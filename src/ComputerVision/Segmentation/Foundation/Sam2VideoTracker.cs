@@ -85,7 +85,7 @@ internal sealed class Sam2VideoTracker<T>
     /// set to −1024 when the object score says the object is absent, upsampled to the image, the best by predicted IoU
     /// selected from a multimask output, and the object pointer of its mask token (the no-object pointer when absent).
     /// </summary>
-    public Sam2Heads<T> Heads(Tensor<T> features, Tensor<T> highRes0, Tensor<T> highRes1, Tensor<T>? points, Tensor<T>? labels, Tensor<T>? maskInput,
+    public Sam2Heads<T> Heads(Tensor<T> features, Tensor<T>? highRes0, Tensor<T>? highRes1, Tensor<T>? points, Tensor<T>? labels, Tensor<T>? maskInput,
         bool multimask)
     {
         var c = _net.Configuration;
@@ -124,7 +124,7 @@ internal sealed class Sam2VideoTracker<T>
     /// <summary>A mask prompt <c>[1, 1, S, S]</c> taken as the output (logits ±10), its pointer decoded from the raw features
     /// with the mask (downsampled by the 4×4 convolution) as the mask input, and its object score ±10 by whether it is
     /// empty.</summary>
-    public Sam2Heads<T> MaskAsOutput(Tensor<T> features, Tensor<T> highRes0, Tensor<T> highRes1, Tensor<T> mask)
+    public Sam2Heads<T> MaskAsOutput(Tensor<T> features, Tensor<T>? highRes0, Tensor<T>? highRes1, Tensor<T> mask)
     {
         int size = _net.Configuration.ImageSize;
         var high = _engine.TensorAddScalar(_engine.TensorMultiplyScalar(mask, NumOps.FromDouble(20.0)), NumOps.FromDouble(-10.0));
@@ -249,7 +249,7 @@ internal sealed class Sam2VideoTracker<T>
     /// <paramref name="previousLogits"/>, a previous low-resolution prediction, as the mask input). Returns the heads and
     /// the conditioned features (the training's corrective clicks reuse them).
     /// </summary>
-    public (Sam2Heads<T> Heads, Tensor<T> Features) Step(int frame, bool prompted, (Tensor<T> Features, Tensor<T> HighRes0, Tensor<T> HighRes1) frameFeatures,
+    public (Sam2Heads<T> Heads, Tensor<T> Features) Step(int frame, bool prompted, (Tensor<T> Features, Tensor<T>? HighRes0, Tensor<T>? HighRes1) frameFeatures,
         Sam2Prompt<T>? prompt, bool reverse, Tensor<T>? previousLogits = null)
     {
         var (raw, s0, s1) = frameFeatures;
@@ -282,11 +282,26 @@ internal sealed class Sam2VideoTracker<T>
     }
 
     /// <summary>
+    /// One frame of tracking: the step (decoded alone from its prompt when <paramref name="prompted"/>, otherwise from the
+    /// memory), its memory encoded, and its output stored with the prompted or the tracked frames. A streaming caller sets
+    /// <see cref="Frames"/> to <see cref="int.MaxValue"/> so the pointer window is the configured one.
+    /// </summary>
+    public Sam2FrameOutput<T> TrackFrame(int frame, bool prompted, (Tensor<T> Features, Tensor<T>? HighRes0, Tensor<T>? HighRes1) features,
+        Sam2Prompt<T>? prompt, bool reverse = false)
+    {
+        var (heads, _) = Step(frame, prompted, features, prompt, reverse);
+        var output = new Sam2FrameOutput<T> { LowRes = heads.Low, HighRes = heads.High, Pointer = heads.Pointer, ObjectScore = heads.Score(NumOps) };
+        output.Memory = EncodeMemory(features.Features, heads.High, output.ObjectScore, prompt?.Points is not null);
+        (prompted ? Conditioning : Tracked)[frame] = output;
+        return output;
+    }
+
+    /// <summary>
     /// Segments one object through a set of images as Medical SAM 2 does (a pseudo-video): in order, each image conditioned
     /// on the self-sorting bank and decoded from its prompt (if any), and its memory offered to the bank. Returns every
     /// image's output.
     /// </summary>
-    public Sam2FrameOutput<T>[] RunImageSet(int frames, Func<int, (Tensor<T> Features, Tensor<T> HighRes0, Tensor<T> HighRes1)> features,
+    public Sam2FrameOutput<T>[] RunImageSet(int frames, Func<int, (Tensor<T> Features, Tensor<T>? HighRes0, Tensor<T>? HighRes1)> features,
         IReadOnlyDictionary<int, Sam2Prompt<T>> prompts)
     {
         if (Bank is null) throw new InvalidOperationException("An image set needs a memory bank.");
@@ -313,24 +328,16 @@ internal sealed class Sam2VideoTracker<T>
     /// forward pass's memories (MedSAM2's inference resets the predictor between the two directions). Returns every frame's
     /// output.
     /// </summary>
-    public Sam2FrameOutput<T>[] Propagate(int frames, Func<int, (Tensor<T> Features, Tensor<T> HighRes0, Tensor<T> HighRes1)> features,
+    public Sam2FrameOutput<T>[] Propagate(int frames, Func<int, (Tensor<T> Features, Tensor<T>? HighRes0, Tensor<T>? HighRes1)> features,
         IReadOnlyDictionary<int, Sam2Prompt<T>> prompts, bool freshReverse = false)
     {
         if (prompts.Count == 0) throw new ArgumentException("SAM 2 needs at least one prompted frame.", nameof(prompts));
         Reset();
         Frames = frames;
-        var cache = new Dictionary<int, (Tensor<T>, Tensor<T>, Tensor<T>)>();
-        (Tensor<T>, Tensor<T>, Tensor<T>) Features(int t) => cache.TryGetValue(t, out var f) ? f : cache[t] = features(t);
+        var cache = new Dictionary<int, (Tensor<T>, Tensor<T>?, Tensor<T>?)>();
+        (Tensor<T>, Tensor<T>?, Tensor<T>?) Features(int t) => cache.TryGetValue(t, out var f) ? f : cache[t] = features(t);
         var outputs = new Sam2FrameOutput<T>[frames];
-        void Run(int t, bool prompted, Sam2Prompt<T>? prompt, bool reverse)
-        {
-            var frameFeatures = Features(t);
-            var (heads, _) = Step(t, prompted, frameFeatures, prompt, reverse);
-            var output = new Sam2FrameOutput<T> { LowRes = heads.Low, HighRes = heads.High, Pointer = heads.Pointer, ObjectScore = heads.Score(NumOps) };
-            output.Memory = EncodeMemory(frameFeatures.Item1, heads.High, output.ObjectScore, prompt?.Points is not null);
-            (prompted ? Conditioning : Tracked)[t] = output;
-            outputs[t] = output;
-        }
+        void Run(int t, bool prompted, Sam2Prompt<T>? prompt, bool reverse) => outputs[t] = TrackFrame(t, prompted, Features(t), prompt, reverse);
         void Prompted()
         {
             foreach (var kv in prompts.OrderBy(kv => kv.Key))

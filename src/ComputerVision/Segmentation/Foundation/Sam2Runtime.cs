@@ -73,10 +73,12 @@ internal interface ISam2Settings
 internal static class Sam2SettingsValidation
 {
     /// <summary>Throws if a shared setting is out of range.</summary>
-    public static void Validate(ISam2Settings o)
+    /// <param name="o">The settings.</param>
+    /// <param name="imageMultiple">The encoder's size granularity (Hiera: 32; a plain ViT: its 16-pixel patch).</param>
+    public static void Validate(ISam2Settings o, int imageMultiple = 32)
     {
-        if (o.ImageSize is { } size && (size <= 0 || size % 32 != 0))
-            throw new ArgumentOutOfRangeException(nameof(ISam2Settings.ImageSize), "The image size must be a positive multiple of 32.");
+        if (o.ImageSize is { } size && (size <= 0 || size % imageMultiple != 0))
+            throw new ArgumentOutOfRangeException(nameof(ISam2Settings.ImageSize), $"The image size must be a positive multiple of {imageMultiple}.");
         if (o.MemoryBankSize < 1) throw new ArgumentOutOfRangeException(nameof(o.MemoryBankSize));
         if (o.HieraStageDepths is { } depths && (depths.Length != 4 || depths.Any(d => d <= 0)))
             throw new ArgumentException("HieraStageDepths must hold four positive values.", nameof(ISam2Settings.HieraStageDepths));
@@ -128,6 +130,13 @@ internal sealed class Sam2Runtime<T>
     /// <param name="bank">A self-sorting memory bank for image sets (Medical SAM 2), or null.</param>
     public Sam2Runtime(IEngine engine, ISam2Settings settings, int sizeIndex, bool sam21, int side, Sam2TrainingSettings training,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer, Sam2BankSettings? bank = null)
+        : this(engine, settings, Configuration(settings, sizeIndex, sam21, side), sizeIndex, training, optimizer, bank)
+    {
+    }
+
+    /// <summary>A runtime over a given network configuration (EfficientTAM's ViT encoder, for one).</summary>
+    public Sam2Runtime(IEngine engine, ISam2Settings settings, Sam2Configuration configuration, int sizeIndex, Sam2TrainingSettings training,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer, Sam2BankSettings? bank = null)
     {
         _bank = bank;
         _engine = engine;
@@ -145,7 +154,7 @@ internal sealed class Sam2Runtime<T>
             CorrectionPoints = settings.CorrectionPoints,
         };
         Layers = new List<LayerBase<T>>();
-        Network = new Sam2Network<T>(engine, Layers, Configuration(settings, sizeIndex, sam21, side));
+        Network = new Sam2Network<T>(engine, Layers, configuration);
         int seed = settings.Seed ?? 42;
         Network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
         TrainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 1);
@@ -274,6 +283,59 @@ internal sealed class Sam2Runtime<T>
     /// <summary>The model's empty prompt (a padding point).</summary>
     public static Sam2Prompt<T> NoPrompt => new(null, null, null);
 
+    /// <summary>The background holes the video predictor fills in its outputs (<c>fill_hole_area</c>, 8 in the official
+    /// predictor builds).</summary>
+    public const int FillHoleArea = 8;
+
+    /// <summary>
+    /// A tracked frame's mask probabilities <c>[H, W]</c> as the official video predictor outputs them: holes in the
+    /// low-resolution logits (8-connected background regions of at most <see cref="FillHoleArea"/> pixels) filled with 0.1,
+    /// then the logits resized to the frame (bilinear) once.
+    /// </summary>
+    public Tensor<T> VideoProbabilities(Sam2FrameOutput<T> output, int height, int width)
+        => Probabilities(FillHoles(output.LowRes, FillHoleArea), height, width);
+
+    /// <summary>The official <c>fill_holes_in_mask_scores</c>: 8-connected regions of logits ≤ 0 with at most
+    /// <paramref name="maxArea"/> pixels set to 0.1.</summary>
+    public static Tensor<T> FillHoles(Tensor<T> logits, int maxArea)
+    {
+        int h = logits.Shape[^2], w = logits.Shape[^1];
+        var values = logits.ToArray();
+        var label = new int[h * w];
+        var filled = (T[])values.Clone();
+        bool changed = false;
+        int next = 0;
+        var stack = new Stack<int>();
+        var members = new List<int>();
+        for (int start = 0; start < h * w; start++)
+        {
+            if (label[start] != 0 || NumOps.ToDouble(values[start]) > 0) continue;
+            label[start] = ++next;
+            stack.Push(start);
+            members.Clear();
+            while (stack.Count > 0)
+            {
+                int i = stack.Pop();
+                members.Add(i);
+                int y = i / w, x = i % w;
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int ny = y + dy, nx = x + dx;
+                        if (ny < 0 || ny >= h || nx < 0 || nx >= w) continue;
+                        int j = ny * w + nx;
+                        if (label[j] != 0 || NumOps.ToDouble(values[j]) > 0) continue;
+                        label[j] = next;
+                        stack.Push(j);
+                    }
+            }
+            if (members.Count > maxArea) continue;
+            foreach (int i in members) filled[i] = NumOps.FromDouble(0.1);
+            changed = true;
+        }
+        return changed ? new Tensor<T>(logits.Shape.ToArray(), new Vector<T>(filled)) : logits;
+    }
+
     /// <summary>Mask logits <c>[1, 1, h, w]</c> resized to a frame (bilinear) as probabilities <c>[H, W]</c>.</summary>
     public Tensor<T> Probabilities(Tensor<T> logits, int height, int width)
     {
@@ -305,8 +367,15 @@ internal sealed class Sam2Runtime<T>
         return tracker.RunImageSet(images.Count, t => Network.EncodeFeatures(Preprocess(images[t], video: true)), prompts);
     }
 
+    /// <summary>A tracker for streaming one object through frames that arrive one at a time.</summary>
+    public Sam2VideoTracker<T> StreamingTracker() => new(_engine, Network) { Frames = int.MaxValue };
+
+    /// <summary>A video frame's features <c>[1, 3, H, W]</c> (values in 0..1) for a tracker.</summary>
+    public (Tensor<T> Features, Tensor<T>? HighRes0, Tensor<T>? HighRes1) EncodeVideoFrame(Tensor<T> frame)
+        => Network.EncodeFeatures(Preprocess(frame, video: true));
+
     /// <summary>The image predictor on one frame <c>[1, 3, H, W]</c>: the features with the no-memory embedding.</summary>
-    public (Tensor<T> Embedding, Tensor<T> HighRes0, Tensor<T> HighRes1) EncodeImage(Tensor<T> frame)
+    public (Tensor<T> Embedding, Tensor<T>? HighRes0, Tensor<T>? HighRes1) EncodeImage(Tensor<T> frame)
     {
         using var _ = new NoGradScope<T>();
         return Network.EncodeImage(Preprocess(frame));
@@ -315,7 +384,7 @@ internal sealed class Sam2Runtime<T>
     /// <summary>The image predictor's masks for N prompts: low-resolution logits <c>[N, M, S/4, S/4]</c>, predicted IoUs
     /// <c>[N, M]</c> and object-score logits <c>[N, 1]</c> (three masks with <paramref name="multimask"/>, else one chosen by
     /// stability).</summary>
-    public (Tensor<T> Logits, Tensor<T> Iou, Tensor<T> ObjectScore) DecodeImage((Tensor<T> Embedding, Tensor<T> HighRes0, Tensor<T> HighRes1) features,
+    public (Tensor<T> Logits, Tensor<T> Iou, Tensor<T> ObjectScore) DecodeImage((Tensor<T> Embedding, Tensor<T>? HighRes0, Tensor<T>? HighRes1) features,
         Tensor<T>? points, Tensor<T>? labels, Tensor<T>? lowResLogits, bool multimask)
     {
         using var _ = new NoGradScope<T>();

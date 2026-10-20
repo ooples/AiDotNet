@@ -4,6 +4,23 @@ using AiDotNet.TextToSpeech.CodecBased;
 
 namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 
+/// <summary>How the memory attention's cross-attention reads the spatial memories.</summary>
+public enum MemoryCrossAttention
+{
+    /// <summary>SAM 2's: every memory token is a key.</summary>
+    Full,
+
+    /// <summary>
+    /// EfficientTAM's efficient cross-attention (Xiong et al. 2024, eq. 5): each memory frame's keys and values are
+    /// average-pooled over 2×2 windows, and the pooled scores are raised by ln 4 so they stand in for the four tokens they
+    /// summarize; the object pointers stay unpooled.
+    /// </summary>
+    PooledScores,
+
+    /// <summary>The same pooling with ln 4 added to the pooled keys instead (eq. 6, the official code's second variant).</summary>
+    PooledKeys,
+}
+
 /// <summary>
 /// The shape of SAM 2's video modules (Ravi et al. 2024, section 4), as the official configs define them. The defaults
 /// are SAM 2's; <see cref="Sam21"/> adds the two SAM 2.1 changes (the temporal encoding of the object pointers and the
@@ -61,6 +78,10 @@ internal sealed record Sam2MemoryConfiguration
 
     /// <summary>Whether a learned embedding marks the memories of frames predicted occluded (SAM 2.1).</summary>
     public bool OcclusionEmbedding { get; init; }
+
+    /// <summary>How the cross-attention reads the spatial memories (SAM 2: all tokens; EfficientTAM's "/2" models: 2×2
+    /// pooled).</summary>
+    public MemoryCrossAttention CrossAttention { get; init; } = MemoryCrossAttention.Full;
 
     /// <summary>SAM 2.1's video modules.</summary>
     public static Sam2MemoryConfiguration Sam21 => new() { TemporalPointerEncoding = true, OcclusionEmbedding = true };
@@ -290,9 +311,43 @@ internal sealed partial class Sam2Network<T>
             head = Rotate(head, cosK, sinK);
             kh = exclude > 0 ? _engine.TensorConcatenate(new[] { head, _engine.TensorSlice(kh, new[] { 0, rotated, 0 }, new[] { n * heads, exclude, hd }) }, 1) : head;
         }
+        var vh = Heads(Rows(attention.Value, v), tk);
+        var mode = MemoryConfiguration.CrossAttention;
+        bool pooled = mode != MemoryCrossAttention.Full && repeat > 1 && rotated > tq;
+        int pooledTokens = 0;
+        if (pooled)
+        {
+            // EfficientTAM: each memory frame's rotated keys and values averaged over 2×2 windows (the object pointers kept).
+            int side = (int)Math.Round(Math.Sqrt(tq));
+            Tensor<T> Pool(Tensor<T> x)
+            {
+                var spatial = _engine.Reshape(_engine.TensorSlice(x, new[] { 0, 0, 0 }, new[] { n * heads, rotated, hd }), new[] { n * heads, repeat, side, side, hd });
+                int even = side / 2 * 2, half = side / 2;
+                if (even != side) spatial = _engine.TensorSlice(spatial, new[] { 0, 0, 0, 0, 0 }, new[] { n * heads, repeat, even, even, hd });
+                var windows = _engine.Reshape(spatial, new[] { n * heads, repeat, half, 2, half, 2, hd });
+                var mean = _engine.ReduceMean(windows, new[] { 3, 5 }, keepDims: false);
+                var flat = _engine.Reshape(mean, new[] { n * heads, repeat * half * half, hd });
+                return exclude > 0 ? _engine.TensorConcatenate(new[] { flat, _engine.TensorSlice(x, new[] { 0, rotated, 0 }, new[] { n * heads, exclude, hd }) }, 1) : flat;
+            }
+            pooledTokens = repeat * (side / 2) * (side / 2);
+            kh = Pool(kh);
+            vh = Pool(vh);
+            if (mode == MemoryCrossAttention.PooledKeys)
+            {
+                var shift = new Tensor<T>(new[] { 1, pooledTokens + exclude, 1 });
+                for (int i = 0; i < pooledTokens; i++) shift[0, i, 0] = NumOps.FromDouble(2 * Math.Log(2));
+                kh = _engine.TensorAdd(kh, _engine.TensorBroadcastTo(shift, kh.Shape.ToArray()));
+            }
+        }
         var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(qh, _engine.TensorPermute(kh, new[] { 0, 2, 1 })), NumOps.FromDouble(1.0 / Math.Sqrt(hd)));
+        if (pooled && mode == MemoryCrossAttention.PooledScores)
+        {
+            var bias = new Tensor<T>(new[] { 1, 1, pooledTokens + exclude });
+            for (int i = 0; i < pooledTokens; i++) bias[0, 0, i] = NumOps.FromDouble(2 * Math.Log(2));
+            scores = _engine.TensorAdd(scores, _engine.TensorBroadcastTo(bias, scores.Shape.ToArray()));
+        }
         var weights = Dropout(_engine.Softmax(scores, axis: 2));
-        var context = _engine.BatchMatMul(weights, Heads(Rows(attention.Value, v), tk));
+        var context = _engine.BatchMatMul(weights, vh);
         context = _engine.Reshape(_engine.TensorPermute(_engine.Reshape(context, new[] { n, heads, tq, hd }), new[] { 0, 2, 1, 3 }), new[] { n, tq, inner });
         return Rows(attention.Output, context);
     }
@@ -381,15 +436,100 @@ internal sealed partial class Sam2Network<T>
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("The checkpoint path is empty.", nameof(path));
         using var stream = File.OpenRead(path);
         var file = SafetensorsReader.Read(stream);
-        LoadTorchWeights((name, shape) =>
+        // An official state dict (facebookresearch/sam2, EfficientTAM, the medical fine-tunes) is read through Hugging
+        // Face's renaming of its keys.
+        bool official = file.Names.Any(n => n.StartsWith("image_encoder.", StringComparison.Ordinal) || n.StartsWith("sam_mask_decoder.", StringComparison.Ordinal));
+        var names = official ? file.Names.ToDictionary(HuggingFaceName, n => n) : file.Names.ToDictionary(n => n, n => n);
+        double[] Read(string name, int[] shape)
         {
-            var tensor = file.Get(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+            if (official && name == "prompt_encoder.point_embed.weight")
+            {
+                int width = shape[1];
+                return Enumerable.Range(0, shape[0]).SelectMany(i => Read($"prompt_encoder.point_embed.{i}.weight", new[] { 1, width })).ToArray();
+            }
+            if (!names.TryGetValue(name, out var stored) || file.Get(stored) is not { } tensor)
+                throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
             var actual = tensor.Shape.Select(d => (int)d).ToArray();
-            if (!actual.SequenceEqual(shape))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] in " +
+            if (actual.Aggregate(1, (x, y) => x * y) != shape.Aggregate(1, (x, y) => x * y) || (!official && !actual.SequenceEqual(shape)))
+                throw new InvalidDataException($"'{stored}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] in " +
                     "this model; build the model with the checkpoint's size.");
-            return file.ReadAsDouble(name);
-        });
+            return file.ReadAsDouble(stored);
+        }
+        LoadTorchWeights(Read);
+    }
+
+    private static readonly (string From, string To)[] OfficialRenames =
+    {
+        ("iou_prediction_head.layers.0", "iou_prediction_head.proj_in"),
+        ("iou_prediction_head.layers.1", "iou_prediction_head.layers.0"),
+        ("iou_prediction_head.layers.2", "iou_prediction_head.proj_out"),
+        ("mask_decoder.output_upscaling.0", "mask_decoder.upscale_conv1"),
+        ("mask_decoder.output_upscaling.1", "mask_decoder.upscale_layer_norm"),
+        ("mask_decoder.output_upscaling.3", "mask_decoder.upscale_conv2"),
+        ("mask_downscaling.0", "mask_embed.conv1"),
+        ("mask_downscaling.1", "mask_embed.layer_norm1"),
+        ("mask_downscaling.3", "mask_embed.conv2"),
+        ("mask_downscaling.4", "mask_embed.layer_norm2"),
+        ("mask_downscaling.6", "mask_embed.conv3"),
+        ("dwconv", "depthwise_conv"),
+        ("pwconv", "pointwise_conv"),
+        ("fuser", "memory_fuser"),
+        ("point_embeddings", "point_embed"),
+        ("pe_layer.positional_encoding_gaussian_matrix", "shared_embedding.positional_embedding"),
+        ("obj_ptr_tpos_proj", "temporal_positional_encoding_projection_layer"),
+        ("no_obj_embed_spatial", "occlusion_spatial_embedding_parameter"),
+        ("sam_prompt_encoder", "prompt_encoder"),
+        ("sam_mask_decoder", "mask_decoder"),
+        ("maskmem_tpos_enc", "memory_temporal_positional_encoding"),
+        ("gamma", "scale"),
+        ("image_encoder.neck", "vision_encoder.neck"),
+        ("image_encoder", "vision_encoder.backbone"),
+        ("neck.0", "neck.conv1"),
+        ("neck.1", "neck.layer_norm1"),
+        ("neck.2", "neck.conv2"),
+        ("neck.3", "neck.layer_norm2"),
+        ("pix_feat_proj", "feature_projection"),
+        ("patch_embed.proj", "patch_embed.projection"),
+        ("no_mem_embed", "no_memory_embedding"),
+        ("no_mem_pos_enc", "no_memory_positional_encoding"),
+        ("obj_ptr", "object_pointer"),
+        (".norm", ".layer_norm"),
+        ("trunk.", ""),
+        ("out_proj", "o_proj"),
+    };
+
+    /// <summary>The Hugging Face name of an official state-dict key: a port of transformers' <c>replace_keys</c> in
+    /// <c>convert_sam2_video_to_hf.py</c> (applied in order, then the index-dependent renames).</summary>
+    internal static string HuggingFaceName(string key)
+    {
+        foreach (var (from, to) in OfficialRenames)
+            if (key.Contains(from)) key = key.Replace(from, to);
+        System.Text.RegularExpressions.Match m;
+        string Renumber(string k, string prefix, int index, string first, string? middle, string last)
+            => index == 0 ? k.Replace(prefix + "0", first) : index == 1 && middle is not null ? k.Replace(prefix + "1", middle)
+                : index == (middle is null ? 1 : 2) ? k.Replace(prefix + index, last) : k;
+        if ((m = System.Text.RegularExpressions.Regex.Match(key, @"^vision_encoder.backbone.blocks.(\d+).mlp.layers.(\d+)")).Success)
+            key = Renumber(key, "layers.", int.Parse(m.Groups[2].Value), "proj_in", null, "proj_out");
+        if ((m = System.Text.RegularExpressions.Regex.Match(key, @"^mask_decoder.transformer.layers.(\d+).mlp.layers.(\d+)")).Success)
+            key = Renumber(key, "mlp.layers.", int.Parse(m.Groups[2].Value), "mlp.proj_in", null, "mlp.proj_out");
+        if ((m = System.Text.RegularExpressions.Regex.Match(key, @"^mask_decoder.pred_obj_score_head.layers.(\d+)")).Success)
+            key = Renumber(key, "layers.", int.Parse(m.Groups[1].Value), "proj_in", "layers.0", "proj_out");
+        if ((m = System.Text.RegularExpressions.Regex.Match(key, @"^.*.output_hypernetworks_mlps.(\d+).layers.(\d+)")).Success)
+            key = Renumber(key, "layers.", int.Parse(m.Groups[2].Value), "proj_in", "layers.0", "proj_out");
+        if (System.Text.RegularExpressions.Regex.IsMatch(key, @"^vision_encoder.neck.convs.(\d+).conv"))
+            key = key.Replace(".conv.", ".");
+        if (System.Text.RegularExpressions.Regex.IsMatch(key, @"^memory_encoder.o_proj"))
+            key = key.Replace(".o_proj.", ".projection.");
+        if ((m = System.Text.RegularExpressions.Regex.Match(key, @"^object_pointer_proj.layers.(\d+)")).Success)
+            key = Renumber(key, "layers.", int.Parse(m.Groups[1].Value), "proj_in", "layers.0", "proj_out");
+        if ((m = System.Text.RegularExpressions.Regex.Match(key, @"^memory_encoder.mask_downsampler.encoder.(\d+)")).Success)
+        {
+            int index = int.Parse(m.Groups[1].Value);
+            key = index == 12 ? key.Replace("encoder.12", "final_conv")
+                : index % 3 == 0 ? key.Replace($"encoder.{index}", $"layers.{index / 3}.conv")
+                : index % 3 == 1 ? key.Replace($"encoder.{index}", $"layers.{index / 3}.layer_norm") : key;
+        }
+        return key;
     }
 
     /// <summary>Loads the video modules from a Hugging Face <c>Sam2VideoModel</c> state dict.</summary>

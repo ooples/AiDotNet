@@ -96,8 +96,41 @@ internal sealed record Sam2Configuration
 
     public int MaskTokens => MultimaskOutputs + 1;
 
+    /// <summary>Whether the image encoder is a plain ViT (EfficientTAM's ViTDet: patchify, windowed and global blocks, a
+    /// single-level neck) rather than Hiera with its FPN; the mask decoder then has no high-resolution skips.</summary>
+    public bool PlainVit { get; init; }
+
+    /// <summary>The plain ViT's blocks (12).</summary>
+    public int VitDepth { get; init; } = 12;
+
+    /// <summary>The plain ViT's attention heads.</summary>
+    public int VitHeads { get; init; } = 6;
+
+    /// <summary>The plain ViT's attention window (14); the global blocks attend over the whole image.</summary>
+    public int VitWindow { get; init; } = 14;
+
+    /// <summary>The plain ViT's global-attention blocks (four, equally spaced: 2, 5, 8, 11).</summary>
+    public int[] VitGlobalBlocks { get; init; } = { 2, 5, 8, 11 };
+
+    /// <summary>The side of the plain ViT's position table (its 224-pixel pretraining grid, 14, after a class token).</summary>
+    public int VitPositionGrid { get; init; } = 14;
+
+    /// <summary>Whether the mask decoder adds the 1/4 and 1/8 features while upscaling (Hiera only).</summary>
+    public bool UseHighResFeatures => !PlainVit;
+
     /// <summary>Side of the image embedding (1/16 of the image).</summary>
-    public int Grid => ImageSize / (PatchStride * 4);
+    public int Grid => PlainVit ? ImageSize / PatchKernel : ImageSize / (PatchStride * 4);
+
+    /// <summary>
+    /// EfficientTAM's ViT encoders (Xiong et al. 2024): ViT-Tiny (192 wide, 3 heads) or ViT-Small (384, 6), patch 16, 14×14
+    /// windows with four global blocks, at 1024 pixels.
+    /// </summary>
+    public static Sam2Configuration Vit(bool small) => new()
+    {
+        PlainVit = true, PatchKernel = 16, PatchStride = 16, PatchPadding = 0, EmbedDims = new[] { small ? 384 : 192 },
+        VitHeads = small ? 6 : 3, BlocksPerStage = new[] { 12 }, HeadsPerStage = new[] { small ? 6 : 3 }, WindowSizes = new[] { 14 },
+        GlobalAttentionBlocks = new[] { 2, 5, 8, 11 }, DropPath = 0.0,
+    };
 }
 
 /// <summary>
@@ -136,6 +169,24 @@ internal sealed partial class Sam2Network<T>
         Attention Attend(int downsample) => new(Linear(c.Dim / downsample), Linear(c.Dim / downsample), Linear(c.Dim / downsample), Linear(c.Dim), c.DecoderHeads);
 
         PatchProjection = Linear(c.EmbedDims[0]);
+        if (c.PlainVit)
+        {
+            int dim = c.EmbedDims[0];
+            VitPosition = Values((c.VitPositionGrid * c.VitPositionGrid + 1) * dim);
+            for (int i = 0; i < c.VitDepth; i++)
+            {
+                int window = c.VitGlobalBlocks.Contains(i) ? 0 : c.VitWindow;
+                Blocks.Add(new Block(Norm(dim, c.LayerNormEpsilon), Linear(3 * dim), Linear(dim), null, Norm(dim, c.LayerNormEpsilon),
+                    Linear((int)(dim * c.MlpRatio)), Linear(dim), dim, dim, c.VitHeads, window, false));
+            }
+            StageEnds.Add(c.VitDepth - 1);
+            VitNeckConv1 = Add(new BiasFreeLinearLayer<T>(dim, c.Dim));
+            VitNeckNorm1 = Norm(c.Dim, 1e-6);
+            VitNeckConv2 = Add(new BiasFreeLinearLayer<T>(9 * c.Dim, c.Dim));
+            VitNeckNorm2 = Norm(c.Dim, 1e-6);
+        }
+        else
+        {
         BackgroundPosition = Values(c.EmbedDims[0] * c.BackgroundPositionSize * c.BackgroundPositionSize);
         WindowPosition = Values(c.EmbedDims[0] * c.WindowSizes[0] * c.WindowSizes[0]);
         int total = 0;
@@ -156,6 +207,7 @@ internal sealed partial class Sam2Network<T>
         for (int s = c.EmbedDims.Length - 1; s >= 0; s--) NeckConvs.Add(Linear(c.Dim));
         HighRes0 = Linear(c.Dim / 8);
         HighRes1 = Linear(c.Dim / 4);
+        }
         NoMemory = Values(c.Dim);
 
         int p = c.Dim;
@@ -193,9 +245,21 @@ internal sealed partial class Sam2Network<T>
 
     public DenseLayer<T> PatchProjection { get; }
 
-    public BiasFreeLinearLayer<T> BackgroundPosition { get; }
+    public BiasFreeLinearLayer<T>? BackgroundPosition { get; }
 
-    public BiasFreeLinearLayer<T> WindowPosition { get; }
+    public BiasFreeLinearLayer<T>? WindowPosition { get; }
+
+    /// <summary>The plain ViT's position table <c>[1 + P², EmbedDim]</c> (a class token's row first).</summary>
+    public BiasFreeLinearLayer<T>? VitPosition { get; }
+
+    /// <summary>The plain ViT's neck: a 1×1 and a 3×3 convolution without biases, each followed by a LayerNorm.</summary>
+    public BiasFreeLinearLayer<T>? VitNeckConv1 { get; }
+
+    public LayerNormalizationLayer<T>? VitNeckNorm1 { get; }
+
+    public BiasFreeLinearLayer<T>? VitNeckConv2 { get; }
+
+    public LayerNormalizationLayer<T>? VitNeckNorm2 { get; }
 
     public List<Block> Blocks { get; } = new();
 
@@ -203,9 +267,9 @@ internal sealed partial class Sam2Network<T>
 
     public List<DenseLayer<T>> NeckConvs { get; } = new();
 
-    public DenseLayer<T> HighRes0 { get; }
+    public DenseLayer<T>? HighRes0 { get; }
 
-    public DenseLayer<T> HighRes1 { get; }
+    public DenseLayer<T>? HighRes1 { get; }
 
     public BiasFreeLinearLayer<T> NoMemory { get; }
 
@@ -280,7 +344,7 @@ internal sealed partial class Sam2Network<T>
         => _engine.TensorPermute(Rows(norm, _engine.TensorPermute(x, new[] { 0, 2, 3, 1 })), new[] { 0, 3, 1, 2 });
 
     /// <summary>A strided convolution of <c>[B, C, H, W]</c> as its patches through a linear layer.</summary>
-    private Tensor<T> Convolve(DenseLayer<T> layer, Tensor<T> x, int kernel, int stride, int padding)
+    private Tensor<T> Convolve(LayerBase<T> layer, Tensor<T> x, int kernel, int stride, int padding)
     {
         int b = x.Shape[0], h = (x.Shape[2] + 2 * padding - kernel) / stride + 1, w = (x.Shape[3] + 2 * padding - kernel) / stride + 1;
         var columns = _engine.Unfold(x, new[] { kernel, kernel }, new[] { stride, stride }, new[] { padding, padding });
@@ -293,7 +357,7 @@ internal sealed partial class Sam2Network<T>
     /// the image embedding <c>[B, Dim, Grid, Grid]</c> (with the no-memory embedding), the others the high-resolution
     /// skips through the decoder's 1x1 convolutions (<c>Dim/8</c> and <c>Dim/4</c> channels).
     /// </summary>
-    public (Tensor<T> Embedding, Tensor<T> HighRes0, Tensor<T> HighRes1) EncodeImage(Tensor<T> images)
+    public (Tensor<T> Embedding, Tensor<T>? HighRes0, Tensor<T>? HighRes1) EncodeImage(Tensor<T> images)
     {
         var (features, s0, s1) = EncodeFeatures(images);
         return (AddNoMemory(features), s0, s1);
@@ -306,10 +370,11 @@ internal sealed partial class Sam2Network<T>
 
     /// <summary>As <see cref="EncodeImage"/>, but the 1/16 features without the no-memory embedding: the frame features
     /// the video model conditions on its memory and encodes into it.</summary>
-    public (Tensor<T> Features, Tensor<T> HighRes0, Tensor<T> HighRes1) EncodeFeatures(Tensor<T> images)
+    public (Tensor<T> Features, Tensor<T>? HighRes0, Tensor<T>? HighRes1) EncodeFeatures(Tensor<T> images)
     {
         var c = Configuration;
         int b = images.Shape[0];
+        if (c.PlainVit) return (EncodeVit(images), null, null);
         var patches = Convolve(PatchProjection, images, c.PatchKernel, c.PatchStride, c.PatchPadding);       // [B, C, H, W]
         int h = patches.Shape[2], w = patches.Shape[3], d0 = c.EmbedDims[0];
         var x = _engine.TensorPermute(patches, new[] { 0, 2, 3, 1 });                                         // [B, H, W, C]
@@ -334,7 +399,42 @@ internal sealed partial class Sam2Network<T>
             previous = !c.TopDownLevels.Contains(i) || i == n || previous is null ? lateral : _engine.TensorAdd(lateral, Nearest2x(previous));
             outputs[i] = previous;
         }
-        return (outputs[2], Convolve(HighRes0, outputs[0], 1, 1, 0), Convolve(HighRes1, outputs[1], 1, 1, 0));
+        return (outputs[2], Convolve(HighRes0!, outputs[0], 1, 1, 0), Convolve(HighRes1!, outputs[1], 1, 1, 0));
+    }
+
+    /// <summary>EfficientTAM's ViTDet encoder: 16×16 patches plus the position table (bicubically resized to the grid),
+    /// the blocks, and the neck (1×1 convolution, LayerNorm, 3×3 convolution, LayerNorm) to <c>[B, Dim, Grid, Grid]</c>.</summary>
+    private Tensor<T> EncodeVit(Tensor<T> images)
+    {
+        var c = Configuration;
+        int b = images.Shape[0], dim = c.EmbedDims[0];
+        var patches = Convolve(PatchProjection, images, c.PatchKernel, c.PatchKernel, 0);                       // [B, C, g, g]
+        int g = patches.Shape[2];
+        var x = _engine.TensorPermute(patches, new[] { 0, 2, 3, 1 });
+        x = _engine.TensorAdd(x, _engine.TensorBroadcastTo(VitPositionEmbedding(g), new[] { b, g, g, dim }));
+        for (int i = 0; i < Blocks.Count; i++)
+        {
+            double drop = Training && c.DropPath > 0 && Blocks.Count > 1 ? c.DropPath * i / (Blocks.Count - 1) : 0.0;
+            x = Run(Blocks[i], x, drop);
+        }
+        var map = _engine.TensorPermute(x, new[] { 0, 3, 1, 2 });
+        var y = ChannelNorm(VitNeckNorm1!, Convolve(VitNeckConv1!, map, 1, 1, 0));
+        return ChannelNorm(VitNeckNorm2!, Convolve(VitNeckConv2!, y, 3, 1, 1));
+    }
+
+    /// <summary>The plain ViT's position embedding <c>[1, g, g, C]</c>: the table without its class-token row, resized
+    /// bicubically (align_corners false) when the grid differs from the table's.</summary>
+    private Tensor<T> VitPositionEmbedding(int g)
+    {
+        var c = Configuration;
+        int d = c.EmbedDims[0], p = c.VitPositionGrid;
+        var table = _engine.Reshape(_engine.TensorSlice(_engine.Reshape(Value(VitPosition!), new[] { p * p + 1, d }), new[] { 1, 0 }, new[] { p * p, d }),
+            new[] { p, p, d });
+        if (p == g) return _engine.Reshape(table, new[] { 1, g, g, d });
+        var planes = _engine.TensorPermute(table, new[] { 2, 0, 1 });                                            // [C, P, P]
+        var rows = _engine.BatchMatMul(_engine.TensorBroadcastTo(_engine.Reshape(Bicubic(g, p), new[] { 1, g, p }), new[] { d, g, p }), planes);
+        var full = _engine.BatchMatMul(rows, _engine.TensorBroadcastTo(_engine.Reshape(_engine.TensorTranspose(Bicubic(g, p)), new[] { 1, p, g }), new[] { d, p, g }));
+        return _engine.Reshape(_engine.TensorPermute(full, new[] { 1, 2, 0 }), new[] { 1, g, g, d });
     }
 
     private Tensor<T> Nearest2x(Tensor<T> x)
@@ -350,11 +450,11 @@ internal sealed partial class Sam2Network<T>
     {
         var c = Configuration;
         int d = c.EmbedDims[0], s = c.BackgroundPositionSize, ws = c.WindowSizes[0];
-        var background = _engine.Reshape(Value(BackgroundPosition), new[] { d, s, s });
+        var background = _engine.Reshape(Value(BackgroundPosition!), new[] { d, s, s });
         // out[c] = Mh · P[c] · Mwᵀ.
         var rows = _engine.BatchMatMul(_engine.TensorBroadcastTo(_engine.Reshape(Bicubic(h, s), new[] { 1, h, s }), new[] { d, h, s }), background);
         var full = _engine.BatchMatMul(rows, _engine.TensorBroadcastTo(_engine.Reshape(_engine.TensorTranspose(Bicubic(w, s)), new[] { 1, s, w }), new[] { d, s, w }));
-        var window = _engine.Reshape(Value(WindowPosition), new[] { d, ws, ws });
+        var window = _engine.Reshape(Value(WindowPosition!), new[] { d, ws, ws });
         var tiled = _engine.TensorTile(window, new[] { 1, h / ws, w / ws });
         return _engine.Reshape(_engine.TensorPermute(_engine.TensorAdd(full, tiled), new[] { 1, 2, 0 }), new[] { 1, h, w, d });
     }

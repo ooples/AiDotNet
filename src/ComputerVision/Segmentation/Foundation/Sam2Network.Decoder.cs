@@ -140,7 +140,7 @@ internal sealed partial class Sam2Network<T>
     /// <paramref name="multimask"/>; otherwise one mask, chosen as the image predictor does when not training (the
     /// single-mask output if it is stable, else the best of the three).
     /// </summary>
-    public (Tensor<T> Logits, Tensor<T> Iou, Tensor<T> ObjectScore) DecodeMasks(Tensor<T> embedding, Tensor<T> highRes0, Tensor<T> highRes1,
+    public (Tensor<T> Logits, Tensor<T> Iou, Tensor<T> ObjectScore) DecodeMasks(Tensor<T> embedding, Tensor<T>? highRes0, Tensor<T>? highRes1,
         Tensor<T> positional, Tensor<T> sparse, Tensor<T> dense, bool multimask)
     {
         var (masks, iou, _, objectScore) = DecodeAll(embedding, highRes0, highRes1, positional, sparse, dense);
@@ -202,7 +202,7 @@ internal sealed partial class Sam2Network<T>
     /// predictions <c>[N, MaskTokens]</c>, the mask tokens after the two-way transformer <c>[N, MaskTokens, Dim]</c> (the
     /// video model's object pointers come from them) and the object-score logits <c>[N, 1]</c>.
     /// </summary>
-    public (Tensor<T> Masks, Tensor<T> Iou, Tensor<T> Tokens, Tensor<T> ObjectScore) DecodeAll(Tensor<T> embedding, Tensor<T> highRes0, Tensor<T> highRes1,
+    public (Tensor<T> Masks, Tensor<T> Iou, Tensor<T> Tokens, Tensor<T> ObjectScore) DecodeAll(Tensor<T> embedding, Tensor<T>? highRes0, Tensor<T>? highRes1,
         Tensor<T> positional, Tensor<T> sparse, Tensor<T> dense)
     {
         var c = Configuration;
@@ -240,10 +240,20 @@ internal sealed partial class Sam2Network<T>
             Attend(FinalAttention, _engine.TensorAdd(queries, queryPositional), _engine.TensorAdd(keys, keyPositional), keys)));
 
         var image = _engine.Reshape(_engine.TensorPermute(keys, new[] { 0, 2, 1 }), new[] { n, p, g, g });
-        var s1 = _engine.TensorBroadcastTo(highRes1, new[] { n, highRes1.Shape[1], highRes1.Shape[2], highRes1.Shape[3] });
-        var s0 = _engine.TensorBroadcastTo(highRes0, new[] { n, highRes0.Shape[1], highRes0.Shape[2], highRes0.Shape[3] });
-        var up = Gelu(ChannelNorm(UpscaleNorm, _engine.TensorAdd(Upscale1.Forward(image), s1)));
-        up = Gelu(_engine.TensorAdd(Upscale2.Forward(up), s0));                                            // [N, p/8, 4g, 4g]
+        Tensor<T> up;
+        if (highRes0 is null || highRes1 is null)
+        {
+            // Without high-resolution features (EfficientTAM): the two transposed convolutions alone.
+            up = Gelu(ChannelNorm(UpscaleNorm, Upscale1.Forward(image)));
+            up = Gelu(Upscale2.Forward(up));
+        }
+        else
+        {
+            var s1 = _engine.TensorBroadcastTo(highRes1, new[] { n, highRes1.Shape[1], highRes1.Shape[2], highRes1.Shape[3] });
+            var s0 = _engine.TensorBroadcastTo(highRes0, new[] { n, highRes0.Shape[1], highRes0.Shape[2], highRes0.Shape[3] });
+            up = Gelu(ChannelNorm(UpscaleNorm, _engine.TensorAdd(Upscale1.Forward(image), s1)));
+            up = Gelu(_engine.TensorAdd(Upscale2.Forward(up), s0));                                        // [N, p/8, 4g, 4g]
+        }
         int side = 4 * g, low = p / 8;
         Tensor<T> Token(int index) => _engine.Reshape(_engine.TensorSlice(queries, new[] { 0, index, 0 }, new[] { n, 1, p }), new[] { n, p });
         var weights = new Tensor<T>[m];
@@ -289,6 +299,12 @@ internal sealed partial class Sam2Network<T>
             var values = new double[count];
             if (name.EndsWith("positional_embedding", StringComparison.Ordinal))
                 return (double[])(fourier ??= Enumerable.Range(0, count).Select(_ => Normal()).ToArray()).Clone();
+            if (name == "vision_encoder.backbone.pos_embed" && Configuration.PlainVit)
+            {
+                // ViTDet's absolute position table starts from trunc_normal(std 0.02).
+                for (int i = 0; i < count; i++) values[i] = 0.02 * Math.Max(-2.0, Math.Min(2.0, Normal()));
+                return values;
+            }
             if (name.Contains("pos_embed") || name == "no_memory_embedding") return values;
             if (name.EndsWith(".scale", StringComparison.Ordinal))
             {
@@ -336,8 +352,19 @@ internal sealed partial class Sam2Network<T>
 
         const string backbone = "vision_encoder.backbone";
         Conv(PatchProjection, $"{backbone}.patch_embed.projection", c.Channels, d0, c.PatchKernel);
-        Values(BackgroundPosition, $"{backbone}.pos_embed", new[] { 1, d0, c.BackgroundPositionSize, c.BackgroundPositionSize });
-        Values(WindowPosition, $"{backbone}.pos_embed_window", new[] { 1, d0, c.WindowSizes[0], c.WindowSizes[0] });
+        if (c.PlainVit)
+        {
+            Values(VitPosition!, $"{backbone}.pos_embed", new[] { 1, c.VitPositionGrid * c.VitPositionGrid + 1, d0 });
+            TorchParameters.Linear(VitNeckConv1!, d0, p, read("vision_encoder.neck.convs.0.conv_1x1.weight", new[] { p, d0, 1, 1 }));
+            Norm(VitNeckNorm1!, "vision_encoder.neck.convs.0.layer_norm_0", p);
+            TorchParameters.Linear(VitNeckConv2!, 9 * p, p, read("vision_encoder.neck.convs.0.conv_3x3.weight", new[] { p, p, 3, 3 }));
+            Norm(VitNeckNorm2!, "vision_encoder.neck.convs.0.layer_norm_1", p);
+        }
+        else
+        {
+            Values(BackgroundPosition!, $"{backbone}.pos_embed", new[] { 1, d0, c.BackgroundPositionSize, c.BackgroundPositionSize });
+            Values(WindowPosition!, $"{backbone}.pos_embed_window", new[] { 1, d0, c.WindowSizes[0], c.WindowSizes[0] });
+        }
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
@@ -352,8 +379,8 @@ internal sealed partial class Sam2Network<T>
         }
         for (int i = 0; i < NeckConvs.Count; i++)
             Conv(NeckConvs[i], $"vision_encoder.neck.convs.{i}", c.EmbedDims[c.EmbedDims.Length - 1 - i], p, 1);
-        Conv(HighRes0, "mask_decoder.conv_s0", p, p / 8, 1);
-        Conv(HighRes1, "mask_decoder.conv_s1", p, p / 4, 1);
+        if (HighRes0 is not null) Conv(HighRes0, "mask_decoder.conv_s0", p, p / 8, 1);
+        if (HighRes1 is not null) Conv(HighRes1, "mask_decoder.conv_s1", p, p / 4, 1);
         Values(NoMemory, "no_memory_embedding", new[] { 1, 1, p });
 
         var gaussian = read("prompt_encoder.shared_embedding.positional_embedding", new[] { 2, p / 2 });

@@ -4642,6 +4642,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          // SAM 2.1's fixture canvas: 64 px (a multiple of 32) gives a 4x4 image embedding.
          : className == "SAM21" ? 64
          : className == "MedicalSAM2" ? 64
+         : className == "EfficientTAM" ? 64
          : IsPatchVisionModel(className) ? 112
          : 128;
 
@@ -5964,6 +5965,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { ImageSize = 64, " +
                     "HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
                     "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
+                    "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, MemoryAttentionLayerCount = 4, " +
+                    "MemoryAttentionFeedForwardDimension = 64, MemoryFuserDimension = 32, MaskDecoderMlpDimension = 64, " +
+                    "WarmupSteps = 0, LearningRate = 1e-3, ImageEncoderLearningRate = 1e-3, CorrectionPoints = 1, MemoryBankSize = 2 })";
+            }
+            else if (model.ClassName == "EfficientTAM" && model.TypeParameterCount == 1)
+            {
+                // EfficientTAM is SAM 2's tracker on a ViT-S at 1024 px; the fixture scales the capacity (and the encoder
+                // canvas, a multiple of 16) through the public options, keeping every module. The recipe warms up over 15k
+                // steps from zero, so the fixture trains at a constant 1e-3; each corrected frame gets one click (of 7).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 1), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Video.EfficientTAMOptions { ImageSize = 64, " +
+                    "VitEmbeddingDimension = 16, VitDepth = 2, VitHeadCount = 2, VitWindowSize = 2, VitGlobalAttentionBlockIndexes = new[] { 1 }, " +
                     "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, MemoryAttentionLayerCount = 4, " +
                     "MemoryAttentionFeedForwardDimension = 64, MemoryFuserDimension = 32, MaskDecoderMlpDimension = 64, " +
                     "WarmupSteps = 0, LearningRate = 1e-3, ImageEncoderLearningRate = 1e-3, CorrectionPoints = 1, MemoryBankSize = 2 })";

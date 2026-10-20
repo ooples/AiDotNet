@@ -179,7 +179,7 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>, ITrainingOb
         if (keyFrame < 0 || keyFrame >= frames.Count) throw new ArgumentOutOfRangeException(nameof(keyFrame));
         int h = frames[0].Shape[2], w = frames[0].Shape[3];
         var outputs = Runtime.Track(frames, new Dictionary<int, Sam2Prompt<T>> { [keyFrame] = prompt }, freshReverse: true);
-        return Engine.TensorStack(outputs.Select(o => Runtime.Probabilities(o.HighRes, h, w)).ToArray(), 0);
+        return Engine.TensorStack(outputs.Select(o => Runtime.VideoProbabilities(o, h, w)).ToArray(), 0);
     }
 
     /// <summary>Segments a structure in one slice <c>[C, H, W]</c> from a box <c>[x0, y0, x1, y1]</c> (the image predictor).</summary>

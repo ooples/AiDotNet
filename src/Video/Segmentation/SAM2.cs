@@ -169,7 +169,7 @@ public partial class SAM2<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<
         if (batched.Any(f => f.Shape[2] != height || f.Shape[3] != width))
             throw new ArgumentException("Every frame must have the same size.", nameof(frames));
         var outputs = Runtime.Track(batched, prompts(height, width));
-        return outputs.Select(o => Runtime.Probabilities(o.HighRes, height, width)).ToList();
+        return outputs.Select(o => Runtime.VideoProbabilities(o, height, width)).ToList();
     }
 
     /// <summary>
@@ -276,7 +276,7 @@ public partial class SAM2<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<
         var batched = Enumerable.Range(0, frames).Select(t => single ? Sam2Runtime<T>.Frame(input, nameof(input))
             : Engine.TensorSlice(input, new[] { t, 0, 0, 0 }, new[] { 1, input.Shape[1], height, width })).ToList();
         var outputs = Runtime.Track(batched, new Dictionary<int, Sam2Prompt<T>> { [0] = Sam2Runtime<T>.NoPrompt });
-        var masks = outputs.Select(o => Runtime.Probabilities(o.HighRes, height, width)).ToArray();
+        var masks = outputs.Select(o => Runtime.VideoProbabilities(o, height, width)).ToArray();
         return single ? masks[0] : Engine.TensorStack(masks, 0);
     }
 
