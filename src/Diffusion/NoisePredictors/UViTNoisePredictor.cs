@@ -89,6 +89,10 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
     private LayerNormalizationLayer<T> _finalNorm;
     private DenseLayer<T> _outputProj;
 
+    // U-ViT (Bao et al. 2023, Sec. 3) treats the condition as tokens: each context vector is linearly embedded and
+    // joins the sequence beside the time token. Null when the model is unconditional (contextDim 0).
+    private DenseLayer<T>? _contextEmbed;
+
     // Position embeddings
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _posEmbed;
@@ -209,6 +213,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
         _finalNorm = LazyLayerNorm(_hiddenSize);
         int outPatchDim = _inputChannels * _patchSize * _patchSize;
         _outputProj = LazyDense(_hiddenSize, outPatchDim);
+        _contextEmbed = _contextDim > 0 ? LazyDense(_contextDim, _hiddenSize) : null;
 
         // Position embeddings (computed from latent spatial size and patch size)
         var posEmbData = new T[_maxPatches * _hiddenSize];
@@ -314,8 +319,25 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
             }
         }
 
-        // Add time embedding (broadcast to all tokens)
-        patches = AddTimeToPatches(patches, timeEmbed);
+        // U-ViT treats every input as a token (Sec. 3): the time token and the embedded context tokens are
+        // prepended to the patch tokens, attended to like any other, and dropped again before the output head.
+        // Previously the time embedding was added to every patch and the conditioning was never read, so a
+        // model constructed with a context dimension ignored its condition.
+        int hidden = patches.Shape[2];
+        var tokens = new List<Tensor<T>> { TokensPerSample(timeEmbed, batch, hidden) };
+        if (conditioning is not null && _contextEmbed is not null)
+        {
+            var context = conditioning.Rank == 2
+                ? Engine.Reshape(conditioning, new[] { conditioning.Shape[0], 1, conditioning.Shape[1] })
+                : conditioning;
+            var contextTokens = _contextEmbed.Forward(context);
+            tokens.Add(contextTokens.Shape[0] == batch ? contextTokens : RepeatBatch(contextTokens, batch));
+        }
+
+        int extras = 0;
+        foreach (var t in tokens) extras += t.Shape[1];
+        tokens.Add(patches);
+        patches = Engine.Concat(tokens.ToArray(), 1);
 
         int halfLayers = _numLayers / 2;
 
@@ -345,8 +367,10 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
             patches = CheckpointBlocks(new System.Func<Tensor<T>, Tensor<T>>[] { h => ApplyBlock(decBlock, h) }, patches);
         }
 
-        // Final norm and unpatchify
+        // Final norm, then drop the time and context tokens: only patch tokens are decoded.
         patches = _finalNorm.Forward(patches);
+        int patchTokens = patches.Shape[1] - extras;
+        patches = Engine.TensorSlice(patches, new[] { 0, extras, 0 }, new[] { batch, patchTokens, hidden });
         patches = _outputProj.Forward(patches);
 
         return Unpatchify(patches, batch, shape.Length > 2 ? shape[2] : 32, shape.Length > 3 ? shape[3] : 32);
@@ -457,28 +481,19 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
         return new Tensor<T>(new[] { batch, _inputChannels, height, width }, new Vector<T>(result));
     }
 
-    private Tensor<T> AddTimeToPatches(Tensor<T> patches, Tensor<T> timeEmbed)
+    // A time embedding is [1, hidden] (shared by the batch) or [batch, hidden]; as a token it is [batch, 1, hidden].
+    private Tensor<T> TokensPerSample(Tensor<T> embedding, int batch, int hidden)
     {
-        // Reshape time embedding to [batch, 1, hiddenSize] for broadcasting across [batch, seqLen, hidden]
-        int batch = patches.Shape[0];
-        int hiddenDim = patches.Shape.Length > 2 ? patches.Shape[2] : patches.Shape[^1];
-        var timeSpan = timeEmbed.AsSpan();
-        int totalTimeLen = timeSpan.Length;
-        int perBatchTimeLen = totalTimeLen >= batch * hiddenDim ? hiddenDim : totalTimeLen;
-        bool isBatched = totalTimeLen >= batch * hiddenDim;
-
-        // Build [batch, 1, hiddenDim] tensor with per-batch time embeddings
-        var timeData = new T[batch * hiddenDim];
-        for (int b = 0; b < batch; b++)
-        {
-            int srcOffset = isBatched ? b * perBatchTimeLen : 0;
-            int copyLen = Math.Min(perBatchTimeLen, hiddenDim);
-            timeSpan.Slice(srcOffset, copyLen).CopyTo(timeData.AsSpan(b * hiddenDim, copyLen));
-        }
-        var timeBroadcast = new Tensor<T>(new[] { batch, 1, hiddenDim }, new Vector<T>(timeData));
-        return Engine.TensorAdd<T>(patches, timeBroadcast);
+        var token = Engine.Reshape(embedding, new[] { embedding.Length / hidden, 1, hidden });
+        return token.Shape[0] == batch ? token : RepeatBatch(token, batch);
     }
 
+    private Tensor<T> RepeatBatch(Tensor<T> single, int batch)
+    {
+        var copies = new Tensor<T>[batch];
+        for (int b = 0; b < batch; b++) copies[b] = single;
+        return Engine.Concat(copies, 0);
+    }
     private static Tensor<T> CloneTensor(Tensor<T> t)
     {
         var span = t.AsSpan();
@@ -538,6 +553,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
         yield return _finalNorm;
         yield return _outputProj;
+        if (_contextEmbed is not null) yield return _contextEmbed;
     }
 
     private static IEnumerable<ILayer<T>> BlockLayers(UViTBlock block)
@@ -585,6 +601,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
         AddLayerGrads(allGrads, _finalNorm);
         AddLayerGrads(allGrads, _outputProj);
+        if (_contextEmbed is not null) AddLayerGrads(allGrads, _contextEmbed);
 
         return new Vector<T>(allGrads.ToArray());
     }
