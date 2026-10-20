@@ -10738,6 +10738,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Guard.NotNull(input);
         Guard.NotNull(expectedOutput);
         ThrowIfCannotTrain();
+        // Seed the stochastic layers before any step runs. ForwardForTraining wires them, but a learning rule that
+        // runs its own forwards (CLAP's two towers through the shared stepper) never reached it, so its dropout,
+        // SpecAugment and fusion draws came from an unseeded generator and the same model trained differently in
+        // every process: CLAP's first contrastive loss measured 1.15, 0.75 and 0.62 in three identical runs.
+        EnsureLayerRandomSeedsWired();
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
         _hasBeenTrained = true;
