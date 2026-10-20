@@ -74,6 +74,7 @@ public abstract class AudioSafetyModuleTestBase
             for (int i = 0; i < first.Count; i++)
             {
                 Assert.Equal(first[i].Category, second[i].Category);
+                Assert.Equal(first[i].Severity, second[i].Severity);
                 Assert.Equal(first[i].Confidence, second[i].Confidence);
             }
         }

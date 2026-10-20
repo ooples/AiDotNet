@@ -90,18 +90,17 @@ public abstract class TextSafetyModuleTestBase
             AssertSameFindings(module.EvaluateText(text), module.EvaluateText(text), $"'{text}' evaluated twice");
     }
 
-    [Fact(Timeout = 60000)]
+    [SkippableFact(Timeout = 60000)]
     public async Task Evaluate_OnCharacterCodes_MatchesEvaluateText()
     {
         await Task.Yield();
         var module = CreateModule();
         var evaluate = module.GetType().GetMethod(nameof(ISafetyModule<double>.Evaluate), new[] { typeof(Vector<double>) });
-        if (evaluate is null || evaluate.DeclaringType is not { IsGenericType: true } declaring
-            || declaring.GetGenericTypeDefinition() != typeof(TextSafetyModuleBase<>))
-        {
-            // The module reads the vector its own way (an embedding, say); the character-code bridge is not its contract.
-            return;
-        }
+        bool usesCharacterCodeBridge = evaluate?.DeclaringType is { IsGenericType: true } declaring
+            && declaring.GetGenericTypeDefinition() == typeof(TextSafetyModuleBase<>);
+        // A module that reads the vector its own way (an embedding, say) is reported as skipped, not as passing.
+        Skip.IfNot(usesCharacterCodeBridge,
+            $"Module '{module.ModuleName}' overrides Evaluate(Vector<double>); the character-code bridge is not its contract.");
 
         foreach (var text in Samples)
         {
