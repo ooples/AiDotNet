@@ -1,415 +1,331 @@
 ﻿using AiDotNet.LearningRateSchedulers;
-using System.IO;
 using AiDotNet.Attributes;
+using AiDotNet.ComputerVision.Segmentation.Foundation;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using Microsoft.ML.OnnxRuntime;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.Medical;
 
 /// <summary>
-/// MedSAM-2: SAM 2 adapted for medical image and video segmentation.
+/// MedSAM2: SAM 2.1 fine-tuned to segment anything in 3D medical images and videos.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Medical video segmentation (endoscopy, ultrasound). 3D volumetric medical segmentation (treat slices as video).
-///
-/// Common use cases:
-/// - Medical video segmentation (endoscopy, ultrasound)
-/// - 3D volumetric medical segmentation (treat slices as video)
-/// - One-click medical segmentation across frames
-/// - Temporal-consistent medical image analysis
+/// <b>For Beginners:</b> Draw a box around a lesion or organ on one slice of a CT or MRI scan (or one frame of an
+/// ultrasound or endoscopy video), and MedSAM2 segments it in that slice and follows it through the rest of the volume.
 /// </para>
 /// <para>
-/// <b>Technical Details:</b>
-/// - SAM 2 architecture with memory attention for temporal consistency
-/// - Treats 3D medical volumes as video sequences
-/// - Point and box prompts propagated across frames/slices
-/// - Hiera (Hierarchical) image encoder backbone
+/// MedSAM2 (Ma et al. 2025, bowang-lab/MedSAM2) is SAM2.1-Tiny at 512 pixels (Hiera blocks 1-2-7-2, four memory-attention
+/// layers with 2D RoPE on the 32×32 embedding), fine-tuned on medical volumes and videos. It shares SAM 2's network,
+/// tracking and training (<see cref="Foundation.SAM21{T}"/>, verified against the official code at 1e-9). A volume's slices
+/// are frames: grayscale slices are repeated to three channels, and the box on the key slice is propagated forward to the
+/// last slice and, starting again from the key slice, backward to the first, as the official inference does. Training
+/// follows the paper (AdamW, 3e-5 for the image encoder and 5e-5 for the rest, weight decay 0.01, focal and dice 20:1,
+/// boxes moved by up to 10 pixels) and the official config where the paper is silent (see <see cref="MedSAM2Options"/>).
+/// Released checkpoints load with <see cref="LoadPretrainedWeights"/> once converted to Hugging Face's format.
 /// </para>
 /// <para>
-/// <b>Reference:</b> Zhu et al., "Medical SAM 2: Segment Medical Images As Video Via Segment Anything Model 2", arXiv 2024.
+/// <b>Reference:</b> Ma et al., "MedSAM2: Segment Anything in 3D Medical Images and Videos", arXiv 2025.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a MedSAM2 model for medical video and volumetric segmentation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
-///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new MedSAM2&lt;double&gt;(architecture);
-/// // Every tunable is now set through the options object; these are the defaults:
-/// var custom = new MedSAM2&lt;double&gt;(architecture,
-///     options: new MedSAM2Options { NumClasses = 1, DropRate = 0, ModelSize = MedSAM2ModelSize.Tiny });
-///
-/// // Or load a pre-trained ONNX model for endoscopy and 3D volume segmentation
-/// var onnxModel = new MedSAM2&lt;double&gt;(architecture, "medsam2.onnx");
+///     inputHeight: 512, inputWidth: 512, inputDepth: 1, outputSize: 1);
+/// var model = new MedSAM2&lt;float&gt;(architecture);
+/// model.LoadPretrainedWeights("MedSAM2/model.safetensors");
+/// // volume [1, D, H, W] with values in 0..1 (CT windowed to 0..255, then divided by 255)
+/// var result = model.SegmentVolume(volume, keySlice: 42, box: new float[] { 120, 140, 210, 230 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Medical SAM 2: Segment Medical Images As Video Via Segment Anything Model 2", "https://arxiv.org/abs/2408.00874", Year = 2024, Authors = "Zhu et al.")]
-[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, MinLearningRate = 0,
-                Schedule = LearningRateSchedulerType.CosineAnnealing,
-                Source = "Zhu et al. 2024: AdamW with beta1 0.9 and beta2 0.999, a linear learning rate warmup followed by cosine decay. Neither the peak rate nor the warmup length is stated, so neither is declared.")]
-public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>
+[ResearchPaper("MedSAM2: Segment Anything in 3D Medical Images and Videos", "https://arxiv.org/abs/2504.03600", Year = 2025,
+    Authors = "Jun Ma, Zongxin Yang, Sumin Kim, Bihui Chen, Mohammed Baharoon, Adibvafa Fallahpour, Reza Asakereh, Hongwei Lyu, Bo Wang")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.01, MaxGradientNorm = 0.1,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, Phase = TrainingPhase.FineTuning,
+                Source = "Ma et al. 2025, Methods: AdamW with beta1 0.9, beta2 0.999 and a weight decay of 0.01, at 3.0e-5 "
+                        + "for the image encoder and 5.0e-5 for the other components, for 70 epochs. The official config "
+                        + "adds a cosine schedule to a tenth, layer-wise decay 0.9 and clipping at 0.1. The model builds this "
+                        + "optimizer itself (Sam2Optimizer): no single rate is declared because the rates differ per parameter.")]
+public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>, ITrainingObjectiveProvider<T>
 {
     private readonly MedSAM2Options _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _userOptimizer;
+    private Sam2Runtime<T>? _runtime;
+
+    private static readonly string[] MedSAM2Modalities = ["CT", "MRI", "PET", "Ultrasound", "Endoscopy"];
+
     public override ModelOptions GetOptions() => _options;
 
-    #region Fields
-    // Only MedSAM2's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from MedicalSegmentationBase -> SegmentationModelBase, as do SupportedModalities,
-    // Supports2D and Supports3D.
-    private readonly MedSAM2ModelSize _modelSize;
-    private readonly int[] _channelDims;
-    private readonly int _decoderDim;
-    private readonly int[] _depths;
-    private readonly double _dropRate;
+    private Sam2Runtime<T> Runtime => _runtime ?? throw new InvalidOperationException("The network is not initialized.");
 
-    // MedSAM2's own optimizer bookkeeping. NOTE: this model deliberately reads the base's raw
-    // _optimizer FIELD (the un-defaulted constructor argument) rather than the base's Optimizer
-    // PROPERTY. The property would lazily materialize CreateDefaultOptimizer(), and passing that
-    // non-null value into TrainWithTape would bypass GetOrCreateBaseOptimizer below - the tuned
-    // warmup path this model needs to stay finite.
-    private readonly bool _hasUserSuppliedOptimizer;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
+    /// <summary>The network.</summary>
+    internal Sam2Network<T> Network => Runtime.Network;
 
-    /// <summary>
-    /// The imaging modalities MedSAM2 was trained on, passed to the base constructor.
-    /// </summary>
-    private static readonly string[] MedSAM2Modalities =
-        ["CT", "MRI_T1", "MRI_T2", "Ultrasound", "Endoscopy"];
-    #endregion
-
-    #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
-    // SegmentationModelBase and say exactly the same thing.
-    internal bool UseNativeMode => _useNativeMode;
-    internal MedSAM2ModelSize ModelSize => _modelSize;
-    #endregion
-
-    #region Constructors
-    /// <summary>
-    /// Initializes MedSAM2 in native (trainable) mode.
-    /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a trainable MedSAM2 model.
-    /// </para>
-    /// </remarks>
+    /// <summary>Creates a trainable MedSAM2.</summary>
+    /// <param name="architecture">The slices' size (512 by default) and channels (1 for grayscale scans, 3 for color video).</param>
+    /// <param name="optimizer">The optimizer (default: the paper's AdamW recipe).</param>
+    /// <param name="lossFunction">Reported by the base; training minimizes the paper's losses.</param>
+    /// <param name="options">Model options.</param>
     public MedSAM2(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         MedSAM2Options? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture,
-        // defaults the loss to CrossEntropyWithLogitsLoss and stores the modality list - exactly
-        // what the deleted lines did by hand. `optimizer` is passed straight through INCLUDING
-        // null, and the base stores it verbatim in _optimizer; MedSAM2 never asks for the base's
-        // lazy default, so a null here still routes training through GetOrCreateBaseOptimizer.
-        : base(architecture, optimizer, lossFunction, (options ??= new MedSAM2Options()).NumClasses, MedSAM2Modalities)
+        : base(architecture, optimizer, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), (options ??= new MedSAM2Options()).NumClasses, MedSAM2Modalities)
     {
-        _options = options; Options = _options;
-        ApplyMedSAM2InputFallback(architecture);
-        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
-        _hasUserSuppliedOptimizer = optimizer is not null;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize, _options);
+        _options = options;
+        _options.Validate();
+        Options = _options;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
+        if (_channels is not (1 or 3)) throw new ArgumentException("MedSAM2 segments grayscale (1-channel) or RGB (3-channel) images.", nameof(architecture));
+        _userOptimizer = optimizer;
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Re-applies MedSAM2's 1024x1024 fallback for architectures that carry no input geometry.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// SegmentationModelBase falls back to 512x512 when the architecture supplies no input height
-    /// or width. MedSAM2 inherits SAM 2's 1024x1024 input resolution, so that fallback is restored
-    /// here for the unset case only - when the architecture does specify dimensions, the base's
-    /// value already matches and nothing changes.
-    /// </para>
-    /// </remarks>
-    private void ApplyMedSAM2InputFallback(NeuralNetworkArchitecture<T> architecture)
-    {
-        if (architecture.InputHeight <= 0) _height = 1024;
-        if (architecture.InputWidth <= 0) _width = 1024;
-    }
-
-    /// <summary>
-    /// Initializes MedSAM2 in ONNX (inference-only) mode.
-    /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained MedSAM2 from ONNX for inference.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public MedSAM2(NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath,
-        MedSAM2Options? options = null)
-        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
-        // geometry, stores the modality list and opens the InferenceSession - the same lines this
-        // used to repeat.
-        : base(architecture, onnxModelPath, (options ??= new MedSAM2Options()).NumClasses, MedSAM2Modalities)
-    {
-        _options = options; Options = _options;
-        ApplyMedSAM2InputFallback(architecture);
-        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize, _options);
-        InitializeLayers();
-    }
-    #endregion
-
-    #region Public Methods
-    /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        if (!_useNativeMode) return PredictOnnx(input);
-        SetTrainingMode(false); // eval mode: sync inference-weight cache to latest weights
-        return Forward(input);
-    }
-
-    /// <summary>
-    /// Supplies the training optimizer: a linear-warmup Adam at 1e-4 (honoring a
-    /// constructor-supplied optimizer when present) so the from-scratch SAM-style stack
-    /// does not diverge — the default optimizer was never consulted and MoreData saw the
-    /// loss climb (22 -> 58) over successive iterations. Mirrors the MedSAM / UniVS / ODISE fix.
-    /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
-    {
-        if (_hasUserSuppliedOptimizer && _optimizer is not null)
-            return _optimizer;
-
-        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                UseAMSGrad = false,
-                InitialLearningRate = 0.0001,
-                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
-                    baseLearningRate: 0.0001,
-                    warmupSteps: 5,
-                    totalSteps: 300,
-                    warmupInitLr: 0.00001)
-            });
-    }
-
-    #endregion
-
-    #region Private Methods
-    /// <summary>
-    /// Resolves the encoder configuration, preferring explicit caller overrides over the paper preset.
-    /// </summary>
-    /// <remarks>
-    /// The presets below are the published Hiera encoders and remain the default in every case, so
-    /// production behaviour is unchanged. Previously they were the ONLY reachable configurations, so
-    /// even MedSAM2ModelSize.Tiny built a full 96/192/384/768 encoder — no caller could construct the
-    /// model at a bounded size for a test or a memory-constrained deployment. Options.ChannelDims /
-    /// Depths / DecoderDim now allow that; leaving them null selects the preset exactly as before.
-    /// </remarks>
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(
-        MedSAM2ModelSize modelSize, MedSAM2Options? options)
-    {
-        (int[] ChannelDims, int[] Depths, int DecoderDim) preset = modelSize switch
-        {
-            MedSAM2ModelSize.Tiny => ([96, 192, 384, 768], [2, 2, 6, 2], 256),
-            MedSAM2ModelSize.Base => ([112, 224, 448, 896], [2, 3, 16, 3], 256),
-            MedSAM2ModelSize.Large => ([144, 288, 576, 1152], [2, 6, 36, 4], 256),
-            _ => ([96, 192, 384, 768], [2, 2, 6, 2], 256)
-        };
-
-        int[] dims = options?.ChannelDims is { Length: > 0 } d ? d : preset.ChannelDims;
-        int[] depths = options?.Depths is { Length: > 0 } p ? p : preset.Depths;
-        if (dims.Length != depths.Length)
-        {
-            throw new ArgumentException(
-                $"MedSAM2Options.ChannelDims ({dims.Length}) and Depths ({depths.Length}) must have the " +
-                "same number of stages.", nameof(options));
-        }
-
-        return (dims, depths, options?.DecoderDim ?? preset.DecoderDim);
-    }
-
-    protected override Tensor<T> Forward(Tensor<T> input)
-    {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
-    }
-
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
-    {
-        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
-        string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
-        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
-        using var results = _onnxSession.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
-        if (!hasBatch) result = RemoveBatchDimension(result); return result;
-    }
-
-    // AddBatchDimension and RemoveBatchDimension are inherited from SegmentationModelBase.
-    #endregion
-
-    #region Abstract Implementation
-    /// <summary>
-    /// Initializes the encoder and decoder layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In native mode, builds the neural network layers.
-    /// In ONNX mode, no layers are created.
-    /// </para>
-    /// </remarks>
     protected override void InitializeLayers()
     {
+        if (_options is null || _runtime is not null) return;
         if (!_useNativeMode) { ClearLayers(); return; }
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
-        else
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("MedSAM2 builds the paper's network; custom layers are not supported.");
+        // SAM2.1-Tiny, at 512 pixels unless the options say otherwise (a smaller canvas follows the architecture).
+        int side = _options.ImageSize ?? 512;
+        var training = new Sam2TrainingSettings
         {
-            var encoderLayers = LayerHelper<T>.CreateMedSAM2EncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateMedSAM2DecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
-            Layers.AddRange(decoderLayers);
-        }
+            PointProbability = 0.5, BoxProbability = 1.0, ReverseProbability = 0.0, BoxNoiseBound = 10.0, CorrectedFramesAsPrompted = true,
+        };
+        _runtime = new Sam2Runtime<T>(Engine, _options, sizeIndex: 0, sam21: true, side, training, _userOptimizer);
+        Layers.AddRange(_runtime.Layers);
+        _encoderLayerEnd = _runtime.Layers.Count;
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Collects metadata describing this model's configuration.
-    /// </summary>
-    /// <returns>Model metadata.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns a summary for saving or display.
-    /// </para>
-    /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata() => new()
-    {
-        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "MedSAM2" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelDataProvider = () => SerializeForMetadata()
-    };
+    /// <summary>Loads a checkpoint in Hugging Face's <c>Sam2VideoModel</c> format (MedSAM2's released <c>.pt</c> converted with
+    /// transformers' SAM 2 conversion script).</summary>
+    public void LoadPretrainedWeights(string path) => Network.LoadSafetensors(path);
 
-    // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
-    // MedSAM2 owns no further unmanaged resources.
-    #endregion
-
-    #region IMedicalSegmentation Implementation
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase.
-    // SupportedModalities is supplied to the base constructor via MedSAM2Modalities, and
-    // Supports3D (true), Supports2D (true) and SupportsFewShot (false) are MedicalSegmentationBase's
-    // defaults already - re-declaring them here would only create two sources of one fact.
+    /// <summary>Loads a Hugging Face <c>Sam2VideoModel</c> state dict.</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
     /// <inheritdoc/>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        if (_runtime is not null) _runtime.Network.Training = isTraining;
+    }
+
+    // ------------------------------------------------------------------ slices, volumes and videos
+
+    /// <summary>A slice or frame <c>[C, H, W]</c> (C 1 or 3, values in 0..1) as an RGB frame <c>[1, 3, H, W]</c>: a grayscale
+    /// slice is repeated to three channels, as the official preprocessing does.</summary>
+    private Tensor<T> Rgb(Tensor<T> slice)
+    {
+        var frame = Sam2Runtime<T>.Frame(slice, nameof(slice));
+        if (frame.Shape[1] == 3) return frame;
+        if (frame.Shape[1] != 1) throw new ArgumentException("MedSAM2 takes grayscale (1-channel) or RGB (3-channel) slices.", nameof(slice));
+        return Engine.TensorConcatenate(new[] { frame, frame, frame }, 1);
+    }
+
+    /// <summary>The slices of a volume <c>[C, D, H, W]</c> (or a video <c>[F, C, H, W]</c> with <paramref name="video"/>) as
+    /// RGB frames.</summary>
+    private List<Tensor<T>> Slices(Tensor<T> volume, bool video)
+    {
+        if (volume.Rank != 4) throw new ArgumentException(video ? "A video is [F, C, H, W]." : "A volume is [C, D, H, W].", nameof(volume));
+        int channels = video ? volume.Shape[1] : volume.Shape[0], count = video ? volume.Shape[0] : volume.Shape[1];
+        int h = volume.Shape[2], w = volume.Shape[3];
+        return Enumerable.Range(0, count).Select(t => Rgb(video
+            ? Engine.TensorSlice(volume, new[] { t, 0, 0, 0 }, new[] { 1, channels, h, w })
+            : Engine.Reshape(Engine.TensorSlice(volume, new[] { 0, t, 0, 0 }, new[] { channels, 1, h, w }), new[] { 1, channels, h, w }))).ToList();
+    }
+
+    /// <summary>A binary segmentation result from probabilities <c>[..., H, W]</c>: the labels (above 0.5) and one structure.</summary>
+    private MedicalSegmentationResult<T> Result(Tensor<T> probabilities)
+    {
+        var labels = new Tensor<T>(probabilities.Shape.ToArray());
+        double area = 0, confidence = 0;
+        var values = probabilities.ToArray();
+        for (int i = 0; i < values.Length; i++)
+        {
+            double p = NumOps.ToDouble(values[i]);
+            if (p <= 0.5) continue;
+            labels[i] = NumOps.One;
+            area++;
+            confidence += p;
+        }
+        var structures = area > 0
+            ? new List<SegmentedStructure> { new() { ClassId = 1, Name = "Prompted structure", VolumeOrArea = area, MeanConfidence = confidence / area } }
+            : new List<SegmentedStructure>();
+        return new MedicalSegmentationResult<T>
+        {
+            Labels = labels,
+            Probabilities = Engine.Reshape(probabilities, new[] { 1 }.Concat(probabilities.Shape.ToArray()).ToArray()),
+            Structures = structures,
+        };
+    }
+
+    private Tensor<T> Track(List<Tensor<T>> frames, int keyFrame, Sam2Prompt<T> prompt)
+    {
+        if (keyFrame < 0 || keyFrame >= frames.Count) throw new ArgumentOutOfRangeException(nameof(keyFrame));
+        int h = frames[0].Shape[2], w = frames[0].Shape[3];
+        var outputs = Runtime.Track(frames, new Dictionary<int, Sam2Prompt<T>> { [keyFrame] = prompt }, freshReverse: true);
+        return Engine.TensorStack(outputs.Select(o => Runtime.Probabilities(o.HighRes, h, w)).ToArray(), 0);
+    }
+
+    /// <summary>Segments a structure in one slice <c>[C, H, W]</c> from a box <c>[x0, y0, x1, y1]</c> (the image predictor).</summary>
+    public MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice, float[] box)
+    {
+        var frame = Rgb(slice);
+        int h = frame.Shape[2], w = frame.Shape[3];
+        var prompt = Runtime.BoxPrompt(box.Select(v => (double)v).ToList(), h, w);
+        var (logits, _, _) = Runtime.DecodeImage(Runtime.EncodeImage(frame), prompt.Points, prompt.Labels, null, multimask: false);
+        return Result(Runtime.Probabilities(logits, h, w));
+    }
+
+    /// <summary>
+    /// Segments a structure through a volume <c>[C, D, H, W]</c> (values in 0..1) from a box <c>[x0, y0, x1, y1]</c> on its key
+    /// slice: the box is propagated to the last slice and, starting again from the key slice, to the first.
+    /// </summary>
+    public MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume, int keySlice, float[] box)
+    {
+        var slices = Slices(volume, video: false);
+        int h = slices[0].Shape[2], w = slices[0].Shape[3];
+        return Result(Track(slices, keySlice, Runtime.BoxPrompt(box.Select(v => (double)v).ToList(), h, w)));
+    }
+
+    /// <summary>Segments a structure through a video <c>[F, C, H, W]</c> (values in 0..1) from a box on one frame; each
+    /// frame's probabilities <c>[F, H, W]</c>.</summary>
+    public Tensor<T> SegmentVideo(Tensor<T> video, int keyFrame, float[] box)
+    {
+        var frames = Slices(video, video: true);
+        int h = frames[0].Shape[2], w = frames[0].Shape[3];
+        return Track(frames, keyFrame, Runtime.BoxPrompt(box.Select(v => (double)v).ToList(), h, w));
+    }
+
+    /// <summary>A slice <c>[C, H, W]</c> without a prompt: the decoder on the model's empty prompt (a padding point).</summary>
     public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
     {
-        var output = Predict(slice);
-        var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
-        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
-        int h = labels.Shape[0], w = labels.Shape[1];
-        int numC = probs.Shape[0];
-        var structures = new List<SegmentedStructure>();
-        for (int c = 0; c < numC; c++)
-        {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
-            if (area > 0)
-                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
-        }
-        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
+        var frame = Rgb(slice);
+        int h = frame.Shape[2], w = frame.Shape[3];
+        var (logits, _, _) = Runtime.DecodeImage(Runtime.EncodeImage(frame), null, null, null, multimask: false);
+        return Result(Runtime.Probabilities(logits, h, w));
     }
-    /// <inheritdoc/>
+
+    /// <summary>A volume <c>[C, D, H, W]</c> (or a slice) without a prompt: the middle slice decoded from the model's empty
+    /// prompt and propagated both ways.</summary>
     public override MedicalSegmentationResult<T> SegmentVolume(Tensor<T> volume)
     {
-        if (volume.Rank <= 3)
-            return SegmentSlice(volume);
-        int numC = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
-        var volLabels = new Tensor<T>([depth, h, w]);
-        var volProbs = new Tensor<T>([numC, depth, h, w]);
-        var structAccum = new Dictionary<int, (double area, double confSum)>();
-        for (int d = 0; d < depth; d++)
-        {
-            var slice = new Tensor<T>([numC, h, w]);
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        slice[c, y, x] = volume[c, d, y, x];
-            var result = SegmentSlice(slice);
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    volLabels[d, y, x] = result.Labels[y, x];
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        volProbs[c, d, y, x] = result.Probabilities[c, y, x];
-            foreach (var s in result.Structures)
-            {
-                if (structAccum.TryGetValue(s.ClassId, out var existing))
-                    structAccum[s.ClassId] = (existing.area + s.VolumeOrArea, existing.confSum + s.MeanConfidence * s.VolumeOrArea);
-                else
-                    structAccum[s.ClassId] = (s.VolumeOrArea, s.MeanConfidence * s.VolumeOrArea);
-            }
-        }
-        var structures = new List<SegmentedStructure>();
-        foreach (var kvp in structAccum)
-            structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
-        return new MedicalSegmentationResult<T> { Labels = volLabels, Probabilities = volProbs, Structures = structures };
+        if (volume.Rank <= 3) return SegmentSlice(volume);
+        var slices = Slices(volume, video: false);
+        return Result(Track(slices, slices.Count / 2, Sam2Runtime<T>.NoPrompt));
     }
+
+    // ------------------------------------------------------------------ the tensor contract and training
+
+    /// <summary>The single-mask logits <c>[B, 1, H, W]</c> (or <c>[1, H, W]</c>) of slices with no prompt.</summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch) input = AddBatchDimension(input);
+        int b = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
+        var outputs = new Tensor<T>[b];
+        for (int i = 0; i < b; i++)
+        {
+            var frame = Rgb(Engine.TensorSlice(input, new[] { i, 0, 0, 0 }, new[] { 1, input.Shape[1], h, w }));
+            var (low, _, _) = Runtime.DecodeImage(Runtime.EncodeImage(frame), null, null, null, multimask: false);
+            outputs[i] = SpatialResampling.Resize(Engine, low, h, w);
+        }
+        var logits = b == 1 ? outputs[0] : Engine.TensorConcatenate(outputs, 0);
+        return hasBatch ? logits : RemoveBatchDimension(logits);
+    }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    private IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> Images(Tensor<T> input, Tensor<T> target)
+    {
+        if (input.Rank == 3) return new[] { (Engine.Reshape(Rgb(input), new[] { 3, input.Shape[1], input.Shape[2] }), target) };
+        if (input.Rank != 4) throw new ArgumentException("MedSAM2 trains on slices [C, H, W] or [B, C, H, W].", nameof(input));
+        int b = input.Shape[0], c = input.Shape[1], h = input.Shape[2], w = input.Shape[3];
+        if (target.Length != b * h * w) throw new ArgumentException($"The target is one {h}x{w} mask per slice ({b}).", nameof(target));
+        var flat = Engine.Reshape(target, new[] { b, h * w });
+        return Enumerable.Range(0, b).Select(i => (
+            Engine.Reshape(Rgb(Engine.TensorSlice(input, new[] { i, 0, 0, 0 }, new[] { 1, c, h, w })), new[] { 3, h, w }),
+            Engine.Reshape(Engine.TensorSlice(flat, new[] { i, 0 }, new[] { 1, h * w }), new[] { h, w }))).ToList();
+    }
+
     /// <summary>
-    /// Segments a query image, ignoring the support set.
+    /// One step of MedSAM2's training on slices <c>[C, H, W]</c> or <c>[B, C, H, W]</c> and their masks: each slice is a
+    /// one-frame example (a box prompt with corrective clicks), and the step minimizes the mean loss. Volumes and videos train
+    /// through <see cref="TrainOnVolume"/>.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Overrides the base rather than inheriting it deliberately. MedicalSegmentationBase's
-    /// SegmentFewShot throws NotSupportedException whenever SupportsFewShot is false, which it is
-    /// for MedSAM2; this model instead falls back to plain slice segmentation, and that behaviour
-    /// is preserved exactly as it was before re-parenting.
-    /// </para>
-    /// </remarks>
-    public override MedicalSegmentationResult<T> SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => SegmentSlice(queryImage);
-    #endregion
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        Step(Images(input, expectedOutput));
+        return true;
+    }
+
+    /// <summary>One step of MedSAM2's training on a structure through consecutive slices of a volume <c>[C, D, H, W]</c> (or
+    /// frames of a video <c>[F, C, H, W]</c> with <paramref name="video"/>) and its masks <c>[D, H, W]</c>; the paper trains on
+    /// eight consecutive slices or frames.</summary>
+    public void TrainOnVolume(Tensor<T> volume, Tensor<T> masks, bool video = false)
+    {
+        var frames = Slices(volume, video);
+        Step(new[] { (Engine.TensorConcatenate(frames.ToArray(), 0), masks) });
+    }
+
+    private void Step(IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> examples)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            LastLoss = Runtime.Train(examples, gradients => PublishParameterGradients(gradients));
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>MedSAM2 trains on a supervised objective: its losses against a structure's masks.</summary>
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    /// <inheritdoc/>
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <summary>The training objective estimated with common random numbers (fixed draws), so two evaluations compare the
+    /// same objective.</summary>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) => Runtime.Evaluate(Images(input, target));
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            { "ModelName", "MedSAM2" },
+            { "InputHeight", _height },
+            { "InputWidth", _width },
+            { "ImageSize", Network.Configuration.ImageSize },
+            { "MemoryBankSize", _options.MemoryBankSize },
+            { "NumLayers", Layers.Count },
+        },
+        ModelDataProvider = () => SerializeForMetadata()
+    };
 }

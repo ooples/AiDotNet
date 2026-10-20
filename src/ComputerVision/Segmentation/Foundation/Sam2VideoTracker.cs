@@ -257,10 +257,12 @@ internal sealed class Sam2VideoTracker<T>
     /// <summary>
     /// Segments one object through a video as the official video predictor does: each prompted frame is decoded on its own,
     /// then the object is propagated forward from the first prompted frame to the end and backward from it to the start.
-    /// Returns every frame's output.
+    /// With <paramref name="freshReverse"/> the backward pass starts again from the prompted frames alone, without the
+    /// forward pass's memories (MedSAM2's inference resets the predictor between the two directions). Returns every frame's
+    /// output.
     /// </summary>
     public Sam2FrameOutput<T>[] Propagate(int frames, Func<int, (Tensor<T> Features, Tensor<T> HighRes0, Tensor<T> HighRes1)> features,
-        IReadOnlyDictionary<int, Sam2Prompt<T>> prompts)
+        IReadOnlyDictionary<int, Sam2Prompt<T>> prompts, bool freshReverse = false)
     {
         if (prompts.Count == 0) throw new ArgumentException("SAM 2 needs at least one prompted frame.", nameof(prompts));
         Reset();
@@ -277,14 +279,25 @@ internal sealed class Sam2VideoTracker<T>
             (prompted ? Conditioning : Tracked)[t] = output;
             outputs[t] = output;
         }
-        foreach (var kv in prompts.OrderBy(kv => kv.Key))
+        void Prompted()
         {
-            if (kv.Key < 0 || kv.Key >= frames) throw new ArgumentOutOfRangeException(nameof(prompts), $"Frame {kv.Key} is outside the video.");
-            Run(kv.Key, true, kv.Value, reverse: false);
+            foreach (var kv in prompts.OrderBy(kv => kv.Key))
+            {
+                if (kv.Key < 0 || kv.Key >= frames) throw new ArgumentOutOfRangeException(nameof(prompts), $"Frame {kv.Key} is outside the video.");
+                Run(kv.Key, true, kv.Value, reverse: false);
+            }
         }
+        Prompted();
         int start = prompts.Keys.Min();
         for (int t = start + 1; t < frames; t++)
             if (!Conditioning.ContainsKey(t)) Run(t, false, null, reverse: false);
+        if (freshReverse && start > 0)
+        {
+            var forward = (Sam2FrameOutput<T>[])outputs.Clone();
+            Reset();
+            Prompted();
+            for (int t = start + 1; t < frames; t++) outputs[t] = forward[t];
+        }
         for (int t = start - 1; t >= 0; t--)
             if (!Conditioning.ContainsKey(t)) Run(t, false, null, reverse: true);
         return outputs;

@@ -406,7 +406,14 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MedSAM2_MultiStepTrain_DoesNotThrow()
     {
-        var model = new MedSAM2<float>(Arch(), options: new MedSAM2Options { NumClasses = 5, ModelSize = MedSAM2ModelSize.Base });
+        // MedSAM2 segments one prompted structure (NumClasses 1); the capacity is scaled for the smoke test.
+        var model = new MedSAM2<float>(Arch(), options: new MedSAM2Options
+            {
+                ImageSize = 32, HieraEmbeddingDimension = 8, HieraStageDepths = new[] { 1, 1, 1, 1 }, HieraInitialHeadCount = 1,
+                HieraWindowSizes = new[] { 4, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, ModelDimension = 32, MemoryDimension = 16,
+                DecoderHeadCount = 2, MaskDecoderMlpDimension = 32, MemoryAttentionLayerCount = 1, MemoryAttentionFeedForwardDimension = 32,
+                MemoryFuserDimension = 32, CorrectionPoints = 1,
+        });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
