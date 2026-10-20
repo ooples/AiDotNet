@@ -71,6 +71,26 @@ public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMetho
     /// <inheritdoc />
     public override bool RequiresMemoryBank => false;
 
+    /// <inheritdoc />
+    /// <remarks>Self-distillation trains on the global crops (Caron et al. 2021, Sec. 3.1).</remarks>
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch)
+    {
+        var (globalViews, _) = Augmentation.ApplyDINO(batch, 2, 0);
+        return (globalViews[0], globalViews[1]);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The teacher (encoder and projector) follows the student by EMA.</remarks>
+    protected override void AfterOptimizerStep() => UpdateTeacher();
+
+    /// <inheritdoc />
+    /// <remarks>The paper trains with AdamW (Sec. 4).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.AdamW;
+
+    /// <inheritdoc />
+    protected override double DefaultLearningRate => 5e-4;
+
     /// <summary>
     /// Initializes a new instance of the TeacherStudentSSL class.
     /// </summary>
@@ -130,7 +150,7 @@ public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMetho
     /// </summary>
     protected virtual Tensor<T> ForwardStudent(Tensor<T> view)
     {
-        var h = _encoder.ForwardWithMemory(view);
+        var h = EncodeForTraining(view);
         var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
         return projector.Project(h);
     }
