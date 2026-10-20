@@ -7856,6 +7856,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(inputChannels: 3, latentChannels: 4, " +
                     "baseChannels: 32, channelMultipliers: new[] { 1 }, numResBlocksPerLevel: 1, seed: 42), seed: 42)";
             }
+            else if (model.ClassName == "DiffusionAutoMLModel" && model.TypeParameterCount == 1)
+            {
+                // The default trial config is a search starting point sized for 512x512 images: a 128-channel
+                // U-Net over a 64x64 latent plus its autoencoder, 131M parameters. Each training step left about
+                // 1.4 GB of gradient-sized garbage the GC reclaimed late, so Training_ShouldReducePredictionError
+                // peaked at 15.8 GB alone and shard D ran its 16 GB runner out of memory. The bounded config keeps
+                // the same U-Net topology (every resolution level, attention and cross-attention) at the fixture's
+                // 8x8 latent.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.AutoML.DiffusionTrialConfig<double> {{ " +
+                    "BaseChannels = 16, NumHeads = 4, NumResBlocks = 1, LatentDim = 4, LatentHeight = 8, LatentWidth = 8, " +
+                    "ConditioningDim = 8, ImageChannels = 3 }, seed: 42)";
+            }
             else if (model.ClassName == "UniVSTModel" && model.TypeParameterCount == 1)
             {
                 // UniVST steers a frozen Stable Diffusion v1.5 pipeline. Production correctly keeps
