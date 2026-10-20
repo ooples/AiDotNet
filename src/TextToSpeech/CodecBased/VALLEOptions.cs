@@ -60,12 +60,14 @@ public class VALLEOptions : TtsModelOptions
     public int FeedForwardDim { get; set; } = 4096;
 
     /// <summary>Rows of the phoneme embeddings (512, the reference's <c>NUM_TEXT_TOKENS</c>).</summary>
+    [AiDotNet.Attributes.NotScaled("holds every phoneme id of the model's inventory (93 to 105)")]
     public int TextTokens { get; set; } = 512;
 
     /// <summary>Codebooks (8: EnCodec at 6 kbps).</summary>
     public int NumCodebooks { get; set; } = 8;
 
     /// <summary>Codes per codebook (1024).</summary>
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]
     public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Length of the NAR's training prompt, in seconds (3, §5.1).</summary>

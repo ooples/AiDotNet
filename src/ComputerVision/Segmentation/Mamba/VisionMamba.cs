@@ -126,7 +126,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         {
             Backbone = new VimConfiguration
             {
-                ImageHeight = _height, ImageWidth = _width, Channels = _channels, PatchSize = 16, Stride = 16, Dim = dim,
+                ImageHeight = Canvas(_height), ImageWidth = Canvas(_width), Channels = _channels, PatchSize = 16, Stride = 16, Dim = dim,
                 Depth = 24, StateDim = 16, DropPathRate = _options.DropRate, ClassToken = false, Rope = small, RopeResidual = small,
             },
             OutIndices = new[] { 5, 11, 17, 23 }, Classes = _numClasses, HeadChannels = dim, AuxiliaryChannels = 256,
@@ -139,8 +139,6 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         if (!_useNativeMode) { ClearLayers(); return; }
         if (Architecture.Layers is { Count: > 0 })
             throw new NotSupportedException("VisionMamba builds the paper's network; custom layers are not supported.");
-        if (_height % 16 != 0 || _width % 16 != 0)
-            throw new ArgumentException($"VisionMamba cuts the image into 16-pixel patches; {_height}x{_width} is not a multiple of 16.");
         var layers = new List<LayerBase<T>>();
         _network = new VimSegmentationNetwork<T>(Engine, layers, Configuration());
         int seed = _options.Seed ?? 42;
@@ -154,12 +152,34 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
     /// <summary>The class logits <c>[B, classes, H, W]</c> (or <c>[classes, H, W]</c>) at the image's resolution.</summary>
+    /// <remarks>An image whose sides are not multiples of the 16-pixel patch is zero-padded on the bottom and right to the
+    /// network's canvas and its logits cropped back, as mmseg pads to the size divisor (pad value 0) and crops.</remarks>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var logits = Network.Forward(input, IsTrainingMode, _trainingRandom, withAuxiliary: false).Logits;
+        int h = input.Shape[2], w = input.Shape[3];
+        var logits = Crop(Network.Forward(PadToCanvas(input), IsTrainingMode, _trainingRandom, withAuxiliary: false).Logits, h, w);
         return hasBatch ? logits : RemoveBatchDimension(logits);
     }
+
+    /// <summary>A side rounded up to the 16-pixel patch.</summary>
+    private static int Canvas(int side) => (side + 15) / 16 * 16;
+
+    /// <summary>Zero-pads <c>[B, C, h, w]</c> on the bottom and right to the patch multiple.</summary>
+    private Tensor<T> PadToCanvas(Tensor<T> image)
+    {
+        int b = image.Shape[0], c = image.Shape[1], h = image.Shape[2], w = image.Shape[3];
+        int height = Canvas(h), width = Canvas(w);
+        if (width > w) image = Engine.TensorConcatenate(new[] { image, new Tensor<T>(new[] { b, c, h, width - w }) }, 3);
+        if (height > h) image = Engine.TensorConcatenate(new[] { image, new Tensor<T>(new[] { b, c, height - h, width }) }, 2);
+        return image;
+    }
+
+    /// <summary>The top-left <c>h x w</c> of <c>[B, C, H, W]</c> logits.</summary>
+    private Tensor<T> Crop(Tensor<T> logits, int h, int w)
+        => logits.Shape[2] == h && logits.Shape[3] == w
+            ? logits
+            : Engine.TensorSlice(logits, new[] { 0, 0, 0, 0 }, new[] { logits.Shape[0], logits.Shape[1], h, w });
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
@@ -177,15 +197,17 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         if (input.Shape[0] != expectedOutput.Shape[0]) throw new ArgumentException($"Batch size mismatch: input has {input.Shape[0]} but expectedOutput has {expectedOutput.Shape[0]}.", nameof(expectedOutput));
         var network = Network;
         var target = expectedOutput;
-        var image = input;
+        int height = input.Shape[2], width = input.Shape[3];
+        var image = PadToCanvas(input);
         SetTrainingMode(true);
         try
         {
             TrainWithCustomLoss(image, _ =>
             {
                 var (logits, auxiliary) = network.Forward(image, training: true, _trainingRandom, withAuxiliary: true);
-                return Engine.TensorAdd(PixelCrossEntropy(logits, target),
-                    Engine.TensorMultiplyScalar(PixelCrossEntropy(auxiliary!, target), NumOps.FromDouble(network.Configuration.AuxiliaryWeight)));
+                return Engine.TensorAdd(PixelCrossEntropy(Crop(logits, height, width), target),
+                    Engine.TensorMultiplyScalar(PixelCrossEntropy(Crop(auxiliary!, height, width), target),
+                        NumOps.FromDouble(network.Configuration.AuxiliaryWeight)));
             }, Optimizer);
         }
         finally

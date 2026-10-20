@@ -100,9 +100,11 @@ public class SoundStreamOptions : NeuralAudioCodecOptions
     public int WaveDiscriminatorWidthDivisor { get; set; } = 1;
 
     /// <summary>Gets or sets the STFT discriminator's window W (1024).</summary>
+    [AiDotNet.Attributes.NotScaled("an analysis window: the discriminator halves its W/2 bins six times, so W is a multiple of 128")]
     public int StftWindow { get; set; } = 1024;
 
     /// <summary>Gets or sets the STFT discriminator's hop H (256).</summary>
+    [AiDotNet.Attributes.NotScaled("the analysis hop of StftWindow; a smaller hop only adds frames")]
     public int StftHop { get; set; } = 256;
 
     /// <summary>Gets or sets the STFT discriminator's base channels C (32).</summary>

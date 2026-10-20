@@ -498,7 +498,9 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                 .Where(p => p.DeclaredAccessibility == Accessibility.Public
                     && p.SetMethod is { DeclaredAccessibility: Accessibility.Public }
                     && !p.IsStatic
-                    && p.Type.SpecialType == SpecialType.System_Int32)
+                    && p.Type.SpecialType == SpecialType.System_Int32
+                    && !IsMarkedNotScaled(p)
+                    && !ClassExemptsFromScaling(type, p.Name))
                 .Select(p => p.Name)
                 .Where(IsScalable)
                 .ToArray();
@@ -549,7 +551,9 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                         || property.Type is not IArrayTypeSymbol { Rank: 1 } array
                         || array.ElementType.SpecialType != SpecialType.System_Int32
                         || !IsScalable(property.Name)
-                        || !NamesAWidth(property.Name)) continue;
+                        || !NamesAWidth(property.Name)
+                        || IsMarkedNotScaled(property)
+                        || ClassExemptsFromScaling(type, property.Name)) continue;
                     arrayKnobs.Add(property.Name);
                 }
             }
@@ -659,6 +663,76 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("        if (instance is null) return null;");
         sb.AppendLine();
+        sb.AppendLine("        ScaleInPlace(optionsType, key, instance);");
+        sb.AppendLine();
+        sb.AppendLine("        if (overrides is not null)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var pair in overrides)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var target = optionsType.GetProperty(");
+        sb.AppendLine("                    pair.Key,");
+        sb.AppendLine("                    global::System.Reflection.BindingFlags.Instance");
+        sb.AppendLine("                        | global::System.Reflection.BindingFlags.Public");
+        sb.AppendLine("                        | global::System.Reflection.BindingFlags.IgnoreCase);");
+        sb.AppendLine("                if (target is null || !target.CanWrite) continue;");
+        sb.AppendLine("                if (target.PropertyType != typeof(int)) continue;");
+        sb.AppendLine("                target.SetValue(instance, pair.Value);");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        // Restore relationships after both independent scaling and explicit overrides.");
+        sb.AppendLine("        // A dimension may cross the scaling floor while its small head count does not");
+        sb.AppendLine("        // (768 / 12 becomes 32 / 12), so ratio-preserving division alone is insufficient.");
+        sb.AppendLine("        AlignDeclaredConstraints(optionsType, key, instance);");
+        sb.AppendLine("        AlignHeadCounts(optionsType, key, instance);");
+        sb.AppendLine();
+        sb.AppendLine("        // NESTED OPTIONS scale with their owner. A model that carries a codec's or a detector's options (Pheme,");
+        sb.AppendLine("        // SoundStorm and AudioLM a codec's, Grounded SAM 2 a Grounding DINO's) checks its own sizes against the");
+        sb.AppendLine("        // nested ones: scaling only the owner made 32 codes per level meet a 1024-entry codebook, and left the");
+        sb.AppendLine("        // nested network at paper scale. The nested instance is scaled IN PLACE, so whatever the owner set on it");
+        sb.AppendLine("        // (MusicGen's 32 kHz EnCodec) is kept.");
+        sb.AppendLine("        ScaleNested(instance, 0, new global::System.Collections.Generic.List<object> { instance });");
+        sb.AppendLine();
+        sb.AppendLine("        return instance;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static bool IsKnown(global::System.Type key)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        for (int i = 0; i < Knobs.Length; i++) if (Knobs[i].Type == key) return true;");
+        sb.AppendLine("        for (int i = 0; i < ArrayKnobs.Length; i++) if (ArrayKnobs[i].Type == key) return true;");
+        sb.AppendLine("        for (int i = 0; i < DivisibilityConstraints.Length; i++) if (DivisibilityConstraints[i].Type == key) return true;");
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static void ScaleNested(object owner, int depth, global::System.Collections.Generic.List<object> visited)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (depth >= 3) return;");
+        sb.AppendLine("        foreach (var property in owner.GetType().GetProperties(");
+        sb.AppendLine("            global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public))");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (!property.CanRead || property.GetIndexParameters().Length > 0) continue;");
+        sb.AppendLine("            var declared = property.PropertyType;");
+        sb.AppendLine("            if (declared.IsPrimitive || declared.IsEnum || declared.IsArray || declared == typeof(string) || declared.IsValueType) continue;");
+        sb.AppendLine("            object? value;");
+        sb.AppendLine("            try { value = property.GetValue(owner); }");
+        sb.AppendLine("            catch (global::System.Exception) { continue; }");
+        sb.AppendLine("            if (value is null) continue;");
+        sb.AppendLine("            bool seen = false;");
+        sb.AppendLine("            foreach (var v in visited) if (ReferenceEquals(v, value)) { seen = true; break; }");
+        sb.AppendLine("            if (seen) continue;");
+        sb.AppendLine("            visited.Add(value);");
+        sb.AppendLine("            var type = value.GetType();");
+        sb.AppendLine("            var key = type.IsGenericType ? type.GetGenericTypeDefinition() : type;");
+        sb.AppendLine("            if (!IsKnown(key)) continue;");
+        sb.AppendLine("            ScaleInPlace(type, key, value);");
+        sb.AppendLine("            AlignDeclaredConstraints(type, key, value);");
+        sb.AppendLine("            AlignHeadCounts(type, key, value);");
+        sb.AppendLine("            ScaleNested(value, depth + 1, visited);");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static void ScaleInPlace(global::System.Type optionsType, global::System.Type key, object instance)");
+        sb.AppendLine("    {");
         sb.AppendLine("        for (int i = 0; i < Knobs.Length; i++)");
         sb.AppendLine("        {");
         sb.AppendLine("            if (Knobs[i].Type != key) continue;");
@@ -693,29 +767,6 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            }");
         sb.AppendLine("            if (changed) property.SetValue(instance, scaled);");
         sb.AppendLine("        }");
-        sb.AppendLine();
-        sb.AppendLine("        if (overrides is not null)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            foreach (var pair in overrides)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                var target = optionsType.GetProperty(");
-        sb.AppendLine("                    pair.Key,");
-        sb.AppendLine("                    global::System.Reflection.BindingFlags.Instance");
-        sb.AppendLine("                        | global::System.Reflection.BindingFlags.Public");
-        sb.AppendLine("                        | global::System.Reflection.BindingFlags.IgnoreCase);");
-        sb.AppendLine("                if (target is null || !target.CanWrite) continue;");
-        sb.AppendLine("                if (target.PropertyType != typeof(int)) continue;");
-        sb.AppendLine("                target.SetValue(instance, pair.Value);");
-        sb.AppendLine("            }");
-        sb.AppendLine("        }");
-        sb.AppendLine();
-        sb.AppendLine("        // Restore relationships after both independent scaling and explicit overrides.");
-        sb.AppendLine("        // A dimension may cross the scaling floor while its small head count does not");
-        sb.AppendLine("        // (768 / 12 becomes 32 / 12), so ratio-preserving division alone is insufficient.");
-        sb.AppendLine("        AlignDeclaredConstraints(optionsType, key, instance);");
-        sb.AppendLine("        AlignHeadCounts(optionsType, key, instance);");
-        sb.AppendLine();
-        sb.AppendLine("        return instance;");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>");
@@ -899,6 +950,36 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// nothing, and proportional scaling does not have either problem: ratios are preserved and
     /// anything already small is untouched.
     /// </remarks>
+    private const string NotScaledAttributeName = "AiDotNet.Attributes.NotScaledAttribute";
+
+    /// <summary>Whether a property carries [NotScaled]: a size fixed by the data it indexes (a tokenizer's vocabulary).</summary>
+    private static bool IsMarkedNotScaled(IPropertySymbol property)
+    {
+        for (var p = property; p is not null; p = p.OverriddenProperty)
+        {
+            foreach (var attribute in p.GetAttributes())
+                if (attribute.AttributeClass?.ToDisplayString() == NotScaledAttributeName) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whether the options type (or a base) carries a class-level [NotScaled("Property", reason)] naming it.</summary>
+    private static bool ClassExemptsFromScaling(INamedTypeSymbol type, string propertyName)
+    {
+        for (var walk = type; walk is not null; walk = walk.BaseType)
+        {
+            foreach (var attribute in walk.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToDisplayString() != NotScaledAttributeName) continue;
+                if (attribute.ConstructorArguments.Length == 2
+                    && attribute.ConstructorArguments[0].Value is string named
+                    && string.Equals(named, propertyName, System.StringComparison.Ordinal))
+                    return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>Whether an int[] property's name says it holds widths (channels, dimensions, filters).</summary>
     private static bool NamesAWidth(string propertyName)
     {
