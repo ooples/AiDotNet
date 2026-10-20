@@ -48,7 +48,8 @@ public class VideoExtendedIntegrationTests
         MemoryDimension = 8,
         DecoderHeadCount = 4,
         MemoryAttentionLayerCount = 4,
-        MaskDecoderDepth = 2,
+        MemoryAttentionFeedForwardDimension = 32,
+        MemoryFuserDimension = 32,
         MaskDecoderMlpDimension = 64
     };
 
@@ -594,29 +595,24 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SAM2_ScoreHeads_EmitOneScoreVectorPerBatchItem()
+    public async Task SAM2_Predict_GivesOneProbabilityMaskPerFrame()
     {
         await Task.Yield();
         var arch = CreateArch(height: 32, width: 32);
         using var model = new SAM2<double>(
             arch, options: CreateSam2SmokeOptions(SAM2ModelSize.Tiny));
-        var input = new Tensor<double>([2, 3, 32, 32]);
-        for (int i = 0; i < input.Length; i++)
+        var video = new Tensor<double>([3, 3, 32, 32]);
+        for (int i = 0; i < video.Length; i++)
         {
-            input[i] = Math.Sin(i * 0.01);
+            video[i] = 0.5 + 0.5 * Math.Sin(i * 0.01);
         }
 
-        var activations = model.GetNamedLayerActivations(input);
+        var masks = model.Predict(video);
 
-        Assert.True(activations.TryGetValue("IouScores", out var iouScores));
-        Assert.Equal(4, iouScores.Rank);
-        Assert.Equal(2, iouScores.Shape[0]);
-        Assert.Equal(4, iouScores.Shape[1]);
-        Assert.Equal(1, iouScores.Shape[2]);
-        Assert.Equal(1, iouScores.Shape[3]);
-        for (int i = 0; i < iouScores.Length; i++)
+        Assert.Equal(new[] { 3, 32, 32 }, masks.Shape.ToArray());
+        for (int i = 0; i < masks.Length; i++)
         {
-            Assert.False(double.IsNaN(iouScores[i]) || double.IsInfinity(iouScores[i]));
+            Assert.InRange(masks[i], 0.0, 1.0);
         }
     }
 
