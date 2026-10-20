@@ -15,31 +15,38 @@ internal static class ArchitectureAgreement
     /// <paramref name="numFeatures"/>] model.
     /// </summary>
     /// <remarks>
-    /// An architecture describes such an input either as a grid (<c>InputHeight</c> time steps by <c>InputWidth</c>
-    /// features, as the financial models document) or as a flat <c>InputSize</c>. A flat size cannot say how it
-    /// splits across time and features, so it agrees when it equals either the feature count or the whole window.
+    /// <para>
+    /// An architecture describes such an input as a grid (<c>InputHeight</c> time steps by <c>InputWidth</c> features,
+    /// as the financial models document) or as a flat <c>InputSize</c>, and it converts one into the other itself: a
+    /// two-dimensional architecture given only 96 records a 1 x 96 grid. So a grid that matches exactly agrees, and
+    /// otherwise the stated element count agrees when it is one of the three readings callers use - the feature
+    /// count, the sequence length (the generated forecasting fixtures pass the context length) or the whole window.
+    /// </para>
+    /// <para>
+    /// An architecture whose spatial size is unstated (zero, or the lazy -1 of a three-dimensional input) is never
+    /// refused.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException">The architecture states an input size the model does not have.</exception>
     internal static void RequireSequenceInput<T>(NeuralNetworkArchitecture<T> architecture, string model,
         int sequenceLength, int numFeatures)
     {
         if (architecture is null) throw new ArgumentNullException(nameof(architecture));
-        if (architecture.InputHeight > 0 && architecture.InputWidth > 0)
-        {
-            if (architecture.InputHeight != sequenceLength || architecture.InputWidth != numFeatures)
-                throw new ArgumentException(
-                    $"{model}: the architecture describes a {architecture.InputHeight} x {architecture.InputWidth} " +
-                    $"(time steps x features) input, but the model was built for {sequenceLength} x {numFeatures} " +
-                    "from its options. Make the architecture's InputHeight and InputWidth match the options' sequence " +
-                    "length and feature count, or leave them unset.", nameof(architecture));
-            return;
-        }
+        int height = architecture.InputHeight, width = architecture.InputWidth;
+        bool grid = height > 0 && width > 0;
+        if (grid && height == sequenceLength && width == numFeatures) return;
 
-        int flat = architecture.InputSize;
-        if (flat > 0 && flat != numFeatures && (long)flat != (long)sequenceLength * numFeatures)
-            throw new ArgumentException(
-                $"{model}: the architecture's InputSize is {flat}, but the model was built for {numFeatures} features " +
-                $"over {sequenceLength} time steps ({(long)sequenceLength * numFeatures} values) from its options. " +
-                "Make InputSize the feature count or the whole window, or leave it unset.", nameof(architecture));
+        long stated = grid ? (long)height * width * Math.Max(1, architecture.InputDepth) : architecture.InputSize;
+        if (stated <= 0) return;
+        long window = (long)sequenceLength * numFeatures;
+        if (stated == numFeatures || stated == sequenceLength || stated == window) return;
+
+        string described = grid
+            ? $"a {height} x {width} (time steps x features) input"
+            : $"an InputSize of {stated}";
+        throw new ArgumentException(
+            $"{model}: the architecture describes {described}, but the model was built for {sequenceLength} x " +
+            $"{numFeatures} (time steps x features, {window} values) from its options. State the options' sequence " +
+            "length and feature count in the architecture, or leave its input size unset.", nameof(architecture));
     }
 }
