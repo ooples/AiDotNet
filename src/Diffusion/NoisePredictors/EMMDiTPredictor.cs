@@ -52,6 +52,9 @@ public class EMMDiTPredictor<T> : MMDiTNoisePredictor<T>
     private readonly int _emmInputChannels;
     private readonly int _emmContextDim;
     private readonly int? _emmSeed;
+    private readonly int _emmHiddenSizeOverride;
+    private readonly int _emmNumLayersOverride;
+    private readonly int _emmNumHeadsOverride;
 
     /// <summary>
     /// Initializes a new E-MMDiT predictor on the faithful MMDiT backbone at the
@@ -60,22 +63,35 @@ public class EMMDiTPredictor<T> : MMDiTNoisePredictor<T>
     /// <param name="inputChannels">Latent channels (default: 4).</param>
     /// <param name="contextDim">Text-conditioning dimension (default: 768, CLIP).</param>
     /// <param name="seed">Optional random seed.</param>
+    /// <param name="hiddenSizeOverride">Hidden size; 0 keeps the compact configuration's 1024.</param>
+    /// <param name="numLayersOverride">Joint blocks; 0 keeps the compact configuration's 12.</param>
+    /// <param name="numHeadsOverride">Attention heads; 0 keeps the compact configuration's 16.</param>
+    /// <remarks>
+    /// The overrides keep the compact configuration the default while letting a caller (or a test) build the same
+    /// backbone at another size. Without them the model was fixed at about 460M parameters.
+    /// </remarks>
     public EMMDiTPredictor(
         int inputChannels = 4,
         int contextDim = 768,
-        int? seed = null)
+        int? seed = null,
+        int hiddenSizeOverride = 0,
+        int numLayersOverride = 0,
+        int numHeadsOverride = 0)
         : base(
             inputChannels: inputChannels,
-            hiddenSize: EMMDIT_HIDDEN_SIZE,
-            numJointLayers: EMMDIT_NUM_LAYERS,
+            hiddenSize: hiddenSizeOverride > 0 ? hiddenSizeOverride : EMMDIT_HIDDEN_SIZE,
+            numJointLayers: numLayersOverride > 0 ? numLayersOverride : EMMDIT_NUM_LAYERS,
             numSingleLayers: 0,
-            numHeads: EMMDIT_NUM_HEADS,
+            numHeads: numHeadsOverride > 0 ? numHeadsOverride : EMMDIT_NUM_HEADS,
             contextDim: contextDim,
             seed: seed)
     {
         _emmInputChannels = inputChannels;
         _emmContextDim = contextDim;
         _emmSeed = seed;
+        _emmHiddenSizeOverride = hiddenSizeOverride;
+        _emmNumLayersOverride = numLayersOverride;
+        _emmNumHeadsOverride = numHeadsOverride;
     }
 
 }
