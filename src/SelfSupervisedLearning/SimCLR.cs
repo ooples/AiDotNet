@@ -79,6 +79,22 @@ public class SimCLR<T> : SelfSupervisedLearningMethodBase<T>
         _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Chen et al. 2020, Sec. 2.1: both views go through the same encoder and projection head, and NT-Xent pulls each
+    /// view toward its pair against the other 2(N-1) views in the batch.
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2) =>
+        _loss.ComputeLoss(Projector.Project(EncodeForTraining(view1)), Projector.Project(EncodeForTraining(view2)));
+
+    /// <inheritdoc />
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => _augmentation.ApplySimCLR(batch);
+
+    /// <inheritdoc />
+    /// <remarks>The paper trains with LARS (Sec. 2.2).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.LARS;
+
     private void UpdateWithGradients(T learningRate, Vector<T> encoderGrads, Vector<T> projectorGrads)
     {
         // SGD update for encoder

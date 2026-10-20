@@ -120,10 +120,127 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <param name="batch">The input batch tensor.</param>
     /// <param name="augmentationContext">Optional augmentation context.</param>
     /// <returns>The result of the training step.</returns>
+    /// <remarks>
+    /// <para>
+    /// One tape-based update: the two views are built once (outside the objective, so a re-evaluation replays the same
+    /// draws), the method's <see cref="ComputeObjective"/> is recorded on the gradient tape, the online network's
+    /// tensors (<see cref="GetOnlineTrainableTensors"/>) are stepped by the optimizer, and
+    /// <see cref="AfterOptimizerStep"/> updates whatever follows the online network (a momentum target, a queue, a
+    /// center).
+    /// </para>
+    /// <para>
+    /// This used to return a zero loss and change nothing: no method overrode it, so every self-supervised method,
+    /// and the pretraining session and pretrainer that call TrainStep, silently skipped training.
+    /// </para>
+    /// </remarks>
     protected virtual SelfSupervisedLearningStepResult<T> TrainStepCore(Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext)
     {
-        // Default implementation uses tape-based training
-        return new SelfSupervisedLearningStepResult<T> { Loss = NumOps.Zero };
+        var (view1, view2) = CreateViews(batch, augmentationContext);
+        var optimizer = _trainingOptimizer ??= CreateOptimizer();
+        T loss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+            GetOnlineTrainableTensors,
+            () => ComputeObjective(view1, view2),
+            optimizer);
+        AfterOptimizerStep();
+        return CreateStepResult(loss);
+    }
+
+    // Created on the first training step, so a method configured after construction still gets its settings.
+    [Scratch]
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
+
+    [Scratch]
+    private SelfSupervisedLearningAugmentationPolicies<T>? _viewPolicies;
+
+    /// <summary>
+    /// The two views a training step compares. A context that supplies <see cref="SelfSupervisedLearningAugmentationContext{T}.PrecomputedView"/>
+    /// pairs the batch with it; otherwise the method's augmentation policy makes both views.
+    /// </summary>
+    protected virtual (Tensor<T> View1, Tensor<T> View2) CreateViews(
+        Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext)
+    {
+        if (augmentationContext?.PrecomputedView is { } precomputed)
+            return (batch, precomputed);
+        var policies = _viewPolicies ??= new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
+        return AugmentViews(policies, batch);
+    }
+
+    /// <summary>The method's own augmentation pipeline (SimCLR's by default).</summary>
+    protected virtual (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => policies.ApplySimCLR(batch);
+
+    /// <summary>
+    /// The method's training loss for two views of a batch, built from the live online parameters so the tape records
+    /// it. Each method states its paper's objective here.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The method defines no training objective.</exception>
+    protected virtual Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2) =>
+        throw new NotSupportedException($"{Name} defines no training objective.");
+
+    /// <summary>
+    /// The tensors the optimizer steps: the online encoder's and the projector's. A method with further online heads
+    /// (a predictor) adds them; momentum targets are never included, they follow by EMA in <see cref="AfterOptimizerStep"/>.
+    /// </summary>
+    protected virtual IReadOnlyList<Tensor<T>> GetOnlineTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>(EncoderTrainableTensors(_encoder));
+        if (_projector is not null) tensors.AddRange(_projector.GetTrainableTensors());
+        return tensors;
+    }
+
+    /// <summary>
+    /// The encoder's training forward, recorded on the gradient tape (Predict runs without it, for inference).
+    /// </summary>
+    protected Tensor<T> EncodeForTraining(Tensor<T> input) => EncodeForTraining(_encoder, input);
+
+    /// <summary>A network's training forward, recorded on the gradient tape.</summary>
+    protected static Tensor<T> EncodeForTraining(INeuralNetwork<T> network, Tensor<T> input) =>
+        network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> trainable
+            ? trainable.ForwardForTraining(input)
+            : network.ForwardWithMemory(input);
+
+    /// <summary>The trainable tensors of an encoder network, the live objects its forward reads.</summary>
+    /// <exception cref="NotSupportedException">The encoder is not a network whose tensors can be stepped.</exception>
+    protected static IReadOnlyList<Tensor<T>> EncoderTrainableTensors(INeuralNetwork<T> encoder) =>
+        encoder is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network
+            ? network.CollectModelTrainableTensors()
+            : throw new NotSupportedException(
+                $"A {encoder.GetType().Name} encoder exposes no trainable tensors; self-supervised training needs a NeuralNetworkBase encoder.");
+
+    /// <summary>Runs after the optimizer step: momentum targets, queues and centers update here.</summary>
+    protected virtual void AfterOptimizerStep()
+    {
+    }
+
+    /// <summary>The optimizer the paper trains this method with, unless the configuration names another.</summary>
+    protected virtual SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.AdamW;
+
+    /// <summary>The learning rate when the configuration sets none.</summary>
+    protected virtual double DefaultLearningRate => 1e-3;
+
+    /// <summary>Creates the training optimizer from the configuration.</summary>
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateOptimizer()
+    {
+        double lr = _config.LearningRate ?? DefaultLearningRate;
+        double wd = _config.WeightDecay ?? 0.0;
+        switch (_config.OptimizerType ?? DefaultOptimizerType)
+        {
+            case SelfSupervisedLearningOptimizerType.SGD:
+                return new AiDotNet.Optimizers.MomentumOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr });
+            case SelfSupervisedLearningOptimizerType.Adam:
+                return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr });
+            case SelfSupervisedLearningOptimizerType.LARS:
+                return new AiDotNet.Optimizers.LARSOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.LARSOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });
+            case SelfSupervisedLearningOptimizerType.LAMB:
+                return new AiDotNet.Optimizers.LAMBOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.LAMBOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });
+            default:
+                return new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });
+        }
     }
 
     /// <inheritdoc />
