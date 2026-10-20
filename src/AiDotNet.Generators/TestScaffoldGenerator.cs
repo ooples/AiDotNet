@@ -79,8 +79,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                      // specified not to have. Covering these needs a policy-specific
                                      // base, not a different existing family.
         "SelfSupervisedLearningMethodBase",             // Self-supervised learning: wraps encoder + projector
-        "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
-        "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
+        // AudioSafetyModuleBase and TextSafetyModuleBase are no longer excluded: almost every module under them is
+        // built from defaults alone (the "wraps another model" note was wrong for all but the composite detectors),
+        // and their own family bases feed them text or waveforms instead of a content vector (#2139).
         "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
         "VAEModelBase",              // VAEs: encoder/decoder components of latent diffusion,
@@ -676,6 +677,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> DeepfakeDetectorTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateDetector", "TargetArtifact" };
+
+    /// <summary>Overridable surface of <c>TextSafetyModuleTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> TextSafetyModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateModule", "Samples" };
+
+    /// <summary>Overridable surface of <c>AudioSafetyModuleTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> AudioSafetyModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateModule", "SampleRate", "Seconds" };
 
     /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VideoSafetyModuleTestBaseMembers =
@@ -3914,6 +3925,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsNeck = false;
         bool extendsInstanceSegmenter = false;
         bool extendsVideoSafety = false;
+        bool extendsTextSafety = false, extendsAudioSafety = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
         bool extendsClassicalVolatility = false;
@@ -4108,6 +4120,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsInstanceSegmenter = true;
             else if (baseName.StartsWith("VideoSafetyModuleBase", System.StringComparison.Ordinal))
                 extendsVideoSafety = true;
+            else if (baseName.StartsWith("TextSafetyModuleBase", System.StringComparison.Ordinal))
+                extendsTextSafety = true;
+            else if (baseName.StartsWith("AudioSafetyModuleBase", System.StringComparison.Ordinal))
+                extendsAudioSafety = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
@@ -4309,6 +4325,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsNeckBase = extendsNeck,
             ExtendsInstanceSegmenterBase = extendsInstanceSegmenter,
             ExtendsVideoSafetyModuleBase = extendsVideoSafety,
+            ExtendsTextSafetyModuleBase = extendsTextSafety,
+            ExtendsAudioSafetyModuleBase = extendsAudioSafety,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
             MetaLearnerOptionsType = metaLearnerOptionsType,
@@ -4991,6 +5009,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // module cannot judge, so they get a base that drives EvaluateVideo (#2139).
         if (model.ExtendsVideoSafetyModuleBase)
             return TestFamily.VideoSafetyModule;
+
+        // Text and audio safety modules judge text and waveforms, which the vector fixture cannot give them (#2139).
+        if (model.ExtendsTextSafetyModuleBase)
+            return TestFamily.TextSafetyModule;
+        if (model.ExtendsAudioSafetyModuleBase)
+            return TestFamily.AudioSafetyModule;
 
         // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
         // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
@@ -13450,6 +13474,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "NeckTestBase"
             || baseClassName == "InstanceSegmenterTestBase"
             || baseClassName == "VideoSafetyModuleTestBase"
+            || baseClassName == "TextSafetyModuleTestBase"
+            || baseClassName == "AudioSafetyModuleTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
@@ -17690,6 +17716,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.Neck => NeckTestBaseMembers,
             TestFamily.InstanceSegmentation => InstanceSegmenterTestBaseMembers,
             TestFamily.VideoSafetyModule => VideoSafetyModuleTestBaseMembers,
+            TestFamily.TextSafetyModule => TextSafetyModuleTestBaseMembers,
+            TestFamily.AudioSafetyModule => AudioSafetyModuleTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
@@ -17848,6 +17876,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsInstanceSegmenterBase;
             case TestFamily.VideoSafetyModule:
                 return model.ExtendsVideoSafetyModuleBase;
+            case TestFamily.TextSafetyModule:
+                return model.ExtendsTextSafetyModuleBase;
+            case TestFamily.AudioSafetyModule:
+                return model.ExtendsAudioSafetyModuleBase;
             case TestFamily.DeepfakeDetector:
                 return model.ExtendsDeepfakeDetectorBase;
             case TestFamily.MetaLearning:
@@ -20248,6 +20280,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// <summary>True for a video safety module, which is judged on clips through EvaluateVideo.</summary>
         public bool ExtendsVideoSafetyModuleBase { get; set; }
 
+        /// <summary>True for a text safety module, which is judged on text through EvaluateText.</summary>
+        public bool ExtendsTextSafetyModuleBase { get; set; }
+
+        /// <summary>True for an audio safety module, which is judged on waveforms through EvaluateAudio.</summary>
+        public bool ExtendsAudioSafetyModuleBase { get; set; }
+
         /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
         public bool ExtendsDeepfakeDetectorBase { get; set; }
 
@@ -20476,6 +20514,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Neck,
         InstanceSegmentation,
         VideoSafetyModule,
+        TextSafetyModule,
+        AudioSafetyModule,
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
@@ -21306,6 +21346,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.Neck:                  return "NeckTestBase";
             case TestFamily.InstanceSegmentation:  return "InstanceSegmenterTestBase";
             case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
+            case TestFamily.TextSafetyModule:      return "TextSafetyModuleTestBase";
+            case TestFamily.AudioSafetyModule:     return "AudioSafetyModuleTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
@@ -21355,6 +21397,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // SafetyModuleTestBase asks for CreateModule, not CreateModel.
             case TestFamily.SafetyModule:
             case TestFamily.VideoSafetyModule:
+            case TestFamily.TextSafetyModule:
+            case TestFamily.AudioSafetyModule:
                 return "CreateModule";
             case TestFamily.DeepfakeDetector:
                 return "CreateDetector";
@@ -21424,6 +21468,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase<double>";
             case TestFamily.VideoSafetyModule:
                 return "AiDotNet.Interfaces.IVideoSafetyModule<double>";
+            case TestFamily.TextSafetyModule:
+                return "AiDotNet.Interfaces.ITextSafetyModule<double>";
+            case TestFamily.AudioSafetyModule:
+                return "AiDotNet.Interfaces.IAudioSafetyModule<double>";
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:
