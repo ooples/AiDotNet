@@ -90,7 +90,8 @@ internal static class ConvolutionBatchNormFolding<T>
         lock (entry)
         {
             if (entry.FoldedKernels is { } cachedKernels && entry.FoldedBiases is { } cachedBiases
-                && ReferenceEquals(entry.Norm, norm) && entry.Epsilon == epsilon
+                && ReferenceEquals(entry.Norm, norm)
+                && BitConverter.DoubleToInt64Bits(entry.Epsilon) == BitConverter.DoubleToInt64Bits(epsilon)
                 && Same(entry.Kernels, entry.KernelsVersion, kernels) && SameOrNull(entry.Biases, entry.BiasesVersion, biases)
                 && Same(entry.Gamma, entry.GammaVersion, gamma) && Same(entry.Beta, entry.BetaVersion, beta)
                 && Same(entry.Mean, entry.MeanVersion, mean) && Same(entry.Variance, entry.VarianceVersion, variance))
