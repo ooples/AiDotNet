@@ -7,6 +7,7 @@ namespace AiDotNet.Models.Options;
 /// Configuration options for Wav2Vec2 speech recognition models.
 /// </summary>
 [DimensionDivisibility(nameof(HiddenDim), nameof(NumHeads))]
+[DimensionDivisibility(nameof(HiddenDim), nameof(PositionalConvGroups))]
 public class Wav2Vec2ModelOptions : AudioNeuralNetworkOptions
 {
     /// <summary>
@@ -72,6 +73,12 @@ public class Wav2Vec2ModelOptions : AudioNeuralNetworkOptions
     public int FfDim { get; set; }
 
     /// <summary>
+    /// Gets or sets the groups of the convolutional relative positional embedding (16, Baevski et al. 2020, §4.2).
+    /// </summary>
+    /// <remarks>The convolution splits <see cref="HiddenDim"/> into this many groups, so it must divide the width.</remarks>
+    public int PositionalConvGroups { get; set; } = 16;
+
+    /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
     /// </summary>
     /// <exception cref="ArgumentException">
@@ -123,6 +130,7 @@ public class Wav2Vec2ModelOptions : AudioNeuralNetworkOptions
         Layers = NumTransformerLayers,
         Heads = NumHeads,
         IntermediateSize = FfDim,
+        PositionalConvGroups = PositionalConvGroups,
         LayerNormFeatureEncoder = StableLayerNorm,
         StableLayerNorm = StableLayerNorm,
         ConvBias = StableLayerNorm,

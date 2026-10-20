@@ -16,6 +16,8 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <para><b>For Beginners:</b> These options configure the GroundingDINO model. Default values follow the released
 /// model.</para>
 /// </remarks>
+[AiDotNet.Attributes.NotScaled(nameof(VocabSize), "the text encoder embeds BERT-base-uncased token ids (30522)")]
+[AiDotNet.Attributes.DimensionDivisibility(nameof(TextHiddenSize), nameof(TextHeads))]
 public class GroundingDINOOptions : GroundingVLMOptions
 {
     /// <summary>Initializes a new instance by copying from another instance.</summary>

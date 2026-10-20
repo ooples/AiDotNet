@@ -69,6 +69,44 @@ public abstract class LayerTestBase<T>
     protected virtual int[] InputShape => [1, 4];
 
     /// <summary>
+    /// The further inputs of a layer whose forward takes more than one tensor (a recurrent cell's state, a decoder
+    /// layer's encoder memory, a conditional norm's conditioning vector), given the primary input's shape. Empty (the
+    /// default) for a single-input layer. Every invariant feeds the same companions for a given primary shape and
+    /// perturbs only the primary input.
+    /// </summary>
+    protected virtual int[][] CompanionInputShapes(int[] primaryShape) => System.Array.Empty<int[]>();
+
+    private readonly System.Collections.Generic.Dictionary<string, Tensor<T>[]> _companions = new();
+
+    // The layer's forward on `input` and this fixture's companions for its shape (fixed per shape, seeded draws).
+    private Tensor<T> Run(ILayer<T> layer, Tensor<T> input)
+    {
+        var shapes = CompanionInputShapes(input.Shape.ToArray());
+        if (shapes.Length == 0) return layer.Forward(input);
+        string key = string.Join(",", input.Shape.ToArray());
+        if (!_companions.TryGetValue(key, out var companions))
+        {
+            int seed = 1729;
+            foreach (char ch in key) seed = unchecked(seed * 31 + ch);
+            var rng = new Random(seed);
+            companions = new Tensor<T>[shapes.Length];
+            for (int c = 0; c < shapes.Length; c++)
+            {
+                companions[c] = new Tensor<T>(shapes[c]);
+                for (int i = 0; i < companions[c].Length; i++)
+                    companions[c][i] = NumOps.FromDouble(rng.NextDouble() * 2.0 - 1.0);
+            }
+            _companions[key] = companions;
+        }
+        var all = new Tensor<T>[1 + companions.Length];
+        all[0] = input;
+        companions.CopyTo(all, 1);
+        if (layer is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> multi)
+            throw new InvalidOperationException($"{layer.GetType().Name} takes several inputs but is not a LayerBase.");
+        return multi.Forward(all);
+    }
+
+    /// <summary>
     /// Whether the layer is expected to have trainable parameters.
     /// Override to false for pass-through layers (InputLayer, FlattenLayer, ActivationLayer, etc.)
     /// </summary>
@@ -353,7 +391,7 @@ public abstract class LayerTestBase<T>
         var layer = CreateLayer();
         var input = CreateConformingInput(layer, InputShape);
 
-        var output = layer.Forward(input);
+        var output = Run(layer, input);
 
         Assert.True(output.Length > 0, "Layer output should not be empty.");
         bool checkFinite = ExpectsFiniteOutput;
@@ -419,7 +457,7 @@ public abstract class LayerTestBase<T>
             try
             {
                 var candidateLayer = CreateLayer();
-                var output = candidateLayer.Forward(CreateConformingInput(candidateLayer, shape));
+                var output = Run(candidateLayer, CreateConformingInput(candidateLayer, shape));
                 var outShape = output.Shape.ToArray();
 
                 Assert.True(
@@ -600,9 +638,9 @@ public abstract class LayerTestBase<T>
         layer.SetTrainingMode(false); // Disable dropout/stochastic behavior
         var input = CreateConformingInput(layer, InputShape);
 
-        var out1 = layer.Forward(input);
+        var out1 = Run(layer, input);
         layer.ResetState(); // Reset any recurrent state
-        var out2 = layer.Forward(input);
+        var out2 = Run(layer, input);
 
         Assert.Equal(out1.Length, out2.Length);
         for (int i = 0; i < out1.Length; i++)
@@ -651,9 +689,9 @@ public abstract class LayerTestBase<T>
             var input2 = CreateConformingInput(layer, InputShape, seed + 1);
 
             layer.ResetState();
-            var output1 = layer.Forward(input1);
+            var output1 = Run(layer, input1);
             layer.ResetState();
-            var output2 = layer.Forward(input2);
+            var output2 = Run(layer, input2);
 
             int minLen = Math.Min(output1.Length, output2.Length);
             for (int i = 0; i < minLen; i++)
@@ -683,7 +721,7 @@ public abstract class LayerTestBase<T>
         var layer = CreateLayer();
         var input = CreateConformingInput(layer, InputShape);
 
-        var output = layer.Forward(input);
+        var output = Run(layer, input);
         var declaredShape = layer.GetOutputShape();
 
         // The output length should equal the product of declared output shape
@@ -725,7 +763,7 @@ public abstract class LayerTestBase<T>
         // "post first forward" state to be meaningful.
         using (var probeInput = CreateConformingInput(layer, InputShape, seed: 17))
         {
-            try { layer.Forward(probeInput); }
+            try { Run(layer, probeInput); }
             catch
             {
                 // Single-input Forward failed — for dual-input layers
@@ -785,7 +823,7 @@ public abstract class LayerTestBase<T>
         // the invariant we're testing only has meaning post-resolution.
         using (var probeInput = CreateConformingInput(layer, InputShape, seed: 17))
         {
-            try { layer.Forward(probeInput); } catch { }
+            try { Run(layer, probeInput); } catch { }
         }
 
         if (layer.ParameterCount == 0) return; // Genuinely non-trainable layers.
@@ -827,7 +865,7 @@ public abstract class LayerTestBase<T>
         // composite forwards may legitimately recycle an earlier activation buffer during the
         // second layer's run; comparing a live arena view would then compare the restored output
         // with memory that the restored forward just overwrote, not with the original value.
-        var originalOutput = layer.Forward(input).Clone();
+        var originalOutput = Run(layer, input).Clone();
         var originalParameters = layer.GetParameters();
 
         // Serialize
@@ -901,7 +939,7 @@ public abstract class LayerTestBase<T>
         // lines down already calls ResetState() for precisely this reason; this makes the replay
         // symmetric with it.
         layer.ResetState();
-        var originalReplay = layer.Forward(input).Clone();
+        var originalReplay = Run(layer, input).Clone();
         for (int i = 0; i < originalOutput.Length; i++)
         {
             // Direct equality first, for the same reason the deserialized comparison below does it:
@@ -943,7 +981,7 @@ public abstract class LayerTestBase<T>
 
         layer2.SetTrainingMode(false);
         layer2.ResetState();
-        var deserializedOutput = layer2.Forward(input);
+        var deserializedOutput = Run(layer2, input);
 
         Assert.Equal(originalOutput.Length, deserializedOutput.Length);
         for (int i = 0; i < originalOutput.Length; i++)
@@ -997,13 +1035,13 @@ public abstract class LayerTestBase<T>
         var input = CreateConformingInput(layer, InputShape);
 
         // Forward once to populate state
-        layer.Forward(input);
+        Run(layer, input);
 
         // Reset
         layer.ResetState();
 
         // Forward again — should still work
-        var output = layer.Forward(input);
+        var output = Run(layer, input);
         Assert.True(output.Length > 0, "Output should not be empty after ResetState.");
         for (int i = 0; i < output.Length; i++)
         {
@@ -1086,7 +1124,7 @@ public abstract class LayerTestBase<T>
     private GradientProbeResult ProbeTapeGradient(ILayer<T> layer, Tensor<T> input)
     {
         using var tape = new GradientTape<T>();
-        var output = layer.Forward(input);
+        var output = Run(layer, input);
 
         // Use the production recursive collector, not only this layer's own tensor list. Composite
         // layers often own no tensors directly—their parameters live entirely in registered child
@@ -1234,7 +1272,7 @@ public abstract class LayerTestBase<T>
 
         // --- Analytical gradient via tape ---
         using var tape = new GradientTape<T>();
-        var output = layer.Forward(input);
+        var output = Run(layer, input);
         // Match the production training gateway's recursive ownership walk. A composite whose
         // tensors all live in children must be checked, not treated as parameter-free.
         var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(
@@ -1384,11 +1422,11 @@ public abstract class LayerTestBase<T>
                 if (plusValue == minusValue) continue;
 
                 WriteScalar(param, idx, plusValue);
-                var lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                var lossPlus = ComputeProjectionLossScalar(Run(layer, input), projection);
                 WriteScalar(param, idx, minusValue);
-                var lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                var lossMinus = ComputeProjectionLossScalar(Run(layer, input), projection);
                 WriteScalar(param, idx, original);
-                var lossBase = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                var lossBase = ComputeProjectionLossScalar(Run(layer, input), projection);
 
                 // Divide by the ACTUAL representable perturbation. For float, original ± eps
                 // can round asymmetrically (or together); pretending the denominator is exactly
@@ -1452,11 +1490,11 @@ public abstract class LayerTestBase<T>
                 if (plusValue == minusValue) continue;
 
                 input[index] = ToT(plusValue);
-                double lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                double lossPlus = ComputeProjectionLossScalar(Run(layer, input), projection);
                 input[index] = ToT(minusValue);
-                double lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                double lossMinus = ComputeProjectionLossScalar(Run(layer, input), projection);
                 input[index] = ToT(original);
-                double lossBase = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                double lossBase = ComputeProjectionLossScalar(Run(layer, input), projection);
 
                 double numerical = (lossPlus - lossMinus) / (plusValue - minusValue);
                 double analytical = ToD(inputGradient[index]);
@@ -1564,7 +1602,7 @@ public abstract class LayerTestBase<T>
                         coordinate.Index,
                         original + (sign * step * directionScale * coordinate.Sign));
                 }
-                return ComputeProjectionLossScalar(layer.Forward(input), projection);
+                return ComputeProjectionLossScalar(Run(layer, input), projection);
             }
             finally
             {
@@ -1626,7 +1664,7 @@ public abstract class LayerTestBase<T>
         {
             double offset = (o - 2) * directionalStep;   // -2, -1, 0, +1, +2, +3 steps
             offsetLosses[o] = offset == 0.0
-                ? ComputeProjectionLossScalar(layer.Forward(input), projection)
+                ? ComputeProjectionLossScalar(Run(layer, input), projection)
                 : EvaluateDirection(Math.Abs(offset), Math.Sign(offset));
         }
 

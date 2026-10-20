@@ -136,9 +136,16 @@ public abstract partial class DiffusionVocoderBase<T> : SegmentVocoderBase<T>
         int samples = SynthesisSamples(mel);
         var betas = InferenceBetas ?? TrainingBetas;
         var alphaBar = Cumulative(betas);
+        // Each step's scratch is dead once it has produced the next x, so under Predict's inference arena the loop
+        // carries x across a reset per step (DetachAndRecycleBetweenLayers) and peaks at one step's scratch, not one
+        // per step: a 200-step DiffWave otherwise held about 0.5 GB per step until Predict returned. The conditioning
+        // is read by every step, so it is copied out of the arena once; the arena's carry is double-buffered and
+        // holds only the latest x.
+        if (InferenceRecycleActive) mel = DetachFromArena(mel);
         var x = PriorNoise(mel, samples, random);
         for (int n = betas.Length - 1; n >= 0; n--)
         {
+            if (n < betas.Length - 1) x = DetachAndRecycleBetweenLayers(x);
             double alpha = 1 - betas[n];
             var eps = Denoise(x, InferenceLevel(n, alphaBar[n]), mel);
             x = Engine.TensorMultiplyScalar(Engine.TensorSubtract(x, Engine.TensorMultiplyScalar(eps, NumOps.FromDouble(betas[n] / Math.Sqrt(1 - alphaBar[n])))),

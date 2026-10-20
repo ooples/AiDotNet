@@ -1679,15 +1679,15 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerWithReLUInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.TiedEmbeddingHeadLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.FlattenLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.ConditionalLayerNormalizationInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.GRUCellInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LSTMCellInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.PostNormTransformerDecoderBlockInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.InteractingLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.AttentionalFeatureFusionInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerInvariantCoverageTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerNormalizationInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.RMSNormalizationInvariantTests.|
-      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.ConditionalLayerNormalizationLayerInvariantTests.|
-      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.GRUCellLayerInvariantTests.|
-      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LSTMCellLayerInvariantTests.|
-      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.PostNormTransformerDecoderBlockInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelLoading.GgufEndToEndTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelLoading.LlamaRopePermuteTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.GpuTransformerWeightParityTests.|

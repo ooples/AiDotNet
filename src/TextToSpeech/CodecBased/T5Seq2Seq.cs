@@ -370,12 +370,16 @@ internal sealed class T5Seq2Seq<T>
     // 1 - topP (always keeping the most likely); the draw is from the softmax of what is left.
     private static int SampleTopK(double[] scores, int topK, double topP, Random random)
     {
+        // Masked tokens score -infinity: never among the k drawn from.
+        int finite = 0;
+        foreach (double score in scores) if (!double.IsNegativeInfinity(score)) finite++;
+        if (finite == 0) throw new InvalidOperationException("No token is allowed at this step.");
         var order = new int[scores.Length];
         for (int i = 0; i < order.Length; i++) order[i] = i;
         Array.Sort(order, (a, b) => scores[b].CompareTo(scores[a]));
-        int k = topK <= 0 ? scores.Length : Math.Min(topK, scores.Length);
+        int k = topK <= 0 ? finite : Math.Min(topK, finite);
         double threshold = scores[order[k - 1]];
-        while (k < order.Length && scores[order[k]] >= threshold) k++;
+        while (k < finite && scores[order[k]] >= threshold) k++;
         double max = scores[order[0]], total = 0;
         var weights = new double[k];
         for (int i = 0; i < k; i++) total += weights[i] = Math.Exp(scores[order[i]] - max);

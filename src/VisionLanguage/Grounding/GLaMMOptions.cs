@@ -16,6 +16,13 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <para><b>For Beginners:</b> These options configure GLaMM's four parts: the image encoder, the language model, the
 /// region encoder and the segmenter.</para>
 /// </remarks>
+[AiDotNet.Attributes.DimensionDivisibility(nameof(ClipImageSize), nameof(ClipPatchSize))]
+[AiDotNet.Attributes.DimensionDivisibility(nameof(ClipHidden), nameof(ClipHeads))]
+[AiDotNet.Attributes.DimensionDivisibility(nameof(ClipHidden), nameof(RegionGroupNormGroups))]
+[AiDotNet.Attributes.DimensionDivisibility(nameof(LlmHidden), nameof(LlmHeads))]
+[AiDotNet.Attributes.DimensionDivisibility(nameof(LlmHeads), nameof(LlmKeyValueHeads))]
+[AiDotNet.Attributes.DimensionDivisibility(nameof(SamEncoderDim), nameof(SamEncoderHeads))]
+[AiDotNet.Attributes.DimensionDivisibility(nameof(SamPromptDim), nameof(SamDecoderHeads))]
 public class GLaMMOptions : ModelOptions
 {
     /// <summary>Initializes a new instance by copying from another instance.</summary>
@@ -29,6 +36,7 @@ public class GLaMMOptions : ModelOptions
         Seed = other.Seed;
         TokenizerPath = other.TokenizerPath;
         TokenizerModel = other.TokenizerModel is null ? null : (byte[])other.TokenizerModel.Clone();
+        TokenizerPieces = other.TokenizerPieces;
         ClipImageSize = other.ClipImageSize;
         ClipPatchSize = other.ClipPatchSize;
         ClipHidden = other.ClipHidden;
@@ -44,6 +52,7 @@ public class GLaMMOptions : ModelOptions
         LoraAlpha = other.LoraAlpha;
         LoraDropout = other.LoraDropout;
         RegionWidth = other.RegionWidth;
+        RegionGroupNormGroups = other.RegionGroupNormGroups;
         SamImageSize = other.SamImageSize;
         SamPatchSize = other.SamPatchSize;
         SamEncoderDim = other.SamEncoderDim;
@@ -71,6 +80,10 @@ public class GLaMMOptions : ModelOptions
 
     /// <summary>Gets or sets the bytes of a SentencePiece BPE model, in place of <see cref="TokenizerPath"/>.</summary>
     public byte[]? TokenizerModel { get; set; }
+
+    /// <summary>Gets or sets the pieces of the tokenizer the language model embeds (32000, Vicuna's), used to size the
+    /// network when it is built before its tokenizer is supplied; a tokenizer loaded later must have this many.</summary>
+    public int TokenizerPieces { get; set; } = 32000;
 
     /// <summary>Gets or sets CLIP's image side (336).</summary>
     public int ClipImageSize { get; set; } = 336;
@@ -116,6 +129,10 @@ public class GLaMMOptions : ModelOptions
 
     /// <summary>Gets or sets the region encoder's region and position width (1024, fixed in the official code).</summary>
     public int RegionWidth { get; set; } = 1024;
+
+    /// <summary>Gets or sets the GroupNorm groups of the region encoder's fuse convolutions (64), which divide
+    /// <see cref="ClipHidden"/>.</summary>
+    public int RegionGroupNormGroups { get; set; } = 64;
 
     /// <summary>Gets or sets SAM's image side (1024).</summary>
     public int SamImageSize { get; set; } = 1024;

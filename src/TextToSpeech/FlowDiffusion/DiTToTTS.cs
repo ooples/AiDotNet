@@ -64,11 +64,11 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         // waveform built from sine waves and the character codes, so the trained model never reached the caller.
         return PostprocessAudio(Predict(input));
     }
-    protected override Tensor<T> PreprocessText(string text) => OneHotCharacterFeatures(text.Length > _options.MaxTextLength ? text.Substring(0, _options.MaxTextLength) : text, _options.MelChannels); protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() => InitializeLayersCore();
 
     // Constructors initialize this model's layers without dispatching into an unfinished derived instance.
-    private void InitializeLayersCore() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFlowMatchingTTSLayers(_options.EncoderDim, _options.FlowDim, _options.DecoderDim, _options.NumEncoderLayers, _options.NumFlowLayers, _options.NumHeads, _options.DropoutRate, inputFeatures: _options.MelChannels)); }
+    private void InitializeLayersCore() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFlowMatchingTTSLayers(_options.EncoderDim, _options.FlowDim, _options.DecoderDim, _options.NumEncoderLayers, _options.NumFlowLayers, _options.NumHeads, _options.DropoutRate, inputFeatures: _options.MelChannels, vocabSize: _options.VocabSize)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); SetTrainingMode(false); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

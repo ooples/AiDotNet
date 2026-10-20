@@ -70,6 +70,9 @@ public sealed record GlammAnswer<T>(string Text, IReadOnlyList<Tensor<T>> Masks)
 [ModelTask(ModelTask.TextGeneration)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PreprocessesInput("GlobalInput resizes, centre-crops and normalizes the image as CLIPImageProcessor does, and "
+    + "ClipVisionNetwork unfolds it into patches before the bias-free patch embedding, its first layer.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Features)]
 [ResearchPaper(
     "GLaMM: Pixel Grounding Large Multimodal Model",
     "https://arxiv.org/abs/2311.03356",
@@ -99,7 +102,23 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
 
     internal GlammNetwork<T> Network => _network ?? throw new InvalidOperationException("The network is not initialized.");
 
-    internal GlammTokenizer Tokenizer => _tokenizer ?? throw new InvalidOperationException("The tokenizer is not loaded.");
+    /// <summary>The tokenizer, read from the options on first use when the network was built without it.</summary>
+    internal GlammTokenizer Tokenizer => _tokenizer ??= LoadTokenizer();
+
+    private GlammTokenizer LoadTokenizer()
+    {
+        var model = TokenizerBytes() ?? throw new InvalidOperationException(
+            "GLaMM reads Vicuna's SentencePiece model: set GLaMMOptions.TokenizerPath (tokenizer.model) or TokenizerModel.");
+        var tokenizer = new GlammTokenizer(new SentencePieceModel(model));
+        int expected = _options.TokenizerPieces + GlammTokenizer.AddedTokens.Length;
+        if (tokenizer.VocabularySize != expected)
+            throw new InvalidOperationException($"The tokenizer has {tokenizer.VocabularySize} tokens but the network embeds {expected} "
+                + $"(GLaMMOptions.TokenizerPieces {_options.TokenizerPieces} plus {GlammTokenizer.AddedTokens.Length} added).");
+        return tokenizer;
+    }
+
+    private byte[]? TokenizerBytes() => _options.TokenizerModel
+        ?? (_options.TokenizerPath is { Length: > 0 } path ? File.ReadAllBytes(path) : null);
 
     public GLaMM(
         NeuralNetworkArchitecture<T> architecture,
@@ -135,6 +154,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
         Region = new GlammRegionConfiguration
         {
             Embed = o.ClipHidden, Grid = o.ClipImageSize / o.ClipPatchSize, RegionWidth = o.RegionWidth, OutDims = o.LlmHidden,
+            GroupNormGroups = o.RegionGroupNormGroups,
         },
         Sam = new SamConfiguration
         {
@@ -151,12 +171,14 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
         if (_options is null || _network is not null) return;
         if (Architecture.Layers is { Count: > 0 })
             throw new NotSupportedException("GLaMM builds the paper's network; custom layers are not supported.");
-        byte[] model = _options.TokenizerModel
-            ?? (_options.TokenizerPath is { Length: > 0 } path ? File.ReadAllBytes(path)
-                : throw new ArgumentException("GLaMM reads Vicuna's SentencePiece model: set GLaMMOptions.TokenizerPath (tokenizer.model) or TokenizerModel."));
-        _tokenizer = new GlammTokenizer(new SentencePieceModel(model));
+        // With the tokenizer supplied, the network embeds its vocabulary. Without it the network is sized from
+        // TokenizerPieces, so a model can be built (and its released weights loaded) before the tokenizer is at hand;
+        // the tokenizer is then read on first use and must match.
+        if (TokenizerBytes() is { } model)
+            _tokenizer = new GlammTokenizer(new SentencePieceModel(model));
+        int vocabulary = _tokenizer?.VocabularySize ?? _options.TokenizerPieces + GlammTokenizer.AddedTokens.Length;
         var layers = new List<LayerBase<T>>();
-        _network = new GlammNetwork<T>(Engine, layers, Configuration(_options, _tokenizer.VocabularySize));
+        _network = new GlammNetwork<T>(Engine, layers, Configuration(_options, vocabulary));
         _network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42));
         Layers.AddRange(layers);
     }
