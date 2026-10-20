@@ -183,6 +183,10 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     {
         _options = options ?? new CLAPModelOptions();
         _options.Validate();
+        // Before the towers are built: Options.Seed seeds their initial weights and every stochastic layer's stream
+        // (dropout, drop-path, SpecAugment stripes, the fusion branch's random "longer" clip). It used to reach only the
+        // front end, so the same seeded model trained differently in every process.
+        ApplyOptionsSeed(_options.Seed);
         _frontEnd = new ClapAudioFrontEnd<T>(_options);
         _trainingRandom = RandomHelper.CreateSeededRandom(_options.Seed ?? 0);
         SampleRate = _options.SampleRate;

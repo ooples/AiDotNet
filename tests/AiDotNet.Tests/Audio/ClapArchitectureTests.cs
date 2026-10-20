@@ -188,17 +188,45 @@ public class ClapArchitectureTests
         using var model = ClapReferenceTests.Build(fusion: true);
         var audio = Audio(2, 6000);
         var captions = Captions();
-        model.Train(audio, captions);
-        double first = model.GetLastLoss();
-        double last = first;
-        for (int step = 0; step < 15; step++)
-        {
+        // Measured in evaluation mode, on the embeddings: each training step's loss is one draw of text dropout,
+        // drop-path, SpecAugment and the fusion branch's random clip, and on two pairs those draws swing it between
+        // 0.47 and 1.6 while the evaluation loss falls steadily (0.746 -> 0.420 over 16 steps). Comparing the first
+        // and last training losses compared two samples of that noise.
+        double before = EvaluationContrastiveLoss(model, audio, captions);
+        for (int step = 0; step < 16; step++)
             model.Train(audio, captions);
-            last = model.GetLastLoss();
-        }
+        double after = EvaluationContrastiveLoss(model, audio, captions);
         // double.IsFinite does not exist on net471, so the check is spelled out.
-        Assert.False(double.IsNaN(last) || double.IsInfinity(last), $"Contrastive loss is not finite: {last}.");
-        Assert.True(last < first, $"Contrastive loss went from {first:G6} to {last:G6} over 15 steps on two pairs.");
+        Assert.False(double.IsNaN(after) || double.IsInfinity(after), $"Contrastive loss is not finite: {after}.");
+        Assert.True(after < before, $"The evaluation contrastive loss went from {before:G6} to {after:G6} over 16 steps on two pairs.");
+    }
+
+    /// <summary>
+    /// The symmetric InfoNCE loss of the evaluation-mode embeddings (Radford et al. 2021), at CLIP's initial temperature
+    /// 0.07 so the measure does not move with the learned one.
+    /// </summary>
+    private static double EvaluationContrastiveLoss(AiDotNet.Audio.Fingerprinting.CLAPModel<double> model, Tensor<double> audio, Tensor<double> captions)
+    {
+        var a = model.EncodeAudio(audio);
+        var t = model.EncodeText(captions);
+        int n = a.Shape[0], d = a.Shape[1];
+        const double scale = 1.0 / 0.07;
+        var logits = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+            {
+                double dot = 0;
+                for (int k = 0; k < d; k++) dot += a[i, k] * t[j, k];
+                logits[i, j] = scale * dot;
+            }
+        double loss = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double row = 0, column = 0;
+            for (int j = 0; j < n; j++) { row += Math.Exp(logits[i, j]); column += Math.Exp(logits[j, i]); }
+            loss += (Math.Log(row) - logits[i, i]) + (Math.Log(column) - logits[i, i]);
+        }
+        return loss / (2 * n);
     }
 
     private static Tensor<double> Audio(int batch, int samples)
