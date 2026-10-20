@@ -15,9 +15,13 @@ namespace AiDotNet.Tests.VisionLanguage;
 /// </summary>
 public class GlammModelTests
 {
-    private static GLaMM<double> Small(int seed = 7) => new(
-        new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.ImageSegmentation,
-            inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 32),
+    private static NeuralNetworkArchitecture<double> Architecture() =>
+        new(inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.ImageSegmentation,
+            inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 32);
+
+    private static GLaMM<double> Small(int seed = 7) => new(Architecture(), SmallOptions(seed));
+
+    private static GLaMMOptions SmallOptions(int seed = 7) =>
         new GLaMMOptions
         {
             Seed = seed, TokenizerModel = GlammTokenizerReferenceTests.TestModel(),
@@ -26,7 +30,7 @@ public class GlammModelTests
             RegionWidth = 32, SamImageSize = 64, SamPatchSize = 16, SamEncoderDim = 32, SamEncoderDepth = 2, SamEncoderHeads = 2, SamWindowSize = 2,
             SamGlobalAttention = new[] { 1 }, SamPromptDim = 16, SamMaskInChannels = 8, SamDecoderHeads = 2, SamDecoderMlpDim = 32, SamIouHiddenDim = 16,
             ModelMaxLength = 256,
-        });
+        };
 
     private static Tensor<double> Image(int h = 21, int w = 35)
     {
@@ -48,10 +52,14 @@ public class GlammModelTests
     }
 
     [Fact]
-    public void Construction_WithoutATokenizer_SaysWhereToGetOne()
+    public void WithoutATokenizer_TheNetworkBuilds_AndTextSaysWhereToGetOne()
     {
-        var ex = Assert.Throws<ArgumentException>(() => new GLaMM<double>(new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional,
-            taskType: NeuralNetworkTaskType.ImageSegmentation, inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 32)));
+        // The network is sized from TokenizerPieces, so it can be built (and released weights loaded) before the tokenizer.
+        var options = SmallOptions();
+        options.TokenizerModel = null;
+        options.TokenizerPieces = 32000;
+        using var model = new GLaMM<double>(Architecture(), options);
+        var ex = Assert.Throws<InvalidOperationException>(() => model.Chat(Image(), "Describe the image."));
         Assert.Contains("TokenizerPath", ex.Message);
     }
 
