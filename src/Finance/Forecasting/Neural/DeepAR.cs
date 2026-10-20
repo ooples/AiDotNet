@@ -192,11 +192,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     public override bool SupportsTraining => UseNativeMode;
 
     /// <inheritdoc />
-    /// <remarks>The likelihood is evaluated step by step with host-built inputs, so training runs the true forward
-    /// every step rather than a traced replay.</remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
-
-    /// <inheritdoc />
     /// <remarks>The forward is a recurrence, not a fold of <c>Layers</c>; the activations are those the forecast
     /// computes.</remarks>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
@@ -261,7 +256,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         return y;
     }
 
-    private Random InferenceRandom() => RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+    private static Random InferenceRandom() => DeepARNetwork<T>.ForecastRandom();
 
     // ------------------------------------------------------------------ forecasting
 
@@ -319,20 +314,28 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         int batch = x.Shape[0], length = x.Shape[1], series = x.Shape[2], horizon = y.Shape[1];
         if (y.Rank != 3 || y.Shape[0] != batch || y.Shape[2] != series)
             throw new ArgumentException($"The target must be [{batch}, horizon, {series}].", nameof(target));
-        var (history, items) = Series(x);
-        var window = new double[batch * series, length + horizon + 1];
-        for (int r = 0; r < batch * series; r++)
+        // Series rows [B·S, ·] of the input and the target, z₀ = 0 in front: the window [B·S, L + H + 1], in engine ops
+        // so a compiled training plan builds every step's window from that step's data.
+        Tensor<T> Rows(Tensor<T> values, int steps)
+            => Engine.Reshape(Engine.TensorPermute(values, new[] { 0, 2, 1 }), new[] { batch * series, steps });
+        var window = Engine.TensorConcatenate(
+            new[] { new Tensor<T>(new[] { batch * series, 1 }), Rows(x, length), Rows(y, horizon) }, 1);
+        int[]? items = null;
+        if (series > 1)
         {
-            for (int t = 0; t <= length; t++) window[r, t] = history[r, t];
-            for (int h = 0; h < horizon; h++) window[r, length + 1 + h] = NumOps.ToDouble(y[r / series, h, r % series]);
+            items = new int[batch * series];
+            for (int r = 0; r < items.Length; r++) items[r] = r % series;
         }
         return Network.Loss(window, null, length, training, _random, items);
     }
 
     /// <inheritdoc />
-    /// <remarks>One Adam step on the negative log-likelihood of the window (input, then target).</remarks>
-    protected override void RunTrainingStep(Tensor<T> input, Tensor<T> expectedOutput)
-        => TrainWithCustomLoss(input, _ => WindowLoss(input, expectedOutput, training: true), _optimizer);
+    /// <remarks>One Adam step on the negative log-likelihood of the window (input, then target), on the shared fused
+    /// session: a compiled plan rebinds both on every replay.</remarks>
+    protected override IReadOnlyList<AiDotNet.Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
+        => UseNativeMode
+            ? new[] { new AiDotNet.Training.TrainingObjective<T>(new[] { input, target }, data => WindowLoss(data[0], data[1], training: true)) { Optimizer = _optimizer } }
+            : null;
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 

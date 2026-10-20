@@ -33154,12 +33154,15 @@ public static partial class LayerHelper<T>
         int numFlowLayers = 6,
         int numHeads = 4,
         double dropoutRate = 0.1,
-        int inputFeatures = 256)
+        int inputFeatures = 256,
+        int vocabSize = 0)
     {
         if (dropoutRate < 0 || dropoutRate >= 1)
             throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
         if (inputFeatures <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputFeatures), "inputFeatures must be positive.");
+        if (vocabSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(vocabSize), "vocabSize cannot be negative; use 0 for a feature front end.");
 
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
@@ -33172,8 +33175,10 @@ public static partial class LayerHelper<T>
         // feed continuous tensors with last-dim != encoderDim, so the bare
         // LayerNorm(encoderDim) first layer threw "Gamma shape mismatch".
         // No-op when inputFeatures == encoderDim (paper-default embedded
-        // input).
-        if (inputFeatures != encoderDim)
+        // input). A text front end embeds token ids into the encoder width instead (DiTTo-TTS's text encoder).
+        if (vocabSize > 0)
+            yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        else if (inputFeatures != encoderDim)
             yield return new DenseLayer<T>(encoderDim, identityActivation, lazy);
 
         // === Text Encoder ===
@@ -33217,12 +33222,18 @@ public static partial class LayerHelper<T>
         int numDecoderLayers = 4,
         int numHeads = 4,
         double dropoutRate = 0.1,
-        int inputFeatureDim = 0)
+        int inputFeatureDim = 0,
+        int vocabSize = 0)
     {
         if (inputFeatureDim < 0)
             throw new ArgumentOutOfRangeException(
                 nameof(inputFeatureDim), inputFeatureDim,
                 "inputFeatureDim cannot be negative; use 0 (no projection) or a positive feature width.");
+        if (vocabSize < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(vocabSize), vocabSize, "vocabSize cannot be negative; use 0 for a feature front end.");
+        if (vocabSize > 0 && inputFeatureDim > 0)
+            throw new ArgumentException("A text front end (vocabSize) and a feature front end (inputFeatureDim) exclude each other.");
 
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -33239,7 +33250,11 @@ public static partial class LayerHelper<T>
         // `SpeakerConsistency` tests observe degenerate / inconsistent outputs.
         // Applies to all style/emotion TTS front ends that expose mel /
         // prosody feature tensors instead of already-projected hidden states.
-        if (inputFeatureDim > 0 && inputFeatureDim != encoderDim)
+        // A text front end embeds token ids (phonemes or characters) into the encoder width, as the text encoders of
+        // StyleTTS (Li et al. 2022, §3.1) and PromptTTS (Guo et al. 2023, §3.1) do; Synthesize then reads text.
+        if (vocabSize > 0)
+            yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        else if (inputFeatureDim > 0 && inputFeatureDim != encoderDim)
             yield return new DenseLayer<T>(encoderDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
@@ -33364,15 +33379,28 @@ public static partial class LayerHelper<T>
         int specChannels = 80,
         int hiddenDim = 192,
         int numFlowBlocks = 4,
-        int upsampleRate = 2)
+        int upsampleRate = 2,
+        int vocabSize = 0)
     {
+        if (vocabSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(vocabSize), "vocabSize cannot be negative; use 0 for a spectrum front end.");
         var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
         var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
+
+        // A text front end: VITS's prior encoder starts from a phoneme/character embedding (Kim et al. 2021, §2.3),
+        // [B, T] ids -> [B, T, hidden], then channels-first [B, hidden, T] for the 1-D convolutions.
+        int firstChannels = specChannels;
+        if (vocabSize > 0)
+        {
+            yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
+            yield return new TransposeLayer<T>(new[] { 1, 0 });   // logical axes: [T, hidden] -> [hidden, T]
+            firstChannels = hiddenDim;
+        }
 
         // (1) Content encoder: spectrum -> hidden width, "same" padding keeps T. Explicit input
         //     channels so shape resolution propagates from this first layer.
         yield return new Conv1DLayer<T>(
-            inputChannels: specChannels, outputChannels: hiddenDim,
+            inputChannels: firstChannels, outputChannels: hiddenDim,
             kernelSize: 5, dilation: 1, stride: 1, padding: null, activation: leakyRelu);
 
         // (2) Normalizing-flow middle: dilated WaveNet residual blocks (dilation 2^i), constant width.

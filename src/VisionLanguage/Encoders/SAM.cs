@@ -110,7 +110,10 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         _options = options ?? new SAMOptions();
         if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0)
         {
-            _options = new SAMOptions(_options) { ImageSize = architecture.InputHeight };
+            // The encoder square holds the architecture's longer side, rounded up to the patch: an image of any size up
+            // to it is zero-padded to the square (SamNetwork.Preprocess, the official Sam.preprocess).
+            int longer = Math.Max(architecture.InputHeight, architecture.InputWidth), patch = _options.PatchSize;
+            _options = new SAMOptions(_options) { ImageSize = (longer + patch - 1) / patch * patch };
         }
         _useNativeMode = true;
         _optimizer = optimizer
@@ -174,7 +177,7 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
         bool single = image.Rank == 3;
-        var embedding = Network.EncodeImage(PreprocessImage(Batched(image)));
+        var embedding = Network.EncodeImage(Network.Preprocess(PreprocessImage(Batched(image))));
         return single ? Engine.Reshape(embedding, new[] { embedding.Shape[1], embedding.Shape[2], embedding.Shape[3] }) : embedding;
     }
 
@@ -210,7 +213,8 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 
     protected override bool SupportsParameterMutation => _useNativeMode;
 
-    /// <summary>SAM normalizes inside its network (and pads to a square); the image passes through unchanged here.</summary>
+    /// <summary>SAM normalizes and pads to a square in its network (<see cref="EncodeImage"/>); the image passes
+    /// through unchanged here.</summary>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => image;
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;

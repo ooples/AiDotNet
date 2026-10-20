@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+// File-level, as in AudioNeuralNetworkBase: it makes [TensorLayout] bind to AiDotNet's attribute rather than the
+// Tensors namespaces' type of the same name.
+using AiDotNet.Attributes;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -25,7 +28,7 @@ public class NeuralAudioCodecOptions : ModelOptions
     public int NumQuantizers { get; set; } = 32;
 
     /// <summary>Gets or sets the entries per codebook.</summary>
-    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the bits per code: a codec's codebook count at a bandwidth follows log2 of it")]    public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the bandwidth (kbps) <see cref="IAudioCodec{T}.Encode"/> and prediction use.</summary>
     public double TargetBandwidthKbps { get; set; } = 6.0;
@@ -70,6 +73,11 @@ public class NeuralAudioCodecOptions : ModelOptions
 /// computed without updating the codebooks, then the generator; the generation is the same, as the weights have not
 /// changed in between.</para>
 /// </remarks>
+// The waveform forms AsBatch accepts. The audio base's [Batch, Features] stays the rank-2 form ([channels, samples]);
+// a batch-optional [Batch?, Channels, Time] here would give rank 2 two namings. The stack's first convolution
+// takes the rank-3 form.
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
 public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>, ITrainingObjectiveProvider<T>
 {
     private readonly NeuralAudioCodecOptions _codec;
@@ -257,6 +265,25 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
         return Quantizer!.Encode(EncodeLatent(AsBatch(audio)), QuantizersForBandwidth(_codec.TargetBandwidthKbps));
     }
 
+    /// <summary>Whether the quantizer's codebooks have been fitted (by training or a load). An unfitted codec encodes every
+    /// recording to the same codes.</summary>
+    public bool CodebooksInitialized => Quantizer?.CodebooksInitialized ?? false;
+
+    /// <summary>
+    /// Fits the codebooks that have never been fitted from <paramref name="audio"/>'s latents, by the data-dependent
+    /// initialization the first training batch would run (k-means for SoundStream/EnCodec); fitted codebooks are left
+    /// as they are.
+    /// </summary>
+    public void InitializeCodebooks(Tensor<T> audio)
+    {
+        ThrowIfDisposed();
+        RequireNative();
+        if (Quantizer!.CodebooksInitialized) return;
+        SetTrainingMode(false);
+        using var _ = new NoGradScope<T>();
+        Quantizer.InitializeCodebooks(EncodeLatent(AsBatch(audio)));
+    }
+
     /// <inheritdoc />
     public Task<int[,]> EncodeAsync(Tensor<T> audio, CancellationToken cancellationToken = default)
         => Task.Run(() => Encode(audio), cancellationToken);
@@ -342,6 +369,8 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
     /// discriminator (with <see cref="DiscriminatorUpdateProbability"/>) and then the generator.</remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // A model of this family that declares its own objective or learning rule takes its step through it.
+        if (TryTrainDeclaredObjectives(input, expectedOutput)) return;
         ThrowIfDisposed();
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         // A codec whose step differs (SpeechTokenizer distils from a semantic teacher) declares it as a learning rule.

@@ -925,6 +925,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual double MoreDataTolerance => 1e-4;
 
     /// <summary>
+    /// A tolerance for <see cref="MoreData_ShouldNotDegrade"/> as a fraction of the untrained loss, for an objective
+    /// that is not monotone over the probe's horizon by construction (one whose targets are the model's own codes,
+    /// which move as it trains). The larger of this and <see cref="MoreDataTolerance"/> applies. Default 0.
+    /// </summary>
+    protected virtual double MoreDataRelativeTolerance => 0.0;
+
+    /// <summary>
     /// Creates a random tensor in the model-declared input domain. Input-shaped
     /// tensors are synthesized from the bound production contract; unrelated
     /// tensors retain the continuous default.
@@ -2808,7 +2815,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // The real invariant: after a full budget the model is better than it started. The
         // tolerance is additive on top of the untrained baseline, so a model that merely fails to
         // improve still passes while one that actively degrades does not.
-        if (lossLong > lossUntrained + MoreDataTolerance)
+        double moreDataTolerance = Math.Max(MoreDataTolerance, MoreDataRelativeTolerance * Math.Abs(lossUntrained));
+        if (lossLong > lossUntrained + moreDataTolerance)
         {
             var longParams = network1.GetParameters();
             double longParamNormSq = 0.0;
@@ -2822,7 +2830,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             Assert.Fail(
                 $"{network1.GetType().FullName} training invariant failed at precision {typeof(T).FullName}: " +
                 $"after {longIters} iterations the loss ({lossLong:R}) is worse than the UNTRAINED " +
-                $"baseline ({lossUntrained:R}) + tolerance ({MoreDataTolerance:R}). " +
+                $"baseline ({lossUntrained:R}) + tolerance ({moreDataTolerance:R}). " +
                 "Parameter diagnostics: " +
                 $"long count={longParams.Length}, L2={Math.Sqrt(longParamNormSq):R}, nonfinite={longNonFinite}; " +
                 $"input shape=[{string.Join(",", EffectiveInputShape)}], output shape=[{string.Join(",", ShapeCheckedOutputShape)}].");
@@ -6301,6 +6309,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         if (!GradientCorrectnessInvariantApplicable) return;
+
+        // A self-supervised objective is defined by reading no caller target (w2v-BERT's masked prediction, AudioLM's
+        // semantic stage): an update that ignores the target is its contract, not a broken backward.
+        if (network is ITrainingObjectiveProvider<T> { TrainingObjectiveKind: TrainingObjectiveKind.SelfSupervised })
+        {
+            ReportGradientFinding(GradientReportFile, GetType().Name,
+                "SKIPPED: the model declares a self-supervised training objective, which reads no target.");
+            return;
+        }
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
         var targetA = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);

@@ -144,9 +144,13 @@ internal sealed class AutoformerNetwork<T>
     {
         double rate = Configuration.Dropout;
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
         var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(x._shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        });
         return _engine.TensorMultiply(x, mask);
     }
 
@@ -232,27 +236,14 @@ internal sealed class AutoformerNetwork<T>
 
         // k = ⌊c·ln L⌋, which is zero for very short inputs: then nothing is aggregated, as in the reference.
         int top = Math.Min((int)(Configuration.Factor * Math.Log(length)), length);
-        var host = mean.GetCpuData();
         Tensor<T> aggregated;
         if (top <= 0)
             aggregated = _engine.TensorMultiplyScalar(v, NumOps.Zero);
         else if (training)
-        {
-            // The lags strongest on average over the batch, shared by every series.
-            var lags = Enumerable.Range(0, length)
-                .OrderByDescending(tau => Enumerable.Range(0, batch).Sum(b => NumOps.ToDouble(host[b * length + tau])))
-                .Take(top).ToArray();
-            var weights = _engine.Softmax(_engine.TensorGather(mean, new Tensor<int>(new[] { top }, new Vector<int>(lags)), axis: 1), axis: 1);
-            aggregated = new Tensor<T>(new[] { batch, length, d });
-            for (int i = 0; i < top; i++)
-            {
-                var rolled = _engine.TensorRoll(v, new[] { -lags[i] }, new[] { 1 });
-                var w = _engine.Reshape(_engine.TensorSlice(weights, new[] { 0, i }, new[] { batch, 1 }), new[] { batch, 1, 1 });
-                aggregated = _engine.TensorAdd(aggregated, _engine.TensorMultiply(rolled, _engine.TensorTile(w, new[] { 1, length, d })));
-            }
-        }
+            aggregated = AggregateSharedLags(mean, v, top);
         else
         {
+            var host = mean.GetCpuData();
             // Each series' own strongest lags.
             var rows = new Tensor<T>[batch];
             for (int b = 0; b < batch; b++)
@@ -274,6 +265,49 @@ internal sealed class AutoformerNetwork<T>
             aggregated = batch == 1 ? rows[0] : _engine.TensorConcatenate(rows, 0);
         }
         return Dense(a.Output, aggregated);
+    }
+
+    // Training's time-delay aggregation: the top lags strongest on average over the batch, shared by every series,
+    // Σ_i softmax(R̄(τ_i)) · Roll(V, −τ_i) (time_delay_agg_training). The lags are chosen from the step's own
+    // correlations, as one-hot matrices a compiled training plan recomputes on every replay: a selector [L, u] that
+    // picks R̄(τ_i) (so the weights stay differentiable) and the shift operators [u, L·L] whose weighted sum rolls V.
+    private Tensor<T> AggregateSharedLags(Tensor<T> mean, Tensor<T> v, int top)
+    {
+        int batch = v.Shape[0], length = v.Shape[1];
+        var selector = AiDotNet.Training.CompiledStepHostValue<T>.Compute("AutoformerLagSelector", new[] { mean },
+            new[] { length, top }, (inputs, result) =>
+            {
+                var lags = SharedLags(inputs[0], top);
+                var span = result.AsWritableSpan();
+                span.Clear();
+                for (int i = 0; i < top; i++) span[lags[i] * top + i] = NumOps.One;
+                result.IncrementVersion();
+            });
+        var shifts = AiDotNet.Training.CompiledStepHostValue<T>.Compute("AutoformerLagShifts", new[] { mean },
+            new[] { top, length * length }, (inputs, result) =>
+            {
+                var lags = SharedLags(inputs[0], top);
+                var span = result.AsWritableSpan();
+                span.Clear();
+                // Roll(V, −τ)[t] = V[(t + τ) mod L]: row t of the operator picks column (t + τ) mod L.
+                for (int i = 0; i < top; i++)
+                    for (int t = 0; t < length; t++) span[i * length * length + t * length + (t + lags[i]) % length] = NumOps.One;
+                result.IncrementVersion();
+            });
+
+        var weights = _engine.Softmax(_engine.TensorMatMul(mean, selector), axis: 1);                                    // [B, u]
+        var operators = _engine.Reshape(_engine.TensorMatMul(weights, shifts), new[] { batch, length, length });         // [B, L, L]
+        return _engine.BatchMatMul(operators, v);                                                                         // [B, L, D]
+    }
+
+    // The u lags whose autocorrelation summed over the batch is largest (ties keep the smaller lag).
+    private static int[] SharedLags(Tensor<T> mean, int top)
+    {
+        var host = mean.GetCpuData();
+        int rows = mean.Shape[0], steps = mean.Shape[1];
+        return Enumerable.Range(0, steps)
+            .OrderByDescending(tau => Enumerable.Range(0, rows).Sum(b => NumOps.ToDouble(host[b * steps + tau])))
+            .Take(top).ToArray();
     }
 
     private Tensor<T> FeedForward(BiasFreeLinearLayer<T> conv1, BiasFreeLinearLayer<T> conv2, Tensor<T> x, bool training, Random random)

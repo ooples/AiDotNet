@@ -19,22 +19,25 @@ public class ForecasterFusedTrainingTests
     // by a few 1e-8 of the parameter scale per step. A model that trained a different step differs by far more.
     private const double RelativeTolerance = 1e-5;
 
-    // DeepAR, Informer and Autoformer are absent: each is a data adapter over its official-code network, trained by its own
-    // tape step and listed in FusedCompiledTrainingOptOutInventoryTests (their forwards read per-batch values a compiled
-    // replay would freeze).
     public static TheoryData<string> Models => new()
     {
-        "NBEATS", "NHiTS", "TFT",
+        "DeepAR", "NBEATS", "NHiTS", "TFT", "Informer", "Autoformer",
     };
 
     private static TimeSeriesModelBase<double> Create(string model, int epochs, int batch) => model switch
     {
+        "DeepAR" => new DeepARModel<double>(new DeepAROptions<double>
+            { LookbackWindow = 8, ForecastHorizon = 2, HiddenSize = 8, NumLayers = 1, Epochs = epochs, BatchSize = batch, Seed = 5 }),
         "NBEATS" => new NBEATSModel<double>(new NBEATSModelOptions<double>
             { NumStacks = 2, NumBlocksPerStack = 1, LookbackWindow = 8, ForecastHorizon = 2, HiddenLayerSize = 8, NumHiddenLayers = 1, Epochs = epochs, BatchSize = batch, Seed = 5 }),
         "NHiTS" => new NHiTSModel<double>(new NHiTSOptions<double>
             { LookbackWindow = 8, ForecastHorizon = 2, HiddenLayerSize = 8, Epochs = epochs, BatchSize = batch, Seed = 5 }),
         "TFT" => new TemporalFusionTransformer<double>(new TemporalFusionTransformerOptions<double>
             { LookbackWindow = 8, ForecastHorizon = 2, HiddenSize = 8, NumAttentionHeads = 2, Epochs = epochs, BatchSize = batch, Seed = 5 }),
+        "Informer" => new InformerModel<double>(new InformerOptions<double>
+            { LookbackWindow = 8, ForecastHorizon = 2, EmbeddingDim = 8, NumAttentionHeads = 2, Epochs = epochs, BatchSize = batch, Seed = 5 }),
+        "Autoformer" => new AutoformerModel<double>(new AutoformerOptions<double>
+            { LookbackWindow = 8, ForecastHorizon = 2, EmbeddingDim = 8, NumAttentionHeads = 2, Epochs = epochs, BatchSize = batch, Seed = 5 }),
         _ => throw new ArgumentOutOfRangeException(nameof(model)),
     };
 

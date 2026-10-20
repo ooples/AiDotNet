@@ -130,9 +130,11 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>, IShapeContract
 
         // Resolve against a placeholder T large enough for the kernel to fit; the real T binds on
         // first Forward and does not change the parameter count (conv is translation-invariant in T).
+        // The output time axis is dynamic (it follows each input's length), as Conv1DLayer declares it:
+        // a concrete T_out pinned to the last input made a trained layer's resolved shape differ from a
+        // restored one's, so a model clone rejected the in-place restore and kept stale weights.
         int minTime = _kernelSize;
-        int outTime = (minTime + 2 * _padding - _kernelSize) / _stride + 1;
-        ResolveShapes(new[] { channels, minTime }, new[] { outChannels, outTime });
+        ResolveShapes(new[] { channels, minTime }, new[] { outChannels, LayerShape.Dynamic });
     }
 
     /// <inheritdoc/>
@@ -160,13 +162,11 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>, IShapeContract
                 nameof(input));
         }
 
-        // Bind the real sequence length so GetOutputShape() reports the actual T_out (the ctor only
-        // resolved against a placeholder T since the real length is unknown until the first forward —
-        // mirrors Conv1DLayer.OnFirstForward). The parameter count is unaffected (conv is
-        // translation-invariant in T).
+        // Bind the real input length (the ctor only resolved against a placeholder T since the real length
+        // is unknown until the first forward); the output length stays dynamic, as in Conv1DLayer. The
+        // parameter count is unaffected (conv is translation-invariant in T).
         int tIn = input.Shape[2];
-        int tOut = (tIn + 2 * _padding - _kernelSize) / _stride + 1;
-        ResolveShapes(new[] { _channels, tIn }, new[] { _channels * _multiplier, tOut });
+        ResolveShapes(new[] { _channels, tIn }, new[] { _channels * _multiplier, LayerShape.Dynamic });
 
         // Tape-aware depthwise temporal conv: [B, C, T] -> [B, C*mult, T_out].
         var conv = Engine.DepthwiseConv1D(input, _kernel, _stride, _padding);

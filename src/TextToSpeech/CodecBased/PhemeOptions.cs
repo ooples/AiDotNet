@@ -132,9 +132,10 @@ public class PhemeOptions : TtsModelOptions
     public int AcousticCodebooks { get; set; } = 7;
 
     /// <summary>Codes per acoustic codebook (1024).</summary>
-    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Semantic codes (1024).</summary>
+    [AiDotNet.Attributes.NotScaled("the semantic codec's codes per codebook, which it must equal")]
     public int SemanticCodes { get; set; } = 1024;
 
     /// <summary>Whether the acoustic model reads a pyannote speaker embedding (true; false in the released large

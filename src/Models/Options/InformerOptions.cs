@@ -34,7 +34,7 @@ public class InformerOptions<T> : TimeSeriesRegressionOptions<T>
         // changes deterministic initialization.
         Seed = other.Seed;
         LookbackWindow = other.LookbackWindow;
-        LabelLength = other.LabelLength;
+        _labelLength = other._labelLength;
         ForecastHorizon = other.ForecastHorizon;
         EmbeddingDim = other.EmbeddingDim;
         FeedForwardDim = other.FeedForwardDim;
@@ -59,13 +59,20 @@ public class InformerOptions<T> : TimeSeriesRegressionOptions<T>
 
     /// <summary>
     /// Gets or sets the start-token length: the last steps of the lookback window that open the decoder input
-    /// (label_len, 48).
+    /// (label_len). Unless set, half of <see cref="LookbackWindow"/>: the reference's 48 for its 96-step window, and a
+    /// valid start for any shorter window.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Informer's decoder predicts the whole horizon in one pass. It is given the end of
     /// the known history as a "start", followed by empty placeholders it fills in.</para>
     /// </remarks>
-    public int LabelLength { get; set; } = 48;
+    public int LabelLength
+    {
+        get => _labelLength ?? LookbackWindow / 2;
+        set => _labelLength = value;
+    }
+
+    private int? _labelLength;
 
     /// <summary>
     /// Gets or sets the forecast horizon, the number of predicted steps (pred_len, 24).

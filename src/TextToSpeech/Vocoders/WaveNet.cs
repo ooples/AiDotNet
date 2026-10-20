@@ -144,6 +144,10 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
         var o = PaperOptions;
         int samples = mel.Shape[2] * UpsampleFactor, levels = o.MuLawLevels;
         var condition = Condition(mel, samples);
+        // Each step leaves only the sampled class and the GC-owned state live, so under Predict's inference arena the
+        // loop resets the arena per sample; the condition every step slices is copied out of it once. Without the
+        // reset every sample's scratch stayed live until Predict returned (15 GB for 2048 samples at test scale).
+        if (InferenceRecycleActive) condition = DetachFromArena(condition);
         var state = _network!.NewState();
         var wave = new Tensor<T>(new[] { 1, 1, samples });
         int previous = MuLaw.Encode(0, levels);
@@ -154,6 +158,7 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
             int chosen = SampleClass(logits, random);
             wave[0, 0, t] = NumOps.FromDouble(MuLaw.Decode(chosen, levels));
             previous = chosen;
+            RecycleInferenceScratch();
         }
         return wave;
     }

@@ -15,6 +15,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure a VITS-style model. Default values follow the original paper settings.</para>
 /// </remarks>
+[AiDotNet.Attributes.DimensionDivisibility(nameof(UpsampleInitialChannels), nameof(UpsampleChannelDivisor))]
 public abstract class VitsModelOptions : EndToEndTtsOptions
 {
     /// <summary>Initializes a new instance by copying from another instance.</summary>
@@ -121,6 +122,10 @@ public abstract class VitsModelOptions : EndToEndTtsOptions
 
     /// <summary>Gets or sets the decoder's first width (512).</summary>
     public int UpsampleInitialChannels { get; set; } = 512;
+
+    /// <summary>The factor the upsampling stages halve <see cref="UpsampleInitialChannels"/> by (2 per stage), which
+    /// it must therefore be a multiple of for the last stage to keep a channel.</summary>
+    public int UpsampleChannelDivisor => 1 << UpsampleRates.Length;
 
     /// <summary>Gets or sets the decoder's residual block kernels (3, 7, 11).</summary>
     public int[] ResblockKernelSizes { get; set; } = [3, 7, 11];
