@@ -196,7 +196,9 @@ internal sealed class WaveNetNetwork<T>
         {
             var b = _blocks[i];
             var history = state.Hidden[i];
-            history.Add(x);
+            // A GC-owned copy of the [1, channels, 1] column: the history outlives the step, and the sampler resets
+            // the inference arena between steps (WaveNet.Synthesize).
+            history.Add(new Tensor<T>(x.ToArray(), new[] { x.Shape[0], x.Shape[1], x.Shape[2] }));
             if (history.Count > (_kernel - 1) * b.Dilation + 1) history.RemoveAt(0);
             var (res, skip) = Gate(b, b.Dilated.ForwardTaps(Taps(history, b.Dilation, x.Shape[1])), condition);
             x = _engine.TensorMultiplyScalar(_engine.TensorAdd(x, res), half);

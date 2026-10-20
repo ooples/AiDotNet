@@ -468,7 +468,7 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
             // sampled bytes, which carry no audio, and synthesized nothing.
             var generated = TextToSemantic.Generate(input, prefix, o.Temperature, o.TopK, o.MaxNewSemanticTokens, random,
                     (token, step) => token >= ByteVocabulary || (token == EndToken && step > 0))
-                .Skip(prefix.Count).Select(id => id - ByteVocabulary).ToArray();
+                .Skip(prefix.Count).Where(id => id >= ByteVocabulary).Select(id => id - ByteVocabulary).ToArray();
             if (generated.Length == 0)
                 throw new InvalidOperationException("The text-to-semantic model generated no semantic tokens.");
 

@@ -921,6 +921,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // mutations for compiled-plan replay; NoGradScope only suppresses tape
             // recording. Without this boundary the batch-variance EMA can be retained
             // as differentiable state and corrupted when the training tape is released.
+            // A forward that is not a training step (the fused session's lazy-shape pass, its replay and zero-gradient
+            // checks) normalizes as training does but must not advance the statistics: the step that follows would
+            // see one extra EMA update (running variance off by (1 − momentum)·momentumⁿ after n steps).
+            if (!AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
                 // Recalibration (see OverwriteRunningStatistics) replaces the statistics outright: momentum 0.

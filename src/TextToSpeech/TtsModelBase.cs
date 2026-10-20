@@ -309,29 +309,6 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         return tokens;
     }
 
-    /// <summary>
-    /// Text as one-hot character rows <c>[length, width]</c>, for a network whose front end reads <paramref name="width"/>
-    /// continuous features per step through a dense projection.
-    /// </summary>
-    /// <remarks>
-    /// A dense layer applied to a one-hot row selects one column of its weight matrix, so the projection acts as a
-    /// learned character embedding: the network sees a distinct, trainable vector per character. A single scaled
-    /// code per character (<c>code / 128</c>) has rank 1 and does not fit such a front end at all. Character
-    /// <c>c</c> sets column <c>c % width</c>; text longer than the maximum text length is truncated.
-    /// </remarks>
-    protected Tensor<T> OneHotCharacterFeatures(string text, int width)
-    {
-        Guard.NotNull(text);
-        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), "The feature width must be positive.");
-        int length = Math.Min(text.Length, MaxTextTokens);
-        if (length <= 0)
-            throw new ArgumentException("Text must contain at least one character.", nameof(text));
-        var features = new Tensor<T>(new[] { length, width });
-        for (int i = 0; i < length; i++)
-            features[i, text[i] % width] = NumOps.One;
-        return features;
-    }
-
     /// <summary>Longest text, in tokens, the model reads.</summary>
     protected virtual int MaxTextTokens =>
         this is AiDotNet.TextToSpeech.Interfaces.ITtsModel<T> tts && tts.MaxTextLength > 0 ? tts.MaxTextLength : int.MaxValue;

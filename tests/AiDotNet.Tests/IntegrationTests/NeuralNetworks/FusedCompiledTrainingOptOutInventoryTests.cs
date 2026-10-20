@@ -46,18 +46,11 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
     /// </summary>
     private static readonly string[] KnownOptOuts =
     {
-        "Autoformer",
-        // DeepAR (#2294's rewrite): each step's input is built on the host from the window's values, so a traced replay
-        // would keep the first batch's inputs. Moving that construction into tensor ops would let it fuse.
-        "DeepAR",
         "DifferentiableNeuralComputer",
         "DistilBERTNER",
         "GLALanguageModel",
         "GatedDeltaNetLanguageModel",
         "Hippo",
-        // Informer (#2294's rewrite): ProbSparse attention picks its queries from the current values, the same
-        // data-dependent selection as Autoformer's lags; a replay would keep the first step's choice.
-        "Informer",
         "NeuralTuringMachine",
         "RWKVForecaster",
         "SAM2",

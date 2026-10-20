@@ -57,6 +57,9 @@ namespace AiDotNet.Audio.Foundations;
     Source = "Chung et al. 2021, Section 4.2: w2v-BERT XL uses Adam with the Transformer learning-rate schedule of "
              + "Vaswani et al. 2017 Section 5.3 (beta 0.9 / 0.98, epsilon 1e-9, lr proportional to "
              + "min(step / warmup, sqrt(warmup / step))) at a peak of 2e-3 after 25k warm-up steps.")]
+[PreprocessesInput("W2vBertNetwork.Features converts the waveform to log-mel filterbanks, and Encode feeds them to "
+    + "the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width)]
 public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly W2vBertOptions _options;
@@ -352,13 +355,31 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
 
     Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
 
+    /// <summary>Mask, noise and distractor draws averaged by <see cref="ITrainingObjectiveProvider{T}.EvaluateTrainingObjective"/>.</summary>
+    private const int ObjectiveDraws = 8;
+
     /// <inheritdoc />
-    /// <remarks>The pre-training loss of the input in inference mode, with the mask, noise and distractors drawn from a
-    /// fixed seed, so it is a function of the input and the weights.</remarks>
+    /// <remarks>
+    /// The pre-training loss of the input in inference mode, averaged over <see cref="ObjectiveDraws"/> draws of the
+    /// mask, noise and distractors from fixed seeds, so it is a function of the input and the weights. The objective is
+    /// an expectation over those draws, and one draw is a poor estimate of it: when every sampled distractor quantizes
+    /// to its positive's code, fairseq's rule excludes them all and the contrastive term is exactly 0. Measured on a
+    /// 16-wide model: one input's contrastive term was 0 for one draw in eight and 1.3 to 15.6 for the others.
+    /// </remarks>
     T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
     {
         using var _ = new NoGradScope<T>();
-        return PretrainingLoss(input, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 2))[0];
+        double total = 0, contrastive = 0, diversity = 0, masked = 0;
+        for (int draw = 0; draw < ObjectiveDraws; draw++)
+        {
+            var random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 2 + draw);
+            total += NumOps.ToDouble(PretrainingLoss(input, training: false, random)[0]);
+            contrastive += LastPretrainingLosses.Contrastive;
+            diversity += LastPretrainingLosses.Diversity;
+            masked += LastPretrainingLosses.MaskedPrediction;
+        }
+        LastPretrainingLosses = (contrastive / ObjectiveDraws, diversity / ObjectiveDraws, masked / ObjectiveDraws);
+        return NumOps.FromDouble(total / ObjectiveDraws);
     }
 
     /// <inheritdoc />

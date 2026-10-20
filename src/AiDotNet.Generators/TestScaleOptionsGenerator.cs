@@ -498,7 +498,9 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                 .Where(p => p.DeclaredAccessibility == Accessibility.Public
                     && p.SetMethod is { DeclaredAccessibility: Accessibility.Public }
                     && !p.IsStatic
-                    && p.Type.SpecialType == SpecialType.System_Int32)
+                    && p.Type.SpecialType == SpecialType.System_Int32
+                    && !IsMarkedNotScaled(p)
+                    && !ClassExemptsFromScaling(type, p.Name))
                 .Select(p => p.Name)
                 .Where(IsScalable)
                 .ToArray();
@@ -519,6 +521,51 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
             typeCount++;
         }
 
+        sb.AppendLine("    };");
+        sb.AppendLine();
+
+        // WIDTH ARRAYS. A paper rebuild often states per-stage widths as an int[] (WaveGrad's upsample
+        // channels [512, 512, 256, 128, 128]), which the int table cannot see, so the model stayed at paper
+        // scale under the sweep. Arrays are matched by an ALLOW-list of width words, unlike scalars: an int[]
+        // knob is as often a set of analysis windows, FFT sizes, hops or seasonal periods, where shrinking
+        // changes the meaning or the work, so only a name that says "width" is scaled.
+        sb.AppendLine("    private static readonly (global::System.Type Type, string Property)[] ArrayKnobs =");
+        sb.AppendLine("    {");
+        var arraySeen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+        int arrayKnobCount = 0;
+        foreach (var type in types)
+        {
+            if (type is null) continue;
+            var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (!arraySeen.Add(fullName)) continue;
+            var declaredNames = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+            var arrayKnobs = new System.Collections.Generic.List<string>();
+            for (var walk = type; walk is not null && walk.SpecialType != SpecialType.System_Object; walk = walk.BaseType)
+            {
+                foreach (var property in walk.GetMembers().OfType<IPropertySymbol>())
+                {
+                    if (!declaredNames.Add(property.Name)) continue;
+                    if (property.DeclaredAccessibility != Accessibility.Public
+                        || property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }
+                        || property.IsStatic
+                        || property.Type is not IArrayTypeSymbol { Rank: 1 } array
+                        || array.ElementType.SpecialType != SpecialType.System_Int32
+                        || !IsScalable(property.Name)
+                        || !NamesAWidth(property.Name)
+                        || IsMarkedNotScaled(property)
+                        || ClassExemptsFromScaling(type, property.Name)) continue;
+                    arrayKnobs.Add(property.Name);
+                }
+            }
+            var typeOfArgument = type.IsGenericType
+                ? type.ConstructUnboundGenericType().ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                : fullName;
+            foreach (var property in arrayKnobs)
+            {
+                sb.AppendLine($"        (typeof({typeOfArgument}), \"{property}\"),");
+                arrayKnobCount++;
+            }
+        }
         sb.AppendLine("    };");
         sb.AppendLine();
         sb.AppendLine("    private static readonly (global::System.Type Type, string Dimension, string Divisor)[] DivisibilityConstraints =");
@@ -548,7 +595,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         // assembly shadows the useful implementation from AiDotNet and makes every request fall
         // back to paper-scale defaults. A constraint-only type is useful even when its current
         // values already satisfy the relationship, so constraints count as supported behavior.
-        if (knobCount == 0 && synthesizedCount == 0 && constraintCount == 0) return;
+        if (knobCount == 0 && arrayKnobCount == 0 && synthesizedCount == 0 && constraintCount == 0) return;
 
         sb.AppendLine("    };");
         sb.AppendLine();
@@ -588,6 +635,8 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            known = true;");
         sb.AppendLine("            break;");
         sb.AppendLine("        }");
+        sb.AppendLine("        for (int i = 0; !known && i < ArrayKnobs.Length; i++)");
+        sb.AppendLine("            known = ArrayKnobs[i].Type == key;");
         sb.AppendLine("        if (!known)");
         sb.AppendLine("        {");
         sb.AppendLine("            for (int i = 0; i < DivisibilityConstraints.Length; i++)");
@@ -614,22 +663,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("        if (instance is null) return null;");
         sb.AppendLine();
-        sb.AppendLine("        for (int i = 0; i < Knobs.Length; i++)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            if (Knobs[i].Type != key) continue;");
-        sb.AppendLine();
-        sb.AppendLine("            var property = optionsType.GetProperty(Knobs[i].Property);");
-        sb.AppendLine("            if (property is null || !property.CanRead || !property.CanWrite) continue;");
-        sb.AppendLine("            if (property.GetValue(instance) is not int current) continue;");
-        sb.AppendLine();
-        sb.AppendLine("            // SCALED, not clamped. Dividing preserves the ratios between knobs, so a");
-        sb.AppendLine("            // width and a head count shrink together and width % heads still divides.");
-        sb.AppendLine("            // An absolute cap set them independently and broke exactly that.");
-        sb.AppendLine("            var scaled = ScaleDeclaredInteger(current);");
-        sb.AppendLine("            if (scaled == current) continue;");
-        sb.AppendLine();
-        sb.AppendLine("            property.SetValue(instance, scaled);");
-        sb.AppendLine("        }");
+        sb.AppendLine("        ScaleInPlace(optionsType, key, instance);");
         sb.AppendLine();
         sb.AppendLine("        if (overrides is not null)");
         sb.AppendLine("        {");
@@ -652,7 +686,87 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("        AlignDeclaredConstraints(optionsType, key, instance);");
         sb.AppendLine("        AlignHeadCounts(optionsType, key, instance);");
         sb.AppendLine();
+        sb.AppendLine("        // NESTED OPTIONS scale with their owner. A model that carries a codec's or a detector's options (Pheme,");
+        sb.AppendLine("        // SoundStorm and AudioLM a codec's, Grounded SAM 2 a Grounding DINO's) checks its own sizes against the");
+        sb.AppendLine("        // nested ones: scaling only the owner made 32 codes per level meet a 1024-entry codebook, and left the");
+        sb.AppendLine("        // nested network at paper scale. The nested instance is scaled IN PLACE, so whatever the owner set on it");
+        sb.AppendLine("        // (MusicGen's 32 kHz EnCodec) is kept.");
+        sb.AppendLine("        ScaleNested(instance, 0, new global::System.Collections.Generic.List<object> { instance });");
+        sb.AppendLine();
         sb.AppendLine("        return instance;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static bool IsKnown(global::System.Type key)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        for (int i = 0; i < Knobs.Length; i++) if (Knobs[i].Type == key) return true;");
+        sb.AppendLine("        for (int i = 0; i < ArrayKnobs.Length; i++) if (ArrayKnobs[i].Type == key) return true;");
+        sb.AppendLine("        for (int i = 0; i < DivisibilityConstraints.Length; i++) if (DivisibilityConstraints[i].Type == key) return true;");
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static void ScaleNested(object owner, int depth, global::System.Collections.Generic.List<object> visited)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (depth >= 3) return;");
+        sb.AppendLine("        foreach (var property in owner.GetType().GetProperties(");
+        sb.AppendLine("            global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public))");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (!property.CanRead || property.GetIndexParameters().Length > 0) continue;");
+        sb.AppendLine("            var declared = property.PropertyType;");
+        sb.AppendLine("            if (declared.IsPrimitive || declared.IsEnum || declared.IsArray || declared == typeof(string) || declared.IsValueType) continue;");
+        sb.AppendLine("            object? value;");
+        sb.AppendLine("            try { value = property.GetValue(owner); }");
+        sb.AppendLine("            catch (global::System.Exception) { continue; }");
+        sb.AppendLine("            if (value is null) continue;");
+        sb.AppendLine("            bool seen = false;");
+        sb.AppendLine("            foreach (var v in visited) if (ReferenceEquals(v, value)) { seen = true; break; }");
+        sb.AppendLine("            if (seen) continue;");
+        sb.AppendLine("            visited.Add(value);");
+        sb.AppendLine("            var type = value.GetType();");
+        sb.AppendLine("            var key = type.IsGenericType ? type.GetGenericTypeDefinition() : type;");
+        sb.AppendLine("            if (!IsKnown(key)) continue;");
+        sb.AppendLine("            ScaleInPlace(type, key, value);");
+        sb.AppendLine("            AlignDeclaredConstraints(type, key, value);");
+        sb.AppendLine("            AlignHeadCounts(type, key, value);");
+        sb.AppendLine("            ScaleNested(value, depth + 1, visited);");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static void ScaleInPlace(global::System.Type optionsType, global::System.Type key, object instance)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        for (int i = 0; i < Knobs.Length; i++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (Knobs[i].Type != key) continue;");
+        sb.AppendLine();
+        sb.AppendLine("            var property = optionsType.GetProperty(Knobs[i].Property);");
+        sb.AppendLine("            if (property is null || !property.CanRead || !property.CanWrite) continue;");
+        sb.AppendLine("            if (property.GetValue(instance) is not int current) continue;");
+        sb.AppendLine();
+        sb.AppendLine("            // SCALED, not clamped. Dividing preserves the ratios between knobs, so a");
+        sb.AppendLine("            // width and a head count shrink together and width % heads still divides.");
+        sb.AppendLine("            // An absolute cap set them independently and broke exactly that.");
+        sb.AppendLine("            var scaled = ScaleDeclaredInteger(current);");
+        sb.AppendLine("            if (scaled == current) continue;");
+        sb.AppendLine();
+        sb.AppendLine("            property.SetValue(instance, scaled);");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        // Each element of a width array scales like a scalar width. A NEW array is set: the default may be a");
+        sb.AppendLine("        // shared instance, and writing into it would shrink every later default construction too.");
+        sb.AppendLine("        for (int i = 0; i < ArrayKnobs.Length; i++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (ArrayKnobs[i].Type != key) continue;");
+        sb.AppendLine("            var property = optionsType.GetProperty(ArrayKnobs[i].Property);");
+        sb.AppendLine("            if (property is null || !property.CanRead || !property.CanWrite) continue;");
+        sb.AppendLine("            if (property.GetValue(instance) is not int[] current || current.Length == 0) continue;");
+        sb.AppendLine("            var scaled = new int[current.Length];");
+        sb.AppendLine("            bool changed = false;");
+        sb.AppendLine("            for (int j = 0; j < current.Length; j++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                scaled[j] = ScaleDeclaredInteger(current[j]);");
+        sb.AppendLine("                changed |= scaled[j] != current[j];");
+        sb.AppendLine("            }");
+        sb.AppendLine("            if (changed) property.SetValue(instance, scaled);");
+        sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>");
@@ -836,6 +950,48 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// nothing, and proportional scaling does not have either problem: ratios are preserved and
     /// anything already small is untouched.
     /// </remarks>
+    private const string NotScaledAttributeName = "AiDotNet.Attributes.NotScaledAttribute";
+
+    /// <summary>Whether a property carries [NotScaled]: a size fixed by the data it indexes (a tokenizer's vocabulary).</summary>
+    private static bool IsMarkedNotScaled(IPropertySymbol property)
+    {
+        for (var p = property; p is not null; p = p.OverriddenProperty)
+        {
+            foreach (var attribute in p.GetAttributes())
+                if (attribute.AttributeClass?.ToDisplayString() == NotScaledAttributeName) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whether the options type (or a base) carries a class-level [NotScaled("Property", reason)] naming it.</summary>
+    private static bool ClassExemptsFromScaling(INamedTypeSymbol type, string propertyName)
+    {
+        for (var walk = type; walk is not null; walk = walk.BaseType)
+        {
+            foreach (var attribute in walk.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToDisplayString() != NotScaledAttributeName) continue;
+                if (attribute.ConstructorArguments.Length == 2
+                    && attribute.ConstructorArguments[0].Value is string named
+                    && string.Equals(named, propertyName, System.StringComparison.Ordinal))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Whether an int[] property's name says it holds widths (channels, dimensions, filters).</summary>
+    private static bool NamesAWidth(string propertyName)
+    {
+        foreach (var word in new[] { "Channel", "Dim", "Width", "Filter", "Hidden" })
+        {
+            if (propertyName.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool IsScalable(string propertyName)
     {
         foreach (var fixedName in SemanticallyFixed)
