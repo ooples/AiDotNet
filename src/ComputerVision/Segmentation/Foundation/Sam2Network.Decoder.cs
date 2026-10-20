@@ -35,7 +35,7 @@ internal sealed partial class Sam2Network<T>
     /// <summary>
     /// The sparse prompt embeddings <c>[N, tokens, Dim]</c> and dense ones <c>[N, Dim, Grid, Grid]</c> for N prompts:
     /// points <c>[N, k, 2]</c> (x, y in the ImageSize frame) with labels <c>[N, k]</c> (1 positive, 0 negative,
-    /// −1 padding), boxes <c>[N, 4]</c> (x0, y0, x1, y1), and low-resolution mask logits <c>[N, 1, 4·Grid, 4·Grid]</c>.
+    /// −1 padding, 2 and 3 a box's top-left and bottom-right corners given as points), boxes <c>[N, 4]</c> (x0, y0, x1, y1), and low-resolution mask logits <c>[N, 1, 4·Grid, 4·Grid]</c>.
     /// </summary>
     public (Tensor<T> Sparse, Tensor<T> Dense) EncodePrompts(Tensor<T>? points, Tensor<T>? labels, Tensor<T>? boxes, Tensor<T>? masks)
     {
@@ -56,8 +56,9 @@ internal sealed partial class Sam2Network<T>
             bool pad = boxes is null;
             int count = k + (pad ? 1 : 0);
             var fourier = new Tensor<T>(new[] { n, count, p });
-            var kinds = new Tensor<T>[3];
-            for (int i = 0; i < 3; i++) kinds[i] = new Tensor<T>(new[] { n, count, 1 });
+            // Kind 0 is padding (not-a-point), kinds 1 to 4 the point embeddings of labels 0 to 3.
+            var kinds = new Tensor<T>[5];
+            for (int i = 0; i < kinds.Length; i++) kinds[i] = new Tensor<T>(new[] { n, count, 1 });
             for (int b = 0; b < n; b++)
                 for (int i = 0; i < count; i++)
                 {
@@ -66,14 +67,16 @@ internal sealed partial class Sam2Network<T>
                     double x = (NumOps.ToDouble(points[b, i, 0]) + 0.5) / c.ImageSize, y = (NumOps.ToDouble(points[b, i, 1]) + 0.5) / c.ImageSize;
                     var f = Fourier(x, y);
                     for (int j = 0; j < p; j++) fourier[(b * count + i) * p + j] = NumOps.FromDouble(f[j]);
-                    kinds[label == 1 ? 2 : 1][b, i, 0] = NumOps.One;
+                    if (label is < 0 or > 3) throw new ArgumentException($"Point label {label} is not -1, 0, 1, 2 or 3.", nameof(labels));
+                    kinds[label + 1][b, i, 0] = NumOps.One;
                 }
             var shape = new[] { n, count, p };
             Tensor<T> Kind(Tensor<T> mask, BiasFreeLinearLayer<T> embedding) => _engine.TensorMultiply(
                 _engine.TensorBroadcastTo(mask, shape), _engine.TensorBroadcastTo(_engine.Reshape(Value(embedding), new[] { 1, 1, p }), shape));
             var embedded = _engine.TensorAdd(fourier, Kind(kinds[0], NotAPoint));
-            embedded = _engine.TensorAdd(embedded, Kind(kinds[1], PointEmbeddings[0]));
-            parts.Add(_engine.TensorAdd(embedded, Kind(kinds[2], PointEmbeddings[1])));
+            for (int kind = 1; kind < kinds.Length; kind++)
+                embedded = _engine.TensorAdd(embedded, Kind(kinds[kind], PointEmbeddings[kind - 1]));
+            parts.Add(embedded);
         }
         if (boxes is not null)
         {
@@ -140,6 +143,68 @@ internal sealed partial class Sam2Network<T>
     public (Tensor<T> Logits, Tensor<T> Iou, Tensor<T> ObjectScore) DecodeMasks(Tensor<T> embedding, Tensor<T> highRes0, Tensor<T> highRes1,
         Tensor<T> positional, Tensor<T> sparse, Tensor<T> dense, bool multimask)
     {
+        var (masks, iou, _, objectScore) = DecodeAll(embedding, highRes0, highRes1, positional, sparse, dense);
+        var (logits, chosenIou, _) = SelectOutputs(masks, iou, multimask);
+        return (logits, chosenIou, objectScore);
+    }
+
+    /// <summary>
+    /// The decoder's outputs selected as the official one returns them: the three ambiguity-aware masks with
+    /// <paramref name="multimask"/>; otherwise one mask (when not training, the single-mask output if it is stable,
+    /// else the best of the three by predicted IoU). <c>Token</c> is the index of the first output token whose mask
+    /// slice is returned (1 for the multimask outputs, 0 otherwise, even when the stability rule picked a multimask
+    /// output, as the official decoder does).
+    /// </summary>
+    public (Tensor<T> Logits, Tensor<T> Iou, int Token) SelectOutputs(Tensor<T> masks, Tensor<T> iou, bool multimask)
+    {
+        var c = Configuration;
+        int n = masks.Shape[0], m = masks.Shape[1], side = masks.Shape[2];
+        if (multimask)
+            return (_engine.TensorSlice(masks, new[] { 0, 1, 0, 0 }, new[] { n, m - 1, side, side }),
+                _engine.TensorSlice(iou, new[] { 0, 1 }, new[] { n, m - 1 }), 1);
+        if (Training)
+            return (_engine.TensorSlice(masks, new[] { 0, 0, 0, 0 }, new[] { n, 1, side, side }),
+                _engine.TensorSlice(iou, new[] { 0, 0 }, new[] { n, 1 }), 0);
+
+        // Dynamic multimask via stability: keep the single-mask output where its stability (the area above +δ over the
+        // area above −δ) reaches the threshold, else the multimask output with the highest predicted IoU.
+        var chosenMasks = new Tensor<T>[n];
+        var chosenIou = new Tensor<T>[n];
+        var all = masks.ToArray();
+        for (int i = 0; i < n; i++)
+        {
+            int index = 0;
+            double above = 0, within = 0;
+            for (int j = 0; j < side * side; j++)
+            {
+                double v = NumOps.ToDouble(all[i * m * side * side + j]);
+                if (v > c.StabilityDelta) above++;
+                if (v > -c.StabilityDelta) within++;
+            }
+            double stability = within > 0 ? above / within : 1.0;
+            if (stability < c.StabilityThreshold)
+            {
+                double best = double.NegativeInfinity;
+                for (int k = 1; k < m; k++)
+                {
+                    double score = NumOps.ToDouble(iou[i, k]);
+                    if (score > best) { best = score; index = k; }
+                }
+            }
+            chosenMasks[i] = _engine.TensorSlice(masks, new[] { i, index, 0, 0 }, new[] { 1, 1, side, side });
+            chosenIou[i] = _engine.TensorSlice(iou, new[] { i, index }, new[] { 1, 1 });
+        }
+        return (n == 1 ? chosenMasks[0] : _engine.TensorConcatenate(chosenMasks, 0), n == 1 ? chosenIou[0] : _engine.TensorConcatenate(chosenIou, 0), 0);
+    }
+
+    /// <summary>
+    /// Every output of the mask decoder for N prompts: the mask logits <c>[N, MaskTokens, 4·Grid, 4·Grid]</c>, the IoU
+    /// predictions <c>[N, MaskTokens]</c>, the mask tokens after the two-way transformer <c>[N, MaskTokens, Dim]</c> (the
+    /// video model's object pointers come from them) and the object-score logits <c>[N, 1]</c>.
+    /// </summary>
+    public (Tensor<T> Masks, Tensor<T> Iou, Tensor<T> Tokens, Tensor<T> ObjectScore) DecodeAll(Tensor<T> embedding, Tensor<T> highRes0, Tensor<T> highRes1,
+        Tensor<T> positional, Tensor<T> sparse, Tensor<T> dense)
+    {
         var c = Configuration;
         int n = sparse.Shape[0], p = c.Dim, g = c.Grid, hw = g * g, m = c.MaskTokens;
         var output = _engine.TensorConcatenate(new[]
@@ -187,36 +252,8 @@ internal sealed partial class Sam2Network<T>
             new[] { n, m, side, side });
         var iou = _engine.Sigmoid(Mlp(IouHead, Token(1)));
         var objectScore = Mlp(ObjectHead, Token(0));
-        if (multimask)
-            return (_engine.TensorSlice(masks, new[] { 0, 1, 0, 0 }, new[] { n, m - 1, side, side }),
-                _engine.TensorSlice(iou, new[] { 0, 1 }, new[] { n, m - 1 }), objectScore);
-        if (Training)
-            return (_engine.TensorSlice(masks, new[] { 0, 0, 0, 0 }, new[] { n, 1, side, side }),
-                _engine.TensorSlice(iou, new[] { 0, 0 }, new[] { n, 1 }), objectScore);
-
-        // Dynamic multimask via stability: keep the single-mask output where its stability (the area above +δ over the
-        // area above −δ) reaches the threshold, else the multimask output with the highest predicted IoU.
-        var chosenMasks = new Tensor<T>[n];
-        var chosenIou = new Tensor<T>[n];
-        for (int i = 0; i < n; i++)
-        {
-            int index = 0;
-            var single = masks.ToArray().Skip(i * m * side * side).Take(side * side).Select(NumOps.ToDouble).ToArray();
-            double above = single.Count(v => v > c.StabilityDelta), within = single.Count(v => v > -c.StabilityDelta);
-            double stability = within > 0 ? above / within : 1.0;
-            if (stability < c.StabilityThreshold)
-            {
-                double best = double.NegativeInfinity;
-                for (int k = 1; k < m; k++)
-                {
-                    double score = NumOps.ToDouble(iou[i, k]);
-                    if (score > best) { best = score; index = k; }
-                }
-            }
-            chosenMasks[i] = _engine.TensorSlice(masks, new[] { i, index, 0, 0 }, new[] { 1, 1, side, side });
-            chosenIou[i] = _engine.TensorSlice(iou, new[] { i, index }, new[] { 1, 1 });
-        }
-        return (n == 1 ? chosenMasks[0] : _engine.TensorConcatenate(chosenMasks, 0), n == 1 ? chosenIou[0] : _engine.TensorConcatenate(chosenIou, 0), objectScore);
+        var maskTokens = _engine.TensorSlice(queries, new[] { 0, 2, 0 }, new[] { n, m, p });
+        return (masks, iou, maskTokens, objectScore);
     }
 
     /// <summary>The image predictor's postprocessing: low-resolution logits bilinearly resized (align_corners false) to
@@ -238,7 +275,9 @@ internal sealed partial class Sam2Network<T>
     /// <summary>
     /// The reference initialization (Hugging Face <c>Sam2PreTrainedModel._init_weights</c>): linear and convolution
     /// weights and embeddings N(0, 0.02²) with zero biases, layer norms unit, the Hiera position embeddings zero, and the
-    /// prompt encoder's random Fourier matrix N(0, 1) (scale 1), shared with the image positional encoding.
+    /// prompt encoder's random Fourier matrix N(0, 1) (scale 1), shared with the image positional encoding. The video
+    /// modules' learned tokens (no-object pointer, memory slot and occlusion encodings) start at zero, and the fuser's
+    /// layer scales at the official 1e-6 (Hugging Face's port zeroes them, which would leave the fuser untrainable).
     /// </summary>
     public void InitializeLikeReference(Random random)
     {
@@ -251,6 +290,11 @@ internal sealed partial class Sam2Network<T>
             if (name.EndsWith("positional_embedding", StringComparison.Ordinal))
                 return (double[])(fourier ??= Enumerable.Range(0, count).Select(_ => Normal()).ToArray()).Clone();
             if (name.Contains("pos_embed") || name == "no_memory_embedding") return values;
+            if (name.EndsWith(".scale", StringComparison.Ordinal))
+            {
+                for (int i = 0; i < count; i++) values[i] = Configuration.Memory!.LayerScale;
+                return values;
+            }
             bool weight = name.EndsWith(".weight", StringComparison.Ordinal);
             if (name.Contains("layer_norm"))
             {
@@ -351,5 +395,6 @@ internal sealed partial class Sam2Network<T>
             FeedForward(Hypernetworks[i], $"mask_decoder.output_hypernetworks_mlps.{i}", p, p, p / 8);
         FeedForward(IouHead, "mask_decoder.iou_prediction_head", p, c.IouHidden, c.MaskTokens);
         FeedForward(ObjectHead, "mask_decoder.pred_obj_score_head", p, p, 1);
+        if (c.Memory is not null) LoadMemoryWeights(read);
     }
 }

@@ -7031,6 +7031,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Exercise SAM 2's complete Hiera/FPN, four-layer RoPE memory transformer,
                 // two-way decoder, mask-conditioned memory encoder, and object-pointer path at CI
                 // width. Only capacity is scaled; no stage/module or generated invariant is removed.
+                // The paper's schedule warms up over 7.5k steps from zero, so the fixture skips the warmup
+                // (the paper's rates from the first step) and gives each corrected frame one click (of 7).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
@@ -7040,7 +7042,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, " +
                     "HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
                     "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, " +
-                    "MemoryAttentionLayerCount = 4, MaskDecoderDepth = 2, MaskDecoderMlpDimension = 64 })";
+                    "MemoryAttentionLayerCount = 4, MemoryAttentionFeedForwardDimension = 64, MemoryFuserDimension = 32, " +
+                    "MaskDecoderMlpDimension = 64, WarmupSteps = 0, " +
+                    "CorrectionPoints = 1 })";
             }
             else if (model.ClassName == "SAM21" && model.TypeParameterCount == 1)
             {

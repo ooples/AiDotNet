@@ -66,6 +66,34 @@ internal sealed record Sam2Configuration
 
     public double[] PixelStd { get; init; } = { 0.229, 0.224, 0.225 };
 
+    /// <summary>The largest stochastic-depth rate of the Hiera blocks while training, reached linearly by the last block
+    /// (0 disables it).</summary>
+    public double DropPath { get; init; }
+
+    /// <summary>The video modules (memory encoder, memory attention and object pointers); null for the image model.</summary>
+    public Sam2MemoryConfiguration? Memory { get; init; }
+
+    /// <summary>
+    /// The released Hiera image encoders at 1024 pixels: Tiny, Small, Base+ and Large, as the official configs define
+    /// them, with the stochastic depth of the paper's training recipe (Ravi et al. 2024, Table 12: 0.1, 0.1, 0.2, 0.3).
+    /// </summary>
+    public static Sam2Configuration Hiera(int size) => size switch
+    {
+        0 => new Sam2Configuration { DropPath = 0.1 },
+        1 => new Sam2Configuration { BlocksPerStage = new[] { 1, 2, 11, 2 }, GlobalAttentionBlocks = new[] { 7, 10, 13 }, DropPath = 0.1 },
+        2 => new Sam2Configuration
+        {
+            BlocksPerStage = new[] { 2, 3, 16, 3 }, EmbedDims = new[] { 112, 224, 448, 896 }, HeadsPerStage = new[] { 2, 4, 8, 16 },
+            GlobalAttentionBlocks = new[] { 12, 16, 20 }, BackgroundPositionSize = 14, DropPath = 0.2,
+        },
+        3 => new Sam2Configuration
+        {
+            BlocksPerStage = new[] { 2, 6, 36, 4 }, EmbedDims = new[] { 144, 288, 576, 1152 }, HeadsPerStage = new[] { 2, 4, 8, 16 },
+            WindowSizes = new[] { 8, 4, 16, 8 }, GlobalAttentionBlocks = new[] { 23, 33, 43 }, DropPath = 0.3,
+        },
+        _ => throw new ArgumentOutOfRangeException(nameof(size)),
+    };
+
     public int MaskTokens => MultimaskOutputs + 1;
 
     /// <summary>Side of the image embedding (1/16 of the image).</summary>
@@ -158,6 +186,7 @@ internal sealed partial class Sam2Network<T>
         ObjectHead = new[] { Linear(p), Linear(p), Linear(1) };
         _gaussian = new double[2, p / 2];
         _bicubicRows = new Dictionary<(int, int), Tensor<T>>();
+        if (c.Memory is { } memory) BuildMemory(layers, memory);
     }
 
     public Sam2Configuration Configuration { get; }
@@ -225,8 +254,12 @@ internal sealed partial class Sam2Network<T>
 
     private readonly Dictionary<(int, int), Tensor<T>> _bicubicRows;
 
-    /// <summary>Whether the network is training (the single-mask output then skips the stability selection).</summary>
+    /// <summary>Whether the network is training: the single-mask output then skips the stability selection, and drop
+    /// path and the memory attention's dropout are active.</summary>
     public bool Training { get; set; }
+
+    /// <summary>The generator of the training-time drop path and dropout masks.</summary>
+    public Random TrainingRandom { get; set; } = new Random(0);
 
     private Tensor<T> Value(BiasFreeLinearLayer<T> holder)
         => holder.Forward(new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.One })));
@@ -262,6 +295,19 @@ internal sealed partial class Sam2Network<T>
     /// </summary>
     public (Tensor<T> Embedding, Tensor<T> HighRes0, Tensor<T> HighRes1) EncodeImage(Tensor<T> images)
     {
+        var (features, s0, s1) = EncodeFeatures(images);
+        return (AddNoMemory(features), s0, s1);
+    }
+
+    /// <summary>1/16 features <c>[B, Dim, Grid, Grid]</c> plus the no-memory embedding, as an image (or a prompted video
+    /// frame) reaches the mask decoder.</summary>
+    public Tensor<T> AddNoMemory(Tensor<T> features)
+        => _engine.TensorAdd(features, _engine.TensorBroadcastTo(_engine.Reshape(Value(NoMemory), new[] { 1, Configuration.Dim, 1, 1 }), features.Shape.ToArray()));
+
+    /// <summary>As <see cref="EncodeImage"/>, but the 1/16 features without the no-memory embedding: the frame features
+    /// the video model conditions on its memory and encodes into it.</summary>
+    public (Tensor<T> Features, Tensor<T> HighRes0, Tensor<T> HighRes1) EncodeFeatures(Tensor<T> images)
+    {
         var c = Configuration;
         int b = images.Shape[0];
         var patches = Convolve(PatchProjection, images, c.PatchKernel, c.PatchStride, c.PatchPadding);       // [B, C, H, W]
@@ -271,7 +317,9 @@ internal sealed partial class Sam2Network<T>
         var stages = new List<Tensor<T>>();
         for (int i = 0; i < Blocks.Count; i++)
         {
-            x = Run(Blocks[i], x);
+            // Stochastic depth rising linearly from 0 at the first block to DropPath at the last (torch.linspace).
+            double drop = Training && c.DropPath > 0 && Blocks.Count > 1 ? c.DropPath * i / (Blocks.Count - 1) : 0.0;
+            x = Run(Blocks[i], x, drop);
             if (StageEnds.Contains(i)) stages.Add(x);
         }
 
@@ -286,8 +334,7 @@ internal sealed partial class Sam2Network<T>
             previous = !c.TopDownLevels.Contains(i) || i == n || previous is null ? lateral : _engine.TensorAdd(lateral, Nearest2x(previous));
             outputs[i] = previous;
         }
-        var embedding = _engine.TensorAdd(outputs[2], _engine.TensorBroadcastTo(_engine.Reshape(Value(NoMemory), new[] { 1, c.Dim, 1, 1 }), outputs[2].Shape.ToArray()));
-        return (embedding, Convolve(HighRes0, outputs[0], 1, 1, 0), Convolve(HighRes1, outputs[1], 1, 1, 0));
+        return (outputs[2], Convolve(HighRes0, outputs[0], 1, 1, 0), Convolve(HighRes1, outputs[1], 1, 1, 0));
     }
 
     private Tensor<T> Nearest2x(Tensor<T> x)
@@ -339,8 +386,9 @@ internal sealed partial class Sam2Network<T>
     }
 
     /// <summary>A Hiera block on <c>[B, H, W, C]</c>: windowed (or global) attention, query pooling on a stage's first
-    /// block (the shortcut projected and pooled to match), and the MLP.</summary>
-    private Tensor<T> Run(Block block, Tensor<T> x)
+    /// block (the shortcut projected and pooled to match), and the MLP, each branch dropped per sample with probability
+    /// <paramref name="drop"/> (and the kept ones scaled by 1/(1 − drop)).</summary>
+    private Tensor<T> Run(Block block, Tensor<T> x, double drop = 0.0)
     {
         int b = x.Shape[0], h = x.Shape[1], w = x.Shape[2];
         var residual = x;
@@ -377,8 +425,22 @@ internal sealed partial class Sam2Network<T>
                 new[] { b, qh, qw, block.DimOut });
             attended = qh == rh && qw == rw ? grid : _engine.TensorSlice(grid, new[] { 0, 0, 0, 0 }, new[] { b, rh, rw, block.DimOut });
         }
-        x = _engine.TensorAdd(residual, attended);
-        return _engine.TensorAdd(x, Rows(block.Mlp2, Gelu(Rows(block.Mlp1, Rows(block.Norm2, x)))));
+        x = _engine.TensorAdd(residual, DropPathOf(attended, drop));
+        return _engine.TensorAdd(x, DropPathOf(Rows(block.Mlp2, Gelu(Rows(block.Mlp1, Rows(block.Norm2, x)))), drop));
+    }
+
+    /// <summary>timm's DropPath: each sample's branch is zeroed with probability <paramref name="drop"/>, else scaled by
+    /// 1/(1 − drop).</summary>
+    private Tensor<T> DropPathOf(Tensor<T> branch, double drop)
+    {
+        if (drop <= 0) return branch;
+        int b = branch.Shape[0];
+        var shape = new int[branch.Rank];
+        shape[0] = b;
+        for (int i = 1; i < shape.Length; i++) shape[i] = 1;
+        var keep = new Tensor<T>(shape);
+        for (int i = 0; i < b; i++) keep[i] = TrainingRandom.NextDouble() < drop ? NumOps.Zero : NumOps.FromDouble(1.0 / (1.0 - drop));
+        return _engine.TensorMultiply(branch, _engine.TensorBroadcastTo(keep, branch.Shape.ToArray()));
     }
 
     private Tensor<T> MaxPool2(Tensor<T> x)
