@@ -184,7 +184,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // A masked run cannot be expressed here: the config below carries decay as a single float, so
         // the compiled kernel would decay every parameter including the ones the mask exempts. Decline
         // rather than diverge from the eager path.
-        if (_options.WeightDecayMask is not null) return false;
+        if (_options.WeightDecayMask is not null || _options.LearningRateMask is not null) return false;
         // The eager tape step clips before the update. The compiled plan can reproduce a global-norm
         // clip (carried below) but not a per-element value clip, so a value-clipped run stays eager.
         bool clips = GradientOptions.EnableGradientClipping;
@@ -350,6 +350,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         }
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var configuredMask = GetValidatedWeightDecayMask(parameters.Length);
+        var rateMask = GetValidatedLearningRateMask(parameters.Length);
 
         // Right-size _m/_v/_vMax to gradient on first call or after lazy-layer
         // expansion. Mirrors the AdamOptimizer #1221 fix: lazy-shape models
@@ -433,6 +434,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (configuredMask is { } decayMask)
             weightDecayTerm = Engine.Multiply(weightDecayTerm, decayMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, CurrentLearningRate);
+        if (rateMask is { } rates)
+        {
+            scaledAdamUpdate = Engine.Multiply(scaledAdamUpdate, rates);
+            scaledWeightDecay = Engine.Multiply(scaledWeightDecay, rates);
+        }
 
         // Combine: parameters = parameters - scaledAdamUpdate - scaledWeightDecay
         var afterAdamUpdate = (Vector<T>)Engine.Subtract(parameters, scaledAdamUpdate);
@@ -457,6 +463,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         }
 
         var configuredMask = GetValidatedWeightDecayMask(parameters.Length);
+        var rateMask = GetValidatedLearningRateMask(parameters.Length);
 
         if (_m == null || _v == null || _m.Length != parameters.Length || _v.Length != parameters.Length)
         {
@@ -530,7 +537,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         var vMaxSpan = amsGrad ? _vMax!.AsWritableSpan() : default;
         // Empty when no mask is configured, which keeps the per-element branch off the common path.
         var maskSpan = configuredMask is { } wdMask ? wdMask.AsSpan() : default;
-        T learningRate = CurrentLearningRate;
+        var rateSpan = rateMask is { } lrMask ? lrMask.AsSpan() : default;
+        T baseLearningRate = CurrentLearningRate;
 
         for (int i = 0; i < pSpan.Length; i++)
         {
@@ -557,6 +565,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             }
 
             T adamUpdate = NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon));
+            T learningRate = rateSpan.Length > 0 ? NumOps.Multiply(baseLearningRate, rateSpan[i]) : baseLearningRate;
             T afterAdam = NumOps.Subtract(p, NumOps.Multiply(adamUpdate, learningRate));
             // Per-parameter exemption (see AdamWOptimizerOptions.WeightDecayMask). Null means decay
             // everything, which is the behaviour every caller had before the mask existed.
@@ -578,6 +587,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     {
         int totalSize = parameters.Rows * parameters.Columns;
         GetValidatedWeightDecayMask(totalSize);
+        GetValidatedLearningRateMask(totalSize);
 
         if (_m == null || _v == null || _m.Length != totalSize)
         {
@@ -630,6 +640,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     private Vector<T> UpdateParametersInternal(Vector<T> parameters, Vector<T> gradient)
     {
         var configuredMask = GetValidatedWeightDecayMask(parameters.Length);
+        var rateMask = GetValidatedLearningRateMask(parameters.Length);
         T beta1 = NumOps.FromDouble(_options.Beta1);
         T beta2 = NumOps.FromDouble(_options.Beta2);
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
@@ -676,6 +687,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (configuredMask is { } decayMask)
             weightDecayTerm = Engine.Multiply(weightDecayTerm, decayMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, CurrentLearningRate);
+        if (rateMask is { } rates)
+        {
+            scaledAdamUpdate = Engine.Multiply(scaledAdamUpdate, rates);
+            scaledWeightDecay = Engine.Multiply(scaledWeightDecay, rates);
+        }
 
         var afterAdamUpdate = (Vector<T>)Engine.Subtract(parameters, scaledAdamUpdate);
         return (Vector<T>)Engine.Subtract(afterAdamUpdate, scaledWeightDecay);
@@ -695,7 +711,13 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         int flattenedParameterCount = 0;
         foreach (var parameter in context.Parameters)
             flattenedParameterCount = checked(flattenedParameterCount + parameter.Length);
-        var configuredMask = GetValidatedWeightDecayMask(flattenedParameterCount);
+        // With MaskParameters the masks describe that list, and a step may reach only part of it.
+        var maskOffsets = MaskOffsets();
+        int maskLength = maskOffsets?.Length ?? flattenedParameterCount;
+        var configuredMask = GetValidatedWeightDecayMask(maskLength);
+        var rateMask = GetValidatedLearningRateMask(maskLength);
+        // Either mask makes the update elementwise, which the scalar fast paths below cannot express.
+        bool masked = configuredMask is not null || rateMask is not null;
 
         // Global-norm gradient clipping BEFORE the AdamW update. AdamW is the
         // canonical optimizer for transformer / classifier fine-tuning, and
@@ -741,7 +763,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // GPU-RESIDENT ADAMW (env AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step for the rationale — run the
         // update on the GPU (GpuOptimizer.TryAdamWStep -> backend.AdamWUpdate, decoupled weight decay) so grads
         // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise. Gated off.
-        bool gpuAdam = configuredMask is null && typeof(T) == typeof(float) && !_options.UseAMSGrad
+        bool gpuAdam = !masked && typeof(T) == typeof(float) && !_options.UseAMSGrad
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
@@ -750,6 +772,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         {
             int parameterMaskOffset = maskOffset;
             maskOffset += param.Length;
+            if (maskOffsets is not null && (configuredMask is not null || rateMask is not null))
+            {
+                if (!maskOffsets.Value.Offsets.TryGetValue(param, out parameterMaskOffset))
+                    throw new InvalidOperationException("A stepped parameter is not among AdamWOptimizerOptions.MaskParameters.");
+            }
             // Cheap presence check — defer sparse→dense materialization until after
             // the sparse fast path declines, so a sparse-only embedding param isn't
             // ToDense'd into a full [vocab, dim] tensor that the scatter path below
@@ -779,7 +806,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // from Adam only in decoupled weight decay (θ ← θ(1 − lr·wd) − step),
             // which the helper applies per-row when weightDecay > 0. AMSGrad
             // keeps the dense path (vMax invariant requires touching every row).
-            if (configuredMask is null && !_options.UseAMSGrad
+            if (!masked && !_options.UseAMSGrad
                 && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
                     param, m, v,
                     NumOps.ToDouble(CurrentLearningRate),
@@ -812,7 +839,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // Host fast path: one fused pass per parameter (m, v and the decayed parameter updated in place),
             // chunked across the pool. The tensor-op path below runs ~15 full-size engine ops per parameter, each
             // allocating its result: ~400 ms of a Track B LM step (31M parameters) vs a few ms here.
-            if (configuredMask is null && !_options.UseAMSGrad
+            if (!masked && !_options.UseAMSGrad
                 && TryFusedHostAdamWStep(param, grad, m, v, NumOps.ToDouble(CurrentLearningRate),
                     1.0 - Math.Pow(_options.Beta1, _tapeStep), 1.0 - Math.Pow(_options.Beta2, _tapeStep)))
             {
@@ -871,6 +898,16 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 for (int i = 0; i < param.Length; i++)
                     multiplierSpan[i] = NumOps.Multiply(decayScale, configuredMaskSpan[parameterMaskOffset + i]);
                 decayTerm = Engine.TensorMultiply(param, parameterDecayMultiplier);
+            }
+
+            if (rateMask is not null)
+            {
+                using var parameterRates = new Tensor<T>(param._shape);
+                var rateSpan = parameterRates.Data.Span;
+                var rateMaskSpan = rateMask.AsSpan();
+                for (int i = 0; i < param.Length; i++) rateSpan[i] = rateMaskSpan[parameterMaskOffset + i];
+                adamUpdate = Engine.TensorMultiply(adamUpdate, parameterRates);
+                decayTerm = Engine.TensorMultiply(decayTerm, parameterRates);
             }
 
             Engine.TensorSubtractInPlace(param, adamUpdate);
@@ -951,6 +988,54 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         return mask;
     }
 
+    private IReadOnlyList<Tensor<T>>? _maskOffsetsFor;
+    private (Dictionary<Tensor<T>, int> Offsets, int Length)? _maskOffsets;
+
+    /// <summary>Each of <see cref="AdamWOptimizerOptions{T, TInput, TOutput}.MaskParameters"/>' offset into the masks, and
+    /// their total length; null when the masks are positional.</summary>
+    private (Dictionary<Tensor<T>, int> Offsets, int Length)? MaskOffsets()
+    {
+        var parameters = _options.MaskParameters;
+        if (parameters is null) return null;
+        if (ReferenceEquals(parameters, _maskOffsetsFor) && _maskOffsets is not null) return _maskOffsets;
+        var offsets = new Dictionary<Tensor<T>, int>(TensorReferenceComparer<Tensor<T>>.Instance);
+        int length = 0;
+        foreach (var p in parameters)
+        {
+            if (!offsets.ContainsKey(p)) offsets[p] = length;
+            length = checked(length + p.Length);
+        }
+        _maskOffsetsFor = parameters;
+        _maskOffsets = (offsets, length);
+        return _maskOffsets;
+    }
+
+    /// <summary>
+    /// Validates the mutable learning-rate mask at the point of use and returns it when configured.
+    /// </summary>
+    private Vector<T>? GetValidatedLearningRateMask(int expectedLength)
+    {
+        var mask = _options.LearningRateMask;
+        if (mask is null) return null;
+        if (mask.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Learning-rate mask length ({mask.Length}) must match the flattened parameter length ({expectedLength}).",
+                nameof(_options.LearningRateMask));
+        }
+        for (int i = 0; i < mask.Length; i++)
+        {
+            double multiplier = NumOps.ToDouble(mask[i]);
+            if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier < 0.0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(_options.LearningRateMask),
+                    $"Learning-rate mask entry {i} must be finite and non-negative; got {multiplier}.");
+            }
+        }
+        return mask;
+    }
+
     /// <summary>
     /// Reverses an AdamW gradient update to recover original parameters.
     /// </summary>
@@ -1017,6 +1102,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (configuredMask is { } reverseMask)
             weightDecayTerm = Engine.Multiply(weightDecayTerm, reverseMask);
         var scaledWeightDecay = (Vector<T>)Engine.Multiply(weightDecayTerm, currentLrVec);
+        if (GetValidatedLearningRateMask(updatedParameters.Length) is { } reverseRates)
+        {
+            scaledAdamUpdate = Engine.Multiply(scaledAdamUpdate, reverseRates);
+            scaledWeightDecay = Engine.Multiply(scaledWeightDecay, reverseRates);
+        }
 
         var afterAdamReverse = (Vector<T>)Engine.Add(updatedParameters, scaledAdamUpdate);
         return (Vector<T>)Engine.Add(afterAdamReverse, scaledWeightDecay);

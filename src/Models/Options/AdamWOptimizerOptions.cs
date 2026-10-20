@@ -62,6 +62,8 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
         Epsilon = other.Epsilon;
         WeightDecay = other.WeightDecay;
         WeightDecayMask = other.WeightDecayMask?.Clone();
+        LearningRateMask = other.LearningRateMask?.Clone();
+        MaskParameters = other.MaskParameters;
         UseAMSGrad = other.UseAMSGrad;
         UseAdaptiveBetas = other.UseAdaptiveBetas;
         MinBeta1 = other.MinBeta1;
@@ -191,6 +193,65 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     }
 
     private Vector<T>? _weightDecayMask;
+
+    /// <summary>
+    /// Gets or sets a per-parameter multiplier of the learning rate, or <c>null</c> to step every parameter at the same
+    /// rate.
+    /// </summary>
+    /// <value>A vector as long as the flat parameter vector, or <c>null</c>. Defaults to <c>null</c>.</value>
+    /// <remarks>
+    /// <para>
+    /// The multiplier scales the whole update of its parameter, the Adam step and the decoupled decay alike, as a
+    /// PyTorch parameter group with its own learning rate does. Published recipes need it for layer-wise learning-rate
+    /// decay and for components trained at their own rate: SAM 2 (Ravi et al., 2024, Table 12) trains its image encoder
+    /// at 6e-5 and the rest at 3e-4, each Hiera block's rate decayed by 0.8 to 0.925 per block from the top.
+    /// </para>
+    /// <para>Entries must be finite and non-negative. Setting this opts the optimizer out of fused compilation, for the same
+    /// reason as <see cref="WeightDecayMask"/>.</para>
+    /// <para><b>For Beginners:</b> Leave this null unless a recipe trains some layers faster or slower than others.</para>
+    /// </remarks>
+    public Vector<T>? LearningRateMask
+    {
+        get => _learningRateMask;
+        set
+        {
+            if (value is not null)
+            {
+                var numOps = MathHelper.GetNumericOperations<T>();
+                for (int i = 0; i < value.Length; i++)
+                {
+                    double multiplier = numOps.ToDouble(value[i]);
+                    if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier < 0.0)
+                    {
+                        throw new ArgumentOutOfRangeException(
+                            nameof(value),
+                            $"Learning-rate mask entry {i} must be finite and non-negative; got {multiplier}.");
+                    }
+                }
+            }
+
+            _learningRateMask = value;
+        }
+    }
+
+    private Vector<T>? _learningRateMask;
+
+    /// <summary>
+    /// Gets or sets the parameter tensors whose flattened concatenation <see cref="WeightDecayMask"/> and
+    /// <see cref="LearningRateMask"/> describe, or <c>null</c> to read the masks positionally.
+    /// </summary>
+    /// <value>The parameters in mask order, or <c>null</c>. Defaults to <c>null</c>.</value>
+    /// <remarks>
+    /// <para>
+    /// A tape step hands the optimizer only the parameters its loss reached: a branch the loss did not use gets no
+    /// gradient and is left out. Read positionally, a mask then lines up with the wrong parameters (or not at all). With
+    /// this set, each stepped parameter's entries are found by identity, so a step that reaches only some parameters still
+    /// applies the right ones.
+    /// </para>
+    /// <para><b>For Beginners:</b> Set this whenever you set a mask for a model with optional branches; list the parameters
+    /// in the order you built the mask.</para>
+    /// </remarks>
+    public IReadOnlyList<Tensor<T>>? MaskParameters { get; set; }
 
     /// <summary>
     /// Gets or sets whether to apply AMSGrad variant for improved convergence guarantees.
