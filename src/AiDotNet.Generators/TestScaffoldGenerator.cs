@@ -65,7 +65,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // model a meta-learner wraps, so the fixture only names the algorithm and its options type (#2139).
         "MetaLearningModelBase",     // The adapted models Adapt returns: results of a meta-learner, not learners
         "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
-        "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
+        // NoisePredictorBase is no longer excluded: NoisePredictorTestBase drives PredictNoise directly, and each
+        // predictor is built at a reduced size from NoisePredictorFixtureArgs (#2139).
         "PolicyBase",                // RL policies: the state->action half of an agent, not an agent.
                                      // Routing these to the RL family was TRIED and measured: 28 of
                                      // the 33 emitted tests failed, and none of the failures was a
@@ -696,6 +697,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> VAEModelTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateVAE", "ImageSize" };
+    /// <summary>Overridable surface of <c>NoisePredictorTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> NoisePredictorTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreatePredictor", "SampleShape" };
+
+    /// <summary>
+    /// Reduced-size constructor arguments for each noise predictor's generated fixture. Their defaults are paper scale
+    /// (DiT-XL, Flux, SD3: hundreds of millions to billions of parameters), which no invariant needs: these keep each
+    /// architecture and shrink only its widths and depths. A predictor missing here gets no fixture-sized constructor.
+    /// </summary>
+    private static readonly System.Collections.Generic.Dictionary<string, string> NoisePredictorFixtureArgs =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["DiTNoisePredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, patchSize: 2, contextDim: 32, latentSpatialSize: 8, seed: 1",
+            ["SiTPredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, seed: 1",
+            ["FlagDiTPredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, numKVHeads: 2, contextDim: 32, latentSize: 8, seed: 1",
+            ["MMDiTNoisePredictor"] = "inputChannels: 4, hiddenSize: 64, numJointLayers: 2, numSingleLayers: 1, numHeads: 4, patchSize: 2, contextDim: 32, seed: 1",
+            ["AsymmDiTPredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, contextDim: 32, seed: 1",
+            ["EMMDiTPredictor"] = "inputChannels: 4, contextDim: 32, seed: 1, hiddenSizeOverride: 64, numLayersOverride: 2, numHeadsOverride: 4",
+            ["FluxDoubleStreamPredictor"] = "inputChannels: 4, hiddenSize: 64, numJointLayers: 1, numSingleLayers: 1, numHeads: 4, patchSize: 2, contextDim: 32, seed: 1",
+            ["MMDiTXNoisePredictor"] = "inputChannels: 4, patchSize: 2, contextDim: 32, seed: 1, hiddenSizeOverride: 64, numLayersOverride: 2, numHeadsOverride: 4",
+            ["UViTNoisePredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, patchSize: 2, contextDim: 32, latentSpatialSize: 8, seed: 1",
+            ["UNetNoisePredictor"] = "inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, contextDim: 32, numHeads: 4, inputHeight: 8, seed: 1",
+            ["VideoUNetPredictor"] = "inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, contextDim: 32, numHeads: 4, inputHeight: 8, inputWidth: 8, numFrames: 2, seed: 1",
+        };
 
     /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VideoSafetyModuleTestBaseMembers =
@@ -3936,6 +3962,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsVideoSafety = false;
         bool extendsTextSafety = false, extendsAudioSafety = false;
         bool extendsVae = false;
+        bool extendsNoisePredictor = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
         bool extendsClassicalVolatility = false;
@@ -4136,6 +4163,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsAudioSafety = true;
             else if (baseName.StartsWith("VAEModelBase", System.StringComparison.Ordinal))
                 extendsVae = true;
+            else if (baseName.StartsWith("NoisePredictorBase", System.StringComparison.Ordinal))
+                extendsNoisePredictor = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
@@ -4340,6 +4369,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsTextSafetyModuleBase = extendsTextSafety,
             ExtendsAudioSafetyModuleBase = extendsAudioSafety,
             ExtendsVAEModelBase = extendsVae,
+            ExtendsNoisePredictorBase = extendsNoisePredictor,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
             MetaLearnerOptionsType = metaLearnerOptionsType,
@@ -5032,6 +5062,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // its latent contract (#2139).
         if (model.ExtendsVAEModelBase)
             return TestFamily.VAE;
+        // A noise predictor is the denoiser inside a diffusion model, judged on PredictNoise directly (#2139).
+        if (model.ExtendsNoisePredictorBase)
+            return TestFamily.NoisePredictor;
 
         // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
         // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
@@ -5622,7 +5655,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // finding only when its score clears the threshold, so on random content they correctly
             // report nothing and the confidence invariants would examine no findings at all. A zero
             // threshold makes every score report, so those invariants run over the real scores.
-            if (model.ClassName is "ViTImageSafetyClassifier" or "EnsembleImageSafetyClassifier")
+            if (model.ExtendsNoisePredictorBase && NoisePredictorFixtureArgs.TryGetValue(model.ClassName, out var noisePredictorArgs))
+            {
+                constructorExpr = $"new {typeName}<double>({noisePredictorArgs})";
+            }
+            else if (model.ClassName is "ViTImageSafetyClassifier" or "EnsembleImageSafetyClassifier")
             {
                 constructorExpr = $"new {typeName}<double>(threshold: 0.0)";
             }
@@ -13494,6 +13531,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "TextSafetyModuleTestBase"
             || baseClassName == "AudioSafetyModuleTestBase"
             || baseClassName == "VAEModelTestBase"
+            || baseClassName == "NoisePredictorTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
@@ -17737,6 +17775,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.TextSafetyModule => TextSafetyModuleTestBaseMembers,
             TestFamily.AudioSafetyModule => AudioSafetyModuleTestBaseMembers,
             TestFamily.VAE => VAEModelTestBaseMembers,
+            TestFamily.NoisePredictor => NoisePredictorTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
@@ -17901,6 +17940,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsAudioSafetyModuleBase;
             case TestFamily.VAE:
                 return model.ExtendsVAEModelBase;
+            case TestFamily.NoisePredictor:
+                return model.ExtendsNoisePredictorBase;
             case TestFamily.DeepfakeDetector:
                 return model.ExtendsDeepfakeDetectorBase;
             case TestFamily.MetaLearning:
@@ -20308,6 +20349,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsAudioSafetyModuleBase { get; set; }
         /// <summary>True for a latent-diffusion VAE, which is judged on encode, decode and its latent contract.</summary>
         public bool ExtendsVAEModelBase { get; set; }
+        /// <summary>True for a diffusion noise predictor, which is judged on PredictNoise.</summary>
+        public bool ExtendsNoisePredictorBase { get; set; }
 
         /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
         public bool ExtendsDeepfakeDetectorBase { get; set; }
@@ -20540,6 +20583,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         TextSafetyModule,
         AudioSafetyModule,
         VAE,
+        NoisePredictor,
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
@@ -21373,6 +21417,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.TextSafetyModule:      return "TextSafetyModuleTestBase";
             case TestFamily.AudioSafetyModule:     return "AudioSafetyModuleTestBase";
             case TestFamily.VAE:                   return "VAEModelTestBase";
+            case TestFamily.NoisePredictor:        return "NoisePredictorTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
@@ -21429,6 +21474,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "CreateDetector";
             case TestFamily.VAE:
                 return "CreateVAE";
+            case TestFamily.NoisePredictor:
+                return "CreatePredictor";
             case TestFamily.Neck:
                 return "CreateNeck";
             case TestFamily.InstanceSegmentation:
@@ -21501,6 +21548,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.Interfaces.IAudioSafetyModule<double>";
             case TestFamily.VAE:
                 return "AiDotNet.Interfaces.IVAEModel<double>";
+            case TestFamily.NoisePredictor:
+                return "AiDotNet.Interfaces.INoisePredictor<double>";
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:
