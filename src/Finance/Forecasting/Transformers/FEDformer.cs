@@ -82,9 +82,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     // The paper's network (null when the architecture supplies its own layers).
     private FedformerNetwork? _network;
 
-    // The heads of the reference's Fourier blocks: their weights are [8, d / 8, d / 8, modes].
-    private const int FourierHeads = 8;
-
     /// <summary>
     /// Instance normalization mean (for RevIN).
     /// </summary>
@@ -346,11 +343,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
             throw new ArgumentOutOfRangeException(nameof(options), options.MovingAverageKernel, "MovingAverageKernel must be at least 1.");
         if (Architecture.Layers is null || Architecture.Layers.Count == 0)
         {
-            // The reference's Fourier weights are [8, d / 8, d / 8, modes]: its blocks run eight heads whatever n_heads is.
-            if (options.NumHeads != FourierHeads)
-                throw new ArgumentException(
-                    $"FEDformer's Fourier blocks have {FourierHeads} heads (the reference fixes it); NumHeads is {options.NumHeads}.",
-                    nameof(options));
             if (options.AttentionType != FrequencyAttentionType.Fourier)
                 throw new NotSupportedException(
                     "FEDformer's wavelet variant (FEDformer-w) is not implemented; use FrequencyAttentionType.Fourier (FEDformer-f).");
@@ -445,6 +437,13 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// FEDformer's dropout draws fresh masks inside its single network layer on every step, which a traced-and-replayed
+    /// fused plan would freeze at the first step's masks; the eager tape re-runs the true forward each step.
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
     /// <summary>
     /// Builds FEDformer-f as the official code does (Zhou et al. 2022; MAZiqing/FEDformer); see
     /// <see cref="FedformerNetwork"/>.
@@ -452,7 +451,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     private void BuildPaperNetwork()
     {
         _network = new FedformerNetwork(_sequenceLength, _labelLength, _predictionHorizon, _numFeatures, _modelDimension,
-            _feedForwardDimension, _numEncoderLayers, _numDecoderLayers, _numModes, _options.ModeSelection,
+            _numHeads, _feedForwardDimension, _numEncoderLayers, _numDecoderLayers, _numModes, _options.ModeSelection,
             _options.ModeSelectionSeed, _movingAverageKernel, _dropout);
         Layers.Add(_network);
     }

@@ -42,6 +42,7 @@ public partial class FEDformer<T>
         private readonly int _features;
         private readonly int _modelDimension;
         private readonly int _feedForward;
+        private readonly int _heads;
         private readonly int _encoderLayers;
         private readonly int _decoderLayers;
         private readonly int _modes;
@@ -51,22 +52,23 @@ public partial class FEDformer<T>
         private readonly double _dropout;
 
         private readonly List<(string Name, Tensor<T> Tensor)> _named = new();
-        private readonly Tensor<T> _encoderEmbedding;
-        private readonly Tensor<T> _decoderEmbedding;
+        private Tensor<T> _encoderEmbedding;
+        private Tensor<T> _decoderEmbedding;
         private readonly List<EncoderBlock> _encoder = new();
-        private readonly (Tensor<T> Gamma, Tensor<T> Beta) _encoderNorm;
+        private (Tensor<T> Gamma, Tensor<T> Beta) _encoderNorm;
         private readonly List<DecoderBlock> _decoder = new();
-        private readonly (Tensor<T> Gamma, Tensor<T> Beta) _decoderNorm;
-        private readonly Tensor<T> _projectionWeight;
-        private readonly Tensor<T> _projectionBias;
+        private readonly List<SpectralWeights> _spectral = new();
+        private (Tensor<T> Gamma, Tensor<T> Beta) _decoderNorm;
+        private Tensor<T> _projectionWeight;
+        private Tensor<T> _projectionBias;
 
         internal FedformerNetwork(int sequenceLength, int labelLength, int predictionHorizon, int features, int modelDimension,
-            int feedForward, int encoderLayers, int decoderLayers, int modes, FourierModeSelection modeSelection,
+            int heads, int feedForward, int encoderLayers, int decoderLayers, int modes, FourierModeSelection modeSelection,
             int modeSelectionSeed, int movingAverage, double dropout)
             : base(new[] { sequenceLength, features }, new[] { predictionHorizon, features })
         {
-            if (modelDimension % FourierAttention.Heads != 0)
-                throw new ArgumentException($"FEDformer's Fourier blocks split the model dimension into {FourierAttention.Heads} heads; {modelDimension} does not divide.", nameof(modelDimension));
+            if (heads < 1 || modelDimension % heads != 0)
+                throw new ArgumentException($"FEDformer's Fourier blocks split the model dimension into heads; {modelDimension} does not divide into {heads}.", nameof(heads));
             if (dropout < 0 || dropout >= 1 || double.IsNaN(dropout))
                 throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must lie in [0, 1).");
             _sequenceLength = sequenceLength;
@@ -75,6 +77,7 @@ public partial class FEDformer<T>
             _features = features;
             _modelDimension = modelDimension;
             _feedForward = feedForward;
+            _heads = heads;
             _encoderLayers = encoderLayers;
             _decoderLayers = decoderLayers;
             _modes = modes;
@@ -94,9 +97,10 @@ public partial class FEDformer<T>
 
             _encoderEmbedding = KaimingConv(modelDimension, features);
             _decoderEmbedding = KaimingConv(modelDimension, features);
-            var encoderSpectral = new SpectralWeights(modelDimension, encoderModes);
-            var decoderSpectral = new SpectralWeights(modelDimension, decoderModes);
-            var crossSpectral = new SpectralWeights(modelDimension, crossQueryModes);
+            var encoderSpectral = new SpectralWeights(modelDimension, heads, encoderModes);
+            var decoderSpectral = new SpectralWeights(modelDimension, heads, decoderModes);
+            var crossSpectral = new SpectralWeights(modelDimension, heads, crossQueryModes);
+            _spectral.AddRange(new[] { encoderSpectral, decoderSpectral, crossSpectral });
             for (int i = 0; i < _encoderLayers; i++) _encoder.Add(new EncoderBlock(this, encoderSpectral));
             _encoderNorm = (Ones(modelDimension), new Tensor<T>(new[] { modelDimension }));
             for (int i = 0; i < _decoderLayers; i++) _decoder.Add(new DecoderBlock(this, decoderSpectral, crossSpectral, crossKeyModes));
@@ -124,6 +128,35 @@ public partial class FEDformer<T>
         /// <inheritdoc />
         public override void ResetState()
         {
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// The blocks read their weights through their own references, which the base class's field rebinding cannot
+        /// reach; every reference to a replaced tensor (a copy-on-write clone's shared storage, a parameter buffer's
+        /// view) is repointed here, shared Fourier weights once.
+        /// </remarks>
+        public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
+        {
+            var previous = GetTrainableParameters().ToArray();
+            base.SetTrainableParameters(parameters);
+            if (previous.Length != parameters.Count) return;
+            Tensor<T> Map(Tensor<T> tensor)
+            {
+                for (int i = 0; i < previous.Length; i++)
+                    if (ReferenceEquals(previous[i], tensor)) return parameters[i];
+                return tensor;
+            }
+            _encoderEmbedding = Map(_encoderEmbedding);
+            _decoderEmbedding = Map(_decoderEmbedding);
+            _encoderNorm = (Map(_encoderNorm.Gamma), Map(_encoderNorm.Beta));
+            _decoderNorm = (Map(_decoderNorm.Gamma), Map(_decoderNorm.Beta));
+            _projectionWeight = Map(_projectionWeight);
+            _projectionBias = Map(_projectionBias);
+            foreach (var spectral in _spectral) spectral.Rebind(Map);
+            foreach (var block in _encoder) block.Rebind(Map);
+            foreach (var block in _decoder) block.Rebind(Map);
+            for (int i = 0; i < _named.Count; i++) _named[i] = (_named[i].Name, Map(_named[i].Tensor));
         }
 
         /// <inheritdoc />
@@ -216,8 +249,19 @@ public partial class FEDformer<T>
             return tensor;
         }
 
-        // Dropout in training mode only, as nn.Dropout.
-        private Tensor<T> Drop(Tensor<T> x) => IsTrainingMode && _dropout > 0 ? Engine.Dropout(x, _dropout, true, out _) : x;
+        // Dropout in training mode only, as nn.Dropout: a fresh inverted-dropout mask per call, multiplied in so the tape
+        // records it. As DropoutLayer does, the mask seed mixes the layer's RandomSeed with a call counter, so two runs at
+        // the same seed drop the same elements.
+        private Tensor<T> Drop(Tensor<T> x)
+        {
+            if (!IsTrainingMode || _dropout <= 0) return x;
+            ulong call = unchecked((ulong)System.Threading.Interlocked.Increment(ref _dropoutCalls) - 1);
+            int? seed = RandomSeed.HasValue ? unchecked((int)(((uint)RandomSeed.Value * 2654435761u) ^ (uint)call)) : (int?)null;
+            var mask = Engine.TensorDropoutMask<T>(x._shape, Ops.FromDouble(_dropout), Ops.FromDouble(1.0 / (1.0 - _dropout)), seed);
+            return Engine.TensorMultiply(x, mask);
+        }
+
+        private long _dropoutCalls;
 
         // x [..., in] times a PyTorch [out, in] weight (plus a bias), over the last axis.
         private Tensor<T> Linear(Tensor<T> x, Tensor<T> weight, Tensor<T>? bias)
@@ -302,27 +346,34 @@ public partial class FEDformer<T>
         /// <summary>The complex weights of one Fourier block and the frequencies it reads; shared by its users.</summary>
         private sealed class SpectralWeights
         {
-            internal SpectralWeights(int modelDimension, int[] modes)
+            internal SpectralWeights(int modelDimension, int heads, int[] modes)
             {
                 Modes = modes;
-                int e = modelDimension / FourierAttention.Heads;
+                int e = modelDimension / heads;
                 // scale * torch.rand(8, in / 8, out / 8, modes, dtype=cfloat), scale = 1 / (in * out): both parts uniform.
                 double scale = 1.0 / ((double)modelDimension * modelDimension);
                 var random = LayerInitializationSeedScope.NextRandom();
-                Real = new Tensor<T>(new[] { FourierAttention.Heads, e, e, modes.Length });
-                Imaginary = new Tensor<T>(new[] { FourierAttention.Heads, e, e, modes.Length });
+                Real = new Tensor<T>(new[] { heads, e, e, modes.Length });
+                Imaginary = new Tensor<T>(new[] { heads, e, e, modes.Length });
                 for (int i = 0; i < Real.Length; i++) Real[i] = Ops.FromDouble(scale * random.NextDouble());
                 for (int i = 0; i < Imaginary.Length; i++) Imaginary[i] = Ops.FromDouble(scale * random.NextDouble());
             }
 
             internal int[] Modes { get; }
-            internal Tensor<T> Real { get; }
-            internal Tensor<T> Imaginary { get; }
+            internal Tensor<T> Real { get; private set; }
+            internal Tensor<T> Imaginary { get; private set; }
+
+            internal void Rebind(Func<Tensor<T>, Tensor<T>> map)
+            {
+                Real = map(Real);
+                Imaginary = map(Imaginary);
+            }
         }
 
         /// <summary>
         /// The frequency-enhanced attention of one AutoCorrelationLayer: query, key, value and output projections around
-        /// FEB-f (self) or FEA-f (cross), with eight heads as the reference's weights fix.
+        /// FEB-f (self) or FEA-f (cross), per head. The reference fixes eight heads in its weights' shape
+        /// [8, d / 8, d / 8, modes]; here the head count is NumHeads (eight by default), which is that shape at eight.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -341,19 +392,19 @@ public partial class FEDformer<T>
         /// </remarks>
         private sealed class FourierAttention
         {
-            internal const int Heads = 8;
             private readonly FedformerNetwork _owner;
             private readonly SpectralWeights _spectral;
             private readonly int[]? _keyModes;
             private readonly int _d;
-            private readonly Tensor<T> _queryWeight;
-            private readonly Tensor<T> _queryBias;
-            private readonly Tensor<T> _keyWeight;
-            private readonly Tensor<T> _keyBias;
-            private readonly Tensor<T> _valueWeight;
-            private readonly Tensor<T> _valueBias;
-            private readonly Tensor<T> _outWeight;
-            private readonly Tensor<T> _outBias;
+            private int Heads { get; }
+            private Tensor<T> _queryWeight;
+            private Tensor<T> _queryBias;
+            private Tensor<T> _keyWeight;
+            private Tensor<T> _keyBias;
+            private Tensor<T> _valueWeight;
+            private Tensor<T> _valueBias;
+            private Tensor<T> _outWeight;
+            private Tensor<T> _outBias;
 
             internal FourierAttention(FedformerNetwork owner, SpectralWeights spectral, int[]? keyModes)
             {
@@ -361,6 +412,7 @@ public partial class FEDformer<T>
                 _spectral = spectral;
                 _keyModes = keyModes;
                 _d = owner._modelDimension;
+                Heads = owner._heads;
                 _queryWeight = Uniform(new[] { _d, _d }, _d);
                 _queryBias = Uniform(new[] { _d }, _d);
                 _keyWeight = Uniform(new[] { _d, _d }, _d);
@@ -372,6 +424,18 @@ public partial class FEDformer<T>
             }
 
             private IEngine Engine => _owner.Engine;
+
+            internal void Rebind(Func<Tensor<T>, Tensor<T>> map)
+            {
+                _queryWeight = map(_queryWeight);
+                _queryBias = map(_queryBias);
+                _keyWeight = map(_keyWeight);
+                _keyBias = map(_keyBias);
+                _valueWeight = map(_valueWeight);
+                _valueBias = map(_valueBias);
+                _outWeight = map(_outWeight);
+                _outBias = map(_outBias);
+            }
 
             internal void Register(string prefix, bool ownsSpectral)
             {
@@ -525,8 +589,8 @@ public partial class FEDformer<T>
         {
             private readonly FedformerNetwork _owner;
             private readonly FourierAttention _attention;
-            private readonly Tensor<T> _conv1;
-            private readonly Tensor<T> _conv2;
+            private Tensor<T> _conv1;
+            private Tensor<T> _conv2;
 
             internal EncoderBlock(FedformerNetwork owner, SpectralWeights spectral)
             {
@@ -534,6 +598,13 @@ public partial class FEDformer<T>
                 _attention = new FourierAttention(owner, spectral, null);
                 _conv1 = Uniform(new[] { owner._feedForward, owner._modelDimension, 1 }, owner._modelDimension);
                 _conv2 = Uniform(new[] { owner._modelDimension, owner._feedForward, 1 }, owner._feedForward);
+            }
+
+            internal void Rebind(Func<Tensor<T>, Tensor<T>> map)
+            {
+                _attention.Rebind(map);
+                _conv1 = map(_conv1);
+                _conv2 = map(_conv2);
             }
 
             internal void Register(string prefix, bool first)
@@ -564,9 +635,9 @@ public partial class FEDformer<T>
             private readonly FedformerNetwork _owner;
             private readonly FourierAttention _selfAttention;
             private readonly FourierAttention _crossAttention;
-            private readonly Tensor<T> _conv1;
-            private readonly Tensor<T> _conv2;
-            private readonly Tensor<T> _trendProjection;
+            private Tensor<T> _conv1;
+            private Tensor<T> _conv2;
+            private Tensor<T> _trendProjection;
 
             internal DecoderBlock(FedformerNetwork owner, SpectralWeights selfSpectral, SpectralWeights crossSpectral, int[] crossKeyModes)
             {
@@ -576,6 +647,15 @@ public partial class FEDformer<T>
                 _conv1 = Uniform(new[] { owner._feedForward, owner._modelDimension, 1 }, owner._modelDimension);
                 _conv2 = Uniform(new[] { owner._modelDimension, owner._feedForward, 1 }, owner._feedForward);
                 _trendProjection = Uniform(new[] { owner._features, owner._modelDimension, 3 }, owner._modelDimension * 3);
+            }
+
+            internal void Rebind(Func<Tensor<T>, Tensor<T>> map)
+            {
+                _selfAttention.Rebind(map);
+                _crossAttention.Rebind(map);
+                _conv1 = map(_conv1);
+                _conv2 = map(_conv2);
+                _trendProjection = map(_trendProjection);
             }
 
             internal void Register(string prefix, bool first)

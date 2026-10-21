@@ -117,6 +117,45 @@ public class FEDformerReferenceTests
                 $"forecast[{i}]: {forecast.GetFlat(i):R} vs the reference's {expected[i]:R}");
     }
 
+    [Fact(Timeout = 300000)]
+    public async Task Tape_gradients_match_finite_differences()
+    {
+        await Task.Yield();
+        var f = Fixture();
+        var model = LoadReference(f, out _);
+        var input = new Tensor<double>(Ints(f.GetProperty("input_shape")), new Vector<double>(Doubles(f.GetProperty("input"))));
+        var target = new Tensor<double>(Ints(f.GetProperty("forecast_shape")));
+        for (int i = 0; i < target.Length; i++) target[i] = Math.Cos(0.7 * i);
+        var loss = new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>();
+
+        var gradient = model.ComputeGradients(input, target, loss);
+        var parameters = model.GetParameters();
+        Assert.Equal(parameters.Length, gradient.Length);
+
+        double Loss(Vector<double> p)
+        {
+            model.SetParameters(p);
+            var output = model.Forecast(input);
+            double sum = 0;
+            for (int i = 0; i < output.Length; i++) sum += (output.GetFlat(i) - target[i]) * (output.GetFlat(i) - target[i]);
+            return sum / output.Length;
+        }
+
+        // Every 97th parameter: every block's weights are sampled, the shared Fourier weights included.
+        const double h = 1e-6;
+        for (int i = 0; i < parameters.Length; i += 97)
+        {
+            var plus = parameters.Clone();
+            var minus = parameters.Clone();
+            plus[i] += h;
+            minus[i] -= h;
+            double numeric = (Loss(plus) - Loss(minus)) / (2 * h);
+            Assert.True(Math.Abs(numeric - gradient[i]) <= 1e-6 + 1e-4 * Math.Abs(numeric),
+                $"parameter {i}: tape {gradient[i]:R} vs finite difference {numeric:R}");
+        }
+        model.SetParameters(parameters);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task Random_mode_selection_is_fixed_by_its_seed()
     {
