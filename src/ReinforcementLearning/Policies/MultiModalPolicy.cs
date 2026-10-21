@@ -72,12 +72,102 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _numComponents = numComponents;
         }
 
-        private int ArgMax(Vector<T> values)
+        /// <summary>
+        /// The mode of a mixture of diagonal Gaussians: the highest-density point found by the fixed-point
+        /// (mean-shift) iteration started from every component mean (Carreira-Perpinan 2000, "Mode-finding for mixtures
+        /// of Gaussian distributions").
+        /// </summary>
+        /// <remarks>
+        /// Each step moves x to the posterior-weighted, precision-weighted mean of the component means; from any start
+        /// it climbs the mixture density to a stationary point. Starting it from every component mean is the paper's
+        /// procedure for finding the modes; the converged point of highest mixture density is returned.
+        /// </remarks>
+        internal static double[] MixtureMode(double[] weights, double[][] means, double[][] logStds)
         {
-            int best = 0;
-            for (int k = 1; k < values.Length; k++)
-                if (NumOps.GreaterThan(values[k], values[best])) best = k;
+            const int MaxIterations = 500;
+            const double Tolerance = 1e-12;
+            int components = weights.Length, dims = means[0].Length;
+            var precisions = new double[components][];
+            for (int k = 0; k < components; k++)
+            {
+                precisions[k] = new double[dims];
+                for (int i = 0; i < dims; i++) precisions[k][i] = Math.Exp(-2.0 * logStds[k][i]);
+            }
+
+            double[] best = (double[])means[0].Clone();
+            double bestDensity = double.NegativeInfinity;
+            var logTerms = new double[components];
+            for (int start = 0; start < components; start++)
+            {
+                var x = (double[])means[start].Clone();
+                for (int iteration = 0; iteration < MaxIterations; iteration++)
+                {
+                    // Posterior responsibilities p(k | x), from log terms for stability.
+                    double maxTerm = double.NegativeInfinity;
+                    for (int k = 0; k < components; k++)
+                    {
+                        logTerms[k] = LogComponentDensity(x, weights[k], means[k], logStds[k], precisions[k]);
+                        if (logTerms[k] > maxTerm) maxTerm = logTerms[k];
+                    }
+                    double change = 0.0;
+                    for (int i = 0; i < dims; i++)
+                    {
+                        double numerator = 0.0, denominator = 0.0;
+                        for (int k = 0; k < components; k++)
+                        {
+                            double responsibility = Math.Exp(logTerms[k] - maxTerm);
+                            numerator += responsibility * precisions[k][i] * means[k][i];
+                            denominator += responsibility * precisions[k][i];
+                        }
+                        double next = numerator / denominator;
+                        change = Math.Max(change, Math.Abs(next - x[i]));
+                        x[i] = next;
+                    }
+                    if (change <= Tolerance * (1.0 + MaxAbs(x))) break;
+                }
+
+                double density = MixtureLogDensity(x, weights, means, logStds, precisions);
+                if (density > bestDensity)
+                {
+                    bestDensity = density;
+                    best = x;
+                }
+            }
             return best;
+        }
+
+        private static double MaxAbs(double[] x)
+        {
+            double m = 0.0;
+            foreach (double v in x) m = Math.Max(m, Math.Abs(v));
+            return m;
+        }
+
+        // log(w_k N(x; mu_k, diag(sigma_k^2))).
+        private static double LogComponentDensity(double[] x, double weight, double[] mean, double[] logStd, double[] precision)
+        {
+            double log = Math.Log(Math.Max(weight, double.Epsilon));
+            for (int i = 0; i < x.Length; i++)
+            {
+                double d = x[i] - mean[i];
+                log -= 0.5 * d * d * precision[i] + logStd[i] + 0.5 * Math.Log(2.0 * Math.PI);
+            }
+            return log;
+        }
+
+        private static double MixtureLogDensity(double[] x, double[] weights, double[][] means, double[][] logStds,
+            double[][] precisions)
+        {
+            double max = double.NegativeInfinity;
+            var terms = new double[weights.Length];
+            for (int k = 0; k < weights.Length; k++)
+            {
+                terms[k] = LogComponentDensity(x, weights[k], means[k], logStds[k], precisions[k]);
+                if (terms[k] > max) max = terms[k];
+            }
+            double sum = 0.0;
+            foreach (double t in terms) sum += Math.Exp(t - max);
+            return max + Math.Log(sum);
         }
 
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -128,25 +218,41 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 logStds.Add(logStd);
             }
 
-            // Inference takes the most probable component and its mean (the mixture's dominant mode); training samples.
-            int selectedComponent = training ? SampleCategoricalIndex(mixingCoefficients) : ArgMax(mixingCoefficients);
-
             var action = new Vector<T>(_actionSize);
+            if (!training)
+            {
+                // Inference takes the mixture's mode: the highest-density point of the whole weighted mixture, which
+                // need not be the heaviest component's mean (a broad heavy component can peak below a narrow light one).
+                var weights = new double[_numComponents];
+                var componentMeans = new double[_numComponents][];
+                var componentLogStds = new double[_numComponents][];
+                for (int k = 0; k < _numComponents; k++)
+                {
+                    weights[k] = NumOps.ToDouble(mixingCoefficients[k]);
+                    componentMeans[k] = new double[_actionSize];
+                    componentLogStds[k] = new double[_actionSize];
+                    for (int i = 0; i < _actionSize; i++)
+                    {
+                        componentMeans[k][i] = NumOps.ToDouble(means[k][i]);
+                        componentLogStds[k][i] = NumOps.ToDouble(logStds[k][i]);
+                    }
+                }
+                var mode = MixtureMode(weights, componentMeans, componentLogStds);
+                for (int i = 0; i < _actionSize; i++) action[i] = NumOps.FromDouble(mode[i]);
+                return action;
+            }
+
+            // Training samples a component, then its Gaussian.
+            int selectedComponent = SampleCategoricalIndex(mixingCoefficients);
             for (int i = 0; i < _actionSize; i++)
             {
                 double meanValue = NumOps.ToDouble(means[selectedComponent][i]);
                 double stdValue = Math.Exp(NumOps.ToDouble(logStds[selectedComponent][i]));
 
-                double sampledValue = training ? meanValue + stdValue * _random.NextGaussian() : meanValue;
-                action[i] = NumOps.FromDouble(sampledValue);
+                action[i] = NumOps.FromDouble(meanValue + stdValue * _random.NextGaussian());
             }
 
-            if (training)
-            {
-                return _explorationStrategy.GetExplorationAction(state, action, _actionSize, _random);
-            }
-
-            return action;
+            return _explorationStrategy.GetExplorationAction(state, action, _actionSize, _random);
         }
 
         public override T ComputeLogProb(Vector<T> state, Vector<T> action)

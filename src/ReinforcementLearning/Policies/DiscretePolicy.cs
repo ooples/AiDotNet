@@ -78,7 +78,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var probabilities = Softmax(logits);
 
             // Training samples the categorical distribution; inference takes its mode (the most probable action).
-            var policyAction = training ? SampleCategorical(probabilities) : OneHotArgMax(probabilities);
+            var policyAction = training ? SampleCategorical(probabilities) : OneHotArgMax(logits);
 
             if (training)
             {
@@ -127,12 +127,14 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         // Helper methods
-        private Vector<T> OneHotArgMax(Vector<T> probabilities)
+        private Vector<T> OneHotArgMax(Vector<T> logits)
         {
             int best = 0;
-            for (int k = 1; k < probabilities.Length; k++)
-                if (NumOps.GreaterThan(probabilities[k], probabilities[best])) best = k;
-            var oneHot = new Vector<T>(probabilities.Length);
+            // The argmax of the logits: softmax preserves their order, and a rounded probability can tie two
+            // logits that differ.
+            for (int k = 1; k < logits.Length; k++)
+                if (NumOps.GreaterThan(logits[k], logits[best])) best = k;
+            var oneHot = new Vector<T>(logits.Length);
             oneHot[best] = NumOps.One;
             return oneHot;
         }

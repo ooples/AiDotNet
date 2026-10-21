@@ -63,7 +63,7 @@ public abstract class PolicyTestBase
     }
 
     [Fact(Timeout = 60000)]
-    public async Task Predict_IsTheModeAndDeterministic()
+    public async Task Predict_IsTheInferenceActionAndDeterministic()
     {
         await Task.Yield();
         var policy = CreatePolicy();
@@ -73,6 +73,8 @@ public abstract class PolicyTestBase
 
         AssertFinite(first, "inference action");
         Assert.Equal(first.ToArray(), second.ToArray());
+        // Predict is the inference path, whose action PolicyModeTests checks is each distribution's mode.
+        Assert.Equal(policy.SelectAction(State, training: false).ToArray(), first.ToArray());
     }
 
     [Fact(Timeout = 60000)]

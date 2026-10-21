@@ -100,19 +100,22 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _sharedFeatures = sharedFeatures;
         }
 
-        /// <summary>
-        /// Selects mixed action: [discrete_action, continuous_actions]
-        /// </summary>
-        private Vector<T> OneHotArgMax(Vector<T> probabilities)
+        // The one-hot of the most probable discrete action.
+        private Vector<T> OneHotArgMax(Vector<T> logits)
         {
             int best = 0;
-            for (int k = 1; k < probabilities.Length; k++)
-                if (NumOps.GreaterThan(probabilities[k], probabilities[best])) best = k;
-            var oneHot = new Vector<T>(probabilities.Length);
+            // The argmax of the logits: softmax preserves their order, and a rounded probability can tie two
+            // logits that differ.
+            for (int k = 1; k < logits.Length; k++)
+                if (NumOps.GreaterThan(logits[k], logits[best])) best = k;
+            var oneHot = new Vector<T>(logits.Length);
             oneHot[best] = NumOps.One;
             return oneHot;
         }
 
+        /// <summary>
+        /// Selects mixed action: [discrete_action, continuous_actions]
+        /// </summary>
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             ValidateState(state, nameof(state));
@@ -124,7 +127,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var discreteLogits = discreteLogitsTensor.ToVector();
             var discreteProbabilities = Softmax(discreteLogits);
             // Inference takes each part's mode (the most probable discrete action, the Gaussian mean); training samples.
-            var discreteAction = training ? SampleCategorical(discreteProbabilities) : OneHotArgMax(discreteProbabilities);
+            var discreteAction = training ? SampleCategorical(discreteProbabilities) : OneHotArgMax(discreteLogits);
 
             if (training)
             {
