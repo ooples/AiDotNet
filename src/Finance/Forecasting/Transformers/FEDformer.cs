@@ -80,7 +80,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     #region Native Mode Fields
 
     // The paper's network (null when the architecture supplies its own layers).
-    private FedformerNetwork? _network;
+    private FedformerNetwork<T>? _network;
 
     /// <summary>
     /// Instance normalization mean (for RevIN).
@@ -446,11 +446,11 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
 
     /// <summary>
     /// Builds FEDformer-f as the official code does (Zhou et al. 2022; MAZiqing/FEDformer); see
-    /// <see cref="FedformerNetwork"/>.
+    /// <see cref="FedformerNetwork{T}"/>.
     /// </summary>
     private void BuildPaperNetwork()
     {
-        _network = new FedformerNetwork(_sequenceLength, _labelLength, _predictionHorizon, _numFeatures, _modelDimension,
+        _network = new FedformerNetwork<T>(_sequenceLength, _labelLength, _predictionHorizon, _numFeatures, _modelDimension,
             _numHeads, _feedForwardDimension, _numEncoderLayers, _numDecoderLayers, _numModes, _options.ModeSelection,
             _options.ModeSelectionSeed, _movingAverageKernel, _dropout);
         Layers.Add(_network);
@@ -597,11 +597,10 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the FEDformer model, Forecast produces predictions from input data. This is the main inference step of the FEDformer architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
-        RequireArchitectureAgreesWithOptions();
 
         return _useNativeMode ? ForecastNative(input, quantiles) : ForecastOnnx(input);
     }
