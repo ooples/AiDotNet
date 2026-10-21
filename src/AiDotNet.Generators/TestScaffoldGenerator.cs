@@ -11263,14 +11263,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // w2v-BERT XL is 0.6B parameters (two 12-block Conformer modules 1024 wide); keep every component
                 // (log-mel front end, two stride-2 convolutions, contrastive and masked-prediction Conformers, the
                 // quantizer) at 16 wide with one block per module and a 64-entry codebook. Half a second of audio is
-                // 48 mel frames, 11 encoder frames.
+                // 48 mel frames, 11 encoder frames. The training invariants run on one fixed draw of the objective
+                // (FixedDraw): at this scale one draw's loss moves by more than training lowers the expectation, so a
+                // loss trajectory over fresh draws is not a property training has; over a fixed draw, with each frame's
+                // codebook entry kept from the first evaluation, it is (the targets are otherwise the quantizer's argmax and
+                // jump: 17.6 -> 24.8 at 1e-4). 3e-5 fell on every one of 30 measured steps.
+                // W2vBertPaperTests.Pretraining_LowersTheExpectedObjective checks learning over fresh draws at a
+                // scale where the contrastive task is well-posed.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputSize: 8000, outputSize: 16), " +
                     "new AiDotNet.Audio.Foundations.W2vBertOptions { ModelDim = 16, NumHeads = 2, FeedForwardMultiplier = 2, " +
                     "ContrastiveLayers = 1, MaskedLayers = 1, CodebookSize = 64, CodeDim = 16, Negatives = 4, " +
-                    "MaskProbability = 0.3, MaskLength = 2, SemanticLayer = 1, SemanticClusters = 4, WarmupSteps = 1, LearningRate = 1e-3 })";
+                    "MaskProbability = 0.3, MaskLength = 2, SemanticLayer = 1, SemanticClusters = 4, WarmupSteps = 1, LearningRate = 3e-5, " +
+                    "FixedDraw = 7 })";
             }
             else if ((model.ClassName is "Wav2Vec2" or "HuBERT" or "WavLM") && model.TypeParameterCount == 1)
             {
@@ -16184,14 +16191,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // the target only has to exist.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8000 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
-                // A loss-trajectory invariant cannot hold for an objective whose targets the model generates; see the skip reason.
-                const string w2vBertTrajectory = "w2v-BERT's objective is not monotone at test scale: its masked-prediction targets are its own quantizer's codes, which get harder to predict as training separates them, and its 64-entry codebook collapses and recovers (every frame on one code: contrastive term exactly 0 even averaged over eight mask and distractor draws). Measured on this fixture: the averaged objective went 29.3 -> 20.3 -> 33.1 over 20 steps on a chirp and 26.5 -> 24.9 -> 20.0 on noise. Gradients, determinism, cloning and the input contract are still tested.";
-                foreach (var trajectoryInvariant in new[] { "Training_ShouldReduceLoss", "LossStrictlyDecreasesOnMemorizationTask", "MoreData_ShouldNotDegrade" })
-                {
-                    sb.AppendLine();
-                    sb.AppendLine($"    [Xunit.Fact(Skip = \"{w2vBertTrajectory}\")]");
-                    sb.AppendLine($"    public override System.Threading.Tasks.Task {trajectoryInvariant}() => System.Threading.Tasks.Task.CompletedTask;");
-                }
             }
             else
             {
