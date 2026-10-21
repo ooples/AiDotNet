@@ -169,10 +169,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     [Scratch]
     private Tensor<T>? _betaGradient;
 
-    // GPU-resident cached tensors for GPU training pipeline
-    [Scratch]
-    private Tensor<T>? _lastInputGpu;
-
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
     /// </summary>
@@ -750,6 +746,48 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// distribution for each feature.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The per-channel affine parameters and running statistics this layer normalizes with in inference, for folding it
+    /// into a preceding convolution of <paramref name="channels"/> output channels
+    /// (<see cref="ConvolutionBatchNormFolding{T}"/>). False when the layer's features are declared channels-last or
+    /// its parameters do not have one entry per channel (not yet resolved).
+    /// </summary>
+    internal bool TryGetFoldingStatistics(int channels, out Tensor<T> gamma, out Tensor<T> beta, out Tensor<T> mean,
+        out Tensor<T> variance, out double epsilon)
+    {
+        gamma = _gamma; beta = _beta; mean = _runningMean; variance = _runningVariance;
+        epsilon = NumOps.ToDouble(_epsilon);
+        return Layout != BatchNormDataLayout.ChannelsLast && channels > 0
+            && _gamma.Length == channels && _beta.Length == channels
+            && _runningMean.Length == channels && _runningVariance.Length == channels;
+    }
+
+    // Set only for the duration of one ForwardThenReLU call; _reluApplied reports whether the forward fused it.
+    private bool _fuseReLUNext;
+    private bool _reluApplied;
+
+    /// <summary>
+    /// <c>ReLU(Forward(input))</c>. In inference on a rank-4 input the normalization and the ReLU run as one engine op
+    /// (one pass over the activation instead of two); otherwise the ReLU is applied to the forward's output.
+    /// </summary>
+    internal Tensor<T> ForwardThenReLU(Tensor<T> input)
+    {
+        _fuseReLUNext = true;
+        _reluApplied = false;
+        Tensor<T> output;
+        try
+        {
+            output = Forward(input);
+        }
+        finally
+        {
+            _fuseReLUNext = false;
+        }
+        bool applied = _reluApplied;
+        _reluApplied = false;
+        return applied ? output : Engine.ReLU(output);
+    }
+
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
@@ -998,6 +1036,57 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _lastMean = _runningMean;
             _lastVariance = _runningVariance;
 
+            // No tape: one fused BatchNormInference over the live gamma, beta and running statistics.
+            // They are persistent tensors, so a GPU engine keeps them resident and uploads nothing per
+            // call; the scale/shift decomposition below builds fresh per-call temporaries (epsilon,
+            // sqrt, divide, multiply, subtract, broadcast reshapes) whose host->device uploads were 89% of
+            // ResNet-50's GPU inference time. The channel axis is folded into [outer, C, inner, 1]
+            // so one rank-4 kernel serves every input rank. Under a tape the decomposition stays:
+            // it carries the gradients to gamma and beta (training with batch norm in eval mode).
+            // The fused kernel reads the activation as one contiguous span, and a Reshape of a view
+            // cannot produce one either. A model that hands batch norm a permuted or sliced tensor -
+            // PANNs' mel pipeline does - therefore falls through to the decomposition below, which is
+            // what ran before this fast path existed. Copying with Contiguous() instead would stage the
+            // activation on every call, which is the cost this path exists to avoid.
+            // The kernel also indexes gamma, beta and the statistics by the input's channel count without
+            // checking it, so an activation whose channel axis does not match them (CLAP's gradient-check
+            // input reaches an 8-feature batch norm with 2048) read past them and threw
+            // IndexOutOfRangeException. It falls through too: the decomposition reports the shape error.
+            int inferenceChannelAxis = InferenceChannelAxis(input.Shape.Length);
+            if (!tapeActive && input.IsContiguous && OperandsMatchChannels(input.Shape[inferenceChannelAxis]))
+            {
+                int rank = input.Shape.Length;
+                int channelAxis = inferenceChannelAxis;
+                int outer = 1, inner = 1;
+                for (int d = 0; d < channelAxis; d++) outer *= input.Shape[d];
+                for (int d = channelAxis + 1; d < rank; d++) inner *= input.Shape[d];
+                // A rank-4 channels-first input (every convolutional network) is already in the kernel's
+                // layout; passing it through keeps a device-resident activation from being re-staged.
+                bool alreadyNchw = rank == 4 && channelAxis == 1;
+                var folded = alreadyNchw ? input : Engine.Reshape(input, [outer, input.Shape[channelAxis], inner, 1]);
+                // A caller that applies ReLU next (ForwardThenReLU) gets it in the same pass, on a rank-4 input.
+                bool fuseReLU = _fuseReLUNext && alreadyNchw;
+                var normalized = fuseReLU
+                    ? Engine.BatchNormInference(folded, _gamma, _beta, _runningMean, _runningVariance,
+                        NumOps.ToDouble(_epsilon), FusedActivationType.ReLU)
+                    : Engine.BatchNormInference(
+                        folded, _gamma, _beta, _runningMean, _runningVariance, NumOps.ToDouble(_epsilon));
+                _reluApplied = fuseReLU;
+                var fusedResult = alreadyNchw ? normalized : Engine.Reshape(normalized, input.Shape.ToArray());
+
+                if (restoreInputShape && preFlattenShape is not null)
+                {
+                    fusedResult = Engine.Reshape(fusedResult, preFlattenShape);
+                }
+
+                if (_inputWas1D)
+                {
+                    fusedResult = Engine.Reshape(fusedResult, [fusedResult.Length]);
+                }
+
+                return fusedResult;
+            }
+
             // Recompute from the live affine parameters. Gamma and beta are optimizer-owned
             // persistent tensors and are commonly updated IN PLACE, so a cache keyed only by a
             // local dirty bit cannot observe their mutation. That stale cache made post-training
@@ -1079,9 +1168,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // channels-first sequence, channels axis 1). A caller that declared ChannelsFirst gets
         // axis 1; everyone else keeps the historical axis-0 reading. Guessing here is what
         // broadcast the channel scale along ContextNet's BATCH axis.
-        int channelAxis = Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
-            ? 1
-            : (rank == 1 || rank == 3 ? 0 : 1);
+        int channelAxis = InferenceChannelAxis(rank);
 
         var broadcastShape = new int[rank];
         for (int d = 0; d < rank; d++)
@@ -1095,71 +1182,16 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         return Engine.TensorAdd(scaled, shiftReshaped);
     }
 
-    /// <summary>
-    /// Gets whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
+    /// <summary>The axis inference normalizes per channel for an input of <paramref name="rank"/>.</summary>
+    private int InferenceChannelAxis(int rank)
+        => Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
+            ? 1
+            : (rank == 1 || rank == 3 ? 0 : 1);
 
-    /// <summary>
-    /// Performs GPU-resident batch normalization forward pass.
-    /// </summary>
-    /// <param name="input">GPU-resident input tensor with shape [batch, features] or [batch, channels, H, W].</param>
-    /// <returns>GPU-resident output tensor with same shape as input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when GPU engine is not available.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs batch normalization entirely on GPU, avoiding CPU round-trips.
-    /// The input and output tensors remain GPU-resident for chained GPU operations.
-    /// </para>
-    /// <para>
-    /// During training mode, running statistics (mean and variance) are updated on GPU
-    /// and then downloaded back to CPU for persistence.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var input = inputs[0];
-
-        // Store input shape for backward pass
-        _lastInput = null; // GPU path doesn't store CPU tensor
-
-        double epsilonDouble = NumOps.ToDouble(_epsilon);
-        double momentumDouble = NumOps.ToDouble(_momentum);
-
-        // Call GPU-resident batch norm
-        var (output, saveMean, saveVar) = gpuEngine.FusedBatchNormGpu(
-            input,
-            _gamma,
-            _beta,
-            ref _runningMean,
-            ref _runningVariance,
-            epsilonDouble,
-            momentumDouble,
-            IsTrainingMode);
-
-        // GPU backends may replace the ref buffers when materializing device
-        // state. Refresh the name-based registration if their identity changed.
-        RegisterRunningStatisticBuffers();
-
-        // Store saved values for backward pass (if training)
-        if (IsTrainingMode && saveMean is not null && saveVar is not null)
-        {
-            _lastInputGpu = input;
-            _lastMean = saveMean;
-            _lastVariance = saveVar;
-        }
-
-        return output;
-    }
+    /// <summary>Whether gamma, beta and the running statistics each hold one entry per input channel.</summary>
+    private bool OperandsMatchChannels(int channels)
+        => _gamma.Length == channels && _beta.Length == channels
+            && _runningMean.Length == channels && _runningVariance.Length == channels;
 
     private static int ComputeTotalElements(int[] shape)
     {
@@ -1328,9 +1360,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
-
-        // Clear GPU cached tensors
-        _lastInputGpu = null;
     }
 
     #region ONNX Export

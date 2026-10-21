@@ -364,99 +364,6 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Gets whether this layer supports GPU execution.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because dropout has full GPU support for both training and inference.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// GPU execution is fully supported:
-    /// - During inference: Identity pass-through (zero-copy view)
-    /// - During training: GPU-accelerated random mask generation with LCG RNG
-    /// </para>
-    /// </remarks>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Performs the forward pass on GPU with full training support.
-    /// </summary>
-    /// <param name="input">The GPU-resident input tensor.</param>
-    /// <returns>
-    /// During inference: A view of the unchanged input tensor.
-    /// During training: A new tensor with dropout applied using GPU-accelerated mask generation.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements full GPU-resident dropout:
-    /// - During inference: Returns a view (zero-copy pass-through)
-    /// - During training: Uses GPU kernel with LCG random number generation for mask creation,
-    ///   applies inverted dropout scaling, and stores the mask for backward pass
-    /// </para>
-    /// <para><b>For Beginners:</b> The GPU version runs the entire dropout operation on the GPU,
-    /// including random mask generation. This is much faster than CPU dropout for large tensors.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
-
-        var input = inputs[0];
-
-        if (!IsTrainingMode)
-        {
-            _gpuDropoutMask?.Dispose();
-            _gpuDropoutMask = null;
-            return input.Reshape(input._shape);
-        }
-
-        float rate = (float)NumOps.ToDouble(_dropoutRate);
-        float scale = (float)NumOps.ToDouble(_scale);
-        // Closes #1383: deterministic seed derivation. Shared helpers with
-        // the CPU Forward path above (DeriveSeed32 / DeriveSeed64 +
-        // AdvanceSeedCounter) ensure CPU and GPU produce bit-identical
-        // dropout masks at the same RandomSeed — prerequisite for the
-        // cross-engine determinism check in GpuTransformerDeterminismTests.
-        // Was previously XORing with Environment.TickCount, which is
-        // process-uptime — different on every process invocation — so
-        // same-seed trainings produced different GPU dropout masks across
-        // runs. The AdvanceSeedCounter helper performs the atomic
-        // Interlocked.Increment so concurrent ForwardGpu calls on the same
-        // layer instance never observe the same _seedCounter value.
-        ulong counter = AdvanceSeedCounter();
-        ulong seed = RandomSeed.HasValue
-            ? DeriveSeed64(RandomSeed.Value, counter)
-            : counter ^ (uint)Environment.TickCount;
-
-        // Generate uniform random mask [0, 1) on GPU
-        var randoms = gpuEngine.RandomUniformGpu<T>(input._shape, 0f, 1f, seed);
-
-        // Keep neurons where random > rate
-        var mask = gpuEngine.GreaterThanScalarGpu<T>(randoms, rate);
-        randoms.Dispose();
-
-        // Apply inverted dropout scaling: output = input * mask * scale
-        var masked = gpuEngine.MultiplyGpu(input, mask);
-        var output = gpuEngine.ScaleGpu(masked, scale);
-        masked.Dispose();
-
-        _gpuDropoutMask?.Dispose();
-        _gpuDropoutMask = mask;
-
-        if (IsTrainingMode)
-        {
-            _lastInput = input;
-            _dropoutMask = mask;
-        }
-
-        return output;
-    }
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -521,21 +428,6 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     private static int DeriveSeed32(int randomSeed, ulong counter)
     {
         return unchecked((int)(((uint)randomSeed * 2654435761u) ^ (uint)counter));
-    }
-
-    /// <summary>
-    /// Shared seed-derivation helper for the GPU Forward path. The 64-bit
-    /// width matches <see cref="Tensors.Engines.Gpu.DirectGpuTensorEngine.RandomUniformGpu{T}"/>'s
-    /// <c>ulong seed</c> parameter. The 32-bit projection
-    /// <c>(uint)randomSeed * 2654435761ul ^ counter</c> in the low 64
-    /// bits is bit-identical to <see cref="DeriveSeed32"/>'s output once
-    /// reinterpreted as int — so CPU and GPU forward paths derive the
-    /// same dropout-mask seed from the same (RandomSeed, counter) pair,
-    /// which is the prerequisite for cross-engine determinism checks.
-    /// </summary>
-    private static ulong DeriveSeed64(int randomSeed, ulong counter)
-    {
-        return unchecked(((ulong)(uint)randomSeed * 2654435761ul) ^ counter);
     }
 
     #region ONNX Export

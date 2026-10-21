@@ -126,11 +126,6 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool SupportsTraining => false;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
     /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
 
@@ -153,11 +148,6 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     [Scratch]
     private Tensor<T>? _lastOutput;
-
-    /// <summary>
-    /// Cached input shape for GPU backward pass.
-    /// </summary>
-    private int[]? _gpuCachedInputShape;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MeanLayer{T}"/> class with the specified input shape and axis.
@@ -282,81 +272,6 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Performs GPU-accelerated forward pass for mean reduction.
-    /// </summary>
-    /// <param name="inputs">Input GPU tensors (uses first input).</param>
-    /// <returns>GPU-resident output tensor with mean values.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        var input = inputs[0];
-        int[] shape = input._shape;
-        int inputRank = shape.Length;
-
-        // Calculate output shape by removing the axis dimension
-        int[] outputShape = CalculateOutputShape(shape, Axis);
-        int axisSize = shape[Axis];
-        float scale = 1.0f / axisSize;
-
-        // GPU-resident mean reduction using permutation pattern from MaxAxisGpu
-        // If axis is not last, permute to move it to the last position
-        Tensor<T> processedInput = input;
-        bool needsPermute = Axis != inputRank - 1;
-
-        if (needsPermute)
-        {
-            // Build permutation: move reduction axis to last position
-            var perm = new int[inputRank];
-            int j = 0;
-            for (int i = 0; i < inputRank; i++)
-                if (i != Axis) perm[j++] = i;
-            perm[inputRank - 1] = Axis;
-            processedInput = gpuEngine.PermuteGpu(input, perm);
-        }
-
-        // Calculate outer size (product of all dims except reduction axis)
-        int outerSize = processedInput.Length / axisSize;
-
-        // Allocate output buffer and perform GPU sum reduction
-        var sumBuffer = backend.AllocateBuffer(outerSize);
-        backend.SumAxis(processedInput.Buffer, sumBuffer, outerSize, axisSize);
-
-        // Dispose permuted tensor if we created one
-        if (needsPermute)
-            processedInput.Dispose();
-
-        // Scale to get mean (sum / axisSize)
-        var outputBuffer = backend.AllocateBuffer(outerSize);
-        backend.Scale(sumBuffer, outputBuffer, scale, outerSize);
-        sumBuffer.Dispose();
-
-        // Cache for backward pass (only when training)
-        if (IsTrainingMode)
-        {
-            _gpuCachedInputShape = (int[])shape.Clone();
-
-            // For backward pass, we need the input cached
-            // Download only when in training mode to minimize overhead during inference
-            var inputData = backend.DownloadBuffer(input.Buffer);
-            _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
-
-            var outputData = backend.DownloadBuffer(outputBuffer);
-            _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
-        }
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
     /// Gets all trainable parameters from the mean layer as a single vector.
     /// </summary>
     /// <returns>An empty vector since MeanLayer has no trainable parameters.</returns>
@@ -410,6 +325,5 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
         // Clear cached values from forward pass
         _lastInput = null;
         _lastOutput = null;
-        _gpuCachedInputShape = null;
     }
 }

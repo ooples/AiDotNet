@@ -237,9 +237,6 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     [Scratch]
     private Tensor<T>? _lastInput;
 
-    // GPU-resident cached tensors for GPU training pipeline
-    private int[]? _lastInputGpuShape;
-
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -435,59 +432,6 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     {
         // Clear cached values from forward pass
         _lastInput = null;
-        _lastInputGpuShape = null;
     }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because flatten is a zero-copy reshape that can be done via GPU tensor view.
-    /// </value>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Performs the forward pass on GPU using a zero-copy view reshape.
-    /// </summary>
-    /// <param name="input">The GPU-resident input tensor.</param>
-    /// <returns>A GPU tensor view with the flattened shape.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements GPU-resident flatten by creating a view into the input tensor
-    /// with the flattened shape. No data is copied - only the shape interpretation changes.
-    /// </para>
-    /// <para><b>For Beginners:</b> The GPU version of flatten is very efficient because:
-    /// - It doesn't move any data
-    /// - It just tells the GPU "interpret this same data with a different shape"
-    /// - This is called a "view" operation
-    ///
-    /// For example, if input has shape [32, 7, 7, 64], the view will have shape [32, 3136]
-    /// but still points to the exact same memory on the GPU.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var input = inputs[0];
-
-        // Cache input shape for BackwardGpu
-        if (IsTrainingMode)
-        {
-            _lastInputGpuShape = input._shape.ToArray();
-        }
-
-        // Handle unbatched input (3D: [C, H, W] or 2D: [H, W] or 1D)
-        if (input.Shape.Length <= 3)
-        {
-            // Unbatched input: flatten to 1D vector
-            return input.Reshape([input.Length]);
-        }
-
-        // Batched input: flatten spatial dimensions keeping batch dimension
-        int batchSize = input.Shape[0];
-        int flattenedSize = input.Length / batchSize;
-        return input.Reshape([batchSize, flattenedSize]);
-    }
 }

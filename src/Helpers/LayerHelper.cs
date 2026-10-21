@@ -1007,12 +1007,17 @@ public static partial class LayerHelper<T>
                 // kernel tensor allocation to first Forward() — VGG16BN at 224×224×3
                 // production defaults is ~1.1 GB of weights, and eager allocation at
                 // ctor time OOMs CI before tests even run.
+                // With batch normalization the order is convolution -> batch norm -> ReLU (torchvision's vgg*_bn,
+                // and VGG16BNBackbone here): the ReLU moves out of the convolution to after the normalization, which
+                // also lets inference fold the batch norm into the convolution. Without it, the ReLU stays fused in.
                 yield return new ConvolutionalLayer<T>(
                     outputDepth: outputChannels,
                     kernelSize: 3,
                     stride: 1,
                     padding: 1,  // Same padding to preserve spatial dimensions
-                    activationFunction: new ReLUActivation<T>(),
+                    activationFunction: configuration.UseBatchNormalization
+                        ? new IdentityActivation<T>()
+                        : new ReLUActivation<T>(),
                     initializationStrategy: InitializationStrategies<T>.Lazy
                 );
 
@@ -1022,6 +1027,7 @@ public static partial class LayerHelper<T>
                 if (configuration.UseBatchNormalization)
                 {
                     yield return new BatchNormalizationLayer<T>();
+                    yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
                 }
 
                 currentChannels = outputChannels;
