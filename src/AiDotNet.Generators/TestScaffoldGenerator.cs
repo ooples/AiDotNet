@@ -84,12 +84,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // and their own family bases feed them text or waveforms instead of a content vector (#2139).
         "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
-        "VAEModelBase",              // VAEs: encoder/decoder components of latent diffusion,
-                                     // implement IVAEModel (not IDiffusionModel), so the auto-
-                                     // resolved Diffusion test family can't construct them —
-                                     // the generator was emitting throwing factories and 14
-                                     // SDXLVAEModelTests failures per shard. Manual tests cover
-                                     // VAE invariants where needed.
+        // VAEModelBase is no longer excluded: VAEs implement IVAEModel, not IDiffusionModel, so they now have their
+        // own family (VAEModelTestBase) instead of being routed to a diffusion family that cannot construct them (#2139).
     ];
 
     /// <summary>
@@ -178,6 +174,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     private static readonly string[] ExcludedClassNames = new[]
     {
+        // Placeholder networks that do not implement the VAE contract they declare, found by VAEModelTestBase
+        // (#2139). Causal3DVAE and TemporalInterpolationVAE are dense layers over the channel axis: no
+        // convolution, no spatial or temporal compression, although both report DownsampleFactor 8. AudioVAE
+        // reports a time downsample its hand-written loops do not learn. Each is being rebuilt from its paper
+        // (CogVideoX's causal 3D VAE, FILM, AudioLDM's VAE); they leave this list when that lands.
+        "Causal3DVAE",
+        "TemporalInterpolationVAE",
+        "AudioVAE",
+
         // A memory buffer for continual learning, not a model: its Predict throws
         // NotSupportedException("ExperienceReplayBuffer is a memory buffer, not a predictor.") by
         // design and Train is empty. It is also generic over three types, so no fixture could pick
@@ -687,6 +692,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> AudioSafetyModuleTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateModule", "SampleRate", "Seconds" };
+    /// <summary>Overridable surface of <c>VAEModelTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> VAEModelTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateVAE", "ImageSize" };
 
     /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VideoSafetyModuleTestBaseMembers =
@@ -3926,6 +3935,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsInstanceSegmenter = false;
         bool extendsVideoSafety = false;
         bool extendsTextSafety = false, extendsAudioSafety = false;
+        bool extendsVae = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
         bool extendsClassicalVolatility = false;
@@ -4124,6 +4134,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsTextSafety = true;
             else if (baseName.StartsWith("AudioSafetyModuleBase", System.StringComparison.Ordinal))
                 extendsAudioSafety = true;
+            else if (baseName.StartsWith("VAEModelBase", System.StringComparison.Ordinal))
+                extendsVae = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
@@ -4327,6 +4339,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsVideoSafetyModuleBase = extendsVideoSafety,
             ExtendsTextSafetyModuleBase = extendsTextSafety,
             ExtendsAudioSafetyModuleBase = extendsAudioSafety,
+            ExtendsVAEModelBase = extendsVae,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
             MetaLearnerOptionsType = metaLearnerOptionsType,
@@ -5015,6 +5028,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return TestFamily.TextSafetyModule;
         if (model.ExtendsAudioSafetyModuleBase)
             return TestFamily.AudioSafetyModule;
+        // A VAE implements IVAEModel, not IDiffusionModel or INeuralNetworkModel: it is judged on encode, decode and
+        // its latent contract (#2139).
+        if (model.ExtendsVAEModelBase)
+            return TestFamily.VAE;
 
         // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
         // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
@@ -13476,6 +13493,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "VideoSafetyModuleTestBase"
             || baseClassName == "TextSafetyModuleTestBase"
             || baseClassName == "AudioSafetyModuleTestBase"
+            || baseClassName == "VAEModelTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
@@ -17718,6 +17736,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.VideoSafetyModule => VideoSafetyModuleTestBaseMembers,
             TestFamily.TextSafetyModule => TextSafetyModuleTestBaseMembers,
             TestFamily.AudioSafetyModule => AudioSafetyModuleTestBaseMembers,
+            TestFamily.VAE => VAEModelTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
@@ -17880,6 +17899,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsTextSafetyModuleBase;
             case TestFamily.AudioSafetyModule:
                 return model.ExtendsAudioSafetyModuleBase;
+            case TestFamily.VAE:
+                return model.ExtendsVAEModelBase;
             case TestFamily.DeepfakeDetector:
                 return model.ExtendsDeepfakeDetectorBase;
             case TestFamily.MetaLearning:
@@ -20285,6 +20306,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>True for an audio safety module, which is judged on waveforms through EvaluateAudio.</summary>
         public bool ExtendsAudioSafetyModuleBase { get; set; }
+        /// <summary>True for a latent-diffusion VAE, which is judged on encode, decode and its latent contract.</summary>
+        public bool ExtendsVAEModelBase { get; set; }
 
         /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
         public bool ExtendsDeepfakeDetectorBase { get; set; }
@@ -20516,6 +20539,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         VideoSafetyModule,
         TextSafetyModule,
         AudioSafetyModule,
+        VAE,
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
@@ -21348,6 +21372,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
             case TestFamily.TextSafetyModule:      return "TextSafetyModuleTestBase";
             case TestFamily.AudioSafetyModule:     return "AudioSafetyModuleTestBase";
+            case TestFamily.VAE:                   return "VAEModelTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
@@ -21402,6 +21427,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "CreateModule";
             case TestFamily.DeepfakeDetector:
                 return "CreateDetector";
+            case TestFamily.VAE:
+                return "CreateVAE";
             case TestFamily.Neck:
                 return "CreateNeck";
             case TestFamily.InstanceSegmentation:
@@ -21472,6 +21499,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.Interfaces.ITextSafetyModule<double>";
             case TestFamily.AudioSafetyModule:
                 return "AiDotNet.Interfaces.IAudioSafetyModule<double>";
+            case TestFamily.VAE:
+                return "AiDotNet.Interfaces.IVAEModel<double>";
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:
