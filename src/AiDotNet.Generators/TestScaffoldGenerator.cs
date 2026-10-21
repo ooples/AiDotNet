@@ -16353,6 +16353,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+                    // AudioGen's LM trains with dropout, so its two-step probe compared two dropout draws of the training loss,
+                    // not two parameter states. Once Train seeded its layers the draw changed and step 2 read 1.966 against
+                    // step 1's 1.523, while the evaluation loss at the same parameters falls across the same two steps.
+                    if (model.ClassName == "AudioGenModel")
+                        sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
                 }
             }
 
