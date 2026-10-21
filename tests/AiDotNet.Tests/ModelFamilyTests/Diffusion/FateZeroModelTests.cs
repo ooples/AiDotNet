@@ -1,23 +1,30 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.Video.VideoEditing;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 [Xunit.Collection("FoundationScaleSerial")]
-// HeavyTimeout (#1706): foundation-scale video-editing diffusion — verified OOM
-// (System.OutOfMemoryException under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling)
-// OS-OOM-kills the Diffusion D-I shard. Nightly heavy lane; drop once streaming fits it.
-[Xunit.Trait("Category", "HeavyTimeout")]
+// #2087 / #1706: out of the HeavyTimeout lane. The default foundation-scale config is too large for
+// the PR gate, so per the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects
+// a small same-architecture VideoUNetPredictor and TemporalVAE. Channel counts, context widths,
+// patch sizes and scale factors keep the model's defaults; only width and depth shrink.
 public class FateZeroModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 16, 16];
     protected override int[] OutputShape => [1, 4, 16, 16];
 
-    // Seed for deterministic, reproducible weight init (matches the sibling
-    // FlowVid/InstructVid2Vid tests). Without it the predictor's lazy weights fall
-    // back to the process-shared RNG, so Training_ShouldReducePredictionError becomes
-    // suite-position-dependent (passes in isolation, fails interleaved).
     protected override IDiffusionModel<float> CreateModel()
-        => new FateZeroModel<float>(seed: 42);
+        => new FateZeroModel<float>(
+            predictor: new VideoUNetPredictor<float>(
+                inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 },
+                numResBlocks: 1, numHeads: 4, contextDim: 768, inputHeight: 16, inputWidth: 16,
+                numTemporalLayers: 1, attentionResolutions: new[] { 1 }, seed: 42),
+            temporalVAE: new TemporalVAE<float>(
+                inputChannels: 3, latentChannels: 4, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numTemporalLayers: 1, temporalKernelSize: 3,
+                causalMode: false, latentScaleFactor: 0.18215, seed: 42),
+            seed: 42);
 }
