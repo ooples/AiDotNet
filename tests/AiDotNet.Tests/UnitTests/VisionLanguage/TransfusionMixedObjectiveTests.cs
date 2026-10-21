@@ -86,7 +86,10 @@ public class TransfusionMixedObjectiveTests
         // steps in lambda give equal steps in L, and L_DDPM is recoverable from either pair.
         double diffusionFromLowPair = (atFive - atZero) / 5.0;
         double diffusionFromHighPair = (atTen - atFive) / 5.0;
-        Assert.Equal(diffusionFromLowPair, diffusionFromHighPair, 4);
+        // An absolute tolerance, not Assert.Equal's decimal places: that rounds each side, so two values
+        // 3.8e-7 apart that straddle a rounding boundary failed (1.2741497 -> 1.2741, 1.2741501 -> 1.2742).
+        // 5e-5 is the half-unit in the fourth place, the agreement "4 decimal places" was meant to state.
+        Assert.Equal(diffusionFromLowPair, diffusionFromHighPair, 5e-5);
         Assert.True(diffusionFromLowPair > 0.0,
             $"The diffusion term must contribute a positive MSE; got {diffusionFromLowPair}.");
         // The language term is what is left at lambda = 0, and cross-entropy over a 64-token
