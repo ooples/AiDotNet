@@ -49,22 +49,22 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     private readonly bool _hasPredictor;
 
     // Projector parameters. Weights are [in, out], row-major, the layout GetParameters has always used.
-    private Tensor<T> _projWeight1;
-    private Tensor<T> _projBias1;
-    private Tensor<T> _projBn1Gamma;
-    private Tensor<T> _projBn1Beta;
-    private Tensor<T> _projWeight2;
-    private Tensor<T> _projBias2;
-    private Tensor<T> _projBn2Gamma;
-    private Tensor<T> _projBn2Beta;
+    private readonly Tensor<T> _projWeight1;
+    private readonly Tensor<T> _projBias1;
+    private readonly Tensor<T> _projBn1Gamma;
+    private readonly Tensor<T> _projBn1Beta;
+    private readonly Tensor<T> _projWeight2;
+    private readonly Tensor<T> _projBias2;
+    private readonly Tensor<T> _projBn2Gamma;
+    private readonly Tensor<T> _projBn2Beta;
 
     // Predictor parameters (optional)
-    private Tensor<T>? _predWeight1;
-    private Tensor<T>? _predBias1;
-    private Tensor<T>? _predBn1Gamma;
-    private Tensor<T>? _predBn1Beta;
-    private Tensor<T>? _predWeight2;
-    private Tensor<T>? _predBias2;
+    private readonly Tensor<T>? _predWeight1;
+    private readonly Tensor<T>? _predBias1;
+    private readonly Tensor<T>? _predBn1Gamma;
+    private readonly Tensor<T>? _predBn1Beta;
+    private readonly Tensor<T>? _predWeight2;
+    private readonly Tensor<T>? _predBias2;
 
     // Running statistics of each BatchNorm (buffers, not parameters): updated in training mode, used in evaluation
     // mode, as torch.nn.BatchNorm1d does.

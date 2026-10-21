@@ -22,7 +22,7 @@ public class TCDModelTests : DiffusionModelTestBase<float>
             predictor: new UNetNoisePredictor<float>(
                 inputChannels: 4, outputChannels: 4,
                 baseChannels: 32, channelMultipliers: [1, 2],
-                numResBlocks: 1, attentionResolutions: [2],
+                numResBlocks: 1, attentionResolutions: [1],
                 contextDim: 768, numHeads: 4, inputHeight: 16, seed: 42),
             vae: new StandardVAE<float>(
                 inputChannels: 3, latentChannels: 4, baseChannels: 16,
