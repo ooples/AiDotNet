@@ -29,7 +29,6 @@ internal static class DefectBaselines
             "global::AiDotNet.Finance.Probabilistic.CSDI<T>",
             "global::AiDotNet.Finance.Probabilistic.TSDiff<T>",
             "global::AiDotNet.Diffusion.VAE.AudioVAE<T>",
-            "global::AiDotNet.Diffusion.VAE.Causal3DVAE<T>",
             "global::AiDotNet.Diffusion.VAE.TemporalInterpolationVAE<T>",
             "global::AiDotNet.DistributedTraining.TensorParallelPagedModel<T>",
             "global::AiDotNet.Finance.AutoML.FinancialAutoML<T>",

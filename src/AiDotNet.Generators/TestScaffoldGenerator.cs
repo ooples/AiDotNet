@@ -168,11 +168,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly string[] ExcludedClassNames = new[]
     {
         // Placeholder networks that do not implement the VAE contract they declare, found by VAEModelTestBase
-        // (#2139). Causal3DVAE and TemporalInterpolationVAE are dense layers over the channel axis: no
-        // convolution, no spatial or temporal compression, although both report DownsampleFactor 8. AudioVAE
-        // reports a time downsample its hand-written loops do not learn. Each is being rebuilt from its paper
-        // (CogVideoX's causal 3D VAE, FILM, AudioLDM's VAE); they leave this list when that lands.
-        "Causal3DVAE",
+        // (#2139). TemporalInterpolationVAE is dense layers over the channel axis: no convolution, no spatial or
+        // temporal compression, although it reports DownsampleFactor 8. AudioVAE reports a time downsample its
+        // hand-written loops do not learn. Each is being rebuilt from its paper (FILM, AudioLDM's VAE); they leave
+        // this list when that lands. (Causal3DVAE left it as CogVideoX's causal 3D VAE.)
         "TemporalInterpolationVAE",
         "AudioVAE",
 
@@ -699,6 +698,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// (DiT-XL, Flux, SD3: hundreds of millions to billions of parameters), which no invariant needs: these keep each
     /// architecture and shrink only its widths and depths. A predictor missing here gets no fixture-sized constructor.
     /// </summary>
+    /// <summary>
+    /// VAEs whose paper-scale default is too large for a fixture, built at a reduced size of the same architecture
+    /// (#2139).
+    /// </summary>
+    private static readonly System.Collections.Generic.Dictionary<string, string> VAEFixtureArgs =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["Causal3DVAE"] = "inputChannels: 3, latentChannels: 4, blockOutChannels: new[] { 8, 8, 16 }, layersPerBlock: 1, normGroups: 4, temporalCompression: 4, seed: 1",
+        };
+
     private static readonly System.Collections.Generic.Dictionary<string, string> NoisePredictorFixtureArgs =
         new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
         {
@@ -5725,6 +5734,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (model.ExtendsNoisePredictorBase && NoisePredictorFixtureArgs.TryGetValue(model.ClassName, out var noisePredictorArgs))
             {
                 constructorExpr = $"new {typeName}<double>({noisePredictorArgs})";
+            }
+            else if (model.ExtendsVAEModelBase && VAEFixtureArgs.TryGetValue(model.ClassName, out var vaeArgs))
+            {
+                constructorExpr = $"new {typeName}<double>({vaeArgs})";
             }
             else if (model.ExtendsSelfSupervisedLearningMethodBase && SslFixtureArgs.TryGetValue(model.ClassName, out var sslArgs))
             {
