@@ -424,6 +424,50 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
 
     #endregion
 
+    #region Architecture Agreement
+
+    // 0 until the architecture has been checked against the model's own sizes; the check runs once.
+    private int _architectureAgreementChecked;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Checks the architecture against the model's sizes first (see <see cref="RequireArchitectureAgreesWithOptions"/>).
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        RequireArchitectureAgreesWithOptions();
+        return base.Predict(input);
+    }
+
+    /// <summary>
+    /// Throws when the architecture states an input size that disagrees with the sequence length and feature count
+    /// this model was built from (#2147).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A financial model sizes its layers from its options. The architecture it is handed was, until #2147, never
+    /// read: one stating 32 features for a model whose options say 7 built the 7-feature network and said nothing,
+    /// so the caller trained a model other than the one they described. Now a disagreement fails here, naming both
+    /// values. An architecture that states no input size is never refused.
+    /// </para>
+    /// <para>
+    /// The rule follows the contract <see cref="GetInputShapeConstraint"/> publishes, [batch, SequenceLength,
+    /// NumFeatures]. A cross-sectional model publishes no sequence split and is not checked here. It runs on the
+    /// first Predict, Forecast or Train rather than in the constructor, because the derived constructor sets the
+    /// sizes after this base constructor has returned.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The architecture's input size disagrees with the model's own sizes.</exception>
+    protected void RequireArchitectureAgreesWithOptions()
+    {
+        if (System.Threading.Volatile.Read(ref _architectureAgreementChecked) != 0) return;
+        if (GetInputShapeConstraint().ExactAxisSizes is { Count: 3 } axes && axes[1] > 0 && axes[2] > 0)
+            ArchitectureAgreement.RequireSequenceInput(Architecture, GetType().Name, axes[1], axes[2]);
+        System.Threading.Volatile.Write(ref _architectureAgreementChecked, 1);
+    }
+
+    #endregion
+
     #region IFinancialModel Implementation
 
     /// <inheritdoc/>
@@ -438,6 +482,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
+        RequireArchitectureAgreesWithOptions();
 
         // Validate input shape
         ValidateInputShape(input);
@@ -706,6 +751,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
             throw new ArgumentNullException(nameof(input));
         if (expectedOutput is null)
             throw new ArgumentNullException(nameof(expectedOutput));
+        RequireArchitectureAgreesWithOptions();
 
         // Previously this method ran Predict() (NoGrad), computed an
         // eager loss value, and delegated to TrainCore() for the actual

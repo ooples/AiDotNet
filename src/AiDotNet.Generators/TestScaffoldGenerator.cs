@@ -21176,6 +21176,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // scale was measured insufficient (3m32s for the generated class), so this generated
             // CI factory uses ContextLength=64 while retaining the same recurrent architecture.
             "Hippo" => 64,
+            // #2147: these models size themselves from their options' sequence length and used to ignore the
+            // architecture, so the family default of 512 below was stated for models built for 96, 12 or 168 steps
+            // without anyone noticing. FinancialModelBase now refuses an architecture that disagrees, so each states
+            // its own options' default sequence length here.
+            "Crossformer" or "FEDformer" or "ITransformer" or "NonStationaryTransformer" or "PatchTST" => 96,
+            "DCRNN" or "GraphWaveNet" or "MTGNN" or "RelationalGCN" or "STGNN" or "TemporalGCN" => 12,
+            "CSDI" => 100,
+            "CCDM" or "ScoreGrad" or "TimeDiff" => 168,
+            "TSDiff" => 192,
+            "TS2Vec" => 200,
+            "S4" => 1024,
+            "FlowState" => 2048,
             // 512 is the modal paper default across the family.
             _ => 512,
         };

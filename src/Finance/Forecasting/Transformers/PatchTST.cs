@@ -705,6 +705,7 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
+        RequireArchitectureAgreesWithOptions();
 
         if (UseNativeMode)
         {
