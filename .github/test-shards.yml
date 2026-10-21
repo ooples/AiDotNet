@@ -184,7 +184,7 @@ shard:
   - name: Unit - 10 Regularization/RL/RAG2
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Regularization|FullyQualifiedName~UnitTests.ReinforcementLearning|FullyQualifiedName~UnitTests.RetrievalAugmentedGeneration)'
+    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Regularization|FullyQualifiedName~UnitTests.ReinforcementLearning|FullyQualifiedName~AiDotNet.Tests.ReinforcementLearning.|FullyQualifiedName~UnitTests.RetrievalAugmentedGeneration)'
   - name: Unit - 11 Serving/TimeSeries/Token/Transfer
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
