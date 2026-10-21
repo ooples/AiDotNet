@@ -46,11 +46,18 @@ internal static class ConvolutionBatchNormFolding<T>
         if (input.Rank != 4 || conv.InTrainingMode || norm.InTrainingMode) return false;
         if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>() || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
             return false;
-        if (LayerBase<T>.IsInferringShapes || LayerForwardObserver<T>.Current is not null) return false;
+        if (LayerBase<T>.IsInferringShapes) return false;
         if (!conv.CanFoldFollowingBatchNorm || input.Shape[1] != conv.InputDepth) return false;
         if (!norm.TryGetFoldingStatistics(conv.OutputDepth, out var gamma, out var beta, out var mean, out var variance,
                 out double epsilon))
             return false;
+        // Last, so the observer learns only of a fold that would otherwise have run: a traced forward
+        // that suppressed one differs from an untraced forward by rounding (NeuralNetworkBase re-runs it).
+        if (LayerForwardObserver<T>.Current is { } observer)
+        {
+            observer.NoteSuppressedFolding();
+            return false;
+        }
 
         var kernels = conv.KernelsForFolding;
         var biases = conv.BiasesForFolding;

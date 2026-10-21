@@ -6189,7 +6189,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // 1e-5 - caught by PSENet's Predict_ShouldBeDeterministic, whose own message said the first
         // inference had taken a materially different path. So the observed pass feeds the validator
         // and is discarded, and the caller gets an unobserved forward that folds exactly as call two
-        // will. The cost is one extra forward, once per model instance: what it costs to keep this
+        // will. The cost is one extra forward, once per model instance that folds: what it costs to keep this
         // diagnostic from changing what Predict returns, which the summary above promises.
         Tensor<T> observed;
         try
@@ -6202,9 +6202,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
 
         // Outside the trace, so folding applies here exactly as it will on every subsequent call.
-        // With no observer installed the pass above already took that path, so it is reused; under
-        // an enclosing observer the re-run would take the same unfolded path, so it is reused too.
-        output = trace is null || enclosedByObserver
+        // Only when the trace actually suppressed a fold: otherwise the pass above already took the
+        // untraced path, and a second forward would draw a stochastic layer's randomness twice (a
+        // seeded Monte Carlo dropout call then differed from the next one). Under an enclosing
+        // observer the re-run would take the same unfolded path, so it is skipped there too.
+        output = trace is null || !trace.SuppressedFolding || enclosedByObserver
             ? observed
             : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
 
