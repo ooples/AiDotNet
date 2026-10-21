@@ -103,6 +103,16 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <summary>
         /// Selects mixed action: [discrete_action, continuous_actions]
         /// </summary>
+        private Vector<T> OneHotArgMax(Vector<T> probabilities)
+        {
+            int best = 0;
+            for (int k = 1; k < probabilities.Length; k++)
+                if (NumOps.GreaterThan(probabilities[k], probabilities[best])) best = k;
+            var oneHot = new Vector<T>(probabilities.Length);
+            oneHot[best] = NumOps.One;
+            return oneHot;
+        }
+
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             ValidateState(state, nameof(state));
@@ -113,7 +123,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var discreteLogitsTensor = _discreteNetwork.Predict(stateTensor);
             var discreteLogits = discreteLogitsTensor.ToVector();
             var discreteProbabilities = Softmax(discreteLogits);
-            var discreteAction = SampleCategorical(discreteProbabilities);
+            // Inference takes each part's mode (the most probable discrete action, the Gaussian mean); training samples.
+            var discreteAction = training ? SampleCategorical(discreteProbabilities) : OneHotArgMax(discreteProbabilities);
 
             if (training)
             {
@@ -131,8 +142,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 double logStdValue = NumOps.ToDouble(continuousOutput[_continuousActionSize + i]);
                 double stdValue = Math.Exp(logStdValue);
 
-                // Sample from Gaussian
-                double sampledValue = meanValue + stdValue * _random.NextGaussian();
+                double sampledValue = training ? meanValue + stdValue * _random.NextGaussian() : meanValue;
 
                 continuousAction[i] = NumOps.FromDouble(sampledValue);
             }

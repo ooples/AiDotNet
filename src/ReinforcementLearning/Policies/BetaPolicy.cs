@@ -119,8 +119,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 double alpha = Softplus(alphaRaw) + 1.0;  // Add 1 to ensure alpha > 1 for well-behaved Beta
                 double beta = Softplus(betaRaw) + 1.0;
 
-                // Sample from Beta distribution using transformation method
-                double sample = SampleBeta(alpha, beta);
+                // Training samples the Beta distribution; inference takes its mode (alpha - 1) / (alpha + beta - 2),
+                // defined here because both parameters exceed 1.
+                double sample = training ? SampleBeta(alpha, beta) : (alpha - 1.0) / (alpha + beta - 2.0);
 
                 // Scale from [0, 1] to [actionMin, actionMax]
                 double scaledAction = _actionMin + sample * (_actionMax - _actionMin);

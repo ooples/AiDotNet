@@ -68,23 +68,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // predictor is built at a reduced size from NoisePredictorFixtureArgs (#2139).
         // ShardedModelBase is no longer excluded: ShardedModelTestBase wraps a seeded network at world size 1, where
         // every wrapper must equal the model it wraps (#2139).
-        "PolicyBase",                // RL policies: the state->action half of an agent, not an agent.
-                                     // Routing these to the RL family was TRIED and measured: 28 of
-                                     // the 33 emitted tests failed, and none of the failures was a
-                                     // model defect. PolicyBase.Train is an intentional no-op whose
-                                     // own doc says "Training is handled by RL algorithms, not
-                                     // directly on the policy", so Training_ShouldChangeParameters
-                                     // can never pass; and ContinuousPolicy/BetaPolicy sample from a
-                                     // Gaussian by design, so Policy_ShouldBeDeterministic and
-                                     // Clone_ShouldProduceSamePolicy compare two draws from a
-                                     // distribution. The family asserts AGENT semantics a policy is
-                                     // specified not to have. Covering these needs a policy-specific
-                                     // base, not a different existing family.
         // AudioSafetyModuleBase and TextSafetyModuleBase are no longer excluded: almost every module under them is
         // built from defaults alone (the "wraps another model" note was wrong for all but the composite detectors),
         // and their own family bases feed them text or waveforms instead of a content vector (#2139).
         // SelfSupervisedLearningMethodBase is no longer excluded: SelfSupervisedLearningMethodTestBase builds each
         // method from small real parts (SslFixtureArgs) and drives TrainStep (#2139).
+        // PolicyBase is no longer excluded: the RL agent family asserted agent semantics a policy does not have
+        // (Train is a no-op, sampling is stochastic), so policies have their own family, PolicyTestBase (#2139).
         "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
         // VAEModelBase is no longer excluded: VAEs implement IVAEModel, not IDiffusionModel, so they now have their
@@ -754,6 +744,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> ShardedModelTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateWrapper" };
+    /// <summary>Overridable surface of <c>PolicyTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> PolicyTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreatePolicy" };
+
+    private const string PolicyParts = "global::AiDotNet.Tests.ModelFamilyTests.Base.PolicyFixtureParts";
+    private const string NoExplorationExpr = "new global::AiDotNet.ReinforcementLearning.Policies.Exploration.NoExploration<double>()";
+
+    /// <summary>Constructor arguments for each policy's fixture, from small seeded parts.</summary>
+    private static readonly System.Collections.Generic.Dictionary<string, string> PolicyFixtureArgs =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["DiscretePolicy"] = $"policyNetwork: {PolicyParts}.Network(3), actionSize: 3, explorationStrategy: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+            ["ContinuousPolicy"] = $"policyNetwork: {PolicyParts}.Network(4), actionSize: 2, explorationStrategy: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+            ["DeterministicPolicy"] = $"policyNetwork: {PolicyParts}.Network(2), actionSize: 2, explorationStrategy: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+            ["BetaPolicy"] = $"policyNetwork: {PolicyParts}.Network(4), actionSize: 2, explorationStrategy: {NoExplorationExpr}, actionMin: -1.0, actionMax: 3.0, random: {PolicyParts}.Random()",
+            ["MultiModalPolicy"] = $"policyNetwork: {PolicyParts}.Network(15), actionSize: 2, numComponents: 3, explorationStrategy: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+            ["MixedPolicy"] = $"discreteNetwork: {PolicyParts}.Network(3), continuousNetwork: {PolicyParts}.Network(4), discreteActionSize: 3, continuousActionSize: 2, discreteExploration: {NoExplorationExpr}, continuousExploration: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+        };
 
     /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VideoSafetyModuleTestBaseMembers =
@@ -3686,6 +3695,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                     || ExplicitlyConstructedClassNames.Contains(model.ClassName)
                                     // A self-supervised method wraps parts the caller supplies; its fixture builds them.
                                     || (family.Value == TestFamily.SelfSupervised && SslFixtureArgs.ContainsKey(model.ClassName))) &&
+                                    // A policy is built from a network and an exploration strategy its fixture supplies.
+                                    || (family.Value == TestFamily.Policy && PolicyFixtureArgs.ContainsKey(model.ClassName))) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -4000,6 +4011,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsNoisePredictor = false;
         bool extendsSsl = false;
         bool extendsSharded = false;
+        bool extendsPolicy = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
         bool extendsClassicalVolatility = false;
@@ -4206,6 +4218,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsSsl = true;
             else if (baseName.StartsWith("ShardedModelBase", System.StringComparison.Ordinal))
                 extendsSharded = true;
+            else if (baseName.StartsWith("PolicyBase", System.StringComparison.Ordinal))
+                extendsPolicy = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
@@ -4413,6 +4427,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsNoisePredictorBase = extendsNoisePredictor,
             ExtendsSelfSupervisedLearningMethodBase = extendsSsl,
             ExtendsShardedModelBase = extendsSharded,
+            ExtendsPolicyBase = extendsPolicy,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
             MetaLearnerOptionsType = metaLearnerOptionsType,
@@ -5114,6 +5129,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // A sharded training wrapper is judged against the model it wraps, at world size 1 (#2139).
         if (model.ExtendsShardedModelBase)
             return TestFamily.Sharded;
+        // An RL policy is the state-to-action half of an agent, judged on its own contract (#2139).
+        if (model.ExtendsPolicyBase)
+            return TestFamily.Policy;
 
         // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
         // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
@@ -5711,6 +5729,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ExtendsSelfSupervisedLearningMethodBase && SslFixtureArgs.TryGetValue(model.ClassName, out var sslArgs))
             {
                 constructorExpr = $"new {typeName}<double>({sslArgs})";
+            }
+            else if (model.ExtendsPolicyBase && PolicyFixtureArgs.TryGetValue(model.ClassName, out var policyArgs))
+            {
+                constructorExpr = $"new {typeName}<double>({policyArgs})";
             }
             else if (model.ClassName is "ViTImageSafetyClassifier" or "EnsembleImageSafetyClassifier")
             {
@@ -13587,6 +13609,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "NoisePredictorTestBase"
             || baseClassName == "SelfSupervisedLearningMethodTestBase"
             || baseClassName == "ShardedModelTestBase"
+            || baseClassName == "PolicyTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
@@ -17842,6 +17865,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.NoisePredictor => NoisePredictorTestBaseMembers,
             TestFamily.SelfSupervised => SelfSupervisedTestBaseMembers,
             TestFamily.Sharded => ShardedModelTestBaseMembers,
+            TestFamily.Policy => PolicyTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
@@ -18012,6 +18036,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsSelfSupervisedLearningMethodBase;
             case TestFamily.Sharded:
                 return model.ExtendsShardedModelBase && model.TypeParameterCount == 3;
+            case TestFamily.Policy:
+                return model.ExtendsPolicyBase;
             case TestFamily.DeepfakeDetector:
                 return model.ExtendsDeepfakeDetectorBase;
             case TestFamily.MetaLearning:
@@ -20425,6 +20451,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsSelfSupervisedLearningMethodBase { get; set; }
         /// <summary>True for a sharded training wrapper, judged against the model it wraps.</summary>
         public bool ExtendsShardedModelBase { get; set; }
+        /// <summary>True for an RL policy, judged on its own contract rather than an agent's.</summary>
+        public bool ExtendsPolicyBase { get; set; }
 
         /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
         public bool ExtendsDeepfakeDetectorBase { get; set; }
@@ -20660,6 +20688,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         NoisePredictor,
         SelfSupervised,
         Sharded,
+        Policy,
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
@@ -21508,6 +21537,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.NoisePredictor:        return "NoisePredictorTestBase";
             case TestFamily.SelfSupervised:        return "SelfSupervisedLearningMethodTestBase";
             case TestFamily.Sharded:               return "ShardedModelTestBase";
+            case TestFamily.Policy:                return "PolicyTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
@@ -21570,6 +21600,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "CreateMethod";
             case TestFamily.Sharded:
                 return "CreateWrapper";
+            case TestFamily.Policy:
+                return "CreatePolicy";
             case TestFamily.Neck:
                 return "CreateNeck";
             case TestFamily.InstanceSegmentation:
@@ -21648,6 +21680,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.SelfSupervisedLearning.ISelfSupervisedLearningMethod<double>";
             case TestFamily.Sharded:
                 return "AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
+            case TestFamily.Policy:
+                return "AiDotNet.ReinforcementLearning.Policies.PolicyBase<double>";
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:

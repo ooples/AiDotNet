@@ -72,6 +72,14 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _numComponents = numComponents;
         }
 
+        private int ArgMax(Vector<T> values)
+        {
+            int best = 0;
+            for (int k = 1; k < values.Length; k++)
+                if (NumOps.GreaterThan(values[k], values[best])) best = k;
+            return best;
+        }
+
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             ValidateState(state, nameof(state));
@@ -120,7 +128,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 logStds.Add(logStd);
             }
 
-            int selectedComponent = SampleCategoricalIndex(mixingCoefficients);
+            // Inference takes the most probable component and its mean (the mixture's dominant mode); training samples.
+            int selectedComponent = training ? SampleCategoricalIndex(mixingCoefficients) : ArgMax(mixingCoefficients);
 
             var action = new Vector<T>(_actionSize);
             for (int i = 0; i < _actionSize; i++)
@@ -128,7 +137,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 double meanValue = NumOps.ToDouble(means[selectedComponent][i]);
                 double stdValue = Math.Exp(NumOps.ToDouble(logStds[selectedComponent][i]));
 
-                double sampledValue = meanValue + stdValue * _random.NextGaussian();
+                double sampledValue = training ? meanValue + stdValue * _random.NextGaussian() : meanValue;
                 action[i] = NumOps.FromDouble(sampledValue);
             }
 
