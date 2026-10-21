@@ -12212,11 +12212,14 @@ public static partial class LayerHelper<T>
         int maxSequenceLength = 512,
         int numLayers = 12,
         int numHeads = 12,
-        int feedForwardDim = 3072)
+        int feedForwardDim = 3072,
+        int hiddenDimension = 768)
     {
-        // 1. Base Encoder (e.g. BERT)
-        yield return new EmbeddingLayer<T>(vocabSize, 768);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, 768);
+        // 1. Base Encoder (e.g. BERT). hiddenDimension is the encoder width: it was hard-coded to
+        // BERT-base's 768, so a ColBERT built with a smaller EmbeddingDimension still ran a 768-wide
+        // encoder. embeddingDimension is the late-interaction projection below.
+        yield return new EmbeddingLayer<T>(vocabSize, hiddenDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDimension);
         for (int i = 0; i < numLayers; i++)
         {
             yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
