@@ -95,7 +95,7 @@ public class SelfSupervisedTrainingContractTests
         DINO<double> Build(int localCrops) => new(SslFixtureParts.Encoder(), SslFixtureParts.Momentum(),
             SslFixtureParts.Mlp(1), SslFixtureParts.Mlp(2), outputDim: 8,
             config: new SelfSupervisedLearningConfig<double> { Seed = 1, DINO = new DINOConfig { NumLocalCrops = localCrops } });
-        var images = Batch(5, 8, 1, 4, 4);
+        var images = Batch(5);
         var globalOnly = Build(0);
         var multiCrop = Build(2);
 
