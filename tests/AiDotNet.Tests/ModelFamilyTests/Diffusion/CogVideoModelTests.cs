@@ -21,7 +21,7 @@ public class CogVideoModelTests : DiffusionModelTestBase<float>
             videoUnet: new VideoUNetPredictor<float>(
                 inputChannels: 16, baseChannels: 32, contextDim: 4096, numTemporalLayers: 1,
                 channelMultipliers: new[] { 1, 2 }, inputHeight: 16, inputWidth: 16,
-                numResBlocks: 1, numHeads: 4, attentionResolutions: new[] { 2 }, seed: 42),
+                numResBlocks: 1, numHeads: 4, attentionResolutions: new[] { 1 }, seed: 42),
             temporalVae: new TemporalVAE<float>(
                 inputChannels: 3, latentChannels: 16, baseChannels: 16, numTemporalLayers: 1,
                 causalMode: true, channelMultipliers: new[] { 1, 2 }, seed: 42),

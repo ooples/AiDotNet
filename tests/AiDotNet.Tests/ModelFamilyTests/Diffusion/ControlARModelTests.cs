@@ -21,7 +21,7 @@ public class ControlARModelTests : DiffusionModelTestBase<float>
             baseUNet: new UNetNoisePredictor<float>(
                 inputChannels: 16, outputChannels: 16, baseChannels: 32,
                 channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
-                attentionResolutions: new[] { 2 }, contextDim: 4096, numHeads: 4, inputHeight: 16,
+                attentionResolutions: new[] { 1 }, contextDim: 4096, numHeads: 4, inputHeight: 16,
                 seed: 42),
             vae: new StandardVAE<float>(
                 inputChannels: 3, latentChannels: 16, baseChannels: 16,

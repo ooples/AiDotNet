@@ -22,12 +22,12 @@ public class DeepFloydIFModelTests : DiffusionModelTestBase<float>
             stageIUnet: new UNetNoisePredictor<float>(
                 inputChannels: 3, outputChannels: 3, baseChannels: 32,
                 channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
-                attentionResolutions: new[] { 2 }, contextDim: 4096, numHeads: 4, inputHeight: 16,
+                attentionResolutions: new[] { 1 }, contextDim: 4096, numHeads: 4, inputHeight: 16,
                 seed: 42),
             stageIIUnet: new UNetNoisePredictor<float>(
                 inputChannels: 6, outputChannels: 3, baseChannels: 32,
                 channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
-                attentionResolutions: new[] { 2 }, contextDim: 4096, numHeads: 4, inputHeight: 16,
+                attentionResolutions: new[] { 1 }, contextDim: 4096, numHeads: 4, inputHeight: 16,
                 seed: 42),
             vae: new StandardVAE<float>(
                 inputChannels: 3, latentChannels: 3, baseChannels: 16,
