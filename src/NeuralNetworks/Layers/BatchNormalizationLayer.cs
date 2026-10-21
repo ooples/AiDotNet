@@ -1048,12 +1048,15 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // PANNs' mel pipeline does - therefore falls through to the decomposition below, which is
             // what ran before this fast path existed. Copying with Contiguous() instead would stage the
             // activation on every call, which is the cost this path exists to avoid.
-            if (!tapeActive && input.IsContiguous)
+            // The kernel also indexes gamma, beta and the statistics by the input's channel count without
+            // checking it, so an activation whose channel axis does not match them (CLAP's gradient-check
+            // input reaches an 8-feature batch norm with 2048) read past them and threw
+            // IndexOutOfRangeException. It falls through too: the decomposition reports the shape error.
+            int inferenceChannelAxis = InferenceChannelAxis(input.Shape.Length);
+            if (!tapeActive && input.IsContiguous && OperandsMatchChannels(input.Shape[inferenceChannelAxis]))
             {
                 int rank = input.Shape.Length;
-                int channelAxis = Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
-                    ? 1
-                    : (rank == 1 || rank == 3 ? 0 : 1);
+                int channelAxis = inferenceChannelAxis;
                 int outer = 1, inner = 1;
                 for (int d = 0; d < channelAxis; d++) outer *= input.Shape[d];
                 for (int d = channelAxis + 1; d < rank; d++) inner *= input.Shape[d];
@@ -1165,9 +1168,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // channels-first sequence, channels axis 1). A caller that declared ChannelsFirst gets
         // axis 1; everyone else keeps the historical axis-0 reading. Guessing here is what
         // broadcast the channel scale along ContextNet's BATCH axis.
-        int channelAxis = Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
-            ? 1
-            : (rank == 1 || rank == 3 ? 0 : 1);
+        int channelAxis = InferenceChannelAxis(rank);
 
         var broadcastShape = new int[rank];
         for (int d = 0; d < rank; d++)
@@ -1180,6 +1181,17 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         var scaled = Engine.TensorMultiply(input, scaleReshaped);
         return Engine.TensorAdd(scaled, shiftReshaped);
     }
+
+    /// <summary>The axis inference normalizes per channel for an input of <paramref name="rank"/>.</summary>
+    private int InferenceChannelAxis(int rank)
+        => Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
+            ? 1
+            : (rank == 1 || rank == 3 ? 0 : 1);
+
+    /// <summary>Whether gamma, beta and the running statistics each hold one entry per input channel.</summary>
+    private bool OperandsMatchChannels(int channels)
+        => _gamma.Length == channels && _beta.Length == channels
+            && _runningMean.Length == channels && _runningVariance.Length == channels;
 
     private static int ComputeTotalElements(int[] shape)
     {
