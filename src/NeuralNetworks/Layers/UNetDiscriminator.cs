@@ -180,11 +180,6 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => false;
-
     #endregion
 
     #region Constructors

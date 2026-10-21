@@ -215,9 +215,6 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Reset recurrent layer state for deterministic inference.
         // GRU layers carry hidden state across calls — must reset for reproducibility.

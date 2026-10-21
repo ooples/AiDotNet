@@ -184,9 +184,6 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         var imageData = new double[input.Length];
         for (int i = 0; i < input.Length; i++)
         {

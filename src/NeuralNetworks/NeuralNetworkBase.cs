@@ -1505,10 +1505,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             if (layerBase.InputPorts.Count > 1)
             {
-                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                // The running activation feeds the layer's first (primary) port under that port's own name: a layer
+                // whose primary port is not called "input" (TransformerDecoderLayer's "decoder_input") would reject it.
+                string primaryPort = layerBase.InputPorts[0].Name;
+                var namedInputs = new Dictionary<string, Tensor<T>> { [primaryPort] = current };
                 foreach (var port in layerBase.InputPorts)
                 {
-                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                    if (port.Name != primaryPort && auxiliaryInputs.TryGetValue(port.Name, out var aux))
                         namedInputs[port.Name] = aux;
                 }
                 current = layerBase.ForwardGpu(namedInputs);
@@ -1943,10 +1946,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var layer = Layers[i];
             if (layer is LayerBase<T> typedLayer && typedLayer.InputPorts.Count > 1)
             {
-                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                // The running activation feeds the layer's first (primary) port under that port's own name: a layer
+                // whose primary port is not called "input" (TransformerDecoderLayer's "decoder_input") would reject it.
+                string primaryPort = typedLayer.InputPorts[0].Name;
+                var namedInputs = new Dictionary<string, Tensor<T>> { [primaryPort] = current };
                 foreach (var port in typedLayer.InputPorts)
                 {
-                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                    if (port.Name != primaryPort && auxiliaryInputs.TryGetValue(port.Name, out var aux))
                         namedInputs[port.Name] = aux;
                 }
                 current = typedLayer.Forward(namedInputs);
@@ -2001,72 +2007,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Checks if all layers in the network support GPU execution.
-    /// Used to determine if the GPU-resident optimization path can be used.
-    /// </summary>
-    /// <returns>True if all layers can execute on GPU; false otherwise.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method checks if every layer in your network can run on the GPU.
-    /// If even one layer needs the CPU, we can't use the fast GPU-only path.
-    /// </para>
-    /// </remarks>
-    protected virtual bool CanUseGpuResidentPath()
-    {
-        return Layers.All(layer => layer.CanExecuteOnGpu);
-    }
-
-    /// <summary>
-    /// Attempts to perform a GPU-resident forward pass with automatic fallback to CPU.
-    /// Use this in derived class Forward() methods to get GPU optimization with minimal code.
-    /// </summary>
-    /// <param name="input">The input tensor to process.</param>
-    /// <param name="result">The output tensor if GPU path succeeded.</param>
-    /// <returns>True if GPU path was used successfully; false if CPU path should be used.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Derived Classes:</b> Call this at the start of your Forward() method:
-    /// </para>
-    /// <code>
-    /// public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)
-    /// {
-    ///     if (TryForwardGpuOptimized(input, out var result))
-    ///         return result;
-    ///     
-    ///     // CPU fallback path
-    ///     ...
-    /// }
-    /// </code>
-    /// </remarks>
-    protected bool TryForwardGpuOptimized(Tensor<T> input, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Tensor<T>? result)
-    {
-        result = null;
-
-        if (Engine is not DirectGpuTensorEngine)
-            return false;
-
-        if (!CanUseGpuResidentPath())
-            return false;
-
-        try
-        {
-            // Fix for #1625: the previous `using var gpuResult = ForwardGpu(input)` disposed
-            // the GPU tensor before the caller could read its values, so every Predict call
-            // returned all-zero output. The returned tensor's lifetime now belongs to the
-            // caller (which is how every other Predict path works — the result is the model's
-            // output, not an intermediate that can be safely freed).
-            result = ForwardGpu(input);
-            return true;
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
-        {
-            // Log GPU failure for diagnostics before falling back to CPU path
-            System.Diagnostics.Debug.WriteLine($"[NeuralNetworkBase] GPU forward failed ({ex.GetType().Name}): {ex.Message}");
-            return false;
-        }
     }
 
     /// <summary>
@@ -2133,102 +2073,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 Engine.GetType().Name);
         }
 
-        // Upload input to GPU once
-        Tensor<T>? current = null;
-        bool ownsCurrentTensor = false;
-
-        try
-        {
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                var layer = Layers[i];
-
-                if (layer.CanExecuteOnGpu)
-                {
-                    // Layer supports GPU-resident execution
-                    if (current is null)
-                    {
-                        // First GPU layer - upload input
-                        current = gpuEngine.UploadToGpu(input, GpuTensorRole.Activation);
-                        ownsCurrentTensor = true;
-                    }
-
-                    var next = layer.ForwardGpu(current);
-
-                    // Dispose intermediate if we own it (but not the input).
-                    if (ownsCurrentTensor && current is not null)
-                    {
-                        // If `next` aliases current's backing (zero-copy reshape view, e.g. FlattenLayer),
-                        // rebind it onto an independent tensor first so the dispose is safe (see helper).
-                        next = RebindGpuAliasBeforeDispose(current, next);
-                        current.Dispose();
-                    }
-
-                    current = next;
-                    ownsCurrentTensor = true;
-                }
-                else
-                {
-                    // Layer doesn't support GPU - fall back to CPU
-                    Tensor<T> cpuInput;
-                    if (current is not null)
-                    {
-                        // Download current GPU tensor to CPU
-                        cpuInput = current;
-                        if (ownsCurrentTensor)
-                        {
-                            current.Dispose();
-                        }
-                        current = null;
-                        ownsCurrentTensor = false;
-                    }
-                    else
-                    {
-                        // Haven't uploaded yet, use original input
-                        cpuInput = input;
-                    }
-
-                    // Execute on CPU
-                    var cpuOutput = layer.Forward(cpuInput);
-
-                    // Check if next layer supports GPU
-                    bool nextLayerSupportsGpu = i + 1 < Layers.Count &&
-                        Layers[i + 1].CanExecuteOnGpu;
-
-                    if (nextLayerSupportsGpu || i == Layers.Count - 1)
-                    {
-                        // Upload result to GPU for next layer or final output
-                        current = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
-                        ownsCurrentTensor = true;
-                    }
-                    else
-                    {
-                        // Keep on CPU for next CPU layer
-                        input = cpuOutput; // Reuse input variable for next iteration
-                    }
-                }
-            }
-
-            // Ensure we return a GPU tensor
-            if (current is null)
-            {
-                // All layers were CPU - upload final result
-                current = gpuEngine.UploadToGpu(input, GpuTensorRole.Activation);
-            }
-
-            return current;
-        }
-        catch (Exception)
-        {
-            // Clean up on error
-            if (ownsCurrentTensor && current is not null)
-            {
-                current.Dispose();
-            }
-            throw;
-        }
+        // Upload the input once; every layer's Forward then runs on the device its operands live on, so the
+        // activations stay on the GPU between layers. No intermediate is disposed here: a layer may keep its
+        // input for its backward pass, and the per-layer GPU overrides that managed their own buffers computed
+        // different outputs from Forward, which is why they were removed.
+        var current = gpuEngine.UploadToGpu(input, GpuTensorRole.Activation);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
     }
-
     /// <summary>
     /// Performs a forward pass using deferred execution for optimized GPU performance.
     /// Operations are recorded and batched into an execution graph that runs with a single sync point.
@@ -6316,6 +6169,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         Tensor<T> output;
         Graph.LayerForwardObserver<T>? trace = null;
+        // Read before this trace is installed: an enclosing observer (named-activation collection)
+        // keeps folding off for the re-run below too, so the re-run would only record every layer twice.
+        bool enclosedByObserver = Graph.LayerForwardObserver<T>.Current is not null;
         try
         {
             trace = new Graph.LayerForwardObserver<T>();
@@ -6325,14 +6181,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Never let the diagnostic stand between a caller and their prediction.
         }
 
+        // The traced forward is the DIAGNOSTIC's, not the caller's. An observer suppresses
+        // convolution/batch-norm folding (ConvolutionBatchNormFolding.TryForward: a folded pair is
+        // one layer, so a trace of it would not show the dataflow being validated), and a folded
+        // convolution differs from the separate operations by rounding. Returning the observed
+        // forward therefore made a model's FIRST prediction differ from every later one by about
+        // 1e-5 - caught by PSENet's Predict_ShouldBeDeterministic, whose own message said the first
+        // inference had taken a materially different path. So the observed pass feeds the validator
+        // and is discarded, and the caller gets an unobserved forward that folds exactly as call two
+        // will. The cost is one extra forward, once per model instance that folds: what it costs to keep this
+        // diagnostic from changing what Predict returns, which the summary above promises.
+        Tensor<T> observed;
         try
         {
-            output = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
+            observed = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
         }
         finally
         {
             trace?.Dispose();
         }
+
+        // Outside the trace, so folding applies here exactly as it will on every subsequent call.
+        // Only when the trace actually suppressed a fold: otherwise the pass above already took the
+        // untraced path, and a second forward would draw a stochastic layer's randomness twice (a
+        // seeded Monte Carlo dropout call then differed from the next one). Under an enclosing
+        // observer the re-run would take the same unfolded path, so it is skipped there too.
+        output = trace is null || !trace.SuppressedFolding || enclosedByObserver
+            ? observed
+            : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
 
         // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
         // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
@@ -8415,7 +8291,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             int lastLayer = Layers.Count - 1;
             for (int i = 0; i < Layers.Count; i++)
             {
-                c = Layers[i].Forward(c);
+                // A convolution, batch norm and optional ReLU run as one folded convolution in inference
+                // (InferenceFusionSettings.FoldBatchNormIntoConvolution); i moves to the last layer consumed.
+                if (ConvolutionBatchNormFolding<T>.TryForwardSequence(Layers, i, c, out var folded, out int consumed))
+                {
+                    c = folded;
+                    i += consumed - 1;
+                }
+                else
+                {
+                    c = Layers[i].Forward(c);
+                }
                 // #1824: recycle this layer's forward scratch before the next
                 // layer allocates, keeping the arena's live working set at
                 // ~one layer instead of the whole depth. No-op unless running

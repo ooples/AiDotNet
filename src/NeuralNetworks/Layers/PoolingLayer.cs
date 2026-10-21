@@ -193,11 +193,6 @@ public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Gets a value indicating whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// The input tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
