@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -64,12 +64,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // MetaLearnerBase and NeuralProcessBase are no longer excluded: MetaLearnerTestBase supplies the inner
         // model a meta-learner wraps, so the fixture only names the algorithm and its options type (#2139).
         "MetaLearningModelBase",     // The adapted models Adapt returns: results of a meta-learner, not learners
-        "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
         // NoisePredictorBase is no longer excluded: NoisePredictorTestBase drives PredictNoise directly, and each
         // predictor is built at a reduced size from NoisePredictorFixtureArgs (#2139).
         // ShardedModelBase is no longer excluded: ShardedModelTestBase wraps a seeded network at world size 1, where
         // every wrapper must equal the model it wraps (#2139).
-        "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
         "PolicyBase",                // RL policies: the state->action half of an agent, not an agent.
                                      // Routing these to the RL family was TRIED and measured: 28 of
                                      // the 33 emitted tests failed, and none of the failures was a
@@ -82,14 +80,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                      // distribution. The family asserts AGENT semantics a policy is
                                      // specified not to have. Covering these needs a policy-specific
                                      // base, not a different existing family.
-        "SelfSupervisedLearningMethodBase",             // Self-supervised learning: wraps encoder + projector
         // AudioSafetyModuleBase and TextSafetyModuleBase are no longer excluded: almost every module under them is
         // built from defaults alone (the "wraps another model" note was wrong for all but the composite detectors),
         // and their own family bases feed them text or waveforms instead of a content vector (#2139).
         // SelfSupervisedLearningMethodBase is no longer excluded: SelfSupervisedLearningMethodTestBase builds each
         // method from small real parts (SslFixtureArgs) and drives TrainStep (#2139).
-        "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
-        "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
         "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
         // VAEModelBase is no longer excluded: VAEs implement IVAEModel, not IDiffusionModel, so they now have their
@@ -728,6 +723,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ["UViTNoisePredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, patchSize: 2, contextDim: 32, latentSpatialSize: 8, seed: 1",
             ["UNetNoisePredictor"] = "inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, contextDim: 32, numHeads: 4, inputHeight: 8, seed: 1",
             ["VideoUNetPredictor"] = "inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, contextDim: 32, numHeads: 4, inputHeight: 8, inputWidth: 8, numFrames: 2, seed: 1",
+        };
+
     /// <summary>Overridable surface of <c>SelfSupervisedLearningMethodTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> SelfSupervisedTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
@@ -5710,7 +5707,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (model.ExtendsNoisePredictorBase && NoisePredictorFixtureArgs.TryGetValue(model.ClassName, out var noisePredictorArgs))
             {
                 constructorExpr = $"new {typeName}<double>({noisePredictorArgs})";
-            if (model.ExtendsSelfSupervisedLearningMethodBase && SslFixtureArgs.TryGetValue(model.ClassName, out var sslArgs))
+            }
+            else if (model.ExtendsSelfSupervisedLearningMethodBase && SslFixtureArgs.TryGetValue(model.ClassName, out var sslArgs))
             {
                 constructorExpr = $"new {typeName}<double>({sslArgs})";
             }
