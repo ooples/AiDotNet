@@ -64,7 +64,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // MetaLearnerBase and NeuralProcessBase are no longer excluded: MetaLearnerTestBase supplies the inner
         // model a meta-learner wraps, so the fixture only names the algorithm and its options type (#2139).
         "MetaLearningModelBase",     // The adapted models Adapt returns: results of a meta-learner, not learners
-        "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
+        // ShardedModelBase is no longer excluded: ShardedModelTestBase wraps a seeded network at world size 1, where
+        // every wrapper must equal the model it wraps (#2139).
         "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
         "PolicyBase",                // RL policies: the state->action half of an agent, not an agent.
                                      // Routing these to the RL family was TRIED and measured: 28 of
@@ -676,6 +677,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> DeepfakeDetectorTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateDetector", "TargetArtifact" };
+
+    /// <summary>Overridable surface of <c>ShardedModelTestBase</c>; its factory is emitted per family, never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> ShardedModelTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateWrapper" };
 
     /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VideoSafetyModuleTestBaseMembers =
@@ -3603,6 +3609,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                     || (model.HasLeadingIntConstructor
                                         && model.UsesMatrixInput && model.UsesVectorOutput)
                                     || family.Value is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation or TestFamily.MetaLearning
+                                        or TestFamily.Sharded
                                         or TestFamily.ClassificationMetaLearning
                                     || ExplicitlyConstructedClassNames.Contains(model.ClassName)) &&
                                     IsCompatibleWithFamily(model, family.Value);
@@ -3914,6 +3921,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsNeck = false;
         bool extendsInstanceSegmenter = false;
         bool extendsVideoSafety = false;
+        bool extendsSharded = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
         bool extendsClassicalVolatility = false;
@@ -4108,6 +4116,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsInstanceSegmenter = true;
             else if (baseName.StartsWith("VideoSafetyModuleBase", System.StringComparison.Ordinal))
                 extendsVideoSafety = true;
+            else if (baseName.StartsWith("ShardedModelBase", System.StringComparison.Ordinal))
+                extendsSharded = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
@@ -4309,6 +4319,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsNeckBase = extendsNeck,
             ExtendsInstanceSegmenterBase = extendsInstanceSegmenter,
             ExtendsVideoSafetyModuleBase = extendsVideoSafety,
+            ExtendsShardedModelBase = extendsSharded,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
             MetaLearnerOptionsType = metaLearnerOptionsType,
@@ -4991,6 +5002,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // module cannot judge, so they get a base that drives EvaluateVideo (#2139).
         if (model.ExtendsVideoSafetyModuleBase)
             return TestFamily.VideoSafetyModule;
+
+        // A sharded training wrapper is judged against the model it wraps, at world size 1 (#2139).
+        if (model.ExtendsShardedModelBase)
+            return TestFamily.Sharded;
 
         // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
         // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
@@ -13450,6 +13465,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "NeckTestBase"
             || baseClassName == "InstanceSegmenterTestBase"
             || baseClassName == "VideoSafetyModuleTestBase"
+            || baseClassName == "ShardedModelTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
@@ -17412,7 +17428,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // second copy of a number the base already holds - the pattern behind every architecture /
         // fixture disagreement this generator has produced.
         bool parameterizedFactory = family is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation
-            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning;
+            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning or TestFamily.Sharded;
         if (family == TestFamily.TensorModule)
         {
             sb.AppendLine($"    protected override {returnTypeCode} CreateModel(int width)");
@@ -17442,6 +17458,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override bool MetaModelFrozenByDesign => true;");
             }
+        }
+        else if (family == TestFamily.Sharded)
+        {
+            // The base compares against an identical twin of the wrapped network, so the wrapper is built from the
+            // same shared parts the base uses.
+            const string tensor = "AiDotNet.Tensors.LinearAlgebra.Tensor<double>";
+            const string parts = "global::AiDotNet.Tests.ModelFamilyTests.Base.ShardedFixtureParts";
+            sb.AppendLine($"    protected override {returnTypeCode} CreateWrapper()");
+            sb.AppendLine($"        => new {typeName}<double, {tensor}, {tensor}>({parts}.Network(), {parts}.Config());");
         }
         else if (family == TestFamily.ClassificationMetaLearning)
         {
@@ -17690,6 +17715,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.Neck => NeckTestBaseMembers,
             TestFamily.InstanceSegmentation => InstanceSegmenterTestBaseMembers,
             TestFamily.VideoSafetyModule => VideoSafetyModuleTestBaseMembers,
+            TestFamily.Sharded => ShardedModelTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
@@ -17848,6 +17874,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsInstanceSegmenterBase;
             case TestFamily.VideoSafetyModule:
                 return model.ExtendsVideoSafetyModuleBase;
+            case TestFamily.Sharded:
+                return model.ExtendsShardedModelBase && model.TypeParameterCount == 3;
             case TestFamily.DeepfakeDetector:
                 return model.ExtendsDeepfakeDetectorBase;
             case TestFamily.MetaLearning:
@@ -20248,6 +20276,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// <summary>True for a video safety module, which is judged on clips through EvaluateVideo.</summary>
         public bool ExtendsVideoSafetyModuleBase { get; set; }
 
+        /// <summary>True for a sharded training wrapper, judged against the model it wraps.</summary>
+        public bool ExtendsShardedModelBase { get; set; }
+
         /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
         public bool ExtendsDeepfakeDetectorBase { get; set; }
 
@@ -20476,6 +20507,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Neck,
         InstanceSegmentation,
         VideoSafetyModule,
+        Sharded,
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
@@ -21306,6 +21338,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.Neck:                  return "NeckTestBase";
             case TestFamily.InstanceSegmentation:  return "InstanceSegmenterTestBase";
             case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
+            case TestFamily.Sharded:               return "ShardedModelTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
@@ -21358,6 +21391,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "CreateModule";
             case TestFamily.DeepfakeDetector:
                 return "CreateDetector";
+            case TestFamily.Sharded:
+                return "CreateWrapper";
             case TestFamily.Neck:
                 return "CreateNeck";
             case TestFamily.InstanceSegmentation:
@@ -21424,6 +21459,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase<double>";
             case TestFamily.VideoSafetyModule:
                 return "AiDotNet.Interfaces.IVideoSafetyModule<double>";
+            case TestFamily.Sharded:
+                return "AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:
