@@ -197,16 +197,14 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         if (architecture.Layers.Count > 0) return;
 
         var hiddenSizes = GetHiddenLayerSizes();
-        // One generator per network, drawn in layer order as each layer materializes.
-        var initialization = architecture.RandomSeed is int seed ? RandomHelper.CreateSeededRandom(seed) : null;
         AddSeededDefaultLayers(architecture, () =>
         {
             var layers = new List<ILayer<T>>(hiddenSizes.Length + 1);
             foreach (int width in hiddenSizes)
                 layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new TanhActivation<T>(),
-                    new NormalizedColumnsInitializationStrategy<T>(1.0, initialization)));
+                    new NormalizedColumnsInitializationStrategy<T>(1.0)));
             layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>(),
-                new NormalizedColumnsInitializationStrategy<T>(headColumnNorm, initialization)));
+                new NormalizedColumnsInitializationStrategy<T>(headColumnNorm)));
             return layers;
         });
     }
@@ -253,19 +251,21 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private void UpdateObservationStatistics(IReadOnlyList<Vector<T>> states)
     {
         int size = states[0].Length;
-        if (_observationSum is null || _observationSum.Length != size)
+        var sum = _observationSum;
+        var squares = _observationSumOfSquares;
+        if (sum is null || squares is null || sum.Length != size)
         {
-            _observationSum = new double[size];
-            _observationSumOfSquares = new double[size];
-            for (int i = 0; i < size; i++) _observationSumOfSquares[i] = ObservationStatisticsEpsilon;
+            sum = _observationSum = new double[size];
+            squares = _observationSumOfSquares = new double[size];
+            for (int i = 0; i < size; i++) squares[i] = ObservationStatisticsEpsilon;
             _observationCount = ObservationStatisticsEpsilon;
         }
         foreach (var state in states)
             for (int i = 0; i < size; i++)
             {
                 double value = NumOps.ToDouble(state[i]);
-                _observationSum[i] += value;
-                _observationSumOfSquares![i] += value * value;
+                sum[i] += value;
+                squares[i] += value * value;
             }
         _observationCount += states.Count;
     }
@@ -327,7 +327,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             {
                 double mean = NumOps.ToDouble(output[j]);
                 continuous[j] = NumOps.FromDouble(training
-                    ? mean + Math.Exp(NumOps.ToDouble(_logStd![j])) * StandardNormal()
+                    ? mean + Math.Exp(NumOps.ToDouble(RequireLogStd()[j])) * StandardNormal()
                     : mean);
             }
             CacheSelectedAction(state, continuous, mask: null);
@@ -547,7 +547,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         int n = _states.Count;
         double gamma = NumOps.ToDouble(TradingOptions.DiscountFactor), lambda = TradingOptions.GAELambda;
-        double bootstrap = _dones[n - 1] ? 0.0 : NumOps.ToDouble(_critic.Predict(NormalizedRow(_lastNextState!)).ToVector()[0]);
+        double bootstrap = _dones[n - 1] ? 0.0 : NumOps.ToDouble(_critic.Predict(NormalizedRow(_lastNextState ?? throw new InvalidOperationException("The rollout has no next state."))).ToVector()[0]);
         var advantages = new double[n];
         var returns = new double[n];
         double last = 0;
@@ -698,6 +698,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         return Actor.TrainObjectiveFused(packed, Objective, _optimizer, TrainedTensors);
     }
+
+    private Tensor<T> RequireLogStd() => _logStd ?? throw new InvalidOperationException("A discrete policy has no log standard deviation.");
 
     private NeuralNetworkBase<T> Actor => (NeuralNetworkBase<T>)_actor;
     private NeuralNetworkBase<T> Critic => (NeuralNetworkBase<T>)_critic;
