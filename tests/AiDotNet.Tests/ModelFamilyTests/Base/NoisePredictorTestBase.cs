@@ -80,6 +80,9 @@ public abstract class NoisePredictorTestBase
     {
         await Task.Yield();
         var predictor = CreatePredictor();
+        // Active parameters: at an adaLN-Zero initialization a branch that read uninitialized state could still give
+        // the same output twice, because its contribution is multiplied by zero.
+        RandomizeParameters(predictor);
         var sample = Random(SampleShape(predictor), 3);
         var condition = Condition(predictor, 4);
 

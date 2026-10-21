@@ -79,10 +79,10 @@ public class EMMDiTPredictor<T> : MMDiTNoisePredictor<T>
         int numHeadsOverride = 0)
         : base(
             inputChannels: inputChannels,
-            hiddenSize: hiddenSizeOverride > 0 ? hiddenSizeOverride : EMMDIT_HIDDEN_SIZE,
-            numJointLayers: numLayersOverride > 0 ? numLayersOverride : EMMDIT_NUM_LAYERS,
+            hiddenSize: ResolveOverride(hiddenSizeOverride, EMMDIT_HIDDEN_SIZE, nameof(hiddenSizeOverride)),
+            numJointLayers: ResolveOverride(numLayersOverride, EMMDIT_NUM_LAYERS, nameof(numLayersOverride)),
             numSingleLayers: 0,
-            numHeads: numHeadsOverride > 0 ? numHeadsOverride : EMMDIT_NUM_HEADS,
+            numHeads: ResolveOverride(numHeadsOverride, EMMDIT_NUM_HEADS, nameof(numHeadsOverride)),
             contextDim: contextDim,
             seed: seed)
     {
@@ -93,5 +93,11 @@ public class EMMDiTPredictor<T> : MMDiTNoisePredictor<T>
         _emmNumLayersOverride = numLayersOverride;
         _emmNumHeadsOverride = numHeadsOverride;
     }
+
+    // 0 keeps the compact configuration's value; a negative size is a caller error, not "use the default".
+    private static int ResolveOverride(int value, int compactDefault, string parameterName) =>
+        value < 0
+            ? throw new ArgumentOutOfRangeException(parameterName, value, "A size override must be positive, or 0 for the default.")
+            : value > 0 ? value : compactDefault;
 
 }

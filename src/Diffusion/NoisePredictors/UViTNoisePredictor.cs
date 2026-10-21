@@ -330,6 +330,10 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
             var context = conditioning.Rank == 2
                 ? Engine.Reshape(conditioning, new[] { conditioning.Shape[0], 1, conditioning.Shape[1] })
                 : conditioning;
+            if (context.Shape[0] != batch && context.Shape[0] != 1)
+                throw new ArgumentException(
+                    $"The conditioning has {context.Shape[0]} samples for a batch of {batch}; give one per sample, or one shared by all.",
+                    nameof(conditioning));
             var contextTokens = _contextEmbed.Forward(context);
             tokens.Add(contextTokens.Shape[0] == batch ? contextTokens : RepeatBatch(contextTokens, batch));
         }

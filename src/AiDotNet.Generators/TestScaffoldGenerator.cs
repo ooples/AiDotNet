@@ -5616,7 +5616,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // finding only when its score clears the threshold, so on random content they correctly
             // report nothing and the confidence invariants would examine no findings at all. A zero
             // threshold makes every score report, so those invariants run over the real scores.
-            if (NoisePredictorFixtureArgs.TryGetValue(model.ClassName, out var noisePredictorArgs))
+            if (model.ExtendsNoisePredictorBase && NoisePredictorFixtureArgs.TryGetValue(model.ClassName, out var noisePredictorArgs))
             {
                 constructorExpr = $"new {typeName}<double>({noisePredictorArgs})";
             }
