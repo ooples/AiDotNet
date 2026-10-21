@@ -5529,6 +5529,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         //     all, so the push is pure dead weight that accumulates one entry
         //     per Forward call indefinitely.
         //
+        //   - A NoGradScope with training mode on: no tape records and no eager backward follows, so each forward
+        //     pushed one tensor per layer for good. A finite-difference gradient check (thousands of training-mode
+        //     objective evaluations under NoGradScope) grew DemucsNoise past 13 GB and killed the CI runner.
+        //
         //   - JIT graph capture (IsCapturing == true): Forward is recording
         //     operations into a computation graph rather than executing the
         //     eager activation derivative, so ApplyActivationDerivativeFromOutput
@@ -5537,7 +5541,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         //     isn't sufficient.
         //
         // Only push when we know the eager backward will drain it: training
-        // mode ON, not capturing, not inside an inference scope, no tape recording.
+        // mode ON, not capturing, not inside an inference or no-grad scope, no tape recording.
         // The tape path already preserves the pre-activation reference through its
         // recorded GradFn closures; the capture path encodes it into the graph node;
         // an InferenceMode scope guarantees no backward at all — all three make the
@@ -5547,6 +5551,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             IsTrainingMode
             && !IsCapturing
             && !InferenceMode.IsActive
+            && !NoGradScope<T>.IsSuppressed
             && GradientTape<T>.Current is null;
         if (eagerBackwardWillRun)
         {
