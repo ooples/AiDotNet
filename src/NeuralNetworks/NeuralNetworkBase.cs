@@ -15314,7 +15314,39 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // initialized even though the shared parameter surface claimed to own them.
     // v7 adds partition sizes for nested layer lists so a fitted topology can be rebuilt without
     // flattening distinct blocks, teacher networks or encoder streams into one unusable collection.
-    private const int SerializationVersion = 7;
+    // v8 records the width parameters are stored at, right after the version. Every earlier version
+    // wrote each value as an 8-byte double whatever T was, so a float model's file was twice its
+    // parameters, and Serialize, which builds one byte array, overflowed it for any float model above
+    // ~268M parameters (UnifiedMultimodalNetwork's GetModelMetadata did, #2087). A float model now
+    // stores 4-byte floats, exactly; every other T keeps 8-byte doubles.
+    private const int SerializationVersion = 8;
+
+    /// <summary>How the parameter values of a serialized network are stored (format v8 and later).</summary>
+    private enum SerializedParameterEncoding : byte
+    {
+        /// <summary>8-byte IEEE doubles: every format before v8, and every T other than float.</summary>
+        Float64 = 0,
+
+        /// <summary>4-byte IEEE floats, exact for a float network.</summary>
+        Float32 = 1,
+    }
+
+    private static SerializedParameterEncoding ParameterEncodingForT
+        => typeof(T) == typeof(float) ? SerializedParameterEncoding.Float32 : SerializedParameterEncoding.Float64;
+
+    private static int ParameterWidth(SerializedParameterEncoding encoding)
+        => encoding == SerializedParameterEncoding.Float32 ? sizeof(float) : sizeof(double);
+
+    private static void WriteParameterValue(BinaryWriter writer, T value, SerializedParameterEncoding encoding)
+    {
+        if (encoding == SerializedParameterEncoding.Float32) writer.Write(Convert.ToSingle(value));
+        else writer.Write(Convert.ToDouble(value));
+    }
+
+    private T ReadParameterValue(BinaryReader reader, SerializedParameterEncoding encoding)
+        => encoding == SerializedParameterEncoding.Float32
+            ? NumOps.FromDouble(reader.ReadSingle())
+            : NumOps.FromDouble(reader.ReadDouble());
 
     // Mirrors System.Array.MaxLength (introduced in .NET 6). Hardcoded
     // here so the check still compiles on net471, where Array.MaxLength
@@ -15368,21 +15400,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Compute the parameter payload ahead of time; rough overhead for
         // type-name strings, shape ints, metadata etc. is tiny vs the
         // parameter doubles, but budget ~64 KB per layer just in case.
+        var encoding = ParameterEncodingForT;
+        int width = ParameterWidth(encoding);
         long paramBytes = 0;
         foreach (var layer in Layers)
         {
-            paramBytes += (long)layer.ParameterCount * sizeof(double);
+            paramBytes += (long)layer.ParameterCount * width;
             if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extras)
             {
-                paramBytes += (long)extras.ExtraParameterCount * sizeof(double);
+                paramBytes += (long)extras.ExtraParameterCount * width;
             }
         }
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
-            paramBytes += (long)layer.ParameterCount * sizeof(double);
+            paramBytes += (long)layer.ParameterCount * width;
             if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extras)
-                paramBytes += (long)extras.ExtraParameterCount * sizeof(double);
+                paramBytes += (long)extras.ExtraParameterCount * width;
         }
         long estimatedTotal = paramBytes + (long)Layers.Count * 65536 + 1024;
         // MemoryStream capacity is an int. Cap at MaxArrayLength so we never
@@ -15397,6 +15431,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         writer.Write(SerializationMagic);
         writer.Write(SerializationVersion);
+        writer.Write((byte)encoding);
 
         // Write the number of layers
         writer.Write(Layers.Count);
@@ -15466,7 +15501,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             writer.Write(parameters.Length);
             foreach (var param in parameters)
             {
-                writer.Write(Convert.ToDouble(param));
+                WriteParameterValue(writer, param, encoding);
             }
 
             // Write any optional extra parameter blocks required to fully reconstruct the layer (e.g., frozen base weights in LoRA adapters).
@@ -15476,7 +15511,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 writer.Write(extraParameters.Length);
                 foreach (var param in extraParameters)
                 {
-                    writer.Write(Convert.ToDouble(param));
+                    WriteParameterValue(writer, param, encoding);
                 }
             }
             else
@@ -15535,9 +15570,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         int first = reader.ReadInt32();
         int layerCount;
 
+        var encoding = SerializedParameterEncoding.Float64;
         if (first == SerializationMagic)
         {
             version = reader.ReadInt32();
+            if (version >= 8)
+            {
+                encoding = (SerializedParameterEncoding)reader.ReadByte();
+                if (encoding != SerializedParameterEncoding.Float64 && encoding != SerializedParameterEncoding.Float32)
+                    throw new InvalidDataException($"Serialized network declares unknown parameter encoding {(byte)encoding}.");
+            }
             layerCount = reader.ReadInt32();
         }
         else
@@ -15598,7 +15640,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 parametersVector = new Vector<T>(paramCount);
                 for (int j = 0; j < paramCount; j++)
                 {
-                    parametersVector[j] = NumOps.FromDouble(reader.ReadDouble());
+                    parametersVector[j] = ReadParameterValue(reader, encoding);
                 }
             }
 
@@ -15627,7 +15669,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     extraParametersVector = new Vector<T>(extraCount);
                     for (int j = 0; j < extraCount; j++)
                     {
-                        extraParametersVector[j] = NumOps.FromDouble(reader.ReadDouble());
+                        extraParametersVector[j] = ReadParameterValue(reader, encoding);
                     }
                 }
             }
@@ -16525,13 +16567,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // is also strictly faster — no 2 GB allocate/free cycle, no
         // redundant double-conversion loop — so we also take it whenever
         // the new instance has an identically-shaped Layers list.
+        var encoding = ParameterEncodingForT;
+        int width = ParameterWidth(encoding);
         long paramBytes = 0;
         bool hasCustomLayer = false;
         for (int i = 0; i < _layers.Count; i++)
         {
-            paramBytes += (long)_layers[i].ParameterCount * sizeof(double);
+            paramBytes += (long)_layers[i].ParameterCount * width;
             if (_layers[i] is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> ext)
-                paramBytes += (long)ext.ExtraParameterCount * sizeof(double);
+                paramBytes += (long)ext.ExtraParameterCount * width;
 
             // Detect layers whose concrete type lives outside AiDotNet — the
             // DeserializationHelper's hard-coded type registry only knows the
