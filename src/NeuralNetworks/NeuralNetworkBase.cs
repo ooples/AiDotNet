@@ -6169,6 +6169,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         Tensor<T> output;
         Graph.LayerForwardObserver<T>? trace = null;
+        // Read before this trace is installed: an enclosing observer (named-activation collection)
+        // keeps folding off for the re-run below too, so the re-run would only record every layer twice.
+        bool enclosedByObserver = Graph.LayerForwardObserver<T>.Current is not null;
         try
         {
             trace = new Graph.LayerForwardObserver<T>();
@@ -6199,8 +6202,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
 
         // Outside the trace, so folding applies here exactly as it will on every subsequent call.
-        // With no observer installed the pass above already took that path, so it is reused.
-        output = trace is null
+        // With no observer installed the pass above already took that path, so it is reused; under
+        // an enclosing observer the re-run would take the same unfolded path, so it is reused too.
+        output = trace is null || enclosedByObserver
             ? observed
             : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
 
