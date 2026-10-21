@@ -12305,7 +12305,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "FinancialPPOAgent" && model.TypeParameterCount == 1)
             {
-                // As A2C, with PPO's own options: one epoch of one minibatch.
+                // As A2C, with PPO's own options: one epoch over a rollout of 16 steps in one minibatch (a rollout needs
+                // two steps or more: its advantages are standardized).
                 constructorExpr = $"new {typeName}<double>(" +
                     "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
@@ -12317,18 +12318,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 4, outputSize: 1), " +
                     "new AiDotNet.Models.Options.FinancialPPOAgentOptions<double> { " +
                     "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
-                    "WarmupSteps = 0, Seed = 42, NumEpochs = 1, NumMiniBatches = 1 })";
+                    "WarmupSteps = 0, Seed = 42, NumEpochs = 1, RolloutLength = 16, MiniBatchSize = 16 })";
             }
             else if (model.ClassName == "FinRLAgent" && model.TypeParameterCount == 1)
             {
-                // The default algorithm (PPO), which requires the secondary (critic) architecture.
+                // The default algorithm (PPO), which requires the secondary (critic) architecture, with the PPO
+                // fixture's options: one epoch over a 16-step rollout in one minibatch.
                 constructorExpr = $"new {typeName}<double>(" +
                     "primaryArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 4), " +
-                    "options: new AiDotNet.Models.Options.TradingAgentOptions<double> { " +
+                    "options: new AiDotNet.Models.Options.FinancialPPOAgentOptions<double> { " +
                     "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
-                    "WarmupSteps = 0, Seed = 42 }, " +
+                    "WarmupSteps = 0, Seed = 42, NumEpochs = 1, RolloutLength = 16, MiniBatchSize = 16 }, " +
                     "secondaryArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 1))";

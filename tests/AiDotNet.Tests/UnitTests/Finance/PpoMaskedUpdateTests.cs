@@ -198,7 +198,7 @@ public class PpoMaskedUpdateTests
         {
             StateSize = StateSize,
             ActionSize = ActionSize,
-            BatchSize = RolloutLength,
+            RolloutLength = RolloutLength,
             ReplayBufferSize = 256,
             Seed = 7,
             ContinuousActions = false,
@@ -206,7 +206,7 @@ public class PpoMaskedUpdateTests
             // One epoch over one mini-batch: a single update across the whole rollout, so the ratio is read
             // against the weights the actions were drawn from and the normalised advantages still sum to zero.
             NumEpochs = 1,
-            NumMiniBatches = 1,
+            MiniBatchSize = RolloutLength,
 
             // So Train() returns the policy loss alone.
             ValueCoefficient = 0.0,

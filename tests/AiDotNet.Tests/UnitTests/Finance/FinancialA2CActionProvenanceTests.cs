@@ -181,6 +181,13 @@ public sealed class FinancialA2CActionProvenanceTests
         options.WarmupSteps = warmup;
         options.HiddenLayers = Array.Empty<int>();
         options.EntropyCoefficient = 0;
+        // PPO updates once per rollout (Schulman et al. 2017, Algorithm 1): a rollout of two steps, so the second
+        // supervised call is the one that trains, and two rewards, so the standardized advantages are defined.
+        if (options is AiDotNet.Models.Options.FinancialPPOAgentOptions<double> ppo)
+        {
+            ppo.RolloutLength = 2;
+            ppo.MiniBatchSize = 2;
+        }
         var secondary = Arch(algorithm == FinRLAlgorithm.SAC ? 7 : 4, 1);
         using var agent = new FinRLAgent<double>(Arch(4, 3), options, algorithm, secondary);
         var state = State(4, 1);
@@ -188,6 +195,13 @@ public sealed class FinancialA2CActionProvenanceTests
         agent.SetParameters(new Vector<double>((int)agent.ParameterCount));
         var before = agent.GetParameters().ToArray();
         Assert.NotEmpty(before);
+        if (algorithm == FinRLAlgorithm.PPO)
+        {
+            var half = OneHot(3, 1);
+            half[1] = 0.5;
+            agent.Train(state, half);
+            Assert.True(before.SequenceEqual(agent.GetParameters().ToArray()), "PPO must not update before its rollout is full.");
+        }
         agent.Train(state, OneHot(3, 2));
         Assert.False(before.SequenceEqual(agent.GetParameters().ToArray()));
     }
