@@ -1048,7 +1048,7 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// predict the next returns or reconstructed outputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         return Predict(input);
     }

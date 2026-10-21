@@ -808,7 +808,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the MOIRAI model, Forecast produces predictions from input data. This is the main inference step of the MOIRAI architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 

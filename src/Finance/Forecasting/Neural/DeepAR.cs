@@ -591,7 +591,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     /// For example, the 0.5 quantile is the median prediction, while 0.1 and 0.9 give you an 80% confidence interval.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         // Point forecast = the distribution mean from the layer stack, computed
         // identically to the training-path forward (ForwardNativeForTraining also

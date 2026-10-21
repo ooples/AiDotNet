@@ -718,7 +718,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// Quantiles can be specified for uncertainty estimation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         // Apply Series Stationarization if enabled
         if (_useSeriesStationarization)

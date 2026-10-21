@@ -614,7 +614,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the LSTNet model, Forecast produces predictions from input data. This is the main inference step of the LSTNet architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }

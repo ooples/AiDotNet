@@ -705,7 +705,7 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
     /// based on the current market features.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         return Predict(input);
     }

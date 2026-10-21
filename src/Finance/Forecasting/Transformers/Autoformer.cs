@@ -500,11 +500,10 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the Autoformer model, Forecast produces predictions from input data. This is the main inference step of the Autoformer architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
-        RequireArchitectureAgreesWithOptions();
 
         return _useNativeMode ? ForecastNative(input, quantiles) : ForecastOnnx(input);
     }

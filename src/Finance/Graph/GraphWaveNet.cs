@@ -679,7 +679,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, Forecast produces predictions from input data. This is the main inference step of the GraphWaveNet architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {

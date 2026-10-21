@@ -597,7 +597,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
     #region IForecastingModel Implementation
 
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
             throw new NotSupportedException("CSDI does not support quantile forecasting. Pass null for point forecasts.");

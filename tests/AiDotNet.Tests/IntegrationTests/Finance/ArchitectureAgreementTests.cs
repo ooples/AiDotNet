@@ -174,6 +174,26 @@ public class ArchitectureAgreementTests
     }
 
     [Fact]
+    public void Every_model_s_Forecast_runs_the_check_not_only_the_ones_that_called_it()
+    {
+        // TimesNet's Forecast never called the check; models now override ForecastCore, and Forecast checks first.
+        var options = new TimesNetOptions<double>
+        {
+            SequenceLength = 8, PredictionHorizon = 2, NumFeatures = 3, ModelDimension = 8, FeedForwardDimension = 16,
+            NumLayers = 1, TopK = 2,
+        };
+        var model = new TimesNet<double>(Grid(8, 5), options);
+
+        var ex = Assert.Throws<ArgumentException>(() => model.Forecast(new Tensor<double>(new[] { 1, 8, 3 })));
+        Assert.Contains("TimesNet", ex.Message);
+        Assert.Contains("8 x 5", ex.Message);
+        var forecast = typeof(AiDotNet.Finance.Base.FinancialModelBase<double>).GetMethod("Forecast");
+        // It implements IFinancialModel.Forecast, so the runtime marks it virtual - and final: no model can override it.
+        Assert.True(forecast is not null && (!forecast.IsVirtual || forecast.IsFinal),
+            "Forecast is the checking template; models override ForecastCore.");
+    }
+
+    [Fact]
     public void A_model_whose_architecture_agrees_predicts_as_before()
     {
         var model = new FEDformer<double>(Grid(8, 3), options: SmallFedformer());

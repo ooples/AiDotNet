@@ -642,7 +642,7 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the TimesFM model, Forecast produces predictions from input data. This is the main inference step of the TimesFM architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         // TimesFM 2.5: if quantiles requested, validate quantile head is configured
         if (quantiles is not null && quantiles.Length > 0)

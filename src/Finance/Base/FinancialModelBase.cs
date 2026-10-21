@@ -478,12 +478,24 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// (fast inference) based on how the class was constructed.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
+        // Every forecast passes this check, whichever model computes it: the models override ForecastCore, not
+        // Forecast, so none can return without it (#2147).
         RequireArchitectureAgreesWithOptions();
+        return ForecastCore(input, quantiles);
+    }
 
+    /// <summary>
+    /// Computes the forecast <see cref="Forecast"/> returns, after the architecture check. Models override this.
+    /// </summary>
+    /// <param name="input">The history, already checked to be non-null.</param>
+    /// <param name="quantiles">Quantiles to forecast, or null for a point forecast.</param>
+    /// <returns>The forecast.</returns>
+    protected virtual Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
+    {
         // Validate input shape
         ValidateInputShape(input);
 

@@ -284,7 +284,7 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     /// TimeMoE produces point forecasts only. The <paramref name="quantiles"/> parameter
     /// is accepted for interface compatibility but is not used.
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }

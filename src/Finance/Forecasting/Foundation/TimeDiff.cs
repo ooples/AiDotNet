@@ -456,7 +456,7 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
 
     #region IForecastingModel Implementation
 
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null) => _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles) => _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         // TimeDiff is non-autoregressive — truncate output to requested steps
