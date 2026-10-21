@@ -1,37 +1,29 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.TextToImage;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-[Xunit.Collection("FoundationScaleSerial")]
-// #2087 / #1706: out of the HeavyTimeout lane. The default foundation-scale config is too large for
-// the PR gate, so per the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects
-// a small same-architecture UNetNoisePredictor and UNetNoisePredictor and StandardVAE. Channel
-// counts, context widths, patch sizes and scale factors keep the model's defaults; only width and
-// depth shrink.
+/// <summary>
+/// DeepFloydIF test scaffold — see <see cref="DiffusionModelTestBase{TNum}"/>
+/// for the FP32 rationale. DeepFloyd IF at paper defaults OOMs in fresh-process
+/// probes at FP64 on the 16 GB CI host.
+/// </summary>
+// HeavyTimeout (#1706): after the input-channel shape fix below, DeepFloyd IF still cleanly OOMs —
+// verified System.OutOfMemoryException under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling
+// (foundation-scale pixel-space cascaded diffusion; the summary above notes it OOMs at paper defaults on
+// the 16 GB host). So it OS-OOM-kills the Diffusion D-I shard. Runs in the nightly heavy lane; the shape
+// fix keeps it correct there. Drop once weight streaming lets it fit the default budget.
+[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+[Xunit.Trait("Category", "HeavyTimeout")]
 public class DeepFloydIFModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 3, 16, 16];
-    protected override int[] OutputShape => [1, 3, 16, 16];
+    // DeepFloyd IF is a PIXEL-space cascaded diffusion model operating on RGB images (3 channels),
+    // not a 4-channel latent — its first conv has input depth 3, so a [1,4,64,64] probe threw
+    // "Expected input depth 3, but got 4". Feed the correct 3-channel RGB shape.
+    protected override int[] InputShape => [1, 3, 64, 64];
+    protected override int[] OutputShape => [1, 3, 64, 64];
 
     protected override IDiffusionModel<float> CreateModel()
-        => new DeepFloydIFModel<float>(
-            stageIUnet: new UNetNoisePredictor<float>(
-                inputChannels: 3, outputChannels: 3, baseChannels: 32,
-                channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
-                attentionResolutions: new[] { 1 }, contextDim: 4096, numHeads: 4, inputHeight: 16,
-                seed: 42),
-            stageIIUnet: new UNetNoisePredictor<float>(
-                inputChannels: 6, outputChannels: 3, baseChannels: 32,
-                channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
-                attentionResolutions: new[] { 1 }, contextDim: 4096, numHeads: 4, inputHeight: 16,
-                seed: 42),
-            vae: new StandardVAE<float>(
-                inputChannels: 3, latentChannels: 3, baseChannels: 16,
-                channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, latentScaleFactor: 1.0,
-                seed: 42),
-            seed: 42);
+        => new DeepFloydIFModel<float>(seed: 42);
 }
