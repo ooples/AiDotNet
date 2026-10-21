@@ -12558,7 +12558,12 @@ public static partial class LayerHelper<T>
     /// <b>Reference:</b> Zhou et al., "FEDformer: Frequency Enhanced Decomposed Transformer",
     /// ICML 2022.
     /// </para>
+    /// <para>
+    /// This stack is not FEDformer: it is a transformer encoder with no frequency-enhanced block and no decomposition,
+    /// and it returns one value per input step rather than the horizon. FEDformer builds the paper's network itself.
+    /// </para>
     /// </remarks>
+    [Obsolete("Not FEDformer: a generic transformer encoder without frequency-enhanced blocks or decomposition. Construct FEDformer<T>, which builds the paper's network.")]
     public static IEnumerable<ILayer<T>> CreateDefaultFEDformerLayers(
         NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 96,

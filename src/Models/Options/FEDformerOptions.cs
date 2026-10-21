@@ -106,8 +106,31 @@ public class FEDformerOptions<T> : ModelOptions
     public int NumModes { get; set; } = 64;
 
     /// <summary>
+    /// Gets or sets how the frequency modes are chosen.
+    /// Default: <see cref="FourierModeSelection.Random"/>, the paper's choice.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zhou et al. (Sec. 3.2) select the modes at random once, when the model is built: random selection keeps some
+    /// high frequencies that a low-pass choice would drop. <see cref="FourierModeSelection.Lowest"/> keeps the lowest
+    /// <see cref="NumModes"/> frequencies instead.
+    /// </para>
+    /// </remarks>
+    public FourierModeSelection ModeSelection { get; set; } = FourierModeSelection.Random;
+
+    /// <summary>
+    /// Gets or sets the seed of the random mode selection.
+    /// Default: 0.
+    /// </summary>
+    /// <remarks>
+    /// The selected modes are part of the network, like its weights, so they come from this seed rather than from the
+    /// run's randomness: a copy or a reloaded model reads the same frequencies.
+    /// </remarks>
+    public int ModeSelectionSeed { get; set; } = 0;
+
+    /// <summary>
     /// Gets or sets the moving average kernel size for trend extraction.
-    /// Default: 25.
+    /// Default: 24, the official FEDformer configuration's.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -116,7 +139,7 @@ public class FEDformerOptions<T> : ModelOptions
     /// give smoother trends.
     /// </para>
     /// </remarks>
-    public int MovingAverageKernel { get; set; } = 25;
+    public int MovingAverageKernel { get; set; } = 24;
 
     #endregion
 
@@ -133,10 +156,10 @@ public class FEDformerOptions<T> : ModelOptions
     #region Normalization
 
     /// <summary>
-    /// Gets or sets whether to use instance normalization (RevIN).
-    /// Default: true.
+    /// Gets or sets whether to wrap the network in instance normalization (RevIN, Kim et al. 2022).
+    /// Default: false: FEDformer (Zhou et al. 2022) has none; its decomposition handles the level.
     /// </summary>
-    public bool UseInstanceNormalization { get; set; } = true;
+    public bool UseInstanceNormalization { get; set; } = false;
 
     #endregion
 
@@ -265,4 +288,16 @@ public enum FrequencyAttentionType
     /// Best for data with patterns that change over time.
     /// </summary>
     Wavelet
+}
+
+/// <summary>
+/// How FEDformer chooses the frequency modes its Fourier blocks keep.
+/// </summary>
+public enum FourierModeSelection
+{
+    /// <summary>A random subset of the frequencies below the Nyquist frequency, drawn once (the paper's choice).</summary>
+    Random,
+
+    /// <summary>The lowest frequencies.</summary>
+    Lowest
 }
