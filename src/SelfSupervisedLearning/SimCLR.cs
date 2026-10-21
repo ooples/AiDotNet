@@ -95,57 +95,6 @@ public class SimCLR<T> : SelfSupervisedLearningMethodBase<T>
     /// <remarks>The paper trains with LARS (Sec. 2.2).</remarks>
     protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.LARS;
 
-    private void UpdateWithGradients(T learningRate, Vector<T> encoderGrads, Vector<T> projectorGrads)
-    {
-        // SGD update for encoder
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // SGD update for projector
-        var projectorParams = (_projector ?? throw new InvalidOperationException("Projector has not been initialized.")).GetParameters();
-        _projector.SetParameters(Engine.Subtract(projectorParams, Engine.Multiply(projectorGrads, learningRate)));
-    }
-
-    private T ComputeAverageNorm(Tensor<T> embeddings)
-    {
-        var batchSize = embeddings.Shape[0];
-        var dim = embeddings.Shape[1];
-        T totalNorm = NumOps.Zero;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T sumSquared = NumOps.Zero;
-            for (int j = 0; j < dim; j++)
-            {
-                var val = embeddings[i, j];
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
-            }
-            totalNorm = NumOps.Add(totalNorm, NumOps.Sqrt(sumSquared));
-        }
-
-        return NumOps.Divide(totalNorm, NumOps.FromDouble(batchSize));
-    }
-
-    private Tensor<T> CombineGradients(Tensor<T> grad1, Tensor<T> grad2)
-    {
-        var batchSize = grad1.Shape[0];
-        var dim = grad1.Shape[1];
-        var combined = new T[batchSize * dim];
-        var half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                // Average the gradients from both views
-                var sum = NumOps.Add(grad1[i, j], grad2[i, j]);
-                combined[i * dim + j] = NumOps.Multiply(sum, half);
-            }
-        }
-
-        return new Tensor<T>(combined, [batchSize, dim]);
-    }
-
     /// <summary>
     /// Creates a SimCLR instance with default configuration.
     /// </summary>

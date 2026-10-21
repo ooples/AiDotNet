@@ -60,17 +60,6 @@ public interface IProjectorHead<T> : AiDotNet.Interfaces.IParameterSource<T>
     Tensor<T> Project(Tensor<T> input);
 
     /// <summary>
-    /// Performs the backward pass through the projector.
-    /// </summary>
-    /// <param name="gradients">The gradients from the loss with respect to projector output.</param>
-    /// <returns>The gradients with respect to projector input (for encoder backprop).</returns>
-    // Backward removed — tape-based autodiff handles projector gradients.
-
-    /// <summary>
-    /// Gets the gradients computed during the last backward pass.
-    /// </summary>
-    /// <returns>A vector containing gradients for all parameters.</returns>
-    /// <summary>
     /// The head's learnable tensors, the live objects its forward reads, in the order GetParameters flattens them.
     /// </summary>
     /// <remarks>
@@ -79,6 +68,14 @@ public interface IProjectorHead<T> : AiDotNet.Interfaces.IParameterSource<T>
     /// </remarks>
     IReadOnlyList<Tensor<T>> GetTrainableTensors();
 
+    /// <summary>
+    /// Gets the gradients a head that keeps its own backward pass computed last.
+    /// </summary>
+    /// <returns>A vector containing gradients for all parameters.</returns>
+    /// <remarks>
+    /// The built-in heads keep none: the gradient tape differentiates <see cref="GetTrainableTensors"/>, and they throw
+    /// <see cref="NotSupportedException"/> here rather than report zeros.
+    /// </remarks>
     Vector<T> GetParameterGradients();
 
     /// <summary>

@@ -107,19 +107,6 @@ public partial class BYOL<T> : SelfSupervisedLearningMethodBase<T>
         _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
-    private void UpdateOnlineParameters(T learningRate)
-    {
-        // Update encoder
-        var encoderGrads = _encoder.GetParameterGradients();
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // Update online projector
-        var projGrads = _onlineProjector.GetParameterGradients();
-        var projParams = _onlineProjector.GetParameters();
-        _onlineProjector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
-    }
-
     private void UpdateTargetProjector()
     {
         // EMA of the target projector toward the online one. The online projector also carries the predictor, which

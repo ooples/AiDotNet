@@ -39,6 +39,8 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
     private const double BatchNormEpsilon = 1e-5;
+    // torch.nn.BatchNorm1d's default momentum for the running statistics.
+    private const double BatchNormMomentum = 0.1;
 
     private readonly int _inputDim;
     private readonly int _hiddenDim;
@@ -64,8 +66,14 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     private Tensor<T>? _predWeight2;
     private Tensor<T>? _predBias2;
 
-    [Scratch]
-    private Vector<T>? _gradients;
+    // Running statistics of each BatchNorm (buffers, not parameters): updated in training mode, used in evaluation
+    // mode, as torch.nn.BatchNorm1d does.
+    private readonly Tensor<T> _projBn1Mean;
+    private readonly Tensor<T> _projBn1Var;
+    private readonly Tensor<T> _projBn2Mean;
+    private readonly Tensor<T> _projBn2Var;
+    private readonly Tensor<T>? _predBn1Mean;
+    private readonly Tensor<T>? _predBn1Var;
 
     private Tensor<T> PredWeight1 => _predWeight1 ?? throw new InvalidOperationException("Predictor weight1 not initialized. Ensure _hasPredictor is true.");
     private Tensor<T> PredBias1 => _predBias1 ?? throw new InvalidOperationException("Predictor bias1 not initialized.");
@@ -136,6 +144,10 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         _projBias2 = new Tensor<T>(new[] { projectionDim });
         _projBn2Gamma = InitializeOnes(projectionDim);
         _projBn2Beta = new Tensor<T>(new[] { projectionDim });
+        _projBn1Mean = new Tensor<T>(new[] { hiddenDim });
+        _projBn1Var = InitializeOnes(hiddenDim);
+        _projBn2Mean = new Tensor<T>(new[] { projectionDim });
+        _projBn2Var = InitializeOnes(projectionDim);
 
         if (_hasPredictor)
         {
@@ -145,6 +157,8 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             _predBn1Beta = new Tensor<T>(new[] { predictorHiddenDim });
             _predWeight2 = InitializeWeight(predictorHiddenDim, projectionDim, rng);
             _predBias2 = new Tensor<T>(new[] { projectionDim });
+            _predBn1Mean = new Tensor<T>(new[] { predictorHiddenDim });
+            _predBn1Var = InitializeOnes(predictorHiddenDim);
         }
     }
 
@@ -154,32 +168,38 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         if (input is null) throw new ArgumentNullException(nameof(input));
 
         // Projector: Linear -> BN -> ReLU -> Linear -> BN
-        var h = Engine.ReLU(BatchNorm(Linear(input, _projWeight1, _projBias1), _projBn1Gamma, _projBn1Beta));
-        return BatchNorm(Linear(h, _projWeight2, _projBias2), _projBn2Gamma, _projBn2Beta);
+        var h = Engine.ReLU(BatchNorm(Linear(input, _projWeight1, _projBias1), _projBn1Gamma, _projBn1Beta, _projBn1Mean, _projBn1Var));
+        return BatchNorm(Linear(h, _projWeight2, _projBias2), _projBn2Gamma, _projBn2Beta, _projBn2Mean, _projBn2Var);
     }
 
     /// <summary>
-    /// Applies the predictor head to a projection.
-    /// </summary>
-    public Tensor<T> Predict(Tensor<T> projection) => Predict(projection, -1);
-
-    /// <summary>
-    /// Applies the predictor head (for online branch only).
+    /// Applies the predictor head to a projection (for the online branch only); a projector without one returns the
+    /// projection.
     /// </summary>
     /// <param name="projection">Output from the projector.</param>
-    /// <param name="branchIndex">0 for branch1, 1 for branch2, or -1. Kept for compatibility: the predictor holds no
-    /// per-branch state, so every branch computes the same function.</param>
-    public Tensor<T> Predict(Tensor<T> projection, int branchIndex)
+    public Tensor<T> Predict(Tensor<T> projection)
     {
         if (projection is null) throw new ArgumentNullException(nameof(projection));
-        if (branchIndex < -1 || branchIndex > 1)
-            throw new ArgumentOutOfRangeException(nameof(branchIndex), "Branch index must be -1, 0, or 1.");
-        if (!_hasPredictor)
+        if (!_hasPredictor || _predBn1Mean is null || _predBn1Var is null)
             return projection;
 
         // Predictor: Linear -> BN -> ReLU -> Linear
-        var h = Engine.ReLU(BatchNorm(Linear(projection, PredWeight1, PredBias1), PredBn1Gamma, PredBn1Beta));
+        var h = Engine.ReLU(BatchNorm(Linear(projection, PredWeight1, PredBias1), PredBn1Gamma, PredBn1Beta, _predBn1Mean, _predBn1Var));
         return Linear(h, PredWeight2, PredBias2);
+    }
+
+    /// <summary>
+    /// Applies the predictor head. The branch index is ignored: the predictor holds no per-branch state, so every
+    /// branch computes the same function.
+    /// </summary>
+    /// <param name="projection">Output from the projector.</param>
+    /// <param name="branchIndex">0, 1 or -1; ignored.</param>
+    [Obsolete("The predictor computes the same function for every branch; call Predict(projection).")]
+    public Tensor<T> Predict(Tensor<T> projection, int branchIndex)
+    {
+        if (branchIndex < -1 || branchIndex > 1)
+            throw new ArgumentOutOfRangeException(nameof(branchIndex), "Branch index must be -1, 0, or 1.");
+        return Predict(projection);
     }
 
     /// <summary>
@@ -239,27 +259,28 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     }
 
     /// <inheritdoc />
-    public Vector<T> GetParameterGradients()
-    {
-        return _gradients ?? new Vector<T>(new T[ParameterCountHelper.ToFlatVectorSize(ParameterCount)]);
-    }
+    /// <exception cref="NotSupportedException">Always: the gradient tape differentiates this head.</exception>
+    public Vector<T> GetParameterGradients() => throw new NotSupportedException(
+        "SymmetricProjector keeps no gradients: record Project and Predict on a GradientTape and differentiate GetTrainableTensors().");
 
     /// <inheritdoc />
+    /// <remarks>This head keeps no gradients, so there is nothing to clear.</remarks>
     public void ClearGradients()
     {
-        _gradients = null;
     }
 
     /// <inheritdoc />
+    /// <remarks>Training mode normalizes with each batch's statistics and updates the running ones; evaluation mode
+    /// normalizes with the running statistics.</remarks>
     public void SetTrainingMode(bool isTraining)
     {
         _isTraining = isTraining;
     }
 
     /// <inheritdoc />
+    /// <remarks>The head keeps no per-call state; Reset leaves the weights and running statistics as they are.</remarks>
     public void Reset()
     {
-        _gradients = null;
     }
 
     private static Tensor<T> InitializeWeight(int fanIn, int fanOut, Random rng)
@@ -292,7 +313,35 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         return Engine.TensorAdd(output, Engine.Reshape(bias, new[] { 1, bias.Length }));
     }
 
-    // Normalizes with the batch's own statistics, as this head always has (it keeps no running statistics).
-    private static Tensor<T> BatchNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta) =>
-        Engine.BatchNorm(input, gamma, beta, BatchNormEpsilon, out _, out _);
+    // torch.nn.BatchNorm1d: in training, the batch's statistics normalize and update the running ones (the variance
+    // unbiased, as PyTorch keeps it); in evaluation, the running statistics normalize.
+    private Tensor<T> BatchNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, Tensor<T> runningMean, Tensor<T> runningVar)
+    {
+        int batch = input.Shape[0], dim = input.Shape[1];
+        if (_isTraining)
+        {
+            var output = Engine.BatchNorm(input, gamma, beta, BatchNormEpsilon, out var mean, out var variance);
+            double unbias = batch > 1 ? batch / (batch - 1.0) : 1.0;
+            for (int d = 0; d < dim; d++)
+            {
+                runningMean[d] = NumOps.FromDouble((1 - BatchNormMomentum) * NumOps.ToDouble(runningMean[d])
+                    + BatchNormMomentum * NumOps.ToDouble(mean[d]));
+                runningVar[d] = NumOps.FromDouble((1 - BatchNormMomentum) * NumOps.ToDouble(runningVar[d])
+                    + BatchNormMomentum * NumOps.ToDouble(variance[d]) * unbias);
+            }
+            return output;
+        }
+
+        // y = x * scale + shift, scale = gamma / sqrt(var + eps), shift = beta - mean * scale.
+        var scale = new Tensor<T>(new[] { 1, dim });
+        var shift = new Tensor<T>(new[] { 1, dim });
+        for (int d = 0; d < dim; d++)
+        {
+            double s = NumOps.ToDouble(gamma[d]) / Math.Sqrt(NumOps.ToDouble(runningVar[d]) + BatchNormEpsilon);
+            scale[0, d] = NumOps.FromDouble(s);
+            shift[0, d] = NumOps.FromDouble(NumOps.ToDouble(beta[d]) - NumOps.ToDouble(runningMean[d]) * s);
+        }
+        var shape = new[] { batch, dim };
+        return Engine.TensorAdd(Engine.TensorMultiply(input, Engine.TensorBroadcastTo(scale, shape)), Engine.TensorBroadcastTo(shift, shape));
+    }
 }

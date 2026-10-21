@@ -128,50 +128,6 @@ public partial class SimSiam<T> : SelfSupervisedLearningMethodBase<T>
     /// <remarks>The paper trains with SGD (momentum 0.9, Sec. 4).</remarks>
     protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.SGD;
 
-    private void UpdateParameters(T learningRate)
-    {
-        // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // Update projector
-        var projGrads = SymmetricProjector.GetParameterGradients();
-        var projParams = SymmetricProjector.GetParameters();
-        SymmetricProjector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
-    }
-
-    private T ComputeStd(Tensor<T> tensor)
-    {
-        var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
-
-        // Compute mean
-        T mean = NumOps.Zero;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                mean = NumOps.Add(mean, tensor[b, d]);
-            }
-        }
-        mean = NumOps.Divide(mean, NumOps.FromDouble(batchSize * dim));
-
-        // Compute variance
-        T variance = NumOps.Zero;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                var diff = NumOps.Subtract(tensor[b, d], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(batchSize * dim));
-
-        return NumOps.Sqrt(variance);
-    }
-
     /// <summary>
     /// Creates a SimSiam instance with default configuration.
     /// </summary>

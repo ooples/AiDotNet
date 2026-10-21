@@ -22,7 +22,10 @@ public static class SslFixtureParts
     /// <summary>The seeded configuration every fixture uses, so a run is reproducible.</summary>
     public static SelfSupervisedLearningConfig<double> Config() => new() { Seed = 1 };
 
-    /// <summary>A two-layer encoder, already materialized.</summary>
+    /// <summary>
+    /// A seeded two-layer encoder, already materialized. Every call builds the same weights, so a momentum encoder made
+    /// from a second call starts as the online encoder's copy, as a method's own momentum encoder does.
+    /// </summary>
     public static NeuralNetwork<double> Encoder(int inputSize = 5, int outputSize = 8)
     {
         var layers = new List<ILayer<double>>
@@ -32,7 +35,7 @@ public static class SslFixtureParts
         };
         var encoder = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
             InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: inputSize, outputSize: outputSize,
-            layers: layers));
+            layers: layers) { RandomSeed = 7 });
         _ = encoder.Predict(new Tensor<double>(new[] { 1, inputSize }));
         return encoder;
     }

@@ -107,21 +107,6 @@ public class BarlowTwins<T> : SelfSupervisedLearningMethodBase<T>
     /// <remarks>The paper trains with LARS (Sec. 4).</remarks>
     protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.LARS;
 
-    private void UpdateParameters(T learningRate, Vector<T> accumulatedProjGrads)
-    {
-        // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // Update projector with accumulated gradients from both views
-        if (_projector is not null)
-        {
-            var projParams = _projector.GetParameters();
-            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(accumulatedProjGrads, learningRate)));
-        }
-    }
-
     /// <summary>
     /// Creates a Barlow Twins instance with default configuration.
     /// </summary>

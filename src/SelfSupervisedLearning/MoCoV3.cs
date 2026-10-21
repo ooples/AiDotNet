@@ -94,6 +94,11 @@ public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
         Guard.NotNull(momentumProjector);
         _momentumProjector = momentumProjector;
         _predictor = predictor;
+        // The momentum projector tracks the online one by EMA, element for element, so the two must match in size.
+        if (projector is not null && momentumProjector is not null && projector.ParameterCount != momentumProjector.ParameterCount)
+            throw new ArgumentException(
+                $"The momentum projector has {momentumProjector.ParameterCount} parameters; the projector it tracks has {projector.ParameterCount}.",
+                nameof(momentumProjector));
 
         var temperature = _config.Temperature ?? 0.2; // MoCo v3 uses higher temperature
         _temperature = temperature;
@@ -195,7 +200,6 @@ public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
         double m = _momentumEncoder.Momentum;
         var online = _projector.GetParameters();
         var target = _momentumProjector.GetParameters();
-        if (online.Length != target.Length) return;
         var updated = new Vector<T>(target.Length);
         for (int i = 0; i < target.Length; i++)
             updated[i] = NumOps.Add(NumOps.Multiply(target[i], NumOps.FromDouble(m)),
@@ -210,47 +214,6 @@ public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
     /// <inheritdoc />
     /// <remarks>The paper trains ViT backbones with AdamW (Sec. 4).</remarks>
     protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.AdamW;
-
-    private void UpdateParameters(T learningRate)
-    {
-        // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // Update projector
-        if (_projector is not null)
-        {
-            var projGrads = new Vector<T>(_projector.GetParameterGradients());
-            var projParams = _projector.GetParameters();
-            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
-        }
-
-        // Update predictor
-        if (_predictor is not null)
-        {
-            var predGrads = new Vector<T>(_predictor.GetParameterGradients());
-            var predParams = _predictor.GetParameters();
-            _predictor.SetParameters(Engine.Subtract(predParams, Engine.Multiply(predGrads, learningRate)));
-        }
-    }
-
-    private Tensor<T> ScaleGradient(Tensor<T> grad, T scale)
-    {
-        var batchSize = grad.Shape[0];
-        var dim = grad.Shape[1];
-        var scaled = new T[batchSize * dim];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                scaled[i * dim + j] = NumOps.Multiply(grad[i, j], scale);
-            }
-        }
-
-        return new Tensor<T>(scaled, [batchSize, dim]);
-    }
 
     /// <inheritdoc />
     public override void OnEpochStart(int epochNumber)

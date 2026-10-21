@@ -48,12 +48,9 @@ namespace AiDotNet.SelfSupervisedLearning;
 public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
 {
     private readonly INeuralNetwork<T>? _decoder;
-    private readonly MAEReconstructionLoss<T> _loss;
-    private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
     private readonly int _patchSize;
     private readonly int _numPatches;
     private readonly double _maskRatio;
-    private readonly int _decoderEmbedDim;
 
     /// <inheritdoc />
     public override string Name => "MAE";
@@ -95,16 +92,21 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
         SelfSupervisedLearningConfig<T>? config = null)
         : base(encoder, null, config ?? new SelfSupervisedLearningConfig<T>())
     {
+        if (patchSize <= 0) throw new ArgumentOutOfRangeException(nameof(patchSize), "The patch size must be positive.");
+        if (maskRatio <= 0 || maskRatio >= 1 || double.IsNaN(maskRatio))
+            throw new ArgumentOutOfRangeException(nameof(maskRatio), "The mask ratio must lie strictly between 0 and 1.");
+        int patchesPerSide = imageSize / patchSize;
+        // MAE masks some patches and encodes the rest, so it needs at least one of each: one patch would leave the
+        // encoder nothing to see and the loss a division by zero.
+        if (patchesPerSide * patchesPerSide < 2)
+            throw new ArgumentException(
+                $"An image of {imageSize} split into {patchSize}-pixel patches has {patchesPerSide * patchesPerSide} patch(es); MAE needs at least 2.",
+                nameof(imageSize));
+
         _decoder = decoder;
         _patchSize = patchSize;
-        _numPatches = (imageSize / patchSize) * (imageSize / patchSize);
+        _numPatches = patchesPerSide * patchesPerSide;
         _maskRatio = maskRatio;
-
-        var maeConfig = _config.MAE ?? new MAEConfig();
-        _decoderEmbedDim = maeConfig.DecoderEmbedDimension ?? 512;
-
-        _loss = new MAEReconstructionLoss<T>(normalize: true, perPatchNormalization: true);
-        _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
     [Scratch]
@@ -126,6 +128,10 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
     {
         var patches = Patchify(view1);                       // [B, N, P], data
         int batch = patches.Shape[0], numPatches = patches.Shape[1], patchDim = patches.Shape[2];
+        if (numPatches < 2)
+            throw new ArgumentException(
+                $"The images split into {numPatches} patch(es) of {_patchSize} pixels; MAE masks some and encodes the rest, so it needs at least 2.",
+                nameof(view1));
         int numMasked = Math.Max(1, Math.Min(numPatches - 1, (int)Math.Round(numPatches * _maskRatio)));
         int numVisible = numPatches - numMasked;
         var rng = _maskRandom ??= _config.Seed.HasValue
@@ -283,313 +289,6 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
         }
 
         return new Tensor<T>(patches, [batchSize, numPatchesActual, patchDim]);
-    }
-
-    private (Tensor<T> visible, int[][] indices) ExtractVisiblePatches(Tensor<T> patches, Tensor<T> mask)
-    {
-        var batchSize = patches.Shape[0];
-        var patchDim = patches.Shape[2];
-        var numVisible = _numPatches - (int)(_numPatches * _maskRatio);
-
-        var visiblePatches = new T[batchSize * numVisible * patchDim];
-        var indices = new int[batchSize][];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var batchIndices = new List<int>();
-            int visibleIdx = 0;
-
-            for (int p = 0; p < _numPatches && visibleIdx < numVisible; p++)
-            {
-                if (!NumOps.GreaterThan(mask[b, p], NumOps.Zero))
-                {
-                    batchIndices.Add(p);
-                    for (int d = 0; d < patchDim; d++)
-                    {
-                        visiblePatches[(b * numVisible + visibleIdx) * patchDim + d] = patches[b, p, d];
-                    }
-                    visibleIdx++;
-                }
-            }
-
-            indices[b] = [.. batchIndices];
-        }
-
-        return (new Tensor<T>(visiblePatches, [batchSize, numVisible, patchDim]), indices);
-    }
-
-    private Tensor<T> PrepareDecoderInput(Tensor<T> encoded, int[][] visibleIndices, Tensor<T> mask)
-    {
-        var batchSize = encoded.Shape[0];
-        var numVisible = encoded.Shape[1];
-        var embedDim = encoded.Shape[2];
-
-        // Create full sequence with mask tokens
-        var decoderInput = new T[batchSize * _numPatches * embedDim];
-
-        // Initialize with mask token (learnable in practice, zeros here)
-        // Then place encoded visible patches at their original positions
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < visibleIndices[b].Length; i++)
-            {
-                var patchIdx = visibleIndices[b][i];
-                for (int d = 0; d < embedDim; d++)
-                {
-                    decoderInput[(b * _numPatches + patchIdx) * embedDim + d] = encoded[b, i, d];
-                }
-            }
-        }
-
-        return new Tensor<T>(decoderInput, [batchSize, _numPatches, embedDim]);
-    }
-
-    private Tensor<T> ReconstructFromVisible(Tensor<T> encoded, Tensor<T> mask)
-    {
-        var batchSize = encoded.Shape[0];
-        var numVisible = encoded.Shape[1];
-        var embedDim = encoded.Shape.Length > 2 ? encoded.Shape[2] : encoded.Shape[1];
-        var patchDim = _patchSize * _patchSize * 3;
-
-        // Reconstruct patches using visible embeddings
-        // Without a decoder, we use a simple linear interpolation approach
-        var reconstructed = new T[batchSize * _numPatches * patchDim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int visibleIdx = 0;
-
-            for (int p = 0; p < _numPatches; p++)
-            {
-                bool isMasked = NumOps.GreaterThan(mask[b, p], NumOps.Zero);
-
-                if (!isMasked && visibleIdx < numVisible)
-                {
-                    // Visible patch: project encoder output to patch dimension
-                    for (int d = 0; d < patchDim; d++)
-                    {
-                        // Simple linear projection using repeated/cyclic pattern from embeddings
-                        var embedIdx = d % embedDim;
-                        if (encoded.Shape.Length > 2)
-                        {
-                            reconstructed[(b * _numPatches + p) * patchDim + d] = encoded[b, visibleIdx, embedIdx];
-                        }
-                        else
-                        {
-                            var flatIdx = visibleIdx * embedDim + embedIdx;
-                            if (flatIdx < encoded.Shape[1])
-                            {
-                                reconstructed[(b * _numPatches + p) * patchDim + d] = encoded[b, flatIdx];
-                            }
-                            else
-                            {
-                                reconstructed[(b * _numPatches + p) * patchDim + d] = NumOps.Zero;
-                            }
-                        }
-                    }
-                    visibleIdx++;
-                }
-                else
-                {
-                    // Masked patch: predict from neighboring visible patches
-                    // Use average of visible embeddings as a simple reconstruction target
-                    for (int d = 0; d < patchDim; d++)
-                    {
-                        var embedIdx = d % embedDim;
-                        T sum = NumOps.Zero;
-
-                        // Average all visible embeddings as prediction for masked patch
-                        for (int v = 0; v < numVisible && v < encoded.Shape[1]; v++)
-                        {
-                            if (encoded.Shape.Length > 2)
-                            {
-                                sum = NumOps.Add(sum, encoded[b, v, embedIdx]);
-                            }
-                            else
-                            {
-                                var flatIdx = v * embedDim + embedIdx;
-                                if (flatIdx < encoded.Shape[1])
-                                {
-                                    sum = NumOps.Add(sum, encoded[b, flatIdx]);
-                                }
-                            }
-                        }
-
-                        if (numVisible > 0)
-                        {
-                            reconstructed[(b * _numPatches + p) * patchDim + d] =
-                                NumOps.Divide(sum, NumOps.FromDouble(numVisible));
-                        }
-                        else
-                        {
-                            reconstructed[(b * _numPatches + p) * patchDim + d] = NumOps.Zero;
-                        }
-                    }
-                }
-            }
-        }
-
-        return new Tensor<T>(reconstructed, [batchSize, _numPatches, patchDim]);
-    }
-
-    /// <summary>
-    /// Routes gradients from decoder output back to encoder through visible patch positions.
-    /// </summary>
-    /// <remarks>
-    /// <para>In MAE, the decoder input is prepared by placing encoded visible patches at their
-    /// original positions. The gradients flow back by extracting gradients only at the
-    /// visible positions, which are then passed to the encoder backward pass.</para>
-    /// </remarks>
-    private Tensor<T> RouteGradientsToEncoder(Tensor<T> decoderOutputGrad, int[][] visibleIndices, Tensor<T> mask)
-    {
-        var batchSize = decoderOutputGrad.Shape[0];
-        var numVisible = _numPatches - (int)(_numPatches * _maskRatio);
-        var embedDim = decoderOutputGrad.Shape.Length > 2 ? decoderOutputGrad.Shape[2] : _decoderEmbedDim;
-
-        // The decoder output gradient has shape [batch, numPatches, patchDim]
-        // We need to compute gradient w.r.t. encoder output at visible positions
-        var encoderGrad = new T[batchSize * numVisible * embedDim];
-
-        // Scale factor for gradient (chain rule through reconstruction)
-        var gradScale = NumOps.FromDouble(1.0 / numVisible);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract gradients at visible patch positions
-            for (int i = 0; i < visibleIndices[b].Length && i < numVisible; i++)
-            {
-                var patchIdx = visibleIndices[b][i];
-
-                // Aggregate gradient contribution from reconstruction loss
-                // For MAE, the reconstruction gradient at visible positions contributes
-                // to encoder learning through the decoder's linear projection
-                for (int d = 0; d < embedDim; d++)
-                {
-                    var gradIdx = (b * numVisible + i) * embedDim + d;
-                    var reconIdx = (b * _numPatches + patchIdx);
-
-                    // Compute gradient: sum over patch dimension, weighted by importance
-                    T gradSum = NumOps.Zero;
-                    var patchDim = decoderOutputGrad.Shape.Length > 2 ? decoderOutputGrad.Shape[2] : 1;
-
-                    // Gradient contribution from this patch's reconstruction
-                    if (decoderOutputGrad.Shape.Length > 2)
-                    {
-                        for (int pd = 0; pd < Math.Min(patchDim, embedDim); pd++)
-                        {
-                            var sourceIdx = reconIdx * patchDim + pd;
-                            if (sourceIdx < decoderOutputGrad.Length)
-                            {
-                                gradSum = NumOps.Add(gradSum, decoderOutputGrad.Data.Span[sourceIdx]);
-                            }
-                        }
-                        encoderGrad[gradIdx] = NumOps.Multiply(gradSum, gradScale);
-                    }
-                    else
-                    {
-                        // For 2D case, directly use the gradient
-                        if (reconIdx < decoderOutputGrad.Length)
-                        {
-                            encoderGrad[gradIdx] = NumOps.Multiply(
-                                decoderOutputGrad.Data.Span[reconIdx], gradScale);
-                        }
-                    }
-                }
-            }
-        }
-
-        return new Tensor<T>(encoderGrad, [batchSize, numVisible, embedDim]);
-    }
-
-    /// <summary>
-    /// Routes gradients directly to encoder when no decoder is present.
-    /// </summary>
-    private Tensor<T> RouteGradientsToEncoderDirect(Tensor<T> reconGrad, int[][] visibleIndices, Tensor<T> mask)
-    {
-        var batchSize = reconGrad.Shape[0];
-        var numVisible = _numPatches - (int)(_numPatches * _maskRatio);
-        var encoderOutputDim = _encoder.GetParameters().Length > 0 ? _decoderEmbedDim : 256;
-
-        var encoderGrad = new T[batchSize * numVisible * encoderOutputDim];
-
-        // Without decoder, gradients from reconstruction flow through the simplified
-        // reconstruction path - use masked patch gradients to guide encoder learning
-        var gradScale = NumOps.FromDouble(1.0 / _numPatches);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Compute mean gradient from masked positions to propagate to visible encoder output
-            T meanMaskedGrad = NumOps.Zero;
-            int maskedCount = 0;
-
-            // Accumulate gradients from masked patches
-            for (int p = 0; p < _numPatches; p++)
-            {
-                if (NumOps.GreaterThan(mask[b, p], NumOps.Zero))
-                {
-                    // This is a masked patch - its reconstruction error contributes to learning
-                    var patchDim = reconGrad.Shape.Length > 2 ? reconGrad.Shape[2] : 1;
-                    for (int d = 0; d < patchDim; d++)
-                    {
-                        var idx = (b * _numPatches + p) * patchDim + d;
-                        if (idx < reconGrad.Length)
-                        {
-                            meanMaskedGrad = NumOps.Add(meanMaskedGrad,
-                                NumOps.Abs(reconGrad.Data.Span[idx]));
-                        }
-                    }
-                    maskedCount++;
-                }
-            }
-
-            // Normalize by number of masked patches
-            if (maskedCount > 0)
-            {
-                meanMaskedGrad = NumOps.Divide(meanMaskedGrad, NumOps.FromDouble(maskedCount));
-            }
-
-            // Distribute gradient to visible patch encoder outputs
-            for (int i = 0; i < numVisible; i++)
-            {
-                for (int d = 0; d < encoderOutputDim; d++)
-                {
-                    var idx = (b * numVisible + i) * encoderOutputDim + d;
-                    // Scale gradient based on position (closer to masked patches = higher gradient)
-                    encoderGrad[idx] = NumOps.Multiply(meanMaskedGrad, gradScale);
-                }
-            }
-        }
-
-        return new Tensor<T>(encoderGrad, [batchSize, numVisible, encoderOutputDim]);
-    }
-
-    private void UpdateParameters(T learningRate)
-    {
-        // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        if (encoderGrads.Length != encoderParams.Length)
-        {
-            throw new InvalidOperationException(
-                $"Encoder gradient length ({encoderGrads.Length}) must match parameter count ({encoderParams.Length}).");
-        }
-
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // Update decoder if present
-        if (_decoder is not null)
-        {
-            var decoderGrads = new Vector<T>(_decoder.GetParameterGradients());
-            var decoderParams = _decoder.GetParameters();
-            if (decoderGrads.Length != decoderParams.Length)
-            {
-                throw new InvalidOperationException(
-                    $"Decoder gradient length ({decoderGrads.Length}) must match parameter count ({decoderParams.Length}).");
-            }
-
-            _decoder.UpdateParameters(Engine.Subtract(decoderParams, Engine.Multiply(decoderGrads, learningRate)));
-        }
     }
 
     /// <summary>

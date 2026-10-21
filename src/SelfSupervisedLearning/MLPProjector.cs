@@ -48,55 +48,30 @@ public partial class MLPProjector<T> : IProjectorHead<T>
     private readonly int _outputDim;
     private readonly bool _useBatchNormOnOutput;
 
-    // Layer 1: Input → Hidden
-    private Tensor<T> _weight1;
-    private Tensor<T> _bias1;
-    [Scratch]
-    private Tensor<T>? _gradWeight1;
-    [Scratch]
-    private Tensor<T>? _gradBias1;
+    // Layer 1: Input → Hidden. Every learnable tensor is written in place, never replaced: an optimizer keys its
+    // state by tensor reference.
+    private readonly Tensor<T> _weight1;
+    private readonly Tensor<T> _bias1;
 
     // BatchNorm 1
-    private Tensor<T> _gamma1;
-    private Tensor<T> _beta1;
+    private readonly Tensor<T> _gamma1;
+    private readonly Tensor<T> _beta1;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _runningMean1;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _runningVar1;
-    [Scratch]
-    private Tensor<T>? _gradGamma1;
-    [Scratch]
-    private Tensor<T>? _gradBeta1;
 
     // Layer 2: Hidden → Output
-    private Tensor<T> _weight2;
-    private Tensor<T> _bias2;
-    [Scratch]
-    private Tensor<T>? _gradWeight2;
-    [Scratch]
-    private Tensor<T>? _gradBias2;
+    private readonly Tensor<T> _weight2;
+    private readonly Tensor<T> _bias2;
 
     // BatchNorm 2 (optional)
-    private Tensor<T>? _gamma2;
-    private Tensor<T>? _beta2;
+    private readonly Tensor<T>? _gamma2;
+    private readonly Tensor<T>? _beta2;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _runningMean2;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _runningVar2;
-    [Scratch]
-    private Tensor<T>? _gradGamma2;
-    [Scratch]
-    private Tensor<T>? _gradBeta2;
-
-    // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _preActivation1;
-    private Tensor<T>? _postBatchNorm1;
-    private Tensor<T>? _postRelu1;
-    [Scratch]
-    private Tensor<T>? _preActivation2;
 
     private bool _isTraining = true;
     private readonly double _batchNormMomentum = 0.1;
@@ -184,28 +159,17 @@ public partial class MLPProjector<T> : IProjectorHead<T>
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
-        _lastInput = input;
+        // Linear, BatchNorm, ReLU, Linear, [BatchNorm]: engine ops the gradient tape records.
+        var hidden = Engine.ReLU(BatchNormForward(LinearForward(input, _weight1, _bias1), _gamma1, _beta1, _runningMean1, _runningVar1));
+        var output = LinearForward(hidden, _weight2, _bias2);
 
-        // Layer 1: Linear
-        _preActivation1 = LinearForward(input, _weight1, _bias1);
-
-        // BatchNorm 1
-        _postBatchNorm1 = BatchNormForward(_preActivation1, _gamma1, _beta1, _runningMean1, _runningVar1);
-
-        // ReLU
-        _postRelu1 = ReLUForward(_postBatchNorm1);
-
-        // Layer 2: Linear
-        _preActivation2 = LinearForward(_postRelu1, _weight2, _bias2);
-
-        // Optional BatchNorm 2
         if (_useBatchNormOnOutput && _gamma2 is not null && _beta2 is not null &&
             _runningMean2 is not null && _runningVar2 is not null)
         {
-            return BatchNormForward(_preActivation2, _gamma2, _beta2, _runningMean2, _runningVar2);
+            return BatchNormForward(output, _gamma2, _beta2, _runningMean2, _runningVar2);
         }
 
-        return _preActivation2;
+        return output;
     }
 
     /// <inheritdoc />
@@ -251,61 +215,27 @@ public partial class MLPProjector<T> : IProjectorHead<T>
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters; got {parameters.Length}.", nameof(parameters));
 
+        // Written into the live tensors, in GetParameters' order, so an optimizer keyed by tensor reference keeps its
+        // state.
         int offset = 0;
-
-        // Layer 1
-        _weight1 = ExtractTensor(parameters, ref offset, [_inputDim, _hiddenDim]);
-        _bias1 = ExtractTensor(parameters, ref offset, [_hiddenDim]);
-        _gamma1 = ExtractTensor(parameters, ref offset, [_hiddenDim]);
-        _beta1 = ExtractTensor(parameters, ref offset, [_hiddenDim]);
-
-        // Layer 2
-        _weight2 = ExtractTensor(parameters, ref offset, [_hiddenDim, _outputDim]);
-        _bias2 = ExtractTensor(parameters, ref offset, [_outputDim]);
-
-        if (_useBatchNormOnOutput)
+        foreach (var tensor in GetTrainableTensors())
         {
-            _gamma2 = ExtractTensor(parameters, ref offset, [_outputDim]);
-            _beta2 = ExtractTensor(parameters, ref offset, [_outputDim]);
+            for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
         }
     }
 
     /// <inheritdoc />
-    public Vector<T> GetParameterGradients()
-    {
-        var gradList = new List<T>();
-
-        // Layer 1
-        AddTensorToList(gradList, _gradWeight1 ?? InitializeZeros(_inputDim * _hiddenDim, [_inputDim, _hiddenDim]));
-        AddTensorToList(gradList, _gradBias1 ?? InitializeZeros(_hiddenDim));
-        AddTensorToList(gradList, _gradGamma1 ?? InitializeZeros(_hiddenDim));
-        AddTensorToList(gradList, _gradBeta1 ?? InitializeZeros(_hiddenDim));
-
-        // Layer 2
-        AddTensorToList(gradList, _gradWeight2 ?? InitializeZeros(_hiddenDim * _outputDim, [_hiddenDim, _outputDim]));
-        AddTensorToList(gradList, _gradBias2 ?? InitializeZeros(_outputDim));
-
-        if (_useBatchNormOnOutput)
-        {
-            AddTensorToList(gradList, _gradGamma2 ?? InitializeZeros(_outputDim));
-            AddTensorToList(gradList, _gradBeta2 ?? InitializeZeros(_outputDim));
-        }
-
-        return new Vector<T>([.. gradList]);
-    }
+    /// <exception cref="NotSupportedException">Always: the gradient tape differentiates this head.</exception>
+    public Vector<T> GetParameterGradients() => throw new NotSupportedException(
+        "MLPProjector keeps no gradients: record Project on a GradientTape and differentiate GetTrainableTensors().");
 
     /// <inheritdoc />
+    /// <remarks>This head keeps no gradients, so there is nothing to clear.</remarks>
     public void ClearGradients()
     {
-        _gradWeight1 = null;
-        _gradBias1 = null;
-        _gradGamma1 = null;
-        _gradBeta1 = null;
-        _gradWeight2 = null;
-        _gradBias2 = null;
-        _gradGamma2 = null;
-        _gradBeta2 = null;
     }
 
     /// <inheritdoc />
@@ -315,14 +245,9 @@ public partial class MLPProjector<T> : IProjectorHead<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>The head keeps no per-call state; Reset leaves the weights and running statistics as they are.</remarks>
     public void Reset()
     {
-        ClearGradients();
-        _lastInput = null;
-        _preActivation1 = null;
-        _postBatchNorm1 = null;
-        _postRelu1 = null;
-        _preActivation2 = null;
     }
 
     #region Private Helper Methods
@@ -351,16 +276,6 @@ public partial class MLPProjector<T> : IProjectorHead<T>
         return new Tensor<T>(data, [size]);
     }
 
-    private Tensor<T> InitializeZeros(int size, int[] shape)
-    {
-        var data = new T[size];
-        for (int i = 0; i < size; i++)
-        {
-            data[i] = NumOps.Zero;
-        }
-        return new Tensor<T>(data, shape);
-    }
-
     private Tensor<T> InitializeOnes(int size)
     {
         var data = new T[size];
@@ -378,24 +293,6 @@ public partial class MLPProjector<T> : IProjectorHead<T>
         var output = Engine.TensorMatMul(input, weight);
         var bias2D = bias.Reshape(1, weight.Shape[1]);
         return Engine.TensorAdd(output, bias2D);
-    }
-
-    private (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) LinearBackward(
-        Tensor<T> outputGrad, Tensor<T> input, Tensor<T> weight)
-    {
-        // Vectorized backward: all matmuls via Engine
-        // Input gradient: dX = dY @ W^T
-        var weightT = weight.Transpose([1, 0]);
-        var inputGradTensor = Engine.TensorMatMul(outputGrad, weightT);
-
-        // Weight gradient: dW = X^T @ dY
-        var inputT = input.Transpose([1, 0]);
-        var weightGradTensor = Engine.TensorMatMul(inputT, outputGrad);
-
-        // Bias gradient: dB = sum(dY, axis=0)
-        var biasGradTensor = Engine.ReduceSum(outputGrad, new[] { 0 });
-
-        return (inputGradTensor, weightGradTensor, biasGradTensor);
     }
 
     private Tensor<T> BatchNormForward(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
@@ -441,137 +338,12 @@ public partial class MLPProjector<T> : IProjectorHead<T>
         return new Tensor<T>(result, [batchSize, dim]);
     }
 
-    private (Tensor<T> inputGrad, Tensor<T> gammaGrad, Tensor<T> betaGrad) BatchNormBackward(
-        Tensor<T> outputGrad, Tensor<T> input, Tensor<T> gamma)
-    {
-        var batchSize = outputGrad.Shape[0];
-        var dim = outputGrad.Shape[1];
-
-        var inputGrad = new T[batchSize * dim];
-        var gammaGrad = new T[dim];
-        var betaGrad = new T[dim];
-
-        // Compute mean and variance for normalization
-        var mean = new T[dim];
-        var variance = new T[dim];
-        var normalized = new T[batchSize * dim];
-
-        for (int d = 0; d < dim; d++)
-        {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                sum = NumOps.Add(sum, input[b, d]);
-            }
-            mean[d] = NumOps.Divide(sum, NumOps.FromDouble(batchSize));
-        }
-
-        for (int d = 0; d < dim; d++)
-        {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                var diff = NumOps.Subtract(input[b, d], mean[d]);
-                sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-            }
-            variance[d] = NumOps.Divide(sum, NumOps.FromDouble(batchSize));
-        }
-
-        // Precompute normalized values: x_norm = (x - mean) / std
-        for (int d = 0; d < dim; d++)
-        {
-            var std = NumOps.Sqrt(NumOps.Add(variance[d], NumOps.FromDouble(_batchNormEpsilon)));
-            for (int b = 0; b < batchSize; b++)
-            {
-                normalized[b * dim + d] = NumOps.Divide(NumOps.Subtract(input[b, d], mean[d]), std);
-            }
-        }
-
-        // Compute parameter gradients and input gradient using full BatchNorm formula:
-        // dL/dx = (1/N) * γ * (1/σ) * [N * dL/dy - sum(dL/dy) - x_norm * sum(dL/dy * x_norm)]
-        var n = NumOps.FromDouble(batchSize);
-
-        for (int d = 0; d < dim; d++)
-        {
-            var std = NumOps.Sqrt(NumOps.Add(variance[d], NumOps.FromDouble(_batchNormEpsilon)));
-            var invStd = NumOps.Divide(NumOps.One, std);
-
-            // dL/dβ = sum(dL/dy)
-            T sumDy = NumOps.Zero;
-            // dL/dγ = sum(dL/dy * x_norm)
-            T sumDyXnorm = NumOps.Zero;
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                var dy = outputGrad[b, d];
-                var xn = normalized[b * dim + d];
-                sumDy = NumOps.Add(sumDy, dy);
-                sumDyXnorm = NumOps.Add(sumDyXnorm, NumOps.Multiply(dy, xn));
-            }
-
-            betaGrad[d] = sumDy;
-            gammaGrad[d] = sumDyXnorm;
-
-            // dL/dx = (γ / (N * σ)) * [N * dL/dy - sum(dL/dy) - x_norm * sum(dL/dy * x_norm)]
-            var scale = NumOps.Multiply(gamma[d], NumOps.Divide(invStd, n));
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                var dy = outputGrad[b, d];
-                var xn = normalized[b * dim + d];
-
-                // N * dL/dy - sum(dL/dy) - x_norm * sum(dL/dy * x_norm)
-                var term = NumOps.Subtract(
-                    NumOps.Subtract(
-                        NumOps.Multiply(n, dy),
-                        sumDy),
-                    NumOps.Multiply(xn, sumDyXnorm));
-
-                inputGrad[b * dim + d] = NumOps.Multiply(scale, term);
-            }
-        }
-
-        return (
-            new Tensor<T>(inputGrad, [batchSize, dim]),
-            new Tensor<T>(gammaGrad, [dim]),
-            new Tensor<T>(betaGrad, [dim])
-        );
-    }
-
-    // Engine.ReLU records on the gradient tape.
-    private Tensor<T> ReLUForward(Tensor<T> input) => Engine.ReLU(input);
-
-    private Tensor<T> ReLUBackward(Tensor<T> outputGrad, Tensor<T> input)
-    {
-        // Vectorized ReLU backward: grad * (input > 0)
-        var mask = Engine.TensorGreaterThan(input, NumOps.Zero);
-        var zeros = Tensor<T>.CreateDefault(outputGrad._shape, NumOps.Zero);
-        return Engine.TensorWhere(mask, outputGrad, zeros);
-    }
-
     private static void AddTensorToList(List<T> list, Tensor<T> tensor)
     {
         for (int i = 0; i < tensor.Length; i++)
         {
             list.Add(tensor.Data.Span[i]);
         }
-    }
-
-    private static Tensor<T> ExtractTensor(Vector<T> parameters, ref int offset, int[] shape)
-    {
-        int size = 1;
-        foreach (var dim in shape)
-        {
-            size *= dim;
-        }
-
-        var data = new T[size];
-        for (int i = 0; i < size; i++)
-        {
-            data[i] = parameters[offset++];
-        }
-
-        return new Tensor<T>(data, shape);
     }
 
     #endregion

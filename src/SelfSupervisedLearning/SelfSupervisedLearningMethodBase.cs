@@ -137,17 +137,61 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     {
         var (view1, view2) = CreateViews(batch, augmentationContext);
         var optimizer = _trainingOptimizer ??= CreateOptimizer();
+        // The configured schedule (linear scaling, warmup, cosine decay) sets this step's rate.
+        double learningRate = GetEffectiveLearningRate();
+        if (optimizer is AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
+            scheduled.SetScheduledLearningRate(learningRate);
+
+        // SGD and Adam take weight decay as an L2 term in the gradient (torch.optim's weight_decay), which is the
+        // gradient of (wd / 2) * ||w||^2 added to the objective; the decoupled optimizers apply it themselves.
+        double coupledDecay = CoupledWeightDecay();
+        T penalty = NumOps.Zero;
         T loss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
             GetOnlineTrainableTensors,
-            () => ComputeObjective(view1, view2),
+            () =>
+            {
+                var objective = ComputeObjective(view1, view2);
+                if (coupledDecay <= 0) return objective;
+                var l2 = L2Penalty(GetOnlineTrainableTensors(), coupledDecay);
+                penalty = l2.Length > 0 ? l2.GetFlat(0) : NumOps.Zero;
+                return Engine.TensorAdd(objective, l2);
+            },
             optimizer);
         AfterOptimizerStep();
-        return CreateStepResult(loss);
+        // The reported loss is the method's objective, without the weight-decay term.
+        return CreateStepResult(NumOps.Subtract(loss, penalty));
+    }
+
+    // The weight decay the objective carries: the configured decay for SGD and Adam, which have no decay of their own.
+    private double CoupledWeightDecay()
+    {
+        double wd = _config.WeightDecay ?? 0.0;
+        if (wd < 0 || double.IsNaN(wd)) throw new InvalidOperationException($"Weight decay must be non-negative; got {wd}.");
+        var type = _config.OptimizerType ?? DefaultOptimizerType;
+        return type == SelfSupervisedLearningOptimizerType.SGD || type == SelfSupervisedLearningOptimizerType.Adam ? wd : 0.0;
+    }
+
+    // (wd / 2) * sum ||w||^2 over the given tensors, as a one-element tensor the tape records.
+    private Tensor<T> L2Penalty(IReadOnlyList<Tensor<T>> tensors, double weightDecay)
+    {
+        Tensor<T>? total = null;
+        foreach (var tensor in tensors)
+        {
+            var sum = Engine.ReduceSum(Engine.TensorMultiply(tensor, tensor), Enumerable.Range(0, tensor.Rank).ToArray(), keepDims: false);
+            var flat = Engine.Reshape(sum, new[] { 1 });
+            total = total is null ? flat : Engine.TensorAdd(total, flat);
+        }
+        return total is null
+            ? new Tensor<T>(new[] { 1 })
+            : Engine.TensorMultiplyScalar(total, NumOps.FromDouble(weightDecay / 2.0));
     }
 
     // Created on the first training step, so a method configured after construction still gets its settings.
     [Scratch]
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
+
+    /// <summary>The rate the training optimizer last stepped at (NaN before the first step).</summary>
+    internal double TrainingOptimizerLearningRate => _trainingOptimizer?.GetCurrentLearningRate() ?? double.NaN;
 
     [Scratch]
     private SelfSupervisedLearningAugmentationPolicies<T>? _viewPolicies;
@@ -221,7 +265,9 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <summary>Creates the training optimizer from the configuration.</summary>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateOptimizer()
     {
-        double lr = _config.LearningRate ?? DefaultLearningRate;
+        // The first step's rate; TrainStepCore sets each step's from GetEffectiveLearningRate. SGD and Adam take the
+        // weight decay through the objective (see TrainStepCore).
+        double lr = GetEffectiveLearningRate();
         double wd = _config.WeightDecay ?? 0.0;
         switch (_config.OptimizerType ?? DefaultOptimizerType)
         {
@@ -332,26 +378,24 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <returns>The current learning rate.</returns>
     public virtual double GetEffectiveLearningRate()
     {
-        var baseLr = _config.LearningRate ?? 0.3;
-        var batchSize = _config.BatchSize ?? 256;
+        // The base rate is per 256 samples (the linear scaling rule of the papers: SimCLR's 0.3, MoCo v3's 1.5e-4).
+        double baseLr = _config.LearningRate ?? DefaultLearningRate;
+        int batchSize = _config.BatchSize ?? 256;
+        double effectiveLr = baseLr * batchSize / 256.0;
 
-        // Linear scaling rule
-        var effectiveLr = baseLr * batchSize / 256.0;
-
-        // Apply cosine decay if enabled
-        if (_config.UseCosineDecay == true)
-        {
-            var totalSteps = (_config.PretrainingEpochs ?? 100) * 1000; // Approximate
-            var progress = Math.Min(1.0, (double)_currentStep / totalSteps);
-            effectiveLr *= 0.5 * (1.0 + Math.Cos(Math.PI * progress));
-        }
-
-        // Apply warmup if in warmup phase
-        var warmupEpochs = _config.WarmupEpochs ?? 10;
+        // Linear warmup over the first WarmupEpochs, by epoch: epoch k of W runs at (k + 1) / W of the rate, so no
+        // epoch trains at zero.
+        int warmupEpochs = Math.Max(0, _config.WarmupEpochs ?? 10);
         if (_currentEpoch < warmupEpochs)
+            return effectiveLr * (_currentEpoch + 1) / warmupEpochs;
+
+        // Then cosine decay to zero over the remaining epochs (MoCo v3's schedule).
+        if (_config.UseCosineDecay ?? true)
         {
-            var warmupProgress = (double)_currentEpoch / warmupEpochs;
-            effectiveLr *= warmupProgress;
+            int totalEpochs = _config.PretrainingEpochs ?? 100;
+            int decayEpochs = Math.Max(1, totalEpochs - warmupEpochs);
+            double progress = Math.Min(1.0, (double)(_currentEpoch - warmupEpochs) / decayEpochs);
+            effectiveLr *= 0.5 * (1.0 + Math.Cos(Math.PI * progress));
         }
 
         return effectiveLr;

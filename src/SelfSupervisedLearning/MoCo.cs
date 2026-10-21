@@ -100,6 +100,11 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
         Guard.NotNull(momentumEncoder);
         _momentumEncoder = momentumEncoder;
         _momentumProjector = momentumProjector;
+        // The momentum projector tracks the online one by EMA, element for element, so the two must match in size.
+        if (projector is not null && momentumProjector is not null && projector.ParameterCount != momentumProjector.ParameterCount)
+            throw new ArgumentException(
+                $"The momentum projector has {momentumProjector.ParameterCount} parameters; the projector it tracks has {projector.ParameterCount}.",
+                nameof(momentumProjector));
 
         var mocoConfig = _config.MoCo ?? new MoCoConfig();
         var queueSize = mocoConfig.QueueSize ?? 65536;
@@ -192,14 +197,11 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
             double m = _momentumEncoder.Momentum;
             var online = _projector.GetParameters();
             var target = _momentumProjector.GetParameters();
-            if (online.Length == target.Length)
-            {
-                var updated = new Vector<T>(target.Length);
-                for (int i = 0; i < target.Length; i++)
-                    updated[i] = NumOps.Add(NumOps.Multiply(target[i], NumOps.FromDouble(m)),
-                        NumOps.Multiply(online[i], NumOps.FromDouble(1.0 - m)));
-                _momentumProjector.SetParameters(updated);
-            }
+            var updated = new Vector<T>(target.Length);
+            for (int i = 0; i < target.Length; i++)
+                updated[i] = NumOps.Add(NumOps.Multiply(target[i], NumOps.FromDouble(m)),
+                    NumOps.Multiply(online[i], NumOps.FromDouble(1.0 - m)));
+            _momentumProjector.SetParameters(updated);
         }
 
         if (_pendingKeys is { } keys)
@@ -219,20 +221,6 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
 
     /// <inheritdoc />
     protected override double DefaultLearningRate => 0.03;
-
-    private void UpdateEncoderParameters(T learningRate)
-    {
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        if (_projector is not null)
-        {
-            var projGrads = new Vector<T>(_projector.GetParameterGradients());
-            var projParams = _projector.GetParameters();
-            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
-        }
-    }
 
     /// <inheritdoc />
     public override void Reset()
