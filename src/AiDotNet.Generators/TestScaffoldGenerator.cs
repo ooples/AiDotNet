@@ -67,6 +67,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
         // NoisePredictorBase is no longer excluded: NoisePredictorTestBase drives PredictNoise directly, and each
         // predictor is built at a reduced size from NoisePredictorFixtureArgs (#2139).
+        // ShardedModelBase is no longer excluded: ShardedModelTestBase wraps a seeded network at world size 1, where
+        // every wrapper must equal the model it wraps (#2139).
+        "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
         "PolicyBase",                // RL policies: the state->action half of an agent, not an agent.
                                      // Routing these to the RL family was TRIED and measured: 28 of
                                      // the 33 emitted tests failed, and none of the failures was a
@@ -750,6 +753,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ["iBOT"] = $"studentEncoder: {SslParts}.Encoder(), teacherEncoder: {SslParts}.Momentum(), studentProjector: {SslParts}.Mlp(1), teacherProjector: {SslParts}.Mlp(2), outputDim: 8, config: {SslParts}.Config()",
             ["MAE"] = $"encoder: {SslParts}.Encoder(4, 4), decoder: null, patchSize: 2, imageSize: 4, maskRatio: 0.75, config: {SslParts}.Config()",
         };
+    /// <summary>Overridable surface of <c>ShardedModelTestBase</c>; its factory is emitted per family, never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> ShardedModelTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateWrapper" };
 
     /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VideoSafetyModuleTestBaseMembers =
@@ -3677,6 +3684,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                     || (model.HasLeadingIntConstructor
                                         && model.UsesMatrixInput && model.UsesVectorOutput)
                                     || family.Value is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation or TestFamily.MetaLearning
+                                        or TestFamily.Sharded
                                         or TestFamily.ClassificationMetaLearning
                                     || ExplicitlyConstructedClassNames.Contains(model.ClassName)
                                     // A self-supervised method wraps parts the caller supplies; its fixture builds them.
@@ -3994,6 +4002,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsVae = false;
         bool extendsNoisePredictor = false;
         bool extendsSsl = false;
+        bool extendsSharded = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
         bool extendsClassicalVolatility = false;
@@ -4198,6 +4207,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsNoisePredictor = true;
             else if (baseName.StartsWith("SelfSupervisedLearningMethodBase", System.StringComparison.Ordinal))
                 extendsSsl = true;
+            else if (baseName.StartsWith("ShardedModelBase", System.StringComparison.Ordinal))
+                extendsSharded = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
@@ -4404,6 +4415,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsVAEModelBase = extendsVae,
             ExtendsNoisePredictorBase = extendsNoisePredictor,
             ExtendsSelfSupervisedLearningMethodBase = extendsSsl,
+            ExtendsShardedModelBase = extendsSharded,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
             MetaLearnerOptionsType = metaLearnerOptionsType,
@@ -5102,6 +5114,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // A self-supervised method is judged on TrainStep and Encode, built from small real parts (#2139).
         if (model.ExtendsSelfSupervisedLearningMethodBase)
             return TestFamily.SelfSupervised;
+        // A sharded training wrapper is judged against the model it wraps, at world size 1 (#2139).
+        if (model.ExtendsShardedModelBase)
+            return TestFamily.Sharded;
 
         // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
         // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
@@ -13573,6 +13588,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "VAEModelTestBase"
             || baseClassName == "NoisePredictorTestBase"
             || baseClassName == "SelfSupervisedLearningMethodTestBase"
+            || baseClassName == "ShardedModelTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
@@ -17535,7 +17551,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // second copy of a number the base already holds - the pattern behind every architecture /
         // fixture disagreement this generator has produced.
         bool parameterizedFactory = family is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation
-            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning;
+            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning or TestFamily.Sharded;
         if (family == TestFamily.TensorModule)
         {
             sb.AppendLine($"    protected override {returnTypeCode} CreateModel(int width)");
@@ -17565,6 +17581,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override bool MetaModelFrozenByDesign => true;");
             }
+        }
+        else if (family == TestFamily.Sharded)
+        {
+            // The base compares against an identical twin of the wrapped network, so the wrapper is built from the
+            // same shared parts the base uses.
+            const string tensor = "AiDotNet.Tensors.LinearAlgebra.Tensor<double>";
+            const string parts = "global::AiDotNet.Tests.ModelFamilyTests.Base.ShardedFixtureParts";
+            sb.AppendLine($"    protected override {returnTypeCode} CreateWrapper()");
+            sb.AppendLine($"        => new {typeName}<double, {tensor}, {tensor}>({parts}.Network(), {parts}.Config());");
         }
         else if (family == TestFamily.ClassificationMetaLearning)
         {
@@ -17818,6 +17843,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.VAE => VAEModelTestBaseMembers,
             TestFamily.NoisePredictor => NoisePredictorTestBaseMembers,
             TestFamily.SelfSupervised => SelfSupervisedTestBaseMembers,
+            TestFamily.Sharded => ShardedModelTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
@@ -17986,6 +18012,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsNoisePredictorBase;
             case TestFamily.SelfSupervised:
                 return model.ExtendsSelfSupervisedLearningMethodBase;
+            case TestFamily.Sharded:
+                return model.ExtendsShardedModelBase && model.TypeParameterCount == 3;
             case TestFamily.DeepfakeDetector:
                 return model.ExtendsDeepfakeDetectorBase;
             case TestFamily.MetaLearning:
@@ -20397,6 +20425,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsNoisePredictorBase { get; set; }
         /// <summary>True for a self-supervised learning method, judged on TrainStep and Encode.</summary>
         public bool ExtendsSelfSupervisedLearningMethodBase { get; set; }
+        /// <summary>True for a sharded training wrapper, judged against the model it wraps.</summary>
+        public bool ExtendsShardedModelBase { get; set; }
 
         /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
         public bool ExtendsDeepfakeDetectorBase { get; set; }
@@ -20631,6 +20661,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         VAE,
         NoisePredictor,
         SelfSupervised,
+        Sharded,
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
@@ -21466,6 +21497,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.VAE:                   return "VAEModelTestBase";
             case TestFamily.NoisePredictor:        return "NoisePredictorTestBase";
             case TestFamily.SelfSupervised:        return "SelfSupervisedLearningMethodTestBase";
+            case TestFamily.Sharded:               return "ShardedModelTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
@@ -21526,6 +21558,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "CreatePredictor";
             case TestFamily.SelfSupervised:
                 return "CreateMethod";
+            case TestFamily.Sharded:
+                return "CreateWrapper";
             case TestFamily.Neck:
                 return "CreateNeck";
             case TestFamily.InstanceSegmentation:
@@ -21602,6 +21636,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.Interfaces.INoisePredictor<double>";
             case TestFamily.SelfSupervised:
                 return "AiDotNet.SelfSupervisedLearning.ISelfSupervisedLearningMethod<double>";
+            case TestFamily.Sharded:
+                return "AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:
