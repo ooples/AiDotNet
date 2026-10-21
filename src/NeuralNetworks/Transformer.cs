@@ -656,9 +656,6 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
     /// </remarks>
     protected override Tensor<T> PredictEager(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return RunLayerWalk(input);
     }

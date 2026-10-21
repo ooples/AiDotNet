@@ -222,10 +222,6 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(SparseNeuralNetwork<T>), "forward pass");
 
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         Tensor<T> output = input;
         foreach (var layer in Layers)
         {

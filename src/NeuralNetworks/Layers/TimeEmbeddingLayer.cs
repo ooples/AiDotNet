@@ -156,17 +156,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     [Scratch]
     private Tensor<T>? _linear2BiasGradient;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuTimesteps;
-    [ExternalState]
-    private Tensor<T>? _gpuSinusoidalEmbed;
-    [ExternalState]
-    private Tensor<T>? _gpuHidden;
-    [ExternalState]
-    private Tensor<T>? _gpuPreActivation;
-    private int[]? _gpuInputShape;
-
     public override bool SupportsTraining => true;
 
     public override void ClearGradients()
@@ -176,58 +165,8 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         _linear2WeightsGradient = null; _linear2BiasGradient = null;
     }
 
-    /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
     [TrainableParameter(Role = PersistentTensorRole.Constant)]
     private Tensor<T> _frequencies;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0) throw new ArgumentException("TimeEmbeddingLayer requires an input tensor.");
-        var input = inputs[0];
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        int batch = input.Shape[0];
-        Tensor<T> timesteps = input.Shape.Length == 1
-            ? gpuEngine.ReshapeGpu(input, [batch, 1])
-            : input;
-
-        // Compute sinusoidal embedding args: timesteps @ frequencies^T
-        var freqsT = _frequencies.Transpose();
-        var args = gpuEngine.FusedLinearGpu(timesteps, freqsT, null, FusedActivationType.None);
-
-        var sinPart = gpuEngine.SinGpu(args);
-        var cosPart = gpuEngine.CosGpu(args);
-
-        // Concatenate sin and cos components along feature axis
-        var embedding = gpuEngine.ConcatGpu<T>([sinPart, cosPart], 1);
-
-        // MLP projection: Linear1 -> SiLU (Swish) -> Linear2
-        // For backward pass, we need the pre-activation values, so compute linear1 without activation first
-        var preActivation = gpuEngine.FusedLinearGpu(embedding, _linear1Weights, _linear1Bias, FusedActivationType.None);
-        var hidden = gpuEngine.ActivationGpu<T>(preActivation, FusedActivationType.Swish);
-        var output = gpuEngine.FusedLinearGpu(hidden, _linear2Weights, _linear2Bias, FusedActivationType.None);
-
-        if (IsTrainingMode)
-        {
-            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-            _lastSinusoidalEmbed = embedding;
-            _lastHidden = hidden;
-
-            // Cache GPU tensors for backward pass
-            _gpuInputShape = input._shape;
-            _gpuTimesteps = timesteps;
-            _gpuSinusoidalEmbed = embedding;
-            _gpuHidden = hidden;
-            _gpuPreActivation = preActivation;
-        }
-
-        return output;
-    }
 
     /// <summary>
     /// The maximum timestep value for scaling embeddings.
@@ -404,12 +343,5 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         _linear1BiasGradient = null;
         _linear2WeightsGradient = null;
         _linear2BiasGradient = null;
-
-        // Clear GPU cached tensors
-        _gpuTimesteps = null;
-        _gpuSinusoidalEmbed = null;
-        _gpuHidden = null;
-        _gpuPreActivation = null;
-        _gpuInputShape = null;
     }
 }

@@ -478,23 +478,12 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     // Cached forward pass state for backpropagation (BPTT)
     [ExternalState]
     private Tensor<T>? _gpuLastInput;
-    private Tensor<T>[]? _gpuCachedZGates;
-    private Tensor<T>[]? _gpuCachedRGates;
-    private Tensor<T>[]? _gpuCachedHCandidates;
-    private Tensor<T>[]? _gpuCachedHiddenStates;
-    [ExternalState]
-    private Tensor<T>? _gpuInitialHiddenState;
 
     // Cached stacked weights for fused kernel (PyTorch format: r, z, n)
     private IGpuBuffer? _gpuStackedWeightsIh;
     private IGpuBuffer? _gpuStackedWeightsHh;
     private IGpuBuffer? _gpuStackedBiasIh;
     private IGpuBuffer? _gpuStackedBiasHh;
-    private bool _gpuStackedWeightsValid;
-
-    // Fused kernel output cache buffers for backward pass
-    private IGpuBuffer? _gpuFusedAllH;
-    private IGpuBuffer? _gpuFusedCacheGates;
 
     #endregion
 
@@ -520,11 +509,6 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// True once the first forward has resolved <see cref="_inputSize"/> and allocated
@@ -1140,184 +1124,6 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Performs the forward pass on GPU tensors using fused sequence kernel.
-    /// </summary>
-    /// <param name="inputs">GPU tensor inputs.</param>
-    /// <returns>GPU tensor output after GRU processing.</returns>
-    /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        // Lazy ctor path: resolve _inputSize from inputs[0].Shape[^1] and allocate weights
-        // before any GPU code reads stacked weight tensors. Without this, a first GPU call
-        // on a freshly-constructed lazy GRULayer would dereference zero-sized tensors.
-        EnsureInitializedFromInput(inputs[0]);
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        var input = inputs[0];
-        var shape = input._shape;
-        int rank = shape.Length;
-
-        // Determine sequence length, batch size from shape
-        int sequenceLength;
-        int batchSize;
-        if (rank == 1)
-        {
-            sequenceLength = 1;
-            batchSize = 1;
-        }
-        else if (rank == 2)
-        {
-            sequenceLength = shape[0];
-            batchSize = 1;
-        }
-        else if (rank == 3)
-        {
-            sequenceLength = shape[1];
-            batchSize = shape[0];
-        }
-        else
-        {
-            // Higher rank: collapse leading dims into batch
-            sequenceLength = shape[rank - 2];
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 2; d++)
-                flatBatch *= shape[d];
-            batchSize = flatBatch;
-        }
-
-        int hiddenBufferSize = batchSize * _hiddenSize;
-        int fullOutputSize = sequenceLength * batchSize * _hiddenSize;
-        int allHSize = (sequenceLength + 1) * batchSize * _hiddenSize;
-        int cacheGatesSize = sequenceLength * batchSize * _hiddenSize * 3;
-
-        int[] outputShape;
-        int outputSize;
-        if (_returnSequences)
-        {
-            outputShape = [batchSize, sequenceLength, _hiddenSize];
-            outputSize = fullOutputSize;
-        }
-        else
-        {
-            outputShape = [batchSize, _hiddenSize];
-            outputSize = hiddenBufferSize;
-        }
-
-        // Cache input for backward pass if training
-        if (IsTrainingMode)
-        {
-            _lastInput = input.Reshape([batchSize, sequenceLength, _inputSize]);
-            _originalInputShape = shape;
-        }
-
-        // Prepare stacked weights in PyTorch format (r, z, n order)
-        PrepareStackedWeightsForGpu(backend);
-
-        // Allocate initial hidden state buffer (zeros)
-        var hInitBuffer = backend.AllocateBuffer(hiddenBufferSize);
-        backend.Fill(hInitBuffer, 0.0f, hiddenBufferSize);
-
-        // Allocate output buffers
-        var fullOutputBuffer = backend.AllocateBuffer(fullOutputSize);
-        var hFinalBuffer = backend.AllocateBuffer(hiddenBufferSize);
-
-        // Allocate cache buffers for backward pass
-        bool cacheForTraining = IsTrainingMode;
-        IGpuBuffer? allHBuffer = null;
-        IGpuBuffer? cacheGatesBuffer = null;
-
-        if (cacheForTraining)
-        {
-            ClearGpuTrainingCache();
-            _gpuLastInput = input;
-
-            allHBuffer = backend.AllocateBuffer(allHSize);
-            cacheGatesBuffer = backend.AllocateBuffer(cacheGatesSize);
-
-            // Store fused cache buffers for backward pass
-            _gpuFusedAllH = allHBuffer;
-            _gpuFusedCacheGates = cacheGatesBuffer;
-
-            // Cache initial hidden state
-            var initHBufferCopy = backend.AllocateBuffer(hiddenBufferSize);
-            backend.Copy(hInitBuffer, initHBufferCopy, hiddenBufferSize);
-            _gpuInitialHiddenState = GpuTensorHelper.UploadToGpu<T>(backend, initHBufferCopy, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
-        }
-        else
-        {
-            // Allocate temporary cache buffers (will be disposed after forward)
-            allHBuffer = backend.AllocateBuffer(allHSize);
-            cacheGatesBuffer = backend.AllocateBuffer(cacheGatesSize);
-        }
-
-        try
-        {
-            // Call fused GRU sequence kernel (processes all timesteps in one kernel launch)
-            backend.GruForwardSequence(
-                input.Buffer, hInitBuffer,
-                _gpuStackedWeightsIh!, _gpuStackedWeightsHh!, _gpuStackedBiasIh!, _gpuStackedBiasHh!,
-                fullOutputBuffer, hFinalBuffer, allHBuffer, cacheGatesBuffer,
-                sequenceLength, batchSize, _inputSize, _hiddenSize);
-
-            // Create output buffer - either full sequence or final hidden state
-            IGpuBuffer outputBuffer;
-            if (_returnSequences)
-            {
-                outputBuffer = fullOutputBuffer;
-            }
-            else
-            {
-                // Copy final hidden state to output
-                outputBuffer = backend.AllocateBuffer(outputSize);
-                backend.Copy(hFinalBuffer, outputBuffer, hiddenBufferSize);
-                fullOutputBuffer.Dispose();
-            }
-
-            // Cleanup temporary buffers
-            hInitBuffer.Dispose();
-            hFinalBuffer.Dispose();
-
-            // If not training, dispose cache buffers
-            if (!cacheForTraining)
-            {
-                allHBuffer.Dispose();
-                cacheGatesBuffer.Dispose();
-            }
-
-            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-        }
-        catch
-        {
-            // Cleanup buffers on error
-            hInitBuffer.Dispose();
-            hFinalBuffer.Dispose();
-            fullOutputBuffer.Dispose();
-
-            if (!cacheForTraining)
-            {
-                allHBuffer?.Dispose();
-                cacheGatesBuffer?.Dispose();
-            }
-            else
-            {
-                ClearGpuTrainingCache();
-            }
-
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Applies the appropriate activation function to the input tensor.
     /// </summary>
     /// <param name="input">The input tensor to activate.</param>
@@ -1850,121 +1656,6 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Clears the GPU training cache to release GPU memory.
-    /// </summary>
-    private void ClearGpuTrainingCache()
-    {
-        if (_gpuCachedZGates != null)
-        {
-            foreach (var tensor in _gpuCachedZGates)
-                tensor?.Dispose();
-            _gpuCachedZGates = null;
-        }
-        if (_gpuCachedRGates != null)
-        {
-            foreach (var tensor in _gpuCachedRGates)
-                tensor?.Dispose();
-            _gpuCachedRGates = null;
-        }
-        if (_gpuCachedHCandidates != null)
-        {
-            foreach (var tensor in _gpuCachedHCandidates)
-                tensor?.Dispose();
-            _gpuCachedHCandidates = null;
-        }
-        if (_gpuCachedHiddenStates != null)
-        {
-            foreach (var tensor in _gpuCachedHiddenStates)
-                tensor?.Dispose();
-            _gpuCachedHiddenStates = null;
-        }
-        _gpuInitialHiddenState?.Dispose();
-        _gpuInitialHiddenState = null;
-        _gpuLastInput = null; // Don't dispose - owned by caller
-
-        // Note: Do NOT dispose stacked weights here - they're reusable across forward passes
-        // and are only invalidated when actual weights are updated via InvalidateGpuStackedWeights()
-
-        _gpuFusedAllH?.Dispose();
-        _gpuFusedAllH = null;
-        _gpuFusedCacheGates?.Dispose();
-        _gpuFusedCacheGates = null;
-    }
-
-    /// <summary>
-    /// Prepares stacked weights in PyTorch format (r, z, n order) for the fused GRU kernel.
-    /// </summary>
-    private void PrepareStackedWeightsForGpu(IDirectGpuBackend backend)
-    {
-        if (_gpuStackedWeightsValid && _gpuStackedWeightsIh != null)
-            return;
-
-        // Stack input-to-hidden weights: [3*hiddenSize, inputSize] in order r, z, n
-        // Layer has: _Wz (update/z), _Wr (reset/r), _Wh (candidate/n)
-        // Kernel order: r, z, n -> Wr, Wz, Wh
-        int weightsIhSize = 3 * _hiddenSize * _inputSize;
-        int weightsHhSize = 3 * _hiddenSize * _hiddenSize;
-        int biasSize = 3 * _hiddenSize;
-
-        var stackedIh = new float[weightsIhSize];
-        var stackedHh = new float[weightsHhSize];
-        var stackedBiasIh = new float[biasSize];
-        var stackedBiasHh = new float[biasSize]; // PyTorch uses separate ih/hh biases
-
-        // Convert weights to float arrays
-        var wR = DirectGpuEngine.ToFloatArray<T>(_Wr.ToArray());
-        var wZ = DirectGpuEngine.ToFloatArray<T>(_Wz.ToArray());
-        var wH = DirectGpuEngine.ToFloatArray<T>(_Wh.ToArray());
-
-        var uR = DirectGpuEngine.ToFloatArray<T>(_Ur.ToArray());
-        var uZ = DirectGpuEngine.ToFloatArray<T>(_Uz.ToArray());
-        var uH = DirectGpuEngine.ToFloatArray<T>(_Uh.ToArray());
-
-        var bR = DirectGpuEngine.ToFloatArray<T>(_br.ToArray());
-        var bZ = DirectGpuEngine.ToFloatArray<T>(_bz.ToArray());
-        var bH = DirectGpuEngine.ToFloatArray<T>(_bh.ToArray());
-
-        // Stack weights in kernel order (r, z, n)
-        int resetGateOffset = 0;
-        int updateGateOffset = _hiddenSize * _inputSize;
-        int newGateOffset = 2 * _hiddenSize * _inputSize;
-
-        Array.Copy(wR, 0, stackedIh, resetGateOffset, _hiddenSize * _inputSize);
-        Array.Copy(wZ, 0, stackedIh, updateGateOffset, _hiddenSize * _inputSize);
-        Array.Copy(wH, 0, stackedIh, newGateOffset, _hiddenSize * _inputSize);
-
-        int hhResetGateOffset = 0;
-        int hhUpdateGateOffset = _hiddenSize * _hiddenSize;
-        int hhNewGateOffset = 2 * _hiddenSize * _hiddenSize;
-
-        Array.Copy(uR, 0, stackedHh, hhResetGateOffset, _hiddenSize * _hiddenSize);
-        Array.Copy(uZ, 0, stackedHh, hhUpdateGateOffset, _hiddenSize * _hiddenSize);
-        Array.Copy(uH, 0, stackedHh, hhNewGateOffset, _hiddenSize * _hiddenSize);
-
-        // Stack biases (put all in biasIh, biasHh will be zeros - matches PyTorch default)
-        int biasResetGateOffset = 0;
-        int biasUpdateGateOffset = _hiddenSize;
-        int biasNewGateOffset = 2 * _hiddenSize;
-
-        Array.Copy(bR, 0, stackedBiasIh, biasResetGateOffset, _hiddenSize);
-        Array.Copy(bZ, 0, stackedBiasIh, biasUpdateGateOffset, _hiddenSize);
-        Array.Copy(bH, 0, stackedBiasIh, biasNewGateOffset, _hiddenSize);
-        // stackedBiasHh stays zeros
-
-        // Allocate GPU buffers
-        _gpuStackedWeightsIh?.Dispose();
-        _gpuStackedWeightsHh?.Dispose();
-        _gpuStackedBiasIh?.Dispose();
-        _gpuStackedBiasHh?.Dispose();
-
-        _gpuStackedWeightsIh = backend.AllocateBuffer(stackedIh);
-        _gpuStackedWeightsHh = backend.AllocateBuffer(stackedHh);
-        _gpuStackedBiasIh = backend.AllocateBuffer(stackedBiasIh);
-        _gpuStackedBiasHh = backend.AllocateBuffer(stackedBiasHh);
-        _gpuStackedWeightsValid = true;
-    }
-
-    /// <summary>
     /// Invalidates and disposes the stacked GPU weight buffers.
     /// Call this after any weight modification (CPU or GPU side) to ensure
     /// PrepareStackedWeightsForGpu will rebuild the stacked buffers.
@@ -1979,7 +1670,6 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         _gpuStackedBiasIh = null;
         _gpuStackedBiasHh?.Dispose();
         _gpuStackedBiasHh = null;
-        _gpuStackedWeightsValid = false;
     }
 
     /// <summary>

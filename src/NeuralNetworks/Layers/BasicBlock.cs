@@ -150,20 +150,7 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     [Scratch]
     private Tensor<T>? _lastPreActivation;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuBn1Out;
-    [ExternalState]
-    private Tensor<T>? _gpuBn2Out;
-    [ExternalState]
-    private Tensor<T>? _gpuPreActivation;
-
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BasicBlock{T}"/> class.
@@ -352,18 +339,38 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
 
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
-        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2
-        _lastConv1Output = _conv1.Forward(input);
-        _lastBn1Output = _bn1.Forward(_lastConv1Output);
-        _lastRelu1Output = ApplyReLU(_lastBn1Output);
-        _lastConv2Output = _conv2.Forward(_lastRelu1Output);
-        _lastBn2Output = _bn2.Forward(_lastConv2Output);
+        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2. In inference each convolution and its batch norm (and the
+        // ReLU) run as one folded convolution (ConvolutionBatchNormFolding); the backward caches stay unset there.
+        if (ConvolutionBatchNormFolding<T>.TryForward(_conv1, _bn1, input, relu: true, out var relu1))
+        {
+            _lastConv1Output = null;
+            _lastRelu1Output = relu1;
+        }
+        else
+        {
+            _lastConv1Output = _conv1.Forward(input);
+            // Normalization and ReLU in one pass in inference (BatchNormalizationLayer.ForwardThenReLU).
+            _lastRelu1Output = _bn1.ForwardThenReLU(_lastConv1Output);
+        }
+        _lastBn1Output = _lastRelu1Output;
+        if (ConvolutionBatchNormFolding<T>.TryForward(_conv2, _bn2, _lastRelu1Output, relu: false, out var bn2))
+        {
+            _lastConv2Output = null;
+            _lastBn2Output = bn2;
+        }
+        else
+        {
+            _lastConv2Output = _conv2.Forward(_lastRelu1Output);
+            _lastBn2Output = _bn2.Forward(_lastConv2Output);
+        }
 
         // Identity/skip branch
         if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
         {
-            var dsConvOut = _downsampleConv.Forward(input);
-            _lastIdentity = _downsampleBn.Forward(dsConvOut);
+            _lastIdentity = ConvolutionBatchNormFolding<T>.TryForward(_downsampleConv, _downsampleBn, input, relu: false,
+                out var downsampled)
+                ? downsampled
+                : _downsampleBn.Forward(_downsampleConv.Forward(input));
         }
         else
         {
@@ -375,65 +382,6 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
 
         // Final ReLU
         return ApplyReLU(_lastPreActivation);
-    }
-
-    /// <summary>
-    /// Performs the forward pass on GPU, keeping data GPU-resident.
-    /// </summary>
-    /// <param name="inputs">The input tensors (expects single input).</param>
-    /// <returns>The output tensor on GPU.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Mirror the lazy-init guard from Forward(): if this block's
-        // first ever execution is on the GPU path, _hasDownsample /
-        // _downsampleConv stay false/null and the skip branch is
-        // silently dropped (residual identity = raw input even when
-        // the stage requires stride=2 downsampling). OnFirstForward
-        // resolves shapes + allocates _downsampleConv / _downsampleBn.
-        if (!IsShapeResolved) OnFirstForward(input);
-
-        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2
-        var conv1Out = _conv1.ForwardGpu(input);
-        var bn1Out = _bn1.ForwardGpu(conv1Out);
-
-        // Cache bn1Out for backward pass (ReLU1 backward needs it)
-        _gpuBn1Out = bn1Out;
-
-        var relu1Out = gpuEngine.ReluGpu(bn1Out);
-        var conv2Out = _conv2.ForwardGpu(relu1Out);
-        var bn2Out = _bn2.ForwardGpu(conv2Out);
-
-        // Cache bn2Out for backward pass (ReLU2/final backward needs it)
-        _gpuBn2Out = bn2Out;
-
-        // Identity/skip branch
-        Tensor<T> identity;
-        if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
-        {
-            var dsConvOut = _downsampleConv.ForwardGpu(input);
-            identity = _downsampleBn.ForwardGpu(dsConvOut);
-        }
-        else
-        {
-            identity = input;
-        }
-
-        // Add residual connection
-        var preActivation = gpuEngine.AddGpu(bn2Out, identity);
-
-        // Cache preActivation for backward pass (final ReLU backward needs it)
-        _gpuPreActivation = preActivation;
-
-        // Final ReLU
-        return gpuEngine.ReluGpu(preActivation);
     }
 
     /// <summary>

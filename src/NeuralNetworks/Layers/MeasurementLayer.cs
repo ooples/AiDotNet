@@ -92,11 +92,6 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => false;
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="MeasurementLayer{T}"/> class with the specified size.
     /// </summary>
     /// <param name="size">The size of the quantum state vector (number of basis states).</param>
@@ -225,77 +220,6 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
         return probabilities;
     }
 
-    /// <summary>
-    /// Performs the GPU-accelerated forward pass for quantum measurement.
-    /// </summary>
-    /// <param name="inputs">The GPU tensor inputs. First element is the complex-valued quantum state.</param>
-    /// <returns>A GPU tensor containing the classical probability distribution.</returns>
-    /// <remarks>
-    /// The measurement layer converts quantum amplitudes to probabilities via the Born rule.
-    /// This method uses a specialized CUDA kernel to perform measurement entirely on GPU.
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs == null || inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var input = inputs[0];
-
-        // Validate GPU engine availability
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend is not available.");
-
-        // Determine batch size and state size from input shape
-        int batchSize;
-        int stateSize = InputShape[0];
-
-        if (input.Shape.Length == 1)
-        {
-            batchSize = 1;
-        }
-        else if (input.Shape.Length == 2)
-        {
-            batchSize = input.Shape[0];
-        }
-        else
-        {
-            // Flatten higher-rank tensors to batch
-            batchSize = 1;
-            for (int d = 0; d < input.Shape.Length - 1; d++)
-            {
-                batchSize *= input.Shape[d];
-            }
-        }
-
-        // Allocate output buffer for probabilities
-        var outputBuffer = backend.AllocateBuffer(batchSize * stateSize);
-
-        // Call the GPU kernel for measurement forward
-        backend.MeasurementForward(input.Buffer, outputBuffer, batchSize, stateSize);
-
-        // Determine output shape
-        int[] outputShape;
-        if (input.Shape.Length == 1)
-        {
-            outputShape = [stateSize];
-        }
-        else if (input.Shape.Length == 2)
-        {
-            outputShape = [batchSize, stateSize];
-        }
-        else
-        {
-            // Restore original shape
-            outputShape = (int[])input._shape.Clone();
-            outputShape[input.Shape.Length - 1] = stateSize;
-        }
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
     /// <summary>
     /// Resets the internal state of the measurement layer.
     /// </summary>

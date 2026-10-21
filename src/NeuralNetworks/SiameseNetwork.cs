@@ -479,9 +479,6 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Make sure we're in inference mode
         bool originalTrainingMode = IsTrainingMode;
