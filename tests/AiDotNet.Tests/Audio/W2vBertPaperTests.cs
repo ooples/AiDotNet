@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -115,5 +116,38 @@ public class W2vBertPaperTests
         Assert.Equal(network.EncodedLength(network.Features(recordings[1]).Shape[1]), tokens.Length);
         Assert.All(tokens, token => Assert.InRange(token, 0, 3));
         Assert.Equal(tokens, model.SemanticTokens(recordings[1]));
+    }
+
+    [Fact(Timeout = 600000)]
+    public async Task Pretraining_LowersTheExpectedObjective()
+    {
+        await Task.Yield();
+        // Learning over fresh draws, at a scale where the contrastive task is posed: a second of eight different tones
+        // (24 encoder frames, so the masked steps' distractors carry different codes; one steady tone quantizes every
+        // frame to one entry and the contrastive term is 0), spans of 4 at p = 0.195 and 10 distractors. The
+        // generated suite's fixture is too small for this and checks descent on a fixed draw instead (FixedDraw).
+        var options = Tiny();
+        options.Negatives = 10;
+        options.MaskProbability = 0.195;
+        options.MaskLength = 4;
+        options.WarmupSteps = 10;
+        options.Seed = 2;
+        using var model = new W2vBert<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.SequenceToSequence, inputSize: 16000, outputSize: 16), options);
+        var audio = new Tensor<double>(new[] { 16000 });
+        for (int i = 0; i < audio.Length; i++)
+        {
+            double f = 150 * (1 + i / 2000 * 0.37), t = i / 16000.0;
+            audio[i] = 0.3 * Math.Sin(2 * Math.PI * f * t) + 0.15 * Math.Sin(2 * Math.PI * 3 * f * t);
+        }
+        var objective = (ITrainingObjectiveProvider<double>)model;
+        // The objective averaged over eight seeded draws of the mask, noise and distractors (EvaluateTrainingObjective).
+        double before = objective.EvaluateTrainingObjective(audio, audio);
+        Assert.True(model.LastPretrainingLosses.Contrastive > 0, "The contrastive task must be posed before training.");
+        for (int step = 0; step < 30; step++) model.Train(audio, audio);
+        double after = objective.EvaluateTrainingObjective(audio, audio);
+        // Measured: 80.7 -> 70.8 over 30 steps, the contrastive term still 26.2 (seed 1 also falls, 82.7 -> 34.3, but by
+        // collapsing the codebook onto one entry, which zeroes the contrastive term as fairseq's rule prescribes).
+        Assert.True(after < before, $"The expected objective went {before} -> {after} over 30 steps.");
     }
 }
