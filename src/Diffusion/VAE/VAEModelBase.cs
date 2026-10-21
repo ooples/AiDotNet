@@ -757,6 +757,21 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
 
     #region ICheckpointableModel Implementation
 
+    // Format 1 had no architecture revision; format 2 records it after the version.
+    private const int StateFormatVersion = 2;
+
+    /// <summary>
+    /// The revision of this VAE's layer layout, recorded in every checkpoint. A VAE whose layers change in a way the
+    /// sizes in the checkpoint header cannot show (a different kernel, stride or block, with the same channel counts and
+    /// downsample factor) raises it, so a checkpoint of the old layout is refused by name instead of failing on a
+    /// parameter-count mismatch, or loading into the wrong tensors when the counts happen to agree.
+    /// </summary>
+    /// <remarks>Checkpoints written before revisions were recorded are revision 1.</remarks>
+    protected virtual int ArchitectureRevision => 1;
+
+    /// <summary>What changed in the current <see cref="ArchitectureRevision"/>, quoted when an older checkpoint is refused.</summary>
+    protected virtual string ArchitectureRevisionNote => string.Empty;
+
     /// <inheritdoc />
     public virtual void SaveState(Stream stream)
     {
@@ -767,8 +782,8 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
 
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
 
-        // Save version for future compatibility
-        writer.Write(1); // Version 1
+        writer.Write(StateFormatVersion);
+        writer.Write(ArchitectureRevision);
 
         // Save architecture info
         writer.Write(InputChannels);
@@ -792,10 +807,17 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
 
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
 
-        // Read version
         var version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 1 && version != StateFormatVersion)
             throw new InvalidOperationException($"Unsupported model version: {version}");
+        int savedRevision = version == 1 ? 1 : reader.ReadInt32();
+        if (savedRevision != ArchitectureRevision)
+        {
+            string note = string.IsNullOrEmpty(ArchitectureRevisionNote) ? string.Empty : " " + ArchitectureRevisionNote;
+            throw new InvalidOperationException(
+                $"This {GetType().Name} checkpoint was written by revision {savedRevision} of its architecture; this build " +
+                $"is revision {ArchitectureRevision}, whose layers differ, so its weights cannot be loaded.{note}");
+        }
 
         // Read and validate architecture info
         var savedInputChannels = reader.ReadInt32();

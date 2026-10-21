@@ -94,6 +94,18 @@ public class EMMDiTPredictor<T> : MMDiTNoisePredictor<T>
         _emmNumHeadsOverride = numHeadsOverride;
     }
 
+    /// <summary>
+    /// Initializes a new E-MMDiT predictor at the compact configuration: the constructor earlier releases compiled
+    /// against, kept so they still bind after an upgrade.
+    /// </summary>
+    /// <param name="inputChannels">Latent channels.</param>
+    /// <param name="contextDim">Text-conditioning dimension.</param>
+    /// <param name="seed">Optional random seed.</param>
+    public EMMDiTPredictor(int inputChannels, int contextDim, int? seed)
+        : this(inputChannels, contextDim, seed, 0, 0, 0)
+    {
+    }
+
     // 0 keeps the compact configuration's value; a negative size is a caller error, not "use the default".
     private static int ResolveOverride(int value, int compactDefault, string parameterName) =>
         value < 0

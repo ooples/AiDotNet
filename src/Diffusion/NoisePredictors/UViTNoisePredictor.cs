@@ -488,8 +488,13 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
     // A time embedding is [1, hidden] (shared by the batch) or [batch, hidden]; as a token it is [batch, 1, hidden].
     private Tensor<T> TokensPerSample(Tensor<T> embedding, int batch, int hidden)
     {
-        var token = Engine.Reshape(embedding, new[] { embedding.Length / hidden, 1, hidden });
-        return token.Shape[0] == batch ? token : RepeatBatch(token, batch);
+        if (hidden <= 0 || embedding.Length % hidden != 0)
+            throw new ArgumentException($"A time embedding of {embedding.Length} values is not a whole number of {hidden}-wide rows.", nameof(embedding));
+        int rows = embedding.Length / hidden;
+        if (rows != 1 && rows != batch)
+            throw new ArgumentException($"Expected one time embedding shared by the batch or one per sample ({batch}); got {rows}.", nameof(embedding));
+        var token = Engine.Reshape(embedding, new[] { rows, 1, hidden });
+        return rows == batch ? token : RepeatBatch(token, batch);
     }
 
     private Tensor<T> RepeatBatch(Tensor<T> single, int batch)
