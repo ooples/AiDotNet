@@ -236,7 +236,7 @@ public class MaskableAgentSelectionTests
         // SAC's critic is a Q-function Q(s,a), so it takes the state CONCATENATED WITH the action and is
         // StateSize + ActionSize wide. PPO's and A2C's critics are V(s) and take the state alone. Sizing this
         // like theirs fails construction with "input size 6 does not match expected 10".
-        FinRLAlgorithm.SAC => new FinRLAgent<double>(Arch(StateSize, ActionSize), SacOptions(), algorithm, Arch(StateSize + ActionSize, 1)),
+        FinRLAlgorithm.SAC => new FinRLAgent<double>(Arch(StateSize, 2 * ActionSize), SacOptions(), algorithm, Arch(StateSize + ActionSize, 1)),
         _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, "not a FinRL algorithm"),
     };
 

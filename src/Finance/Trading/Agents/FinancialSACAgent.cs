@@ -1,5 +1,7 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
+using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -8,38 +10,59 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Training;
 
 namespace AiDotNet.Finance.Trading.Agents;
 
 /// <summary>
-/// Financial Soft Actor-Critic (SAC) agent for high-performance continuous trading.
+/// Soft Actor-Critic for trading, as Haarnoja et al. define it: by default the ICML paper (2018a), with a state-value
+/// network and a fixed temperature, or the follow-up (2018b), with target Q-networks and a learned temperature.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> The SAC (Soft Actor-Critic) trading agent is designed for
-/// continuous trading decisions, like choosing exact position sizes (e.g., buy 37% of
-/// portfolio capacity). It encourages exploration by maximizing both returns and the
-/// "entropy" (randomness) of its strategy, which prevents it from getting stuck in a
-/// suboptimal trading pattern. SAC is considered state-of-the-art for continuous action
-/// spaces and adapts well to changing market conditions.</para>
+/// <para>
+/// <b>The policy</b> is a Gaussian over pre-squash actions whose mean and log standard deviation the actor predicts
+/// from the state (log σ clipped to [−20, 2], as both authors' codes do), squashed into the position limit:
+/// <c>a = MaxPositionSize · tanh(u)</c>, <c>u = μ(s) + σ(s)·ε</c>. Its log-density carries the change of variables of
+/// 2018a Appendix C, computed exactly: <c>log π(a|s) = log N(u; μ, σ) − Σ log(1 − tanh²u) − dim(A)·log MaxPositionSize</c>.
+/// </para>
+/// <para>
+/// <b>2018a (<see cref="SacVariant.ValueNetwork"/>, the default)</b>, each gradient step in the order of Algorithm 1:
+/// V toward <c>min Q(s, a) − α log π(a|s)</c> with a ~ π (eq. 5); both Q-functions toward <c>r + γ(1 − d)V̄(s')</c>
+/// (eq. 8); the policy on <c>E[α log π(ã|s) − min Q(s, ã)]</c> with the reparameterized ã (eq. 12); then
+/// <c>V̄ ← τV + (1 − τ)V̄</c>. Every loss on the value functions is <c>½(prediction − target)²</c>.
+/// </para>
+/// <para>
+/// <b>2018b (<see cref="SacVariant.AutomaticTemperature"/>, <see cref="FinancialSACAgentOptions{T}.Sac2018b"/>)</b>:
+/// both Q-functions toward <c>r + γ(1 − d)(min Q̄(s', a') − α log π(a'|s'))</c> with a' ~ π(s'); the policy as above;
+/// the temperature on <c>J(α) = E[−α(log π(a|s) + H̄)]</c> (eq. 18) with H̄ = −dim(A); then both target Q-functions
+/// track by Polyak averaging.
+/// </para>
+/// <para>
+/// Hyperparameters are the papers' Table 1: Adam (Kingma and Ba, ε = 1e-8) at 3e-4 for every network, two hidden
+/// layers of 256 ReLU units with Glorot-uniform weights (the authors' TensorFlow default), minibatches of 256,
+/// γ = 0.99, τ = 0.005. The authors' code differs from its papers in three places, each an option: the 2018a code
+/// computes every step from the same parameters (<see cref="FinancialSACAgentOptions{T}.SimultaneousUpdates"/>) and
+/// uses Q1 alone in the policy loss, softlearning averages the Q-functions there
+/// (<see cref="FinancialSACAgentOptions{T}.PolicyCriticAggregate"/>) and learns log α
+/// (<see cref="FinancialSACAgentOptions{T}.TemperatureParameter"/>).
+/// </para>
+/// <para><b>For Beginners:</b> SAC learns a policy that earns reward while staying as random as it can afford to. The
+/// randomness keeps it exploring, and the "temperature" sets how much reward it will give up to stay random.</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Define actor and critic architectures for SAC continuous trading (30 features, 5 position sizes)
-/// var actorArch = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 30, outputSize: 5);
-/// var criticArch = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 30, outputSize: 1);
-///
-/// // Create SAC agent for entropy-regularized continuous portfolio allocation
-/// var options = new TradingAgentOptions&lt;double&gt;();
-/// var model = new FinancialSACAgent&lt;double&gt;(actorArch, criticArch, options);
+/// // 2018a (the default); FinancialSACAgentOptions&lt;double&gt;.Sac2018b() gives the learned-temperature version.
+/// var options = new FinancialSACAgentOptions&lt;double&gt; { StateSize = 30, ActionSize = 3, ContinuousActions = true };
+/// var agent = new FinancialSACAgent&lt;double&gt;(
+///     new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 30, outputSize: 6),   // 3 means, 3 log standard deviations
+///     new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 33, outputSize: 1),  // Q(s, a)
+///     options);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Finance)]
@@ -50,56 +73,49 @@ namespace AiDotNet.Finance.Trading.Agents;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor", "https://arxiv.org/abs/1801.01290", Year = 2018, Authors = "Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, Sergey Levine")]
+[ResearchPaper("Soft Actor-Critic Algorithms and Applications", "https://arxiv.org/abs/1812.05905", Year = 2018, Authors = "Tuomas Haarnoja, Aurick Zhou, Kristian Hartikainen, George Tucker, Sehoon Ha, Jie Tan, Vikash Kumar, Henry Zhu, Abhishek Gupta, Pieter Abbeel, Sergey Levine")]
 public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
-
     #region Fields
 
+    private const double MinLogStandardDeviation = -20.0;
+    private const double MaxLogStandardDeviation = 2.0;
+
     private readonly TradingAgentOptions<T> _options;
+    private readonly FinancialSACAgentOptions<T> _sacOptions;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic1;
     private readonly INeuralNetwork<T> _critic2;
+    // 2018b: the Q-functions' Polyak-averaged targets. Null under 2018a, which bootstraps from V̄ instead.
     [Buffer]
-    private readonly INeuralNetwork<T> _targetCritic1;
+    private readonly INeuralNetwork<T>? _targetCritic1;
     [Buffer]
-    private readonly INeuralNetwork<T> _targetCritic2;
+    private readonly INeuralNetwork<T>? _targetCritic2;
+    // 2018a: the state-value network and its Polyak-averaged target. Null under 2018b.
+    private readonly INeuralNetwork<T>? _value;
+    [Buffer]
+    private readonly INeuralNetwork<T>? _targetValue;
     private readonly ReplayBuffer<T> ReplayBuffer;
+    // The constructor's arguments, kept under their names so a clone can replay the constructor.
     private readonly NeuralNetworkArchitecture<T> _actorArchitecture;
     private readonly NeuralNetworkArchitecture<T> _criticArchitecture;
 
-    /// <summary>
-    /// Log of the entropy temperature alpha. Persisted so a reloaded agent resumes its tuned temperature
-    /// instead of restarting from the configured one.
-    /// </summary>
-    private T _logAlpha;
+    // The state-independent head's log standard deviation (one per action dimension); null for the paper's head.
+    [TrainableParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
+    private readonly Tensor<T>? _logStd;
 
-    /// <summary>
-    /// Per-action-dimension log standard deviation of the policy.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Used by <see cref="SacActorHead.StateIndependentLogStd"/> only. That head emits one output per action
-    /// dimension (the architecture contract callers already build against), so the policy's spread lives here
-    /// instead: pi(.|s) = N(mu(s), diag(exp(logStd)^2)) before squashing, a state-independent diagonal
-    /// Gaussian. This is the same state-independent log-std used by the reference PPO/SAC implementations in
-    /// OpenAI Baselines, and it is what makes the entropy term real: without a learned spread the policy
-    /// entropy is a constant and <see cref="TradingAgentOptions{T}.AutoTuneAlpha"/> could only push alpha
-    /// monotonically to zero or infinity.
-    /// </para>
-    /// <para>
-    /// <see cref="SacActorHead.StateConditionedGaussian"/> does NOT use this field: that head is the paper's,
-    /// emitting <c>2 * ActionSize</c> outputs whose second half is a per-state log standard deviation, so its
-    /// spread is read from the actor output and trained with the rest of the actor.
-    /// </para>
-    /// </remarks>
-    private Vector<T> _logStd;
+    // A learned temperature: α itself or log α (TemperatureParameter). Null when the temperature is fixed.
+    [TrainableParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
+    private readonly Tensor<T>? _temperature;
 
-    /// <summary>
-    /// Gradient updates applied so far. Exposed through the trading metrics and persisted with the agent.
-    /// </summary>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _actorOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _critic1Optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _critic2Optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _valueOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _temperatureOptimizer;
+
     private int _updateCount;
 
-    /// <summary>Which head supplies the policy's standard deviation. Fixed at construction.</summary>
     private readonly SacActorHead _actorHead;
 
     /// <inheritdoc/>
@@ -117,203 +133,160 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the FinancialSACAgent class.
+    /// Creates a SAC agent from its policy (actor) and Q-function (critic) architectures.
     /// </summary>
-    /// <param name="actorArchitecture">User-provided architecture for the policy (actor).</param>
-    /// <param name="criticArchitecture">User-provided architecture for the critics.</param>
-    /// <param name="options">Configuration options for the trading agent.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, FinancialSACAgent sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="actorArchitecture">The policy: <c>StateSize</c> inputs, and <c>2 × ActionSize</c> outputs (means then
+    /// log standard deviations) for the paper's head or <c>ActionSize</c> for the state-independent one. Left without
+    /// layers, the agent builds the papers' two 256-unit ReLU layers.</param>
+    /// <param name="criticArchitecture">A soft Q-function: <c>StateSize + ActionSize</c> inputs, one output. Both
+    /// Q-functions (and their targets) are built from it with independent initializations.</param>
+    /// <param name="options">The agent's options; pass <see cref="FinancialSACAgentOptions{T}"/> for SAC's own.</param>
+    /// <param name="valueArchitecture">2018a's state-value network: <c>StateSize</c> inputs, one output. Null builds
+    /// it from <see cref="TradingAgentOptions{T}.HiddenLayers"/>; ignored under 2018b.</param>
     public FinancialSACAgent(
         NeuralNetworkArchitecture<T> actorArchitecture,
         NeuralNetworkArchitecture<T> criticArchitecture,
-        TradingAgentOptions<T> options)
+        TradingAgentOptions<T> options,
+        NeuralNetworkArchitecture<T>? valueArchitecture = null)
         : base(options)
     {
         _options = options;
+        _sacOptions = options as FinancialSACAgentOptions<T> ?? new FinancialSACAgentOptions<T>();
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
+        _actorHead = _sacOptions.ActorHead;
 
-        _actorHead = options is FinancialSACAgentOptions<T> headOptions
-            ? headOptions.ActorHead
-            : SacActorHead.StateIndependentLogStd;
-
-        // The paper's head predicts the spread from the state, which needs two outputs per action dimension:
-        // [mu_0..mu_{A-1} | logStd_0..logStd_{A-1}]. The default head keeps the historical ActionSize width.
-        int actorOutputWidth = _actorHead == SacActorHead.StateConditionedGaussian
-            ? options.ActionSize * 2
-            : options.ActionSize;
-
-        if (_actorHead == SacActorHead.StateConditionedGaussian
-            && actorArchitecture.OutputSize != actorOutputWidth)
+        int actionSize = options.ActionSize;
+        int actorOutputWidth = UsesStateConditionedHead ? actionSize * 2 : actionSize;
+        if (actorArchitecture.OutputSize != actorOutputWidth)
         {
             throw new ArgumentException(
-                $"SacActorHead.StateConditionedGaussian needs an actor architecture with {actorOutputWidth} outputs "
-                + $"(2 * ActionSize: {options.ActionSize} means followed by {options.ActionSize} log standard "
-                + $"deviations), but this architecture has {actorArchitecture.OutputSize}. Either widen the actor "
-                + "architecture or use SacActorHead.StateIndependentLogStd, which keeps the ActionSize width.",
+                UsesStateConditionedHead
+                    ? $"The paper's Gaussian head needs an actor architecture with {actorOutputWidth} outputs (2 * ActionSize: "
+                      + $"{actionSize} means, then {actionSize} log standard deviations), but this one has {actorArchitecture.OutputSize}. "
+                      + "Widen the actor architecture, or set FinancialSACAgentOptions.ActorHead to StateIndependentLogStd."
+                    : $"The state-independent head needs an actor architecture with ActionSize ({actionSize}) outputs, but this one "
+                      + $"has {actorArchitecture.OutputSize}.",
                 nameof(actorArchitecture));
         }
 
-        EnsureDefaultLayers(actorArchitecture, options.StateSize, actorOutputWidth);
-        EnsureDefaultLayers(criticArchitecture, options.StateSize + options.ActionSize, 1);
+        EnsureSacDefaultLayers(actorArchitecture, options.StateSize, actorOutputWidth);
+        EnsureSacDefaultLayers(criticArchitecture, options.StateSize + actionSize, 1);
 
-        _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _critic1 = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _critic2 = new NeuralNetwork<T>(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 1), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _targetCritic1 = new NeuralNetwork<T>(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 2), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _targetCritic2 = new NeuralNetwork<T>(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 3), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        // The networks do not clip their own gradients; neither paper clips.
+        var networkOptions = new AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions { MaxGradNorm = 0.0 };
+        NeuralNetwork<T> Build(NeuralNetworkArchitecture<T> architecture)
+            => new(architecture, lossFunction: new MeanSquaredErrorLoss<T>(), options: networkOptions);
+
+        var actor = Build(actorArchitecture);
+        _actor = actor;
+        _critic1 = Build(criticArchitecture);
+        _critic2 = Build(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 1));
         Networks.Add(_actor);
         Networks.Add(_critic1);
         Networks.Add(_critic2);
-        Networks.Add(_targetCritic1);
-        Networks.Add(_targetCritic2);
+        if (_sacOptions.Variant == SacVariant.AutomaticTemperature)
+        {
+            _targetCritic1 = Build(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 2));
+            _targetCritic2 = Build(IndependentlyInitialisedCritic(criticArchitecture, ordinal: 3));
+            Networks.Add(_targetCritic1);
+            Networks.Add(_targetCritic2);
+        }
+        else
+        {
+            var valueArch = valueArchitecture ?? new NeuralNetworkArchitecture<T>(inputFeatures: options.StateSize, outputSize: 1);
+            EnsureSacDefaultLayers(valueArch, options.StateSize, 1);
+            _value = Build(valueArch);
+            _targetValue = Build(IndependentlyInitialisedCritic(valueArch, ordinal: 4));
+            Networks.Add(_value);
+            Networks.Add(_targetValue);
+        }
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
 
-        // Policy spread starts at the historical exploration width so behaviour is unchanged on step 0.
-        _logStd = new Vector<T>(options.ActionSize);
-        for (int i = 0; i < options.ActionSize; i++)
+        if (!UsesStateConditionedHead) _logStd = new Tensor<T>([actionSize]);
+        if (options.AutoTuneAlpha)
         {
-            _logStd[i] = NumOps.FromDouble(Math.Log(InitialExplorationStandardDeviation));
+            _temperature = new Tensor<T>([1]);
+            _temperature[0] = NumOps.FromDouble(_sacOptions.TemperatureParameter == SacTemperatureParameter.LogAlpha
+                ? _sacOptions.InitialLogAlpha
+                : Math.Exp(_sacOptions.InitialLogAlpha));
         }
 
-        // Temperature: the configured SACAlpha is the operating temperature; when auto-tuning is on, a
-        // SAC-specific options object may instead name the starting point for the tuned value.
-        double initialAlpha = options.SACAlpha;
-        if (options.AutoTuneAlpha && options is FinancialSACAgentOptions<T> sacOptions)
-        {
-            initialAlpha = Math.Exp(sacOptions.InitialLogAlpha);
-        }
+        _actorOptimizer = CreateAdam(actor);
+        _critic1Optimizer = CreateAdam(_critic1);
+        _critic2Optimizer = CreateAdam(_critic2);
+        if (_value is not null) _valueOptimizer = CreateAdam(_value);
+        if (_temperature is not null) _temperatureOptimizer = CreateAdam(actor);
 
-        _logAlpha = NumOps.FromDouble(Math.Log(Math.Max(initialAlpha, 1e-8)));
-
-        // Hard sync: the targets must start equal to the critics they track.
-        SoftUpdateTargetNetwork(_critic1, _targetCritic1, 1.0);
-        SoftUpdateTargetNetwork(_critic2, _targetCritic2, 1.0);
+        // The targets start as copies of what they track (both papers' codes copy with τ = 1 at initialization).
+        if (_targetValue is not null) SoftUpdateTargetNetwork(RequireValueNetwork(), _targetValue, 1.0);
+        if (_targetCritic1 is not null) SoftUpdateTargetNetwork(_critic1, _targetCritic1, 1.0);
+        if (_targetCritic2 is not null) SoftUpdateTargetNetwork(_critic2, _targetCritic2, 1.0);
     }
 
-    /// <summary>
-    /// Current entropy temperature alpha (<c>exp(logAlpha)</c>).
-    /// </summary>
-    internal double CurrentAlpha => Math.Exp(NumOps.ToDouble(_logAlpha));
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateAdam(INeuralNetwork<T> model)
+        => new AdamOptimizer<T, Tensor<T>, Tensor<T>>((IFullModel<T, Tensor<T>, Tensor<T>>)model,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = NumOps.ToDouble(TradingOptions.LearningRate),
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false,
+            });
 
-    /// <summary>
-    /// Current per-dimension policy standard deviations, <c>exp(logStd)</c>.
-    /// </summary>
-    /// <remarks>
-    /// For <see cref="SacActorHead.StateConditionedGaussian"/> the spread depends on the state, so this
-    /// returns the state-independent fallback only; use <see cref="PolicyStandardDeviationsFor"/> instead.
-    /// </remarks>
-    internal double[] CurrentPolicyStandardDeviations => CurrentLogStandardDeviations()
-        .Select(Math.Exp)
-        .ToArray();
-
-    /// <summary>Which head this agent was built with.</summary>
-    internal SacActorHead ActorHead => _actorHead;
-
-    private bool UsesStateConditionedHead => _actorHead == SacActorHead.StateConditionedGaussian;
-
-    /// <summary>
-    /// The policy's standard deviation in a given state — the quantity that can differ between a calm market
-    /// and a volatile one when <see cref="SacActorHead.StateConditionedGaussian"/> is in use.
-    /// </summary>
-    /// <remarks>
-    /// With the state-independent head this returns the same vector for every state, by construction.
-    /// </remarks>
-    internal double[] PolicyStandardDeviationsFor(Vector<T> state)
+    // The papers' networks: the HiddenLayers widths with ReLU and a linear output, Glorot-uniform weights and zero
+    // biases (the authors' TensorFlow default); each layer draws from its own seed (LayerBase.InitializeLayerWeights).
+    private void EnsureSacDefaultLayers(NeuralNetworkArchitecture<T> architecture, int expectedInputSize, int expectedOutputSize)
     {
-        if (state is null) throw new ArgumentNullException(nameof(state));
-        if (!UsesStateConditionedHead)
-        {
-            return CurrentPolicyStandardDeviations;
-        }
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        if (architecture.CalculatedInputSize != expectedInputSize)
+            throw new ArgumentException($"Architecture input size {architecture.CalculatedInputSize} does not match expected {expectedInputSize}.", nameof(architecture));
+        if (architecture.OutputSize != expectedOutputSize)
+            throw new ArgumentException($"Architecture output size {architecture.OutputSize} does not match expected {expectedOutputSize}.", nameof(architecture));
+        ApplyNetworkSeed(architecture);
+        if (architecture.Layers.Count > 0) return;
 
-        var output = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
-        var logStds = LogStandardDeviationsFromRow(output, rowOffset: 0, TradingOptions.ActionSize);
-        var stds = new double[logStds.Length];
-        for (int i = 0; i < logStds.Length; i++)
+        var hiddenSizes = GetHiddenLayerSizes();
+        AddSeededDefaultLayers(architecture, () =>
         {
-            stds[i] = Math.Exp(logStds[i]);
-        }
-
-        return stds;
+            var layers = new List<ILayer<T>>(hiddenSizes.Length + 1);
+            foreach (int width in hiddenSizes)
+                layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new ReLUActivation<T>(),
+                    new GlorotUniformInitializationStrategy<T>()));
+            layers.Add(new DenseLayer<T>(expectedOutputSize, (IActivationFunction<T>)new IdentityActivation<T>(),
+                new GlorotUniformInitializationStrategy<T>()));
+            return layers;
+        });
     }
 
-    /// <summary>
-    /// Reads the clamped log standard deviations out of one row of a state-conditioned actor output, whose
-    /// layout is <c>[means | logStds]</c>.
-    /// </summary>
-    private double[] LogStandardDeviationsFromRow(Vector<T> actorOutput, int rowOffset, int actionDim)
-    {
-        var logStds = new double[actionDim];
-        for (int j = 0; j < actionDim; j++)
-        {
-            double raw = NumOps.ToDouble(actorOutput[rowOffset + actionDim + j]);
-            logStds[j] = MathPolyfill.Clamp(raw, MinLogStandardDeviation, MaxLogStandardDeviation);
-        }
-
-        return logStds;
-    }
-
-    /// <summary>
-    /// Evaluates the twin critics at a state-action pair, returning <c>(Q1, Q2)</c>.
-    /// </summary>
-    /// <remarks>
-    /// Exposed so callers (and tests) can inspect what the critics actually learned — the twin values are
-    /// separately meaningful, and their agreement is the diagnostic that says the pair is genuinely
-    /// independent rather than two references to one network.
-    /// </remarks>
-    internal (T Q1, T Q2) EvaluateCritics(Vector<T> state, Vector<T> action)
-    {
-        if (state is null) throw new ArgumentNullException(nameof(state));
-        if (action is null) throw new ArgumentNullException(nameof(action));
-
-        var stateAction = Tensor<T>.FromVector(ConcatenateStateAction(state, action));
-        return (_critic1.Predict(stateAction).ToVector()[0], _critic2.Predict(stateAction).ToVector()[0]);
-    }
-
-    /// <summary>
-    /// Clones the critic architecture so the new network's weights are drawn INDEPENDENTLY of the critic it
-    /// is cloned from.
-    /// </summary>
-    /// <param name="criticArchitecture">The architecture <see cref="_critic1"/> was built from.</param>
-    /// <param name="ordinal">Distinguishes the clones, so no two draw the same weights.</param>
-    /// <remarks>
-    /// <para>
-    /// <see cref="NeuralNetworkArchitecture{T}.CloneForModelConstruction"/> gives the clone its own layer
-    /// OBJECTS — which is what stops two networks sharing mutable layers — but it rebuilds each layer through
-    /// the layer's constructor, so the new weights come from the ambient initialization-seed scope, and it
-    /// copies the source architecture's <c>RandomSeed</c>. Under a fixed
-    /// <see cref="TradingAgentOptions{T}.Seed"/> every clone therefore re-initializes from the SAME seed and
-    /// the twin critics come out BIT-IDENTICAL. Nothing fails: <c>min(Q1, Q2)</c> simply equals <c>Q1</c>, and
-    /// the overestimation control that twin critics exist to provide is silently gone. Re-seeding the scope
-    /// per clone is what makes the pair genuinely independent.
-    /// </para>
-    /// <para>
-    /// With no seed configured the initialization is already independent (each layer draws from the shared
-    /// non-deterministic RNG), so the scope is left alone and behaviour is unchanged.
-    /// </para>
-    /// </remarks>
     private NeuralNetworkArchitecture<T> IndependentlyInitialisedCritic(
         NeuralNetworkArchitecture<T> criticArchitecture, int ordinal)
     {
-        // Save and restore the ambient scope around the clone. Reseeding it here is deliberate, but leaving
-        // it reseeded is not: the sequence would stay armed with THIS agent's critic seed, and the next
-        // model built on this thread whose layers arrive as constructor arguments (they are evaluated
-        // before its own constructor resets the scope) would silently initialize from it.
+        // Save and restore the ambient scope around the clone. Reseeding it here is deliberate, but leaving it
+        // reseeded is not: the sequence would stay armed with THIS agent's critic seed, and the next model built on
+        // this thread whose layers arrive as constructor arguments would silently initialize from it.
         var previousScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
         try
         {
-            if (TradingOptions.Seed is int seed)
-            {
-                int distinctSeed = unchecked((int)(((uint)seed * 2246822519u) ^ ((uint)(ordinal + 1) * 3266489917u)));
-                AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(distinctSeed);
-            }
+            int? distinctSeed = TradingOptions.Seed is int seed
+                ? unchecked((int)(((uint)seed * 2246822519u) ^ ((uint)(ordinal + 1) * 3266489917u)))
+                : null;
+            if (distinctSeed is int scopeSeed)
+                AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(scopeSeed);
 
-            return criticArchitecture.CloneForModelConstruction();
+            var clone = criticArchitecture.CloneForModelConstruction();
+            // The clone rebuilds each layer from its metadata, seed included, so without this the twin would draw
+            // exactly its original's weights. Each cloned layer gets its own seed from the clone's.
+            if (distinctSeed is int cloneSeed)
+            {
+                for (int i = 0; i < clone.Layers.Count; i++)
+                    if (clone.Layers[i] is LayerBase<T> layer)
+                        layer.RandomSeed = unchecked((int)(((uint)cloneSeed * 2654435761u) ^ ((uint)(i + 1) * 40503u)));
+            }
+            return clone;
         }
         finally
         {
@@ -321,159 +294,121 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         }
     }
 
-    /// <summary>Clamped log standard deviations, as plain doubles.</summary>
-    private double[] CurrentLogStandardDeviations()
-    {
-        var logStds = new double[_logStd.Length];
-        for (int i = 0; i < logStds.Length; i++)
-        {
-            logStds[i] = MathPolyfill.Clamp(NumOps.ToDouble(_logStd[i]), MinLogStandardDeviation, MaxLogStandardDeviation);
-        }
+    #endregion
 
-        return logStds;
+    #region Policy
+
+    internal SacActorHead ActorHead => _actorHead;
+
+    private INeuralNetwork<T> RequireValueNetwork() => _value ?? throw VariantMismatch("value network");
+    private INeuralNetwork<T> RequireTargetValueNetwork() => _targetValue ?? throw VariantMismatch("target value network");
+    private INeuralNetwork<T> RequireTargetCritic1() => _targetCritic1 ?? throw VariantMismatch("first target Q-function");
+    private INeuralNetwork<T> RequireTargetCritic2() => _targetCritic2 ?? throw VariantMismatch("second target Q-function");
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> RequireValueOptimizer() => _valueOptimizer ?? throw VariantMismatch("value optimizer");
+    private Tensor<T> RequireTemperature() => _temperature ?? throw new InvalidOperationException("The temperature is fixed (AutoTuneAlpha is off).");
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> RequireTemperatureOptimizer() =>
+        _temperatureOptimizer ?? throw new InvalidOperationException("The temperature is fixed (AutoTuneAlpha is off).");
+    private Tensor<T> RequireSharedLogStd() => _logStd ?? throw new InvalidOperationException("The paper's head predicts the spread per state.");
+
+    private InvalidOperationException VariantMismatch(string component)
+        => new($"The {_sacOptions.Variant} variant has no {component}.");
+
+    private bool UsesStateConditionedHead => _actorHead == SacActorHead.StateConditionedGaussian;
+
+    /// <summary>The temperature α in force: the learned one, or SACAlpha when it is fixed.</summary>
+    internal double CurrentAlpha => _temperature is null
+        ? TradingOptions.SACAlpha
+        : _sacOptions.TemperatureParameter == SacTemperatureParameter.LogAlpha
+            ? Math.Exp(NumOps.ToDouble(_temperature[0]))
+            : NumOps.ToDouble(_temperature[0]);
+
+    /// <summary>The policy's standard deviations (before the squash) for one state.</summary>
+    internal double[] PolicyStandardDeviationsFor(Vector<T> state)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        using var _ = new NoGradScope<T>();
+        var (_, logStd) = PolicyParameters(_actor.Predict(Row(state)), 1);
+        return logStd.ToArray().Select(v => Math.Exp(NumOps.ToDouble(v))).ToArray();
     }
 
-    private static Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
+    internal (T Q1, T Q2) EvaluateCritics(Vector<T> state, Vector<T> action)
     {
-        var combined = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++) combined[i] = state[i];
-        for (int i = 0; i < action.Length; i++) combined[state.Length + i] = action[i];
-        return combined;
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        var stateAction = AiDotNetEngine.Current.TensorConcatenate([Row(state), Row(action)], axis: 1);
+        return (_critic1.Predict(stateAction).ToVector()[0], _critic2.Predict(stateAction).ToVector()[0]);
     }
 
-    /// <summary>
-    /// The paper's bounded action <c>a = MaxPositionSize * tanh(u)</c> (Haarnoja et al. 2018, Eq. 20).
-    /// </summary>
-    /// <remarks>
-    /// Squashing rather than clipping is what keeps the position inside the configured limit while leaving
-    /// a usable gradient everywhere: a clipped action is flat outside the limit and stops training there.
-    /// </remarks>
-    private Vector<T> SquashToPositionLimit(Vector<T> preSquash, double maxPosition)
+    private static Tensor<T> Row(Vector<T> vector)
     {
-        var bounded = new Vector<T>(preSquash.Length);
-        for (int i = 0; i < preSquash.Length; i++)
-        {
-            bounded[i] = NumOps.FromDouble(maxPosition * Math.Tanh(NumOps.ToDouble(preSquash[i])));
-        }
-
-        return bounded;
+        var row = new Tensor<T>([1, vector.Length]);
+        for (int i = 0; i < vector.Length; i++) row[0, i] = vector[i];
+        return row;
     }
 
-    /// <summary>
-    /// Scalar counterpart of <see cref="PolicyDistributionHelper{T}.ComputeSquashedGaussianLogProb"/>, used
-    /// on the no-gradient TD-target path where the values are plain doubles.
-    /// </summary>
-    private double SquashedGaussianLogProbability(
-        Vector<T> preSquash, Vector<T> mean, IReadOnlyList<double> logStds, double maxPosition)
+    // The policy's mean and clipped log standard deviation for n states, [n, A] each.
+    private (Tensor<T> Mean, Tensor<T> LogStd) PolicyParameters(Tensor<T> actorOutput, int n)
     {
-        double total = GaussianLogProbability(preSquash, mean, logStds);
-        for (int j = 0; j < preSquash.Length; j++)
-        {
-            double squashed = Math.Tanh(NumOps.ToDouble(preSquash[j]));
-            total -= Math.Log(Math.Max(1.0 - (squashed * squashed), 1e-12));
-        }
+        var engine = AiDotNetEngine.Current;
+        int a = TradingOptions.ActionSize;
+        var output = engine.Reshape(actorOutput, [n, UsesStateConditionedHead ? 2 * a : a]);
+        var mean = engine.TensorSlice(output, [0, 0], [n, a]);
+        var rawLogStd = UsesStateConditionedHead
+            ? engine.TensorSlice(output, [0, a], [n, a])
+            : engine.TensorTile(engine.Reshape(RequireSharedLogStd(), [1, a]), [n, 1]);
+        var logStd = engine.TensorClamp(rawLogStd, NumOps.FromDouble(MinLogStandardDeviation), NumOps.FromDouble(MaxLogStandardDeviation));
+        return (mean, logStd);
+    }
 
-        return total - (preSquash.Length * Math.Log(maxPosition));
+    // a = M·tanh(μ + σε) and log π(a|s), exactly: log N(u; μ, σ) − Σ log(1 − tanh²u) − A·log M, with
+    // log(1 − tanh²u) = 2(log 2 − |u| − log(1 + e^{−2|u|})) and (u − μ)/σ = ε.
+    private (Tensor<T> Action, Tensor<T> LogProb) SquashedSample(Tensor<T> mean, Tensor<T> logStd, Tensor<T> noise)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = mean.Shape[0], a = mean.Shape[1];
+        double maxPosition = Convert.ToDouble(TradingOptions.MaxPositionSize);
+        var u = engine.TensorAdd(mean, engine.TensorMultiply(engine.TensorExp(logStd), noise));
+        var action = engine.TensorMultiplyScalar(engine.TensorTanh(u), NumOps.FromDouble(maxPosition));
+        var gaussian = engine.TensorSubtract(
+            engine.TensorMultiplyScalar(engine.TensorMultiply(noise, noise), NumOps.FromDouble(-0.5)), logStd);
+        var absU = engine.TensorAbs(u);
+        var logOneMinusTanhSquared = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(engine.TensorAddScalar(engine.TensorNegate(absU), NumOps.FromDouble(Math.Log(2.0))),
+                engine.TensorLog(engine.TensorAddScalar(engine.TensorExp(engine.TensorMultiplyScalar(absU, NumOps.FromDouble(-2.0))), NumOps.One))),
+            NumOps.FromDouble(2.0));
+        var perDimension = engine.TensorSubtract(gaussian, logOneMinusTanhSquared);
+        var logProb = engine.TensorAddScalar(engine.ReduceSum(perDimension, [1], keepDims: false),
+            NumOps.FromDouble(-a * (0.5 * Math.Log(2.0 * Math.PI) + Math.Log(maxPosition))));
+        return (action, engine.Reshape(logProb, [n]));
+    }
+
+    private Tensor<T> StandardNormals(int n)
+    {
+        int a = TradingOptions.ActionSize;
+        var noise = new Tensor<T>([n, a]);
+        var span = noise.AsWritableSpan();
+        for (int i = 0; i < span.Length; i++) span[i] = NumOps.FromDouble(NextStandardNormal());
+        return noise;
     }
 
     #endregion
 
     #region Action Selection
 
-    /// <summary>
-    /// Standard deviation the policy's learned spread starts from, so untrained behaviour is unchanged.
-    /// </summary>
-    private const double InitialExplorationStandardDeviation = 0.1;
-
-    /// <summary>Lower clamp on log-std, keeping the policy from collapsing to a delta (and log-prob to -inf).</summary>
-    private const double MinLogStandardDeviation = -20.0;
-
-    /// <summary>Upper clamp on log-std, keeping exploration from diverging.</summary>
-    private const double MaxLogStandardDeviation = 2.0;
-
-    /// <summary>Action-space ascent step used to turn the deterministic policy gradient into a regression target.</summary>
-    private const double ActorPolicyGradientStep = 0.05;
-
-    /// <summary>Central-difference half-width used to estimate the critic's action sensitivity.</summary>
-    private const double ActionFiniteDifferenceEpsilon = 1e-3;
-
-    /// <summary>Step size for the log-std ascent and the temperature update.</summary>
-    private const double PolicySpreadLearningRate = 1e-3;
-
-    /// <summary>
-    /// Step size for the state-conditioned spread target.
-    /// </summary>
-    /// <remarks>
-    /// Larger than <see cref="PolicySpreadLearningRate"/> on purpose. The state-independent spread is a
-    /// parameter this agent writes directly, so a small step lands exactly; the state-conditioned spread is
-    /// a network OUTPUT that has to be chased by an MSE step averaged over the batch, so a target that moves
-    /// by 1e-3 is indistinguishable from the target it already predicts and the head would never separate.
-    /// </remarks>
-    private const double StateConditionedSpreadStep = 0.05;
-
     /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// The policy is a squashed diagonal Gaussian (Haarnoja et al. 2018, Appendix C). Training draws
-    /// <c>u = mu(s) + sigma(s) * eps, eps ~ N(0, I)</c> from the agent's seeded random stream and returns
-    /// <c>a = MaxPositionSize * tanh(u)</c>; evaluation returns <c>MaxPositionSize * tanh(mu(s))</c>. Sampling
-    /// before the squash is what bounds every action by the configured position limit — an unsquashed sample
-    /// could exceed it whenever the mean approached the boundary.
-    /// </para>
-    /// <para>
-    /// Where <c>sigma(s)</c> comes from depends on the head:
-    /// <see cref="SacActorHead.StateIndependentLogStd"/> reads the learned state-independent spread, which
-    /// merely STARTS at 0.1 and is trained thereafter, while
-    /// <see cref="SacActorHead.StateConditionedGaussian"/> reads it from the actor's own output for that
-    /// state. The earlier noise was <c>U[0, 0.1)</c> — mean +0.05 and never negative — which biased every
-    /// exploratory position long.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> While training, the agent jitters its chosen position sizes in both directions
-    /// so it can discover better ones, then squeezes the result into the allowed position range; at
-    /// evaluation time it uses the actor's own output, squeezed the same way.
-    /// </para>
-    /// </remarks>
+    /// <remarks>Training samples <c>a = MaxPositionSize · tanh(μ + σε)</c>; evaluation takes the squashed mean,
+    /// <c>MaxPositionSize · tanh(μ)</c>, as the authors' deterministic policy does.</remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        int actionDim = TradingOptions.ActionSize;
-        var output = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
-
-        // Only the leading ActionSize outputs are the action; the state-conditioned head appends the spread.
-        var mean = new Vector<T>(actionDim);
-        for (int i = 0; i < actionDim; i++)
-        {
-            mean[i] = output[i];
-        }
-
-        double maxPosition = Convert.ToDouble(TradingOptions.MaxPositionSize);
-
+        using var _ = new NoGradScope<T>();
+        var (mean, logStd) = PolicyParameters(_actor.Predict(Row(state)), 1);
         if (!training)
         {
-            return SquashToPositionLimit(mean, maxPosition);
+            double maxPosition = Convert.ToDouble(TradingOptions.MaxPositionSize);
+            return AiDotNetEngine.Current.TensorMultiplyScalar(AiDotNetEngine.Current.TensorTanh(mean), NumOps.FromDouble(maxPosition))
+                .ToVector();
         }
-
-        double[] standardDeviations;
-        if (UsesStateConditionedHead)
-        {
-            var logStds = LogStandardDeviationsFromRow(output, rowOffset: 0, actionDim);
-            standardDeviations = new double[actionDim];
-            for (int i = 0; i < actionDim; i++)
-            {
-                standardDeviations[i] = Math.Exp(logStds[i]);
-            }
-        }
-        else
-        {
-            standardDeviations = CurrentPolicyStandardDeviations;
-        }
-
-        // Reparameterized draw in the PRE-SQUASH space, then bounded: u = mu(s) + sigma(s) * eps and
-        // a = MaxPositionSize * tanh(u). Sampling before the squash is what keeps every exploratory
-        // position inside the configured limit no matter where the mean sits — the unsquashed sample
-        // could land outside it whenever the mean approached the boundary.
-        var preSquash = AddGaussianExplorationNoise(mean, standardDeviations);
-        return SquashToPositionLimit(preSquash, maxPosition);
+        return SquashedSample(mean, logStd, StandardNormals(1)).Action.ToVector();
     }
 
     #endregion
@@ -482,443 +417,302 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, Train performs a training step. This updates the FinancialSACAgent architecture so it learns from data.
-    /// </para>
+    /// One gradient step (the papers' one step per environment step) on a minibatch drawn uniformly with replacement
+    /// from the replay buffer, once the buffer holds a minibatch and the warm-up has passed. The order is the papers'
+    /// Algorithm 1, or one shared parameter snapshot with <see cref="FinancialSACAgentOptions{T}.SimultaneousUpdates"/>.
+    /// Returns the mean of the Q losses plus the policy loss.
     /// </remarks>
+    /// <exception cref="InvalidOperationException">A learned α stepped on directly
+    /// (<see cref="SacTemperatureParameter.Alpha"/>) became non-positive.</exception>
     public override T Train()
     {
-        // A supervised one-shot Train(state, target) call bypasses the autonomous-exploration batch
-        // gate and trains on the samples gathered so far (clamped to the buffer); autonomous stepping
-        // still requires a full minibatch before updating.
-        int effectiveBatchSize = SupervisedUpdateRequested
-            ? System.Math.Min(TradingOptions.BatchSize, ReplayBuffer.Count)
+        // A supervised one-shot Train(state, target) call trains on the samples gathered so far (clamped to the
+        // buffer); autonomous stepping requires a full minibatch.
+        int batchSize = SupervisedUpdateRequested
+            ? Math.Min(TradingOptions.BatchSize, ReplayBuffer.Count)
             : TradingOptions.BatchSize;
-        if (effectiveBatchSize <= 0 || ReplayBuffer.Count < effectiveBatchSize) return NumOps.Zero;
-
-        // TradingAgentOptions.WarmupSteps: collect this many transitions before the first update.
+        if (batchSize <= 0 || ReplayBuffer.Count < batchSize) return NumOps.Zero;
         if (IsInWarmup(ReplayBuffer.Count)) return NumOps.Zero;
 
-        var batch = ReplayBuffer.Sample(effectiveBatchSize);
+        var batch = ReplayBuffer.Sample(batchSize);
         int n = batch.Count;
         if (n == 0) return NumOps.Zero;
-
-        // Every network pass below is batched over the whole minibatch rather than run per experience
-        // (the per-sample loop dominated RL training time — see profiling).
-        int stateDim = batch[0].State.Length;
-        int actionDim = batch[0].Action.Length;
-
-        var statesData = new T[n * stateDim];
+        int stateDim = batch[0].State.Length, actionDim = batch[0].Action.Length;
+        var states = Rows(batch.Select(e => e.State).ToList(), stateDim);
+        var nextStates = Rows(batch.Select(e => e.NextState).ToList(), stateDim);
+        var actions = Rows(batch.Select(e => e.Action).ToList(), actionDim);
+        var rewards = new double[n];
+        var notDone = new double[n];
         for (int i = 0; i < n; i++)
         {
-            var exp = batch[i];
-            for (int j = 0; j < stateDim; j++)
-            {
-                statesData[i * stateDim + j] = exp.State[j];
-            }
+            rewards[i] = NumOps.ToDouble(batch[i].Reward);
+            notDone[i] = batch[i].Done ? 0.0 : 1.0;
         }
 
-        var nextStatesData = new T[n * stateDim];
-        for (int i = 0; i < n; i++)
-        {
-            var exp = batch[i];
-            for (int j = 0; j < stateDim; j++)
-            {
-                nextStatesData[i * stateDim + j] = exp.NextState[j];
-            }
-        }
-
-        using var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        using var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
-
-        int stateActionDim = stateDim + actionDim;
-        var logStds = CurrentLogStandardDeviations();
         double alpha = CurrentAlpha;
-        double gamma = Convert.ToDouble(TradingOptions.DiscountFactor);
-        double maxPositionValue = Convert.ToDouble(TradingOptions.MaxPositionSize);
-
-        // ---- 1. Soft TD target (no gradients: the target critics are not trained) ----
-        //   a' ~ pi(.|s') = N(mu(s'), diag(exp(logStd)^2))
-        //   y  = r + gamma * (1 - done) * ( min(Q1'(s',a'), Q2'(s',a')) - alpha * log pi(a'|s') )
-        // The entropy term is what makes this SAC rather than TD3: the bootstrap is the SOFT value, so
-        // the critics learn the value of acting AND staying stochastic.
-        // With the state-conditioned head the actor emits [means | logStds] per row, so the spread used for
-        // a' and for log pi(a'|s') is the one the network predicts FOR THAT STATE, not a global constant.
-        int actorWidth = UsesStateConditionedHead ? actionDim * 2 : actionDim;
-        var nextOutputs = _actor.Predict(nextStates).ToVector();
-        var nextStateActionsData = new T[n * stateActionDim];
-        var nextLogProbs = new double[n];
-        for (int i = 0; i < n; i++)
+        double gamma = NumOps.ToDouble(TradingOptions.DiscountFactor);
+        bool v1 = _sacOptions.Variant == SacVariant.ValueNetwork;
+        T qLoss1, qLoss2, policyLoss;
+        SetTrainingModes(true);
+        try
         {
-            int row = i * actorWidth;
-            double[] rowLogStds = UsesStateConditionedHead
-                ? LogStandardDeviationsFromRow(nextOutputs, row, actionDim)
-                : logStds;
-
-            var nextMean = new Vector<T>(actionDim);
-            var nextPreSquash = new Vector<T>(actionDim);
-            for (int j = 0; j < actionDim; j++)
+            if (_sacOptions.SimultaneousUpdates)
             {
-                nextMean[j] = nextOutputs[row + j];
-                double noise = Math.Exp(rowLogStds[j]) * NextStandardNormal();
-                nextPreSquash[j] = NumOps.Add(nextMean[j], NumOps.FromDouble(noise));
+                // Every target from the pre-step parameters, and one policy sample at s shared by the value target,
+                // the policy loss and the temperature loss (the 2018a code's single session call).
+                var noise = StandardNormals(n);
+                var (valueTarget, logProbs) = PolicyTargets(states, noise);
+                var qTargets = QTargets(nextStates, rewards, notDone, gamma, alpha);
+                policyLoss = UpdatePolicy(states, noise, alpha);
+                qLoss1 = UpdateQ(_critic1, _critic1Optimizer, states, actions, qTargets);
+                qLoss2 = UpdateQ(_critic2, _critic2Optimizer, states, actions, qTargets);
+                if (v1) UpdateValue(states, valueTarget);
+                if (_temperature is not null) UpdateTemperature(logProbs);
             }
-
-            // The bootstrap has to use the SAME bounded action the policy would really take, and the
-            // density of THAT action rather than of the unsquashed Gaussian — otherwise the entropy term
-            // is measured against a distribution the agent never samples from.
-            var nextAction = SquashToPositionLimit(nextPreSquash, maxPositionValue);
-            nextLogProbs[i] = SquashedGaussianLogProbability(
-                nextPreSquash, nextMean, rowLogStds, maxPositionValue);
-            for (int j = 0; j < stateDim; j++)
+            else if (v1)
             {
-                nextStateActionsData[(i * stateActionDim) + j] = batch[i].NextState[j];
+                // 2018a, Algorithm 1: V, then both Q-functions, then the policy.
+                var (valueTarget, _) = PolicyTargets(states, StandardNormals(n));
+                UpdateValue(states, valueTarget);
+                var qTargets = QTargets(nextStates, rewards, notDone, gamma, alpha);
+                qLoss1 = UpdateQ(_critic1, _critic1Optimizer, states, actions, qTargets);
+                qLoss2 = UpdateQ(_critic2, _critic2Optimizer, states, actions, qTargets);
+                policyLoss = UpdatePolicy(states, StandardNormals(n), alpha);
+                if (_temperature is not null) UpdateTemperature(PolicyTargets(states, StandardNormals(n)).LogProbs);
             }
-
-            for (int j = 0; j < actionDim; j++)
+            else
             {
-                nextStateActionsData[(i * stateActionDim) + stateDim + j] = nextAction[j];
+                // 2018b, Algorithm 1: both Q-functions, then the policy, then the temperature.
+                var qTargets = QTargets(nextStates, rewards, notDone, gamma, alpha);
+                qLoss1 = UpdateQ(_critic1, _critic1Optimizer, states, actions, qTargets);
+                qLoss2 = UpdateQ(_critic2, _critic2Optimizer, states, actions, qTargets);
+                policyLoss = UpdatePolicy(states, StandardNormals(n), alpha);
+                if (_temperature is not null) UpdateTemperature(PolicyTargets(states, StandardNormals(n)).LogProbs);
             }
         }
-
-        using var nextStateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(nextStateActionsData));
-        var targetQ1 = _targetCritic1.Predict(nextStateActions).ToVector();
-        var targetQ2 = _targetCritic2.Predict(nextStateActions).ToVector();
-
-        var stateActionsData = new T[n * stateActionDim];
-        var targetData = new T[n];
-        for (int i = 0; i < n; i++)
+        finally
         {
-            double q1 = NumOps.ToDouble(targetQ1[i]);
-            double q2 = NumOps.ToDouble(targetQ2[i]);
-            double softValue = Math.Min(q1, q2) - (alpha * nextLogProbs[i]);
-            double bootstrap = batch[i].Done ? 0.0 : gamma * softValue;
-            targetData[i] = NumOps.Add(batch[i].Reward, NumOps.FromDouble(bootstrap));
-
-            for (int j = 0; j < stateDim; j++)
-            {
-                stateActionsData[(i * stateActionDim) + j] = batch[i].State[j];
-            }
-
-            for (int j = 0; j < actionDim; j++)
-            {
-                stateActionsData[(i * stateActionDim) + stateDim + j] = batch[i].Action[j];
-            }
+            SetTrainingModes(false);
         }
 
-        using var stateActions = new Tensor<T>([n, stateActionDim], new Vector<T>(stateActionsData));
-        using var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
-
-        // ---- 2. Train BOTH critics on the same target ----
-        // They differ only by their independent initialization, which is exactly what makes min(Q1, Q2)
-        // a pessimistic estimate instead of a redundant one.
-        _critic1.Train(stateActions, targets);
-        T critic1Loss = _critic1.GetLastLoss();
-        _critic2.Train(stateActions, targets);
-        T critic2Loss = _critic2.GetLastLoss();
-
-        // ---- 3. Actor update: the reparameterized SAC objective, differentiated on the tape ----
-        //   J(theta) = E[ alpha * log pi(a|s) - min(Q1,Q2)(s, a) ],  a = MaxPositionSize * tanh(mu + sigma*eps)
-        // This is the paper's objective (Haarnoja et al. 2018 §4.2 with the bounded action of Appendix C)
-        // rather than a regression onto an ascended target. The critics are forwarded with
-        // ForwardForTraining, NOT Predict: Predict runs inside a NoGradScope, which would silently detach
-        // dQ/da and leave the actor ascending nothing but its own entropy. TrainWithCustomLoss collects
-        // only the ACTOR's tensors, so the critics contribute gradient to the action without being updated.
-        var explorationNoise = new T[n * actionDim];
-        for (int i = 0; i < explorationNoise.Length; i++)
-        {
-            explorationNoise[i] = NumOps.FromDouble(NextStandardNormal());
-        }
-
-        using var noiseTensor = new Tensor<T>([n, actionDim], new Vector<T>(explorationNoise));
-
-        // The state-independent spread is a field, not an actor output, so it enters the objective as a
-        // constant broadcast across the batch.
-        var sharedLogStdData = new T[n * actionDim];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < actionDim; j++)
-            {
-                sharedLogStdData[(i * actionDim) + j] = NumOps.FromDouble(logStds[j]);
-            }
-        }
-
-        using var sharedLogStds = new Tensor<T>([n, actionDim], new Vector<T>(sharedLogStdData));
-
-        bool stateConditioned = UsesStateConditionedHead;
-        var trainableActor = (NeuralNetworkBase<T>)_actor;
-
-        // The critics are held as INeuralNetwork<T>; the tape-aware forward lives on the base class, so they
-        // are narrowed once here rather than per call inside the objective.
-        var tapedCritic1 = (NeuralNetworkBase<T>)_critic1;
-        var tapedCritic2 = (NeuralNetworkBase<T>)_critic2;
-        T actorLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
-        {
-            var engine = AiDotNetEngine.Current;
-            var meansTensor = engine.TensorSlice(actorOutput, [0, 0], [n, actionDim]);
-            var logStdTensor = stateConditioned
-                ? engine.TensorClamp(
-                    engine.TensorSlice(actorOutput, [0, actionDim], [n, actionDim]),
-                    NumOps.FromDouble(MinLogStandardDeviation),
-                    NumOps.FromDouble(MaxLogStandardDeviation))
-                : sharedLogStds;
-
-            // u = mu + sigma * eps with eps FIXED for this step: the reparameterization is what lets the
-            // gradient pass through the sample instead of round it.
-            var preSquash = engine.TensorAdd(
-                meansTensor, engine.TensorMultiply(engine.TensorExp(logStdTensor), noiseTensor));
-            var boundedAction = PolicyDistributionHelper<T>.SquashAction(engine, preSquash, maxPositionValue);
-            var logPi = PolicyDistributionHelper<T>.ComputeSquashedGaussianLogProb(
-                engine, meansTensor, logStdTensor, preSquash, maxPositionValue);
-
-            var stateAction = engine.TensorConcatenate([states, boundedAction], axis: 1);
-            var minQ = engine.TensorMin(
-                tapedCritic1.ForwardForTraining(stateAction), tapedCritic2.ForwardForTraining(stateAction));
-            var flatMinQ = engine.ReduceSum(minQ, [1], keepDims: false);
-
-            var objective = engine.TensorSubtract(
-                engine.TensorMultiplyScalar(logPi, NumOps.FromDouble(alpha)), flatMinQ);
-            return engine.ReduceMean(objective, [0], keepDims: false);
-        });
-
-        // ---- 4. Policy spread for the state-independent head ----
-        // With the paper's head the spread IS an actor output and was just trained by the objective above.
-        // The state-independent spread is a plain field the tape cannot reach, so it keeps its own ascent
-        // on the same trade-off, now measured through the squash: widening costs value in proportion to
-        // |dQ/da| * d a/d u * sigma, and buys entropy at the rate alpha.
-        if (!stateConditioned)
-        {
-            var actorOutputs = _actor.Predict(states).ToVector();
-            var means = new Vector<T>(n * actionDim);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < actionDim; j++)
-                {
-                    means[(i * actionDim) + j] = actorOutputs[(i * actorWidth) + j];
-                }
-            }
-
-            var actionGradients = EstimateActionGradients(batch, means, n, stateDim, actionDim, stateActionDim);
-            UpdatePolicySpread(actionGradients, logStds, alpha, n, actionDim);
-        }
-
-        // ---- 5. Temperature ----
-        if (TradingOptions.AutoTuneAlpha)
-        {
-            UpdateTemperature(nextLogProbs, actionDim);
-        }
-
-        // ---- 6. Polyak target updates ----
         double tau = TradingOptions.Tau;
-        SoftUpdateTargetNetwork(_critic1, _targetCritic1, tau);
-        SoftUpdateTargetNetwork(_critic2, _targetCritic2, tau);
-
-        if (_updateCount < int.MaxValue)
+        if (v1)
         {
-            _updateCount++;
+            SoftUpdateTargetNetwork(RequireValueNetwork(), RequireTargetValueNetwork(), tau);
         }
+        else
+        {
+            SoftUpdateTargetNetwork(_critic1, RequireTargetCritic1(), tau);
+            SoftUpdateTargetNetwork(_critic2, RequireTargetCritic2(), tau);
+        }
+        if (_updateCount < int.MaxValue) _updateCount++;
 
-        T criticLoss = NumOps.Divide(NumOps.Add(critic1Loss, critic2Loss), NumOps.FromDouble(2.0));
-        T loss = NumOps.Add(criticLoss, actorLoss);
+        T loss = NumOps.Add(NumOps.Divide(NumOps.Add(qLoss1, qLoss2), NumOps.FromDouble(2.0)), policyLoss);
         LossHistory.Add(loss);
         return loss;
     }
 
-    /// <summary>
-    /// Central-difference estimate of <c>d min(Q1, Q2) / da</c> at each sampled state, evaluated at the
-    /// actor's current mean action. Returns a flat <c>[n * actionDim]</c> buffer of doubles.
-    /// </summary>
-    /// <remarks>
-    /// Every perturbation is packed into ONE batched forward per critic per direction rather than a
-    /// forward per element, so the cost is 2 * actionDim batched passes instead of 2 * n * actionDim
-    /// single-sample ones.
-    /// </remarks>
-    private double[] EstimateActionGradients(
-        List<Experience<T>> batch, Vector<T> means, int n, int stateDim, int actionDim, int stateActionDim)
+    private void SetTrainingModes(bool training)
     {
-        var gradients = new double[n * actionDim];
-        double epsilon = ActionFiniteDifferenceEpsilon;
-
-        for (int dimension = 0; dimension < actionDim; dimension++)
-        {
-            var plusData = new T[n * stateActionDim];
-            var minusData = new T[n * stateActionDim];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < stateDim; j++)
-                {
-                    plusData[(i * stateActionDim) + j] = batch[i].State[j];
-                    minusData[(i * stateActionDim) + j] = batch[i].State[j];
-                }
-
-                for (int j = 0; j < actionDim; j++)
-                {
-                    T mean = means[(i * actionDim) + j];
-                    int slot = (i * stateActionDim) + stateDim + j;
-                    plusData[slot] = j == dimension ? NumOps.Add(mean, NumOps.FromDouble(epsilon)) : mean;
-                    minusData[slot] = j == dimension ? NumOps.Subtract(mean, NumOps.FromDouble(epsilon)) : mean;
-                }
-            }
-
-            // Released per direction rather than at method exit: the loop runs actionDim times and each
-            // iteration allocates two [n, stateActionDim] buffers that nothing reads after its passes.
-            using var plus = new Tensor<T>([n, stateActionDim], new Vector<T>(plusData));
-            using var minus = new Tensor<T>([n, stateActionDim], new Vector<T>(minusData));
-            var plusQ1 = _critic1.Predict(plus).ToVector();
-            var plusQ2 = _critic2.Predict(plus).ToVector();
-            var minusQ1 = _critic1.Predict(minus).ToVector();
-            var minusQ2 = _critic2.Predict(minus).ToVector();
-
-            for (int i = 0; i < n; i++)
-            {
-                double forward = Math.Min(NumOps.ToDouble(plusQ1[i]), NumOps.ToDouble(plusQ2[i]));
-                double backward = Math.Min(NumOps.ToDouble(minusQ1[i]), NumOps.ToDouble(minusQ2[i]));
-                gradients[(i * actionDim) + dimension] = (forward - backward) / (2.0 * epsilon);
-            }
-        }
-
-        return gradients;
+        foreach (var network in new[] { _actor, _critic1, _critic2, _value })
+            if (network is not null) ((NeuralNetworkBase<T>)network).SetTrainingMode(training);
     }
 
-    /// <summary>
-    /// One ascent step on the state-independent log standard deviations against <c>Q + alpha * H</c>.
-    /// </summary>
-    private void UpdatePolicySpread(double[] actionGradients, double[] logStds, double alpha, int n, int actionDim)
+    private static Tensor<T> Rows(IReadOnlyList<Vector<T>> vectors, int width)
     {
-        for (int j = 0; j < actionDim; j++)
-        {
-            // Mean |dQ/da_j| measures how sharply value depends on this dimension; widening a dimension the
-            // critic is sensitive to costs value, so that term pushes the spread DOWN while entropy pushes up.
-            double sensitivity = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                sensitivity += Math.Abs(actionGradients[(i * actionDim) + j]);
-            }
-
-            sensitivity /= Math.Max(1, n);
-
-            double std = Math.Exp(logStds[j]);
-            double gradient = alpha - (sensitivity * std);
-            double updated = MathPolyfill.Clamp(
-                logStds[j] + (PolicySpreadLearningRate * gradient),
-                MinLogStandardDeviation,
-                MaxLogStandardDeviation);
-            _logStd[j] = NumOps.FromDouble(updated);
-        }
+        var rows = new Tensor<T>([vectors.Count, width]);
+        var span = rows.AsWritableSpan();
+        for (int i = 0; i < vectors.Count; i++)
+            for (int j = 0; j < width; j++) span[i * width + j] = vectors[i][j];
+        return rows;
     }
 
-    /// <summary>
-    /// Automatic temperature tuning (Haarnoja et al. 2018 §5): descend
-    /// <c>L(alpha) = -alpha * (log pi + H_target)</c>, so alpha rises while the policy is more
-    /// deterministic than the target entropy and falls once it is more random.
-    /// </summary>
-    private void UpdateTemperature(double[] logProbs, int actionDim)
+    private static NeuralNetworkBase<T> Trainable(INeuralNetwork<T> network) => (NeuralNetworkBase<T>)network;
+
+    private Tensor<T> MinQ(Tensor<T> q1, Tensor<T> q2) => AiDotNetEngine.Current.TensorMin(q1, q2);
+
+    // With a sample a ~ π(s) (no gradient): the 2018a value target min Q(s, a) − α log π(a|s), and log π(a|s).
+    private (Tensor<T> ValueTarget, Tensor<T> LogProbs) PolicyTargets(Tensor<T> states, Tensor<T> noise)
     {
-        double averageLogProb = 0.0;
-        for (int i = 0; i < logProbs.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        int n = states.Shape[0];
+        using var _ = new NoGradScope<T>();
+        var (mean, logStd) = PolicyParameters(_actor.Predict(states), n);
+        var (action, logProb) = SquashedSample(mean, logStd, noise);
+        var stateAction = engine.TensorConcatenate([states, action], axis: 1);
+        var minQ = engine.Reshape(MinQ(_critic1.Predict(stateAction), _critic2.Predict(stateAction)), [n]);
+        var target = engine.TensorSubtract(minQ, engine.TensorMultiplyScalar(logProb, NumOps.FromDouble(CurrentAlpha)));
+        return (engine.Reshape(target, [n, 1]), logProb);
+    }
+
+    // The Q-functions' target: 2018a r + γ(1 − d)V̄(s'); 2018b r + γ(1 − d)(min Q̄(s', a') − α log π(a'|s')), a' ~ π(s').
+    private Tensor<T> QTargets(Tensor<T> nextStates, double[] rewards, double[] notDone, double gamma, double alpha)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = nextStates.Shape[0];
+        using var _ = new NoGradScope<T>();
+        Tensor<T> next;
+        if (_sacOptions.Variant == SacVariant.ValueNetwork)
         {
-            averageLogProb += logProbs[i];
+            next = engine.Reshape(RequireTargetValueNetwork().Predict(nextStates), [n]);
         }
+        else
+        {
+            var (mean, logStd) = PolicyParameters(_actor.Predict(nextStates), n);
+            var (action, logProb) = SquashedSample(mean, logStd, StandardNormals(n));
+            var stateAction = engine.TensorConcatenate([nextStates, action], axis: 1);
+            var minQ = engine.Reshape(MinQ(RequireTargetCritic1().Predict(stateAction), RequireTargetCritic2().Predict(stateAction)), [n]);
+            next = engine.TensorSubtract(minQ, engine.TensorMultiplyScalar(logProb, NumOps.FromDouble(alpha)));
+        }
+        var values = next.ToVector();
+        var targets = new Tensor<T>([n, 1]);
+        for (int i = 0; i < n; i++)
+            targets[i, 0] = NumOps.FromDouble(rewards[i] + gamma * notDone[i] * NumOps.ToDouble(values[i]));
+        return targets;
+    }
 
-        averageLogProb /= Math.Max(1, logProbs.Length);
+    // ½ mean((Q(s, a) − y)²) on one Q-function.
+    private T UpdateQ(INeuralNetwork<T> critic, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        Tensor<T> states, Tensor<T> actions, Tensor<T> targets)
+    {
+        int n = states.Shape[0], width = states.Shape[1] + actions.Shape[1];
+        var packed = StepInputPacking<T>.Pack(AiDotNetEngine.Current.TensorConcatenate([states, actions], axis: 1), targets);
+        var network = Trainable(critic);
+        return network.TrainObjectiveFused(packed, data =>
+        {
+            var engine = AiDotNetEngine.Current;
+            var stateAction = StepInputPacking<T>.Slice(data, 0, [n, width]);
+            var target = StepInputPacking<T>.Slice(data, n * width, [n, 1]);
+            var difference = engine.TensorSubtract(network.ForwardForTraining(stateAction), target);
+            return engine.TensorMultiplyScalar(engine.ReduceMean(engine.TensorMultiply(difference, difference), [0, 1], keepDims: false),
+                NumOps.FromDouble(0.5));
+        }, optimizer);
+    }
 
-        // Target entropy defaults to -ActionSize (the SAC convention); TargetEntropyRatio scales it.
-        double ratio = TradingOptions is FinancialSACAgentOptions<T> sacOptions
-            ? sacOptions.TargetEntropyRatio
-            : -1.0;
-        double targetEntropy = ratio * actionDim;
+    // 2018a eq. 5: ½ mean((V(s) − target)²).
+    private void UpdateValue(Tensor<T> states, Tensor<T> targets)
+    {
+        int n = states.Shape[0], width = states.Shape[1];
+        var packed = StepInputPacking<T>.Pack(states, targets);
+        var network = Trainable(RequireValueNetwork());
+        network.TrainObjectiveFused(packed, data =>
+        {
+            var engine = AiDotNetEngine.Current;
+            var s = StepInputPacking<T>.Slice(data, 0, [n, width]);
+            var target = StepInputPacking<T>.Slice(data, n * width, [n, 1]);
+            var difference = engine.TensorSubtract(network.ForwardForTraining(s), target);
+            return engine.TensorMultiplyScalar(engine.ReduceMean(engine.TensorMultiply(difference, difference), [0, 1], keepDims: false),
+                NumOps.FromDouble(0.5));
+        }, RequireValueOptimizer());
+    }
 
-        double logAlpha = NumOps.ToDouble(_logAlpha);
-        double gradient = -Math.Exp(logAlpha) * (averageLogProb + targetEntropy);
-        logAlpha -= PolicySpreadLearningRate * gradient;
-        _logAlpha = NumOps.FromDouble(MathPolyfill.Clamp(logAlpha, -20.0, 4.0));
+    // mean(α log π(ã|s) − Q_agg(s, ã)), ã = M·tanh(μ + σε) reparameterized; only the policy (and its log-std) trains.
+    private T UpdatePolicy(Tensor<T> states, Tensor<T> noise, double alpha)
+    {
+        int n = states.Shape[0], width = states.Shape[1], a = TradingOptions.ActionSize;
+        // α travels in the packed input: a compiled step rebinds its input on every replay but keeps any host value
+        // the objective captures, and a learned α changes every step.
+        var temperature = new Tensor<T>([1, 1]);
+        temperature[0, 0] = NumOps.FromDouble(alpha);
+        var packed = StepInputPacking<T>.Pack(states, noise, temperature);
+        var actor = Trainable(_actor);
+        var critic1 = Trainable(_critic1);
+        var critic2 = Trainable(_critic2);
+        var aggregate = _sacOptions.PolicyCriticAggregate;
+        return actor.TrainObjectiveFused(packed, data =>
+        {
+            var engine = AiDotNetEngine.Current;
+            var s = StepInputPacking<T>.Slice(data, 0, [n, width]);
+            var epsilon = StepInputPacking<T>.Slice(data, n * width, [n, a]);
+            var alphaTensor = StepInputPacking<T>.Slice(data, n * width + n * a, [1]);
+            var (mean, logStd) = PolicyParameters(actor.ForwardForTraining(s), n);
+            var (action, logProb) = SquashedSample(mean, logStd, epsilon);
+            var stateAction = engine.TensorConcatenate([s, action], axis: 1);
+            var q1 = critic1.ForwardForTraining(stateAction);
+            var q = aggregate switch
+            {
+                SacCriticAggregate.FirstCritic => q1,
+                SacCriticAggregate.Mean => engine.TensorMultiplyScalar(engine.TensorAdd(q1, critic2.ForwardForTraining(stateAction)), NumOps.FromDouble(0.5)),
+                _ => engine.TensorMin(q1, critic2.ForwardForTraining(stateAction)),
+            };
+            var objective = engine.TensorSubtract(engine.TensorMultiply(logProb, engine.TensorTile(alphaTensor, [n])), engine.Reshape(q, [n]));
+            return engine.ReduceMean(objective, [0], keepDims: false);
+        }, _actorOptimizer, () => PolicyTensors(actor));
+    }
+
+    private IReadOnlyList<Tensor<T>> PolicyTensors(NeuralNetworkBase<T> actor)
+    {
+        var tensors = new List<Tensor<T>>(actor.CollectModelTrainableTensors());
+        if (_logStd is not null) tensors.Add(_logStd);
+        return tensors;
+    }
+
+    // 2018b eq. 18: J = −mean(α (log π(a|s) + H̄)), on α itself (Algorithm 1) or on log α (softlearning).
+    private void UpdateTemperature(Tensor<T> logProbs)
+    {
+        double targetEntropy = _sacOptions.TargetEntropyRatio * TradingOptions.ActionSize;
+        double mean = logProbs.ToArray().Average(v => NumOps.ToDouble(v)) + targetEntropy;
+        var temperature = RequireTemperature();
+        bool logParameter = _sacOptions.TemperatureParameter == SacTemperatureParameter.LogAlpha;
+        var unit = new Tensor<T>([1]);
+        var request = new FusedTrainingStepRequest<T>
+        {
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = unit,
+            Target = unit,
+            Forward = _ =>
+            {
+                var engine = AiDotNetEngine.Current;
+                var alphaValue = logParameter ? engine.TensorExp(temperature) : temperature;
+                return engine.TensorMultiplyScalar(engine.ReduceSum(alphaValue, [0], keepDims: false), NumOps.FromDouble(-mean));
+            },
+            ComputeLoss = (loss, _) => loss,
+            Optimizer = RequireTemperatureOptimizer(),
+            ExtraParameters = [temperature],
+            Selection = [temperature],
+        };
+        TapeTrainingStepper<T>.EagerStep(request);
+        if (!logParameter && !(NumOps.ToDouble(temperature[0]) > 0))
+            throw new InvalidOperationException(
+                $"The learned temperature α reached {NumOps.ToDouble(temperature[0])}. The 2018b paper steps α directly on an objective "
+                + "linear in α, which nothing keeps positive; set FinancialSACAgentOptions.TemperatureParameter to LogAlpha "
+                + "(softlearning's parameterization) to keep it positive.");
     }
 
     #endregion
 
     #region Base Implementation
 
-    /// <summary>
-    /// Executes LoadModel for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, LoadModel performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void LoadModel(string filepath)
-    {
-        var data = File.ReadAllBytes(filepath);
-        Deserialize(data);
-    }
+    /// <inheritdoc/>
+    public override void LoadModel(string filepath) => Deserialize(File.ReadAllBytes(filepath));
 
-    /// <summary>
-    /// Executes SaveModel for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, SaveModel performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override void SaveModel(string filepath)
-    {
-        var data = Serialize();
-        File.WriteAllBytes(filepath, data);
-    }
+    /// <inheritdoc/>
+    public override void SaveModel(string filepath) => File.WriteAllBytes(filepath, Serialize());
 
-    /// <summary>
-    /// Executes StoreExperience for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, StoreExperience performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         ValidateTransitionShape(state, action, nextState);
-        var experience = new Experience<T>(state, action, ScaleReward(reward), nextState, done);
-        ReplayBuffer.Add(experience);
+        ReplayBuffer.Add(new Experience<T>(state, action, ScaleReward(reward), nextState, done));
     }
-
-    #endregion
-
-    #region Serialization
 
     #endregion
 
     #region Model Metadata
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Adds the entropy temperature (<c>"Alpha"</c>), the mean policy standard deviation
-    /// (<c>"PolicyStdDev"</c>) and the number of gradient updates applied (<c>"Updates"</c>), so a caller can
-    /// see the exploration/exploitation trade-off the agent has actually settled on.
-    /// </remarks>
     public override Dictionary<string, T> GetTradingMetrics()
     {
         var metrics = base.GetTradingMetrics();
         metrics["Alpha"] = NumOps.FromDouble(CurrentAlpha);
-        // Only report the spread when it actually tracks the policy. _logStd is updated in step 4
-        // of Train, which is SKIPPED for a state-conditioned head, so this key would otherwise report
-        // the constructor's 0.1 forever and read as an exploration width that never moves. Omitting
-        // it is honest; a constant dressed up as a measurement is not.
-        if (_actorHead != SacActorHead.StateConditionedGaussian)
-        {
-            metrics["PolicyStdDev"] = NumOps.FromDouble(CurrentPolicyStandardDeviations.Average());
-        }
+        if (_logStd is not null)
+            metrics["PolicyStdDev"] = NumOps.FromDouble(_logStd.ToArray().Average(v => Math.Exp(MathPolyfill.Clamp(
+                NumOps.ToDouble(v), MinLogStandardDeviation, MaxLogStandardDeviation))));
         metrics["Updates"] = NumOps.FromDouble(_updateCount);
         return metrics;
     }
 
-    /// <summary>
-    /// Executes GetModelMetadata for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, GetModelMetadata performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -926,36 +720,18 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "AgentType", "FinancialSAC" },
+                { "Variant", _sacOptions.Variant.ToString() },
                 { "ParameterCount", ParameterCount }
             }
         };
     }
 
-    /// <summary>
-    /// Executes ComputeGradients for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, ComputeGradients performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
+    /// <summary>The policy network's gradients of <paramref name="lossFunction"/> on one state.</summary>
     public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        return _actor.ComputeGradients(Tensor<T>.FromVector(input), Tensor<T>.FromVector(target), lossFunction);
-    }
+        => _actor.ComputeGradients(Row(input), Tensor<T>.FromVector(target), lossFunction);
 
-    /// <summary>
-    /// Executes ApplyGradients for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, ApplyGradients performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        _actor.ApplyGradients(gradients, learningRate);
-    }
+    /// <summary>Applies gradients to the policy network.</summary>
+    public void ApplyGradients(Vector<T> gradients, T learningRate) => _actor.ApplyGradients(gradients, learningRate);
 
     #endregion
 }

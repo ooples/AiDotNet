@@ -751,10 +751,11 @@ internal static class FinanceModelTestFactory
         int stateSize = Math.Max(1, GetIntOption(optionsInstance, "StateSize") ?? 8);
         int actionSize = Math.Max(1, GetIntOption(optionsInstance, "ActionSize") ?? 3);
 
-        var actorArchitecture = FinanceTestHelpers.CreateArchitecture<T>(stateSize, actionSize);
-
-        // SAC agents need critic input = state + action size (Q-network takes both as input)
+        // SAC agents need critic input = state + action size (Q-network takes both as input), and the paper's
+        // Gaussian head emits a mean and a log standard deviation per action dimension.
         bool isSACAgent = closedModelType.Name.Contains("SAC", StringComparison.OrdinalIgnoreCase);
+        var actorArchitecture = FinanceTestHelpers.CreateArchitecture<T>(stateSize, isSACAgent ? 2 * actionSize : actionSize);
+        var valueArchitecture = FinanceTestHelpers.CreateArchitecture<T>(stateSize, 1);
         int criticInputSize = isSACAgent ? stateSize + actionSize : stateSize;
         var criticArchitecture = FinanceTestHelpers.CreateArchitecture<T>(criticInputSize, 1);
 
@@ -765,7 +766,12 @@ internal static class FinanceModelTestFactory
             if (param.ParameterType == architectureType)
             {
                 string paramName = param.Name ?? string.Empty;
-                if (paramName.Contains("critic", StringComparison.OrdinalIgnoreCase)
+                if (isSACAgent && paramName.Contains("value", StringComparison.OrdinalIgnoreCase))
+                {
+                    // SAC 2018a's state-value network V(s).
+                    args[i] = valueArchitecture;
+                }
+                else if (paramName.Contains("critic", StringComparison.OrdinalIgnoreCase)
                     || paramName.Contains("value", StringComparison.OrdinalIgnoreCase)
                     || paramName.Contains("secondary", StringComparison.OrdinalIgnoreCase))
                 {

@@ -12287,14 +12287,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName is "FinancialA2CAgent" or "FinancialSACAgent"
                      && model.TypeParameterCount == 1)
             {
-                // StateSize = ActionSize = the RL base's StateDim (4). The actor maps state -> action;
+                // StateSize = ActionSize = the RL base's StateDim (4). The actor maps state -> action (SAC's paper head
+                // emits a mean and a log standard deviation per action dimension, so 8 outputs);
                 // A2C's critic maps state -> value, SAC's maps (state, action) -> Q.
-                string criticInputs = model.ClassName == "FinancialSACAgent" ? "8" : "4";
+                bool sac = model.ClassName == "FinancialSACAgent";
+                string criticInputs = sac ? "8" : "4";
+                string actorOutputs = sac ? "8" : "4";
                 constructorExpr = $"new {typeName}<double>(" +
                     "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 4, outputSize: 4), " +
+                    $"inputSize: 4, outputSize: {actorOutputs}), " +
                     "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
