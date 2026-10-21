@@ -11,6 +11,23 @@ namespace AiDotNet.NeuralNetworks;
 internal static class ArchitectureAgreement
 {
     /// <summary>
+    /// The feature count an architecture states for a [batch, time steps, features] input: the width of a grid stated
+    /// as a grid, otherwise the flat <c>InputSize</c>.
+    /// </summary>
+    /// <remarks>
+    /// A forecasting architecture of 96 x 7 has an <c>InputSize</c> of 672, the whole window; its features are the 7
+    /// columns. A grid of one of the two forms the architecture infers from a flat size (1 x n, or square) carries no
+    /// split, so its flat size is the feature count.
+    /// </remarks>
+    internal static int SequenceFeatureCount<T>(NeuralNetworkArchitecture<T> architecture)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        int height = architecture.InputHeight, width = architecture.InputWidth;
+        bool statedGrid = height > 0 && width > 0 && height != 1 && height != width;
+        return statedGrid ? width : architecture.InputSize;
+    }
+
+    /// <summary>
     /// Requires an architecture's input description to match a [batch, <paramref name="sequenceLength"/>,
     /// <paramref name="numFeatures"/>] model.
     /// </summary>
@@ -36,16 +53,18 @@ internal static class ArchitectureAgreement
     {
         if (architecture is null) throw new ArgumentNullException(nameof(architecture));
         int height = architecture.InputHeight, width = architecture.InputWidth;
+        int depth = Math.Max(1, architecture.InputDepth);
         bool grid = height > 0 && width > 0;
-        if (grid && height == sequenceLength && width == numFeatures) return;
+        // A grid with more than one channel holds depth times the window's values, so it never matches exactly.
+        if (grid && depth == 1 && height == sequenceLength && width == numFeatures) return;
         bool inferredGrid = grid && (height == 1 || height == width);
-        if (grid && !inferredGrid)
+        if (grid && (!inferredGrid || depth > 1))
             throw new ArgumentException(
-                $"{model}: the architecture describes a {height} x {width} (time steps x features) input, but the model " +
+                $"{model}: the architecture describes a {height} x {width}{(depth > 1 ? $" x {depth}" : "")} (time steps x features{(depth > 1 ? " x channels" : "")}) input, but the model " +
                 $"was built for {sequenceLength} x {numFeatures} from its options. State the options' sequence length and " +
                 "feature count in the architecture, or leave its input size unset.", nameof(architecture));
 
-        long stated = grid ? (long)height * width * Math.Max(1, architecture.InputDepth) : architecture.InputSize;
+        long stated = grid ? (long)height * width * depth : architecture.InputSize;
         if (stated <= 0) return;
         long window = (long)sequenceLength * numFeatures;
         if (stated == numFeatures || stated == sequenceLength || stated == window) return;

@@ -231,7 +231,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.LookbackWindow;
         _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
         _numHeads = options.NumAttentionHeads;
@@ -276,7 +276,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.LookbackWindow;
         _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
         _numHeads = options.NumAttentionHeads;
