@@ -459,6 +459,11 @@ internal sealed class FusedTrainingSession<T>
         InvalidateDerivedWeightCaches();
         if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
             scheduled.OnBatchEnd();
+
+        // Counted here, where every base class's fused step lands, and regardless of the diagnostics level: the hit
+        // counter exists to answer "did the fused path engage at all?" after a run (#1930), and the network's own
+        // hit event fires only at PerStep, so FusedOptimizerHits stayed 0 through any number of fused steps.
+        AiDotNet.Configuration.TrainingDiagnosticsConfig.RecordFusedOptimizerPath(hit: true, reason: null);
         return FusedStepOutcome.Stepped;
     }
 

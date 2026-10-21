@@ -1,4 +1,5 @@
 using AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
+using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
@@ -55,11 +56,29 @@ public class FusedTrainingSessionStreamedWeightTests
             NeuralNetworkBase<float>.ResetWeightStreamingForTests();
 
             using var model = CreateSmall(architecture);
-            model.ApplyAutoDetectThresholdOverride(1);
+            // A 1 KB resident budget makes every layer boundary evict, and ForceOff keeps training on the fused
+            // session (the path that runs the probe) instead of the optimizer-in-backward streaming path.
+            model.ConfigureWeightLifetime(new GpuOffloadOptions { StreamingPoolMaxResidentBytes = 1024L });
+            model.StreamingTraining = StreamingTrainingMode.ForceOff;
+            Assert.True(model.IsWeightStreamingActive, "the weight lifetime configuration did not turn streaming on");
             var target = Seeded(7, outputShape);
-            Assert.Null(Record.Exception(() => model.Train(input, target)));
-            Assert.Null(Record.Exception(() => model.Train(input, target)));
-            Assert.True(model.WeightStreamingAutoDetected, "the threshold override did not turn streaming on");
+
+            // The counters are process-wide and other collections may train concurrently, so each step is
+            // asserted to advance them rather than to land on an exact value. Only the first step pages: it
+            // traces the plan through the layer boundaries, while the second replays the compiled plan, which
+            // never crosses one. Both run the probe.
+            long evictionsBefore = WeightRegistry.GetStreamingReport().EvictionCount;
+            for (int step = 1; step <= 2; step++)
+            {
+                int fusedHitsBefore = TrainingDiagnosticsConfig.FusedOptimizerHits;
+                Assert.Null(Record.Exception(() => model.Train(input, target)));
+                Assert.True(
+                    TrainingDiagnosticsConfig.FusedOptimizerHits > fusedHitsBefore,
+                    $"training step {step} did not run on the fused training session");
+            }
+            Assert.True(
+                WeightRegistry.GetStreamingReport().EvictionCount > evictionsBefore,
+                "training under a 1 KB resident budget produced no streaming-pool eviction");
         }
         finally
         {
