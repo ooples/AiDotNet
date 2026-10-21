@@ -406,7 +406,6 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTSMixerLayers(
-                Architecture,
                 _sequenceLength,
                 _predictionHorizon,
                 _numFeatures,

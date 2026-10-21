@@ -212,7 +212,6 @@ namespace AiDotNet.NeuralNetworks
             {
                 // Default Siamese architecture: Transformer-based encoder from LayerHelper
                 Layers.AddRange(LayerHelper<T>.CreateDefaultSiameseLayers(
-                    Architecture,
                     _vocabSize,
                     _embeddingDimension,
                     _maxSequenceLength));

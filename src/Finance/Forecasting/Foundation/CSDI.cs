@@ -274,7 +274,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultCSDILayers(
-                Architecture, _sequenceLength, _numFeatures, _hiddenDimension,
+                _sequenceLength, _numFeatures, _hiddenDimension,
                 _numResidualLayers, _numHeads, _timeEmbeddingDim, _dropout));
             ExtractLayerReferences();
         }

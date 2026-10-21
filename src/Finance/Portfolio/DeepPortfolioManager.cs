@@ -162,7 +162,7 @@ public partial class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
         }
         else if (UseNativeMode)
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultDeepPortfolioLayers(Architecture, _numAssets));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultDeepPortfolioLayers(_numAssets));
         }
     }
 

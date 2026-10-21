@@ -374,7 +374,7 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultLagLlamaLayers(
-                Architecture, _contextLength, _forecastHorizon, 1,
+                _contextLength, _forecastHorizon, 1,
                 _lagIndices.Length, _hiddenDimension, _numLayers, _numHeads,
                 _intermediateSize, _dropout));
 

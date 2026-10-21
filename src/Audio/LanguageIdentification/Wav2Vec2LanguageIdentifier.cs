@@ -212,7 +212,6 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         // forward needs, in the factory's documented order. The partition fails loudly if the two
         // ever drift apart, and Layers publishes exactly these instances.
         var built = LayerHelper<T>.CreateDefaultWav2Vec2LanguageIdentifierLayers(
-            Architecture,
             hiddenSize: _options.HiddenSize,
             numLayers: _options.NumLayers,
             numAttentionHeads: _options.NumAttentionHeads,

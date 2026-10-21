@@ -167,7 +167,7 @@ public partial class FinGPT<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinGPTLayers(
-                Architecture, MaxSequenceLength, VocabularySize, 
+                MaxSequenceLength, VocabularySize, 
                 HiddenDimension, 12, 12, _dropout));
 
             ExtractLayerReferences();

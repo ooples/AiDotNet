@@ -1107,7 +1107,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         {
             // Use default layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultOpenSoraLayers(
-                Architecture, _height, _width, _channels, _hiddenDim, _numLayers, _numHeads));
+                _height, _width, _channels, _hiddenDim, _numLayers, _numHeads));
 
             // Store references to specific layers for direct access
             ExtractLayerReferences();

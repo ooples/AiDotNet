@@ -471,7 +471,6 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultNonStationaryTransformerLayers(
-                Architecture,
                 _sequenceLength,
                 _predictionHorizon,
                 _numFeatures,

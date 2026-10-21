@@ -248,7 +248,7 @@ public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultKairosLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchSizes,
+                _contextLength, _forecastHorizon, _patchSizes,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
         }
     }

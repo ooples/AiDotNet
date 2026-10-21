@@ -161,7 +161,6 @@ public partial class NeuralStressTest<T> : RiskModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralStressTestLayers(
-                Architecture,
                 _options.NumFeatures,
                 _options.HiddenDimension,
                 _options.NumScenarios,

@@ -391,7 +391,6 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFactorVAELayers(
-                Architecture,
                 _numFeatures,
                 _hiddenDimension,
                 _latentDimension,

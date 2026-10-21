@@ -453,7 +453,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimerLayers(
-                Architecture, _contextLength, _forecastHorizon, _numFeatures,
+                _contextLength, _forecastHorizon, _numFeatures,
                 _patchLength, _patchStride, _hiddenDimension, _numLayers, _numHeads, _dropout));
 
             ExtractLayerReferences();

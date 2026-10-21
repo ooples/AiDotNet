@@ -305,7 +305,6 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultAlphaFactorLayers(
-                Architecture,
                 _numFeatures,
                 _hiddenDimension,
                 _numFactors,

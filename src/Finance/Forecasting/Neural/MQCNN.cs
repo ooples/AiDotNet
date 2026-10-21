@@ -366,7 +366,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultMQCNNLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _quantiles.Length, _encoderChannels, _decoderChannels,
                 _numEncoderLayers, _numDecoderLayers, _dropout));
 

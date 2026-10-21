@@ -272,7 +272,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); ExtractLayerReferences(); }
-        else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultMGTSDLayers(Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _numGranularities, _dropout)); ExtractLayerReferences(); }
+        else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultMGTSDLayers(_contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _numGranularities, _dropout)); ExtractLayerReferences(); }
 
         // Manually resolve each sub-stage's lazy layers from its OWN known
         // input shape so ParameterCount reports correctly before any forward

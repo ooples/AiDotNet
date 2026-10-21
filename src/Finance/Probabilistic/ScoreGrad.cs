@@ -339,7 +339,6 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultScoreGradLayers(
-                Architecture,
                 _sequenceLength,
                 _forecastHorizon,
                 _numFeatures,

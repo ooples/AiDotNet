@@ -341,7 +341,6 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultSTGNNLayers(
-                Architecture,
                 _sequenceLength,
                 _forecastHorizon,
                 _numNodes,

@@ -236,7 +236,7 @@ public partial class YingLong<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultYingLongLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchLength,
+                _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
         }
     }

@@ -450,7 +450,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFEDformerLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                _sequenceLength, _predictionHorizon, _numFeatures,
                 _numEncoderLayers, _numDecoderLayers, _numHeads, _modelDimension, _feedForwardDimension));
 
             ExtractLayerReferences();

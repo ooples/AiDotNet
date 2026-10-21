@@ -308,7 +308,7 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         else
         {
             // Use EfficientNet-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientNetLayers(Architecture, _configuration));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientNetLayers(_configuration));
         }
     }
 

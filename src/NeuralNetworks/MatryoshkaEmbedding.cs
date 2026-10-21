@@ -163,7 +163,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultMRLLayers(
-                    Architecture,
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,

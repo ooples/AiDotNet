@@ -301,7 +301,6 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinBERTLayers(
-                Architecture,
                 _vocabularySize,
                 _maxSequenceLength,
                 _hiddenDimension,

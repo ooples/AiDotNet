@@ -213,7 +213,7 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultMamba2Layers(
-                Architecture, _contextLength, _forecastHorizon, _numFeatures,
+                _contextLength, _forecastHorizon, _numFeatures,
                 _modelDimension, _stateDimension, _numHeads, _expandFactor, _numLayers, _dropout,
                 _convKernelSize, _chunkSize));
             ExtractLayerReferences();

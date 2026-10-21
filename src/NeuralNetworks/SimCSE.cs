@@ -142,7 +142,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultSimCSELayers(
-                    Architecture,
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,

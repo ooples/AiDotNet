@@ -146,7 +146,6 @@ public partial class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultBlackLittermanNeuralLayers(
-                Architecture,
                 NumFeatures,
                 _hiddenDimension,
                 _numAssets,

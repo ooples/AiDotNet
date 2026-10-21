@@ -467,7 +467,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultMOIRAILayers(
-                Architecture, _contextLength, _forecastHorizon, _numFeatures,
+                _contextLength, _forecastHorizon, _numFeatures,
                 _patchSizes, _hiddenDimension, _numLayers, _numHeads,
                 _intermediateSize, _numMixtures, _dropout));
 

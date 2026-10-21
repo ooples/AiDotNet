@@ -184,7 +184,7 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
         else
         {
             // Use MobileNetV3-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV3Layers(Architecture, _configuration));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV3Layers(_configuration));
         }
 
         // Set eval mode: BN with constant spatial input in training mode normalizes to zero

@@ -140,7 +140,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultInstructorLayers(
-                    Architecture,
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,

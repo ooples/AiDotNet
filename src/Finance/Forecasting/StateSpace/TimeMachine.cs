@@ -320,7 +320,6 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimeMachineLayers(
-                Architecture,
                 _contextLength,
                 _forecastHorizon,
                 _modelDimension,

@@ -337,7 +337,7 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultNBEATSLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numStacks,
+                _lookbackWindow, _forecastHorizon, _numStacks,
                 _numBlocksPerStack, _hiddenSize, _numHiddenLayers));
 
             ExtractLayerReferences();

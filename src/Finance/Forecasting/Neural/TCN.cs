@@ -367,7 +367,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTCNLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _numChannels, _kernelSize, _numLayers, _dropout, _useResidualConnections));
 
             ExtractLayerReferences();

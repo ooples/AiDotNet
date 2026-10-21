@@ -257,7 +257,7 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTOTOLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchLength,
+                _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
         }
     }

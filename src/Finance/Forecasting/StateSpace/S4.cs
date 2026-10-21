@@ -345,7 +345,6 @@ public partial class S4<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultS4Layers(
-                Architecture,
                 _contextLength,
                 _forecastHorizon,
                 _modelDimension,

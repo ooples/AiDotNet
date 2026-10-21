@@ -308,7 +308,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultWaveNetLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _residualChannels, _skipChannels, _dilationDepth, _numStacks, _dropout));
 
             ExtractLayerReferences();
