@@ -106,8 +106,13 @@ internal sealed partial class FedformerNetwork<T> : LayerBase<T>, IShapeContract
         _projectionWeight = Uniform(new[] { features, modelDimension }, modelDimension);
         _projectionBias = Uniform(new[] { features }, modelDimension);
 
-        // Registered in the reference's state-dict order; a shared Fourier weight is registered once (with its first
-        // user, where the reference's parameters() yields it) and named under every block that uses it.
+        RegisterInReferenceOrder();
+    }
+
+    // Registered in the reference's state-dict order; a shared Fourier weight is registered once (with its first user,
+    // where the reference's parameters() yields it) and named under every block that uses it.
+    private void RegisterInReferenceOrder()
+    {
         Register("enc_embedding.value_embedding.tokenConv.weight", _encoderEmbedding);
         Register("dec_embedding.value_embedding.tokenConv.weight", _decoderEmbedding);
         for (int i = 0; i < _encoder.Count; i++) _encoder[i].Register($"encoder.attn_layers.{i}.", first: i == 0);

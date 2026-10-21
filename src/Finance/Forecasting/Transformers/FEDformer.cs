@@ -125,7 +125,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// The decoder's start token: how many of the last input steps it receives ahead of the horizon.
     /// </summary>
-    private int _labelLength;
+    private readonly int _labelLength;
 
     /// <summary>
     /// The number of input features.
@@ -341,12 +341,10 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
             throw new ArgumentOutOfRangeException(nameof(options), options.NumModes, "NumModes must be at least 1, as FEDformerOptions.Validate requires.");
         if (options.MovingAverageKernel < 1)
             throw new ArgumentOutOfRangeException(nameof(options), options.MovingAverageKernel, "MovingAverageKernel must be at least 1.");
-        if (Architecture.Layers is null || Architecture.Layers.Count == 0)
-        {
-            if (options.AttentionType != FrequencyAttentionType.Fourier)
-                throw new NotSupportedException(
-                    "FEDformer's wavelet variant (FEDformer-w) is not implemented; use FrequencyAttentionType.Fourier (FEDformer-f).");
-        }
+        if ((Architecture.Layers is null || Architecture.Layers.Count == 0)
+            && options.AttentionType != FrequencyAttentionType.Fourier)
+            throw new NotSupportedException(
+                "FEDformer's wavelet variant (FEDformer-w) is not implemented; use FrequencyAttentionType.Fourier (FEDformer-f).");
 
         _options = options;
         Options = _options;
@@ -468,10 +466,8 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         if (read is null) throw new ArgumentNullException(nameof(read));
         var network = _network ?? throw new InvalidOperationException(
             "Only FEDformer's own network loads reference weights; this one was built from custom layers.");
-        var named = network.NamedTensors;
-
         var names = new List<string>();
-        foreach (var (name, tensor) in named)
+        foreach (var (name, tensor) in network.NamedTensors)
         {
             var values = read(name, tensor.Shape.ToArray());
             if (values is null || values.Length != tensor.Length)

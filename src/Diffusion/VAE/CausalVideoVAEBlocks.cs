@@ -64,6 +64,11 @@ internal sealed class CausalConv3d<T> : CausalVideoModule<T>
     private readonly int _timeStride;
     private readonly bool _nested;
 
+    /// <summary>Creates a causal convolution with a kernel of the given (odd) size in time, height and width.</summary>
+    /// <param name="inChannels">Input channels.</param>
+    /// <param name="outChannels">Output channels.</param>
+    /// <param name="kernel">Kernel size, odd.</param>
+    /// <param name="timeStride">Stride in time.</param>
     /// <param name="nested">diffusers keeps the convolution as a child named <c>conv</c>; the 1x1x1 residual shortcut
     /// is a bare <c>CogVideoXSafeConv3d</c> with no child.</param>
     public CausalConv3d(int inChannels, int outChannels, int kernel, int timeStride = 1, bool nested = true)
@@ -270,6 +275,11 @@ internal sealed class CausalResnetBlock3D<T> : CausalVideoModule<T>
     private readonly CausalConv3d<T> _conv2;
     private readonly CausalConv3d<T>? _shortcut;
 
+    /// <summary>Creates a residual block from <paramref name="inChannels"/> to <paramref name="outChannels"/>.</summary>
+    /// <param name="inChannels">Input channels.</param>
+    /// <param name="outChannels">Output channels.</param>
+    /// <param name="groups">GroupNorm groups.</param>
+    /// <param name="epsilon">GroupNorm epsilon.</param>
     /// <param name="latentChannels">The latent's channels when the block normalizes with the latent (decoder), else
     /// null.</param>
     public CausalResnetBlock3D(int inChannels, int outChannels, int groups, double epsilon, int? latentChannels)
