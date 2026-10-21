@@ -3694,7 +3694,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                         or TestFamily.ClassificationMetaLearning
                                     || ExplicitlyConstructedClassNames.Contains(model.ClassName)
                                     // A self-supervised method wraps parts the caller supplies; its fixture builds them.
-                                    || (family.Value == TestFamily.SelfSupervised && SslFixtureArgs.ContainsKey(model.ClassName))) &&
+                                    || (family.Value == TestFamily.SelfSupervised && SslFixtureArgs.ContainsKey(model.ClassName))
                                     // A policy is built from a network and an exploration strategy its fixture supplies.
                                     || (family.Value == TestFamily.Policy && PolicyFixtureArgs.ContainsKey(model.ClassName))) &&
                                     IsCompatibleWithFamily(model, family.Value);
