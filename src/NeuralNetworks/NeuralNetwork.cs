@@ -167,6 +167,10 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
     /// to transform the data as it flows through the network.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    /// <remarks>From <see cref="NeuralNetworkDefaultOptions.MaxGradNorm"/>; 0 leaves clipping to the optimizer.</remarks>
+    public override double MaxGradNormValue => _options?.MaxGradNorm ?? base.MaxGradNormValue;
+
     protected override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
