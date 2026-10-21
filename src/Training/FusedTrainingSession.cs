@@ -699,6 +699,12 @@ internal sealed class FusedTrainingSession<T>
             Array.Copy(sparse.Values, head, take);
             return new Tensor<T>(head, new[] { take });
         }
+        // A streamed weight holds an empty vector until it is paged back (WeightRegistry.RegisterWeight), and a
+        // Reshape inspects the storage before any kernel would page it in: OpenVocabSAM, which streams at its
+        // default size, threw "View exceeds storage bounds" from this probe on its first training step. Page it in
+        // first, as LayerBase does at a layer boundary.
+        if (tensor.Lifetime == WeightLifetime.Streaming)
+            WeightRegistry.Materialize(tensor);
         return engine.TensorNarrow(engine.Reshape(tensor, new[] { tensor.Length }), 0, 0, count);
     }
 }
