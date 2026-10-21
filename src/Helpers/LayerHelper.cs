@@ -12203,7 +12203,8 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for a ColBERT (Contextualized Late Interaction over BERT) model.
+    /// Creates default layers for a ColBERT (Contextualized Late Interaction over BERT) model with a
+    /// BERT-base (768-wide) encoder.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultColBERTLayers(
         NeuralNetworkArchitecture<T> architecture,
@@ -12212,8 +12213,27 @@ public static partial class LayerHelper<T>
         int maxSequenceLength = 512,
         int numLayers = 12,
         int numHeads = 12,
-        int feedForwardDim = 3072,
-        int hiddenDimension = 768)
+        int feedForwardDim = 3072)
+        => CreateDefaultColBERTLayers(
+            architecture, vocabSize, embeddingDimension, maxSequenceLength,
+            numLayers, numHeads, feedForwardDim, hiddenDimension: 768);
+
+    /// <summary>
+    /// Creates default layers for a ColBERT model whose encoder is <paramref name="hiddenDimension"/> wide.
+    /// </summary>
+    /// <remarks>
+    /// Every parameter is required so that a call with seven or fewer arguments binds to the overload above
+    /// instead of being ambiguous between the two.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultColBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize,
+        int embeddingDimension,
+        int maxSequenceLength,
+        int numLayers,
+        int numHeads,
+        int feedForwardDim,
+        int hiddenDimension)
     {
         // 1. Base Encoder (e.g. BERT). hiddenDimension is the encoder width: it was hard-coded to
         // BERT-base's 768, so a ColBERT built with a smaller EmbeddingDimension still ran a 768-wide
