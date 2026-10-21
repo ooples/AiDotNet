@@ -108,7 +108,10 @@ internal sealed class Wav2Vec2Pretraining<T>
     private static Tensor<T> Constant(Tensor<T> x) => new(x._shape, new Vector<T>(x.ToArray()));
 
     // The quantized features [B, L, d] and the codebook perplexity (Σ_g exp(entropy of the masked marginal)).
-    private (Tensor<T> Quantized, Tensor<T> Perplexity, int[,] Ids) Quantize(Tensor<T> features, bool[,] mask, bool training, Random random)
+    // fixedIds, when given, replaces each step's argmax with its recorded entry (the groups' indices combined as below);
+    // the Gumbel noise is still drawn, so the random stream stays aligned with an unfixed draw.
+    private (Tensor<T> Quantized, Tensor<T> Perplexity, int[,] Ids) Quantize(Tensor<T> features, bool[,] mask, bool training, Random random,
+        int[,]? fixedIds)
     {
         var c = Configuration;
         int batch = features.Shape[0], length = features.Shape[1], rows = batch * length, v = c.EntriesPerGroup;
@@ -143,7 +146,8 @@ internal sealed class Wav2Vec2Pretraining<T>
                 for (int r = 0; r < rows; r++)
                 {
                     int best = 0;
-                    for (int j = 1; j < v; j++) if (NumOps.ToDouble(sv[r * v + j]) > NumOps.ToDouble(sv[r * v + best])) best = j;
+                    if (fixedIds is not null) best = fixedIds[r / length, r % length] / place % v;
+                    else for (int j = 1; j < v; j++) if (NumOps.ToDouble(sv[r * v + j]) > NumOps.ToDouble(sv[r * v + best])) best = j;
                     hard[r, best] = NumOps.One;
                     ids[r / length, r % length] += best * place;
                 }
@@ -155,7 +159,8 @@ internal sealed class Wav2Vec2Pretraining<T>
                 for (int r = 0; r < rows; r++)
                 {
                     int best = 0;
-                    for (int j = 1; j < v; j++) if (NumOps.ToDouble(values[r * v + j]) > NumOps.ToDouble(values[r * v + best])) best = j;
+                    if (fixedIds is not null) best = fixedIds[r / length, r % length] / place % v;
+                    else for (int j = 1; j < v; j++) if (NumOps.ToDouble(values[r * v + j]) > NumOps.ToDouble(values[r * v + best])) best = j;
                     hard[r, best] = NumOps.One;
                     ids[r / length, r % length] += best * place;
                 }
@@ -206,13 +211,19 @@ internal sealed class Wav2Vec2Pretraining<T>
     }
 
     /// <summary>The pre-training loss of a forward with its applied mask and distractor indices.</summary>
-    public Losses Loss(Wav2Vec2Network<T>.Output output, int[,,] negatives, bool training, Random random)
+    /// <param name="output">The forward, with its applied mask.</param>
+    /// <param name="negatives">Each step's distractor indices.</param>
+    /// <param name="training">Whether the quantizer samples (straight-through Gumbel-softmax) or takes the argmax.</param>
+    /// <param name="random">The Gumbel noise's generator.</param>
+    /// <param name="fixedIds">Each step's codebook entry to use in place of the quantizer's choice (the <see cref="Losses.CodeIds"/>
+    /// of an earlier call), or null for the quantizer's own; gradients still flow through the soft sample.</param>
+    public Losses Loss(Wav2Vec2Network<T>.Output output, int[,,] negatives, bool training, Random random, int[,]? fixedIds = null)
     {
         var c = Configuration;
         var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
         int batch = output.Hidden.Shape[0], length = output.Hidden.Shape[1], k = negatives.GetLength(2), p = c.ProjectedDim;
         var predicted = Dense(ProjectHidden, output.Hidden);                                                       // [B, L, P]
-        var (quantized, perplexity, ids) = Quantize(output.Features, mask, training, random);
+        var (quantized, perplexity, ids) = Quantize(output.Features, mask, training, random, fixedIds);
         var targets = Dense(ProjectQuantized, quantized);                                                           // [B, L, P]
 
         // Candidates [B, L, 1 + K, P]: the step's own target, then its distractors.

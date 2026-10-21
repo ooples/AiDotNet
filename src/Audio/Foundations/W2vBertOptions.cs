@@ -62,6 +62,7 @@ public class W2vBertOptions : ModelOptions
         WarmupSteps = other.WarmupSteps;
         SemanticLayer = other.SemanticLayer;
         SemanticClusters = other.SemanticClusters;
+        FixedDraw = other.FixedDraw;
         Seed = other.Seed;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
@@ -133,6 +134,21 @@ public class W2vBertOptions : ModelOptions
 
     /// <summary>k-means clusters of the semantic tokens (1024, AudioLM's).</summary>
     public int SemanticClusters { get; set; } = 1024;
+
+    /// <summary>
+    /// A seed that fixes the pre-training draw (mask, Gumbel noise, distractors, dropout) for every step and every
+    /// evaluated objective, and keeps each input's codebook entries from its first evaluation; null, the paper's
+    /// setting, draws afresh each step and lets the quantizer choose.
+    /// </summary>
+    /// <remarks>
+    /// The pre-training objective is an expectation over those draws, and on a small model or a short clip one draw's
+    /// loss moves by more than training lowers the expectation (a contrastive term of exactly 0 when every distractor
+    /// shares its positive's code). Fixing the draw makes the objective a deterministic function of the weights, and
+    /// keeping the entries makes it a continuous one (the masked-prediction targets are otherwise the quantizer's argmax,
+    /// so the loss jumps when training moves a frame to another entry). That is what an overfitting or gradient check
+    /// needs; it is not a pre-training setting.
+    /// </remarks>
+    public int? FixedDraw { get; set; }
 
     /// <summary>Path of an ONNX export, for inference.</summary>
     public string? ModelPath { get; set; }
