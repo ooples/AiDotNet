@@ -15411,12 +15411,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 paramBytes += (long)extras.ExtraParameterCount * width;
             }
         }
+        // Additional layers serialize through LayerBase.Serialize, which always writes
+        // 8-byte doubles, so their share is sized at that width rather than the encoding's.
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
-            paramBytes += (long)layer.ParameterCount * width;
+            paramBytes += (long)layer.ParameterCount * sizeof(double);
             if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extras)
-                paramBytes += (long)extras.ExtraParameterCount * width;
+                paramBytes += (long)extras.ExtraParameterCount * sizeof(double);
         }
         long estimatedTotal = paramBytes + (long)Layers.Count * 65536 + 1024;
         // MemoryStream capacity is an int. Cap at MaxArrayLength so we never
