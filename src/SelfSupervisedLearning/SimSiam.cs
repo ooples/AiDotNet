@@ -102,6 +102,32 @@ public partial class SimSiam<T> : SelfSupervisedLearningMethodBase<T>
         };
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Chen and He 2021, Eq. 4: L = D(p1, stopgrad(z2))/2 + D(p2, stopgrad(z1))/2, where z is the projector's output
+    /// and p the predictor's. The stop-gradient on the target branch is what keeps SimSiam from collapsing.
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2)
+    {
+        if (Projector is not SymmetricProjector<T> projector)
+            throw new InvalidOperationException("SimSiam needs a SymmetricProjector with a predictor head.");
+        var z1 = projector.Project(EncodeForTraining(view1));
+        var z2 = projector.Project(EncodeForTraining(view2));
+        var p1 = projector.Predict(z1);
+        var p2 = projector.Predict(z2);
+        var d12 = _loss.ComputeLoss(p1, Engine.StopGradient(z2));
+        var d21 = _loss.ComputeLoss(p2, Engine.StopGradient(z1));
+        return Engine.TensorMultiplyScalar(Engine.TensorAdd(d12, d21), NumOps.FromDouble(0.5));
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => _augmentation.ApplySimCLR(batch);
+
+    /// <inheritdoc />
+    /// <remarks>The paper trains with SGD (momentum 0.9, Sec. 4).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.SGD;
+
     private void UpdateParameters(T learningRate)
     {
         // Update encoder

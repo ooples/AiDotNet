@@ -112,6 +112,10 @@ public class LinearProjector<T> : IProjectorHead<T>
     }
 
     /// <inheritdoc />
+    public IReadOnlyList<Tensor<T>> GetTrainableTensors() =>
+        _bias is null ? new[] { _weight } : new[] { _weight, _bias };
+
+    /// <inheritdoc />
     public Tensor<T> Project(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));

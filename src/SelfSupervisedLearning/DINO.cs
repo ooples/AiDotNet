@@ -49,6 +49,40 @@ public class DINO<T> : TeacherStudentSSL<T>
     private readonly DINOLoss<T> _loss;
     private readonly int _outputDim;
 
+    // The step's teacher outputs; the center advances once from them after the optimizer has stepped.
+    [Scratch]
+    private Tensor<T>? _pendingTeacherOutputs;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Caron et al. 2021, Alg. 1: the student's distribution for one global crop is matched to the teacher's sharpened,
+    /// centered distribution for the other, averaged over both pairings. The teacher carries no gradient; it follows by
+    /// EMA, and the center advances once per step from the teacher's outputs.
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2)
+    {
+        var s1 = ForwardStudent(view1);
+        var s2 = ForwardStudent(view2);
+        var t1 = ForwardTeacher(view1);
+        var t2 = ForwardTeacher(view2);
+        _pendingTeacherOutputs = Engine.Concat(new[] { t1, t2 }, 0);
+        var loss = Engine.TensorAdd(
+            _loss.ComputeDifferentiableLoss(s1, t2, updateCenter: false),
+            _loss.ComputeDifferentiableLoss(s2, t1, updateCenter: false));
+        return Engine.TensorMultiplyScalar(loss, NumOps.FromDouble(0.5));
+    }
+
+    /// <inheritdoc />
+    protected override void AfterOptimizerStep()
+    {
+        base.AfterOptimizerStep();
+        if (_pendingTeacherOutputs is { } teacherOutputs)
+        {
+            _loss.UpdateCenter(teacherOutputs);
+            _pendingTeacherOutputs = null;
+        }
+    }
+
     /// <inheritdoc />
     public override string Name => "DINO";
 

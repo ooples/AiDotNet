@@ -122,16 +122,53 @@ public partial class BYOL<T> : SelfSupervisedLearningMethodBase<T>
 
     private void UpdateTargetProjector()
     {
-        // EMA update for target projector
-        var momentum = NumOps.FromDouble(_targetEncoder.Momentum);
-        var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
-
+        // EMA of the target projector toward the online one. The online projector also carries the predictor, which
+        // the target lacks; both flatten the projector first, so the target follows that leading part only. Blending
+        // the whole online vector into the shorter target one mismatched their lengths.
+        double momentum = _targetEncoder.Momentum;
         var onlineParams = _onlineProjector.GetParameters();
         var targetParams = _targetProjector.GetParameters();
-        _targetProjector.SetParameters(Engine.Add(
-            Engine.Multiply(targetParams, momentum),
-            Engine.Multiply(onlineParams, oneMinusMomentum)));
+        var updated = new Vector<T>(targetParams.Length);
+        for (int i = 0; i < targetParams.Length; i++)
+        {
+            updated[i] = NumOps.Add(
+                NumOps.Multiply(targetParams[i], NumOps.FromDouble(momentum)),
+                NumOps.Multiply(onlineParams[i], NumOps.FromDouble(1.0 - momentum)));
+        }
+
+        _targetProjector.SetParameters(updated);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Grill et al. 2020, Eq. 2: the online network predicts the target network's projection of the other view,
+    /// L = ||normalize(q(z(v1))) - normalize(sg(z'(v2)))||^2, symmetrized by swapping the views. The target branch
+    /// (momentum encoder and target projector) receives no gradient; it follows by EMA after each step.
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2)
+    {
+        var p1 = _onlineProjector.Predict(_onlineProjector.Project(EncodeForTraining(view1)));
+        var p2 = _onlineProjector.Predict(_onlineProjector.Project(EncodeForTraining(view2)));
+        var t1 = Engine.StopGradient(_targetProjector.Project(_targetEncoder.Encode(view1)));
+        var t2 = Engine.StopGradient(_targetProjector.Project(_targetEncoder.Encode(view2)));
+        return Engine.TensorAdd(_loss.ComputeLoss(p1, t2), _loss.ComputeLoss(p2, t1));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The target network follows the online one by EMA at the scheduled momentum.</remarks>
+    protected override void AfterOptimizerStep()
+    {
+        _targetEncoder.UpdateFromMainEncoder(_encoder);
+        UpdateTargetProjector();
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => _augmentation.ApplyBYOL(batch);
+
+    /// <inheritdoc />
+    /// <remarks>The paper trains with LARS (Sec. 3.3).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.LARS;
 
     /// <inheritdoc />
     public override void OnEpochStart(int epochNumber)

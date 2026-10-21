@@ -235,6 +235,19 @@ public partial class MLPProjector<T> : IProjectorHead<T>
     }
 
     /// <inheritdoc />
+    public IReadOnlyList<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>> { _weight1, _bias1, _gamma1, _beta1, _weight2, _bias2 };
+        if (_useBatchNormOnOutput && _gamma2 is not null && _beta2 is not null)
+        {
+            tensors.Add(_gamma2);
+            tensors.Add(_beta2);
+        }
+
+        return tensors;
+    }
+
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
@@ -394,53 +407,21 @@ public partial class MLPProjector<T> : IProjectorHead<T>
 
         if (_isTraining)
         {
-            // Compute batch mean and variance
-            var mean = new T[dim];
-            var variance = new T[dim];
-
-            for (int d = 0; d < dim; d++)
-            {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    sum = NumOps.Add(sum, input[b, d]);
-                }
-                mean[d] = NumOps.Divide(sum, NumOps.FromDouble(batchSize));
-            }
-
-            for (int d = 0; d < dim; d++)
-            {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    var diff = NumOps.Subtract(input[b, d], mean[d]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-                }
-                variance[d] = NumOps.Divide(sum, NumOps.FromDouble(batchSize));
-            }
-
-            // Update running statistics
+            // Engine.BatchNorm records on the gradient tape, so the loss reaches gamma, beta and everything upstream.
+            // The hand-written loops this replaces built the output from a fresh array, which cut the tape: no
+            // gradient reached the projector's first layer or the encoder behind it.
+            var output = Engine.BatchNorm(input, gamma, beta, _batchNormEpsilon, out var batchMean, out var batchVariance);
             for (int d = 0; d < dim; d++)
             {
                 runningMean[d] = NumOps.Add(
                     NumOps.Multiply(NumOps.FromDouble(1 - _batchNormMomentum), runningMean[d]),
-                    NumOps.Multiply(NumOps.FromDouble(_batchNormMomentum), mean[d]));
+                    NumOps.Multiply(NumOps.FromDouble(_batchNormMomentum), batchMean[d]));
                 runningVar[d] = NumOps.Add(
                     NumOps.Multiply(NumOps.FromDouble(1 - _batchNormMomentum), runningVar[d]),
-                    NumOps.Multiply(NumOps.FromDouble(_batchNormMomentum), variance[d]));
+                    NumOps.Multiply(NumOps.FromDouble(_batchNormMomentum), batchVariance[d]));
             }
 
-            // Normalize
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int d = 0; d < dim; d++)
-                {
-                    var normalized = NumOps.Divide(
-                        NumOps.Subtract(input[b, d], mean[d]),
-                        NumOps.Sqrt(NumOps.Add(variance[d], NumOps.FromDouble(_batchNormEpsilon))));
-                    result[b * dim + d] = NumOps.Add(NumOps.Multiply(gamma[d], normalized), beta[d]);
-                }
-            }
+            return output;
         }
         else
         {
@@ -557,18 +538,8 @@ public partial class MLPProjector<T> : IProjectorHead<T>
         );
     }
 
-    private Tensor<T> ReLUForward(Tensor<T> input)
-    {
-        var size = input.Length;
-        var result = new T[size];
-
-        for (int i = 0; i < size; i++)
-        {
-            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? input.Data.Span[i] : NumOps.Zero;
-        }
-
-        return new Tensor<T>(result, input._shape);
-    }
+    // Engine.ReLU records on the gradient tape.
+    private Tensor<T> ReLUForward(Tensor<T> input) => Engine.ReLU(input);
 
     private Tensor<T> ReLUBackward(Tensor<T> outputGrad, Tensor<T> input)
     {

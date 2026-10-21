@@ -70,6 +70,15 @@ public interface IProjectorHead<T> : AiDotNet.Interfaces.IParameterSource<T>
     /// Gets the gradients computed during the last backward pass.
     /// </summary>
     /// <returns>A vector containing gradients for all parameters.</returns>
+    /// <summary>
+    /// The head's learnable tensors, the live objects its forward reads, in the order GetParameters flattens them.
+    /// </summary>
+    /// <remarks>
+    /// A self-supervised training step records the forward on the gradient tape and updates exactly these tensors, so
+    /// they must be the tensors the forward uses, not copies.
+    /// </remarks>
+    IReadOnlyList<Tensor<T>> GetTrainableTensors();
+
     Vector<T> GetParameterGradients();
 
     /// <summary>

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -83,6 +83,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // AudioSafetyModuleBase and TextSafetyModuleBase are no longer excluded: almost every module under them is
         // built from defaults alone (the "wraps another model" note was wrong for all but the composite detectors),
         // and their own family bases feed them text or waveforms instead of a content vector (#2139).
+        // SelfSupervisedLearningMethodBase is no longer excluded: SelfSupervisedLearningMethodTestBase builds each
+        // method from small real parts (SslFixtureArgs) and drives TrainStep (#2139).
+        "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
+        "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
         "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
         // VAEModelBase is no longer excluded: VAEs implement IVAEModel, not IDiffusionModel, so they now have their
@@ -721,6 +725,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ["UViTNoisePredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, patchSize: 2, contextDim: 32, latentSpatialSize: 8, seed: 1",
             ["UNetNoisePredictor"] = "inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, contextDim: 32, numHeads: 4, inputHeight: 8, seed: 1",
             ["VideoUNetPredictor"] = "inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, contextDim: 32, numHeads: 4, inputHeight: 8, inputWidth: 8, numFrames: 2, seed: 1",
+    /// <summary>Overridable surface of <c>SelfSupervisedLearningMethodTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> SelfSupervisedTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateMethod", "BatchShape" };
+
+    private const string SslParts = "global::AiDotNet.Tests.ModelFamilyTests.Base.SslFixtureParts";
+
+    /// <summary>
+    /// Constructor arguments for each self-supervised method's fixture. The methods wrap an encoder and heads the caller
+    /// supplies; SslFixtureParts builds small real ones, so each method is tested with its own composition.
+    /// </summary>
+    private static readonly System.Collections.Generic.Dictionary<string, string> SslFixtureArgs =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["SimCLR"] = $"encoder: {SslParts}.Encoder(), projector: {SslParts}.Mlp(1), config: {SslParts}.Config()",
+            ["BarlowTwins"] = $"encoder: {SslParts}.Encoder(), projector: {SslParts}.Mlp(1), config: {SslParts}.Config()",
+            ["SimSiam"] = $"encoder: {SslParts}.Encoder(), projector: {SslParts}.Symmetric(1, true), config: {SslParts}.Config()",
+            ["BYOL"] = $"encoder: {SslParts}.Encoder(), targetEncoder: {SslParts}.Momentum(), onlineProjector: {SslParts}.Symmetric(1, true), targetProjector: {SslParts}.Symmetric(2, false), config: {SslParts}.Config()",
+            ["MoCo"] = $"encoder: {SslParts}.Encoder(), momentumEncoder: {SslParts}.Momentum(), projector: {SslParts}.Mlp(1), momentumProjector: {SslParts}.Mlp(2), embeddingDim: 8, config: {SslParts}.Config()",
+            ["MoCoV2"] = $"encoder: {SslParts}.Encoder(), momentumEncoder: {SslParts}.Momentum(), projector: {SslParts}.Mlp(1), momentumProjector: {SslParts}.Mlp(2), embeddingDim: 8, config: {SslParts}.Config()",
+            ["MoCoV3"] = $"encoder: {SslParts}.Encoder(), momentumEncoder: {SslParts}.Momentum(), projector: {SslParts}.Mlp(1), momentumProjector: {SslParts}.Mlp(2), predictor: {SslParts}.Mlp(3), config: {SslParts}.Config()",
+            ["DINO"] = $"studentEncoder: {SslParts}.Encoder(), teacherEncoder: {SslParts}.Momentum(), studentProjector: {SslParts}.Mlp(1), teacherProjector: {SslParts}.Mlp(2), outputDim: 8, config: {SslParts}.Config()",
+            ["iBOT"] = $"studentEncoder: {SslParts}.Encoder(), teacherEncoder: {SslParts}.Momentum(), studentProjector: {SslParts}.Mlp(1), teacherProjector: {SslParts}.Mlp(2), outputDim: 8, config: {SslParts}.Config()",
+            ["MAE"] = $"encoder: {SslParts}.Encoder(4, 4), decoder: null, patchSize: 2, imageSize: 4, maskRatio: 0.75, config: {SslParts}.Config()",
         };
 
     /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
@@ -3650,7 +3678,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                         && model.UsesMatrixInput && model.UsesVectorOutput)
                                     || family.Value is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation or TestFamily.MetaLearning
                                         or TestFamily.ClassificationMetaLearning
-                                    || ExplicitlyConstructedClassNames.Contains(model.ClassName)) &&
+                                    || ExplicitlyConstructedClassNames.Contains(model.ClassName)
+                                    // A self-supervised method wraps parts the caller supplies; its fixture builds them.
+                                    || (family.Value == TestFamily.SelfSupervised && SslFixtureArgs.ContainsKey(model.ClassName))) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -3963,6 +3993,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsTextSafety = false, extendsAudioSafety = false;
         bool extendsVae = false;
         bool extendsNoisePredictor = false;
+        bool extendsSsl = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
         bool extendsClassicalVolatility = false;
@@ -4165,6 +4196,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsVae = true;
             else if (baseName.StartsWith("NoisePredictorBase", System.StringComparison.Ordinal))
                 extendsNoisePredictor = true;
+            else if (baseName.StartsWith("SelfSupervisedLearningMethodBase", System.StringComparison.Ordinal))
+                extendsSsl = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
@@ -4370,6 +4403,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsAudioSafetyModuleBase = extendsAudioSafety,
             ExtendsVAEModelBase = extendsVae,
             ExtendsNoisePredictorBase = extendsNoisePredictor,
+            ExtendsSelfSupervisedLearningMethodBase = extendsSsl,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
             MetaLearnerOptionsType = metaLearnerOptionsType,
@@ -5065,6 +5099,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // A noise predictor is the denoiser inside a diffusion model, judged on PredictNoise directly (#2139).
         if (model.ExtendsNoisePredictorBase)
             return TestFamily.NoisePredictor;
+        // A self-supervised method is judged on TrainStep and Encode, built from small real parts (#2139).
+        if (model.ExtendsSelfSupervisedLearningMethodBase)
+            return TestFamily.SelfSupervised;
 
         // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
         // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
@@ -5658,6 +5695,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (model.ExtendsNoisePredictorBase && NoisePredictorFixtureArgs.TryGetValue(model.ClassName, out var noisePredictorArgs))
             {
                 constructorExpr = $"new {typeName}<double>({noisePredictorArgs})";
+            if (model.ExtendsSelfSupervisedLearningMethodBase && SslFixtureArgs.TryGetValue(model.ClassName, out var sslArgs))
+            {
+                constructorExpr = $"new {typeName}<double>({sslArgs})";
             }
             else if (model.ClassName is "ViTImageSafetyClassifier" or "EnsembleImageSafetyClassifier")
             {
@@ -13532,6 +13572,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "AudioSafetyModuleTestBase"
             || baseClassName == "VAEModelTestBase"
             || baseClassName == "NoisePredictorTestBase"
+            || baseClassName == "SelfSupervisedLearningMethodTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
@@ -17776,6 +17817,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.AudioSafetyModule => AudioSafetyModuleTestBaseMembers,
             TestFamily.VAE => VAEModelTestBaseMembers,
             TestFamily.NoisePredictor => NoisePredictorTestBaseMembers,
+            TestFamily.SelfSupervised => SelfSupervisedTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
@@ -17942,6 +17984,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsVAEModelBase;
             case TestFamily.NoisePredictor:
                 return model.ExtendsNoisePredictorBase;
+            case TestFamily.SelfSupervised:
+                return model.ExtendsSelfSupervisedLearningMethodBase;
             case TestFamily.DeepfakeDetector:
                 return model.ExtendsDeepfakeDetectorBase;
             case TestFamily.MetaLearning:
@@ -20351,6 +20395,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsVAEModelBase { get; set; }
         /// <summary>True for a diffusion noise predictor, which is judged on PredictNoise.</summary>
         public bool ExtendsNoisePredictorBase { get; set; }
+        /// <summary>True for a self-supervised learning method, judged on TrainStep and Encode.</summary>
+        public bool ExtendsSelfSupervisedLearningMethodBase { get; set; }
 
         /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
         public bool ExtendsDeepfakeDetectorBase { get; set; }
@@ -20584,6 +20630,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         AudioSafetyModule,
         VAE,
         NoisePredictor,
+        SelfSupervised,
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
@@ -21418,6 +21465,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.AudioSafetyModule:     return "AudioSafetyModuleTestBase";
             case TestFamily.VAE:                   return "VAEModelTestBase";
             case TestFamily.NoisePredictor:        return "NoisePredictorTestBase";
+            case TestFamily.SelfSupervised:        return "SelfSupervisedLearningMethodTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
@@ -21476,6 +21524,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "CreateVAE";
             case TestFamily.NoisePredictor:
                 return "CreatePredictor";
+            case TestFamily.SelfSupervised:
+                return "CreateMethod";
             case TestFamily.Neck:
                 return "CreateNeck";
             case TestFamily.InstanceSegmentation:
@@ -21550,6 +21600,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.Interfaces.IVAEModel<double>";
             case TestFamily.NoisePredictor:
                 return "AiDotNet.Interfaces.INoisePredictor<double>";
+            case TestFamily.SelfSupervised:
+                return "AiDotNet.SelfSupervisedLearning.ISelfSupervisedLearningMethod<double>";
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:
