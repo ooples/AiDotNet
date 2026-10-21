@@ -104,7 +104,9 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Strided convolution for downsampling.
     /// </summary>
-    private readonly ConvolutionalLayer<T> _downsample;
+    // Null on a block that keeps its resolution (the encoder's last level). Building it anyway left a convolution
+    // the forward never runs, so its lazy weights never resolved and the model's parameters could not be read.
+    private readonly ConvolutionalLayer<T>? _downsample;
 
     /// <summary>
     /// Number of input channels.
@@ -232,12 +234,15 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
 
         // Strided convolution for 2x downsampling
         // kernel=3, stride=2, padding=1 -> output_size = (input_size + 2*1 - 3) / 2 + 1 = input_size / 2
-        _downsample = new ConvolutionalLayer<T>(
-            outputDepth: outChannels,
-            kernelSize: 3,
-            stride: 2,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        if (hasDownsample)
+        {
+            _downsample = new ConvolutionalLayer<T>(
+                outputDepth: outChannels,
+                kernelSize: 3,
+                stride: 2,
+                padding: 1,
+                activationFunction: new IdentityActivation<T>());
+        }
     }
 
     private static int[] CalculateInputShape(int channels, int spatialSize)
@@ -281,7 +286,7 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
         _preDownsampleOutput = x;
 
         // Apply downsampling if enabled
-        if (_hasDownsample)
+        if (_downsample is not null)
         {
             x = _downsample.Forward(x);
         }
@@ -300,10 +305,7 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
             block.UpdateParameters(learningRate);
         }
 
-        if (_hasDownsample)
-        {
-            _downsample.UpdateParameters(learningRate);
-        }
+        _downsample?.UpdateParameters(learningRate);
     }
 
     private static void AddParameters(List<T> list, Vector<T> parameters)
@@ -345,7 +347,7 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
             block.ResetState();
         }
 
-        _downsample.ResetState();
+        _downsample?.ResetState();
     }
 
 
