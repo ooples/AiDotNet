@@ -337,8 +337,8 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         if (options.LabelLength < 0 || options.LabelLength > options.SequenceLength)
             throw new ArgumentOutOfRangeException(nameof(options), options.LabelLength,
                 "LabelLength must lie between 0 and SequenceLength: the decoder starts from the last LabelLength inputs.");
-        if (options.NumModes < 0)
-            throw new ArgumentOutOfRangeException(nameof(options), options.NumModes, "NumModes must be non-negative.");
+        if (options.NumModes < 1)
+            throw new ArgumentOutOfRangeException(nameof(options), options.NumModes, "NumModes must be at least 1, as FEDformerOptions.Validate requires.");
         if (options.MovingAverageKernel < 1)
             throw new ArgumentOutOfRangeException(nameof(options), options.MovingAverageKernel, "MovingAverageKernel must be at least 1.");
         if (Architecture.Layers is null || Architecture.Layers.Count == 0)

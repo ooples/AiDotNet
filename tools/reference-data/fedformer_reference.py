@@ -101,6 +101,13 @@ def compute(root):
                 forecast=forecast.reshape(-1).tolist(), forecast_shape=list(forecast.shape))
 
 
+def max_deviation(expected, actual, what):
+    """The largest elementwise difference; a length mismatch is a stale fixture, not a prefix to compare."""
+    if len(expected) != len(actual):
+        raise SystemExit(f"{what}: the fixture has {len(actual)} values, the reference {len(expected)}")
+    return max((abs(a - b) for a, b in zip(expected, actual)), default=0.0)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--fedformer", required=True, help="a checkout of MAZiqing/FEDformer at c0f6b972")
@@ -116,7 +123,15 @@ def main():
         return
     with open(path, encoding="utf-8") as f:
         stored = json.load(f)
-    worst = max(abs(a - b) for a, b in zip(data["forecast"], stored["forecast"]))
+    if data["config"] != stored["config"]:
+        raise SystemExit("the fixture was written for another configuration")
+    for key in ("input_shape", "forecast_shape"):
+        if data[key] != stored[key]:
+            raise SystemExit(f"{key}: the fixture has {stored[key]}, the reference {data[key]}")
+    worst = max((max_deviation(values, stored["state_dict"].get(name, []), name)
+                 for name, values in data["state_dict"].items()), default=0.0)
+    worst = max(worst, max_deviation(data["input"], stored["input"], "input"))
+    worst = max(worst, max_deviation(data["forecast"], stored["forecast"], "forecast"))
     print(f"max deviation from the fixture: {worst:.3e}")
     raise SystemExit(0 if worst <= 1e-12 else 1)
 

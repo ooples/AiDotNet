@@ -31,6 +31,41 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FEDformerOptions<T> : ModelOptions
 {
+    /// <summary>
+    /// Creates a new instance with default values.
+    /// </summary>
+    public FEDformerOptions() { }
+
+    /// <summary>
+    /// Creates a copy of the specified options.
+    /// </summary>
+    /// <param name="other">The options to copy.</param>
+    public FEDformerOptions(FEDformerOptions<T> other)
+    {
+        if (other == null) throw new ArgumentNullException(nameof(other));
+        // Seed is declared on ModelOptions rather than in this file, so it is copied explicitly: losing it on a clone
+        // silently changes deterministic initialization.
+        Seed = other.Seed;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        ModelDimension = other.ModelDimension;
+        NumHeads = other.NumHeads;
+        FeedForwardDimension = other.FeedForwardDimension;
+        AttentionType = other.AttentionType;
+        NumModes = other.NumModes;
+        ModeSelection = other.ModeSelection;
+        ModeSelectionSeed = other.ModeSelectionSeed;
+        MovingAverageKernel = other.MovingAverageKernel;
+        Dropout = other.Dropout;
+        UseInstanceNormalization = other.UseInstanceNormalization;
+        LossFunction = other.LossFunction;
+        LearningRate = other.LearningRate;
+        SequenceLength = other.SequenceLength;
+        LabelLength = other.LabelLength;
+        PredictionHorizon = other.PredictionHorizon;
+        NumFeatures = other.NumFeatures;
+    }
+
     #region Model Architecture
 
     /// <summary>
@@ -109,12 +144,16 @@ public class FEDformerOptions<T> : ModelOptions
     /// Gets or sets how the frequency modes are chosen.
     /// Default: <see cref="FourierModeSelection.Random"/>, the paper's choice.
     /// </summary>
+    /// <value>The rule that picks which <see cref="NumModes"/> frequencies each Fourier block keeps.</value>
     /// <remarks>
     /// <para>
     /// Zhou et al. (Sec. 3.2) select the modes at random once, when the model is built: random selection keeps some
     /// high frequencies that a low-pass choice would drop. <see cref="FourierModeSelection.Lowest"/> keeps the lowest
     /// <see cref="NumModes"/> frequencies instead.
     /// </para>
+    /// <para><b>For Beginners:</b> FEDformer looks at only some of a series' frequencies. Random (the default, as in
+    /// the paper) mixes slow and fast ones, which tends to keep more of the series' structure; Lowest keeps only the
+    /// slow, smooth ones.</para>
     /// </remarks>
     public FourierModeSelection ModeSelection { get; set; } = FourierModeSelection.Random;
 
@@ -122,9 +161,14 @@ public class FEDformerOptions<T> : ModelOptions
     /// Gets or sets the seed of the random mode selection.
     /// Default: 0.
     /// </summary>
+    /// <value>The seed that fixes which frequencies <see cref="FourierModeSelection.Random"/> picks.</value>
     /// <remarks>
+    /// <para>
     /// The selected modes are part of the network, like its weights, so they come from this seed rather than from the
     /// run's randomness: a copy or a reloaded model reads the same frequencies.
+    /// </para>
+    /// <para><b>For Beginners:</b> Two models with the same seed look at the same frequencies, so their weights mean
+    /// the same thing; change it to try another random choice of frequencies.</para>
     /// </remarks>
     public int ModeSelectionSeed { get; set; } = 0;
 

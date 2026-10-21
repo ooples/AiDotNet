@@ -67,6 +67,13 @@ def compute():
     return dict(config=CONFIG, state_dict=state, shapes=shapes, cases=cases)
 
 
+def max_deviation(expected, actual, what):
+    """The largest elementwise difference; a length mismatch is a stale fixture, not a prefix to compare."""
+    if len(expected) != len(actual):
+        raise SystemExit(f"{what}: the fixture has {len(actual)} values, the reference {len(expected)}")
+    return max((abs(a - b) for a, b in zip(expected, actual)), default=0.0)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--write", action="store_true")
@@ -81,10 +88,16 @@ def main():
         return
     with open(path, encoding="utf-8") as f:
         stored = json.load(f)
-    worst = 0.0
+    if data["config"] != stored["config"] or set(data["cases"]) != set(stored["cases"]):
+        raise SystemExit("the fixture was written for another configuration or set of clips")
+    worst = max((max_deviation(values, stored["state_dict"].get(name, []), name)
+                 for name, values in data["state_dict"].items()), default=0.0)
     for name, case in data["cases"].items():
-        for key in ("moments", "decoded"):
-            worst = max(worst, max(abs(a - b) for a, b in zip(case[key], stored["cases"][name][key])))
+        for key in ("input_shape", "moments_shape", "decoded_shape"):
+            if case[key] != stored["cases"][name][key]:
+                raise SystemExit(f"{name}.{key}: the fixture has {stored['cases'][name][key]}, the reference {case[key]}")
+        for key in ("input", "moments", "decoded"):
+            worst = max(worst, max_deviation(case[key], stored["cases"][name][key], f"{name}.{key}"))
     print(f"max deviation from the fixture: {worst:.3e}")
     raise SystemExit(0 if worst <= 1e-12 else 1)
 

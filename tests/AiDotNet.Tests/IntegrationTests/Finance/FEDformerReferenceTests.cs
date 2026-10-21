@@ -174,8 +174,13 @@ public class FEDformerReferenceTests
 
         var a = Build(5);
         var b = Build(5);
+        var other = Build(6);
         b.SetParameters(a.GetParameters());
+        other.SetParameters(a.GetParameters());
 
+        // The same seed reads the same frequencies; another seed (5 and 6 pick different modes of 16 steps) does not,
+        // so the same weights forecast differently.
         Assert.Equal(a.Forecast(input).ToVector().ToArray(), b.Forecast(input).ToVector().ToArray());
+        Assert.NotEqual(a.Forecast(input).ToVector().ToArray(), other.Forecast(input).ToVector().ToArray());
     }
 }

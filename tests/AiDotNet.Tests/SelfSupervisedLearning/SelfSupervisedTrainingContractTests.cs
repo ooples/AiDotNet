@@ -55,8 +55,11 @@ public class SelfSupervisedTrainingContractTests
             Seed = 1, LearningRate = 0.5, WarmupEpochs = 0, UseCosineDecay = false,
             OptimizerType = SelfSupervisedLearningOptimizerType.SGD, WeightDecay = wd,
         };
+        const double learningRate = 0.5, weightDecay = 0.1;
         var plain = SimClr(Config(0.0));
-        var decayed = SimClr(Config(0.1));
+        var decayed = SimClr(Config(weightDecay));
+        var initial = plain.GetParameters().ToArray();
+        Assert.Equal(initial, decayed.GetParameters().ToArray());
         var batch = Batch(3);
         var context = new SelfSupervisedLearningAugmentationContext<double> { PrecomputedView = Batch(4) };
 
@@ -65,7 +68,16 @@ public class SelfSupervisedTrainingContractTests
 
         // The same objective from the same weights; the decay changes only the update.
         Assert.Equal(plainStep.Loss, decayedStep.Loss, 10);
-        Assert.NotEqual(plain.GetParameters().ToArray(), decayed.GetParameters().ToArray());
+        // On the first step the velocity is zero, so SGD moves by -lr * gradient, and the coupled L2 term adds
+        // wd * w0 to the gradient: the decayed weights differ from the plain ones by exactly -lr * wd * w0.
+        var plainAfter = plain.GetParameters().ToArray();
+        var decayedAfter = decayed.GetParameters().ToArray();
+        for (int i = 0; i < initial.Length; i++)
+        {
+            double expected = -learningRate * weightDecay * initial[i];
+            Assert.True(Math.Abs(decayedAfter[i] - plainAfter[i] - expected) <= 1e-10 + 1e-9 * Math.Abs(expected),
+                $"parameter {i}: the decay moved it {decayedAfter[i] - plainAfter[i]:R}; -lr * wd * w0 is {expected:R}.");
+        }
     }
 
     [Fact]

@@ -131,7 +131,8 @@ public class DINO<T> : TeacherStudentSSL<T>
         NumGlobalCrops = dinoConfig.NumGlobalCrops ?? 2;
         if (NumGlobalCrops != 2)
             throw new ArgumentException($"DINO trains on two global crops; NumGlobalCrops is {NumGlobalCrops}.", nameof(config));
-        NumLocalCrops = dinoConfig.NumLocalCrops ?? 0;
+        // DINOConfig's documented default, the official recipe's local_crops_number of 8.
+        NumLocalCrops = dinoConfig.NumLocalCrops ?? 8;
         if (NumLocalCrops < 0)
             throw new ArgumentException($"NumLocalCrops must be non-negative; got {NumLocalCrops}.", nameof(config));
     }

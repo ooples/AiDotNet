@@ -300,7 +300,6 @@ public partial class MLPProjector<T> : IProjectorHead<T>
     {
         var batchSize = input.Shape[0];
         var dim = input.Shape[1];
-        var result = new T[batchSize * dim];
 
         if (_isTraining)
         {
@@ -308,6 +307,9 @@ public partial class MLPProjector<T> : IProjectorHead<T>
             // The hand-written loops this replaces built the output from a fresh array, which cut the tape: no
             // gradient reached the projector's first layer or the encoder behind it.
             var output = Engine.BatchNorm(input, gamma, beta, _batchNormEpsilon, out var batchMean, out var batchVariance);
+            // torch.nn.BatchNorm1d keeps the unbiased variance, batch / (batch - 1) times the batch's, as
+            // SymmetricProjector does.
+            double unbias = batchSize > 1 ? batchSize / (batchSize - 1.0) : 1.0;
             for (int d = 0; d < dim; d++)
             {
                 runningMean[d] = NumOps.Add(
@@ -315,12 +317,13 @@ public partial class MLPProjector<T> : IProjectorHead<T>
                     NumOps.Multiply(NumOps.FromDouble(_batchNormMomentum), batchMean[d]));
                 runningVar[d] = NumOps.Add(
                     NumOps.Multiply(NumOps.FromDouble(1 - _batchNormMomentum), runningVar[d]),
-                    NumOps.Multiply(NumOps.FromDouble(_batchNormMomentum), batchVariance[d]));
+                    NumOps.Multiply(NumOps.FromDouble(_batchNormMomentum * unbias), batchVariance[d]));
             }
 
             return output;
         }
-        else
+
+        var result = new T[batchSize * dim];
         {
             // Use running statistics
             for (int b = 0; b < batchSize; b++)

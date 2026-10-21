@@ -195,7 +195,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
             // Discrete log prob
             var discreteLogitsTensor = _discreteNetwork.Predict(stateTensor);
             var discreteLogits = discreteLogitsTensor.ToVector();
-            var discreteProbabilities = Softmax(discreteLogits);
 
             int discreteActionIndex = 0;
             for (int i = 0; i < _discreteActionSize; i++)
@@ -207,7 +206,13 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 }
             }
 
-            T discreteLogProb = NumOps.FromDouble(Math.Log(NumOps.ToDouble(discreteProbabilities[discreteActionIndex]) + 1e-8));
+            // Exact log-softmax from the logits, log p(a) = z_a - logsumexp(z), as DiscretePolicy computes it: the
+            // former log(p + 1e-8) of the rounded softmax biased every log-probability.
+            double maxLogit = double.NegativeInfinity;
+            for (int i = 0; i < discreteLogits.Length; i++) maxLogit = Math.Max(maxLogit, NumOps.ToDouble(discreteLogits[i]));
+            double expSum = 0;
+            for (int i = 0; i < discreteLogits.Length; i++) expSum += Math.Exp(NumOps.ToDouble(discreteLogits[i]) - maxLogit);
+            T discreteLogProb = NumOps.FromDouble(NumOps.ToDouble(discreteLogits[discreteActionIndex]) - maxLogit - Math.Log(expSum));
 
             // Continuous log prob
             var continuousOutputTensor = _continuousNetwork.Predict(stateTensor);
