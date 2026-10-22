@@ -30,11 +30,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// </para>
 /// <para>
 /// <b>Technical Details:</b>
-/// - MSCAN backbone with multi-scale convolutional attention (no self-attention needed)
-/// - Multi-branch depth-wise strip convolutions capture multi-scale context
-/// - Attention weights are computed via 1x1 convolutions on concatenated multi-scale features
-/// - Hamburger decoder uses matrix decomposition for global context aggregation
-/// - Four model sizes (Tiny to Large) from 4.3M to 48.9M parameters
+/// - MSCAN encoder: a convolutional stem, then blocks of multi-scale convolutional attention (a 5x5 depth-wise
+///   convolution plus 1x7/7x1, 1x11/11x1 and 1x21/21x1 strip branches, mixed by a 1x1 convolution and multiplied
+///   into the input) and depth-wise convolutional MLPs, with BatchNorm, layer scale and stochastic depth
+/// - LightHamHead decoder: stages 2-4 at 1/8 scale, concatenated and factored by a non-negative matrix
+///   factorization (the Hamburger) for global context, then a 1x1 classifier; logits are upsampled to the image
+/// - Matches mmsegmentation's MSCAN and LightHamHead to 1e-9 (SegNeXtReferenceTests) and loads their checkpoints
+/// - Trains with the paper's recipe: AdamW 6e-5 (head x10, no decay on norms), warm-up then poly decay
 /// </para>
 /// <para>
 /// <b>Reference:</b> Guo et al., "SegNeXt: Rethinking Convolutional Attention Design for
@@ -66,77 +68,28 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegNeXtOptions _options;
+    private SegNeXtNetwork<T>? _network;
+    private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
-    /// <summary>
-    /// Gets the configuration options for this SegNeXt model.
-    /// </summary>
-    /// <returns>The <see cref="SegNeXtOptions"/> used to configure this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control how the model behaves, including the random seed
-    /// for reproducibility. This returns the options that were passed in when creating the model,
-    /// or the defaults if none were provided.
-    /// </para>
-    /// </remarks>
+    // The NMF's bases [1, C, R], drawn once (the official code's rand_init=False) and saved with the model; null
+    // draws fresh bases on every forward (rand_init=True), or in ONNX mode.
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
+    private Tensor<T>? _nmfBases;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    #region Fields
-
-    // Only SegNeXt's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from SemanticSegmentationBase -> SegmentationModelBase.
-    private readonly SegNeXtModelSize _modelSize;
-    private readonly int[] _channelDims;
-    private readonly int _decoderDim;
-    private readonly int[] _depths;
-    private readonly double _dropRate;
-
-    #endregion
-
-    #region Properties
-
-    // SupportsTraining and NumClasses are inherited from SegmentationModelBase and say exactly the
-    // same thing, so re-declaring them here would only create two sources of one fact.
-
-    /// <summary>
-    /// Gets whether using native mode (trainable) or ONNX mode (inference only).
-    /// </summary>
     internal bool UseNativeMode => _useNativeMode;
+    internal SegNeXtModelSize ModelSize => _options.ModelSize;
+    internal SegNeXtNetwork<T> Network => _network ?? throw new InvalidOperationException("The native network is not initialized.");
 
     /// <summary>
-    /// Gets the model size variant (Tiny through Large).
+    /// Creates a trainable SegNeXt with the paper's architecture for <see cref="SegNeXtOptions.ModelSize"/>.
     /// </summary>
-    internal SegNeXtModelSize ModelSize => _modelSize;
-
-    #endregion
-
-    #region Constructors
-
-    /// <summary>
-    /// Initializes a new instance of SegNeXt in native (trainable) mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration that defines
-    /// input dimensions (height, width, channels). For a standard SegNeXt setup, use
-    /// ThreeDimensional input type with your image dimensions (e.g., 512x512x3).</param>
-    /// <param name="optimizer">The gradient-based optimizer used to update model weights during
-    /// training (default: AdamW with weight decay, as specified in the SegNeXt paper). AdamW is
-    /// the standard choice for modern segmentation models because it combines adaptive learning
-    /// rates with decoupled weight decay for better generalization.</param>
-    /// <param name="lossFunction">The loss function used to measure prediction error during training
-    /// (default: CrossEntropyLoss, the standard for multi-class segmentation tasks).</param>
-    /// <param name="options">Optional model options including random seed for reproducibility.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This constructor creates a trainable SegNeXt model from scratch.
-    /// Use this when you want to train or fine-tune on your own segmentation dataset.
-    /// Start with the Tiny variant for quick prototyping, then scale up to Base or Large
-    /// for production accuracy.
-    ///
-    /// SegNeXt processes images through a 4-stage convolutional encoder where each stage uses
-    /// multi-scale depth-wise strip convolutions to capture context at different scales, followed
-    /// by a Hamburger decoder that aggregates global context using matrix decomposition.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The input image's shape [C, H, W]; any height and width work.</param>
+    /// <param name="optimizer">An optimizer to use instead of the paper's recipe.</param>
+    /// <param name="lossFunction">Kept for the segmentation family's signature; SegNeXt trains on pixel cross-entropy.</param>
+    /// <param name="options">The size, the class count and the training recipe.</param>
     public SegNeXt(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
@@ -145,35 +98,13 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     {
         _options = options;
         Options = _options;
-        _modelSize = _options.ModelSize;
-        _dropRate = _options.DropRate;
-
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
-
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Initializes a new instance of SegNeXt in ONNX (inference-only) mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration. Input dimensions
-    /// should match the ONNX model's expected input (typically 512x512x3 or 1024x1024x3).</param>
-    /// <param name="onnxModelPath">Absolute or relative path to the pre-trained ONNX model file.
-    /// Pre-trained SegNeXt ONNX models can be exported from the MMSegmentation framework.</param>
-    /// <param name="options">Optional model options including random seed for reproducibility.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This constructor loads a pre-trained SegNeXt model from an ONNX file.
-    /// Use this for fast inference when you don't need to train the model. ONNX mode is typically
-    /// faster than native mode because the ONNX runtime applies hardware-specific optimizations.
-    ///
-    /// Note: ONNX mode does not support training. If you call Train() on an ONNX model,
-    /// it will throw an exception. To fine-tune, use the native constructor instead.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
+    /// <summary>Loads an ONNX export for inference.</summary>
+    /// <param name="architecture">The ONNX model's input shape.</param>
+    /// <param name="onnxModelPath">The ONNX file.</param>
+    /// <param name="options">The class count (the export fixes the rest).</param>
     public SegNeXt(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         SegNeXtOptions? options = null)
@@ -181,133 +112,188 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     {
         _options = options;
         Options = _options;
-        _modelSize = _options.ModelSize;
-        _dropRate = _options.DropRate;
-
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
-
         InitializeLayers();
     }
 
-    #endregion
-
-    #region Public Methods
-
-    /// <summary>
-    /// Runs a forward pass through the SegNeXt model to produce a per-pixel segmentation map.
-    /// </summary>
-    /// <param name="input">The input image tensor. Accepts either a single image as [C, H, W]
-    /// or a batched input as [B, C, H, W]. Pixel values should be normalized to [0, 1]
-    /// or standardized with ImageNet statistics.</param>
-    /// <returns>
-    /// A tensor containing per-pixel class logits. The output spatial resolution matches
-    /// the decoder output (typically 1/4 of input). Take argmax along the class dimension
-    /// to get the predicted class per pixel.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the main method for segmenting an image. Pass in your image
-    /// tensor and get back a map where each pixel has a score for every possible class.
-    /// In native mode, the image goes through the MSCAN encoder and Hamburger decoder.
-    /// In ONNX mode, the ONNX runtime handles everything for optimized inference.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    // mmsegmentation's configs: MSCAN-T/S/B/L and the LightHamHead width.
+    private SegNeXtConfiguration Configuration()
     {
-        if (!_useNativeMode)
+        var (dims, depths, head, dropPath) = _options.ModelSize switch
         {
-            return PredictOnnx(input);
-        }
-
-        return Forward(input);
-    }
-
-    #endregion
-
-    #region Private Methods
-
-    /// <summary>
-    /// Returns the architecture configuration for a given SegNeXt model size.
-    /// </summary>
-    /// <returns>A tuple containing channel dimensions per stage, depths per stage,
-    /// and the Hamburger decoder hidden dimension.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Each SegNeXt size uses different channel widths and encoder depths.
-    /// The "channel dims" control feature richness at each of the 4 stages, and the "depths"
-    /// control how many MSCAN blocks are stacked per stage. Larger models use more channels
-    /// and deeper encoders for higher accuracy.
-    /// </para>
-    /// </remarks>
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(
-        SegNeXtModelSize modelSize)
-    {
-        return modelSize switch
+            SegNeXtModelSize.Small => (new[] { 64, 128, 320, 512 }, new[] { 2, 2, 4, 2 }, 256, 0.1),
+            SegNeXtModelSize.Base => (new[] { 64, 128, 320, 512 }, new[] { 3, 3, 12, 3 }, 512, 0.1),
+            SegNeXtModelSize.Large => (new[] { 64, 128, 320, 512 }, new[] { 3, 5, 27, 3 }, 1024, 0.3),
+            _ => (new[] { 32, 64, 160, 256 }, new[] { 3, 3, 5, 2 }, 256, 0.1),
+        };
+        int channels = _options.HeadChannels ?? head;
+        return new SegNeXtConfiguration
         {
-            SegNeXtModelSize.Tiny => ([32, 64, 160, 256], [3, 3, 5, 2], 256),
-            SegNeXtModelSize.Small => ([64, 128, 320, 512], [2, 2, 4, 2], 256),
-            SegNeXtModelSize.Base => ([64, 128, 320, 512], [3, 3, 12, 3], 512),
-            SegNeXtModelSize.Large => ([64, 128, 320, 512], [3, 5, 27, 3], 1024),
-            _ => ([32, 64, 160, 256], [3, 3, 5, 2], 256)
+            InputChannels = _channels,
+            EmbedDims = _options.EmbedDims ?? dims,
+            Depths = _options.Depths ?? depths,
+            MlpRatios = new[] { 8, 8, 4, 4 },
+            DropPathRate = _options.DropPathRate ?? dropPath,
+            HeadChannels = channels,
+            HamChannels = channels,
+            Classes = _numClasses,
+            MatrixRank = _options.MatrixRank,
+            HeadDropout = _options.DropRate,
         };
     }
 
-    /// <summary>
-    /// Executes the full forward pass through the SegNeXt MSCAN encoder and Hamburger decoder.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>The segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The forward pass has two stages:
-    /// 1. <b>MSCAN Encoder</b>: Processes the image through 4 stages of multi-scale convolutional
-    ///    attention blocks. Each stage uses depth-wise strip convolutions at multiple scales
-    ///    to capture both local details and wider context, producing features at decreasing
-    ///    spatial resolutions (1/4, 1/8, 1/16, 1/32).
-    /// 2. <b>Hamburger Decoder</b>: Aggregates the encoder features using matrix decomposition
-    ///    (Non-negative Matrix Factorization) for global context, then produces per-pixel predictions.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
+    protected override void InitializeLayers()
+    {
+        if (_options is null || _network is not null) return;
+        if (!_useNativeMode)
+        {
+            ClearLayers();
+            return;
+        }
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("SegNeXt builds the paper's network; custom layers are not supported.");
+        var layers = new List<LayerBase<T>>();
+        _network = new SegNeXtNetwork<T>(Engine, layers, Configuration());
+        int seed = _options.Seed ?? 42;
+        _network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
+        _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 1);
+        if (!_options.RandomBasesPerForward)
+            _nmfBases = _network.RandomBases(1, Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 2));
+        Layers.AddRange(layers);
+        _encoderLayerEnd = layers.Count;
+    }
+
+    /// <summary>Loads an mmsegmentation SegNeXt checkpoint's state dict (<c>backbone.*</c>, <c>decode_head.*</c>).</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+
+    /// <summary>The class logits at the image's size: the head's 1/8-scale logits upsampled bilinearly (align_corners false).</summary>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
-        if (!hasBatch)
-        {
-            input = AddBatchDimension(input);
-        }
+        if (!hasBatch) input = AddBatchDimension(input);
+        int h = input.Shape[2], w = input.Shape[3];
+        var logits = SpatialResampling.Resize(Engine, Network.Forward(input, IsTrainingMode, _trainingRandom, Bases(input.Shape[0])), h, w);
+        return hasBatch ? logits : RemoveBatchDimension(logits);
+    }
 
-        var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-        {
-            features = Layers[i].Forward(features);
-        }
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-        {
-            features = Layers[i].Forward(features);
-        }
+    // The fixed bases for a batch of b (repeated, as bases.repeat(B, 1, 1)), or null to draw them.
+    private Tensor<T>? Bases(int batch) => _nmfBases is null ? null : Engine.TensorTile(_nmfBases, new[] { batch, 1, 1 });
 
-        if (!hasBatch)
-        {
-            features = RemoveBatchDimension(features);
-        }
+    /// <summary>
+    /// One step of the paper's training: the mean pixel cross-entropy of the logits resized to the labels (mmseg's
+    /// loss_by_feat) against one-hot (or soft) targets [B, classes, H, W].
+    /// </summary>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
+        if (input.Shape.Length == 3) input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        else if (input.Shape.Length != 4) throw new ArgumentException($"Training requires rank 3 [C,H,W] or 4 [B,C,H,W], got rank {input.Shape.Length}.", nameof(input));
+        if (expectedOutput.Shape.Length == 3) expectedOutput = expectedOutput.Reshape(new[] { 1, expectedOutput.Shape[0], expectedOutput.Shape[1], expectedOutput.Shape[2] });
+        else if (expectedOutput.Shape.Length != 4) throw new ArgumentException($"Expected output requires rank 3 [C,H,W] or 4 [B,C,H,W], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
+        if (input.Shape[0] != expectedOutput.Shape[0]) throw new ArgumentException($"Batch size mismatch: input has {input.Shape[0]} but expectedOutput has {expectedOutput.Shape[0]}.", nameof(expectedOutput));
 
-        return features;
+        var network = Network;
+        var target = expectedOutput;
+        int height = target.Shape[2], width = target.Shape[3];
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithCustomLoss(input, _ =>
+                PixelCrossEntropy(SpatialResampling.Resize(Engine, network.Forward(input, training: true, _trainingRandom, Bases(input.Shape[0])), height, width), target),
+                Optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+        return true;
+    }
+
+    private Tensor<T> PixelCrossEntropy(Tensor<T> logits, Tensor<T> target)
+    {
+        var shape = logits.Shape.ToArray();
+        // Subtracting a per-pixel constant leaves the softmax unchanged; the maximum is taken without a gradient.
+        var maximum = new Tensor<T>(new[] { shape[0], 1, shape[2], shape[3] });
+        int pixels = shape[2] * shape[3];
+        for (int b = 0; b < shape[0]; b++)
+            for (int p = 0; p < pixels; p++)
+            {
+                double m = double.NegativeInfinity;
+                for (int c = 0; c < shape[1]; c++) m = Math.Max(m, NumOps.ToDouble(logits[(b * shape[1] + c) * pixels + p]));
+                maximum[b * pixels + p] = NumOps.FromDouble(m);
+            }
+        var centered = Engine.TensorSubtract(logits, Engine.TensorBroadcastTo(maximum, shape));
+        var logSumExp = Engine.TensorLog(Engine.ReduceSum(Engine.TensorExp(centered), new[] { 1 }, false));
+        var picked = Engine.ReduceSum(Engine.TensorMultiply(centered, target), new[] { 1 }, false);
+        var mass = Engine.ReduceSum(target, new[] { 1 }, false);
+        return Engine.ReduceMean(Engine.TensorSubtract(Engine.TensorMultiply(logSumExp, mass), picked), new[] { 0, 1, 2 }, false);
     }
 
     /// <summary>
-    /// Runs inference using the ONNX runtime session.
+    /// The paper's AdamW (betas 0.9, 0.999) at <see cref="SegNeXtOptions.LearningRate"/> with weight decay
+    /// <see cref="SegNeXtOptions.WeightDecay"/>; the decode head trains at <see cref="SegNeXtOptions.HeadLearningRateMultiplier"/>
+    /// times the rate and parameters whose official names contain "norm" take no decay (mmengine's custom keys match
+    /// the longest key first and then alphabetically, so "head" wins over "norm"). The rate warms up linearly from
+    /// <see cref="SegNeXtOptions.WarmupStartFactor"/> of itself over <see cref="SegNeXtOptions.WarmupIterations"/>, then
+    /// decays as a poly of power 1 to zero at <see cref="SegNeXtOptions.TrainingIterations"/>.
     /// </summary>
-    /// <param name="input">The input image tensor.</param>
-    /// <returns>The segmentation logits tensor from the ONNX model.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> When using a pre-trained ONNX model, this method converts the input
-    /// to float arrays for the ONNX runtime, runs the optimized model, and converts the output
-    /// back to the library's tensor format.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown if the ONNX session was not initialized.</exception>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        var o = _options;
+        var optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = o.LearningRate,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            WeightDecay = o.WeightDecay,
+            UseAdaptiveLearningRate = false,
+            UseAdaptiveBetas = false,
+            EnableGradientClipping = false,
+            LearningRateScheduler = new LearningRateSchedulers.LinearWarmupScheduler(o.LearningRate, o.WarmupIterations,
+                o.TrainingIterations, o.LearningRate * o.WarmupStartFactor, LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear, 0.0),
+            SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+        });
+        var network = Network;
+        var head = new HashSet<LayerBase<T>>(network.HeadLayers());
+        var normNamed = new HashSet<LayerBase<T>>(network.NormNamedLayers());
+        var parameters = new List<Tensor<T>>();
+        var rates = new List<T>();
+        var decays = new List<T>();
+        foreach (var layer in network.OwnedLayers)
+        {
+            var rate = NumOps.FromDouble(head.Contains(layer) ? o.HeadLearningRateMultiplier : 1.0);
+            var decay = NumOps.FromDouble(normNamed.Contains(layer) ? 0.0 : 1.0);
+            foreach (var p in Training.TapeTrainingStep<T>.CollectParameters(new ILayer<T>[] { layer }))
+            {
+                parameters.Add(p);
+                for (int i = 0; i < p.Length; i++)
+                {
+                    rates.Add(rate);
+                    decays.Add(decay);
+                }
+            }
+        }
+        var options = (AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>)optimizer.GetOptions();
+        options.LearningRateMask = new Vector<T>(rates.ToArray());
+        options.WeightDecayMask = new Vector<T>(decays.ToArray());
+        options.MaskParameters = parameters;
+        return optimizer;
+    }
+
+    /// <inheritdoc/>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    #region ONNX
+
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
@@ -356,129 +342,25 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
 
     #endregion
 
-    #region Abstract Implementation
-
-    /// <summary>
-    /// Initializes the MSCAN encoder and Hamburger decoder layers for the SegNeXt model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method builds the internal structure of the SegNeXt model.
-    /// In native mode, it creates:
-    /// 1. <b>MSCAN encoder layers</b>: 4 stages of multi-scale convolutional attention blocks
-    ///    with depth-wise strip convolutions that capture context at multiple scales.
-    /// 2. <b>Hamburger decoder layers</b>: A decoder that uses matrix decomposition to aggregate
-    ///    global context, then produces per-pixel class predictions.
-    ///
-    /// In ONNX mode, no layers are created because the ONNX runtime handles everything internally.
-    /// </para>
-    /// </remarks>
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-        {
-            ClearLayers();
-            return;
-        }
-
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Architecture.Layers.Count / 2;
-        }
-        else
-        {
-            var encoderLayers = LayerHelper<T>.CreateSegNeXtEncoderLayers(
-                _channels, _height, _width,
-                _channelDims, _depths, _dropRate).ToList();
-
-            _encoderLayerEnd = encoderLayers.Count;
-            Layers.AddRange(encoderLayers);
-
-            int[] patchKernels = [7, 3, 3, 3];
-            int[] patchStrides = [4, 2, 2, 2];
-            int[] patchPaddings = [3, 1, 1, 1];
-            int featureH = _height;
-            int featureW = _width;
-            for (int stage = 0; stage < 4; stage++)
-            {
-                featureH = (featureH + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-                featureW = (featureW + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
-            }
-
-            int encoderOutputChannels = _channelDims[^1];
-            var decoderLayers = LayerHelper<T>.CreateSegNeXtDecoderLayers(
-                encoderOutputChannels, _decoderDim, _numClasses,
-                featureH, featureW);
-
-            Layers.AddRange(decoderLayers);
-        }
-    }
-
-    // UpdateParameters redistributed the vector across Layers, which the base already folds -- and
-    // did it less safely: the `offset + count <= parameters.Length` guard silently left the
-    // remaining layers untouched on a short vector instead of failing. Removed under AIDN082.
-    /// <summary>
-    /// Collects metadata describing this SegNeXt model's configuration and state.
-    /// </summary>
-    /// <returns>A <see cref="ModelMetadata{T}"/> containing model type, configuration, and serialized data.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Metadata is a summary of everything about the model — its type,
-    /// input dimensions, class count, model size, and serialized weights. Useful for saving models,
-    /// comparing configurations, or displaying model info in a dashboard.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var additionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "SegNeXt" },
-            { "Description", "SegNeXt Semantic Segmentation Model" },
+            { "Description", "SegNeXt semantic segmentation (Guo et al. 2022): MSCAN encoder and LightHamHead decoder" },
             { "InputHeight", _height },
             { "InputWidth", _width },
             { "InputChannels", _channels },
             { "NumClasses", _numClasses },
-            { "ModelSize", _modelSize.ToString() },
-            { "DecoderDim", _decoderDim },
-            { "DropRate", _dropRate },
+            { "ModelSize", _options.ModelSize.ToString() },
             { "UseNativeMode", _useNativeMode },
             { "NumLayers", Layers.Count },
-            { "EncoderLayerEnd", _encoderLayerEnd }
         };
-
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
             ModelDataProvider = () => SerializeForMetadata()
         };
     }
-
-    /// <summary>
-    /// Writes all SegNeXt-specific configuration values to a binary stream for persistence.
-    /// </summary>
-    /// <param name="writer">The binary writer to serialize configuration data into.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> When saving a SegNeXt model, the base class handles layer weights,
-    /// and this method saves the model's configuration (dimensions, classes, model size, etc.).
-    /// The data is written in a specific order matching <see cref="DeserializeNetworkSpecificData"/>.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Reads SegNeXt-specific configuration values from a binary stream during model loading.
-    /// </summary>
-    /// <param name="reader">The binary reader to deserialize configuration data from.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the counterpart to <see cref="SerializeNetworkSpecificData"/>.
-    /// When loading a saved model, this reads back configuration values in the exact same order
-    /// they were written.
-    /// </para>
-    /// </remarks>
-
-
-    #endregion
 }

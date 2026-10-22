@@ -6024,6 +6024,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ChannelDims = new[] { 16, 32, 48, 64 }, Depths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDim = 32 })";
             }
+            else if (model.ClassName == "SegNeXt" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Semantic.", System.StringComparison.Ordinal))
+            {
+                // SegNeXt (Guo et al. 2022) at smoke scale: every MSCAN stage (stem, strip-convolution attention,
+                // depth-wise MLP, layer scale) and the full LightHamHead with its NMF, at 8/16/32/32 wide with one
+                // block per stage, a 32-channel head (GroupNorm's 32 groups) and rank 4. The paper's warm-up starts
+                // at 1e-6 of the rate over 1500 iterations, so the fixture starts at the paper's rates from step 1.
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Semantic.SegNeXtOptions { NumClasses = 4, " +
+                    "EmbedDims = new[] { 8, 16, 32, 32 }, Depths = new[] { 1, 1, 1, 1 }, HeadChannels = 32, MatrixRank = 4, " +
+                    "WarmupIterations = 0 })";
+            }
             else if (model.ClassName == "MelodyExtractor" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Audio.MusicAnalysis.", System.StringComparison.Ordinal))
             {
