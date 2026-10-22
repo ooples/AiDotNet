@@ -236,9 +236,62 @@ def run_flow():
             "generate_short": generate(6, 3, 5, 31), "generate_long": generate(45, 2, 4, 32)}
 
 
+HIFT = dict(mel=8, base=16, harmonics=2, rates=[2, 2], kernels=[4, 4], n_fft=8, hop=2, res_kernels=[3, 5],
+            res_dilations=[[1, 3], [1, 3]], src_kernels=[3, 5], src_dilations=[[1, 3], [1, 3]], f0_channels=8, frames=7)
+
+
+def run_hift():
+    import numpy as np
+    from scipy.signal import get_window
+    from cosyvoice.hifigan.f0_predictor import ConvRNNF0Predictor
+    from cosyvoice.hifigan.generator import HiFTGenerator
+    c = HIFT
+    gen = torch.Generator().manual_seed(41)
+    model = HiFTGenerator(in_channels=c["mel"], base_channels=c["base"], nb_harmonics=c["harmonics"], sampling_rate=22050,
+                          nsf_alpha=0.1, nsf_sigma=0.003, nsf_voiced_threshold=10, upsample_rates=c["rates"],
+                          upsample_kernel_sizes=c["kernels"], istft_params={"n_fft": c["n_fft"], "hop_len": c["hop"]},
+                          resblock_kernel_sizes=c["res_kernels"], resblock_dilation_sizes=c["res_dilations"],
+                          source_resblock_kernel_sizes=c["src_kernels"], source_resblock_dilation_sizes=c["src_dilations"],
+                          lrelu_slope=0.1, audio_limit=0.99,
+                          f0_predictor=ConvRNNF0Predictor(num_class=1, in_channels=c["mel"], cond_channels=c["f0_channels"]))
+    # The reference casts its Hann window to float32; the fixture keeps it in float64.
+    model.stft_window = torch.from_numpy(get_window("hann", c["n_fft"], fftbins=True))
+    randomize(model, gen, 0.3)
+    with torch.no_grad():
+        model.f0_predictor.classifier.bias.add_(10.235)     # an F0 near the 10 Hz voicing threshold: voiced and unvoiced frames
+    initial = flat(model)
+    mel = torch.randn(1, c["mel"], c["frames"], generator=gen)
+    samples = c["frames"] * c["rates"][0] * c["rates"][1] * c["hop"]
+    h = c["harmonics"] + 1
+    phases = (torch.rand(1, h, 1, generator=gen) * 2 - 1) * math.pi
+    noise = torch.randn(1, h, samples, generator=gen)   # SineGen draws it as [B, harmonics, samples]
+    weights = torch.randn(samples, generator=gen)
+    pitch = torch.rand(1, c["frames"], generator=gen) * 80
+    from cosyvoice.hifigan import generator as cv_generator
+
+    def run(net):
+        f0 = net.f0_predictor(mel)
+        s = net.f0_upsamp(f0[:, None]).transpose(1, 2)
+        with mock.patch.object(cv_generator.Uniform, "sample", return_value=phases.clone()),                 mock.patch("torch.randn_like", side_effect=[noise.clone(), torch.zeros(1, samples, 1)]):
+            source, _, _ = net.m_source(s)
+        audio = net.decode(x=mel, s=source.transpose(1, 2))
+        return f0, source, audio
+
+    f0, source, audio = run(model)
+    loss = (audio.squeeze() * weights).sum() + torch.nn.functional.l1_loss(f0, pitch)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    return {"config": HIFT, "initial": initial, "mel": mel.flatten().tolist(), "phases": phases.flatten().tolist(),
+            "noise": noise[0].transpose(0, 1).flatten().tolist(), "weights": weights.tolist(), "pitch": pitch.flatten().tolist(),
+            "f0": f0.flatten().tolist(), "source": source.flatten().tolist(), "audio": audio.flatten().tolist(),
+            "loss": loss.item(), "lr": 0.01, "final": flat(model)}
+
+
 def main():
     out = {"cosyvoice_commit": COSYVOICE_COMMIT, "matcha_commit": MATCHA_COMMIT, "language_model": run_language_model(),
-           "flow": run_flow()}
+           "flow": run_flow(), "hift": run_hift()}
     path = os.path.join(HERE, "..", "..", "tests", "AiDotNet.Tests", "TextToSpeech", "ReferenceData", "cosyvoice_reference.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f)

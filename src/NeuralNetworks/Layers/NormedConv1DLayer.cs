@@ -165,6 +165,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>The output channels.</summary>
     internal int OutputChannels => _out;
 
+    /// <summary>The weight reparameterization; without one, the gain tensor is unused.</summary>
+    internal ConvolutionNormalization Normalization => _normalization;
+
     /// <summary>Sets the bias to zero (references that initialize a convolution's bias with <c>nn.init.constant_(0)</c>).</summary>
     internal void ZeroBias()
     {

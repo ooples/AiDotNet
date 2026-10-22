@@ -125,14 +125,23 @@ public class CosyVoiceReferenceTests
 
     private static void AssertLayersMatch(List<LayerBase<double>> actual, List<LayerBase<double>> expected, string what, double tolerance = 1e-9)
     {
+        // The trainable tensors only: GetParameters also carries buffers (a normed convolution's spectral-norm vectors),
+        // which each instance draws for itself.
         Assert.Equal(expected.Count, actual.Count);
         for (int l = 0; l < actual.Count; l++)
         {
-            var a = actual[l].GetParameters();
-            var e = expected[l].GetParameters();
-            Assert.Equal(e.Length, a.Length);
-            for (int i = 0; i < e.Length; i++)
-                Assert.True(Math.Abs(e[i] - a[i]) < tolerance, $"{what}: layer {l} ({actual[l].GetType().Name}) parameter {i}: {e[i]} vs {a[i]}");
+            var a = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(new[] { actual[l] });
+            var e = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(new[] { expected[l] });
+            Assert.Equal(e.Count, a.Count);
+            for (int t = 0; t < e.Count; t++)
+            {
+                // An unnormalized convolution's gain is never read (nor trained), so it is not part of the model.
+                if (actual[l] is NormedConv1DLayer<double> { Normalization: ConvolutionNormalization.None } && t == 1) continue;
+                Assert.Equal(e[t].Length, a[t].Length);
+                for (int i = 0; i < e[t].Length; i++)
+                    Assert.True(Math.Abs(e[t][i] - a[t][i]) < tolerance,
+                        $"{what}: layer {l} ({actual[l].GetType().Name}) tensor {t} value {i}: {e[t][i]} vs {a[t][i]}");
+            }
         }
     }
 
@@ -202,5 +211,80 @@ public class CosyVoiceReferenceTests
         for (int i = 0; i < expected.Length; i++)
             Assert.True(Math.Abs(expected[i] - (float)output[i]) <= 1.5e-7 * Math.Max(1.0, Math.Abs(expected[i])),
                 $"{name}: mel {i}: {expected[i]} vs {output[i]}");
+    }
+
+    private static int[][] Jagged(JsonElement e) => e.EnumerateArray().Select(Ints).ToArray();
+
+    private static CosyVoiceHiFT<double> HiFT(IEngine engine, List<LayerBase<double>> layers, JsonElement c) =>
+        new(engine, layers, new CosyVoiceHiFTConfiguration(
+            MelChannels: c.GetProperty("mel").GetInt32(), BaseChannels: c.GetProperty("base").GetInt32(),
+            Harmonics: c.GetProperty("harmonics").GetInt32(), UpsampleRates: Ints(c.GetProperty("rates")),
+            UpsampleKernels: Ints(c.GetProperty("kernels")), FftSize: c.GetProperty("n_fft").GetInt32(),
+            HopSize: c.GetProperty("hop").GetInt32(), ResblockKernels: Ints(c.GetProperty("res_kernels")),
+            ResblockDilations: Jagged(c.GetProperty("res_dilations")), SourceResblockKernels: Ints(c.GetProperty("src_kernels")),
+            SourceResblockDilations: Jagged(c.GetProperty("src_dilations")), F0Channels: c.GetProperty("f0_channels").GetInt32()));
+
+    private static void AssertClose(double[] expected, Tensor<double> actual, double tolerance, string what)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.True(Math.Abs(expected[i] - actual[i]) < tolerance, $"{what} {i}: {expected[i]} vs {actual[i]}");
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task HiFT_SourceDecodeAndOneSgdStep_MatchTheOfficialCode()
+    {
+        await Task.Yield();
+        var engine = new CpuEngine();
+        var k = Data.Value.GetProperty("hift");
+        var c = k.GetProperty("config");
+        var layers = new List<LayerBase<double>>();
+        var hift = HiFT(engine, layers, c);
+        hift.LoadTorch(StateDict(k.GetProperty("initial")));
+        int mel = c.GetProperty("mel").GetInt32(), frames = c.GetProperty("frames").GetInt32();
+        int h = c.GetProperty("harmonics").GetInt32() + 1;
+        var melTensor = new Tensor<double>(new[] { 1, mel, frames });
+        var melValues = Values(k.GetProperty("mel"));
+        for (int i = 0; i < melValues.Length; i++) melTensor[i] = melValues[i];
+        var noiseValues = Values(k.GetProperty("noise"));
+        int samples = noiseValues.Length / h;
+        var noise = new double[samples, h];
+        for (int n = 0; n < samples; n++)
+            for (int i = 0; i < h; i++) noise[n, i] = noiseValues[n * h + i];
+        var weights = Values(k.GetProperty("weights"));
+        var pitch = Values(k.GetProperty("pitch"));
+
+        var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(layers);
+        Dictionary<Tensor<double>, Tensor<double>> grads;
+        double loss;
+        using (var tape = new GradientTape<double>())
+        {
+            var f0 = hift.PredictF0(melTensor);
+            AssertClose(Values(k.GetProperty("f0")), f0, 1e-9, "f0");
+            var source = hift.Source(hift.Sines(hift.UpsampleF0(f0), Values(k.GetProperty("phases")), noise));
+            AssertClose(Values(k.GetProperty("source")), source, 1e-9, "source");
+            var audio = hift.Decode(melTensor, source);
+            AssertClose(Values(k.GetProperty("audio")), audio, 1e-9, "audio");
+            var w = new Tensor<double>(new[] { samples });
+            var p = new Tensor<double>(new[] { frames });
+            for (int i = 0; i < samples; i++) w[i] = weights[i];
+            for (int i = 0; i < frames; i++) p[i] = pitch[i];
+            var weighted = engine.ReduceSum(engine.TensorMultiply(audio, w), new[] { 0 }, keepDims: false);
+            var l1 = engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorAbs(engine.TensorSubtract(f0, p)), new[] { 0 }, keepDims: false), 1.0 / frames);
+            var total = engine.TensorAdd(weighted, l1);
+            loss = total[0];
+            grads = tape.ComputeGradients(total, sources: parameters);
+        }
+        Assert.True(Math.Abs(loss - k.GetProperty("loss").GetDouble()) < 1e-9, $"loss {loss} vs {k.GetProperty("loss").GetDouble()}");
+        double lr = k.GetProperty("lr").GetDouble();
+        foreach (var p in parameters)
+        {
+            if (!grads.TryGetValue(p, out var g)) continue;
+            for (int i = 0; i < p.Length; i++) p[i] -= lr * g[i];
+            engine.InvalidatePersistentTensor(p);
+        }
+        var expectedLayers = new List<LayerBase<double>>();
+        HiFT(engine, expectedLayers, c).LoadTorch(StateDict(k.GetProperty("final")));
+        AssertLayersMatch(layers, expectedLayers, "hift");
     }
 }
