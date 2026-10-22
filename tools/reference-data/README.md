@@ -17,6 +17,7 @@ that produce those values, so you can check them yourself or regenerate them.
 | `chattts_reference.py` | `TextToSpeech/ReferenceData/chattts_reference.json` | 2noise/ChatTTS's `Embed`, `Speaker.apply` and `DVAE` (pass a checkout with `--chattts`) around Hugging Face `LlamaModel` |
 | `hift_reference.py` | `TextToSpeech/ReferenceData/hift_reference.json` | FunAudioLLM/CosyVoice's `HiFTGenerator` and `ConvRNNF0Predictor` (pass a checkout with `--cosyvoice`) |
 | `wenet_encoder_reference.py` | `TextToSpeech/ReferenceData/wenet_encoder_reference.json` | FunAudioLLM/CosyVoice's wenet `ConformerEncoder` / `TransformerEncoder` with ESPnet relative positions (pass a checkout with `--cosyvoice`) |
+| `cosyvoice_decoder_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_decoder_reference.json` | FunAudioLLM/CosyVoice's `ConditionalDecoder` over Matcha-TTS at CosyVoice's pinned commit (pass checkouts with `--cosyvoice` and `--matcha`) |
 | `conformer_reference.py` | `TextToSpeech/ReferenceData/soundstorm_conformer_reference.json` | Pheme's `modules/conformer.py` (needs `--pheme`, a checkout of PolyAI-LDN/pheme) |
 | `pheme_s2a_reference.py` | `TextToSpeech/ReferenceData/pheme_s2a_reference.json` | Pheme's `modules/s2a_model.py` `TTSConformer` (needs `--pheme`) |
 | `valle_reference.py` | `TextToSpeech/ReferenceData/valle_reference.json` | lifeiteng/vall-e's `VALLE` (needs `--valle`, a checkout of lifeiteng/vall-e) |
