@@ -225,4 +225,59 @@ public class OptionsSeedReassignmentTests
         AdvanceTheSharedGenerator();
         Assert.Equal(first, Trained());
     }
+
+    /// <summary>
+    /// Keeps its only layer outside Layers and builds it before its seeded options exist, so no seed request comes
+    /// after the options do and the deferral is still pending when construction ends.
+    /// </summary>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    private sealed class KeepsLayersOffList : NeuralNetworkBase<double>
+    {
+        private readonly FullyConnectedLayer<double> _head;
+        private readonly NeuralNetworkOptions _options;
+
+        public KeepsLayersOffList(NeuralNetworkArchitecture<double> architecture, int? seed)
+            : base(architecture, new MeanSquaredErrorLoss<double>())
+        {
+            _head = new FullyConnectedLayer<double>(4, 4, new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+            _options = new NeuralNetworkOptions { Seed = seed };
+        }
+
+        public override ModelOptions GetOptions() => _options;
+
+        protected override IEnumerable<LayerBase<double>?> GetExtraTrainableLayers()
+        {
+            yield return _head;
+        }
+
+        protected override void InitializeLayers()
+        {
+        }
+
+        public override IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
+            => new KeepsLayersOffList(Architecture, _options.Seed);
+
+        public override ModelMetadata<double> GetModelMetadata() => new()
+        {
+            Name = nameof(KeepsLayersOffList),
+            Description = "Test double that holds its layer outside Layers.",
+        };
+    }
+
+    [Fact]
+    public void AFinishedModelWithOffListLayers_DoesNotSeedALayerBuiltAfterIt()
+    {
+        _ = new KeepsLayersOffList(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 4, outputSize: 4),
+            2290);
+        var unrelated = new FullyConnectedLayer<double>(4, 4, new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+
+        // Handing the finished model's seed to the scope would give this layer the first draw of that seed's stream.
+        Assert.NotEqual(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2290).Next(), unrelated.RandomSeed);
+    }
 }
