@@ -113,7 +113,12 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     private readonly double[] _alphasCumprod;
     private readonly double[] _sqrtAlphasCumprod;
     private readonly double[] _sqrtOneMinusAlphasCumprod;
+    // The training draws (timesteps, noise, masks): one generator for the model's lifetime, seeded from Options.Seed
+    // when set, so a seeded model trains reproducibly while every step still draws fresh values.
     private readonly Random _random;
+
+    // The sampling draws, restarted at Options.Seed on every forecast.
+    private Random _samplingRandom = RandomHelper.CreateSecureRandom();
     #endregion
 
     #region Shared Fields
@@ -255,7 +260,9 @@ public partial class CSDI<T> : ForecastingModelBase<T>
         // Initialize diffusion schedule
         (_betas, _alphas, _alphasCumprod, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod) =
             InitializeDiffusionSchedule(_numDiffusionSteps, _options.BetaStart, _options.BetaEnd, _betaSchedule);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -300,7 +307,9 @@ public partial class CSDI<T> : ForecastingModelBase<T>
         // Initialize diffusion schedule
         (_betas, _alphas, _alphasCumprod, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod) =
             InitializeDiffusionSchedule(_numDiffusionSteps, _options.BetaStart, _options.BetaEnd, _betaSchedule);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         InitializeLayers();
     }
@@ -828,6 +837,12 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ImputeNative(Tensor<T> input)
     {
+        // Restart the sampling stream at the configured seed, so a seeded model returns the same samples for the same
+        // input on every call; with no seed the draw is secure and deliberately not reproducible.
+        _samplingRandom = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+
         // Parse input to extract data and mask
         var (data, mask) = ParseInputWithMask(input);
 
@@ -1016,8 +1031,8 @@ public partial class CSDI<T> : ForecastingModelBase<T>
                 double z = 0;
                 if (t > 0)
                 {
-                    double u1 = _random.NextDouble();
-                    double u2 = _random.NextDouble();
+                    double u1 = _samplingRandom.NextDouble();
+                    double u2 = _samplingRandom.NextDouble();
                     z = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
                 }
 
@@ -1056,8 +1071,8 @@ public partial class CSDI<T> : ForecastingModelBase<T>
             if (maskVal < 0.5) // Missing position
             {
                 // Initialize with random noise
-                double u1 = _random.NextDouble();
-                double u2 = _random.NextDouble();
+                double u1 = _samplingRandom.NextDouble();
+                double u2 = _samplingRandom.NextDouble();
                 double noise = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
                 resultVec[i] = NumOps.FromDouble(noise);
             }
