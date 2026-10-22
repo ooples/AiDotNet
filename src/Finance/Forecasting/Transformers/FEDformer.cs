@@ -435,12 +435,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         }
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// FEDformer's dropout draws fresh masks inside its single network layer on every step, which a traced-and-replayed
-    /// fused plan would freeze at the first step's masks; the eager tape re-runs the true forward each step.
-    /// </remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
 
     /// <summary>
     /// Builds FEDformer-f as the official code does (Zhou et al. 2022; MAZiqing/FEDformer); see
