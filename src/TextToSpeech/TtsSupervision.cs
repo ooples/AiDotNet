@@ -46,4 +46,10 @@ public enum TtsSupervision
     /// 2023 Eq. 2).
     /// </summary>
     PromptCodecTokens = 128,
+
+    /// <summary>
+    /// A natural-language description of how the utterance sounds, as the description encoder's token ids
+    /// (Parler-TTS cross-attends to the Flan-T5 encoding of it, Lyth &amp; King 2024 §3).
+    /// </summary>
+    Description = 256,
 }
