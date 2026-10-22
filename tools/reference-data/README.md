@@ -15,6 +15,7 @@ that produce those values, so you can check them yourself or regenerate them.
 | `t5_reference.py` | `TextToSpeech/ReferenceData/t5_reference.json` | Hugging Face `transformers` `T5ForConditionalGeneration` (Pheme's text-to-semantic model) |
 | `speartts_reference.py` | `TextToSpeech/ReferenceData/speartts_reference.json` | Hugging Face `transformers` `T5ForConditionalGeneration` with its own encoder table (SPEAR-TTS's reading model): label smoothing, a reading-stage SGD step, beam search |
 | `chattts_reference.py` | `TextToSpeech/ReferenceData/chattts_reference.json` | 2noise/ChatTTS's `Embed`, `Speaker.apply` and `DVAE` (pass a checkout with `--chattts`) around Hugging Face `LlamaModel` |
+| `hift_reference.py` | `TextToSpeech/ReferenceData/hift_reference.json` | FunAudioLLM/CosyVoice's `HiFTGenerator` and `ConvRNNF0Predictor` (pass a checkout with `--cosyvoice`) |
 | `conformer_reference.py` | `TextToSpeech/ReferenceData/soundstorm_conformer_reference.json` | Pheme's `modules/conformer.py` (needs `--pheme`, a checkout of PolyAI-LDN/pheme) |
 | `pheme_s2a_reference.py` | `TextToSpeech/ReferenceData/pheme_s2a_reference.json` | Pheme's `modules/s2a_model.py` `TTSConformer` (needs `--pheme`) |
 | `valle_reference.py` | `TextToSpeech/ReferenceData/valle_reference.json` | lifeiteng/vall-e's `VALLE` (needs `--valle`, a checkout of lifeiteng/vall-e) |
