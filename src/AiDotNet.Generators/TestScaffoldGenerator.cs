@@ -7566,8 +7566,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 4, VocabSize = 64, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
             }
-            else if ((model.ClassName == "FireRedTTS" || model.ClassName == "SparkTTS"
-                      || model.ClassName == "SPEARTTS")
+            else if ((model.ClassName == "FireRedTTS" || model.ClassName == "SparkTTS")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
@@ -7580,19 +7579,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Dropout stays disabled so the exact deterministic-speaker assertion remains
                 // meaningful; production defaults and inference behavior are unchanged.
                 //
-                // SparkTTS and SPEAR-TTS join from the Q-S shard for the same reason, measured:
-                // SparkTTS keeps Qwen2.5's 1536-wide / 28-layer decoder over a 1x4096 codec head
-                // and OOM-killed the shard (System.OutOfMemoryException out of
-                // FusedLinearBackwardCore with the test host at ~10 GB resident), taking the rest
-                // of its own class down with it — 9 cascaded failures including several that
-                // reported in 1-3 s because the process had no headroom left. SPEAR-TTS is the
-                // same stack at 1024-wide / 12 layers with an 8x1024 head. Both are now also on
-                // the IsCodecLMTokenModel list, so the fixture feeds the discrete token IDs their
-                // EmbeddingLayer-first stack declares instead of 640 continuous mel features.
+                // SparkTTS joins from the Q-S shard for the same reason, measured: it keeps
+                // Qwen2.5's 1536-wide / 28-layer decoder over a 1x4096 codec head and OOM-killed
+                // the shard (System.OutOfMemoryException out of FusedLinearBackwardCore with the
+                // test host at ~10 GB resident), taking the rest of its own class down with it —
+                // 9 cascaded failures including several that reported in 1-3 s because the process
+                // had no headroom left. It is also on the IsCodecLMTokenModel list, so the fixture
+                // feeds the discrete token IDs its EmbeddingLayer-first stack declares instead of
+                // 640 continuous mel features.
                 string codecBasedOptionsType = model.ClassName switch
                 {
                     "SparkTTS" => "AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions",
-                    "SPEARTTS" => "AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions",
                     _ => "AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions",
                 };
                 pinInitSeed = true;
@@ -9882,6 +9879,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "SemanticFrameRate = 5, FirstLevelIterations = 3, TextModelDim = 16, TextFeedForwardDim = 32, " +
                     "TextKeyValueDim = 8, NumEncoderLayers = 1, NumDecoderLayers = 1, TextDropoutRate = 0.0, TopK = 8, " +
                     "MaxNewSemanticTokens = 4, MaxTextLength = 32, LearningRate = 3e-3, DropoutRate = 0.0, HopSize = 1600, " +
+                    "SoundStream = new AiDotNet.Audio.Generation.SoundStreamOptions { SampleRate = 16000, Filters = 4, " +
+                    "Dimension = 8, Ratios = [8, 5, 5, 4, 2], NumQuantizers = 2, CodebookSize = 16, TargetBandwidthKbps = 0.08 } })";
+            }
+            else if (model.ClassName == "SPEARTTS" && model.TypeParameterCount == 1)
+            {
+                // SPEAR-TTS's paper model is a T5-Large reader (twice: S1 and its backtranslation copy), a 768-wide
+                // 12-layer speaker and a 3-level SoundStream. Keep every component (T5 v1.0 with its own encoder
+                // table, the decoder-only speaker, SoundStream) at 16 wide over two levels of 16 codes, with a beam of
+                // 2 and short generations. The codec's hop is 1600 (10 frames a second, semantic tokens at 5), so a
+                // 16-frame training utterance is 8 semantic tokens and its 0.4 s prompt window 4 frames.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions { HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 2, " +
+                    "NumDecoderLayers = 2, ReadingFeedForwardDim = 32, ReadingKeyValueDim = 8, ReadingTrainableEncoderLayers = 1, " +
+                    "BacktranslationTrainableDecoderLayers = 1, DropoutRate = 0.0, PretrainingDropoutRate = 0.0, " +
+                    "SemanticCodes = 16, SemanticFrameRate = 5, NumCodebooks = 2, CodebookSize = 16, SpeakingModelDim = 16, " +
+                    "SpeakingLayers = 1, SpeakingHeads = 2, SpeakingKeyValueDim = 8, SpeakingFeedForwardDim = 32, " +
+                    "SpeakingDropoutRate = 0.0, BeamSize = 2, MaxSemanticTokens = 4, MaxAcousticFrames = 4, MaxTextLength = 32, " +
+                    "PromptSeconds = 0.4, HopSize = 1600, " +
                     "SoundStream = new AiDotNet.Audio.Generation.SoundStreamOptions { SampleRate = 16000, Filters = 4, " +
                     "Dimension = 8, Ratios = [8, 5, 5, 4, 2], NumQuantizers = 2, CodebookSize = 16, TargetBandwidthKbps = 0.08 } })";
             }
@@ -15841,9 +15859,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS")
                 {
-                    // Pheme and VALL-E read phoneme ids (SoundStorm text bytes) and train on codec tokens, one frame per target row (the TTS
+                    // Pheme, VALL-E and SPEAR-TTS read phoneme ids (SoundStorm text bytes) and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 1 };");
@@ -21311,8 +21329,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
             or "SpeechGPT" or "SpiritLM"
             or "Amphion" or "Dia" or "GLM4Voice" or "WhisperSpeech"
-            // SparkTTS and SPEAR-TTS expose the same discrete codec-token contract.
-            or "SparkTTS" or "SPEARTTS" or "Llasa" or "MegaTTS3"
+            // SparkTTS exposes the same discrete codec-token contract.
+            or "SparkTTS" or "Llasa" or "MegaTTS3"
             || IsValleCodecLMModel(className);
     }
 
@@ -21347,10 +21365,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "CosyVoiceClone" => 16,
             "Chatterbox" => 16,
             "FireRedTTS" => 16,
-            // SparkTTS / SPEAR-TTS: CI-smoke fixtures below pin NumCodebooks = 1, CodebookSize = 16,
-            // so their codec head is 1 x 16 wide (production stays 1 x 4096 / 8 x 1024).
+            // SparkTTS: the CI-smoke fixture pins NumCodebooks = 1, CodebookSize = 16, so its codec
+            // head is 1 x 16 wide (production stays 1 x 4096).
             "SparkTTS" => 16,
-            "SPEARTTS" => 16,
             "Llasa" => 16,
             "MegaTTS3" => 16,
             "FishSpeech" or "FishSpeechV15" => 32,
