@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -193,26 +193,28 @@ public class FEDformerReferenceTests
     /// FEDformer's dropout masks are drawn inside its one network layer, so a compiled training plan used to replay the
     /// traced step's masks on every later step; FEDformer opted out of fused training instead. The masks now come from
     /// CompiledStepRandom, which refills them before each replay, so the fused loss follows the eager loss step for
-    /// step. A plan replaying frozen masks drops different elements from step 2 on and diverges.
+    /// step. A plan replaying frozen masks drops different elements from step 2 on and diverges. Run in double, where the
+    /// two arms differ by at most about 3e-6 (the compiled plan's own rounding) and frozen masks by 2e-2 to 9e-2, so the
+    /// 1e-4 tolerance sits well clear of both. In float the arms drifted 3e-4 apart within three steps on a CI runner.
     /// </summary>
     [Fact(Timeout = 120000)]
     public async Task Fused_training_redraws_dropout_masks_like_the_eager_step()
     {
         await Task.Yield();
         const int sequence = 16, label = 8, horizon = 4, features = 3, batch = 2;
-        FedformerNetwork<float> Build() => new(sequence, label, horizon, features, modelDimension: 8, heads: 2,
+        FedformerNetwork<double> Build() => new(sequence, label, horizon, features, modelDimension: 8, heads: 2,
             feedForward: 16, encoderLayers: 1, decoderLayers: 1, modes: 4, FourierModeSelection.Lowest,
             modeSelectionSeed: 1, movingAverage: 5, dropout: 0.3) { RandomSeed = 11 };
         var fusedNetwork = Build();
         var eagerNetwork = Build();
-        var warm = new Tensor<float>(new[] { batch, sequence, features });
+        var warm = new Tensor<double>(new[] { batch, sequence, features });
         fusedNetwork.Forward(warm);
         eagerNetwork.Forward(warm);
         eagerNetwork.SetParameters(fusedNetwork.GetParameters());
         fusedNetwork.SetTrainingMode(true);
         eagerNetwork.SetTrainingMode(true);
 
-        var stepper = new TapeTrainingStepper<float>(new object());
+        var stepper = new TapeTrainingStepper<double>(new object());
         var fusedOptimizer = Sgd();
         var eagerOptimizer = Sgd();
         var data = RandomHelper.CreateSeededRandom(5);
@@ -220,19 +222,19 @@ public class FEDformerReferenceTests
         {
             var input = Random(data, batch, sequence, features);
             var target = Random(data, batch, horizon, features);
-            float fused = stepper.Step(Request(fusedNetwork, input, target, fusedOptimizer));
+            double fused = stepper.Step(Request(fusedNetwork, input, target, fusedOptimizer));
             Assert.True(stepper.LastStepFused, $"step {step}: fused path did not engage ({stepper.Session.LastMissReason}).");
-            float eager = TapeTrainingStepper<float>.EagerStep(Request(eagerNetwork, input, target, eagerOptimizer));
+            double eager = TapeTrainingStepper<double>.EagerStep(Request(eagerNetwork, input, target, eagerOptimizer));
             Assert.True(
-                Math.Abs(fused - eager) <= 1e-4f * Math.Max(1f, Math.Abs(eager)),
+                Math.Abs(fused - eager) <= 1e-4 * Math.Max(1.0, Math.Abs(eager)),
                 $"step {step}: fused loss {fused} differs from eager loss {eager}; the plan is not redrawing its masks.");
         }
     }
 
-    private static FusedTrainingStepRequest<float> Request(FedformerNetwork<float> network, Tensor<float> input,
-        Tensor<float> target, IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> optimizer) => new()
+    private static FusedTrainingStepRequest<double> Request(FedformerNetwork<double> network, Tensor<double> input,
+        Tensor<double> target, IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> optimizer) => new()
     {
-        Layers = new ITrainableLayer<float>[] { network },
+        Layers = new ITrainableLayer<double>[] { network },
         Input = input,
         Target = target,
         Forward = network.Forward,
@@ -241,22 +243,22 @@ public class FEDformerReferenceTests
             var engine = AiDotNetEngine.Current;
             var difference = engine.TensorSubtract(predicted, expected);
             return engine.TensorMultiplyScalar(
-                engine.ReduceSum(engine.TensorMultiply(difference, difference), null), 1f / difference.Length);
+                engine.ReduceSum(engine.TensorMultiply(difference, difference), null), 1.0 / difference.Length);
         },
         Optimizer = optimizer,
     };
 
-    private static StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>> Sgd()
-        => new(model: null, options: new StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+    private static StochasticGradientDescentOptimizer<double, Tensor<double>, Tensor<double>> Sgd()
+        => new(model: null, options: new StochasticGradientDescentOptimizerOptions<double, Tensor<double>, Tensor<double>>
         {
             InitialLearningRate = 0.05,
             UseAdaptiveLearningRate = false,
         });
 
-    private static Tensor<float> Random(System.Random random, params int[] shape)
+    private static Tensor<double> Random(System.Random random, params int[] shape)
     {
-        var tensor = new Tensor<float>(shape);
-        for (int i = 0; i < tensor.Length; i++) tensor[i] = (float)(random.NextDouble() * 2.0 - 1.0);
+        var tensor = new Tensor<double>(shape);
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = random.NextDouble() * 2.0 - 1.0;
         return tensor;
     }
 }
