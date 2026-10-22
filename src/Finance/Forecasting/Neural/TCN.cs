@@ -265,7 +265,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _numChannels = options.NumChannels;
         _kernelSize = options.KernelSize;
         _numLayers = options.NumLayers;
@@ -332,7 +332,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _numChannels = options.NumChannels;
         _kernelSize = options.KernelSize;
         _numLayers = options.NumLayers;
@@ -729,7 +729,8 @@ public partial class TCN<T> : ForecastingModelBase<T>
             current = _outputProjection.Forward(current);
         }
 
-        return current;
+        // The head maps every step to the horizon; the forecast is the last step's, which has seen the whole window.
+        return LastTimeStep(current);
     }
 
     /// <summary>

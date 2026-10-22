@@ -298,7 +298,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.LookbackWindow;
         _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _hiddenSize = options.HiddenSize;
         _numHeads = options.NumAttentionHeads;
         _numLayers = options.NumLayers;
@@ -350,7 +350,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.LookbackWindow;
         _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _hiddenSize = options.HiddenSize;
         _numHeads = options.NumAttentionHeads;
         _numLayers = options.NumLayers;

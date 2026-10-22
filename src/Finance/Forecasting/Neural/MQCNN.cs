@@ -278,7 +278,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _quantiles = options.Quantiles;
         _encoderChannels = options.EncoderChannels;
         _decoderChannels = options.DecoderChannels;
@@ -328,7 +328,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _quantiles = options.Quantiles;
         _encoderChannels = options.EncoderChannels;
         _decoderChannels = options.DecoderChannels;

@@ -452,8 +452,9 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         }
         else if (_useNativeMode)
         {
+            // One series per token stream: every variate is forecast by the same single-series decoder (S3).
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimerLayers(
-                Architecture, _contextLength, _forecastHorizon, _numFeatures,
+                Architecture, _contextLength, _forecastHorizon, numFeatures: 1,
                 _patchLength, _patchStride, _hiddenDimension, _numLayers, _numHeads, _dropout));
 
             ExtractLayerReferences();
@@ -811,35 +812,75 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         // RevIN forward: normalize the context so the decoder sees a zero-mean
         // unit-std series, then restore the level after the head so distinct
         // input scales produce distinct forecasts (Kim et al. 2022).
-        var current = ApplyInstanceNormalization(input);
+        var series = SqueezeUnivariateFeatureAxis(input);
 
         // The patch ReshapeLayer needs a leading batch axis; a bare rank-1
         // context [contextLength] would be misread as a contextLength-row batch.
         bool addedBatchDim = false;
-        if (current.Rank == 1)
+        if (series.Rank == 1)
         {
-            current = current.Reshape(new[] { 1, current.Length });
+            series = series.Reshape(new[] { 1, series.Length });
             addedBatchDim = true;
         }
 
-        foreach (var layer in Layers)
+        // Channel independence (the S3 format, Liu et al. 2024 Sec. 3): a multivariate context [batch, steps, variates]
+        // is forecast as batch * variates single series by the one decoder, then reassembled. Each series is normalized
+        // on its own, so its forecast comes back on its own scale.
+        int batchSize = series.Shape[0];
+        int variates = series.Rank == 3 ? series.Shape[2] : 1;
+        if (series.Rank == 3)
         {
-            current = layer.Forward(current);
+            series = Engine.Reshape(Engine.TensorPermute(series, new[] { 0, 2, 1 }).Contiguous(),
+                new[] { batchSize * variates, series.Shape[1] });
         }
 
-        // The per-patch head + Flatten produce [B, numPatches * patchLength] =
-        // the generated continuation. Take the last forecastHorizon values
-        // (the most-recent patches predict the furthest future). Tape-aware
-        // narrow keeps the head's gradient connected.
-        int total = current.Shape.Length >= 2 ? current.Shape[current.Shape.Length - 1] : current.Length;
-        if (total > _forecastHorizon)
+        var current = ApplyInstanceNormalization(series);
+
+        // Generative forecasting (Liu et al. 2024, Sec. 3): the decoder's head at patch i predicts patch i + 1, so only the
+        // last patch's prediction is future. Generate it, slide it into the context window, and repeat until the horizon
+        // is covered. Taking the last forecastHorizon values of one pass instead returned in-sample predictions as the
+        // forecast whenever the horizon exceeded a patch, and the end rather than the start of the next patch when it
+        // was shorter. Every step is tape-connected, so training sees the same rollout.
+        int timeAxis = current.Rank - 1;
+        int contextLength = current.Shape[timeAxis];
+        var generated = new List<Tensor<T>>();
+        int produced = 0;
+        while (produced < _forecastHorizon)
         {
-            int offset = total - _forecastHorizon;
-            current = Engine.TensorNarrow(current, current.Rank - 1, offset, _forecastHorizon);
+            var step = current;
+            foreach (var layer in Layers)
+            {
+                step = layer.Forward(step);
+            }
+
+            int total = step.Shape[step.Rank - 1];
+            var nextPatch = Engine.TensorNarrow(step, step.Rank - 1, total - _patchLength, _patchLength);
+            generated.Add(nextPatch);
+            produced += _patchLength;
+
+            if (produced < _forecastHorizon)
+            {
+                // A context of exactly one patch is replaced by the patch it predicted.
+                current = contextLength == _patchLength
+                    ? nextPatch
+                    : Engine.Concat(new[] { Engine.TensorNarrow(current, timeAxis, _patchLength, contextLength - _patchLength), nextPatch }, timeAxis);
+            }
+        }
+
+        current = generated.Count == 1 ? generated[0] : Engine.Concat(generated.ToArray(), timeAxis);
+        if (produced > _forecastHorizon)
+        {
+            current = Engine.TensorNarrow(current, timeAxis, 0, _forecastHorizon);
         }
 
         // RevIN reverse: restore the input's per-instance level/scale.
         current = DenormalizeForecast(current);
+
+        if (input.Rank == 3 && input.Shape[2] > 1)
+        {
+            current = Engine.TensorPermute(
+                Engine.Reshape(current, new[] { batchSize, variates, _forecastHorizon }), new[] { 0, 2, 1 }).Contiguous();
+        }
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = Engine.Reshape(current, new[] { current.Shape[1] });

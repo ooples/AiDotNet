@@ -327,7 +327,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _hiddenRecurrentSize = options.HiddenRecurrentSize;
         _hiddenSkipSize = options.HiddenSkipSize;
         _convolutionFilters = options.ConvolutionFilters;
@@ -380,7 +380,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 7;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 7;
         _hiddenRecurrentSize = options.HiddenRecurrentSize;
         _hiddenSkipSize = options.HiddenSkipSize;
         _convolutionFilters = options.ConvolutionFilters;

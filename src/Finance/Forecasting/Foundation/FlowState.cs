@@ -386,7 +386,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var current = ApplyInstanceNormalization(input);
+        var current = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         bool addedBatchDim = false;
         if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
 
@@ -430,7 +430,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
             return base.GetNamedLayerActivations(input);
 
         var activations = new Dictionary<string, Tensor<T>>();
-        var current = ApplyInstanceNormalization(input);
+        var current = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         if (current.Rank == 1)
             current = current.Reshape(new[] { 1, current.Length });
         for (int i = 0; i < Layers.Count; i++)

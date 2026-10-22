@@ -293,7 +293,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _stateDimension = options.StateDimension;
         _hiddenDimension = options.HiddenDimension;
         _numRnnLayers = options.NumRnnLayers;
@@ -345,7 +345,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _stateDimension = options.StateDimension;
         _hiddenDimension = options.HiddenDimension;
         _numRnnLayers = options.NumRnnLayers;

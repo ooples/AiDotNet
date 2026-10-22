@@ -394,7 +394,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         _baseUseNativeMode = true;
         _baseSequenceLength = 0;
         _basePredictionHorizon = 0;
-        _baseNumFeatures = architecture.InputSize;
+        _baseNumFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _lastTrainingLoss = NumOps.Zero;
         Options = new FinancialNeuralNetworkOptions();
     }
@@ -420,6 +420,53 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         if (numFeatures < 1)
             throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures,
                 "Number of features must be at least 1.");
+    }
+
+    #endregion
+
+    #region Forecast Head
+
+    /// <summary>
+    /// The forecast a per-step head made at the last input step: [..., steps, horizon] becomes [..., horizon].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Several models end with a dense head that maps each step's representation to the whole forecast horizon, so the
+    /// head runs at every input step and returns one forecast per step. The forecast is the one made at the last step,
+    /// whose representation has seen the whole context (a causal convolution or recurrence ends there, and TS2Vec,
+    /// Yue et al. 2022 Sec. 4.2, forecasts from the last timestamp's representation). Returning every step instead gave
+    /// an output as long as the input rather than the horizon.
+    /// </para>
+    /// <para>The narrow is recorded on the gradient tape, so the training forward can use it too.</para>
+    /// </remarks>
+    protected Tensor<T> LastTimeStep(Tensor<T> perStep)
+    {
+        if (perStep is null) throw new ArgumentNullException(nameof(perStep));
+        if (perStep.Rank < 2) return perStep;
+        int axis = perStep.Rank - 2;
+        var shape = perStep._shape;
+        var last = Engine.TensorNarrow(perStep, axis, shape[axis] - 1, 1);
+        var squeezed = new int[shape.Length - 1];
+        for (int i = 0, j = 0; i < shape.Length; i++)
+            if (i != axis) squeezed[j++] = shape[i];
+        return Engine.Reshape(last, squeezed);
+    }
+
+    /// <summary>
+    /// A univariate series in the published [batch, steps, 1] form as the [batch, steps] vector a model whose dense layers
+    /// read the whole series at once expects; any other input is returned unchanged.
+    /// </summary>
+    /// <remarks>
+    /// The base contract publishes [batch, SequenceLength, NumFeatures]. A model that projects the whole context in one
+    /// dense layer, given that rank-3 form, would apply the layer to the one-wide feature axis at every step and return a
+    /// forecast per step. The reshape is recorded on the gradient tape.
+    /// </remarks>
+    protected Tensor<T> SqueezeUnivariateFeatureAxis(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        return input.Rank == 3 && input.Shape[2] == 1
+            ? Engine.Reshape(input, new[] { input.Shape[0], input.Shape[1] })
+            : input;
     }
 
     #endregion

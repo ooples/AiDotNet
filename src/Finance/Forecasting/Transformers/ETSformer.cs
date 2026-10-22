@@ -271,7 +271,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.SequenceLength;
         _predictionHorizon = options.PredictionHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _modelDimension = options.ModelDimension;
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
@@ -321,7 +321,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.SequenceLength;
         _predictionHorizon = options.PredictionHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _modelDimension = options.ModelDimension;
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;

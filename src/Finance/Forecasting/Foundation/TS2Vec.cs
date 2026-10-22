@@ -398,7 +398,7 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
+        var normalized = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         var current = normalized;
 
         bool addedBatchDim = false;

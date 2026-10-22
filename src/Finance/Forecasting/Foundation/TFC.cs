@@ -371,7 +371,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ComputeContrastiveLossTape(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
+        var normalized = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         var timeCurrent = normalized;
         if (timeCurrent.Rank == 1)
             timeCurrent = Engine.Reshape(timeCurrent, new[] { 1, timeCurrent.Length });
@@ -452,7 +452,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     private T ComputeContrastiveLoss(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
+        var normalized = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         var timeCurrent = normalized;
         if (timeCurrent.Rank == 1) timeCurrent = timeCurrent.Reshape(new[] { 1, timeCurrent.Length });
 
@@ -701,7 +701,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         // fused plan, class-field capture at trace time would freeze the trace-batch
         // stats; tensor-threaded stats re-execute on every replay. The abstract
         // override caches them for external ApplyInstanceNormalization callers.
-        var (normalized, mean, std) = NormalizeWithStats(input);
+        var (normalized, mean, std) = NormalizeWithStats(SqueezeUnivariateFeatureAxis(input));
         _revinMeanTensor = mean;
         _revinStdTensor = std;
         var current = normalized;
