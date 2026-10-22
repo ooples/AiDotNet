@@ -7459,11 +7459,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>
     /// Applies the seed of the options a derived model returns from <see cref="GetOptions"/>, for the layer
     /// initialization scope's deferral (see the constructor). Returns <c>false</c> while the model has no options of
-    /// its own yet, and <c>true</c> once it has applied their seed or found none.
+    /// its own yet, and <c>true</c> once it has applied their seed, found none, or already holds layers.
     /// </summary>
     private bool TryApplyConstructionOptionsSeed()
     {
-        if (_optionsSeed is not null)
+        // The Options setter's rule: a seed applies only while no layer exists yet. A model that already holds layers
+        // has finished building them, and a layer asking now belongs to something constructed after it on this
+        // thread (a standalone backbone after a detector), which must not inherit this model's seed.
+        if (_optionsSeed is not null || (_layers is not null && _layers.Count > 0))
             return true;
         if (GetOptions() is not { } own || ReferenceEquals(own, _modelOptions))
             return false;
