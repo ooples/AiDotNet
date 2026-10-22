@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly DiffCutSegmentationOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only DiffCut's OWN configuration lives here. _height, _width, _channels, _numClasses,

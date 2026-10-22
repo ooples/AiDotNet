@@ -52,9 +52,6 @@ public partial class DKM<T> : OpticalFlowBase<T>
 {
     private readonly DKMOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _numFeatures;
     private int _numLayers;
     private ConvolutionalLayer<T>? _featureExtract;

@@ -75,9 +75,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly SiameseNeuralNetworkOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         /// <summary>

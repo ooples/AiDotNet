@@ -67,19 +67,6 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegNeXtOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this SegNeXt model.
-    /// </summary>
-    /// <returns>The <see cref="SegNeXtOptions"/> used to configure this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control how the model behaves, including the random seed
-    /// for reproducibility. This returns the options that were passed in when creating the model,
-    /// or the defaults if none were provided.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only SegNeXt's OWN configuration lives here. _height, _width, _channels, _numClasses,

@@ -46,7 +46,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ResearchPaper("CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition", "https://arxiv.org/abs/1905.11235", Year = 2020, Authors = "Dong and Xu")]
 public partial class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly CIFEncoderOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly CIFEncoderOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
@@ -60,6 +60,7 @@ public partial class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new CIFEncoderOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -88,6 +89,7 @@ public partial class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new CIFEncoderOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;

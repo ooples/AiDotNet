@@ -52,8 +52,6 @@ public partial class Vocos<T> : VocoderBase<T>
 {
     private readonly VocosOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -66,6 +64,7 @@ public partial class Vocos<T> : VocoderBase<T>
         : base(architecture)
     {
         _options = options ?? new VocosOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -87,6 +86,7 @@ public partial class Vocos<T> : VocoderBase<T>
         : base(architecture)
     {
         _options = options ?? new VocosOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(

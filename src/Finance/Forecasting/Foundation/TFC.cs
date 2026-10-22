@@ -101,9 +101,6 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly TFCOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _hiddenDimension;

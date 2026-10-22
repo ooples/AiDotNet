@@ -84,9 +84,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
     {
         private readonly DeepRitzMethodOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly Func<T[], T[], T[,], T> _energyFunctional;
         private readonly Func<T[], bool>? _boundaryCheck;
         private readonly Func<T[], T[]>? _boundaryValue;

@@ -52,9 +52,6 @@ public partial class SEARAFT<T> : OpticalFlowBase<T>
 {
     private readonly SEARAFTOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _numFeatures;
     private int _numLayers;
     private ConvolutionalLayer<T>? _featureExtract;

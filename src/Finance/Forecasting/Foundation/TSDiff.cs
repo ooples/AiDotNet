@@ -82,8 +82,6 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
     // Options.Seed when set, so a seeded model trains reproducibly while every step still draws fresh values.
     private readonly Random _trainingRandom = RandomHelper.CreateSecureRandom();
 
-    public override ModelOptions GetOptions() => _options;
-
     private int _sequenceLength;
     private int _forecastHorizon;
     private int _hiddenDimension;

@@ -56,7 +56,6 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private bool _useNativeMode;
     private bool _disposed;
 
-    public override ModelOptions GetOptions() => _options;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
     public bool SupportsWordTimestamps => false;
@@ -65,6 +64,7 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -85,6 +85,7 @@ public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new ContextNetOptions();
+        Options = _options;
         _options.Validate();
         _useNativeMode = true;
         // Global-norm gradient clipping. The default-constructed optimizer applied no

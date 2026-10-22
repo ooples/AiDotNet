@@ -77,9 +77,6 @@ public partial class VFIformer<T> : FrameInterpolationBase<T>
 {
     private readonly VFIformerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -97,6 +94,7 @@ public partial class VFIformer<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new VFIformerOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
         _options.ModelPath = modelPath;
@@ -117,6 +115,7 @@ public partial class VFIformer<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new VFIformerOptions();
+        Options = _options;
         _useNativeMode = true;
         // Wire the paper's configured learning rate (VFIformerOptions.LearningRate = 2e-4,
         // matching the paper's Adam setup) into the optimizer. Previously this constructed a

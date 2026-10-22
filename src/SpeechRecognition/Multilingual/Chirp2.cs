@@ -54,14 +54,14 @@ public partial class Chirp2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </remarks>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
-    private readonly Chirp2Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly Chirp2Options _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public Chirp2(NeuralNetworkArchitecture<T> architecture, string modelPath, Chirp2Options? options = null) : base(architecture) { _options = options ?? new Chirp2Options(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
-    public Chirp2(NeuralNetworkArchitecture<T> architecture, Chirp2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Chirp2Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
+    public Chirp2(NeuralNetworkArchitecture<T> architecture, string modelPath, Chirp2Options? options = null) : base(architecture) { _options = options ?? new Chirp2Options(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
+    public Chirp2(NeuralNetworkArchitecture<T> architecture, Chirp2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Chirp2Options(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Chirp 2's enhanced USM encoder.

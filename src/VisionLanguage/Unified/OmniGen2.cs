@@ -63,8 +63,6 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
 {
     private readonly OmniGen2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -79,6 +77,7 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         : base(architecture)
     {
         _options = options ?? new OmniGen2Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -101,6 +100,7 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         : base(architecture)
     {
         _options = options ?? new OmniGen2Options();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;

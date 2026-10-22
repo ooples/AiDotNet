@@ -50,8 +50,6 @@ public partial class PriorGrad<T> : VocoderBase<T>
 {
     private readonly PriorGradOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _preserveSuppliedOptimizer;
     private bool _useNativeMode;
@@ -65,6 +63,7 @@ public partial class PriorGrad<T> : VocoderBase<T>
         : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
     {
         _options = options ?? new PriorGradOptions();
+        Options = _options;
         _useNativeMode = false;
         _preserveSuppliedOptimizer = false;
         base.SampleRate = _options.SampleRate;
@@ -87,6 +86,7 @@ public partial class PriorGrad<T> : VocoderBase<T>
         : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
     {
         _options = options ?? new PriorGradOptions();
+        Options = _options;
         _useNativeMode = true;
         _preserveSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer ?? CreateDefaultOptimizer();

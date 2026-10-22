@@ -72,9 +72,6 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the memory (number of memory slots).
     /// </summary>

@@ -60,9 +60,6 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly ConditionalGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly List<T> _generatorLosses = new List<T>();
 
     /// <summary>

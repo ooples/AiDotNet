@@ -66,8 +66,6 @@ public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     private bool _useNativeMode;
     private bool _disposed;
 
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="VITS{T}"/> class in ONNX inference mode.
     /// </summary>
@@ -82,6 +80,7 @@ public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new VITSOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -110,6 +109,7 @@ public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new VITSOptions();
+        Options = _options;
         _useNativeMode = true;
         _usesDefaultOptimizer = optimizer is null;
         _optimizer = optimizer ?? CreatePaperOptimizer();

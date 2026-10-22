@@ -73,7 +73,6 @@ public partial class GroundedSAM2<T> : Common.OpenVocabSegmentationBase<T>
         => SpatialStrideContract(inputRank, 1);
 
     private readonly GroundedSAM2Options _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only GroundedSAM2's OWN configuration lives here. _height, _width, _channels, _numClasses,

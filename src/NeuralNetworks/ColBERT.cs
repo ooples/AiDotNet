@@ -58,9 +58,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly ColBERTOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         /// <summary>

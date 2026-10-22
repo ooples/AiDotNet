@@ -54,14 +54,14 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
                 Source = "Kim et al. 2022, Sec. A.1: warmup for 20 epochs, hold the peak for a further 160, and decay with d = 1, fixed across all experiments; over the 500-epoch run that is 4% warmup and 32% hold. Peak rate 2e-3 for the small variant (1.5e-3 medium, 1e-3/5e-4 large), batch size 1024. The small variant rate is used because this type selects no variant. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly SqueezeformerOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly SqueezeformerOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => true;
 
-    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, string modelPath, SqueezeformerOptions? options = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeSqueezeformerLayers(); }
-    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, SqueezeformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = true; _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, string modelPath, SqueezeformerOptions? options = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeSqueezeformerLayers(); }
+    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, SqueezeformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); Options = _options; _useNativeMode = true; _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
             optimizer ?? CreateSqueezeformerOptimizer()); base.SetBaseTrainOptimizer(_optimizer); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeSqueezeformerLayers(); }
 
     /// <summary>

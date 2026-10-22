@@ -70,9 +70,6 @@ public partial class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     private readonly bool _allowShortSelling;
     private readonly double _maxWeight;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #endregion
 
     #region Interface Properties

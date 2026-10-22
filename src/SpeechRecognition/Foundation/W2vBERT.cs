@@ -55,14 +55,14 @@ namespace AiDotNet.SpeechRecognition.Foundation;
                         + "records.")]
 public partial class W2vBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly W2vBERTOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly W2vBERTOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public W2vBERT(NeuralNetworkArchitecture<T> architecture, string modelPath, W2vBERTOptions? options = null) : base(architecture) { _options = options ?? new W2vBERTOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public W2vBERT(NeuralNetworkArchitecture<T> architecture, W2vBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new W2vBERTOptions(); _useNativeMode = true; _optimizer = optimizer
+    public W2vBERT(NeuralNetworkArchitecture<T> architecture, string modelPath, W2vBERTOptions? options = null) : base(architecture) { _options = options ?? new W2vBERTOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public W2vBERT(NeuralNetworkArchitecture<T> architecture, W2vBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new W2vBERTOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 

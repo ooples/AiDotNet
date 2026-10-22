@@ -78,8 +78,6 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly MGTSDOptions<T> _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _hiddenDimension;

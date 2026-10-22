@@ -156,9 +156,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly DeepAROptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The hidden size of LSTM cells.
     /// </summary>

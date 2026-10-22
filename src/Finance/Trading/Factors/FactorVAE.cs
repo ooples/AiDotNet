@@ -122,9 +122,6 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// </summary>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Declares the cross-sectional geometry a factor model accepts.
     /// </summary>

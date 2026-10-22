@@ -64,9 +64,6 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
 {
     private readonly SignatureInformedTransformerOptions<T> _options;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Gets the path-signature transform, including the pairwise signed-area (lead-lag) measure.</summary>
     public PathSignatureTransform<T> Signatures { get; }
 
@@ -106,6 +103,7 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         : base(resolvedArchitecture, options.NumAssets, resolvedArchitecture.CalculatedInputSize, lossFunction)
     {
         _options = options;
+        Options = _options;
 
         Signatures = new PathSignatureTransform<T>(options.SignatureLevel);
         Attention = new SignatureAugmentedAttention<T>();

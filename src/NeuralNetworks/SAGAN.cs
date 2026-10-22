@@ -68,9 +68,6 @@ public partial class SAGAN<T> : GenerativeAdversarialNetwork<T>
     private readonly int _discriminatorChannels;
     private readonly int[] _attentionLayers;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Gets the size of the latent (noise) vector input to the generator.</summary>
     public int LatentSize => _latentSize;
 

@@ -70,9 +70,6 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
 {
     private readonly DocFormerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

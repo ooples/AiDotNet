@@ -78,8 +78,6 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
     private readonly ILossFunction<T> _lossFunction;
     private readonly TimeDiffOptions<T> _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _hiddenDimension;

@@ -62,9 +62,6 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
 {
     private readonly FlowFormerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

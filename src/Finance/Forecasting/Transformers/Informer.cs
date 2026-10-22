@@ -136,9 +136,6 @@ public partial class Informer<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly InformerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _sequenceLength;
     private int _labelLength;
     private int _predictionHorizon;

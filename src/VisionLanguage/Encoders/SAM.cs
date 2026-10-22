@@ -67,8 +67,6 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SAMOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -81,6 +79,7 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         : base(architecture)
     {
         _options = options ?? new SAMOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -102,9 +101,11 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         : base(architecture)
     {
         _options = options ?? new SAMOptions();
+        Options = _options;
         if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0)
         {
             _options = new SAMOptions(_options) { ImageSize = architecture.InputHeight };
+            Options = _options;
         }
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
