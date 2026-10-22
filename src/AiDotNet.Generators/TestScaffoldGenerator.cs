@@ -167,11 +167,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     private static readonly string[] ExcludedClassNames = new[]
     {
-        // A placeholder network that does not implement the VAE contract it declares, found by VAEModelTestBase
-        // (#2139). TemporalInterpolationVAE is dense layers over the channel axis: no convolution, no spatial or
-        // temporal compression, although it reports DownsampleFactor 8. It is being rebuilt from its paper and leaves
-        // this list when that lands. (Causal3DVAE left it as CogVideoX's causal 3D VAE, AudioVAE as AudioLDM's VAE.)
-        "TemporalInterpolationVAE",
 
         // A memory buffer for continual learning, not a model: its Predict throws
         // NotSupportedException("ExperienceReplayBuffer is a memory buffer, not a predictor.") by
@@ -468,34 +463,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Generating the fixture is what found these: both models build their sampling RNG with
-    /// <c>RandomHelper.CreateSecureRandom()</c> and never read <c>ModelOptions.Seed</c>
-    /// (<c>src/Finance/Probabilistic/CSDI.cs</c> lines 258 and 303,
-    /// <c>src/Finance/Probabilistic/TSDiff.cs</c> lines 272 and 317), and that stream is drawn
-    /// from inside the reverse-diffusion path, so two predictions from one model disagree.
+    /// A withheld model stays in <c>DefectBaselines.UntestedModels</c>, so AIDN040 keeps reporting it as
+    /// needing coverage, and the reason is recorded rather than silent - which was the actual gap in
+    /// #2138. Withholding a fixture that cannot pass is not the same as the old bare <c>continue</c>:
+    /// nothing here is hidden from the residual.
     /// </para>
     /// <para>
-    /// They stay in <c>DefectBaselines.UntestedModels</c>, so AIDN040 keeps reporting them as
-    /// needing coverage, and the reason is now recorded rather than silent - which was the actual
-    /// gap in #2138. Withholding a fixture that cannot pass is not the same as the old bare
-    /// <c>continue</c>: nothing here is hidden from the residual.
+    /// Empty now: the two entries it held, the probabilistic CSDI and TSDiff, drew their samples from
+    /// a generator that never read <c>ModelOptions.Seed</c>, so two predictions from one model
+    /// disagreed. Both now restart their sampling stream at the seed on every forecast (#2091).
     /// </para>
     /// </remarks>
     private static readonly System.Collections.Generic.Dictionary<string, string> NamesakeFixtureWithheld =
         new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
         {
-            {
-                "global::AiDotNet.Finance.Probabilistic.CSDI<T>",
-                "its sampling RNG ignores ModelOptions.Seed, so Predict_ShouldBeDeterministic, "
-                + "Clone_ShouldProduceIdenticalOutput, BatchConsistency_SingleMatchesBatch and "
-                + "MoreData_ShouldNotDegrade all fail on the generated fixture"
-            },
-            {
-                "global::AiDotNet.Finance.Probabilistic.TSDiff<T>",
-                "its sampling RNG ignores ModelOptions.Seed, so Predict_ShouldBeDeterministic, "
-                + "Clone_ShouldProduceIdenticalOutput and BatchConsistency_SingleMatchesBatch all "
-                + "fail on the generated fixture"
-            },
         };
 
     /// <summary>
@@ -705,6 +686,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             ["Causal3DVAE"] = "inputChannels: 3, latentChannels: 4, blockOutChannels: new[] { 8, 8, 16 }, layersPerBlock: 1, normGroups: 4, temporalCompression: 4, seed: 1",
             ["AudioVAE"] = "inputChannels: 1, latentChannels: 8, blockOutChannels: new[] { 8, 16, 16 }, layersPerBlock: 1, normGroups: 4, seed: 1",
+            ["TemporalInterpolationVAE"] = "inputChannels: 3, latentChannels: 4, blockOutChannels: new[] { 8, 16 }, layersPerBlock: 2, normGroups: 4, seed: 1",
             ["AutoencoderKL"] = "inputChannels: 3, latentChannels: 4, baseChannels: 8, channelMults: new[] { 1, 2, 4, 4 }, numResBlocks: 1, numGroups: 4, seed: 1",
         };
 
@@ -4105,6 +4087,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // NeuralNetwork and were rejected for not implementing INeuralNetworkModel.
         bool extendsObjectDetector = false, extendsTextDetector = false, extendsOcr = false;
 
+        // #2147: a model that sizes its layers from its options declares SizesLayersFromOptions (itself or through a base
+        // such as FinancialModelBase); NeuralNetworkBase's own declaration is the default, not a declaration.
+        bool sizesLayersFromOptions = false;
+        for (INamedTypeSymbol? declaring = modelClass; declaring is not null; declaring = declaring.BaseType)
+        {
+            if (declaring.Name != "NeuralNetworkBase" && declaring.GetMembers("SizesLayersFromOptions").Length > 0)
+            {
+                sizesLayersFromOptions = true;
+                break;
+            }
+        }
+
         var baseType = modelClass.BaseType;
         while (baseType is not null)
         {
@@ -4478,6 +4472,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsVideoNeuralNetworkBase = extendsVideoNN,
             ExtendsTtsModelBase = extendsTts,
             ExtendsFinancialModelBase = extendsFinancial,
+            SizesLayersFromOptions = sizesLayersFromOptions,
             ExtendsNERNeuralNetworkBase = extendsNER,
             ExtendsCodeModelBase = extendsCode,
             ExtendsVideoDiffusionModelBase = extendsVideoDiffusion,
@@ -5020,6 +5015,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         return null;
     }
+
+    private static readonly System.Text.RegularExpressions.Regex StatedOutputSize =
+        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*\d+|outputSize:\s*\d+,\s*",
+            System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
+
+    /// <summary>Removes every <c>outputSize: n</c> argument from a generated constructor expression (#2147).</summary>
+    private static string OmitStatedOutputSize(string expression) => StatedOutputSize.Replace(expression, string.Empty);
 
     private static bool InheritsFromAnyExcludedBase(INamedTypeSymbol type)
     {
@@ -13529,6 +13531,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             factoryBody = $"        => {constructorExpr};";
         }
 
+        // #2147: a model sized from its options refuses an architecture stating an OutputSize it does not produce, and
+        // the generic fixture states 4 (or a per-model guess) for every model. The output is the options', so the
+        // fixture leaves it unset, which is never refused. The input size stays: a one-dimensional architecture
+        // requires one, and the per-model input sizes above are the options' own.
+        if (model.SizesLayersFromOptions)
+        {
+            constructorExpr = OmitStatedOutputSize(constructorExpr);
+            factoryBody = OmitStatedOutputSize(factoryBody);
+        }
+
         if (family == TestFamily.GraphNN)
         {
             // Graph models require explicit structure (strict PyTorch-Geometric contract); the scaffold
@@ -20596,6 +20608,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsLatentDiffusionModelBase { get; set; }
         public bool ExtendsTtsModelBase { get; set; }
         public bool ExtendsFinancialModelBase { get; set; }
+        /// <summary>The model sizes its layers from its options and refuses an architecture stating other sizes (#2147).</summary>
+        public bool SizesLayersFromOptions { get; set; }
         public bool ExtendsNERNeuralNetworkBase { get; set; }
         public bool ExtendsCodeModelBase { get; set; }
         // Phase B: Leaf-level hierarchy
