@@ -6,11 +6,13 @@ using AiDotNet.Tensors.Engines.Autodiff;
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>The sizes of a T5 encoder–decoder (Raffel et al. 2020; Hugging Face <c>T5Config</c> names).</summary>
+/// <param name="SeparateEncoderEmbedding">The encoder reads its own token table (Hugging Face's
+/// <c>encoder.embed_tokens</c> untied from <c>shared</c>) instead of the decoder's, so the two can train apart.</param>
 internal sealed record T5Configuration(
     int VocabularySize, int ModelDim, int FeedForwardDim, int KeyValueDim, int Heads, int EncoderLayers,
     int DecoderLayers, int RelativeBuckets = 32, int RelativeMaxDistance = 128, double Dropout = 0.1,
     double LayerNormEpsilon = 1e-6, int DecoderStartTokenId = 0, int EndTokenId = 2, bool GatedGelu = false,
-    bool TieWordEmbeddings = true, int PadTokenId = 0);
+    bool TieWordEmbeddings = true, int PadTokenId = 0, bool SeparateEncoderEmbedding = false);
 
 /// <summary>
 /// The relative position buckets of T5 (Raffel et al. 2020, §2.1; Hugging Face <c>T5Attention._relative_position_bucket</c>):
@@ -53,14 +55,13 @@ internal sealed class T5Attention<T>
     private readonly IEngine _engine;
     private readonly int _heads;
     private readonly int _keyValueDim;
-    private readonly double _dropout;
 
     public T5Attention(IEngine engine, List<LayerBase<T>> layers, int modelDim, int heads, int keyValueDim, double dropout)
     {
         _engine = engine;
         _heads = heads;
         _keyValueDim = keyValueDim;
-        _dropout = dropout;
+        DropoutRate = dropout;
         int inner = heads * keyValueDim;
         Query = Own(layers, new BiasFreeLinearLayer<T>(modelDim, inner));
         Key = Own(layers, new BiasFreeLinearLayer<T>(modelDim, inner));
@@ -72,6 +73,9 @@ internal sealed class T5Attention<T>
     public BiasFreeLinearLayer<T> Key { get; }
     public BiasFreeLinearLayer<T> Value { get; }
     public BiasFreeLinearLayer<T> Output { get; }
+
+    /// <summary>The dropout on the attention weights while training.</summary>
+    internal double DropoutRate { get; set; }
 
     internal static TLayer Own<TLayer>(List<LayerBase<T>> layers, TLayer layer) where TLayer : LayerBase<T>
     {
@@ -92,13 +96,13 @@ internal sealed class T5Attention<T>
         var scores = _engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 }));                       // [H, Lq, Lk]
         if (bias is not null) scores = _engine.TensorAdd(scores, bias);
         var weights = _engine.Softmax(scores, axis: 2);
-        if (training && _dropout > 0) weights = Dropout(weights, random);
+        if (training && DropoutRate > 0) weights = Dropout(weights, random);
         var context = _engine.BatchMatMul(weights, v);                                                         // [H, Lq, dkv]
         var merged = _engine.Reshape(_engine.TensorPermute(context, new[] { 1, 0, 2 }), new[] { lq, _heads * _keyValueDim });
         return Output.Forward(merged);
     }
 
-    private Tensor<T> Dropout(Tensor<T> x, Random random) => T5Seq2Seq<T>.Dropout(_engine, x, _dropout, random);
+    private Tensor<T> Dropout(Tensor<T> x, Random random) => T5Seq2Seq<T>.Dropout(_engine, x, DropoutRate, random);
 }
 
 /// <summary>A T5 block (Hugging Face <c>T5Block</c>): pre-norm residual self-attention, cross-attention in the decoder,
@@ -108,7 +112,7 @@ internal sealed class T5Attention<T>
 internal sealed class T5Block<T>
 {
     private readonly IEngine _engine;
-    private readonly double _dropout;
+    private double _dropout;
 
     public T5Block(IEngine engine, List<LayerBase<T>> layers, T5Configuration c, bool decoder)
     {
@@ -138,6 +142,14 @@ internal sealed class T5Block<T>
     /// <summary><c>wi_1</c>, the gated feed-forward's linear branch; null in T5 v1.0.</summary>
     public BiasFreeLinearLayer<T>? WiLinear { get; }
     public BiasFreeLinearLayer<T> Wo { get; }
+
+    /// <summary>Sets the block's dropout: its sublayer outputs, feed-forward hidden layer and attention weights.</summary>
+    internal void SetDropout(double rate)
+    {
+        _dropout = rate;
+        SelfAttention.DropoutRate = rate;
+        if (CrossAttention is not null) CrossAttention.DropoutRate = rate;
+    }
 
     public Tensor<T> Forward(Tensor<T> h, Tensor<T> selfBias, Tensor<T>? memory, Tensor<T>? crossBias, bool training, Random random)
     {
@@ -178,8 +190,11 @@ internal sealed class T5Seq2Seq<T>
     {
         _engine = engine;
         Configuration = configuration;
+        DropoutRate = configuration.Dropout;
         var c = configuration;
         Shared = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.VocabularySize, c.ModelDim));
+        if (c.SeparateEncoderEmbedding)
+            EncoderEmbedding = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.VocabularySize, c.ModelDim));
         for (int i = 0; i < c.EncoderLayers; i++) Encoder.Add(new T5Block<T>(engine, layers, c, decoder: false));
         EncoderBias = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.RelativeBuckets, c.Heads));
         EncoderFinalNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
@@ -200,6 +215,11 @@ internal sealed class T5Seq2Seq<T>
 
     public T5Configuration Configuration { get; }
     public TiedEmbeddingLayer<T> Shared { get; }
+
+    /// <summary>The encoder's own token table (<see cref="T5Configuration.SeparateEncoderEmbedding"/>); null when the
+    /// encoder reads <see cref="Shared"/>.</summary>
+    public TiedEmbeddingLayer<T>? EncoderEmbedding { get; }
+
     public List<T5Block<T>> Encoder { get; } = new();
     public List<T5Block<T>> Decoder { get; } = new();
     /// <summary>The encoder's relative attention bias table <c>[buckets, heads]</c> (Hugging Face
@@ -263,7 +283,7 @@ internal sealed class T5Seq2Seq<T>
     public Tensor<T> Encode(Tensor<T> ids, bool training, Random random, bool[]? mask = null)
     {
         int length = ids.Length;
-        var h = Drop(Shared.Forward(ids), training, random);
+        var h = Drop((EncoderEmbedding ?? Shared).Forward(ids), training, random);
         var bias = PositionBias(EncoderBias, length, length, bidirectional: true, causal: false);
         if (mask is not null) bias = _engine.TensorAdd(bias, MaskBias(length, mask));
         foreach (var block in Encoder) h = block.Forward(h, bias, null, null, training, random);
@@ -295,11 +315,14 @@ internal sealed class T5Seq2Seq<T>
     /// ignored: it adds no term, and the decoder reads the pad token in its place. With
     /// <paramref name="freezeEncoder"/> the encoder runs in inference mode outside the tape, so only the decoder (and
     /// the embedding rows it reads) learn. <paramref name="inputMask"/> masks encoder positions as in
-    /// <see cref="Encode"/>.
+    /// <see cref="Encode"/>. A <paramref name="labelSmoothing"/> ε mixes each target with the uniform distribution, as
+    /// PyTorch's <c>CrossEntropyLoss(label_smoothing=ε)</c> does: (1 − ε)·(−log p_label) + ε·mean_v(−log p_v).
     /// </summary>
     public Tensor<T> Loss(Tensor<T> inputIds, int[] labels, bool training, Random random, bool freezeEncoder = false,
-        bool[]? inputMask = null)
+        bool[]? inputMask = null, double labelSmoothing = 0.0)
     {
+        if (labelSmoothing < 0 || labelSmoothing >= 1)
+            throw new ArgumentOutOfRangeException(nameof(labelSmoothing), "Label smoothing lies in [0, 1).");
         Tensor<T> memory;
         if (freezeEncoder)
         {
@@ -319,8 +342,15 @@ internal sealed class T5Seq2Seq<T>
         int counted = 0;
         foreach (int label in labels) if (label >= 0) counted++;
         if (counted == 0) throw new ArgumentException("Every label is ignored.", nameof(labels));
+        int vocabulary = logits.Shape[1];
+        var uniform = NumOps.FromDouble(-labelSmoothing / vocabulary / counted);
         for (int i = 0; i < labels.Length; i++)
-            if (labels[i] >= 0) target[i, labels[i]] = NumOps.FromDouble(-1.0 / counted);
+        {
+            if (labels[i] < 0) continue;
+            if (labelSmoothing > 0)
+                for (int v = 0; v < vocabulary; v++) target[i, v] = uniform;
+            target[i, labels[i]] = NumOps.FromDouble((-(1.0 - labelSmoothing) - labelSmoothing / vocabulary) / counted);
+        }
         return _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, target), new[] { 0, 1 }, keepDims: false);
     }
 
@@ -365,6 +395,61 @@ internal sealed class T5Seq2Seq<T>
         return sequence;
     }
 
+    /// <summary>
+    /// Beam search from encoder states: each step extends every unfinished beam by its <paramref name="beamSize"/> most
+    /// likely next tokens and keeps the <paramref name="beamSize"/> candidates of highest summed log-probability, with no
+    /// length penalty. A beam that emits the end token is finished: it is not extended and competes with its final
+    /// score. The search stops when every kept beam has finished or after <paramref name="maxNewTokens"/>, and returns,
+    /// as <see cref="Sample"/> does, the prefix followed by the best beam's tokens, without the end token.
+    /// </summary>
+    /// <param name="allowed">When given, <c>allowed(token, step)</c> decides which tokens step <c>step</c> may emit; the
+    /// log-probabilities are normalized over the allowed tokens, as a Hugging Face logits processor leaves them.</param>
+    public List<int> BeamSearch(Tensor<T> memory, bool[]? memoryMask, IReadOnlyList<int> decoderPrefix, int beamSize,
+        int maxNewTokens, Func<int, int, bool>? allowed = null)
+    {
+        if (beamSize < 1) throw new ArgumentOutOfRangeException(nameof(beamSize), "A beam search keeps at least one beam.");
+        var unused = new Random(0);
+        var start = new List<int> { Configuration.DecoderStartTokenId };
+        start.AddRange(decoderPrefix);
+        var beams = new List<(List<int> Sequence, double Score, bool Finished)> { (start, 0.0, false) };
+        for (int step = 0; step < maxNewTokens && beams.Any(b => !b.Finished); step++)
+        {
+            var candidates = new List<(List<int> Sequence, double Score, bool Finished)>();
+            foreach (var beam in beams)
+            {
+                if (beam.Finished) { candidates.Add(beam); continue; }
+                var ids = new Tensor<T>(new[] { beam.Sequence.Count });
+                for (int i = 0; i < beam.Sequence.Count; i++) ids[i] = NumOps.FromDouble(beam.Sequence[i]);
+                var logits = Decode(ids, memory, training: false, unused, memoryMask);
+                int vocabulary = logits.Shape[1], last = beam.Sequence.Count - 1;
+                var scores = new double[vocabulary];
+                double max = double.NegativeInfinity;
+                for (int v = 0; v < vocabulary; v++)
+                {
+                    scores[v] = allowed is null || allowed(v, step) ? NumOps.ToDouble(logits[last, v]) : double.NegativeInfinity;
+                    max = Math.Max(max, scores[v]);
+                }
+                if (double.IsNegativeInfinity(max)) throw new InvalidOperationException("No token is allowed at this step.");
+                double total = 0;
+                foreach (double s in scores) if (!double.IsNegativeInfinity(s)) total += Math.Exp(s - max);
+                double logNormalizer = max + Math.Log(total);
+                var order = Enumerable.Range(0, vocabulary).Where(v => !double.IsNegativeInfinity(scores[v]))
+                    .OrderByDescending(v => scores[v]).Take(beamSize);
+                foreach (int v in order)
+                {
+                    var sequence = new List<int>(beam.Sequence) { v };
+                    candidates.Add((sequence, beam.Score + scores[v] - logNormalizer, v == Configuration.EndTokenId));
+                }
+            }
+            // A stable sort: among equal scores the earlier beam, then its more likely token, comes first.
+            beams = candidates.Select((c, i) => (c, i)).OrderByDescending(x => x.c.Score).ThenBy(x => x.i)
+                .Take(beamSize).Select(x => x.c).ToList();
+        }
+        var best = beams[0].Sequence;
+        int end = best.Count > start.Count && best[best.Count - 1] == Configuration.EndTokenId ? best.Count - 1 : best.Count;
+        return best.GetRange(1, end - 1);
+    }
+
     // Hugging Face's TopKLogitsWarper keeps every score at least the k-th largest (ties included); TopPLogitsWarper
     // then removes the tokens whose cumulative probability, accumulated from the least likely, stays at or below
     // 1 - topP (always keeping the most likely); the draw is from the softmax of what is left.
@@ -407,7 +492,19 @@ internal sealed class T5Seq2Seq<T>
     }
 
     private Tensor<T> Drop(Tensor<T> x, bool training, Random random) =>
-        training && Configuration.Dropout > 0 ? Dropout(_engine, x, Configuration.Dropout, random) : x;
+        training && DropoutRate > 0 ? Dropout(_engine, x, DropoutRate, random) : x;
+
+    /// <summary>The dropout while training, <see cref="T5Configuration.Dropout"/> until <see cref="SetDropout"/>.</summary>
+    public double DropoutRate { get; private set; }
+
+    /// <summary>Changes the dropout everywhere (embeddings, every block's sublayers and attention, the final norms), as a
+    /// recipe that pretrains and finetunes one model at different rates needs.</summary>
+    public void SetDropout(double rate)
+    {
+        if (rate < 0 || rate >= 1) throw new ArgumentOutOfRangeException(nameof(rate), "Dropout lies in [0, 1).");
+        DropoutRate = rate;
+        foreach (var block in Encoder.Concat(Decoder)) block.SetDropout(rate);
+    }
 
     /// <summary>
     /// Initializes the parameters as Hugging Face's <c>T5PreTrainedModel._init_weights</c> does (initializer factor 1):
@@ -439,6 +536,7 @@ internal sealed class T5Seq2Seq<T>
             Fill(attention.Output, inner, c.ModelDim, Math.Pow(inner, -0.5));
         }
         Shared.Reinitialize(() => Normal(factor));
+        EncoderEmbedding?.Reinitialize(() => Normal(factor));
         EncoderBias.Reinitialize(() => Normal(factor * Math.Pow(c.ModelDim, -0.5)));
         DecoderBias?.Reinitialize(() => Normal(factor * Math.Pow(c.ModelDim, -0.5)));
         // T5LayerNorm weights start at the factor.
@@ -506,6 +604,8 @@ internal sealed class T5Seq2Seq<T>
         }
 
         if (!encoderOnly) Shared.LoadTable(read("shared.weight", new[] { c.VocabularySize, c.ModelDim }));
+        if (!encoderOnly && EncoderEmbedding is not null)
+            EncoderEmbedding.LoadTable(read("encoder.embed_tokens.weight", new[] { c.VocabularySize, c.ModelDim }));
         for (int i = 0; i < Encoder.Count; i++)
         {
             string block = $"encoder.block.{i}.layer";
@@ -545,7 +645,7 @@ internal sealed class T5Seq2Seq<T>
         var c = Configuration;
         if (pretrainedVocabulary <= 0 || pretrainedVocabulary > c.VocabularySize)
             throw new ArgumentOutOfRangeException(nameof(pretrainedVocabulary));
-        Shared.LoadLeadingRows(read("shared.weight", new[] { pretrainedVocabulary, c.ModelDim }));
+        (EncoderEmbedding ?? Shared).LoadLeadingRows(read("shared.weight", new[] { pretrainedVocabulary, c.ModelDim }));
         LoadHuggingFaceWeights(read, encoderOnly: true);
     }
 }
