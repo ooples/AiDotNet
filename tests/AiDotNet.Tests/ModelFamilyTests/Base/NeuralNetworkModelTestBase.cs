@@ -5990,6 +5990,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         AiDotNet.LossFunctions.LossFunctionBase<T> loss,
         Tensor<T> input, Tensor<T> target, Vector<T> parameters)
     {
+        // Each finite-difference evaluation gets its own arena. The test body holds one arena for the whole check, and
+        // an arena keeps every array it issues until it is disposed: UpdateParameters' fresh parameter tensors and the
+        // forward's activations, per evaluation. The direction-localization pass runs about 1,600 evaluations, and on
+        // DemucsNoise the live heap grew 590 MB per localized coordinate (29 GB by the end), killing the CI runner. A
+        // nested arena does not pool on dispose, so arrays it issued that stay referenced (the new weights) stay valid
+        // and the rest become collectable: the live heap holds at about 520 MB.
+        using var evaluationArena = TensorArena.Create();
         network.UpdateParameters(parameters);
         return network.EvaluateTrainingObjectiveForNumericalGradient(input, target, loss);
     }
