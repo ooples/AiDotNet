@@ -187,9 +187,7 @@ public partial class SoundStormModel<T> : AudioDiffusionModelBase<T>
             numLayers: NUM_LAYERS, numHeads: NUM_HEADS,
             patchSize: 1, contextDim: CONTEXT_DIM);
 
-        _audioVAE = audioVAE ?? new AudioVAE<T>(
-            melChannels: MEL_CHANNELS, latentChannels: LATENT_CHANNELS,
-            baseChannels: 64, numResBlocks: 2);
+        _audioVAE = audioVAE ?? new AudioVAE<T>(melBins: MEL_CHANNELS, latentChannels: LATENT_CHANNELS);
     }
 
     #endregion
