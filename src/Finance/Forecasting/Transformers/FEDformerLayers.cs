@@ -254,14 +254,21 @@ internal sealed partial class FedformerNetwork<T> : LayerBase<T>, IShapeContract
 
     // Dropout in training mode only, as nn.Dropout: a fresh inverted-dropout mask per call, multiplied in so the tape
     // records it. As DropoutLayer does, the mask seed mixes the layer's RandomSeed with a call counter, so two runs at
-    // the same seed drop the same elements.
+    // the same seed drop the same elements. The mask is drawn through CompiledStepRandom, so a compiled training plan
+    // refills it in place before every replay instead of reusing the traced step's mask.
     private Tensor<T> Drop(Tensor<T> x)
     {
         if (!IsTrainingMode || _dropout <= 0) return x;
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(x._shape, FillDropoutMask);
+        return Engine.TensorMultiply(x, mask);
+    }
+
+    private void FillDropoutMask(Tensor<T> mask)
+    {
         ulong call = unchecked((ulong)System.Threading.Interlocked.Increment(ref _dropoutCalls) - 1);
         int? seed = RandomSeed.HasValue ? unchecked((int)(((uint)RandomSeed.Value * 2654435761u) ^ (uint)call)) : (int?)null;
-        var mask = Engine.TensorDropoutMask<T>(x._shape, Ops.FromDouble(_dropout), Ops.FromDouble(1.0 / (1.0 - _dropout)), seed);
-        return Engine.TensorMultiply(x, mask);
+        var drawn = Engine.TensorDropoutMask<T>(mask._shape, Ops.FromDouble(_dropout), Ops.FromDouble(1.0 / (1.0 - _dropout)), seed);
+        drawn.AsSpan().CopyTo(mask.AsWritableSpan());
     }
 
     private long _dropoutCalls;

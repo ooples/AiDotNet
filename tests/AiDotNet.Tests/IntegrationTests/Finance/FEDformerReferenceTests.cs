@@ -6,9 +6,14 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Forecasting.Transformers;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Finance;
@@ -182,5 +187,76 @@ public class FEDformerReferenceTests
         // so the same weights forecast differently.
         Assert.Equal(a.Forecast(input).ToVector().ToArray(), b.Forecast(input).ToVector().ToArray());
         Assert.NotEqual(a.Forecast(input).ToVector().ToArray(), other.Forecast(input).ToVector().ToArray());
+    }
+
+    /// <summary>
+    /// FEDformer's dropout masks are drawn inside its one network layer, so a compiled training plan used to replay the
+    /// traced step's masks on every later step; FEDformer opted out of fused training instead. The masks now come from
+    /// CompiledStepRandom, which refills them before each replay, so the fused loss follows the eager loss step for
+    /// step. A plan replaying frozen masks drops different elements from step 2 on and diverges.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Fused_training_redraws_dropout_masks_like_the_eager_step()
+    {
+        await Task.Yield();
+        const int sequence = 16, label = 8, horizon = 4, features = 3, batch = 2;
+        FedformerNetwork<float> Build() => new(sequence, label, horizon, features, modelDimension: 8, heads: 2,
+            feedForward: 16, encoderLayers: 1, decoderLayers: 1, modes: 4, FourierModeSelection.Lowest,
+            modeSelectionSeed: 1, movingAverage: 5, dropout: 0.3) { RandomSeed = 11 };
+        var fusedNetwork = Build();
+        var eagerNetwork = Build();
+        var warm = new Tensor<float>(new[] { batch, sequence, features });
+        fusedNetwork.Forward(warm);
+        eagerNetwork.Forward(warm);
+        eagerNetwork.SetParameters(fusedNetwork.GetParameters());
+        fusedNetwork.SetTrainingMode(true);
+        eagerNetwork.SetTrainingMode(true);
+
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var fusedOptimizer = Sgd();
+        var eagerOptimizer = Sgd();
+        var data = RandomHelper.CreateSeededRandom(5);
+        for (int step = 0; step < 4; step++)
+        {
+            var input = Random(data, batch, sequence, features);
+            var target = Random(data, batch, horizon, features);
+            float fused = stepper.Step(Request(fusedNetwork, input, target, fusedOptimizer));
+            Assert.True(stepper.LastStepFused, $"step {step}: fused path did not engage ({stepper.Session.LastMissReason}).");
+            float eager = TapeTrainingStepper<float>.EagerStep(Request(eagerNetwork, input, target, eagerOptimizer));
+            Assert.True(
+                Math.Abs(fused - eager) <= 1e-4f * Math.Max(1f, Math.Abs(eager)),
+                $"step {step}: fused loss {fused} differs from eager loss {eager}; the plan is not redrawing its masks.");
+        }
+    }
+
+    private static FusedTrainingStepRequest<float> Request(FedformerNetwork<float> network, Tensor<float> input,
+        Tensor<float> target, IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> optimizer) => new()
+    {
+        Layers = new ITrainableLayer<float>[] { network },
+        Input = input,
+        Target = target,
+        Forward = network.Forward,
+        ComputeLoss = (predicted, expected) =>
+        {
+            var engine = AiDotNetEngine.Current;
+            var difference = engine.TensorSubtract(predicted, expected);
+            return engine.TensorMultiplyScalar(
+                engine.ReduceSum(engine.TensorMultiply(difference, difference), null), 1f / difference.Length);
+        },
+        Optimizer = optimizer,
+    };
+
+    private static StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>> Sgd()
+        => new(model: null, options: new StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        {
+            InitialLearningRate = 0.05,
+            UseAdaptiveLearningRate = false,
+        });
+
+    private static Tensor<float> Random(System.Random random, params int[] shape)
+    {
+        var tensor = new Tensor<float>(shape);
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = (float)(random.NextDouble() * 2.0 - 1.0);
+        return tensor;
     }
 }

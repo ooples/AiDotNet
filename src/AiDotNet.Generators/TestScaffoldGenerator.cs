@@ -13418,6 +13418,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         inputSize1D = GetForecastingPaperContextLength(model.ClassName);
                     }
 
+                    // The volatility models take their whole input geometry from their options (a lookback window of
+                    // NumAssets series, NumAssets = 1 by default) and read nothing from the architecture, so the
+                    // finance agreement check refuses the generic 16 as an architecture describing another model.
+                    // State the one series they are built for.
+                    if (model.ClassName is "NeuralGARCH" or "RealizedVolatilityTransformer")
+                    {
+                        inputSize1D = 1;
+                    }
+
                     // Sequence-labeling NER models (LSTM-CRF family) are language-domain, so the
                     // generic branch above picks inputSize1D=128 — but the NER InputShape override
                     // below feeds [seqLen, EmbeddingDimension] with EmbeddingDimension=100. The
