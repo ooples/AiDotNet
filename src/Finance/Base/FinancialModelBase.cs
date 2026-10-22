@@ -486,6 +486,29 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         return base.Predict(input);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>A financial model sizes its layers from its options (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
+    /// <inheritdoc/>
+    /// <remarks>A cross-sectional model's architecture may state its feature count (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        NumFeatures > 0 ? new[] { NumFeatures } : null;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A sequence model is checked against its own sequence length and feature count (see
+    /// <see cref="RequireArchitectureAgreesWithOptions"/>); a cross-sectional model, which publishes no sequence split,
+    /// against the sizes it declares (<see cref="NeuralNetworkBase{T}.ArchitectureInputSizesFromOptions"/>).
+    /// </remarks>
+    protected override void RequireArchitectureAgreesWithInput()
+    {
+        if (GetInputShapeConstraint().ExactAxisSizes is { Count: 3 } && SequenceLength > 0 && NumFeatures > 0)
+            RequireArchitectureAgreesWithOptions();
+        else
+            base.RequireArchitectureAgreesWithInput();
+    }
+
     /// <summary>
     /// Throws when the architecture states an input size that disagrees with the sequence length and feature count
     /// this model was built from (#2147).
@@ -535,8 +558,10 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
             throw new ArgumentNullException(nameof(input));
         // Every forecast passes this check, whichever model computes it: the models override ForecastCore, not
         // Forecast, so none can return without it (#2147).
-        RequireArchitectureAgreesWithOptions();
-        return ForecastCore(input, quantiles);
+        RequireArchitectureAgreesWithInput();
+        var forecast = ForecastCore(input, quantiles);
+        RequireArchitectureAgreesWithOutput(forecast);
+        return forecast;
     }
 
     /// <summary>
@@ -814,7 +839,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
             throw new ArgumentNullException(nameof(input));
         if (expectedOutput is null)
             throw new ArgumentNullException(nameof(expectedOutput));
-        RequireArchitectureAgreesWithOptions();
+        RequireArchitectureAgreesWithInput();
 
         // Previously this method ran Predict() (NoGrad), computed an
         // eager loss value, and delegated to TrainCore() for the actual

@@ -105,6 +105,7 @@ public class BertEmbeddingLayerTests
             inputSize: 4,
             outputSize: 1);
         var layers = LayerHelper<double>.CreateDefaultSECBERTLayers(
+            architecture,
             maxSequenceLength: 16,
             vocabularySize: 32,
             hiddenSize: 8,

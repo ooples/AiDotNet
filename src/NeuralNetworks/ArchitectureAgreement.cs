@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -76,5 +78,68 @@ internal static class ArchitectureAgreement
             $"{model}: the architecture describes {described}, but the model was built for {sequenceLength} x " +
             $"{numFeatures} (time steps x features, {window} values) from its options. State the options' sequence " +
             "length and feature count in the architecture, or leave its input size unset.", nameof(architecture));
+    }
+
+    /// <summary>
+    /// Requires a size the architecture states (<c>InputSize</c> or <c>OutputSize</c>) to be one reading of a tensor
+    /// the model actually took or produced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A model that sizes its layers from its options takes and produces tensors of its options' sizes, so the tensor
+    /// is the authority and no per-model guess at what a flat size means is needed. The readings are each axis after
+    /// the batch axis, the per-sample count, and the whole count: a forecast of [batch, horizon, features] agrees with
+    /// an architecture stating the horizon, the feature count or horizon x features. Any other stated size describes
+    /// a different model, which used to be built from the options without a word (#2147).
+    /// </para>
+    /// <para>A size the architecture leaves at zero is not stated and is never refused.</para>
+    /// </remarks>
+    /// <param name="model">The model's name, for the message.</param>
+    /// <param name="what">"InputSize" or "OutputSize".</param>
+    /// <param name="stated">The architecture's value.</param>
+    /// <param name="shape">The shape of the tensor the model took or produced.</param>
+    /// <exception cref="ArgumentException">The stated size is none of the tensor's readings.</exception>
+    internal static void RequireStatedSizeObserved(string model, string what, int stated, IReadOnlyList<int> shape)
+    {
+        if (stated <= 0 || shape is null || shape.Count == 0) return;
+        var readings = Readings(shape);
+        if (readings.Contains(stated)) return;
+        bool output = what == nameof(NeuralNetworkArchitecture<double>.OutputSize);
+        throw new ArgumentException(
+            $"{model}: the architecture states an {what} of {stated}, but the model sizes its layers from its options and " +
+            $"{(output ? "produces" : "takes")} [{string.Join(", ", shape)}]. State one of " +
+            $"{string.Join(", ", readings.OrderBy(r => r))} in the architecture, or leave its {what} unset.", "architecture");
+    }
+
+    /// <summary>
+    /// Requires an architecture's <c>InputSize</c> to be one of the sizes a model sized from its options declares.
+    /// </summary>
+    /// <param name="model">The model's name, for the message.</param>
+    /// <param name="stated">The architecture's <c>InputSize</c>; zero is not stated and is never refused.</param>
+    /// <param name="declared">The option values the model accepts as an input size.</param>
+    /// <exception cref="ArgumentException">The stated size is none of the declared ones.</exception>
+    internal static void RequireStatedSizeDeclared(string model, int stated, IReadOnlyCollection<int> declared)
+    {
+        if (stated <= 0 || declared is null || declared.Count == 0 || declared.Contains(stated)) return;
+        throw new ArgumentException(
+            $"{model}: the architecture states an InputSize of {stated}, but the model sizes its layers from its options, " +
+            $"which give {string.Join(", ", declared.Distinct().OrderBy(d => d))}. State one of those in the architecture, " +
+            "or set the options to the size you mean.", "architecture");
+    }
+
+    private static HashSet<long> Readings(IReadOnlyList<int> shape)
+    {
+        var readings = new HashSet<long>();
+        long whole = 1, perSample = 1;
+        for (int axis = 0; axis < shape.Count; axis++)
+        {
+            whole *= shape[axis];
+            if (axis == 0 && shape.Count > 1) continue;
+            readings.Add(shape[axis]);
+            perSample *= shape[axis];
+        }
+        readings.Add(perSample);
+        readings.Add(whole);
+        return readings;
     }
 }

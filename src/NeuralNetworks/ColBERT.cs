@@ -56,6 +56,10 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", "https://arxiv.org/abs/2004.12832", Year = 2020, Authors = "Omar Khattab, Matei Zaharia")]
     public partial class ColBERT<T> : TransformerEmbeddingNetwork<T>
     {
+        /// <inheritdoc/>
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
         private readonly ColBERTOptions _options;
 
         /// <inheritdoc/>

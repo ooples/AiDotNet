@@ -212,6 +212,84 @@ public class ArchitectureAgreementTests
         Assert.Contains("InputSize of 5", ex.Message);
     }
 
+    private static NeuralNetworkArchitecture<double> Grid(int height, int width, int outputSize) =>
+        new(InputType.TwoDimensional, NeuralNetworkTaskType.Regression, inputHeight: height, inputWidth: width,
+            outputSize: outputSize);
+
+    [Theory]
+    [InlineData(2)] // the horizon
+    [InlineData(3)] // the feature count
+    [InlineData(6)] // horizon x features
+    public void An_output_size_that_reads_the_forecast_agrees(int outputSize)
+    {
+        // SmallFedformer forecasts [batch, 2, 3]: each reading of that output agrees.
+        var model = new FEDformer<double>(Grid(8, 3, outputSize), options: SmallFedformer());
+
+        var output = model.Predict(new Tensor<double>(new[] { 1, 8, 3 }));
+
+        Assert.Equal(new[] { 1, 2, 3 }, output.Shape.ToArray());
+    }
+
+    [Fact]
+    public void An_output_size_the_model_does_not_produce_is_refused_on_Predict_and_Forecast()
+    {
+        var input = new Tensor<double>(new[] { 1, 8, 3 });
+
+        // The options build a 2-step, 3-feature forecast; an architecture stating 4 outputs describes another model,
+        // which used to be built from the options without a word (#2147).
+        var predict = Assert.Throws<ArgumentException>(
+            () => new FEDformer<double>(Grid(8, 3, 4), options: SmallFedformer()).Predict(input));
+        Assert.Contains("OutputSize of 4", predict.Message);
+        Assert.Contains("[1, 2, 3]", predict.Message);
+
+        var forecast = Assert.Throws<ArgumentException>(
+            () => new FEDformer<double>(Grid(8, 3, 4), options: SmallFedformer()).Forecast(input));
+        Assert.Contains("OutputSize of 4", forecast.Message);
+    }
+
+    private static AiDotNet.NeuralNetworks.SimCSE<double> SmallSimCse(int inputSize) => new(
+        new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+            inputSize: inputSize),
+        new AiDotNet.NeuralNetworks.Options.SimCSEOptions
+        {
+            VocabSize = 32, EmbeddingDimension = 16, MaxSequenceLength = 8, NumLayers = 1, NumHeads = 2, FeedForwardDim = 32,
+        });
+
+    [Theory]
+    [InlineData(16)] // the embedding width
+    [InlineData(8)] // the maximum token count
+    public void A_text_model_takes_an_input_size_its_options_give(int inputSize)
+    {
+        // Token ids of any length: the input tensor says nothing about the size, so the model names the option
+        // values an architecture may mean.
+        using var model = SmallSimCse(inputSize);
+
+        Assert.Null(Record.Exception(() => model.Predict(new Tensor<double>(new[] { 1, 5 }))));
+    }
+
+    [Fact]
+    public void A_text_model_refuses_an_input_size_its_options_do_not_give()
+    {
+        using var model = SmallSimCse(12);
+
+        var ex = Assert.Throws<ArgumentException>(() => model.Predict(new Tensor<double>(new[] { 1, 5 })));
+        Assert.Contains("InputSize of 12", ex.Message);
+        Assert.Contains("8, 16", ex.Message);
+    }
+
+    [Fact]
+    public void A_stated_size_is_one_reading_of_the_tensor()
+    {
+        // Each axis after the batch axis, the per-sample count and the whole count.
+        foreach (int agreeing in new[] { 2, 3, 6, 12 })
+            ArchitectureAgreement.RequireStatedSizeObserved("M", "OutputSize", agreeing, new[] { 2, 2, 3 });
+        ArchitectureAgreement.RequireStatedSizeObserved("M", "OutputSize", 0, new[] { 2, 2, 3 });
+
+        var ex = Assert.Throws<ArgumentException>(
+            () => ArchitectureAgreement.RequireStatedSizeObserved("M", "OutputSize", 5, new[] { 2, 2, 3 }));
+        Assert.Contains("State one of 2, 3, 6, 12", ex.Message);
+    }
+
     [Fact]
     public void A_model_whose_architecture_agrees_predicts_as_before()
     {

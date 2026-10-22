@@ -60,6 +60,10 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, Michael Auli")]
 public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
     /// <inheritdoc />
     /// <remarks>
     /// Traced from output construction: PredictCore returns ForwardNative, whose last step is

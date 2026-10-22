@@ -59,6 +59,10 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking", "https://arxiv.org/abs/2107.05720", Year = 2021, Authors = "Thibault Formal, Benjamin Piwowarski, Stephane Clinchant")]
     public partial class SPLADE<T> : TransformerEmbeddingNetwork<T>
     {
+        /// <inheritdoc/>
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
         private readonly SPLADEOptions _options;
 
         /// <inheritdoc/>

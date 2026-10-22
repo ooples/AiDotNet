@@ -71,6 +71,15 @@ namespace AiDotNet.Video.Generation;
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITrainingObjectiveProvider<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
+    /// <inheritdoc/>
+    /// <remarks>An architecture may state the image it is configured for, height x width x channels (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        new[] { _height * _width * _channels };
+
     private readonly OpenSoraOptions _options;
 
     /// <inheritdoc/>

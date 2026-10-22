@@ -61,6 +61,10 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("Matryoshka Representation Learning", "https://arxiv.org/abs/2205.13147", Year = 2022, Authors = "Aditya Kusupati, Gantavya Bhatt, Aniket Rege, Matthew Wallingford, Aditya Sinha, Vivek Ramanujan, William Howard-Snyder, Kaifeng Chen, Sham Kakade, Prateek Jain, Ali Farhadi")]
     public partial class MatryoshkaEmbedding<T> : TransformerEmbeddingNetwork<T>
     {
+        /// <inheritdoc/>
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
         private readonly MatryoshkaEmbeddingOptions _options;
 
         /// <inheritdoc/>
