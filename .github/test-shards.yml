@@ -1699,6 +1699,9 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.ContrastiveObjectiveGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedTrainingContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Diffusion.Causal3DVAEReferenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.Diffusion.AudioVAEReferenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.Diffusion.AutoencoderKLReferenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.Diffusion.TemporalInterpolationVAEReferenceTests.|
       FullyQualifiedName~AiDotNet.Tests.Diffusion.DiffusionContractTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionParameterChunkHelperTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiTNoisePredictorResidentCloneTests.|
