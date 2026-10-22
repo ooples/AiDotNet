@@ -236,3 +236,196 @@ internal sealed class CosyVoiceFlow<T>
         Decoder.LoadTorchWeights(read, prefix + "decoder.estimator.");
     }
 }
+
+/// <summary>The sizes of CosyVoice 1's language model (<c>TransformerLM</c>).</summary>
+internal sealed record CosyVoiceLmConfiguration(
+    int TextVocabulary, int SpeechVocabulary, int TextEncoderInputSize, int LlmSize, int SpeakerDim,
+    WenetEncoderConfiguration TextEncoder, WenetEncoderConfiguration Llm, double TopP = 0.8, int TopK = 25, int RepetitionWindow = 10,
+    double RepetitionRatio = 0.1, double MinTokenTextRatio = 2, double MaxTokenTextRatio = 20);
+
+/// <summary>
+/// CosyVoice 1's text-to-speech-token language model (FunAudioLLM/CosyVoice <c>cosyvoice/llm/llm.py</c>
+/// <c>TransformerLM</c>): a causal Conformer text encoder, then a causal Transformer over
+/// <c>[sos, x-vector, text…, task_id, speech…]</c> whose head predicts the next speech token or the end.
+/// </summary>
+/// <remarks>
+/// <para>Training: the cross-entropy of every speech token and the end, each predicted from the position before it
+/// (the first 2 + |text| positions are ignored), averaged over them (<c>LabelSmoothingLoss</c> with no smoothing,
+/// normalized by length).</para>
+/// <para>Inference: the end is forbidden until <c>2·|text|</c> tokens and generation stops at <c>20·|text|</c>; each
+/// token is drawn by repetition-aware sampling (VALL-E 2): from the most likely tokens up to cumulative probability
+/// 0.8 and at most 25, unless the draw already occurs at least <c>10 · 0.1</c> times among the last 10 tokens, when it
+/// is excluded and the token is drawn from the whole distribution.</para>
+/// </remarks>
+internal sealed class CosyVoiceLm<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IEngine _engine;
+
+    public CosyVoiceLm(IEngine engine, List<LayerBase<T>> layers, CosyVoiceLmConfiguration configuration, Random initialization)
+    {
+        _engine = engine;
+        Configuration = configuration;
+        var c = configuration;
+        TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
+        double Uniform(int fanIn) => (2 * initialization.NextDouble() - 1) / Math.Sqrt(fanIn);
+        Func<double> normal = () => Math.Sqrt(-2.0 * Math.Log(1.0 - initialization.NextDouble())) * Math.Cos(2.0 * Math.PI * initialization.NextDouble());
+        DenseLayer<T> Linear(int inputs, int outputs)
+        {
+            var layer = Add(new DenseLayer<T>(outputs, (IActivationFunction<T>)new IdentityActivation<T>()));
+            TorchParameters.Linear(engine, layer, inputs, outputs, Enumerable.Range(0, inputs * outputs).Select(_ => Uniform(inputs)).ToArray(),
+                Enumerable.Range(0, outputs).Select(_ => Uniform(inputs)).ToArray());
+            return layer;
+        }
+        TiedEmbeddingLayer<T> Table(int rows, int width)
+        {
+            var table = Add(new TiedEmbeddingLayer<T>(rows, width));
+            table.Reinitialize(normal);
+            return table;
+        }
+        TextEmbedding = Table(c.TextVocabulary, c.TextEncoderInputSize);
+        TextEncoder = new WenetEncoder<T>(engine, layers, c.TextEncoder, initialization);
+        TextAffine = Linear(c.TextEncoder.OutputSize, c.LlmSize);
+        LlmEmbedding = Table(2, c.LlmSize);
+        Llm = new WenetEncoder<T>(engine, layers, c.Llm, initialization);
+        Head = Linear(c.Llm.OutputSize, c.SpeechVocabulary + 1);
+        SpeechEmbedding = Table(c.SpeechVocabulary, c.LlmSize);
+        SpeakerAffine = Linear(c.SpeakerDim, c.LlmSize);
+    }
+
+    public CosyVoiceLmConfiguration Configuration { get; }
+    public TiedEmbeddingLayer<T> TextEmbedding { get; }
+    public WenetEncoder<T> TextEncoder { get; }
+    public DenseLayer<T> TextAffine { get; }
+    public TiedEmbeddingLayer<T> LlmEmbedding { get; }
+    public WenetEncoder<T> Llm { get; }
+    public DenseLayer<T> Head { get; }
+    public TiedEmbeddingLayer<T> SpeechEmbedding { get; }
+    public DenseLayer<T> SpeakerAffine { get; }
+
+    /// <summary>The end-of-speech id (the speech vocabulary's size).</summary>
+    public int EndToken => Configuration.SpeechVocabulary;
+
+    private Tensor<T> Ids(IReadOnlyList<int> ids)
+    {
+        var tensor = new Tensor<T>(new[] { ids.Count });
+        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
+        return tensor;
+    }
+
+    /// <summary>The LM's input <c>[2 + |text| + 1 + |speech|, LlmSize]</c>: sos, the projected x-vector (none when null),
+    /// the encoded text, task_id, the speech tokens' embeddings.</summary>
+    internal Tensor<T> Input(IReadOnlyList<int> text, IReadOnlyList<int> speech, Tensor<T>? xvector, bool training, Random random)
+    {
+        var c = Configuration;
+        var encoded = TextAffine.Forward(TextEncoder.Forward(TextEmbedding.Forward(Ids(text)), training, random));
+        var parts = new List<Tensor<T>> { LlmEmbedding.Forward(Ids(new[] { 0 })) };
+        if (xvector is not null)
+        {
+            double norm = 0;
+            for (int i = 0; i < xvector.Length; i++) norm += Math.Pow(NumOps.ToDouble(xvector[i]), 2);
+            norm = Math.Max(Math.Sqrt(norm), 1e-12);
+            parts.Add(SpeakerAffine.Forward(_engine.TensorMultiplyScalar(_engine.Reshape(xvector, new[] { 1, c.SpeakerDim }), NumOps.FromDouble(1.0 / norm))));
+        }
+        parts.Add(encoded);
+        parts.Add(LlmEmbedding.Forward(Ids(new[] { 1 })));
+        if (speech.Count > 0) parts.Add(SpeechEmbedding.Forward(Ids(speech)));
+        return _engine.TensorConcatenate(parts.ToArray(), 0);
+    }
+
+    /// <summary>The head's log-probabilities <c>[L, SpeechVocabulary + 1]</c> of an input.</summary>
+    internal Tensor<T> LogProbabilities(Tensor<T> input, bool training, Random random) =>
+        _engine.TensorLogSoftmax(Head.Forward(Llm.Forward(input, training, random)), axis: -1);
+
+    /// <summary>The training loss: the mean cross-entropy of the speech tokens and the end, each from the position before.</summary>
+    public Tensor<T> Loss(IReadOnlyList<int> text, IReadOnlyList<int> speech, Tensor<T>? xvector, bool training, Random random)
+    {
+        var logp = LogProbabilities(Input(text, speech, xvector, training, random), training, random);
+        int first = (xvector is null ? 1 : 2) + text.Count, targets = speech.Count + 1;          // task_id predicts speech[0]
+        var picks = new Tensor<T>(logp._shape);
+        for (int i = 0; i < targets; i++)
+            picks[first + i, i < speech.Count ? speech[i] : EndToken] = NumOps.FromDouble(-1.0 / targets);
+        return _engine.ReduceSum(_engine.TensorMultiply(logp, picks), new[] { 0, 1 }, false);
+    }
+
+    /// <summary>
+    /// Repetition-aware sampling (<c>ras_sampling</c>): the nucleus draw, replaced by a draw from the whole distribution
+    /// (without it) when it already occurs at least <c>window · ratio</c> times among the last <c>window</c> tokens.
+    /// </summary>
+    internal static int SampleRepetitionAware(double[] logProbabilities, IReadOnlyList<int> decoded, CosyVoiceLmConfiguration c, Random random)
+    {
+        var probabilities = logProbabilities.Select(Math.Exp).ToArray();
+        var order = Enumerable.Range(0, probabilities.Length).OrderByDescending(v => probabilities[v]).ThenBy(v => v).ToList();
+        var kept = new List<int>();
+        double cumulative = 0;
+        foreach (int v in order)
+        {
+            if (cumulative >= c.TopP || kept.Count >= c.TopK) break;
+            cumulative += probabilities[v];
+            kept.Add(v);
+        }
+        int draw = Draw(kept, kept.Select(v => probabilities[v]).ToArray(), random);
+        int repeats = decoded.Skip(Math.Max(0, decoded.Count - c.RepetitionWindow)).Count(token => token == draw);
+        if (repeats >= c.RepetitionWindow * c.RepetitionRatio)
+        {
+            probabilities[draw] = 0;
+            var all = Enumerable.Range(0, probabilities.Length).ToList();
+            draw = Draw(all, probabilities, random);
+        }
+        return draw;
+    }
+
+    private static int Draw(IReadOnlyList<int> ids, double[] weights, Random random)
+    {
+        double total = weights.Sum(), target = random.NextDouble() * total;
+        for (int i = 0; i < ids.Count; i++)
+        {
+            target -= weights[i];
+            if (target <= 0 && weights[i] > 0) return ids[i];
+        }
+        return ids[Array.FindLastIndex(weights, w => w > 0)];
+    }
+
+    /// <summary>
+    /// Generates speech tokens (<c>TransformerLM.inference</c>) for <paramref name="text"/> after an optional prompt:
+    /// the prompt's text precedes the text and its speech tokens follow task_id.
+    /// </summary>
+    public List<int> Generate(IReadOnlyList<int> text, IReadOnlyList<int> promptText, IReadOnlyList<int> promptSpeech, Tensor<T>? xvector,
+        Random random)
+    {
+        var c = Configuration;
+        var allText = promptText.Concat(text).ToList();
+        int minLength = (int)(text.Count * c.MinTokenTextRatio), maxLength = (int)(text.Count * c.MaxTokenTextRatio);
+        var generated = new List<int>();
+        for (int i = 0; i < maxLength; i++)
+        {
+            var speech = promptSpeech.Concat(generated).ToList();
+            var logp = LogProbabilities(Input(allText, speech, xvector, false, random), false, random);
+            int last = logp.Shape[0] - 1, vocabulary = logp.Shape[1];
+            var row = new double[vocabulary];
+            for (int v = 0; v < vocabulary; v++) row[v] = NumOps.ToDouble(logp[last, v]);
+            if (i < minLength) row[EndToken] = double.NegativeInfinity;
+            int next = SampleRepetitionAware(row, generated, c, random);
+            if (next == EndToken) break;
+            generated.Add(next);
+        }
+        return generated;
+    }
+
+    /// <summary>Loads <c>llm.pt</c>'s state: <c>text_embedding</c>, <c>text_encoder.*</c>, <c>text_encoder_affine_layer</c>,
+    /// <c>llm_embedding</c>, <c>llm.*</c>, <c>llm_decoder</c>, <c>speech_embedding</c>, <c>spk_embed_affine_layer</c>.</summary>
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    {
+        var c = Configuration;
+        void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) =>
+            TorchParameters.Linear(_engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
+        TextEmbedding.LoadTable(read(prefix + "text_embedding.weight", new[] { c.TextVocabulary, c.TextEncoderInputSize }));
+        TextEncoder.LoadTorchWeights(read, prefix + "text_encoder.");
+        Dense(TextAffine, prefix + "text_encoder_affine_layer", c.TextEncoder.OutputSize, c.LlmSize);
+        LlmEmbedding.LoadTable(read(prefix + "llm_embedding.weight", new[] { 2, c.LlmSize }));
+        Llm.LoadTorchWeights(read, prefix + "llm.");
+        Dense(Head, prefix + "llm_decoder", c.Llm.OutputSize, c.SpeechVocabulary + 1);
+        SpeechEmbedding.LoadTable(read(prefix + "speech_embedding.weight", new[] { c.SpeechVocabulary, c.LlmSize }));
+        Dense(SpeakerAffine, prefix + "spk_embed_affine_layer", c.SpeakerDim, c.LlmSize);
+    }
+}
