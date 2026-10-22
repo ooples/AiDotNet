@@ -272,7 +272,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
         for (int step = 0; step < maxNewTokens; step++)
         {
             var (embeddings, _, _) = Network.Multimodal(ids, null, imageFeatures, regionFeatures, Tokenizer.BboxId);
-            var (_, logits) = Network.Llm.Forward(embeddings);
+            var (_, logits) = Network.Llm.ForwardWithLogits(embeddings);
             int last = logits.Shape[1] - 1, vocabulary = logits.Shape[2], next = 0;
             for (int v = 1; v < vocabulary; v++)
                 if (NumOps.GreaterThan(logits[0, last, v], logits[0, last, next])) next = v;
@@ -380,7 +380,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
         var (features, levels) = Network.EncodeGlobal(GlobalInput(image));
         var imageFeatures = Engine.Reshape(features, new[] { features.Shape[1], features.Shape[2] });
         var (embeddings, _, fullLabels) = Network.Multimodal(ids, labels, imageFeatures, RegionFeatures(levels, regions), Tokenizer.BboxId);
-        var (hidden, logits) = Network.Llm.Forward(embeddings);
+        var (hidden, logits) = Network.Llm.ForwardWithLogits(embeddings);
         var labels2D = new int[1, fullLabels!.Length];
         for (int i = 0; i < fullLabels.Length; i++) labels2D[0, i] = fullLabels[i];
         var loss = Engine.TensorMultiplyScalar(Network.Llm.CausalLmLoss(logits, labels2D), NumOps.FromDouble(_options.CeLossWeight));
