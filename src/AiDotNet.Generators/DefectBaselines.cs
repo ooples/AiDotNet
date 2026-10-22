@@ -28,7 +28,6 @@ internal static class DefectBaselines
             "global::AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer<T, TInput, TOutput>",
             "global::AiDotNet.Finance.Probabilistic.CSDI<T>",
             "global::AiDotNet.Finance.Probabilistic.TSDiff<T>",
-            "global::AiDotNet.Diffusion.VAE.AudioVAE<T>",
             "global::AiDotNet.Diffusion.VAE.TemporalInterpolationVAE<T>",
             "global::AiDotNet.DistributedTraining.TensorParallelPagedModel<T>",
             "global::AiDotNet.Finance.AutoML.FinancialAutoML<T>",

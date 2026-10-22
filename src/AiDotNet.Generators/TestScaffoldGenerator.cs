@@ -167,13 +167,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     private static readonly string[] ExcludedClassNames = new[]
     {
-        // Placeholder networks that do not implement the VAE contract they declare, found by VAEModelTestBase
+        // A placeholder network that does not implement the VAE contract it declares, found by VAEModelTestBase
         // (#2139). TemporalInterpolationVAE is dense layers over the channel axis: no convolution, no spatial or
-        // temporal compression, although it reports DownsampleFactor 8. AudioVAE reports a time downsample its
-        // hand-written loops do not learn. Each is being rebuilt from its paper (FILM, AudioLDM's VAE); they leave
-        // this list when that lands. (Causal3DVAE left it as CogVideoX's causal 3D VAE.)
+        // temporal compression, although it reports DownsampleFactor 8. It is being rebuilt from its paper and leaves
+        // this list when that lands. (Causal3DVAE left it as CogVideoX's causal 3D VAE, AudioVAE as AudioLDM's VAE.)
         "TemporalInterpolationVAE",
-        "AudioVAE",
 
         // A memory buffer for continual learning, not a model: its Predict throws
         // NotSupportedException("ExperienceReplayBuffer is a memory buffer, not a predictor.") by
@@ -706,6 +704,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
         {
             ["Causal3DVAE"] = "inputChannels: 3, latentChannels: 4, blockOutChannels: new[] { 8, 8, 16 }, layersPerBlock: 1, normGroups: 4, temporalCompression: 4, seed: 1",
+            ["AudioVAE"] = "inputChannels: 1, latentChannels: 8, blockOutChannels: new[] { 8, 16, 16 }, layersPerBlock: 1, normGroups: 4, seed: 1",
+            ["AutoencoderKL"] = "inputChannels: 3, latentChannels: 4, baseChannels: 8, channelMults: new[] { 1, 2, 4, 4 }, numResBlocks: 1, numGroups: 4, seed: 1",
         };
 
     private static readonly System.Collections.Generic.Dictionary<string, string> NoisePredictorFixtureArgs =

@@ -1,5 +1,3 @@
-using AiDotNet.ComputerVision;
-using AiDotNet.Models.Parameters;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
@@ -13,26 +11,10 @@ namespace AiDotNet.Diffusion.VAE;
 /// each weight as diffusers' state dict does.
 /// </summary>
 /// <typeparam name="T">The numeric type of the weights.</typeparam>
-internal abstract class CausalVideoModule<T> : CvParameterModule<T>
+internal abstract class CausalVideoModule<T> : LazyWeightModule<T>
 {
-    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    protected static IEngine Engine => AiDotNetEngine.Current;
-
     /// <summary>Each weight under its diffusers state-dict name, <paramref name="prefix"/> first.</summary>
     public abstract IEnumerable<(string Name, Tensor<T> Tensor)> NamedTensors(string prefix);
-
-    protected override IEnumerable<Tensor<T>> OwnParameterTensors() => Array.Empty<Tensor<T>>();
-
-    // torch.nn.Conv*d's default initialization: uniform in +-1/sqrt(fan_in) for the weight and the bias.
-    protected static Tensor<T> Uniform(int[] shape, int fanIn)
-    {
-        var tensor = new Tensor<T>(shape);
-        var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
-        double bound = 1.0 / Math.Sqrt(fanIn);
-        for (int i = 0; i < tensor.Length; i++) tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * bound);
-        return tensor;
-    }
 
     // Adds a per-channel bias to a [B, C, ...] tensor.
     protected static Tensor<T> AddChannelBias(Tensor<T> x, Tensor<T> bias)
@@ -81,13 +63,13 @@ internal sealed class CausalConv3d<T> : CausalVideoModule<T>
         _timeStride = timeStride;
         _nested = nested;
         int fanIn = inChannels * kernel * kernel * kernel;
-        Weight = Uniform(new[] { outChannels, inChannels, kernel, kernel, kernel }, fanIn);
-        Bias = Uniform(new[] { outChannels }, fanIn);
+        _weight = LazyWeight<T>.Uniform(new[] { outChannels, inChannels, kernel, kernel, kernel }, fanIn);
+        _bias = LazyWeight<T>.Uniform(new[] { outChannels }, fanIn);
     }
 
-    public Tensor<T> Weight { get; }
+    private readonly LazyWeight<T> _weight;
 
-    public Tensor<T> Bias { get; }
+    private readonly LazyWeight<T> _bias;
 
     public Tensor<T> Forward(Tensor<T> x)
     {
@@ -100,23 +82,21 @@ internal sealed class CausalConv3d<T> : CausalVideoModule<T>
             x = Engine.TensorConcatenate(parts, 2);
         }
         int pad = (_kernel - 1) / 2;
-        var y = Engine.Conv3D(x, Weight, new[] { _timeStride, 1, 1 }, new[] { 0, pad, pad }, new[] { 1, 1, 1 });
-        return AddChannelBias(y, Bias);
+        var y = Engine.Conv3D(x, _weight.Value, new[] { _timeStride, 1, 1 }, new[] { 0, pad, pad }, new[] { 1, 1, 1 });
+        return AddChannelBias(y, _bias.Value);
     }
 
     public override IEnumerable<(string Name, Tensor<T> Tensor)> NamedTensors(string prefix)
     {
         string conv = _nested ? Join(prefix, "conv") : prefix;
-        yield return (Join(conv, "weight"), Weight);
-        yield return (Join(conv, "bias"), Bias);
+        yield return (Join(conv, "weight"), _weight.Value);
+        yield return (Join(conv, "bias"), _bias.Value);
     }
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
-
-    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    protected override IEnumerable<LazyWeight<T>> OwnWeights()
     {
-        yield return Weight;
-        yield return Bias;
+        yield return _weight;
+        yield return _bias;
     }
 }
 
@@ -132,29 +112,26 @@ internal sealed class VideoGroupNorm<T> : CausalVideoModule<T>
             throw new ArgumentException($"{channels} channels do not split into {groups} groups.", nameof(groups));
         _groups = groups;
         _epsilon = epsilon;
-        Gamma = new Tensor<T>(new[] { channels });
-        Beta = new Tensor<T>(new[] { channels });
-        Gamma.Fill(NumOps.One);
+        _gamma = LazyWeight<T>.Constant(new[] { channels }, 1.0);
+        _beta = LazyWeight<T>.Constant(new[] { channels }, 0.0);
     }
 
-    public Tensor<T> Gamma { get; }
+    private readonly LazyWeight<T> _gamma;
 
-    public Tensor<T> Beta { get; }
+    private readonly LazyWeight<T> _beta;
 
-    public Tensor<T> Forward(Tensor<T> x) => Engine.GroupNorm(x, _groups, Gamma, Beta, _epsilon, out _, out _);
+    public Tensor<T> Forward(Tensor<T> x) => Engine.GroupNorm(x, _groups, _gamma.Value, _beta.Value, _epsilon, out _, out _);
 
     public override IEnumerable<(string Name, Tensor<T> Tensor)> NamedTensors(string prefix)
     {
-        yield return (Join(prefix, "weight"), Gamma);
-        yield return (Join(prefix, "bias"), Beta);
+        yield return (Join(prefix, "weight"), _gamma.Value);
+        yield return (Join(prefix, "bias"), _beta.Value);
     }
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
-
-    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    protected override IEnumerable<LazyWeight<T>> OwnWeights()
     {
-        yield return Gamma;
-        yield return Beta;
+        yield return _gamma;
+        yield return _beta;
     }
 }
 
@@ -169,13 +146,13 @@ internal sealed class FrameConv2d<T> : CausalVideoModule<T>
         _stride = stride;
         _padding = padding;
         int fanIn = inChannels * kernel * kernel;
-        Weight = Uniform(new[] { outChannels, inChannels, kernel, kernel }, fanIn);
-        Bias = Uniform(new[] { outChannels }, fanIn);
+        _weight = LazyWeight<T>.Uniform(new[] { outChannels, inChannels, kernel, kernel }, fanIn);
+        _bias = LazyWeight<T>.Uniform(new[] { outChannels }, fanIn);
     }
 
-    public Tensor<T> Weight { get; }
+    private readonly LazyWeight<T> _weight;
 
-    public Tensor<T> Bias { get; }
+    private readonly LazyWeight<T> _bias;
 
     public Tensor<T> Forward(Tensor<T> x)
     {
@@ -183,23 +160,21 @@ internal sealed class FrameConv2d<T> : CausalVideoModule<T>
         int batch = s[0], channels = s[1], frames = s[2];
         var flat = Engine.Reshape(Engine.TensorPermute(x, new[] { 0, 2, 1, 3, 4 }), new[] { batch * frames, channels, s[3], s[4] });
         var y = AddChannelBias(
-            Engine.Conv2D(flat, Weight, new[] { _stride, _stride }, new[] { _padding, _padding }, new[] { 1, 1 }), Bias);
+            Engine.Conv2D(flat, _weight.Value, new[] { _stride, _stride }, new[] { _padding, _padding }, new[] { 1, 1 }), _bias.Value);
         var ys = y.Shape;
         return Engine.TensorPermute(Engine.Reshape(y, new[] { batch, frames, ys[1], ys[2], ys[3] }), new[] { 0, 2, 1, 3, 4 });
     }
 
     public override IEnumerable<(string Name, Tensor<T> Tensor)> NamedTensors(string prefix)
     {
-        yield return (Join(prefix, "conv.weight"), Weight);
-        yield return (Join(prefix, "conv.bias"), Bias);
+        yield return (Join(prefix, "conv.weight"), _weight.Value);
+        yield return (Join(prefix, "conv.bias"), _bias.Value);
     }
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren() => Array.Empty<IParameterSource<T>?>();
-
-    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
+    protected override IEnumerable<LazyWeight<T>> OwnWeights()
     {
-        yield return Weight;
-        yield return Bias;
+        yield return _weight;
+        yield return _bias;
     }
 }
 
@@ -252,7 +227,7 @@ internal sealed class SpatialNorm3D<T> : CausalVideoModule<T>
             .Concat(ConvY.NamedTensors(Join(prefix, "conv_y")))
             .Concat(ConvB.NamedTensors(Join(prefix, "conv_b")));
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    protected override IEnumerable<LazyWeightModule<T>?> Children()
     {
         yield return Norm;
         yield return ConvY;
@@ -334,7 +309,7 @@ internal sealed class CausalResnetBlock3D<T> : CausalVideoModule<T>
         return all;
     }
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    protected override IEnumerable<LazyWeightModule<T>?> Children()
     {
         yield return _groupNorm1;
         yield return _groupNorm2;
@@ -396,7 +371,7 @@ internal sealed class CausalDownsample3D<T> : CausalVideoModule<T>
 
     public override IEnumerable<(string Name, Tensor<T> Tensor)> NamedTensors(string prefix) => Conv.NamedTensors(prefix);
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    protected override IEnumerable<LazyWeightModule<T>?> Children()
     {
         yield return Conv;
     }
@@ -440,7 +415,7 @@ internal sealed class CausalUpsample3D<T> : CausalVideoModule<T>
 
     public override IEnumerable<(string Name, Tensor<T> Tensor)> NamedTensors(string prefix) => Conv.NamedTensors(prefix);
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    protected override IEnumerable<LazyWeightModule<T>?> Children()
     {
         yield return Conv;
     }
@@ -483,7 +458,7 @@ internal sealed class CausalResnetStage<T> : CausalVideoModule<T>
         return all;
     }
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    protected override IEnumerable<LazyWeightModule<T>?> Children()
     {
         foreach (var resnet in Resnets) yield return resnet;
         yield return Downsampler;
@@ -549,7 +524,7 @@ internal sealed class CausalVideoEncoder<T> : CausalVideoModule<T>
             .Concat(_convOut.NamedTensors(Join(prefix, "conv_out")));
     }
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    protected override IEnumerable<LazyWeightModule<T>?> Children()
     {
         yield return _convIn;
         foreach (var block in _downBlocks) yield return block;
@@ -617,7 +592,7 @@ internal sealed class CausalVideoDecoder<T> : CausalVideoModule<T>
             .Concat(_convOut.NamedTensors(Join(prefix, "conv_out")));
     }
 
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
+    protected override IEnumerable<LazyWeightModule<T>?> Children()
     {
         yield return _convIn;
         yield return _midBlock;
