@@ -287,4 +287,104 @@ public class CosyVoiceReferenceTests
         HiFT(engine, expectedLayers, c).LoadTorch(StateDict(k.GetProperty("final")));
         AssertLayersMatch(layers, expectedLayers, "hift");
     }
+
+    private static CosyVoiceHiFTDiscriminators<double> Discriminators(IEngine engine, JsonElement g)
+    {
+        var ffts = Ints(g.GetProperty("fft"));
+        var hops = Ints(g.GetProperty("hop"));
+        var wins = Ints(g.GetProperty("win"));
+        var d = new CosyVoiceHiFTDiscriminators<double>(engine, periodChannels: Ints(g.GetProperty("period_channels")),
+            resolutions: ffts.Select((f, i) => (f, hops[i], wins[i])).ToArray());
+        return d;
+    }
+
+    [Theory(Timeout = 300000)]
+    [InlineData("generator")]
+    [InlineData("discriminator")]
+    public async Task HiFT_GanLossesAndOneSgdStep_MatchTheOfficialCode(string turn)
+    {
+        await Task.Yield();
+        var engine = new CpuEngine();
+        var h = Data.Value.GetProperty("hift");
+        var k = Data.Value.GetProperty("hift_gan");
+        var c = h.GetProperty("config");
+        var g = k.GetProperty("config");
+        var generatorLayers = new List<LayerBase<double>>();
+        var hift = HiFT(engine, generatorLayers, c);
+        hift.LoadTorch(StateDict(h.GetProperty("initial")));
+        var discriminators = Discriminators(engine, g);
+        discriminators.LoadTorch(StateDict(k.GetProperty("discriminator")));
+        var losses = new CosyVoiceHiFTLosses<double>(engine, 22050, melFft: g.GetProperty("mel_fft").GetInt32(),
+            melHop: g.GetProperty("mel_hop").GetInt32(), melWindow: g.GetProperty("mel_win").GetInt32(), melBins: g.GetProperty("mel_bins").GetInt32());
+
+        int mel = c.GetProperty("mel").GetInt32(), frames = c.GetProperty("frames").GetInt32(), hh = c.GetProperty("harmonics").GetInt32() + 1;
+        var melTensor = new Tensor<double>(new[] { 1, mel, frames });
+        var melValues = Values(h.GetProperty("mel"));
+        for (int i = 0; i < melValues.Length; i++) melTensor[i] = melValues[i];
+        var noiseValues = Values(h.GetProperty("noise"));
+        int samples = noiseValues.Length / hh;
+        var noise = new double[samples, hh];
+        for (int n = 0; n < samples; n++)
+            for (int i = 0; i < hh; i++) noise[n, i] = noiseValues[n * hh + i];
+        var pitch = new Tensor<double>(new[] { frames });
+        var pitchValues = Values(h.GetProperty("pitch"));
+        for (int i = 0; i < frames; i++) pitch[i] = pitchValues[i];
+        var real = new Tensor<double>(new[] { samples });
+        var realValues = Values(k.GetProperty("real"));
+        for (int i = 0; i < samples; i++) real[i] = realValues[i];
+
+        bool generatorTurn = turn == "generator";
+        var trained = generatorTurn ? generatorLayers : discriminators.Layers.ToList();
+        var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(trained);
+        var expected = k.GetProperty(generatorTurn ? "generator_losses" : "discriminator_losses");
+        Dictionary<Tensor<double>, Tensor<double>> grads;
+        using (var tape = new GradientTape<double>())
+        {
+            Tensor<double> total;
+            if (generatorTurn)
+            {
+                var f0 = hift.PredictF0(melTensor);
+                var audio = hift.Decode(melTensor, hift.Source(hift.Sines(hift.UpsampleF0(f0), Values(h.GetProperty("phases")), noise)));
+                var parts = losses.Generator(real, audio, discriminators.Forward(real), discriminators.Forward(audio), f0, pitch);
+                Assert.True(Math.Abs(parts.Adversarial[0] - expected.GetProperty("loss_gen").GetDouble()) < 1e-9, $"adversarial {parts.Adversarial[0]}");
+                Assert.True(Math.Abs(parts.FeatureMatching[0] - expected.GetProperty("loss_fm").GetDouble()) < 1e-9, $"feature matching {parts.FeatureMatching[0]}");
+                Assert.True(Math.Abs(parts.Mel[0] - expected.GetProperty("loss_mel").GetDouble()) < 1e-9, $"mel {parts.Mel[0]}");
+                double tpr = expected.GetProperty("loss_tpr").GetDouble();
+                Assert.True(Math.Abs(parts.Tpr[0] - tpr) <= 1e-6 * Math.Abs(tpr) + 1e-24, $"tpr {parts.Tpr[0]} vs {tpr}");
+                Assert.True(Math.Abs(parts.F0[0] - expected.GetProperty("loss_f0").GetDouble()) < 1e-9, $"f0 {parts.F0[0]}");
+                total = parts.Total;
+            }
+            else
+            {
+                Tensor<double> audio;
+                using (new NoGradScope<double>())
+                {
+                    var f0 = hift.PredictF0(melTensor);
+                    audio = hift.Decode(melTensor, hift.Source(hift.Sines(hift.UpsampleF0(f0), Values(h.GetProperty("phases")), noise)));
+                }
+                total = losses.Discriminator(discriminators.Forward(real), discriminators.Forward(audio));
+            }
+            Assert.True(Math.Abs(total[0] - expected.GetProperty("loss").GetDouble()) < 1e-9, $"{turn} loss {total[0]} vs {expected.GetProperty("loss").GetDouble()}");
+            grads = tape.ComputeGradients(total, sources: parameters);
+        }
+        foreach (var p in parameters)
+        {
+            if (!grads.TryGetValue(p, out var gr)) continue;
+            for (int i = 0; i < p.Length; i++) p[i] -= 0.01 * gr[i];
+            engine.InvalidatePersistentTensor(p);
+        }
+        var final = StateDict(k.GetProperty(generatorTurn ? "generator_final" : "discriminator_final"));
+        if (generatorTurn)
+        {
+            var expectedLayers = new List<LayerBase<double>>();
+            HiFT(engine, expectedLayers, c).LoadTorch(final);
+            AssertLayersMatch(generatorLayers, expectedLayers, "generator");
+        }
+        else
+        {
+            var expectedDiscriminators = Discriminators(engine, g);
+            expectedDiscriminators.LoadTorch(final);
+            AssertLayersMatch(discriminators.Layers.ToList(), expectedDiscriminators.Layers.ToList(), "discriminator");
+        }
+    }
 }

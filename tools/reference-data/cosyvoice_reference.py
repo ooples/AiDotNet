@@ -237,7 +237,7 @@ def run_flow():
 
 
 HIFT = dict(mel=8, base=16, harmonics=2, rates=[2, 2], kernels=[4, 4], n_fft=8, hop=2, res_kernels=[3, 5],
-            res_dilations=[[1, 3], [1, 3]], src_kernels=[3, 5], src_dilations=[[1, 3], [1, 3]], f0_channels=8, frames=7)
+            res_dilations=[[1, 3], [1, 3]], src_kernels=[3, 5], src_dilations=[[1, 3], [1, 3]], f0_channels=8, frames=60)
 
 
 def run_hift():
@@ -254,6 +254,9 @@ def run_hift():
                           source_resblock_kernel_sizes=c["src_kernels"], source_resblock_dilation_sizes=c["src_dilations"],
                           lrelu_slope=0.1, audio_limit=0.99,
                           f0_predictor=ConvRNNF0Predictor(num_class=1, in_channels=c["mel"], cond_channels=c["f0_channels"]))
+    # SineGen's voicing mask is float32, which rounds its noise amplitudes (0.003, 0.1 / 3) to float32; float64 here.
+    from cosyvoice.hifigan import generator as cv_gen
+    cv_gen.SineGen._f02uv = lambda self, f0: (f0 > self.voiced_threshold).to(torch.float64)
     # The reference casts its Hann window to float32; the fixture keeps it in float64.
     model.stft_window = torch.from_numpy(get_window("hann", c["n_fft"], fftbins=True))
     randomize(model, gen, 0.3)
@@ -277,6 +280,9 @@ def run_hift():
         audio = net.decode(x=mel, s=source.transpose(1, 2))
         return f0, source, audio
 
+    import copy as _copy
+    run_hift.model = _copy.deepcopy(model)
+    run_hift.inputs = (mel, pitch, phases, noise)
     f0, source, audio = run(model)
     loss = (audio.squeeze() * weights).sum() + torch.nn.functional.l1_loss(f0, pitch)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
@@ -289,9 +295,74 @@ def run_hift():
             "loss": loss.item(), "lr": 0.01, "final": flat(model)}
 
 
+GAN = dict(fft=[16, 32, 8], hop=[4, 8, 2], win=[12, 24, 6], mel_fft=32, mel_hop=8, mel_win=32, mel_bins=8,
+           period_channels=[4, 6, 8, 8, 8])
+
+
+def run_hift_gan():
+    import copy
+    import functools
+    import librosa
+    import numpy as np
+    from cosyvoice.hifigan.discriminator import MultipleDiscriminator, MultiResSpecDiscriminator
+    from cosyvoice.hifigan.hifigan import HiFiGan
+    from cosyvoice.hifigan import generator as cv_generator
+    from matcha.hifigan.models import MultiPeriodDiscriminator
+    from matcha.utils import audio as matcha_audio
+    g = GAN
+    hift = run_hift.model                                   # the HiFT fixture's generator, before its SGD step
+    gen = torch.Generator().manual_seed(51)
+    from matcha.hifigan import models as matcha_models
+    widths = {1: 1, 32: 4, 128: 6, 512: 8, 1024: 8}         # DiscriminatorP's 32/128/512/1024 channels, narrowed
+
+    def narrow_conv(cin, cout, *args, **kwargs):
+        return torch.nn.Conv2d(widths[cin], widths[cout], *args, **kwargs)
+
+    def make_discriminator():
+        with mock.patch.object(matcha_models, "Conv2d", narrow_conv):
+            mpd = MultiPeriodDiscriminator()
+        return MultipleDiscriminator(mpd=mpd, mrd=MultiResSpecDiscriminator(fft_sizes=g["fft"], hop_sizes=g["hop"],
+                                                                            win_lengths=g["win"]))
+
+    discriminator = make_discriminator()
+    randomize(discriminator, gen, 0.1)
+    # matcha caches a float32 mel basis and window; the fixture's are float64.
+    key = f"None_cpu"
+    matcha_audio.mel_basis[key] = torch.from_numpy(librosa.filters.mel(sr=22050, n_fft=g["mel_fft"], n_mels=g["mel_bins"], fmin=0, fmax=None, dtype=np.float64))
+    matcha_audio.hann_window["cpu"] = torch.hann_window(g["mel_win"])
+    transform = functools.partial(matcha_audio.mel_spectrogram, n_fft=g["mel_fft"], num_mels=g["mel_bins"], sampling_rate=22050,
+                                  hop_size=g["mel_hop"], win_size=g["mel_win"], fmin=0, fmax=None, center=False)
+    c = HIFT
+    samples = c["frames"] * c["rates"][0] * c["rates"][1] * c["hop"]
+    real = torch.randn(1, samples, generator=gen) * 0.3
+    mel, pitch, phases, noise = run_hift.inputs
+    initial_d = flat(discriminator)
+
+    def step(turn):
+        g_net = copy.deepcopy(hift)
+        d_net = make_discriminator()                      # matcha's weight_norm modules cannot be deep-copied
+        d_net.load_state_dict(discriminator.state_dict())
+        model = HiFiGan(generator=g_net, discriminator=d_net, mel_spec_transform=[transform])
+        batch = {"speech": real, "speech_feat": mel.transpose(1, 2), "pitch_feat": pitch, "turn": turn}
+        with mock.patch.object(cv_generator.Uniform, "sample", return_value=phases.clone()),                 mock.patch("torch.randn_like", side_effect=[noise.clone(), torch.zeros(1, samples, 1)]):
+            out = model(batch, torch.device("cpu"))
+        params = list((g_net if turn == "generator" else d_net).parameters())
+        optimizer = torch.optim.SGD(params, lr=0.01)
+        optimizer.zero_grad()
+        out["loss"].backward()
+        optimizer.step()
+        return {k: float(v) for k, v in out.items()}, flat(g_net if turn == "generator" else d_net)
+
+    gen_losses, gen_final = step("generator")
+    disc_losses, disc_final = step("discriminator")
+    return {"config": GAN, "real": real.flatten().tolist(), "discriminator": initial_d, "lr": 0.01,
+            "generator_losses": gen_losses, "generator_final": gen_final,
+            "discriminator_losses": disc_losses, "discriminator_final": disc_final}
+
+
 def main():
     out = {"cosyvoice_commit": COSYVOICE_COMMIT, "matcha_commit": MATCHA_COMMIT, "language_model": run_language_model(),
-           "flow": run_flow(), "hift": run_hift()}
+           "flow": run_flow(), "hift": run_hift(), "hift_gan": run_hift_gan()}
     path = os.path.join(HERE, "..", "..", "tests", "AiDotNet.Tests", "TextToSpeech", "ReferenceData", "cosyvoice_reference.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f)
