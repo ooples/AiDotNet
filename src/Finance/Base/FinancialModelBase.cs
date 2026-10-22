@@ -508,8 +508,12 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     protected void RequireArchitectureAgreesWithOptions()
     {
         if (System.Threading.Volatile.Read(ref _architectureAgreementChecked) != 0) return;
-        if (GetInputShapeConstraint().ExactAxisSizes is { Count: 3 } axes && axes[1] > 0 && axes[2] > 0)
-            ArchitectureAgreement.RequireSequenceInput(Architecture, GetType().Name, axes[1], axes[2]);
+        // A sequence model (one that publishes an exact rank-3 input) is checked against its own SequenceLength and
+        // NumFeatures, not the contract's axes: those are [batch, steps, features] for the base contract, but a model
+        // may lay its input out otherwise (DCRNN reads [nodes, steps, features per node], and its NumFeatures is
+        // nodes x features per node). Cross-sectional models publish no exact axes and are not checked.
+        if (GetInputShapeConstraint().ExactAxisSizes is { Count: 3 } && SequenceLength > 0 && NumFeatures > 0)
+            ArchitectureAgreement.RequireSequenceInput(Architecture, GetType().Name, SequenceLength, NumFeatures);
         System.Threading.Volatile.Write(ref _architectureAgreementChecked, 1);
     }
 

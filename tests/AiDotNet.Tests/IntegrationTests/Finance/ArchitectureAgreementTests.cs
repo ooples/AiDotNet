@@ -194,6 +194,25 @@ public class ArchitectureAgreementTests
     }
 
     [Fact]
+    public void A_model_with_its_own_input_layout_is_checked_against_its_own_sizes()
+    {
+        // DCRNN reads [nodes, steps, features per node], and its NumFeatures is nodes x features per node: an InputSize
+        // of 2 nodes x 2 steps x 1 feature = 4 is its whole window and agrees. Reading the contract's axes as
+        // [batch, steps, features] saw a 2 x 1 window and refused it.
+        var options = new DCRNNOptions<double>
+        {
+            NumNodes = 2, NumFeatures = 1, SequenceLength = 2, ForecastHorizon = 2, HiddenDimension = 2,
+            NumEncoderLayers = 1, NumDecoderLayers = 1, DiffusionSteps = 1, MaxDiffusionStep = 1, NumSamples = 1, Seed = 42,
+        };
+        using var agrees = new AiDotNet.Finance.Graph.DCRNN<double>(Flat(4), options);
+        Assert.Null(Record.Exception(() => agrees.Predict(new Tensor<double>(new[] { 2, 2, 1 }))));
+
+        using var disagrees = new AiDotNet.Finance.Graph.DCRNN<double>(Flat(5), options);
+        var ex = Assert.Throws<ArgumentException>(() => disagrees.Predict(new Tensor<double>(new[] { 2, 2, 1 })));
+        Assert.Contains("InputSize of 5", ex.Message);
+    }
+
+    [Fact]
     public void A_model_whose_architecture_agrees_predicts_as_before()
     {
         var model = new FEDformer<double>(Grid(8, 3), options: SmallFedformer());
