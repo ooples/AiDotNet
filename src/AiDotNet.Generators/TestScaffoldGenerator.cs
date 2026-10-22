@@ -11660,24 +11660,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "ChatTTS" && model.TypeParameterCount == 1)
             {
-                // ChatTTS (2noise) is a neural codec LM (text -> AR transformer -> DVAE codec tokens),
-                // built via CreateDefaultCodecLMLayers exactly like CSM / XTTSv2. Its paper defaults
-                // (LLMDim=768, NumLLMLayers=20, CodebookSize=626) run a single <double> forward in
-                // 14-28 s and their cumulative footprint OOM-killed the "Generated Layers A-F" shard on
-                // the 16 GB runner (the shard died with a runner shutdown signal while ChatTTS was
-                // executing). Build the SAME codec-LM architecture at CI-smoke scale, mirroring the CSM /
-                // XTTSv2 reductions: a four-token text sequence, 1 codebook x 16 head, 64-wide LLM,
-                // 1 encoder + 2 LLM layers, 4 heads. Keep the generated task/input contract as text
-                // generation: the first layer is an index-mode embedding, so treating its input as an
-                // 80-feature regression vector makes the inference-only fused-attention warmup and the
-                // decomposed tape-training path observe different tensor contracts.
+                // ChatTTS's release is a 768-wide 20-layer Llama GPT over 4 x 626 codes, a 12-block DVAE and Decoder,
+                // and an 8-block Vocos. Keep every component (the GPT with its text and code tables and weight-norm
+                // heads, the grouped FSQ, both mel decoders, the DVAE encoder, Vocos) at 16 wide with one layer each;
+                // FSQ levels 3 x 3 give 9 codes, still 2 groups x 2 stages = 4 codes per frame. A 64-point FFT with
+                // hop 16 and 8 mel bands keeps the audio path small; refinement and code generation stop after a few
+                // tokens. The text vocabulary stays the release's 21,178 (bert-base-chinese plus 50 control tokens).
+                // It trains at 3e-3: the options' 1e-4 (a library default; no recipe was released) barely moves a model this
+                // small in the two steps the memorization probe takes.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions { NumCodebooks = 1, " +
-                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
-                    "NumLLMLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions { HiddenDim = 16, NumHeads = 2, NumDecoderLayers = 1, " +
+                    "IntermediateSize = 32, FsqLevels = [3, 3], DvaeDim = 8, DvaeEncoderHidden = 8, DvaeDecoderHidden = 8, " +
+                    "DvaeLayers = 1, DvaeBottleneck = 8, DecoderDim = 8, DecoderHidden = 8, DecoderLayers = 1, " +
+                    "DecoderBottleneck = 8, VocosDim = 8, VocosIntermediate = 16, VocosLayers = 1, FftSize = 64, HopSize = 16, " +
+                    "MelChannels = 8, MaxNewRefineTokens = 3, MaxNewCodeTokens = 4, MaxTextLength = 32, LearningRate = 3e-3 })";
             }
             else if (model.ClassName == "Voicebox" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -15859,7 +15858,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS")
                 {
                     // Pheme, VALL-E and SPEAR-TTS read phoneme ids (SoundStorm text bytes) and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).
