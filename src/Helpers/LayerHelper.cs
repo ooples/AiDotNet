@@ -37434,11 +37434,15 @@ public static partial class LayerHelper<T>
         // Time-domain encoder input projection
         yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
 
+        // The batch norms are given the encoder width. Parameterless, they guessed their channel count from the
+        // first input's shape, so the count depended on how the first batch was laid out, and training on a batch of
+        // two series threw a gamma shape mismatch in the contrastive forward.
+
         // Time-domain encoder layers
         for (int layer = 0; layer < numTimeLayers; layer++)
         {
             yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>();
+            yield return new BatchNormalizationLayer<T>(numFeatures: hiddenDimension);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
@@ -37449,7 +37453,7 @@ public static partial class LayerHelper<T>
         for (int layer = 0; layer < numFreqLayers; layer++)
         {
             yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>();
+            yield return new BatchNormalizationLayer<T>(numFeatures: hiddenDimension);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
