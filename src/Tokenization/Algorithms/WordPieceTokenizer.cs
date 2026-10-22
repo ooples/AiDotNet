@@ -19,23 +19,42 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly bool _lowercase;
 
         private const string BertBaseUncasedResource = "AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz";
+        private const string BertBaseChineseResource = "AiDotNet.Tokenization.bert-base-chinese-vocab.txt.gz";
 
         /// <summary>
         /// BERT-base's uncased WordPiece tokenizer (Devlin et al. 2019): the released 30,522-token vocabulary
         /// (google-research/bert, Apache-2.0), shipped with the library, with lowercasing and accent stripping.
         /// </summary>
-        public static WordPieceTokenizer BertBaseUncased()
+        public static WordPieceTokenizer BertBaseUncased() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseUncasedResource, null), "[UNK]"), SpecialTokens.Bert());
+
+        /// <summary>
+        /// BERT-base Chinese's WordPiece tokenizer: the released 21,128-token vocabulary (google-research/bert,
+        /// Apache-2.0), shipped with the library, with each CJK character its own word, lowercasing and accent
+        /// stripping. <paramref name="additionalTokens"/> take the ids after it, in order, as a Hugging Face tokenizer's
+        /// added tokens do (ChatTTS adds its 50 control tokens this way).
+        /// </summary>
+        public static WordPieceTokenizer BertBaseChinese(IEnumerable<string>? additionalTokens = null) =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseChineseResource, additionalTokens), "[UNK]"), SpecialTokens.Bert());
+
+        private static Dictionary<string, int> LoadVocabulary(string resource, IEnumerable<string>? additionalTokens)
         {
             var assembly = typeof(WordPieceTokenizer).Assembly;
-            using var stream = assembly.GetManifestResourceStream(BertBaseUncasedResource)
-                ?? throw new System.IO.InvalidDataException($"The embedded resource {BertBaseUncasedResource} is missing.");
+            using var stream = assembly.GetManifestResourceStream(resource)
+                ?? throw new System.IO.InvalidDataException($"The embedded resource {resource} is missing.");
             using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
             using var reader = new System.IO.StreamReader(gzip, Encoding.UTF8);
             var ids = new Dictionary<string, int>(StringComparer.Ordinal);
             string? line;
             while ((line = reader.ReadLine()) is not null)
                 if (!ids.ContainsKey(line)) ids[line] = ids.Count;
-            return new WordPieceTokenizer(new Vocabulary.Vocabulary(ids, "[UNK]"), SpecialTokens.Bert());
+            if (additionalTokens is not null)
+                foreach (var token in additionalTokens)
+                {
+                    if (ids.ContainsKey(token)) throw new ArgumentException($"'{token}' is already in the vocabulary.", nameof(additionalTokens));
+                    ids[token] = ids.Count;
+                }
+            return ids;
         }
 
         /// <summary>
