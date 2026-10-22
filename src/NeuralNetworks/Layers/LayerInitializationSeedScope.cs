@@ -91,7 +91,22 @@ internal static class LayerInitializationSeedScope
         _rng = effectiveSeed.HasValue
             ? RandomHelper.CreateSeededRandom(effectiveSeed.Value)
             : null;
+        _pendingModelSeed = null;
     }
+
+    // A seed the model under construction holds but has not handed to the base yet. Most models keep their options
+    // in a field of their own (_options) that the base reads only through GetOptions(), so the base constructor,
+    // which runs first, cannot see the options seed when it resets this scope. It defers instead: the first layer
+    // that asks for a seed once the model's options exist applies that seed, exactly as assigning Options would have.
+    [ThreadStatic]
+    private static Func<bool>? _pendingModelSeed;
+
+    /// <summary>
+    /// Defers this construction's seed to the model being constructed. <paramref name="tryApply"/> runs when a layer
+    /// next asks for a seed; it returns <c>false</c> while the model has no options yet (it is asked again on the
+    /// next request) and <c>true</c> once it has applied its options' seed or found none.
+    /// </summary>
+    internal static void DeferToModelSeed(Func<bool> tryApply) => _pendingModelSeed = tryApply;
 
     /// <summary>
     /// Captures the current construction scope so a caller that reseeds it for a nested construction can
@@ -146,6 +161,13 @@ internal static class LayerInitializationSeedScope
     /// </summary>
     internal static int? NextSeedOrNull()
     {
+        // Cleared before the call: applying the seed resets this scope, and that reset must not re-enter it.
+        if (_pendingModelSeed is { } pending)
+        {
+            _pendingModelSeed = null;
+            if (!pending())
+                _pendingModelSeed ??= pending;
+        }
         // ARM LAZILY FROM THE AMBIENT SEED.
         //
         // ResetForModelConstruction runs inside the model's constructor, but a layer can be built

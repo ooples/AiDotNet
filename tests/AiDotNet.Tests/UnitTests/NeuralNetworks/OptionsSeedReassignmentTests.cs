@@ -133,4 +133,96 @@ public class OptionsSeedReassignmentTests
 
         Assert.Equal(777, layer.RandomSeed);
     }
+
+    /// <summary>
+    /// The pattern most models follow: options kept in a field of the model's own, exposed through GetOptions(),
+    /// and never assigned to the base's Options. The base reads the seed through the layer-initialization deferral.
+    /// </summary>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    private sealed class KeepsOwnOptions : NeuralNetworkBase<double>
+    {
+        private readonly NeuralNetworkOptions _options;
+
+        public KeepsOwnOptions(NeuralNetworkArchitecture<double> architecture, int? seed)
+            : base(architecture, new MeanSquaredErrorLoss<double>())
+        {
+            _options = new NeuralNetworkOptions { Seed = seed };
+            InitializeLayers();
+        }
+
+        public override ModelOptions GetOptions() => _options;
+
+        protected override void InitializeLayers()
+        {
+            Layers.Add(new FullyConnectedLayer<double>(4, 8, new AiDotNet.ActivationFunctions.IdentityActivation<double>()));
+            Layers.Add(new DropoutLayer<double>(0.5));
+            Layers.Add(new FullyConnectedLayer<double>(8, 4, new AiDotNet.ActivationFunctions.IdentityActivation<double>()));
+        }
+
+        public override IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
+            => new KeepsOwnOptions(Architecture, _options.Seed);
+
+        public override ModelMetadata<double> GetModelMetadata() => new()
+        {
+            Name = nameof(KeepsOwnOptions),
+            Description = "Test double that keeps its seeded options to itself.",
+        };
+    }
+
+    private static KeepsOwnOptions BuildKeepsOwnOptions(int? seed)
+    {
+        var model = new KeepsOwnOptions(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 4, outputSize: 4),
+            seed);
+        model.MaterializeParameters();
+        return model;
+    }
+
+    // Draws from the thread's shared generator, which unseeded initialization falls back to, so a model that ignored
+    // its seed would initialise differently after this.
+    private static void AdvanceTheSharedGenerator()
+    {
+        for (int i = 0; i < 1000; i++)
+            AiDotNet.Tensors.Helpers.RandomHelper.ThreadSafeRandom.NextDouble();
+    }
+
+    [Fact]
+    public void OptionsKeptByTheModel_SeedItsInitialWeights()
+    {
+        var first = BuildKeepsOwnOptions(2290).GetParameters().ToArray();
+        AdvanceTheSharedGenerator();
+        var second = BuildKeepsOwnOptions(2290).GetParameters().ToArray();
+        var other = BuildKeepsOwnOptions(2291).GetParameters().ToArray();
+
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, other);
+    }
+
+    [Fact]
+    public void OptionsKeptByTheModel_SeedItsDropoutStream()
+    {
+        double[] Trained()
+        {
+            var model = BuildKeepsOwnOptions(2290);
+            var input = new Tensor<double>(new[] { 2, 4 });
+            var target = new Tensor<double>(new[] { 2, 4 });
+            for (int i = 0; i < input.Length; i++)
+            {
+                input[i] = Math.Sin(0.7 * i);
+                target[i] = Math.Cos(0.3 * i);
+            }
+            for (int step = 0; step < 3; step++)
+                model.Train(input, target);
+            return model.GetParameters().ToArray();
+        }
+
+        var first = Trained();
+        AdvanceTheSharedGenerator();
+        Assert.Equal(first, Trained());
+    }
 }

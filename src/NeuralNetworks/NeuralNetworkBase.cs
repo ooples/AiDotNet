@@ -664,6 +664,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
         SeedCallerBuiltLayers();
+        // Most models keep their options in a field of their own and expose them only through GetOptions(), which
+        // the derived constructor fills after this one returns, so their Options.Seed reached nothing. The first
+        // layer to ask for a seed once those options exist applies their seed (see TryApplyConstructionOptionsSeed).
+        // The model is held weakly: the deferral lives on the thread until the next construction resets it.
+        if (architecture is not { HasExplicitRandomSeed: true })
+        {
+            var constructing = new WeakReference<NeuralNetworkBase<T>>(this);
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.DeferToModelSeed(
+                () => !constructing.TryGetTarget(out var model) || model.TryApplyConstructionOptionsSeed());
+        }
         _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
@@ -7435,7 +7445,32 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// explicit seed if it has one, otherwise the options seed, otherwise the architecture's fallback.
     /// </summary>
     private int? EffectiveRandomSeed =>
-        Architecture is { HasExplicitRandomSeed: true } ? Architecture.RandomSeed : _optionsSeed ?? Architecture?.RandomSeed;
+        Architecture is { HasExplicitRandomSeed: true }
+            ? Architecture.RandomSeed
+            : _optionsSeed ?? OwnOptionsSeed ?? Architecture?.RandomSeed;
+
+    /// <summary>
+    /// The seed of the options a derived model keeps in a field of its own and returns from <see cref="GetOptions"/>
+    /// without assigning <see cref="Options"/>; null when the model's options are the base's or carry no seed.
+    /// </summary>
+    private int? OwnOptionsSeed
+        => GetOptions() is { } own && !ReferenceEquals(own, _modelOptions) ? own.Seed : null;
+
+    /// <summary>
+    /// Applies the seed of the options a derived model returns from <see cref="GetOptions"/>, for the layer
+    /// initialization scope's deferral (see the constructor). Returns <c>false</c> while the model has no options of
+    /// its own yet, and <c>true</c> once it has applied their seed or found none.
+    /// </summary>
+    private bool TryApplyConstructionOptionsSeed()
+    {
+        if (_optionsSeed is not null)
+            return true;
+        if (GetOptions() is not { } own || ReferenceEquals(own, _modelOptions))
+            return false;
+        if (own.Seed is int seed)
+            ApplyOptionsSeed(seed);
+        return true;
+    }
 
     /// <summary>
     /// Seeds this model from its options, so <see cref="Models.Options.ModelOptions.Seed"/> reproduces the
