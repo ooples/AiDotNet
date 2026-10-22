@@ -9,6 +9,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TextToSpeech.CodecBased;
+using AiDotNet.TextToSpeech.FlowDiffusion;
 using Xunit;
 
 namespace AiDotNet.Tests.TextToSpeech;
@@ -98,5 +99,108 @@ public class CosyVoiceReferenceTests
             for (int i = 0; i < e.Length; i++)
                 Assert.True(Math.Abs(e[i] - a[i]) < 1e-9, $"layer {l} ({layers[l].GetType().Name}) parameter {i}: {e[i]} vs {a[i]}");
         }
+    }
+
+    private static CosyVoiceFlow<double> Flow(IEngine engine, List<LayerBase<double>> layers, JsonElement c, CosyVoiceFlowLoss loss)
+    {
+        int input = c.GetProperty("input").GetInt32();
+        return new CosyVoiceFlow<double>(engine, layers, new CosyVoiceFlowConfiguration(
+            Vocabulary: c.GetProperty("vocab").GetInt32(), InputSize: input, MelChannels: c.GetProperty("mel").GetInt32(),
+            SpeakerEmbeddingDim: c.GetProperty("spk").GetInt32(),
+            Encoder: new WenetEncoderConfiguration(input, input, c.GetProperty("heads").GetInt32(), c.GetProperty("units").GetInt32(),
+                c.GetProperty("blocks").GetInt32(), Dropout: 0, PositionalDropout: 0, InputLayer: WenetInputLayer.Linear,
+                SwishActivation: true),
+            RegulatorBlocks: 4, EstimatorChannels: Ints(c.GetProperty("channels")), EstimatorHeadDim: c.GetProperty("head_dim").GetInt32(),
+            EstimatorHeads: c.GetProperty("est_heads").GetInt32(), EstimatorBlocks: c.GetProperty("est_blocks").GetInt32(),
+            EstimatorMidBlocks: c.GetProperty("est_mid").GetInt32(), EstimatorDropout: 0, InputFrameRate: 50, SampleRate: 22050,
+            HopSize: 256, Loss: loss));
+    }
+
+    private static Tensor<double> Matrix(double[] values, int rows, int cols)
+    {
+        var t = new Tensor<double>(new[] { rows, cols });
+        for (int i = 0; i < values.Length; i++) t[i] = values[i];
+        return t;
+    }
+
+    private static void AssertLayersMatch(List<LayerBase<double>> actual, List<LayerBase<double>> expected, string what, double tolerance = 1e-9)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        for (int l = 0; l < actual.Count; l++)
+        {
+            var a = actual[l].GetParameters();
+            var e = expected[l].GetParameters();
+            Assert.Equal(e.Length, a.Length);
+            for (int i = 0; i < e.Length; i++)
+                Assert.True(Math.Abs(e[i] - a[i]) < tolerance, $"{what}: layer {l} ({actual[l].GetType().Name}) parameter {i}: {e[i]} vs {a[i]}");
+        }
+    }
+
+    [Theory(Timeout = 300000)]
+    [InlineData("squared")]
+    [InlineData("absolute")]
+    public async Task Flow_LossAndOneSgdStep_MatchTheOfficialCode(string form)
+    {
+        await Task.Yield();
+        var engine = new CpuEngine();
+        var k = Data.Value.GetProperty("flow");
+        var c = k.GetProperty("config");
+        var loss = form == "squared" ? CosyVoiceFlowLoss.SquaredError : CosyVoiceFlowLoss.AbsoluteError;
+        var layers = new List<LayerBase<double>>();
+        var flow = Flow(engine, layers, c, loss);
+        flow.LoadTorch(StateDict(k.GetProperty("initial")));
+        int frames = k.GetProperty("frames").GetInt32(), mel = c.GetProperty("mel").GetInt32();
+        var target = Matrix(Values(k.GetProperty("mel")), frames, mel);
+        var noise = Matrix(Values(k.GetProperty("noise")), mel, frames);
+
+        var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(layers);
+        Dictionary<Tensor<double>, Tensor<double>> grads;
+        double value;
+        using (var tape = new GradientTape<double>())
+        {
+            var l = flow.Loss(Ints(k.GetProperty("tokens")), target, Values(k.GetProperty("embedding")), k.GetProperty("prompt").GetInt32(),
+                k.GetProperty("t").GetDouble(), noise, keepConditions: true, training: true, new Random(0));
+            value = l[0];
+            grads = tape.ComputeGradients(l, sources: parameters);
+        }
+        var expected = k.GetProperty(form);
+        Assert.True(Math.Abs(value - expected.GetProperty("loss").GetDouble()) < 1e-9, $"{form} loss {value} vs {expected.GetProperty("loss").GetDouble()}");
+        double lr = k.GetProperty("lr").GetDouble();
+        foreach (var p in parameters)
+        {
+            if (!grads.TryGetValue(p, out var g)) continue;
+            for (int i = 0; i < p.Length; i++) p[i] -= lr * g[i];
+            engine.InvalidatePersistentTensor(p);
+        }
+        var expectedLayers = new List<LayerBase<double>>();
+        Flow(engine, expectedLayers, c, loss).LoadTorch(StateDict(expected.GetProperty("final")));
+        AssertLayersMatch(layers, expectedLayers, form);
+    }
+
+    [Theory(Timeout = 300000)]
+    [InlineData("generate_short")]
+    [InlineData("generate_long")]
+    public async Task Flow_Generation_MatchesTheOfficialCode(string name)
+    {
+        await Task.Yield();
+        var engine = new CpuEngine();
+        var k = Data.Value.GetProperty("flow");
+        var c = k.GetProperty("config");
+        var g = k.GetProperty(name);
+        var flow = Flow(engine, new List<LayerBase<double>>(), c, CosyVoiceFlowLoss.AbsoluteError);
+        flow.LoadTorch(StateDict(k.GetProperty("initial")));
+        int mel = c.GetProperty("mel").GetInt32(), promptFrames = g.GetProperty("prompt_frames").GetInt32();
+        var tokens = Ints(g.GetProperty("tokens"));
+        int total = promptFrames + flow.MelFrames(tokens.Length);
+        var output = flow.Generate(Ints(g.GetProperty("prompt_tokens")), tokens,
+            Matrix(Values(g.GetProperty("prompt_mel")), promptFrames, mel), Values(k.GetProperty("embedding")), new Random(0),
+            Matrix(Values(g.GetProperty("noise")), mel, total));
+        var expected = Values(g.GetProperty("mel"));
+        Assert.Equal(g.GetProperty("frames").GetInt32(), output.Shape[0]);
+        Assert.Equal(expected.Length, output.Length);
+        // The reference returns the mel cast to float32 (solve_euler's sol[-1].float()); compare at that precision.
+        for (int i = 0; i < expected.Length; i++)
+            Assert.True(Math.Abs(expected[i] - (float)output[i]) <= 1.5e-7 * Math.Max(1.0, Math.Abs(expected[i])),
+                $"{name}: mel {i}: {expected[i]} vs {output[i]}");
     }
 }

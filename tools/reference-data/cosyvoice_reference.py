@@ -118,12 +118,131 @@ def run_language_model():
             "embedding": embedding.flatten().tolist(), "loss": loss.item(), "lr": 0.1, "final": flat(model)}
 
 
+FLOW = dict(vocab=10, input=8, mel=80, spk=6, heads=2, units=12, blocks=2, channels=[16, 16], head_dim=4,
+            est_heads=2, est_blocks=2, est_mid=2)
+
+
+def _sinusoidal_float64(self, x, scale=1000):
+    # matcha's SinusoidalPosEmb with its frequencies in float64 instead of float32.
+    if x.ndim < 1:
+        x = x.unsqueeze(0)
+    half_dim = self.dim // 2
+    emb = math.log(10000) / (half_dim - 1)
+    emb = torch.exp(torch.arange(half_dim, dtype=torch.float64) * -emb)
+    emb = scale * x.unsqueeze(1) * emb.unsqueeze(0)
+    return torch.cat((emb.sin(), emb.cos()), dim=-1)
+
+
+def flow_model():
+    import types
+    from cosyvoice.flow.decoder import ConditionalDecoder
+    from cosyvoice.flow.flow import MaskedDiffWithXvec
+    from cosyvoice.flow.flow_matching import ConditionalCFM
+    from cosyvoice.flow.length_regulator import InterpolateRegulator
+    from matcha.models.components import decoder as matcha_decoder
+    matcha_decoder.SinusoidalPosEmb.forward = _sinusoidal_float64
+    # mask_to_bias asserts a float32/16 dtype; the same bias in float64.
+    from cosyvoice.flow import decoder as cv_decoder
+    cv_decoder.mask_to_bias = lambda mask, dtype: (1.0 - mask.to(dtype)) * -1.0e+10
+    c = FLOW
+    encoder = ConformerEncoder(input_size=c["input"], output_size=c["input"], attention_heads=c["heads"],
+                               linear_units=c["units"], num_blocks=c["blocks"], dropout_rate=0.0,
+                               positional_dropout_rate=0.0, attention_dropout_rate=0.0, normalize_before=True,
+                               input_layer="linear", pos_enc_layer_type="rel_pos_espnet",
+                               selfattention_layer_type="rel_selfattn", use_cnn_module=False, macaron_style=False)
+    regulator = InterpolateRegulator(channels=c["mel"], sampling_ratios=[1, 1, 1, 1])
+    estimator = ConditionalDecoder(in_channels=4 * c["mel"], out_channels=c["mel"], channels=c["channels"], dropout=0.0,
+                                   attention_head_dim=c["head_dim"], n_blocks=c["est_blocks"],
+                                   num_mid_blocks=c["est_mid"], num_heads=c["est_heads"], act_fn="gelu")
+    cfm_params = types.SimpleNamespace(sigma_min=1e-6, solver="euler", t_scheduler="cosine", training_cfg_rate=0.2,
+                                       inference_cfg_rate=0.7, reg_loss_type="l1")
+    decoder = ConditionalCFM(in_channels=3 * c["mel"], cfm_params=cfm_params, n_spks=1, spk_emb_dim=c["mel"],
+                             estimator=estimator)
+    return MaskedDiffWithXvec(input_size=c["input"], output_size=c["mel"], spk_embed_dim=c["spk"], output_type="mel",
+                              vocab_size=c["vocab"], input_frame_rate=50, only_mask_loss=True, encoder=encoder,
+                              length_regulator=regulator, decoder=decoder)
+
+
+def run_flow():
+    import copy
+    import random as pyrandom
+    from cosyvoice.flow import flow as cv_flow
+    gen = torch.Generator().manual_seed(21)
+    model = flow_model()
+    randomize(model, gen, 0.2)
+    initial = flat(model)
+    c = FLOW
+    tokens = torch.randint(0, c["vocab"], (1, 6), generator=gen)
+    frames = 13
+    feat = torch.randn(1, frames, c["mel"], generator=gen)
+    embedding = torch.randn(1, c["spk"], generator=gen)
+    prompt = 3
+    t = torch.full((1, 1, 1), 0.37)
+    z = torch.randn(1, c["mel"], frames, generator=gen)
+    keep = torch.tensor([0.9])                          # > training_cfg_rate: the conditions are kept
+    batch = {"speech_token": tokens, "speech_token_len": torch.tensor([6]), "speech_feat": feat,
+             "speech_feat_len": torch.tensor([frames]), "embedding": embedding}
+
+    captured = {}
+
+    def capture(module, args, output):
+        captured["pred"] = output
+
+    def loss_and_step(net, absolute):
+        rand_values = iter([t, keep])
+        hook = net.decoder.estimator.register_forward_hook(capture)
+        with mock.patch.object(cv_flow.random, "random", return_value=0.9),                 mock.patch.object(cv_flow.random, "randint", return_value=prompt),                 mock.patch("torch.rand", side_effect=lambda *a, **k: next(rand_values)),                 mock.patch("torch.randn_like", return_value=z.clone()):
+            net.train()
+            squared = net(batch, torch.device("cpu"))["loss"]
+        hook.remove()
+        if absolute:
+            u = feat.transpose(1, 2) - (1 - 1e-6) * z
+            loss = (captured["pred"] - u).abs().sum() / (frames * c["mel"])
+        else:
+            loss = squared
+        optimizer = torch.optim.SGD(net.parameters(), lr=0.05)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        return loss.item(), flat(net)
+
+    squared_loss, squared_final = loss_and_step(copy.deepcopy(model), absolute=False)
+    absolute_loss, absolute_final = loss_and_step(copy.deepcopy(model), absolute=True)
+
+    def generate(token_count, prompt_tokens, prompt_frames, seed):
+        g = torch.Generator().manual_seed(seed)
+        text = torch.randint(0, c["vocab"], (1, token_count), generator=g)
+        ptok = torch.randint(0, c["vocab"], (1, prompt_tokens), generator=g)
+        pfeat = torch.randn(1, prompt_frames, c["mel"], generator=g)
+        frames_out = prompt_frames + int(token_count / 50 * 22050 / 256)
+        noise = torch.randn(1, c["mel"], frames_out, generator=g)
+        net = copy.deepcopy(model)
+        net.eval()
+        with mock.patch("torch.randn_like", return_value=noise.clone()):
+            mel, _ = net.inference(token=text, token_len=torch.tensor([token_count]), prompt_token=ptok,
+                                   prompt_token_len=torch.tensor([prompt_tokens]), prompt_feat=pfeat,
+                                   prompt_feat_len=torch.tensor([prompt_frames]), embedding=embedding,
+                                   flow_cache=torch.zeros(1, c["mel"], 0, 2))
+        return {"tokens": text.flatten().tolist(), "prompt_tokens": ptok.flatten().tolist(),
+                "prompt_mel": pfeat.flatten().tolist(), "prompt_frames": prompt_frames,
+                "noise": noise.flatten().tolist(), "mel": mel.transpose(1, 2).flatten().tolist(),
+                "frames": mel.shape[2]}
+
+    return {"config": FLOW, "initial": initial, "tokens": tokens.flatten().tolist(), "frames": frames,
+            "mel": feat.flatten().tolist(), "embedding": embedding.flatten().tolist(), "prompt": prompt, "t": 0.37,
+            "noise": z.flatten().tolist(), "lr": 0.05,
+            "squared": {"loss": squared_loss, "final": squared_final},
+            "absolute": {"loss": absolute_loss, "final": absolute_final},
+            "generate_short": generate(6, 3, 5, 31), "generate_long": generate(45, 2, 4, 32)}
+
+
 def main():
-    out = {"cosyvoice_commit": COSYVOICE_COMMIT, "matcha_commit": MATCHA_COMMIT, "language_model": run_language_model()}
+    out = {"cosyvoice_commit": COSYVOICE_COMMIT, "matcha_commit": MATCHA_COMMIT, "language_model": run_language_model(),
+           "flow": run_flow()}
     path = os.path.join(HERE, "..", "..", "tests", "AiDotNet.Tests", "TextToSpeech", "ReferenceData", "cosyvoice_reference.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(out, f)
-    print("wrote", os.path.normpath(path), "lm loss", out["language_model"]["loss"])
+    print("wrote", os.path.normpath(path), "lm loss", out["language_model"]["loss"], "flow", out["flow"]["squared"]["loss"], out["flow"]["absolute"]["loss"])
 
 
 if __name__ == "__main__":
