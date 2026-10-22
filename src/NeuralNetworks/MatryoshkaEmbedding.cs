@@ -40,8 +40,8 @@ namespace AiDotNet.NeuralNetworks
     /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
     ///     inputType: InputType.OneDimensional,
     ///     taskType: NeuralNetworkTaskType.Regression,
-    ///     inputSize: 768,
-    ///     outputSize: 768);
+    ///     inputSize: 1536,
+    ///     outputSize: 1536);
     /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
     /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
     /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
@@ -65,6 +65,8 @@ namespace AiDotNet.NeuralNetworks
         /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
         protected override bool SizesLayersFromOptions => true;
 
+        private static readonly int DefaultEmbeddingDimension = new MatryoshkaEmbeddingOptions().EmbeddingDimension;
+
         private readonly MatryoshkaEmbeddingOptions _options;
 
         /// <inheritdoc/>
@@ -85,12 +87,16 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance with default architecture settings.
         /// </summary>
+        /// <remarks>
+        /// The architecture states the default options' width (1536): stating BERT-base's 768 here
+        /// described a model narrower than the one the options build, which #2147 now refuses.
+        /// </remarks>
         public MatryoshkaEmbedding()
             : this(new NeuralNetworkArchitecture<T>(
                 inputType: Enums.InputType.OneDimensional,
                 taskType: Enums.NeuralNetworkTaskType.Regression,
-                inputSize: 768,
-                outputSize: 768))
+                inputSize: DefaultEmbeddingDimension,
+                outputSize: DefaultEmbeddingDimension))
         {
         }
 

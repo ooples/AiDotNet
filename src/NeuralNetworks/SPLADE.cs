@@ -90,8 +90,9 @@ namespace AiDotNet.NeuralNetworks
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 768,
-            outputSize: 768))
+            inputSize: new SPLADEOptions().EmbeddingDimension,
+            // The output is the sparse vocabulary-sized term-weight vector, not an embedding (#2147).
+            outputSize: new SPLADEOptions().VocabSize))
     {
     }
 

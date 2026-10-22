@@ -95,7 +95,8 @@ namespace AiDotNet.NeuralNetworks
                 inputType: Enums.InputType.OneDimensional,
                 taskType: Enums.NeuralNetworkTaskType.Regression,
                 inputSize: 768,
-                outputSize: 768))
+                // The output is each token's OutputDimension-wide (128) late-interaction vector (#2147).
+                outputSize: new ColBERTOptions().OutputDimension))
         {
         }
 
