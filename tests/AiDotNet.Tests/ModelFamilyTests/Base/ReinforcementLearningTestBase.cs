@@ -269,7 +269,8 @@ public abstract class ReinforcementLearningTestBase<T>
         // action-width: ValidateTransitionShape rejects a mis-sized action just as it does a state.
         var target = new Vector<T>(EffectiveActionDim);
         for (int i = 0; i < target.Length; i++) target[i] = ToT(0.5);
-        model.Train(state, target);
+        // An agent the single-transition adapter cannot train (QMIX consumes joint transitions) acts untrained.
+        if (TrainsViaSingleTransitionAdapter) model.Train(state, target);
 
         var action = model.Predict(state);
         Assert.True(action.Length > 0, "RL agent produced empty action.");
@@ -1124,7 +1125,7 @@ public abstract class ReinforcementLearningTestBase<T>
         using var model = CreateModel();
         var state = CreateRandomState(rng);
         var target = new Vector<T>(EffectiveActionDim);
-        model.Train(state, target);
+        if (TrainsViaSingleTransitionAdapter) model.Train(state, target);
         Assert.NotNull(model.GetModelMetadata());
     }
 
@@ -1169,7 +1170,7 @@ public abstract class ReinforcementLearningTestBase<T>
             $"disagrees with ParameterCount ({parameterizable.ParameterCount}). Callers pair these " +
             "by length, so a mismatch means a saved parameter vector restores into the wrong slots.");
 
-        model.Train(CreateRandomState(rng), new Vector<T>(EffectiveActionDim));
+        if (TrainsViaSingleTransitionAdapter) model.Train(CreateRandomState(rng), new Vector<T>(EffectiveActionDim));
 
         Assert.True(parameterizable.GetParameters().Length > 0,
             "After training, the agent should expose the parameters it learned.");

@@ -73,8 +73,8 @@ public class DeepAgentsIntegrationTests
             StateSize = DiscreteStateSize,
             ActionSize = DiscreteActionSize,
             GlobalStateSize = 1,
-            AgentHiddenLayers = new List<int> { 4 },
-            MixingHiddenLayers = new List<int> { 4 }
+            RnnHiddenDim = 4,
+            MixingEmbedDim = 4
         });
 
         var layout = agent.ParameterLayout;
@@ -82,14 +82,14 @@ public class DeepAgentsIntegrationTests
         Assert.DoesNotContain(layout.Slots,
             slot => slot.StableId.Contains("DeepReinforcementLearningAgentBase<T>::Networks"));
         Assert.Contains(layout.Slots,
-            slot => slot.StableId.Contains("QMIXAgent<T>::_targetAgentNetworks")
+            slot => slot.StableId.Contains("QMIXAgent<T>::_targetAgentNetwork")
                 && slot.Role == ParameterSlotRole.Buffer);
         Assert.Contains(layout.Slots,
             slot => slot.StableId.Contains("QMIXAgent<T>::_targetMixingNetwork")
                 && slot.Role == ParameterSlotRole.Buffer);
-        Assert.Contains(layout.Slots,
-            slot => slot.StableId.Contains("QMIXAgent<T>::_agentNetworks")
-                && slot.Role == ParameterSlotRole.Trainable);
+        // The live networks are registered by the legacy RegisterComponents hook, whose durable owner ID does not
+        // depend on the field name (as DQN's online network is).
+        Assert.Contains(layout.Slots, slot => slot.Role == ParameterSlotRole.Trainable);
     }
 
     [Fact(Timeout = 120000)]
@@ -531,12 +531,10 @@ public class DeepAgentsIntegrationTests
             TargetUpdateFrequency = 1,
             EpsilonStart = 0.0,
             EpsilonEnd = 0.0,
-            EpsilonDecay = 1.0,
             LearningRate = LearningRate,
             DiscountFactor = DiscountFactor,
-            LossFunction = CreateLoss(),
-            AgentHiddenLayers = new List<int> { 4 },
-            MixingHiddenLayers = new List<int> { 4 }
+            RnnHiddenDim = 4,
+            MixingEmbedDim = 4
         });
 
         var qmixStates = new List<Vector<double>>

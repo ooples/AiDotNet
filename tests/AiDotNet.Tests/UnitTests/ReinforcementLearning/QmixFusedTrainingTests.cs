@@ -1,12 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Agents.QMIX;
-using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Training;
@@ -15,73 +12,68 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.ReinforcementLearning;
 
 /// <summary>
-/// QMIX trains its agent networks and its mixing network end to end on the shared fused step (#1804; Rashid et al.
-/// 2018). The agents' chosen Q-values used to be copied into the mixing input by host indexing, which cut the agents
-/// off: only the mixing network trained. Each step's states, actions, global state and TD target travel in its data.
+/// QMIX trains its agent network and its mixing network end to end on the shared fused step (#1804; Rashid et al.
+/// 2018): the TD error of Q_tot reaches the agents through the mixer. Batches of episodes of different lengths unroll
+/// to different horizons, so the fused plan must follow the batch's shape and train exactly as the eager tape does.
 /// </summary>
 [Collection("FusedOptimizerGlobalState")]
 public class QmixFusedTrainingTests
 {
     private const double Tolerance = 1e-9;
-    private const int StateSize = 3;
-    private const int ActionSize = 2;
+    private const int Observation = 3, Actions = 2, State = 2;
 
-    private static QMIXAgent<double> Make() => new(new QMIXOptions<double>
+    private static QMIXAgent<double> Make(bool doubleQ) => new(new QMIXOptions<double>
     {
         NumAgents = 2,
-        StateSize = StateSize,
-        ActionSize = ActionSize,
-        GlobalStateSize = 1,
-        BatchSize = 1,
-        // One slot: every Train call learns from the newest experience, so two agents fed alike train alike.
-        ReplayBufferSize = 1,
+        StateSize = Observation,
+        ActionSize = Actions,
+        GlobalStateSize = State,
+        RnnHiddenDim = 4,
+        MixingEmbedDim = 4,
+        HypernetLayers = doubleQ ? 2 : 1,
+        HypernetEmbed = 3,
+        DoubleQ = doubleQ,
+        MeanLoss = doubleQ,
+        BatchSize = 2,
+        ReplayBufferSize = 3,
         TargetUpdateFrequency = 2,
-        LearningRate = 0.05,
-        AgentHiddenLayers = new List<int> { 4 },
-        MixingHiddenLayers = new List<int> { 4 },
+        LearningRate = 0.01,
+        Seed = 7,
     });
 
-    private static Vector<double> State(int step, int agent)
+    private static Vector<double> Vec(int size, double phase)
+        => new(Enumerable.Range(0, size).Select(i => Math.Sin(0.7 * i + phase)).ToArray());
+
+    private static void Episode(QMIXAgent<double> agent, int episode, int length)
     {
-        var v = new Vector<double>(StateSize);
-        for (int i = 0; i < StateSize; i++) v[i] = Math.Sin(0.7 * i + step + 1.3 * agent);
-        return v;
+        for (int t = 0; t < length; t++)
+        {
+            List<Vector<double>> Observations(int step) => new() { Vec(Observation, episode + step), Vec(Observation, episode + step + 1.3) };
+            var actions = Enumerable.Range(0, 2).Select(i =>
+            {
+                var v = new Vector<double>(Actions);
+                v[(episode + t + i) % Actions] = 1.0;
+                return v;
+            }).ToList();
+            bool last = t == length - 1;
+            agent.StoreMultiAgentExperience(Observations(t), actions, Math.Cos(episode + t), Observations(t + 1),
+                Vec(State, 0.1 * (episode + t)), Vec(State, 0.1 * (episode + t + 1)), done: last && episode % 2 == 0, truncated: last && episode % 2 == 1);
+        }
     }
 
-    private static Vector<double> Action(int step, int agent)
-    {
-        var v = new Vector<double>(ActionSize);
-        v[(step + agent) % ActionSize] = 1.0;
-        return v;
-    }
-
-    private static void Feed(QMIXAgent<double> agent, int step) => agent.StoreMultiAgentExperience(
-        new List<Vector<double>> { State(step, 0), State(step, 1) },
-        new List<Vector<double>> { Action(step, 0), Action(step, 1) },
-        teamReward: Math.Cos(step),
-        nextAgentStates: new List<Vector<double>> { State(step + 1, 0), State(step + 1, 1) },
-        globalState: new Vector<double>(new[] { 0.1 * step }),
-        nextGlobalState: new Vector<double>(new[] { 0.1 * (step + 1) }),
-        done: false);
-
-    private static Vector<double> AgentNetworkParameters(QMIXAgent<double> agent)
-    {
-        var networks = (List<INeuralNetwork<double>>)typeof(QMIXAgent<double>)
-            .GetField("_agentNetworks", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(agent)!;
-        return new Vector<double>(networks.SelectMany(n => n.GetParameters().ToArray()).ToArray());
-    }
-
-    private static (Vector<double> All, Vector<double> Agents) Train(QMIXAgent<double> agent, bool compile)
+    private static (Vector<double> Agent, Vector<double> Mixer) Train(QMIXAgent<double> agent, bool compile)
     {
         var original = TensorCodecOptions.Current;
         try
         {
             TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
             CompiledTapeTrainingStep<double>.Invalidate();
-            for (int step = 0; step < 4; step++)
+            int[] lengths = { 2, 3, 2, 4, 3, 3 };
+            for (int episode = 0; episode < lengths.Length; episode++)
             {
-                Feed(agent, step);
-                agent.Train();
+                Episode(agent, episode, lengths[episode]);
+                double loss = agent.Train();
+                Assert.False(double.IsNaN(loss) || double.IsInfinity(loss), $"episode {episode}: loss {loss}");
             }
         }
         finally
@@ -89,7 +81,7 @@ public class QmixFusedTrainingTests
             TensorCodecOptions.SetCurrent(original);
             CompiledTapeTrainingStep<double>.Invalidate();
         }
-        return (agent.GetParameters(), AgentNetworkParameters(agent));
+        return agent.LiveNetworkParameters();
     }
 
     private static double Worst(Vector<double> a, Vector<double> b)
@@ -100,21 +92,23 @@ public class QmixFusedTrainingTests
         return worst;
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task EndToEndTraining_MovesTheAgentNetworks_AndRunsFusedLikeEager()
+    [Theory(Timeout = 120000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EndToEndTraining_MovesBothNetworks_AndRunsFusedLikeEager(bool doubleQ)
     {
         await Task.Yield();
-        var eagerAgent = Make();
-        var fusedAgent = Make();
-        fusedAgent.SetParameters(eagerAgent.GetParameters());
-        var agentsBefore = AgentNetworkParameters(eagerAgent);
+        using var eagerAgent = Make(doubleQ);
+        using var fusedAgent = Make(doubleQ);
+        var before = eagerAgent.LiveNetworkParameters();
+        Assert.Equal(0.0, Worst(before.Agent, fusedAgent.LiveNetworkParameters().Agent));
 
         var eager = Train(eagerAgent, compile: false);
         var fused = Train(fusedAgent, compile: true);
 
-        Assert.True(Worst(eager.Agents, agentsBefore) > 0,
-            "the agent networks did not move: the TD error never reached them.");
-        double worst = Worst(eager.All, fused.All);
+        Assert.True(Worst(eager.Agent, before.Agent) > 0, "the agent network did not move: the TD error never reached it.");
+        Assert.True(Worst(eager.Mixer, before.Mixer) > 0, "the mixing network did not move.");
+        double worst = Math.Max(Worst(eager.Agent, fused.Agent), Worst(eager.Mixer, fused.Mixer));
         Assert.True(worst <= Tolerance, $"fused QMIX training diverged from eager by {worst:G6}.");
     }
 }
