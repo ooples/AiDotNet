@@ -219,7 +219,7 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
     protected override void InitializeLayers()
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); ExtractLayerReferences(); }
-        else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultTSDiffLayers(Architecture, _sequenceLength, _forecastHorizon, _hiddenDimension, _numResidualBlocks, _numAttentionHeads, _dropout)); ExtractLayerReferences(); }
+        else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultTSDiffLayers(_sequenceLength, _forecastHorizon, _hiddenDimension, _numResidualBlocks, _numAttentionHeads, _dropout)); ExtractLayerReferences(); }
     }
 
     private void ExtractLayerReferences()

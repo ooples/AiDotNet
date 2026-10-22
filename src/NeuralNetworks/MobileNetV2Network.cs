@@ -257,7 +257,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         else
         {
             // Use MobileNetV2-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV2Layers(Architecture, _configuration));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV2Layers(_configuration));
         }
 
         SetAllLayersEvalMode();

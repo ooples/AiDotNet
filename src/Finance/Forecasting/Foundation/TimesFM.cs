@@ -420,7 +420,7 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimesFMLayers(
-                Architecture, _contextLength, _forecastHorizon, 1,
+                _contextLength, _forecastHorizon, 1,
                 _patchLength, _hiddenDimension, _numLayers, _numHeads, _dropout,
                 _outputPatchLength));
         }

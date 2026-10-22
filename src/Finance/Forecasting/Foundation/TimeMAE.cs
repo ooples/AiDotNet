@@ -222,7 +222,7 @@ public partial class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimeMAELayers(
-                Architecture, _contextLength, _forecastHorizon, _patchLength,
+                _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numEncoderLayers, _numDecoderLayers, _numHeads, _dropout));
         }
     }

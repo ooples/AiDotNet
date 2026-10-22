@@ -267,7 +267,7 @@ public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTinyTimeMixersLayers(
-                Architecture, _contextLength, _forecastHorizon, _numFeatures,
+                _contextLength, _forecastHorizon, _numFeatures,
                 _patchLength, _hiddenDimension, _numMixerLayers, _expansionFactor,
                 _dropout));
         }

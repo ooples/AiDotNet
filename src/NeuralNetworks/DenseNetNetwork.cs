@@ -295,7 +295,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         else
         {
             // Use DenseNet-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultDenseNetLayers(Architecture, _configuration));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultDenseNetLayers(_configuration));
         }
     }
 

@@ -420,7 +420,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultLSTNetLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _convolutionFilters, _convolutionKernelSize, _hiddenRecurrentSize,
                 _hiddenSkipSize, _skipPeriod, _dropout));
 

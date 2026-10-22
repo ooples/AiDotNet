@@ -356,7 +356,6 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTemporalGCNLayers(
-                Architecture,
                 _sequenceLength,
                 _forecastHorizon,
                 _numNodes,

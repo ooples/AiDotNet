@@ -166,7 +166,6 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinMALayers(
-                Architecture,
                 vocabularySize: VocabularySize,
                 maxSequenceLength: MaxSequenceLength,
                 hiddenDimension: HiddenDimension,

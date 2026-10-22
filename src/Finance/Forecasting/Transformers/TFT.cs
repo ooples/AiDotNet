@@ -394,7 +394,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTFTLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                _sequenceLength, _predictionHorizon, _numFeatures,
                 _hiddenSize, _numHeads, _numLayers, _dropout));
 
             ExtractLayerReferences();

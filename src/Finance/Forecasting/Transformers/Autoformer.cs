@@ -325,7 +325,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultAutoformerLayers(
-                Architecture,
                 _sequenceLength,
                 _predictionHorizon,
                 _numFeatures,

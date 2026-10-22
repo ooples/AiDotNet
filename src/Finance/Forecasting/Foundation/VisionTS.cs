@@ -242,7 +242,7 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultVisionTSLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchLength,
+                _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
         }
     }

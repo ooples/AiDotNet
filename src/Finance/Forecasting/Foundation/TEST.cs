@@ -219,7 +219,7 @@ public partial class TEST<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTESTLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchLength,
+                _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _textEmbeddingDimension, _numLayers, _numHeads,
                 _numPrototypes, _dropout));
         }

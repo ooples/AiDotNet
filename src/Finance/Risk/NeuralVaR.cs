@@ -174,7 +174,6 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralVaRLayers(
-                Architecture,
                 NumFeatures,
                 _options.HiddenLayers,
                 _options.HiddenDimension));

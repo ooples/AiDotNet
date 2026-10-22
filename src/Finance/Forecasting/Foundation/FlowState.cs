@@ -217,7 +217,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFlowStateLayers(
-                Architecture, _contextLength, _forecastHorizon,
+                _contextLength, _forecastHorizon,
                 _stateDimension, _hiddenDimension, _numLayers, _dropout,
                 _ssmRank, _useDiscretization));
             ExtractLayerReferences();

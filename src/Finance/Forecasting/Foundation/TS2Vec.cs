@@ -209,7 +209,7 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTS2VecLayers(
-                Architecture, _contextLength, _forecastHorizon, _hiddenDimension,
+                _contextLength, _forecastHorizon, _hiddenDimension,
                 _outputDimension, _numLayers, _dropout));
             ExtractLayerReferences();
         }

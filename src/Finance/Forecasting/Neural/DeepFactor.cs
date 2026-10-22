@@ -395,7 +395,7 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultDeepFactorLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _numFactors, _factorHiddenDim, _localHiddenDim,
                 _numFactorLayers, _numLocalLayers, _dropout));
 

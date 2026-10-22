@@ -372,7 +372,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimesNetLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                _sequenceLength, _predictionHorizon, _numFeatures,
                 _modelDimension, _feedForwardDimension, _numLayers, _topK,
                 _convKernelSize, _dropout));
 

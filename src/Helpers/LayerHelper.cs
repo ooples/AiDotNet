@@ -1,4 +1,4 @@
-﻿using AiDotNet.Diffusion.VAE;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Initialization;
@@ -137,7 +137,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layer configuration for a Deep Portfolio Management model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="numAssets">The number of assets in the portfolio.</param>
     /// <returns>A collection of layers forming the portfolio optimization network.</returns>
     /// <remarks>
@@ -148,13 +147,20 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepPortfolioLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numAssets)
     {
         // 2-layer MLP with Softmax output for weight allocation
         yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new DenseLayer<T>(numAssets, new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepPortfolioLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numAssets)
+        => CreateDefaultDeepPortfolioLayers(numAssets: numAssets);
 
     /// <summary>
     /// Creates the default layer configuration for a Neural Value-at-Risk (VaR) model.
@@ -323,7 +329,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layer configuration for FinGPT.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="maxSequenceLength">Maximum sequence length.</param>
     /// <param name="vocabularySize">Size of the vocabulary.</param>
     /// <param name="hiddenSize">Hidden layer size.</param>
@@ -340,7 +345,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFinGPTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int maxSequenceLength = 1024,
         int vocabularySize = 50257,
         int hiddenSize = 768,
@@ -374,6 +378,19 @@ public static partial class LayerHelper<T>
         // 4. Output Head (predict next token from vocabulary)
         yield return new DenseLayer<T>(vocabularySize);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFinGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 1024,
+        int vocabularySize = 50257,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+        => CreateDefaultFinGPTLayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
 
     /// <summary>
     /// Creates the default layer configuration for FinBERT-tone.
@@ -5135,7 +5152,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default layers for a DenseNet network based on the specified configuration.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="configuration">The DenseNet-specific configuration.</param>
     /// <returns>A collection of layers forming a DenseNet network.</returns>
     /// <remarks>
@@ -5155,7 +5171,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultDenseNetLayers(
-        NeuralNetworkArchitecture<T> architecture,
         Configuration.DenseNetConfiguration configuration)
     {
         if (configuration == null)
@@ -5267,10 +5282,17 @@ public static partial class LayerHelper<T>
             activationFunction: new IdentityActivation<T>());
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultDenseNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.DenseNetConfiguration configuration)
+        => CreateDefaultDenseNetLayers(configuration: configuration);
+
     /// <summary>
     /// Creates default layers for an EfficientNet network based on the specified configuration.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="configuration">The EfficientNet-specific configuration.</param>
     /// <returns>A collection of layers forming an EfficientNet network.</returns>
     /// <remarks>
@@ -5281,7 +5303,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultEfficientNetLayers(
-        NeuralNetworkArchitecture<T> architecture,
         Configuration.EfficientNetConfiguration configuration)
     {
         if (configuration == null)
@@ -5391,10 +5412,17 @@ public static partial class LayerHelper<T>
             activationFunction: new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultEfficientNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.EfficientNetConfiguration configuration)
+        => CreateDefaultEfficientNetLayers(configuration: configuration);
+
     /// <summary>
     /// Creates default layers for a MobileNetV2 network based on the specified configuration.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="configuration">The MobileNetV2-specific configuration.</param>
     /// <returns>A collection of layers forming a MobileNetV2 network.</returns>
     /// <remarks>
@@ -5405,7 +5433,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultMobileNetV2Layers(
-        NeuralNetworkArchitecture<T> architecture,
         Configuration.MobileNetV2Configuration configuration)
     {
         if (configuration == null)
@@ -5508,10 +5535,17 @@ public static partial class LayerHelper<T>
             activationFunction: new IdentityActivation<T>());
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultMobileNetV2Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.MobileNetV2Configuration configuration)
+        => CreateDefaultMobileNetV2Layers(configuration: configuration);
+
     /// <summary>
     /// Creates default layers for a MobileNetV3 network based on the specified configuration.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="configuration">The MobileNetV3-specific configuration.</param>
     /// <returns>A collection of layers forming a MobileNetV3 network.</returns>
     /// <remarks>
@@ -5522,7 +5556,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultMobileNetV3Layers(
-        NeuralNetworkArchitecture<T> architecture,
         Configuration.MobileNetV3Configuration configuration)
     {
         if (configuration == null)
@@ -5612,6 +5645,14 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultMobileNetV3Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        Configuration.MobileNetV3Configuration configuration)
+        => CreateDefaultMobileNetV3Layers(configuration: configuration);
 
     /// <summary>
     /// Gets MobileNetV3-Large block configurations.
@@ -5784,7 +5825,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default ECAPA-TDNN layers for spoken language identification.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
     /// <param name="tdnnChannels">Number of TDNN channels (default: 1024).</param>
     /// <param name="embeddingDimension">Embedding dimension (default: 192).</param>
@@ -5801,7 +5841,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultECAPATDNNLanguageIdentifierLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numMels = 80,
         int tdnnChannels = 1024,
         int embeddingDimension = 192,
@@ -5834,6 +5873,22 @@ public static partial class LayerHelper<T>
             yield return layer;
         }
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultECAPATDNNLanguageIdentifierLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numMels = 80,
+        int tdnnChannels = 1024,
+        int embeddingDimension = 192,
+        int numLanguages = 20,
+        int[]? dilations = null,
+        int[]? kernelSizes = null,
+        int res2NetScale = 8,
+        int seChannels = 128,
+        int attentionChannels = 128)
+        => CreateDefaultECAPATDNNLanguageIdentifierLayers(numMels: numMels, tdnnChannels: tdnnChannels, embeddingDimension: embeddingDimension, numLanguages: numLanguages, dilations: dilations, kernelSizes: kernelSizes, res2NetScale: res2NetScale, seChannels: seChannels, attentionChannels: attentionChannels);
 
     /// <summary>
     /// Number of feature-encoder stages in the Wav2Vec2 language-identification stack (seven in the
@@ -5871,7 +5926,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default Wav2Vec2 layers for spoken language identification.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="hiddenSize">Hidden size of transformer (default: 768).</param>
     /// <param name="numLayers">Number of transformer layers (default: 12).</param>
     /// <param name="numAttentionHeads">Number of attention heads (default: 12).</param>
@@ -5911,7 +5965,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultWav2Vec2LanguageIdentifierLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int hiddenSize = 768,
         int numLayers = 12,
         int numAttentionHeads = 12,
@@ -5986,6 +6039,25 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new TanhActivation<T>());
         yield return new DenseLayer<T>(numLanguages);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultWav2Vec2LanguageIdentifierLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenSize = 768,
+        int numLayers = 12,
+        int numAttentionHeads = 12,
+        int intermediateSize = 3072,
+        int numLanguages = 20,
+        double dropoutRate = 0.1,
+        int featureEncoderDim = 512,
+        double? featureProjectionDropout = null,
+        int[]? featureEncoderKernels = null,
+        int[]? featureEncoderStrides = null,
+        int positionalConvKernel = 128,
+        int positionalConvGroups = 16)
+        => CreateDefaultWav2Vec2LanguageIdentifierLayers(hiddenSize: hiddenSize, numLayers: numLayers, numAttentionHeads: numAttentionHeads, intermediateSize: intermediateSize, numLanguages: numLanguages, dropoutRate: dropoutRate, featureEncoderDim: featureEncoderDim, featureProjectionDropout: featureProjectionDropout, featureEncoderKernels: featureEncoderKernels, featureEncoderStrides: featureEncoderStrides, positionalConvKernel: positionalConvKernel, positionalConvGroups: positionalConvGroups);
 
     /// <summary>
     /// Creates default VoxLingua107 layers for 107-language identification.
@@ -11934,7 +12006,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default layers for a Siamese neural network using a Transformer-based encoder.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="vocabSize">The size of the vocabulary (default: 30522).</param>
     /// <param name="embeddingDimension">The dimension of the embedding vectors (default: 768).</param>
     /// <param name="maxSequenceLength">The maximum length of input sequences (default: 512).</param>
@@ -11947,7 +12018,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSiameseLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 30522,
         int embeddingDimension = 768,
         int maxSequenceLength = 512)
@@ -11963,6 +12033,16 @@ public static partial class LayerHelper<T>
         yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
         yield return new TransformerEncoderLayer<T>( numHeads, 3072);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSiameseLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512)
+        => CreateDefaultSiameseLayers(vocabSize: vocabSize, embeddingDimension: embeddingDimension, maxSequenceLength: maxSequenceLength);
 
     /// <summary>
     /// Creates default layers for a Word2Vec model (Skip-Gram or CBOW).
@@ -12177,7 +12257,6 @@ public static partial class LayerHelper<T>
     /// Creates default layers for a SimCSE (Simple Contrastive Learning of Sentence Embeddings) model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultSimCSELayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 30522,
         int embeddingDimension = 768,
         int maxSequenceLength = 512,
@@ -12201,6 +12280,19 @@ public static partial class LayerHelper<T>
         // NOT vocabulary logits. The MLM head is not part of the inference architecture.
         // Output dimension = embeddingDimension (768 for BERT-base).
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSimCSELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+        => CreateDefaultSimCSELayers(vocabSize: vocabSize, embeddingDimension: embeddingDimension, maxSequenceLength: maxSequenceLength, numLayers: numLayers, numHeads: numHeads, feedForwardDim: feedForwardDim);
 
     /// <summary>
     /// Creates default layers for a ColBERT (Contextualized Late Interaction over BERT) model with a
@@ -12226,7 +12318,6 @@ public static partial class LayerHelper<T>
     /// instead of being ambiguous between the two.
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultColBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize,
         int embeddingDimension,
         int maxSequenceLength,
@@ -12249,11 +12340,24 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultColBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize,
+        int embeddingDimension,
+        int maxSequenceLength,
+        int numLayers,
+        int numHeads,
+        int feedForwardDim,
+        int hiddenDimension)
+        => CreateDefaultColBERTLayers(vocabSize: vocabSize, embeddingDimension: embeddingDimension, maxSequenceLength: maxSequenceLength, numLayers: numLayers, numHeads: numHeads, feedForwardDim: feedForwardDim, hiddenDimension: hiddenDimension);
+
     /// <summary>
     /// Creates default layers for a SPLADE (Sparse Lexical and Expansion Model) embedding model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultSPLADELayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 30522,
         int embeddingDimension = 768,
         int maxSequenceLength = 512,
@@ -12273,11 +12377,23 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(vocabSize, new ReLUActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSPLADELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+        => CreateDefaultSPLADELayers(vocabSize: vocabSize, embeddingDimension: embeddingDimension, maxSequenceLength: maxSequenceLength, numLayers: numLayers, numHeads: numHeads, feedForwardDim: feedForwardDim);
+
     /// <summary>
     /// Creates default layers for a Matryoshka Representation Learning (MRL) model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultMRLLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 30522,
         int maxEmbeddingDimension = 1536,
         int maxSequenceLength = 512,
@@ -12297,11 +12413,23 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(maxEmbeddingDimension, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultMRLLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int maxEmbeddingDimension = 1536,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+        => CreateDefaultMRLLayers(vocabSize: vocabSize, maxEmbeddingDimension: maxEmbeddingDimension, maxSequenceLength: maxSequenceLength, numLayers: numLayers, numHeads: numHeads, feedForwardDim: feedForwardDim);
+
     /// <summary>
     /// Creates default layers for an Instructor/E5 (Instruction-Tuned) embedding model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultInstructorLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 30522,
         int embeddingDimension = 768,
         int maxSequenceLength = 512,
@@ -12321,11 +12449,23 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultInstructorLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+        => CreateDefaultInstructorLayers(vocabSize: vocabSize, embeddingDimension: embeddingDimension, maxSequenceLength: maxSequenceLength, numLayers: numLayers, numHeads: numHeads, feedForwardDim: feedForwardDim);
+
     /// <summary>
     /// Creates default layers for a BGE (BAAI General Embedding) model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultBGELayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 30522,
         int embeddingDimension = 768,
         int maxSequenceLength = 512,
@@ -12345,11 +12485,23 @@ public static partial class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>();
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultBGELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+        => CreateDefaultBGELayers(vocabSize: vocabSize, embeddingDimension: embeddingDimension, maxSequenceLength: maxSequenceLength, numLayers: numLayers, numHeads: numHeads, feedForwardDim: feedForwardDim);
+
     /// <summary>
     /// Creates default layers for an SGPT (Sentence GPT) decoder-only embedding model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultSGPTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 50257, // GPT-2 vocab size
         int embeddingDimension = 768,
         int maxSequenceLength = 1024,
@@ -12373,6 +12525,19 @@ public static partial class LayerHelper<T>
         // SGPT uses the last token's representation
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 50257, // GPT-2 vocab size
+        int embeddingDimension = 768,
+        int maxSequenceLength = 1024,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+        => CreateDefaultSGPTLayers(vocabSize: vocabSize, embeddingDimension: embeddingDimension, maxSequenceLength: maxSequenceLength, numLayers: numLayers, numHeads: numHeads, feedForwardDim: feedForwardDim);
 
     #endregion
 
@@ -12647,7 +12812,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layer configuration for an Autoformer model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">The input sequence length (default: 96).</param>
     /// <param name="predictionHorizon">The number of future time steps to predict (default: 96).</param>
     /// <param name="numFeatures">The number of input features/variables (default: 7).</param>
@@ -12677,7 +12841,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultAutoformerLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 96,
         int predictionHorizon = 96,
         int numFeatures = 7,
@@ -12725,10 +12888,24 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultAutoformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 96,
+        int numFeatures = 7,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 1,
+        int numHeads = 8,
+        int modelDimension = 512,
+        int feedForwardDimension = 2048)
+        => CreateDefaultAutoformerLayers(sequenceLength: sequenceLength, predictionHorizon: predictionHorizon, numFeatures: numFeatures, numEncoderLayers: numEncoderLayers, numDecoderLayers: numDecoderLayers, numHeads: numHeads, modelDimension: modelDimension, feedForwardDimension: feedForwardDimension);
+
     /// <summary>
     /// Creates the default layer configuration for an Informer model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">The input sequence length (default: 96).</param>
     /// <param name="predictionHorizon">The number of future time steps to predict (default: 96).</param>
     /// <param name="numFeatures">The number of input features/variables (default: 7).</param>
@@ -12758,7 +12935,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultInformerLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 96,
         int predictionHorizon = 96,
         int numFeatures = 7,
@@ -12806,10 +12982,24 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultInformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 96,
+        int numFeatures = 7,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 1,
+        int numHeads = 8,
+        int modelDimension = 512,
+        int feedForwardDimension = 2048)
+        => CreateDefaultInformerLayers(sequenceLength: sequenceLength, predictionHorizon: predictionHorizon, numFeatures: numFeatures, numEncoderLayers: numEncoderLayers, numDecoderLayers: numDecoderLayers, numHeads: numHeads, modelDimension: modelDimension, feedForwardDimension: feedForwardDimension);
+
     /// <summary>
     /// Creates the default layers for a Temporal Fusion Transformer (TFT) architecture.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Input sequence length (lookback window).</param>
     /// <param name="predictionHorizon">Number of future steps to predict.</param>
     /// <param name="numFeatures">Number of input features.</param>
@@ -12832,7 +13022,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTFTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 24,
         int predictionHorizon = 6,
         int numFeatures = 7,
@@ -12901,10 +13090,23 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTFTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 24,
+        int predictionHorizon = 6,
+        int numFeatures = 7,
+        int hiddenSize = 128,
+        int numHeads = 4,
+        int numLayers = 2,
+        double dropout = 0.1)
+        => CreateDefaultTFTLayers(sequenceLength: sequenceLength, predictionHorizon: predictionHorizon, numFeatures: numFeatures, hiddenSize: hiddenSize, numHeads: numHeads, numLayers: numLayers, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the Crossformer (Cross-Dimension Transformer) architecture.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">The input sequence length. Default: 96.</param>
     /// <param name="predictionHorizon">The number of future time steps to predict. Default: 24.</param>
     /// <param name="numFeatures">The number of input features/variables. Default: 7.</param>
@@ -12932,7 +13134,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCrossformerLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 96,
         int predictionHorizon = 24,
         int numFeatures = 7,
@@ -12984,10 +13185,24 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultCrossformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int segmentLength = 12,
+        int modelDimension = 128,
+        int numHeads = 4,
+        int numLayers = 3,
+        double dropout = 0.1)
+        => CreateDefaultCrossformerLayers(sequenceLength: sequenceLength, predictionHorizon: predictionHorizon, numFeatures: numFeatures, segmentLength: segmentLength, modelDimension: modelDimension, numHeads: numHeads, numLayers: numLayers, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the TimesNet (Temporal 2D-Variation Modeling) architecture.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">The input sequence length. Default: 96.</param>
     /// <param name="predictionHorizon">The number of future time steps to predict. Default: 24.</param>
     /// <param name="numFeatures">The number of input features/variables. Default: 7.</param>
@@ -13016,7 +13231,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTimesNetLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 96,
         int predictionHorizon = 24,
         int numFeatures = 7,
@@ -13081,6 +13295,22 @@ public static partial class LayerHelper<T>
             outputSize: numFeatures,
             activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTimesNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int modelDimension = 64,
+        int feedForwardDim = 128,
+        int numLayers = 2,
+        int topK = 5,
+        int convKernelSize = 3,
+        double dropout = 0.1)
+        => CreateDefaultTimesNetLayers(sequenceLength: sequenceLength, predictionHorizon: predictionHorizon, numFeatures: numFeatures, modelDimension: modelDimension, feedForwardDim: feedForwardDim, numLayers: numLayers, topK: topK, convKernelSize: convKernelSize, dropout: dropout);
 
     /// <summary>
     /// Creates default layers for the ETSformer (Exponential Smoothing Transformer) architecture.
@@ -13188,7 +13418,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default layers for a Non-stationary Transformer model.
     /// </summary>
-    /// <param name="architecture">Neural network architecture containing configuration.</param>
     /// <param name="sequenceLength">Input sequence length. Default: 96.</param>
     /// <param name="predictionHorizon">Number of future time steps to predict. Default: 24.</param>
     /// <param name="numFeatures">Number of input features. Default: 7.</param>
@@ -13213,7 +13442,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultNonStationaryTransformerLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 96,
         int predictionHorizon = 24,
         int numFeatures = 7,
@@ -13305,10 +13533,26 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultNonStationaryTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int modelDimension = 64,
+        int feedForwardDim = 128,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 1,
+        int numHeads = 4,
+        int projectionDim = 64,
+        double dropout = 0.1)
+        => CreateDefaultNonStationaryTransformerLayers(sequenceLength: sequenceLength, predictionHorizon: predictionHorizon, numFeatures: numFeatures, modelDimension: modelDimension, feedForwardDim: feedForwardDim, numEncoderLayers: numEncoderLayers, numDecoderLayers: numDecoderLayers, numHeads: numHeads, projectionDim: projectionDim, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for a TSMixer model.
     /// </summary>
-    /// <param name="architecture">Neural network architecture containing configuration.</param>
     /// <param name="sequenceLength">Input sequence length. Default: 96.</param>
     /// <param name="predictionHorizon">Number of future time steps to predict. Default: 24.</param>
     /// <param name="numFeatures">Number of input features. Default: 7.</param>
@@ -13330,7 +13574,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTSMixerLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 96,
         int predictionHorizon = 24,
         int numFeatures = 7,
@@ -13405,6 +13648,20 @@ public static partial class LayerHelper<T>
             outputSize: numFeatures,
             activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTSMixerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int hiddenDim = 64,
+        int numBlocks = 4,
+        double feedForwardExpansion = 2.0,
+        double dropout = 0.1)
+        => CreateDefaultTSMixerLayers(sequenceLength: sequenceLength, predictionHorizon: predictionHorizon, numFeatures: numFeatures, hiddenDim: hiddenDim, numBlocks: numBlocks, feedForwardExpansion: feedForwardExpansion, dropout: dropout);
 
     /// <summary>
     /// Creates layers for DeepAR probabilistic autoregressive model.
@@ -13514,7 +13771,6 @@ public static partial class LayerHelper<T>
     /// Creates layers for N-BEATS (Neural Basis Expansion Analysis for Time Series) model.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
-    /// <param name="architecture">The neural network architecture.</param>
     /// <param name="lookbackWindow">Historical context window length. Default: 10.</param>
     /// <param name="forecastHorizon">Number of future steps to predict. Default: 5.</param>
     /// <param name="numStacks">Number of stacks in the architecture. Default: 2.</param>
@@ -13541,7 +13797,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultNBEATSLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int lookbackWindow = 10,
         int forecastHorizon = 5,
         int numStacks = 2,
@@ -13600,6 +13855,19 @@ public static partial class LayerHelper<T>
             outputSize: forecastHorizon,
             activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultNBEATSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 10,
+        int forecastHorizon = 5,
+        int numStacks = 2,
+        int numBlocksPerStack = 3,
+        int hiddenSize = 256,
+        int numHiddenLayers = 4)
+        => CreateDefaultNBEATSLayers(lookbackWindow: lookbackWindow, forecastHorizon: forecastHorizon, numStacks: numStacks, numBlocksPerStack: numBlocksPerStack, hiddenSize: hiddenSize, numHiddenLayers: numHiddenLayers);
 
     /// <summary>
     /// Creates layers for N-HiTS (Neural Hierarchical Interpolation for Time Series) model.
@@ -13706,7 +13974,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layers for an LSTNet (Long Short-Term Time-series Network) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="lookbackWindow">How many past time steps to consider (default: 168 for weekly hourly data).</param>
     /// <param name="forecastHorizon">How many future time steps to predict (default: 24).</param>
     /// <param name="numFeatures">Number of input features/variables (default: 7).</param>
@@ -13756,7 +14023,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultLSTNetLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int lookbackWindow = 168,
         int forecastHorizon = 24,
         int numFeatures = 7,
@@ -13864,6 +14130,22 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultLSTNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 7,
+        int convolutionFilters = 100,
+        int convolutionKernelSize = 6,
+        int hiddenRecurrentSize = 100,
+        int hiddenSkipSize = 5,
+        int skipPeriod = 24,
+        double dropout = 0.2)
+        => CreateDefaultLSTNetLayers(lookbackWindow: lookbackWindow, forecastHorizon: forecastHorizon, numFeatures: numFeatures, convolutionFilters: convolutionFilters, convolutionKernelSize: convolutionKernelSize, hiddenRecurrentSize: hiddenRecurrentSize, hiddenSkipSize: hiddenSkipSize, skipPeriod: skipPeriod, dropout: dropout);
+
     #endregion
 
     #region TCN Layers
@@ -13871,7 +14153,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layers for a TCN (Temporal Convolutional Network) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="lookbackWindow">How many past time steps to consider (default: 96).</param>
     /// <param name="forecastHorizon">How many future time steps to predict (default: 24).</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
@@ -13915,7 +14196,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTCNLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int lookbackWindow = 96,
         int forecastHorizon = 24,
         int numFeatures = 1,
@@ -13987,6 +14267,21 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTCNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 96,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int numChannels = 64,
+        int kernelSize = 3,
+        int numLayers = 8,
+        double dropout = 0.2,
+        bool useResidualConnections = true)
+        => CreateDefaultTCNLayers(lookbackWindow: lookbackWindow, forecastHorizon: forecastHorizon, numFeatures: numFeatures, numChannels: numChannels, kernelSize: kernelSize, numLayers: numLayers, dropout: dropout, useResidualConnections: useResidualConnections);
+
     #endregion
 
     #region WaveNet Layers
@@ -13994,7 +14289,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layers for a WaveNet model adapted for time series forecasting.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="lookbackWindow">How many past time steps to consider (default: 128).</param>
     /// <param name="forecastHorizon">How many future time steps to predict (default: 24).</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
@@ -14033,7 +14327,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultWaveNetLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int lookbackWindow = 128,
         int forecastHorizon = 24,
         int numFeatures = 1,
@@ -14115,10 +14408,24 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultWaveNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 128,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int residualChannels = 32,
+        int skipChannels = 256,
+        int dilationDepth = 8,
+        int numStacks = 2,
+        double dropout = 0.1)
+        => CreateDefaultWaveNetLayers(lookbackWindow: lookbackWindow, forecastHorizon: forecastHorizon, numFeatures: numFeatures, residualChannels: residualChannels, skipChannels: skipChannels, dilationDepth: dilationDepth, numStacks: numStacks, dropout: dropout);
+
     /// <summary>
     /// Creates the default layer configuration for an MQCNN (Multi-Quantile CNN) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture containing layer configurations.</param>
     /// <param name="lookbackWindow">The number of past time steps to use as input. Default is 168.</param>
     /// <param name="forecastHorizon">The number of future time steps to predict. Default is 24.</param>
     /// <param name="numFeatures">The number of input features per time step. Default is 1.</param>
@@ -14144,7 +14451,6 @@ public static partial class LayerHelper<T>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultMQCNNLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int lookbackWindow = 168,
         int forecastHorizon = 24,
         int numFeatures = 1,
@@ -14233,10 +14539,25 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultMQCNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int numQuantiles = 3,
+        int encoderChannels = 64,
+        int decoderChannels = 32,
+        int numEncoderLayers = 4,
+        int numDecoderLayers = 2,
+        double dropout = 0.2)
+        => CreateDefaultMQCNNLayers(lookbackWindow: lookbackWindow, forecastHorizon: forecastHorizon, numFeatures: numFeatures, numQuantiles: numQuantiles, encoderChannels: encoderChannels, decoderChannels: decoderChannels, numEncoderLayers: numEncoderLayers, numDecoderLayers: numDecoderLayers, dropout: dropout);
+
     /// <summary>
     /// Creates the default layer configuration for a DeepState (Deep State Space) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture containing layer configurations.</param>
     /// <param name="lookbackWindow">The number of past time steps to use as input. Default is 168.</param>
     /// <param name="forecastHorizon">The number of future time steps to predict. Default is 24.</param>
     /// <param name="numFeatures">The number of input features per time step. Default is 1.</param>
@@ -14263,7 +14584,6 @@ public static partial class LayerHelper<T>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepStateLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int lookbackWindow = 168,
         int forecastHorizon = 24,
         int numFeatures = 1,
@@ -14341,10 +14661,23 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepStateLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int stateDimension = 40,
+        int hiddenDimension = 50,
+        int numRnnLayers = 2,
+        double dropout = 0.1)
+        => CreateDefaultDeepStateLayers(lookbackWindow: lookbackWindow, forecastHorizon: forecastHorizon, numFeatures: numFeatures, stateDimension: stateDimension, hiddenDimension: hiddenDimension, numRnnLayers: numRnnLayers, dropout: dropout);
+
     /// <summary>
     /// Creates the default layer configuration for a DeepFactor (Deep Factor Model).
     /// </summary>
-    /// <param name="architecture">The neural network architecture containing layer configurations.</param>
     /// <param name="lookbackWindow">The number of past time steps to use as input. Default is 168.</param>
     /// <param name="forecastHorizon">The number of future time steps to predict. Default is 24.</param>
     /// <param name="numFeatures">The number of input features per time step. Default is 1.</param>
@@ -14372,7 +14705,6 @@ public static partial class LayerHelper<T>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepFactorLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int lookbackWindow = 168,
         int forecastHorizon = 24,
         int numFeatures = 1,
@@ -14466,10 +14798,25 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepFactorLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int numFactors = 10,
+        int factorHiddenDim = 64,
+        int localHiddenDim = 32,
+        int numFactorLayers = 2,
+        int numLocalLayers = 1,
+        double dropout = 0.1)
+        => CreateDefaultDeepFactorLayers(lookbackWindow: lookbackWindow, forecastHorizon: forecastHorizon, numFeatures: numFeatures, numFactors: numFactors, factorHiddenDim: factorHiddenDim, localHiddenDim: localHiddenDim, numFactorLayers: numFactorLayers, numLocalLayers: numLocalLayers, dropout: dropout);
+
     /// <summary>
     /// Creates the default layer configuration for a TimesFM (Time Series Foundation Model).
     /// </summary>
-    /// <param name="architecture">The neural network architecture containing layer configurations.</param>
     /// <param name="contextLength">The context length (input sequence). Default is 512.</param>
     /// <param name="forecastHorizon">The number of future time steps to predict. Default is 96.</param>
     /// <param name="numFeatures">The number of input features per time step. Default is 1.</param>
@@ -14494,7 +14841,6 @@ public static partial class LayerHelper<T>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultTimesFMLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512,
         int forecastHorizon = 96,
         int numFeatures = 1,
@@ -14570,10 +14916,25 @@ public static partial class LayerHelper<T>
         yield return new FlattenLayer<T>();
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTimesFMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int patchLength = 32,
+        int hiddenDim = 256,
+        int numLayers = 8,
+        int numHeads = 4,
+        double dropout = 0.1,
+        int outputPatchLength = 128)
+        => CreateDefaultTimesFMLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, numFeatures: numFeatures, patchLength: patchLength, hiddenDim: hiddenDim, numLayers: numLayers, numHeads: numHeads, dropout: dropout, outputPatchLength: outputPatchLength);
+
     /// <summary>
     /// Creates default layer configuration for Lag-Llama time series foundation model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="contextLength">The input context length (default: 96).</param>
     /// <param name="forecastHorizon">The number of steps to forecast (default: 24).</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
@@ -14607,7 +14968,6 @@ public static partial class LayerHelper<T>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultLagLlamaLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 96,
         int forecastHorizon = 24,
         int numFeatures = 1,
@@ -14662,10 +15022,25 @@ public static partial class LayerHelper<T>
         yield return new FeedForwardLayer<T>(forecastHorizon * 3, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultLagLlamaLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 96,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int numLags = 7,
+        int hiddenDim = 256,
+        int numLayers = 8,
+        int numHeads = 4,
+        int intermediateSize = 1024,
+        double dropout = 0.1)
+        => CreateDefaultLagLlamaLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, numFeatures: numFeatures, numLags: numLags, hiddenDim: hiddenDim, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, dropout: dropout);
+
     /// <summary>
     /// Creates default layer configuration for Chronos time series foundation model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="contextLength">The input context length (default: 512).</param>
     /// <param name="forecastHorizon">The number of steps to forecast (default: 64).</param>
     /// <param name="numTokens">Number of discrete tokens for quantization (default: 4096).</param>
@@ -14700,7 +15075,6 @@ public static partial class LayerHelper<T>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultChronosLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512,
         int forecastHorizon = 64,
         int numTokens = 4096,
@@ -14749,10 +15123,24 @@ public static partial class LayerHelper<T>
         yield return new FeedForwardLayer<T>(numTokens, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultChronosLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 64,
+        int numTokens = 4096,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int intermediateSize = 3072,
+        double dropout = 0.1)
+        => CreateDefaultChronosLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, numTokens: numTokens, hiddenDim: hiddenDim, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, dropout: dropout);
+
     /// <summary>
     /// Creates the default layers for MOIRAI (Salesforce's Universal Time Series Foundation Model).
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="contextLength">The input context length.</param>
     /// <param name="forecastHorizon">The prediction horizon length.</param>
     /// <param name="numFeatures">The number of input features.</param>
@@ -14773,7 +15161,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultMOIRAILayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512,
         int forecastHorizon = 96,
         int numFeatures = 1,
@@ -14811,6 +15198,23 @@ public static partial class LayerHelper<T>
         yield return new FeedForwardLayer<T>(hiddenDim / 2, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new FeedForwardLayer<T>(distributionParams, (IActivationFunction<T>?)null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultMOIRAILayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int[]? patchSizes = null,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int intermediateSize = 3072,
+        int numMixtures = 10,
+        double dropout = 0.1)
+        => CreateDefaultMOIRAILayers(contextLength: contextLength, forecastHorizon: forecastHorizon, numFeatures: numFeatures, patchSizes: patchSizes, hiddenDim: hiddenDim, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, numMixtures: numMixtures, dropout: dropout);
 
     /// <summary>
     /// Creates the default layers for Time-LLM (LLM Reprogramming for Time Series).
@@ -15024,7 +15428,6 @@ public static partial class LayerHelper<T>
     /// Creates default layers for the Timer (Generative Pre-Training) model.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    /// <param name="architecture">The neural network architecture containing input/output specifications.</param>
     /// <param name="contextLength">The context length (input sequence length). Default: 512.</param>
     /// <param name="forecastHorizon">The forecast horizon (prediction length). Default: 96.</param>
     /// <param name="numFeatures">The number of input features. Default: 1.</param>
@@ -15053,7 +15456,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTimerLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512,
         int forecastHorizon = 96,
         int numFeatures = 1,
@@ -15118,6 +15520,22 @@ public static partial class LayerHelper<T>
             activationFunction: (IActivationFunction<T>?)null);
         yield return new FlattenLayer<T>();
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTimerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int patchLength = 16,
+        int patchStride = 8,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        double dropout = 0.1)
+        => CreateDefaultTimerLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, numFeatures: numFeatures, patchLength: patchLength, patchStride: patchStride, hiddenDim: hiddenDim, numLayers: numLayers, numHeads: numHeads, dropout: dropout);
 
     /// <summary>
     /// Creates default layers for the TimeGPT-style model.
@@ -15260,7 +15678,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default layers for the RWKV-7 "Goose" language model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="vocabSize">Size of the token vocabulary (default: 65536).</param>
     /// <param name="modelDim">The model dimension d_model (default: 768).</param>
     /// <param name="numHeads">Number of heads per block (default: 12). Must divide modelDim.</param>
@@ -15287,7 +15704,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultRWKV7LanguageModelLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 65536,
         int modelDim = 768,
         int numHeads = 12,
@@ -15323,10 +15739,22 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultRWKV7LanguageModelLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 65536,
+        int modelDim = 768,
+        int numHeads = 12,
+        int numLayers = 12,
+        double ffnMultiplier = 3.5,
+        int maxSeqLength = 4096)
+        => CreateDefaultRWKV7LanguageModelLayers(vocabSize: vocabSize, modelDim: modelDim, numHeads: numHeads, numLayers: numLayers, ffnMultiplier: ffnMultiplier, maxSeqLength: maxSeqLength);
+
     /// <summary>
     /// Creates default layers for the S4 (Structured State Space Sequence) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="contextLength">The input sequence length (default: 1024).</param>
     /// <param name="forecastHorizon">The prediction length (default: 96).</param>
     /// <param name="modelDim">The model dimension (default: 256).</param>
@@ -15363,7 +15791,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultS4Layers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 1024,
         int forecastHorizon = 96,
         int modelDim = 256,
@@ -15478,10 +15905,24 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultS4Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 1024,
+        int forecastHorizon = 96,
+        int modelDim = 256,
+        int stateDim = 64,
+        int numLayers = 6,
+        bool useLowRankCorrection = true,
+        int lowRankRank = 1,
+        int numFeatures = 1)
+        => CreateDefaultS4Layers(contextLength: contextLength, forecastHorizon: forecastHorizon, modelDim: modelDim, stateDim: stateDim, numLayers: numLayers, useLowRankCorrection: useLowRankCorrection, lowRankRank: lowRankRank, numFeatures: numFeatures);
+
     /// <summary>
     /// Creates default layers for the TimeMachine (Time Series State Space Model) architecture.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="contextLength">Maximum input sequence length (default: 1024).</param>
     /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
     /// <param name="modelDim">The model dimension d_model (default: 256).</param>
@@ -15506,7 +15947,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTimeMachineLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512,
         int forecastHorizon = 96,
         int modelDim = 256,
@@ -15558,6 +15998,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(outputSize: n1, activationFunction: null); // P1: n2 -> n1
         yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null); // P2: 2*n1 -> T
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeMachineLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int modelDim = 256,
+        int stateDim = 256,
+        int expandFactor = 1,
+        int convKernelSize = 2,
+        int numFeatures = 1,
+        double dropoutRate = 0.05)
+        => CreateDefaultTimeMachineLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, modelDim: modelDim, stateDim: stateDim, expandFactor: expandFactor, convKernelSize: convKernelSize, numFeatures: numFeatures, dropoutRate: dropoutRate);
 
     /// <summary>
     /// Creates default layers for the HiPPO (High-order Polynomial Projection Operators) architecture.
@@ -15667,7 +16122,6 @@ public static partial class LayerHelper<T>
     /// noise for missing positions while keeping observed values fixed during sampling.
     /// </para>
     /// </remarks>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Length of the input time series (default: 100).</param>
     /// <param name="numFeatures">Number of features/variables (default: 1).</param>
     /// <param name="hiddenDim">Hidden dimension for the score network (default: 64).</param>
@@ -15677,7 +16131,6 @@ public static partial class LayerHelper<T>
     /// <param name="featureEmbeddingDim">Dimension of feature embeddings (default: 16).</param>
     /// <returns>An enumerable collection of layers for the CSDI model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultCSDILayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 100,
         int numFeatures = 1,
         int hiddenDim = 64,
@@ -15784,6 +16237,20 @@ public static partial class LayerHelper<T>
             activationFunction: null); // Output noise prediction for all positions
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultCSDILayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 100,
+        int numFeatures = 1,
+        int hiddenDim = 64,
+        int numResidualLayers = 4,
+        int numHeads = 8,
+        int timeEmbeddingDim = 128,
+        int featureEmbeddingDim = 16)
+        => CreateDefaultCSDILayers(sequenceLength: sequenceLength, numFeatures: numFeatures, hiddenDim: hiddenDim, numResidualLayers: numResidualLayers, numHeads: numHeads, timeEmbeddingDim: timeEmbeddingDim, featureEmbeddingDim: featureEmbeddingDim);
+
     /// <summary>
     /// Creates the default layer configuration for TSDiff (Time Series Diffusion).
     /// </summary>
@@ -15802,7 +16269,6 @@ public static partial class LayerHelper<T>
     /// The self-guidance mechanism uses intermediate predictions to refine generation.
     /// </para>
     /// </remarks>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Total sequence length (default: 192).</param>
     /// <param name="numFeatures">Number of features/variables (default: 1).</param>
     /// <param name="hiddenDim">Hidden dimension (default: 128).</param>
@@ -15810,7 +16276,6 @@ public static partial class LayerHelper<T>
     /// <param name="numAttentionHeads">Number of attention heads (default: 4).</param>
     /// <returns>An enumerable collection of layers for the TSDiff model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultTSDiffLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 192,
         int numFeatures = 1,
         int hiddenDim = 128,
@@ -15932,6 +16397,18 @@ public static partial class LayerHelper<T>
             activationFunction: null); // Output noise prediction
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTSDiffLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 192,
+        int numFeatures = 1,
+        int hiddenDim = 128,
+        int numResidualBlocks = 8,
+        int numAttentionHeads = 4)
+        => CreateDefaultTSDiffLayers(sequenceLength: sequenceLength, numFeatures: numFeatures, hiddenDim: hiddenDim, numResidualBlocks: numResidualBlocks, numAttentionHeads: numAttentionHeads);
+
     /// <summary>
     /// Creates the default layer configuration for DiffusionTS (Interpretable Diffusion for Time Series).
     /// </summary>
@@ -15948,7 +16425,6 @@ public static partial class LayerHelper<T>
     /// Each component network has different capacity appropriate for its complexity.
     /// </para>
     /// </remarks>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Input sequence length (default: 168).</param>
     /// <param name="forecastHorizon">Forecast horizon (default: 24).</param>
     /// <param name="numFeatures">Number of features (default: 1).</param>
@@ -15957,7 +16433,6 @@ public static partial class LayerHelper<T>
     /// <param name="seasonalHiddenDim">Seasonal network hidden dim (default: 48).</param>
     /// <returns>An enumerable collection of layers for the DiffusionTS model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultDiffusionTSLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 168,
         int forecastHorizon = 24,
         int numFeatures = 1,
@@ -16051,10 +16526,22 @@ public static partial class LayerHelper<T>
             activationFunction: null); // Final noise/output prediction
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultDiffusionTSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int hiddenDim = 64,
+        int trendHiddenDim = 32,
+        int seasonalHiddenDim = 48)
+        => CreateDefaultDiffusionTSLayers(sequenceLength: sequenceLength, forecastHorizon: forecastHorizon, numFeatures: numFeatures, hiddenDim: hiddenDim, trendHiddenDim: trendHiddenDim, seasonalHiddenDim: seasonalHiddenDim);
+
     /// <summary>
     /// Creates default layers for the ScoreGrad (Score-based Gradient) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Length of input sequence (default: 168).</param>
     /// <param name="forecastHorizon">Number of steps to forecast (default: 24).</param>
     /// <param name="numFeatures">Number of input features (default: 1).</param>
@@ -16089,7 +16576,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultScoreGradLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 168,
         int forecastHorizon = 24,
         int numFeatures = 1,
@@ -16139,10 +16625,21 @@ public static partial class LayerHelper<T>
             activationFunction: null); // Score output (can be any value, not bounded)
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultScoreGradLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int hiddenDim = 128,
+        int numLayers = 4)
+        => CreateDefaultScoreGradLayers(sequenceLength: sequenceLength, forecastHorizon: forecastHorizon, numFeatures: numFeatures, hiddenDim: hiddenDim, numLayers: numLayers);
+
     /// <summary>
     /// Creates default layers for the STGNN (Spatio-Temporal Graph Neural Network) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Length of input sequence (default: 12).</param>
     /// <param name="forecastHorizon">Number of steps to forecast (default: 12).</param>
     /// <param name="numNodes">Number of nodes in the graph (default: 207).</param>
@@ -16176,7 +16673,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSTGNNLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 12,
         int forecastHorizon = 12,
         int numNodes = 207,
@@ -16230,10 +16726,23 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSTGNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 12,
+        int forecastHorizon = 12,
+        int numNodes = 207,
+        int numFeatures = 1,
+        int hiddenDim = 64,
+        int numSpatialLayers = 2,
+        int numTemporalLayers = 2)
+        => CreateDefaultSTGNNLayers(sequenceLength: sequenceLength, forecastHorizon: forecastHorizon, numNodes: numNodes, numFeatures: numFeatures, hiddenDim: hiddenDim, numSpatialLayers: numSpatialLayers, numTemporalLayers: numTemporalLayers);
+
     /// <summary>
     /// Creates default layers for TemporalGCN (Temporal Graph Convolutional Network).
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Number of input time steps.</param>
     /// <param name="forecastHorizon">Number of future time steps to predict.</param>
     /// <param name="numNodes">Number of nodes in the graph.</param>
@@ -16255,7 +16764,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTemporalGCNLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 12,
         int forecastHorizon = 12,
         int numNodes = 207,
@@ -16320,10 +16828,23 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTemporalGCNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 12,
+        int forecastHorizon = 12,
+        int numNodes = 207,
+        int numFeatures = 1,
+        int hiddenDim = 64,
+        int numGCNLayers = 2,
+        int numTemporalLayers = 1)
+        => CreateDefaultTemporalGCNLayers(sequenceLength: sequenceLength, forecastHorizon: forecastHorizon, numNodes: numNodes, numFeatures: numFeatures, hiddenDim: hiddenDim, numGCNLayers: numGCNLayers, numTemporalLayers: numTemporalLayers);
+
     /// <summary>
     /// Creates default layers for MTGNN (Multivariate Time-series Graph Neural Network).
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Number of input time steps.</param>
     /// <param name="forecastHorizon">Number of future time steps to predict.</param>
     /// <param name="numNodes">Number of nodes (variables/time series).</param>
@@ -16344,7 +16865,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultMTGNNLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 12,
         int forecastHorizon = 12,
         int numNodes = 207,
@@ -16406,10 +16926,24 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultMTGNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 12,
+        int forecastHorizon = 12,
+        int numNodes = 207,
+        int numFeatures = 1,
+        int hiddenDim = 32,
+        int nodeEmbeddingDim = 40,
+        int numLayers = 3,
+        int mixHopDepth = 2)
+        => CreateDefaultMTGNNLayers(sequenceLength: sequenceLength, forecastHorizon: forecastHorizon, numNodes: numNodes, numFeatures: numFeatures, hiddenDim: hiddenDim, nodeEmbeddingDim: nodeEmbeddingDim, numLayers: numLayers, mixHopDepth: mixHopDepth);
+
     /// <summary>
     /// Creates default layers for GraphWaveNet (Graph WaveNet for spatial-temporal modeling).
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="sequenceLength">Number of input time steps.</param>
     /// <param name="forecastHorizon">Number of future time steps to predict.</param>
     /// <param name="numNodes">Number of nodes in the graph.</param>
@@ -16431,7 +16965,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultGraphWaveNetLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 12,
         int forecastHorizon = 12,
         int numNodes = 207,
@@ -16493,6 +17026,22 @@ public static partial class LayerHelper<T>
             outputSize: forecastHorizon,
             activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphWaveNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 12,
+        int forecastHorizon = 12,
+        int numNodes = 207,
+        int numFeatures = 2,
+        int residualChannels = 32,
+        int skipChannels = 256,
+        int endChannels = 512,
+        int numBlocks = 4,
+        int layersPerBlock = 2)
+        => CreateDefaultGraphWaveNetLayers(sequenceLength: sequenceLength, forecastHorizon: forecastHorizon, numNodes: numNodes, numFeatures: numFeatures, residualChannels: residualChannels, skipChannels: skipChannels, endChannels: endChannels, numBlocks: numBlocks, layersPerBlock: layersPerBlock);
 
     /// <summary>
     /// Creates the default layers for a DCRNN (Diffusion Convolutional Recurrent Neural Network).
@@ -16588,7 +17137,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default layers for RelationalGCN (Relational Graph Convolutional Network).
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="numNodes">Number of nodes (entities) in the knowledge graph.</param>
     /// <param name="numFeatures">Number of input features per node.</param>
     /// <param name="numRelations">Number of relation types in the graph.</param>
@@ -16619,7 +17167,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultRelationalGCNLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numNodes = 100,
         int numFeatures = 16,
         int numRelations = 10,
@@ -16685,10 +17232,23 @@ public static partial class LayerHelper<T>
             activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultRelationalGCNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numNodes = 100,
+        int numFeatures = 16,
+        int numRelations = 10,
+        int hiddenDimension = 64,
+        int numLayers = 2,
+        int numBases = 5,
+        int forecastHorizon = 12)
+        => CreateDefaultRelationalGCNLayers(numNodes: numNodes, numFeatures: numFeatures, numRelations: numRelations, hiddenDimension: hiddenDimension, numLayers: numLayers, numBases: numBases, forecastHorizon: forecastHorizon);
+
     /// <summary>
     /// Creates default layers for FinBERT (Financial BERT) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="vocabularySize">Size of the token vocabulary.</param>
     /// <param name="maxSequenceLength">Maximum sequence length in tokens.</param>
     /// <param name="hiddenDimension">Hidden dimension for transformer layers.</param>
@@ -16718,7 +17278,6 @@ public static partial class LayerHelper<T>
     /// </remarks>
     [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultFinBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 30522,
         int maxSequenceLength = 512,
         int hiddenDimension = 768,
@@ -16769,10 +17328,24 @@ public static partial class LayerHelper<T>
         // Softmax for class probabilities (applied in model's forward pass)
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFinBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 30522,
+        int maxSequenceLength = 512,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numSentimentClasses = 3,
+        double dropoutRate = 0.1)
+        => CreateDefaultFinBERTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numSentimentClasses: numSentimentClasses, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates the default layer configuration for SEC-BERT (Securities and Exchange Commission BERT).
     /// </summary>
-    /// <param name="architecture">The neural network architecture containing base configuration.</param>
     /// <param name="vocabularySize">Size of the token vocabulary (default: 30522 for BERT-base).</param>
     /// <param name="maxSequenceLength">Maximum sequence length in tokens (default: 512).</param>
     /// <param name="hiddenDimension">Hidden dimension size (default: 768 for BERT-base).</param>
@@ -16805,7 +17378,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSECBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 30522,
         int maxSequenceLength = 512,
         int hiddenDimension = 768,
@@ -16877,10 +17449,25 @@ public static partial class LayerHelper<T>
         }
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSECBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 30522,
+        int maxSequenceLength = 512,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 2,
+        double dropoutRate = 0.1,
+        string taskType = "classification")
+        => CreateDefaultSECBERTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate, taskType: taskType);
+
     /// <summary>
     /// Creates the default layer configuration for FinancialBERT (domain-adapted financial BERT).
     /// </summary>
-    /// <param name="architecture">The neural network architecture containing base configuration.</param>
     /// <param name="vocabularySize">Size of the token vocabulary (default: 30522 for BERT-base).</param>
     /// <param name="maxSequenceLength">Maximum sequence length in tokens (default: 512).</param>
     /// <param name="hiddenDimension">Hidden dimension size (default: 768 for BERT-base).</param>
@@ -16906,7 +17493,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFinancialBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 30522,
         int maxSequenceLength = 512,
         int hiddenDimension = 768,
@@ -16942,10 +17528,25 @@ public static partial class LayerHelper<T>
             activationFunction: new IdentityActivation<T>());
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFinancialBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 30522,
+        int maxSequenceLength = 512,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 3,
+        double dropoutRate = 0.1,
+        string taskType = "sentiment")
+        => CreateDefaultFinancialBERTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate, taskType: taskType);
+
     /// <summary>
     /// Creates the default layer configuration for FinBERT-Tone (sentiment-focused FinBERT).
     /// </summary>
-    /// <param name="architecture">The neural network architecture containing base configuration.</param>
     /// <param name="vocabularySize">Size of the token vocabulary (default: 30522 for BERT-base).</param>
     /// <param name="maxSequenceLength">Maximum sequence length in tokens (default: 512).</param>
     /// <param name="hiddenDimension">Hidden dimension size (default: 768 for BERT-base).</param>
@@ -16970,7 +17571,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFinBERTToneLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 30522,
         int maxSequenceLength = 512,
         int hiddenDimension = 768,
@@ -17009,6 +17609,21 @@ public static partial class LayerHelper<T>
             outputSize: numToneClasses,
             activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFinBERTToneLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 30522,
+        int maxSequenceLength = 512,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numToneClasses = 5,
+        double dropoutRate = 0.1)
+        => CreateDefaultFinBERTToneLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numToneClasses: numToneClasses, dropoutRate: dropoutRate);
 
     /// <summary>
     /// Creates the default layer configuration for FinGPT (Financial GPT).
@@ -17066,7 +17681,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultBloombergGPTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 50257,
         int maxSequenceLength = 2048,
         int hiddenDimension = 1024,
@@ -17100,6 +17714,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultBloombergGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 50257,
+        int maxSequenceLength = 2048,
+        int hiddenDimension = 1024,
+        int numAttentionHeads = 16,
+        int intermediateDimension = 4096,
+        int numLayers = 24,
+        int numClasses = 3,
+        double dropoutRate = 0.1)
+        => CreateDefaultBloombergGPTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates the default layer configuration for FinMA (Financial Multi-Agent).
     /// </summary>
@@ -17112,7 +17741,6 @@ public static partial class LayerHelper<T>
     /// </remarks>
     [ValidateSequentialLayerDomains]
     public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 32000,
         int maxSequenceLength = 2048,
         int hiddenDimension = 768,
@@ -17145,6 +17773,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 32000,
+        int maxSequenceLength = 2048,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 3,
+        double dropoutRate = 0.1)
+        => CreateDefaultFinMALayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates the default layer configuration for InvestLM (Investment Language Model).
     /// </summary>
@@ -17156,7 +17799,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultInvestLMLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabularySize = 32000,
         int maxSequenceLength = 2048,
         int hiddenDimension = 768,
@@ -17191,6 +17833,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultInvestLMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 32000,
+        int maxSequenceLength = 2048,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 3,
+        double dropoutRate = 0.1)
+        => CreateDefaultInvestLMLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate);
+
     #endregion
 
     #region Factor Models
@@ -17198,7 +17855,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default layers for an AlphaFactorModel.
     /// </summary>
-    /// <param name="architecture">The neural network architecture.</param>
     /// <param name="numFeatures">Number of input features per asset.</param>
     /// <param name="hiddenDimension">Dimension of hidden layers.</param>
     /// <param name="numFactors">Number of latent factors to learn.</param>
@@ -17214,7 +17870,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultAlphaFactorLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 128,
         int numFactors = 10,
@@ -17244,10 +17899,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultAlphaFactorLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numFactors = 10,
+        int numAssets = 500,
+        double dropoutRate = 0.1)
+        => CreateDefaultAlphaFactorLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, numFactors: numFactors, numAssets: numAssets, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates default layers for a FactorVAE model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture.</param>
     /// <param name="numFeatures">Number of input features.</param>
     /// <param name="hiddenDimension">Dimension of hidden layers.</param>
     /// <param name="latentDimension">Retained for API compatibility. The factor count is now the latent
@@ -17279,7 +17945,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFactorVAELayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 128,
         int latentDimension = 32,
@@ -17331,6 +17996,19 @@ public static partial class LayerHelper<T>
             numAssets * numFactors, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFactorVAELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int latentDimension = 32,
+        int numFactors = 10,
+        double dropoutRate = 0.1,
+        int numAssets = 10)
+        => CreateDefaultFactorVAELayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, latentDimension: latentDimension, numFactors: numFactors, dropoutRate: dropoutRate, numAssets: numAssets);
+
     /// <summary>Layers in the FactorVAE alpha (idiosyncratic return) head.</summary>
     public const int FactorVAEAlphaLayerCount = 2;
 
@@ -17367,7 +18045,6 @@ public static partial class LayerHelper<T>
     /// Creates default layers for a NeuralVaR model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultNeuralVaRLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 128,
         int sequenceLength = 60,
@@ -17391,11 +18068,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(1, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralVaRLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+        => CreateDefaultNeuralVaRLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, sequenceLength: sequenceLength, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates default layers for a NeuralCVaR model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultNeuralCVaRLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 128,
         int sequenceLength = 60,
@@ -17417,6 +18104,17 @@ public static partial class LayerHelper<T>
         // Output both VaR and CVaR
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralCVaRLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+        => CreateDefaultNeuralCVaRLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, sequenceLength: sequenceLength, dropoutRate: dropoutRate);
 
     /// <summary>
     /// Selects the final-layer activation for a tabular prediction head from the
@@ -17987,7 +18685,6 @@ public static partial class LayerHelper<T>
     /// Creates default layers for a NeuralStressTest model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultNeuralStressTestLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 128,
         int numScenarios = 10,
@@ -18007,6 +18704,17 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numScenarios, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralStressTestLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numScenarios = 10,
+        double dropoutRate = 0.1)
+        => CreateDefaultNeuralStressTestLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, numScenarios: numScenarios, dropoutRate: dropoutRate);
+
     #endregion
 
     #region Portfolio Models
@@ -18015,7 +18723,6 @@ public static partial class LayerHelper<T>
     /// Creates default layers for a DeepPortfolioManager model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepPortfolioLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 128,
         int numAssets = 100,
@@ -18034,11 +18741,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepPortfolioLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numAssets = 100,
+        double dropoutRate = 0.1)
+        => CreateDefaultDeepPortfolioLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, numAssets: numAssets, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates default layers for a HierarchicalRiskParity model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultHierarchicalRiskParityLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 128,
         int numAssets = 100,
@@ -18054,6 +18771,17 @@ public static partial class LayerHelper<T>
         // Weight prediction
         yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultHierarchicalRiskParityLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numAssets = 100,
+        double dropoutRate = 0.1)
+        => CreateDefaultHierarchicalRiskParityLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, numAssets: numAssets, dropoutRate: dropoutRate);
 
     /// <summary>
     /// Shared cross-asset attention trunk for the portfolio allocators, WITHOUT an output head.
@@ -18092,7 +18820,6 @@ public static partial class LayerHelper<T>
     /// optimum near tau = 1.3 would no longer mean anything.
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSignatureInformedTransformerLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 64,
         int numHeads = 8,
@@ -18107,6 +18834,19 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>?)null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSignatureInformedTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 64,
+        int numHeads = 8,
+        int numAssets = 30,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+        => CreateDefaultSignatureInformedTransformerLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, numHeads: numHeads, numAssets: numAssets, sequenceLength: sequenceLength, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates default layers for a GraphAttentionPortfolio (arXiv:2407.15532).
     /// </summary>
@@ -18119,7 +18859,6 @@ public static partial class LayerHelper<T>
     /// rejected softmax to avoid.
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultGraphAttentionPortfolioLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 192,
         int numHeads = 8,
@@ -18135,11 +18874,23 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new ReLUActivation<T>());
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphAttentionPortfolioLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 192,
+        int numHeads = 8,
+        int numAssets = 30,
+        int sequenceLength = 756,
+        double dropoutRate = 0.1)
+        => CreateDefaultGraphAttentionPortfolioLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, numHeads: numHeads, numAssets: numAssets, sequenceLength: sequenceLength, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates default layers for a BlackLittermanNeural model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultBlackLittermanNeuralLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 50,
         int hiddenDimension = 128,
         int numAssets = 100,
@@ -18156,6 +18907,17 @@ public static partial class LayerHelper<T>
         // Output: expected returns and confidence
         yield return new DenseLayer<T>(numAssets * 2, (IActivationFunction<T>?)null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultBlackLittermanNeuralLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numAssets = 100,
+        double dropoutRate = 0.1)
+        => CreateDefaultBlackLittermanNeuralLayers(numFeatures: numFeatures, hiddenDimension: hiddenDimension, numAssets: numAssets, dropoutRate: dropoutRate);
 
     #endregion
 
@@ -18192,7 +18954,6 @@ public static partial class LayerHelper<T>
     /// Creates default layers for a RealizedVolatilityTransformer model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultRealizedVolatilityTransformerLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength,
         int numAssets,
         int hiddenSize = 128,
@@ -18245,10 +19006,22 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numAssets, (IActivationFunction<T>)new SoftPlusActivation<T>());
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultRealizedVolatilityTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength,
+        int numAssets,
+        int hiddenSize = 128,
+        int numHeads = 4,
+        int numLayers = 2,
+        double dropoutRate = 0.1)
+        => CreateDefaultRealizedVolatilityTransformerLayers(sequenceLength: sequenceLength, numAssets: numAssets, hiddenSize: hiddenSize, numHeads: numHeads, numLayers: numLayers, dropoutRate: dropoutRate);
+
     /// <summary>
     /// Creates default layers for an OpenSora video generation model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="height">Output frame height.</param>
     /// <param name="width">Output frame width.</param>
     /// <param name="channels">Number of output channels (typically 3 for RGB).</param>
@@ -18272,7 +19045,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultOpenSoraLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int height = 256,
         int width = 256,
         int channels = 3,
@@ -18332,10 +19104,22 @@ public static partial class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(latentDim, 3, 1, 1);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultOpenSoraLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int height = 256,
+        int width = 256,
+        int channels = 3,
+        int hiddenDim = 1152,
+        int numLayers = 28,
+        int numHeads = 16)
+        => CreateDefaultOpenSoraLayers(height: height, width: width, channels: channels, hiddenDim: hiddenDim, numLayers: numLayers, numHeads: numHeads);
+
     /// <summary>
     /// Creates default layers for a FILM (Frame Interpolation for Large Motion) model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="height">Input frame height.</param>
     /// <param name="width">Input frame width.</param>
     /// <param name="channels">Number of input channels (typically 3 for RGB).</param>
@@ -18357,7 +19141,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFILMLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int height = 256,
         int width = 256,
         int channels = 3,
@@ -18403,6 +19186,18 @@ public static partial class LayerHelper<T>
         // Synthesis head
         yield return new ConvolutionalLayer<T>(channels, 3, 1, 1);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFILMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int height = 256,
+        int width = 256,
+        int channels = 3,
+        int numScales = 7,
+        int numFeatures = 64)
+        => CreateDefaultFILMLayers(height: height, width: width, channels: channels, numScales: numScales, numFeatures: numFeatures);
 
     #endregion
 
@@ -21124,9 +21919,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default layers for the SCNet (Sparse Compression Network) source separation model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration. Currently used only for the
-    /// Golden Pattern factory signature — SCNet's layer shapes are derived from its own option set, so the
-    /// architecture is not consulted internally.</param>
     /// <param name="numClusters">Cluster compression dim (block width). Default: 64.</param>
     /// <param name="compressionDim">Initial compression projection dim before clustering. Default: 128.</param>
     /// <param name="numEncoderBlocks">Number of transformer encoder blocks. Default: 6.</param>
@@ -21165,7 +21957,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultSCNetLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int numClusters = 64, int compressionDim = 128,
         int numEncoderBlocks = 6, int numDecoderBlocks = 6,
         int numAttentionHeads = 8, int feedForwardDim = 1024,
@@ -21231,6 +22022,17 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(compressionDim, reluActivation);
         yield return new DenseLayer<T>(numFreqBins * numStems, identityActivation);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSCNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numClusters = 64, int compressionDim = 128,
+        int numEncoderBlocks = 6, int numDecoderBlocks = 6,
+        int numAttentionHeads = 8, int feedForwardDim = 1024,
+        int numStems = 4, int numFreqBins = 1025, double dropoutRate = 0.0)
+        => CreateDefaultSCNetLayers(numClusters: numClusters, compressionDim: compressionDim, numEncoderBlocks: numEncoderBlocks, numDecoderBlocks: numDecoderBlocks, numAttentionHeads: numAttentionHeads, feedForwardDim: feedForwardDim, numStems: numStems, numFreqBins: numFreqBins, dropoutRate: dropoutRate);
 
     /// <summary>
     /// Creates default layers for the BandSplitRNN source separation model.
@@ -34193,7 +34995,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates default layers for the Mamba-2 time series forecasting model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="contextLength">Input sequence length (default: 512).</param>
     /// <param name="forecastHorizon">Number of future steps to predict (default: 96).</param>
     /// <param name="numFeatures">Number of input features per timestep (default: 1).</param>
@@ -34215,7 +35016,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultMamba2Layers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512,
         int forecastHorizon = 96,
         int numFeatures = 1,
@@ -34261,6 +35061,24 @@ public static partial class LayerHelper<T>
             outputSize: forecastHorizon,
             activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultMamba2Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int modelDim = 256,
+        int stateDim = 64,
+        int numHeads = 8,
+        int expandFactor = 2,
+        int numLayers = 4,
+        double dropout = 0.1,
+        int convKernelSize = 4,
+        int chunkSize = 64)
+        => CreateDefaultMamba2Layers(contextLength: contextLength, forecastHorizon: forecastHorizon, numFeatures: numFeatures, modelDim: modelDim, stateDim: stateDim, numHeads: numHeads, expandFactor: expandFactor, numLayers: numLayers, dropout: dropout, convKernelSize: convKernelSize, chunkSize: chunkSize);
 
     #endregion
 
@@ -36325,7 +37143,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layers for Tiny Time Mixers (TTM) foundation model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="contextLength">The input context length.</param>
     /// <param name="forecastHorizon">The prediction horizon length.</param>
     /// <param name="numFeatures">Number of input features.</param>
@@ -36343,7 +37160,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultTinyTimeMixersLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512,
         int forecastHorizon = 96,
         int numFeatures = 1,
@@ -36405,6 +37221,21 @@ public static partial class LayerHelper<T>
             outputSize: forecastHorizon,
             activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTinyTimeMixersLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int patchLength = 64,
+        int hiddenDim = 64,
+        int numMixerLayers = 4,
+        int expansionFactor = 4,
+        double dropout = 0.1)
+        => CreateDefaultTinyTimeMixersLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, numFeatures: numFeatures, patchLength: patchLength, hiddenDim: hiddenDim, numMixerLayers: numMixerLayers, expansionFactor: expansionFactor, dropout: dropout);
 
     /// <summary>
     /// Creates the default layers for Sundial (decoder-only foundation model).
@@ -36514,7 +37345,6 @@ public static partial class LayerHelper<T>
     /// Creates the default layers for Kairos (Mixture-of-Size Encoder).
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultKairosLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 1024, int forecastHorizon = 96, int[]? patchSizes = null,
         int hiddenDim = 512, int numLayers = 12, int numHeads = 8,
         int intermediateSize = 2048, double dropout = 0.1)
@@ -36556,11 +37386,20 @@ public static partial class LayerHelper<T>
         yield return outputProjection;
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultKairosLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 1024, int forecastHorizon = 96, int[]? patchSizes = null,
+        int hiddenDim = 512, int numLayers = 12, int numHeads = 8,
+        int intermediateSize = 2048, double dropout = 0.1)
+        => CreateDefaultKairosLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchSizes: patchSizes, hiddenDim: hiddenDim, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, dropout: dropout);
+
     /// <summary>
     /// Creates the default layers for FlowState (SSM-based foundation model).
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultFlowStateLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 2048, int forecastHorizon = 96,
         int stateDim = 64, int hiddenDim = 256, int numLayers = 8,
         double dropout = 0.1, int ssmRank = 16, bool useDiscretization = true)
@@ -36598,11 +37437,20 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFlowStateLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 2048, int forecastHorizon = 96,
+        int stateDim = 64, int hiddenDim = 256, int numLayers = 8,
+        double dropout = 0.1, int ssmRank = 16, bool useDiscretization = true)
+        => CreateDefaultFlowStateLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, stateDim: stateDim, hiddenDim: hiddenDim, numLayers: numLayers, dropout: dropout, ssmRank: ssmRank, useDiscretization: useDiscretization);
+
     /// <summary>
     /// Creates the default layers for VisionTS (Visual MAE for time series).
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultVisionTSLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
         int hiddenDim = 768, int numLayers = 12, int numHeads = 12,
         int intermediateSize = 3072, double dropout = 0.1)
@@ -36638,11 +37486,20 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultVisionTSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDim = 768, int numLayers = 12, int numHeads = 12,
+        int intermediateSize = 3072, double dropout = 0.1)
+        => CreateDefaultVisionTSLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, hiddenDim: hiddenDim, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, dropout: dropout);
+
     /// <summary>
     /// Creates the default layers for Chronos-Bolt (encoder-decoder with direct quantile output).
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultChronosBoltLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512, int forecastHorizon = 64, int patchLength = 16,
         int encoderHiddenDim = 512, int decoderHiddenDim = 512,
         int numEncoderLayers = 6, int numDecoderLayers = 6, int numHeads = 8,
@@ -36726,11 +37583,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: numQuantiles, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultChronosBoltLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 64, int patchLength = 16,
+        int encoderHiddenDim = 512, int decoderHiddenDim = 512,
+        int numEncoderLayers = 6, int numDecoderLayers = 6, int numHeads = 8,
+        int numQuantiles = 9, double dropout = 0.1)
+        => CreateDefaultChronosBoltLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, encoderHiddenDim: encoderHiddenDim, decoderHiddenDim: decoderHiddenDim, numEncoderLayers: numEncoderLayers, numDecoderLayers: numDecoderLayers, numHeads: numHeads, numQuantiles: numQuantiles, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the Kronos financial market foundation model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultKronosLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 1024, int forecastHorizon = 96, int patchLength = 32,
         int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
         int intermediateSize = 3072, int numCandlestickFeatures = 5, double dropout = 0.1)
@@ -36768,11 +37635,20 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon * numCandlestickFeatures, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultKronosLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 1024, int forecastHorizon = 96, int patchLength = 32,
+        int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
+        int intermediateSize = 3072, int numCandlestickFeatures = 5, double dropout = 0.1)
+        => CreateDefaultKronosLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, hiddenDimension: hiddenDimension, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, numCandlestickFeatures: numCandlestickFeatures, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the TOTO observability foundation model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTOTOLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 2048, int forecastHorizon = 96, int patchLength = 32,
         int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
         int intermediateSize = 3072, double dropout = 0.1)
@@ -36798,11 +37674,20 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTOTOLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 2048, int forecastHorizon = 96, int patchLength = 32,
+        int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
+        int intermediateSize = 3072, double dropout = 0.1)
+        => CreateDefaultTOTOLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, hiddenDimension: hiddenDimension, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the YingLong enterprise foundation model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultYingLongLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 1024, int forecastHorizon = 96, int patchLength = 32,
         int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
         int intermediateSize = 3072, double dropout = 0.1)
@@ -36827,6 +37712,16 @@ public static partial class LayerHelper<T>
         yield return new FlattenLayer<T>();
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultYingLongLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 1024, int forecastHorizon = 96, int patchLength = 32,
+        int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
+        int intermediateSize = 3072, double dropout = 0.1)
+        => CreateDefaultYingLongLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, hiddenDimension: hiddenDimension, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, dropout: dropout);
 
     /// <summary>
     /// Creates default layers for the GPT4TS model (frozen GPT-2 backbone with task heads).
@@ -36902,7 +37797,6 @@ public static partial class LayerHelper<T>
     /// Creates default layers for the TEST model (text-aligned time series embeddings).
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTESTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
         int hiddenDimension = 768, int textEmbeddingDimension = 768,
         int numLayers = 6, int numHeads = 8,
@@ -36942,11 +37836,21 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTESTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 768, int textEmbeddingDimension = 768,
+        int numLayers = 6, int numHeads = 8,
+        int numPrototypes = 64, double dropout = 0.1)
+        => CreateDefaultTESTLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, hiddenDimension: hiddenDimension, textEmbeddingDimension: textEmbeddingDimension, numLayers: numLayers, numHeads: numHeads, numPrototypes: numPrototypes, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the TimeBridge non-stationarity foundation model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTimeBridgeLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
         int hiddenDimension = 512, int numLayers = 6, int numHeads = 8,
         int intermediateSize = 2048, int bridgeDimension = 128, double dropout = 0.1)
@@ -36985,13 +37889,22 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeBridgeLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 512, int numLayers = 6, int numHeads = 8,
+        int intermediateSize = 2048, int bridgeDimension = 128, double dropout = 0.1)
+        => CreateDefaultTimeBridgeLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, hiddenDimension: hiddenDimension, numLayers: numLayers, numHeads: numHeads, intermediateSize: intermediateSize, bridgeDimension: bridgeDimension, dropout: dropout);
+
     // --- Diffusion-based Time Series Models ---
 
     /// <summary>
     /// Creates default layers for the CSDI score-based diffusion model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultCSDILayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 100, int numFeatures = 1, int hiddenDimension = 64,
         int numResidualLayers = 4, int numHeads = 8, int timeEmbeddingDim = 128,
         double dropout = 0.1)
@@ -37036,11 +37949,20 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: inputDim, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultCSDILayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 100, int numFeatures = 1, int hiddenDimension = 64,
+        int numResidualLayers = 4, int numHeads = 8, int timeEmbeddingDim = 128,
+        double dropout = 0.1)
+        => CreateDefaultCSDILayers(sequenceLength: sequenceLength, numFeatures: numFeatures, hiddenDimension: hiddenDimension, numResidualLayers: numResidualLayers, numHeads: numHeads, timeEmbeddingDim: timeEmbeddingDim, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the TSDiff self-guided diffusion model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTSDiffLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int sequenceLength = 192, int forecastHorizon = 24, int hiddenDimension = 64,
         int numResidualBlocks = 3, int numAttentionHeads = 4, double dropout = 0.1)
     {
@@ -37071,11 +37993,19 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTSDiffLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 192, int forecastHorizon = 24, int hiddenDimension = 64,
+        int numResidualBlocks = 3, int numAttentionHeads = 4, double dropout = 0.1)
+        => CreateDefaultTSDiffLayers(sequenceLength: sequenceLength, forecastHorizon: forecastHorizon, hiddenDimension: hiddenDimension, numResidualBlocks: numResidualBlocks, numAttentionHeads: numAttentionHeads, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the TimeDiff non-autoregressive diffusion model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTimeDiffLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
         int numLayers = 4, int numHeads = 8, double dropout = 0.1)
     {
@@ -37114,11 +38044,19 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeDiffLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
+        int numLayers = 4, int numHeads = 8, double dropout = 0.1)
+        => CreateDefaultTimeDiffLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, hiddenDimension: hiddenDimension, numLayers: numLayers, numHeads: numHeads, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the MG-TSD multi-granularity diffusion model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultMGTSDLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
         int numLayers = 4, int numHeads = 8, int numGranularities = 3, double dropout = 0.1)
     {
@@ -37154,6 +38092,15 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultMGTSDLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
+        int numLayers = 4, int numHeads = 8, int numGranularities = 3, double dropout = 0.1)
+        => CreateDefaultMGTSDLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, hiddenDimension: hiddenDimension, numLayers: numLayers, numHeads: numHeads, numGranularities: numGranularities, dropout: dropout);
+
     /// <summary>
     /// Creates the denoiser of CCDM, the Channel-aware Contrastive Conditional Diffusion model
     /// (Li, Chen and Xiong 2024, arXiv:2410.02168), in the fixed order <c>CCDM</c> binds it.
@@ -37188,7 +38135,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCCDMLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
         int numLayers = 2, int numHeads = 8, double dropout = 0.1,
         int embeddingLayers = 2, double mlpRatio = 1.0, double attentionDropout = 0.1)
@@ -37251,11 +38197,20 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultCCDMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
+        int numLayers = 2, int numHeads = 8, double dropout = 0.1,
+        int embeddingLayers = 2, double mlpRatio = 1.0, double attentionDropout = 0.1)
+        => CreateDefaultCCDMLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, hiddenDimension: hiddenDimension, numLayers: numLayers, numHeads: numHeads, dropout: dropout, embeddingLayers: embeddingLayers, mlpRatio: mlpRatio, attentionDropout: attentionDropout);
+
     /// <summary>
     /// Creates default layers for the TS2Vec contrastive learning model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTS2VecLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 200, int forecastHorizon = 96, int hiddenDimension = 64,
         int outputDimension = 320, int numLayers = 10, double dropout = 0.1)
     {
@@ -37280,6 +38235,15 @@ public static partial class LayerHelper<T>
         // Forecast head
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTS2VecLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 200, int forecastHorizon = 96, int hiddenDimension = 64,
+        int outputDimension = 320, int numLayers = 10, double dropout = 0.1)
+        => CreateDefaultTS2VecLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, hiddenDimension: hiddenDimension, outputDimension: outputDimension, numLayers: numLayers, dropout: dropout);
 
     /// <summary>
     /// Creates default layers for the TOTEM VQ-VAE tokenization model.
@@ -37337,7 +38301,6 @@ public static partial class LayerHelper<T>
     /// Creates default layers for the TimeMAE masked autoencoder model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTimeMAELayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
         int hiddenDimension = 256, int numEncoderLayers = 6, int numDecoderLayers = 2,
         int numHeads = 8, double dropout = 0.1)
@@ -37381,11 +38344,20 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeMAELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 256, int numEncoderLayers = 6, int numDecoderLayers = 2,
+        int numHeads = 8, double dropout = 0.1)
+        => CreateDefaultTimeMAELayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, hiddenDimension: hiddenDimension, numEncoderLayers: numEncoderLayers, numDecoderLayers: numDecoderLayers, numHeads: numHeads, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the SimMTM masked modeling with similarity model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultSimMTMLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
         int hiddenDimension = 256, int numLayers = 6, int numHeads = 8, double dropout = 0.1)
     {
@@ -37419,11 +38391,19 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
 
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultSimMTMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 256, int numLayers = 6, int numHeads = 8, double dropout = 0.1)
+        => CreateDefaultSimMTMLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, patchLength: patchLength, hiddenDimension: hiddenDimension, numLayers: numLayers, numHeads: numHeads, dropout: dropout);
+
     /// <summary>
     /// Creates default layers for the TF-C time-frequency consistency model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTFCLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int contextLength = 200, int forecastHorizon = 96, int hiddenDimension = 128,
         int projectionDimension = 64, int numTimeLayers = 4, int numFreqLayers = 4,
         double dropout = 0.1)
@@ -37459,6 +38439,16 @@ public static partial class LayerHelper<T>
         // Forecast head
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultTFCLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 200, int forecastHorizon = 96, int hiddenDimension = 128,
+        int projectionDimension = 64, int numTimeLayers = 4, int numFreqLayers = 4,
+        double dropout = 0.1)
+        => CreateDefaultTFCLayers(contextLength: contextLength, forecastHorizon: forecastHorizon, hiddenDimension: hiddenDimension, projectionDimension: projectionDimension, numTimeLayers: numTimeLayers, numFreqLayers: numFreqLayers, dropout: dropout);
 
     #endregion
 

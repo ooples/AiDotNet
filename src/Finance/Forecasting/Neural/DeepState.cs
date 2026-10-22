@@ -386,7 +386,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultDeepStateLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _stateDimension, _hiddenDimension, _numRnnLayers, _dropout));
 
             ExtractLayerReferences();

@@ -326,7 +326,6 @@ public partial class Informer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultInformerLayers(
-                Architecture,
                 _sequenceLength,
                 _predictionHorizon,
                 _numFeatures,

@@ -473,7 +473,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultMTGNNLayers(
-                Architecture,
                 _sequenceLength,
                 _forecastHorizon,
                 _numNodes,

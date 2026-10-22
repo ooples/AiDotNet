@@ -156,7 +156,6 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         }
 
         Layers.AddRange(LayerHelper<T>.CreateDefaultSignatureInformedTransformerLayers(
-            Architecture,
             NumFeatures,
             _options.ModelDimension,
             _options.NumHeads,

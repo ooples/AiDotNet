@@ -365,7 +365,7 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultCrossformerLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                _sequenceLength, _predictionHorizon, _numFeatures,
                 _segmentLength, _modelDimension, _numHeads, _numLayers, _dropout));
 
             ExtractLayerReferences();

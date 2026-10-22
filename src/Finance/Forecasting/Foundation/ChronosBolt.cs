@@ -253,7 +253,7 @@ public partial class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultChronosBoltLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchLength,
+                _contextLength, _forecastHorizon, _patchLength,
                 _encoderHiddenDim, _decoderHiddenDim,
                 _numEncoderLayers, _numDecoderLayers, _numHeads,
                 _numQuantiles, _dropout));

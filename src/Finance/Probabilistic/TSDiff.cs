@@ -347,7 +347,6 @@ public partial class TSDiff<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTSDiffLayers(
-                Architecture,
                 _sequenceLength,
                 _numFeatures,
                 _hiddenDimension,

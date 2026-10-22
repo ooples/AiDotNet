@@ -146,7 +146,6 @@ public partial class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultHierarchicalRiskParityLayers(
-                Architecture,
                 NumFeatures,
                 _hiddenDimension,
                 _numAssets,

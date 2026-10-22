@@ -297,7 +297,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             Layers.AddRange(Architecture.Layers);
         else
             Layers.AddRange(LayerHelper<T>.CreateDefaultCCDMLayers(
-                Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads,
+                _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads,
                 _dropout, _embeddingLayers, _mlpRatio, _attentionDropout));
         _ = Parts();
     }

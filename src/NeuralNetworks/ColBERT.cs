@@ -153,7 +153,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultColBERTLayers(
-                    Architecture,
                     _vocabSize,
                     _outputDim,
                     MaxTokens,

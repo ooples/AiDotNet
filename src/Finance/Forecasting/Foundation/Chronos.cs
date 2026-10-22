@@ -399,7 +399,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultChronosLayers(
-                Architecture, _contextLength, _forecastHorizon, _numTokens,
+                _contextLength, _forecastHorizon, _numTokens,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
 
             ExtractLayerReferences();

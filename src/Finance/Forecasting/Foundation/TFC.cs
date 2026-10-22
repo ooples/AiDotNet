@@ -244,7 +244,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTFCLayers(
-                Architecture, _contextLength, _forecastHorizon, _hiddenDimension,
+                _contextLength, _forecastHorizon, _hiddenDimension,
                 _projectionDimension, _numTimeLayers, _numFreqLayers, _dropout));
             ExtractLayerReferences();
         }

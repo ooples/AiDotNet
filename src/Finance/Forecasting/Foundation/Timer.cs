@@ -454,7 +454,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         {
             // One series per token stream: every variate is forecast by the same single-series decoder (S3).
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimerLayers(
-                Architecture, _contextLength, _forecastHorizon, numFeatures: 1,
+                _contextLength, _forecastHorizon, numFeatures: 1,
                 _patchLength, _patchStride, _hiddenDimension, _numLayers, _numHeads, _dropout));
 
             ExtractLayerReferences();

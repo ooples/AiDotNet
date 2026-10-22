@@ -333,7 +333,6 @@ public partial class CSDI<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultCSDILayers(
-                Architecture,
                 _sequenceLength,
                 _numFeatures,
                 _hiddenDimension,

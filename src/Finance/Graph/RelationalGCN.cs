@@ -392,7 +392,6 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultRelationalGCNLayers(
-                Architecture,
                 _numNodes,
                 _numFeatures,
                 _numRelations,
