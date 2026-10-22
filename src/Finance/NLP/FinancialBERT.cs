@@ -161,7 +161,7 @@ public partial class FinancialBERT<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinancialBERTLayers(
-                MaxSequenceLength, VocabularySize, HiddenDimension,
+                Architecture, MaxSequenceLength, VocabularySize, HiddenDimension,
                 _options.NumAttentionHeads, _options.NumLayers, _dropout));
 
         }

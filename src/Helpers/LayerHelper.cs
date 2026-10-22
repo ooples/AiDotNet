@@ -230,7 +230,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layer configuration for InvestLM.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="maxSequenceLength">Maximum sequence length.</param>
     /// <param name="vocabularySize">Size of the vocabulary.</param>
     /// <param name="hiddenSize">Hidden layer size.</param>
@@ -245,7 +244,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultInvestLMLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int maxSequenceLength = 1024,
         int vocabularySize = 32000,
         int hiddenSize = 768,
@@ -254,14 +252,26 @@ public static partial class LayerHelper<T>
         double dropoutProbability = 0.1)
     {
         // Follows the GPT/LLaMA-style decoder-only pattern
-        return CreateDefaultFinGPTLayers(architecture, maxSequenceLength, vocabularySize, 
+        return CreateDefaultFinGPTLayers(maxSequenceLength, vocabularySize, 
             hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultInvestLMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 1024,
+        int vocabularySize = 32000,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+        => CreateDefaultInvestLMLayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
 
     /// <summary>
     /// Creates the default layer configuration for FinMA.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="maxSequenceLength">Maximum sequence length.</param>
     /// <param name="vocabularySize">Size of the vocabulary.</param>
     /// <param name="numAgents">Number of specialized agents.</param>
@@ -278,7 +288,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
-        NeuralNetworkArchitecture<T> architecture,
         int maxSequenceLength = 512,
         int vocabularySize = 32000,
         int numAgents = 4,
@@ -289,14 +298,27 @@ public static partial class LayerHelper<T>
     {
         // Follows a LLaMA-style decoder-only pattern for each agent
         // In this implementation, we return the layers for a single representative agent
-        return CreateDefaultFinGPTLayers(architecture, maxSequenceLength, vocabularySize, 
+        return CreateDefaultFinGPTLayers(maxSequenceLength, vocabularySize, 
             hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 512,
+        int vocabularySize = 32000,
+        int numAgents = 4,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+        => CreateDefaultFinMALayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, numAgents: numAgents, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
 
     /// <summary>
     /// Creates the default layer configuration for BloombergGPT.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="maxSequenceLength">Maximum sequence length.</param>
     /// <param name="vocabularySize">Size of the vocabulary.</param>
     /// <param name="hiddenSize">Hidden layer size.</param>
@@ -312,7 +334,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultBloombergGPTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int maxSequenceLength = 2048,
         int vocabularySize = 131072,
         int hiddenSize = 768,
@@ -322,9 +343,22 @@ public static partial class LayerHelper<T>
     {
         // Follows standard GPT pattern but with ALiBi or Rotary positional embeddings usually
         // For simplicity in the library, we'll use learned positional embeddings
-        return CreateDefaultFinGPTLayers(architecture, maxSequenceLength, vocabularySize, 
+        return CreateDefaultFinGPTLayers(maxSequenceLength, vocabularySize, 
             hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultBloombergGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 2048,
+        int vocabularySize = 131072,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+        => CreateDefaultBloombergGPTLayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
 
     /// <summary>
     /// Creates the default layer configuration for FinGPT.
@@ -395,7 +429,6 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates the default layer configuration for FinBERT-tone.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="maxSequenceLength">Maximum sequence length.</param>
     /// <param name="vocabularySize">Size of the vocabulary.</param>
     /// <param name="numClasses">Number of sentiment classes.</param>
@@ -411,7 +444,6 @@ public static partial class LayerHelper<T>
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFinBERTToneLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int maxSequenceLength = 512,
         int vocabularySize = 30522,
         int numClasses = 3,
@@ -424,7 +456,6 @@ public static partial class LayerHelper<T>
         // below owns the topology so BERT embedding and residual-block fixes cannot drift between
         // two independently maintained builders.
         return CreateDefaultFinBERTToneLayers(
-            architecture,
             vocabularySize: vocabularySize,
             maxSequenceLength: maxSequenceLength,
             hiddenDimension: hiddenSize,
@@ -434,6 +465,20 @@ public static partial class LayerHelper<T>
             numToneClasses: numClasses,
             dropoutRate: dropoutProbability);
     }
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultFinBERTToneLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 512,
+        int vocabularySize = 30522,
+        int numClasses = 3,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+        => CreateDefaultFinBERTToneLayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, numClasses: numClasses, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
 
     /// <summary>
     /// Creates the default layer configuration for FinancialBERT.
@@ -462,7 +507,6 @@ public static partial class LayerHelper<T>
         double dropoutProbability = 0.1)
     {
         return CreateDefaultFinancialBERTLayers(
-            architecture,
             vocabularySize: vocabularySize,
             maxSequenceLength: maxSequenceLength,
             hiddenDimension: hiddenSize,
@@ -511,7 +555,6 @@ public static partial class LayerHelper<T>
         double dropoutProbability = 0.1)
     {
         return CreateDefaultSECBERTLayers(
-            architecture,
             vocabularySize: vocabularySize,
             maxSequenceLength: maxSequenceLength,
             hiddenDimension: hiddenSize,
@@ -6089,7 +6132,6 @@ public static partial class LayerHelper<T>
         // of its one-hot buffer.
         int numLanguages = architecture.OutputSize > 0 ? architecture.OutputSize : 107;
         return CreateDefaultECAPATDNNLanguageIdentifierLayers(
-            architecture,
             numMels: numMels,
             tdnnChannels: tdnnChannels,
             embeddingDimension: embeddingDimension,
@@ -12299,7 +12341,6 @@ public static partial class LayerHelper<T>
     /// BERT-base (768-wide) encoder.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultColBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
         int vocabSize = 30522,
         int embeddingDimension = 128, // ColBERT typically projects down to smaller dimension
         int maxSequenceLength = 512,
@@ -12307,8 +12348,21 @@ public static partial class LayerHelper<T>
         int numHeads = 12,
         int feedForwardDim = 3072)
         => CreateDefaultColBERTLayers(
-            architecture, vocabSize, embeddingDimension, maxSequenceLength,
+            vocabSize, embeddingDimension, maxSequenceLength,
             numLayers, numHeads, feedForwardDim, hiddenDimension: 768);
+
+    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
+    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
+    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
+    public static IEnumerable<ILayer<T>> CreateDefaultColBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 30522,
+        int embeddingDimension = 128, // ColBERT typically projects down to smaller dimension
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+        => CreateDefaultColBERTLayers(vocabSize: vocabSize, embeddingDimension: embeddingDimension, maxSequenceLength: maxSequenceLength, numLayers: numLayers, numHeads: numHeads, feedForwardDim: feedForwardDim);
 
     /// <summary>
     /// Creates default layers for a ColBERT model whose encoder is <paramref name="hiddenDimension"/> wide.

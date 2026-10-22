@@ -182,7 +182,7 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectivePr
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultSECBERTLayers(
-                MaxSequenceLength, VocabularySize, HiddenDimension,
+                Architecture, MaxSequenceLength, VocabularySize, HiddenDimension,
                 12, 12, _dropout)); // Default heads/layers
 
         }
