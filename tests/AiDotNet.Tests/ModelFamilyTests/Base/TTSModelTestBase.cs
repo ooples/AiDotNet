@@ -54,6 +54,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
                 Reference = reference,
                 ReferenceAudio = recording,
                 LanguageId = 0,
+                Description = SyntheticDescription(),
             };
         }
         return network;
@@ -101,6 +102,15 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             return;
         }
         base.RunRecalibrationPass(network, input, target);
+    }
+
+    /// <summary>A short description as token ids, small enough for any description vocabulary (Parler-TTS's Flan-T5).</summary>
+    private static Tensor<T> SyntheticDescription()
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var description = new Tensor<T>(new[] { 6 });
+        for (int i = 0; i < 6; i++) description[i] = ops.FromDouble(2 + 3 * i % 7);
+        return description;
     }
 
     private static AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target,
@@ -196,6 +206,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             CodecTokens = codecTokens,
             SpeakerReference = speakerRecording,
             PromptCodecTokens = promptCodecTokens,
+            Description = network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Description) != 0
+                ? SyntheticDescription() : null,
         };
     }
 

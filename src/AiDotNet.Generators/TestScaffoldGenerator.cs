@@ -1268,7 +1268,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "ParakeetCTC",
         "ParallelWaveGAN",
         "ParametricEqualizer",
-        "ParlerTTS",
         "PartialLeastSquaresRegression",
         "PartitionMCMCAlgorithm",
         "PassiveAggressiveClassifier",
@@ -9800,17 +9799,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "ParlerTTS" && model.TypeParameterCount == 1)
             {
-                // Parler-TTS retains its 1024-wide, 24-layer production defaults.
-                // Generated invariants use the same configurable description/codec-LM
-                // topology at a scale that supports repeated training and cloning.
+                // Parler-TTS's released model is a 1024-wide, 24-layer decoder over DAC's nine 1024-code codebooks, reading
+                // a Flan-T5-large description encoder; keep every component (the delay pattern, the prepended transcript,
+                // the grouped cross-attention, the T5 v1.1 encoder, DAC) at 16 wide with two decoder layers, one encoder
+                // layer, three codebooks of 16 codes and a DAC hop of 8 at 16 kHz. Both vocabularies stay T5's 32,128, so
+                // real text tokenizes into them. Generation stops after 24 steps (21 frames).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 8, outputSize: 80), " +
-                    "new AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions { " +
-                    "TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, " +
-                    "NumHeads = 4, NumCodebooks = 1, CodebookSize = 80, " +
-                    "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions { HiddenDim = 16, NumHeads = 2, " +
+                    "NumDecoderLayers = 2, FeedForwardDim = 32, NumCodebooks = 3, CodebookSize = 16, AudioVocabulary = 20, " +
+                    "TextEncoderDim = 16, TextEncoderFeedForwardDim = 32, TextEncoderKeyValueDim = 8, TextEncoderHeads = 2, " +
+                    "TextEncoderLayers = 1, TextEncoderDropout = 0.0, DropoutRate = 0.0, LearningRate = 3e-3, WarmupSteps = 0, " +
+                    "MaxLength = 24, MinNewTokens = 2, SampleRate = 16000, HopSize = 8, " +
+                    "Codec = new AiDotNet.Audio.Effects.DACOptions { SampleRate = 16000, EncoderDim = 4, EncoderRates = [2, 4], " +
+                    "DecoderDim = 16, DecoderRates = [4, 2], NumQuantizers = 3, CodebookSize = 16, CodebookDim = 2, " +
+                    "TargetBandwidthKbps = 24.0 } })";
             }
             else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1)
             {
@@ -15858,9 +15863,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS" or "ParlerTTS")
                 {
-                    // Pheme, VALL-E and SPEAR-TTS read phoneme ids (SoundStorm text bytes) and train on codec tokens, one frame per target row (the TTS
+                    // Pheme, VALL-E and SPEAR-TTS read phoneme ids (SoundStorm text bytes, Parler-TTS T5 token ids) and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 1 };");
@@ -21319,7 +21324,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" or "Bark" or "BarkModel" or "OrpheusTTS" or "ParlerTTS"
+        return className is "GPTSoVITS" or "CSM" or "Bark" or "BarkModel" or "OrpheusTTS"
             or "FireRedTTS" or "FishSpeech" or "FishSpeechV15"
             or "UniAudio" or "Zonos" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice" or "CosyVoice2" or "CosyVoice3"
@@ -21357,7 +21362,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Dia" => 32,
             "Bark" or "BarkModel" => 32,
             "OrpheusTTS" => 80,
-            "ParlerTTS" => 80,
             "CosyVoice" => 16,
             "CosyVoice2" => 16,
             "CosyVoice3" => 16,
