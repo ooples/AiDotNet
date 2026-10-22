@@ -103,7 +103,6 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         : base(resolvedArchitecture, options.NumAssets, resolvedArchitecture.CalculatedInputSize, lossFunction)
     {
         _options = options;
-        Options = _options;
 
         Signatures = new PathSignatureTransform<T>(options.SignatureLevel);
         Attention = new SignatureAugmentedAttention<T>();

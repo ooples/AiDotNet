@@ -104,7 +104,6 @@ public partial class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
         : base(resolvedArchitecture, options.NumAssets, resolvedArchitecture.CalculatedInputSize, lossFunction)
     {
         _options = options;
-        Options = _options;
 
         Graph = new AssetGraphBuilder<T>(options.VolatilityLookback);
         Attention = new GraphAttentionLayerCore<T>(options.LeakyReLUSlope);
