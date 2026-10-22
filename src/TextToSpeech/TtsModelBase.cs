@@ -374,6 +374,10 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             throw new ArgumentException(
                 $"{GetType().Name} trains with the codec tokens of another utterance of the same speaker as a prompt; set " +
                 $"{nameof(sample.PromptCodecTokens)}.", nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.Description) != 0 && sample.Description is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains on a description of how each recording sounds; set {nameof(sample.Description)}.",
+                nameof(sample));
         if ((RequiredSupervision & TtsSupervision.ReferenceRecording) != 0 && sample.SpeakerReference is null && sample.Audio is null)
             throw new ArgumentException(
                 $"{GetType().Name} reads the speaker from a recording; set {nameof(sample.SpeakerReference)} or {nameof(sample.Audio)}.",
@@ -421,6 +425,9 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         if ((RequiredVoice & TtsSupervision.LanguageId) != 0 && voice.LanguageId is null)
             throw new InvalidOperationException(
                 $"{GetType().Name} speaks one of several languages; set {nameof(TtsVoice<T>.LanguageId)} on {nameof(Voice)}.");
+        if ((RequiredVoice & TtsSupervision.Description) != 0 && voice.Description is null)
+            throw new InvalidOperationException(
+                $"{GetType().Name} synthesizes the voice a description gives; set {nameof(TtsVoice<T>.Description)} on {nameof(Voice)}.");
         return voice;
     }
 

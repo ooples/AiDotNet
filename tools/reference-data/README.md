@@ -25,6 +25,7 @@ that produce those values, so you can check them yourself or regenerate them.
 | `xvector_reference.py` | `TextToSpeech/ReferenceData/pyannote_xvector_reference.json` | pyannote.audio `XVectorSincNet` |
 | `espeak_g2p_reference.py` | `TextToSpeech/ReferenceData/espeak_arctic_phonemes.json` | espeak-ng through `phonemizer` (the front end Pheme was trained with) |
 | `g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz` and `nrl_rules.tsv` (the English G2P's data, not a test fixture) | CMUdict and NRL Report 7948's rules, from pinned sources |
+| `parler_tts_reference.py` | `TextToSpeech/ReferenceData/parler_tts_reference.json` | huggingface/parler-tts's `ParlerTTSForConditionalGeneration` (needs `--parler`, a checkout of huggingface/parler-tts, and its own environment; see below) |
 
 ## Set up
 
@@ -41,6 +42,20 @@ install the two together. pycwt runs correctly on numpy 2 (the checks below pass
 already lists what it needs.
 
 On macOS or Linux the interpreter is `.venv/bin/python`.
+
+Parler-TTS's code runs only on `transformers` 4.46 (it imports helpers that later versions removed), so
+`parler_tts_reference.py` needs an environment of its own:
+
+```
+python -m venv .venv-parler
+.venv-parler\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+.venv-parler\Scripts\python -m pip install transformers==4.46.1 sentencepiece safetensors "numpy<2.6" protobuf
+.venv-parler\Scripts\python tools/reference-data/parler_tts_reference.py --parler <checkout> --stubs <dir>
+```
+
+The `parler_tts` package imports descript's `dac` package for its own DAC wrapper, which the script does not use.
+Without that package installed, pass `--stubs`, a directory holding `dac/__init__.py` (empty) and `dac/model.py`
+(`class DAC: pass`).
 
 ## Check the committed fixtures
 
