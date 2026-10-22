@@ -137,11 +137,6 @@ public partial class MaskingLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool SupportsTraining => false;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
     /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
 
@@ -213,54 +208,6 @@ public partial class MaskingLayer<T> : LayerBase<T>, IShapeContract
         var mask = CreateMask(input);
         _lastMask = ShouldCacheForBackward ? mask : null; // #1668: cache the mask only for backward
         return ApplyMask(input, mask);
-    }
-
-    /// <summary>
-    /// Performs the GPU-resident forward pass of the masking layer.
-    /// </summary>
-    /// <param name="inputs">The GPU input tensors.</param>
-    /// <returns>The GPU output tensor after masking.</returns>
-    /// <remarks>
-    /// All computations stay on the GPU. Uses NotEqualScalar to create the mask
-    /// and Multiply for element-wise application.
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var gpuEngine = Engine as DirectGpuTensorEngine;
-        if (gpuEngine == null)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        var input = inputs[0];
-        int size = input.Length;
-
-        // Create mask buffer: 1 where input != maskValue, 0 where input == maskValue
-        var maskBuffer = backend.AllocateBuffer(size);
-        float maskValueFloat = (float)NumOps.ToDouble(_maskValue);
-        backend.NotEqualScalar(input.Buffer, maskBuffer, maskValueFloat, size);
-
-        // Create output buffer: output = input * mask
-        var outputBuffer = backend.AllocateBuffer(size);
-        backend.Multiply(input.Buffer, maskBuffer, outputBuffer, size);
-
-        // Store mask GPU tensor for backward pass (if training)
-        if (IsTrainingMode)
-        {
-            _lastMaskGpu = GpuTensorHelper.UploadToGpu<T>(backend, maskBuffer, input._shape, GpuTensorRole.Intermediate, ownsBuffer: true);
-        }
-        else
-        {
-            // In inference mode, dispose the mask immediately
-            maskBuffer.Dispose();
-        }
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input._shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

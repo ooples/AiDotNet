@@ -232,14 +232,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     [Scratch]
     private Tensor<T>? _lastGateOutput;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuInput;
-    [ExternalState]
-    private Tensor<T>? _gpuLinearOutput;
-    [ExternalState]
-    private Tensor<T>? _gpuGateOutput;
-
     /// <summary>
     /// The gradients for the linear weights, computed during backpropagation.
     /// </summary>
@@ -352,11 +344,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GatedLinearUnitLayer{T}"/> class with a scalar activation function.
@@ -582,61 +569,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Performs the forward pass on GPU using FusedLinearGpu for efficient computation.
-    /// </summary>
-    /// <param name="inputs">The GPU input tensors.</param>
-    /// <returns>The GPU output tensor.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // GLU weights are stored as [outputDim, inputDim], but FusedLinearGpu expects [inputDim, outputDim]
-        // Transpose the weights
-        var linearWeightsT = Engine.TensorTranspose(_linearWeights);
-        var gateWeightsT = Engine.TensorTranspose(_gateWeights);
-
-        // Linear path: linear = input @ linearWeights^T + linearBias (no activation)
-        var linearOutput = gpuEngine.FusedLinearGpu(input, linearWeightsT, _linearBias, FusedActivationType.None);
-
-        // Gate path: gate = sigmoid(input @ gateWeights^T + gateBias)
-        var gateOutput = gpuEngine.FusedLinearGpu(input, gateWeightsT, _gateBias, FusedActivationType.Sigmoid);
-
-        // GLU output: output = linear * gate
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int size = linearOutput.Length;
-        var outputBuffer = backend.AllocateBuffer(size);
-
-        // Element-wise multiply on GPU
-        backend.Multiply(linearOutput.Buffer, gateOutput.Buffer, outputBuffer, size);
-
-        // Cache state for backward pass only when an eager Backward will read it (#1668:
-        // ShouldCacheForBackward is false under tape / inference scope / eval).
-        if (ShouldCacheForBackward)
-        {
-            // Cache GPU tensors for GPU-resident backward pass
-            _gpuInput = input;
-            _gpuLinearOutput = linearOutput;
-            _gpuGateOutput = gateOutput;
-
-            // Also cache CPU tensors for fallback backward pass
-            _lastInput = input;
-            _lastLinearOutput = linearOutput;
-            _lastGateOutput = gateOutput;
-        }
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, linearOutput._shape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
     /// Updates the weights and biases for both paths using the calculated gradients and the specified learning rate.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -710,10 +642,5 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         _gateWeightsGradient = null;
         _linearBiasGradient = null;
         _gateBiasGradient = null;
-
-        // Clear GPU cached tensors
-        _gpuInput = null;
-        _gpuLinearOutput = null;
-        _gpuGateOutput = null;
     }
 }

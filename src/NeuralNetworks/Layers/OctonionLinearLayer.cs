@@ -160,11 +160,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Initializes a new instance of the OctonionLinearLayer.
     /// </summary>
     /// <param name="inputFeatures">Number of input features (octonion-valued).</param>

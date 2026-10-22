@@ -231,11 +231,6 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="SpatialPoolerLayer{T}"/> class.
     /// </summary>
     /// <param name="inputSize">The size of the input vector.</param>
@@ -421,95 +416,6 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
         var output = Engine.Reshape(outputMask, [ColumnCount]);
 
         LastOutput = output;
-        return output;
-    }
-
-    /// <summary>
-    /// Performs the GPU-accelerated forward pass for the spatial pooler layer.
-    /// </summary>
-    /// <param name="inputs">The GPU tensor inputs. First element is the input activation.</param>
-    /// <returns>A GPU tensor containing the sparse binary output.</returns>
-    /// <remarks>
-    /// The spatial pooler converts input patterns into sparse distributed representations.
-    /// This method processes the input using GPU operations for matrix multiplication and thresholding.
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs == null || inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend()
-            ?? throw new InvalidOperationException("GPU backend is not available.");
-
-        var input = inputs[0];
-
-        // Reshape input to [1, InputSize] for batched matmul
-        var inputReshaped = input.Reshape([1, InputSize]);
-
-        // Compute activations: [1, InputSize] @ [InputSize, ColumnCount] = [1, ColumnCount]
-        var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
-        var activationsFlat = activations.Reshape([ColumnCount]);
-
-        // Normalize activations to [0,1] — download to CPU for min/max reduction
-        var cpuData = backend.DownloadBuffer(activationsFlat.Buffer);
-        float maxVal = float.MinValue;
-        float minVal = float.MaxValue;
-        for (int i = 0; i < Math.Min(ColumnCount, cpuData.Length); i++)
-        {
-            float val = cpuData[i];
-            if (val > maxVal) maxVal = val;
-            if (val < minVal) minVal = val;
-        }
-        float range = maxVal - minVal;
-
-        Tensor<T> normalizedActivations;
-        if (range > 1e-10f)
-        {
-            // normalized = (activations - minVal) / range = activations / range - minVal / range
-            // Using available GPU ops: ScaleGpu (multiply by scalar) and DivideScalarGpu
-            float invRange = 1.0f / range;
-            float offset = minVal * invRange;
-
-            // Step 1: activations * invRange
-            var scaled = gpuEngine.ScaleGpu(activationsFlat, invRange);
-
-            // Step 2: subtract offset by adding (-offset) via ScaleGpu trick:
-            // Create a constant tensor filled with -offset, then add to scaled
-            var offsetGpu = gpuEngine.ZerosGpu<T>([ColumnCount]);
-            backend.Fill(offsetGpu.Buffer, -offset, ColumnCount);
-            normalizedActivations = gpuEngine.AddGpu(scaled, offsetGpu);
-            scaled.Dispose();
-            offsetGpu.Dispose();
-        }
-        else
-        {
-            // All activations identical — use raw activations
-            normalizedActivations = activationsFlat;
-        }
-
-        // Apply sparsity threshold on normalized activations (keep top ~SparsityThreshold%)
-        float threshold = (float)(1.0 - SparsityThreshold);
-        var outputMask = gpuEngine.GreaterThanScalarGpu<T>(normalizedActivations, threshold);
-
-        // Magnitude-preserving output: mask * raw activations (matches CPU Forward)
-        var maskedActivations = gpuEngine.MultiplyGpu(outputMask, activationsFlat);
-        var output = maskedActivations.Reshape([ColumnCount]);
-
-        // Store CPU copies for Learn() which needs binary mask and last output
-        LastOutput = output;
-        _lastBinaryOutput = outputMask.Reshape([ColumnCount]);
-        var cpuInput = input;
-        LastInput = cpuInput.Shape.Length == 1
-            ? cpuInput
-            : cpuInput.Reshape([cpuInput.Length]);
-
-        // Dispose intermediates
-        if (range > 1e-10f)
-            normalizedActivations.Dispose();
-
         return output;
     }
 

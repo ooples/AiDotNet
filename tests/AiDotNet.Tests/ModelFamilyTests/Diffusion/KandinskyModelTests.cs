@@ -1,23 +1,37 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.TextToImage;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-/// <summary>
-/// Kandinsky test scaffold — see <see cref="DiffusionModelTestBase{TNum}"/>
-/// for the FP32 rationale. Kandinsky at paper defaults OOMs in fresh-process
-/// probes at FP64 on the 16 GB CI host.
-/// </summary>
-[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
-// HeavyTimeout (#1706): correct but too slow for the default per-test gate (foundation-scale diffusion,
-// ~100 s/forward x N-step Generate); runs in the nightly lane. Drop this trait once it fits the budget.
-[Xunit.Trait("Category", "HeavyTimeout")]
+[Xunit.Collection("FoundationScaleSerial")]
+// #2087 / #1706: out of the HeavyTimeout lane. The default foundation-scale config is too large for
+// the PR gate, so per the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects
+// a small same-architecture UNetNoisePredictor and UNetNoisePredictor and StandardVAE. Channel
+// counts, context widths, patch sizes and scale factors keep the model's defaults; only width and
+// depth shrink.
 public class KandinskyModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 4, 64, 64];
-    protected override int[] OutputShape => [1, 4, 64, 64];
+    protected override int[] InputShape => [1, 4, 16, 16];
+    protected override int[] OutputShape => [1, 4, 16, 16];
 
     protected override IDiffusionModel<float> CreateModel()
-        => new KandinskyModel<float>(seed: 42);
+        => new KandinskyModel<float>(
+            priorUnet: new UNetNoisePredictor<float>(
+                inputChannels: 1280, outputChannels: 1280, baseChannels: 32,
+                channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
+                attentionResolutions: new[] { 1 }, contextDim: 1280, numHeads: 4, inputHeight: 16,
+                seed: 42),
+            decoderUnet: new UNetNoisePredictor<float>(
+                inputChannels: 4, outputChannels: 4, baseChannels: 32,
+                channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
+                attentionResolutions: new[] { 1 }, contextDim: 1280, numHeads: 4, inputHeight: 16,
+                seed: 42),
+            vae: new StandardVAE<float>(
+                inputChannels: 3, latentChannels: 4, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1,
+                latentScaleFactor: 0.18215, seed: 42),
+            seed: 42);
 }

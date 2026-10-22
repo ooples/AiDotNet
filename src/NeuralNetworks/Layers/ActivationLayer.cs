@@ -46,12 +46,6 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     [Scratch]
     private Tensor<T>? _lastInput;
 
-    // GPU-resident cached tensors for GPU training pipeline
-    [Scratch]
-    private Tensor<T>? _lastInputGpu;
-    [Scratch]
-    private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
-
     /// <summary>
     /// Indicates whether this layer uses a vector activation function instead of a scalar one.
     /// </summary>
@@ -323,102 +317,6 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         _lastInput = null;
-
-        // Clear GPU-resident cached tensors
-        _lastInputGpu = null;
-        _lastOutputGpu = null;
-    }
-
-    /// <summary>
-    /// Gets whether this layer's activation function supports GPU execution.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// GPU execution is supported for common scalar activation functions that have
-    /// dedicated GPU kernels: ReLU, LeakyReLU, Sigmoid, Tanh, GELU, and Swish.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if the activation function can run on GPU.
-    /// Most common activations like ReLU and Sigmoid have GPU support.
-    /// Exotic or vector activations (like Softmax) may not support GPU execution yet.
-    /// </para>
-    /// </remarks>
-    protected override bool SupportsGpuExecution => TryGetFusedActivationType(out _);
-
-    /// <summary>
-    /// Performs the forward pass on GPU using GPU-accelerated activation kernels.
-    /// </summary>
-    /// <param name="input">The GPU-resident input tensor.</param>
-    /// <returns>A GPU tensor with the activation function applied.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when GPU execution is not supported for this activation type.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// This method applies the activation function entirely on the GPU using optimized kernels.
-    /// Supported activations: ReLU, LeakyReLU, Sigmoid, Tanh, GELU, Swish.
-    /// </para>
-    /// <para><b>For Beginners:</b> The GPU version of activation is much faster for large tensors
-    /// because GPUs can process thousands of values in parallel.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
-
-        if (!TryGetFusedActivationType(out var fusedType))
-            throw new InvalidOperationException(
-                $"Activation function '{GetActivationTypeName()}' does not support GPU execution. " +
-                $"Use the CPU Forward method instead.");
-
-        var input = inputs[0];
-        var result = gpuEngine.ActivationGpu<T>(input, fusedType);
-
-        // Cache GPU tensors for BackwardGpu
-        if (IsTrainingMode)
-        {
-            _lastInputGpu = input;
-            _lastOutputGpu = result;
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Attempts to map the configured activation function to a FusedActivationType for GPU execution.
-    /// </summary>
-    private bool TryGetFusedActivationType(out FusedActivationType fusedType)
-    {
-        // Vector activations (like Softmax) are not supported on GPU yet
-        if (_useVectorActivation)
-        {
-            fusedType = FusedActivationType.None;
-            return false;
-        }
-
-        IActivationFunction<T>? activation = ScalarActivation;
-        if (activation == null)
-        {
-            fusedType = FusedActivationType.None;
-            return false;
-        }
-
-        // Map activation function types to GPU kernel types
-        fusedType = activation switch
-        {
-            ReLUActivation<T> => FusedActivationType.ReLU,
-            LeakyReLUActivation<T> => FusedActivationType.LeakyReLU,
-            SigmoidActivation<T> => FusedActivationType.Sigmoid,
-            TanhActivation<T> => FusedActivationType.Tanh,
-            GELUActivation<T> => FusedActivationType.GELU,
-            SwishActivation<T> or SiLUActivation<T> => FusedActivationType.Swish,
-            _ => FusedActivationType.None
-        };
-
-        return fusedType != FusedActivationType.None;
     }
 
     /// <summary>

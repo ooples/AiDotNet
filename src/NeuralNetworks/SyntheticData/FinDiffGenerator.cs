@@ -248,8 +248,6 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         Tensor<T> currentOutput = input;
         foreach (var layer in Layers)

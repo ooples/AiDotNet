@@ -732,9 +732,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Mirror Train's noise-only contract (Chen et al. 2016 §3 — public
         // Train(noise, realImages) treats `input` as raw z and concatenates

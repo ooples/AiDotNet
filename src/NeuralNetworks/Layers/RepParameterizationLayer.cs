@@ -121,26 +121,9 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => false; // Reparameterization trick computes state during forward, no trainable parameters
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuMean;
-    [ExternalState]
-    private Tensor<T>? _gpuLogVar;
-    [ExternalState]
-    private Tensor<T>? _gpuEpsilon;
-    [ExternalState]
-    private Tensor<T>? _gpuStdDev;
-    private int _gpuBatchSize;
-    private int _gpuLatentSize;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RepParameterizationLayer{T}"/> class.
@@ -372,182 +355,12 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
                     gradEngine));
     }
 
-    private static int[] LatentShape(int[] inputShape, int latentSize)
-    {
-        var shape = (int[])inputShape.Clone();
-        shape[shape.Length - 1] = latentSize;
-        return shape;
-    }
-
     private Tensor<T> StandardNormal(int[] shape)
     {
         var noise = new Tensor<T>(shape);
         var span = noise.AsWritableSpan();
         for (int i = 0; i < span.Length; i++) span[i] = NumOps.FromDouble(Random.NextGaussian());
         return noise;
-    }
-
-    /// <summary>
-    /// Performs GPU-accelerated forward pass for the reparameterization trick.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Implements the reparameterization trick on GPU: z = mean + exp(logvar * 0.5) * epsilon
-    /// The epsilon values are generated on CPU (no GPU RNG available) and uploaded once.
-    /// All other operations (exp, multiply, add) are performed on GPU.
-    /// </para>
-    /// </remarks>
-    /// <param name="inputs">Input GPU tensors (uses first input containing [mean, logvar]).</param>
-    /// <returns>GPU-resident output tensor with sampled latent values.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        var input = inputs[0];
-        int[] shape = input._shape;
-
-        // Store original shape for any-rank tensor support
-        _originalInputShape = shape;
-        int rank = shape.Length;
-
-        // Handle any-rank tensor: determine batch and latent dimensions
-        int batchSize;
-        int latentSize;
-        int totalFeatures;
-
-        if (rank == 1)
-        {
-            batchSize = 1;
-            totalFeatures = shape[0];
-            latentSize = totalFeatures / 2;
-        }
-        else if (rank == 2)
-        {
-            batchSize = shape[0];
-            totalFeatures = shape[1];
-            latentSize = totalFeatures / 2;
-        }
-        else
-        {
-            // Higher-rank: collapse leading dims into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 1; d++)
-                flatBatch *= shape[d];
-            batchSize = flatBatch;
-            totalFeatures = shape[rank - 1];
-            latentSize = totalFeatures / 2;
-        }
-
-        int totalElements = batchSize * latentSize;
-
-        // Allocate GPU buffers for mean and logvar
-        var meanBuffer = backend.AllocateBuffer(totalElements);
-        var logvarBuffer = backend.AllocateBuffer(totalElements);
-
-        // Extract mean and logvar using GPU strided copy (no download for inference)
-        // Input layout: [batch, totalFeatures] where totalFeatures = 2 * latentSize
-        // Mean: input[b, 0:latentSize], Logvar: input[b, latentSize:2*latentSize]
-        for (int b = 0; b < batchSize; b++)
-        {
-            int srcBatchOffset = b * totalFeatures;
-            int dstBatchOffset = b * latentSize;
-            // Copy mean for this batch
-            backend.Copy(input.Buffer, srcBatchOffset, meanBuffer, dstBatchOffset, latentSize);
-            // Copy logvar for this batch
-            backend.Copy(input.Buffer, srcBatchOffset + latentSize, logvarBuffer, dstBatchOffset, latentSize);
-        }
-
-        if (!IsTrainingMode)
-        {
-            // Deterministic inference uses the posterior mean, as the CPU path does.
-            logvarBuffer.Dispose();
-            int[] meanShape = rank == 1 ? [latentSize] : rank == 2 ? [batchSize, latentSize] : LatentShape(shape, latentSize);
-            return GpuTensorHelper.UploadToGpu<T>(backend, meanBuffer, meanShape, GpuTensorRole.Activation, ownsBuffer: true);
-        }
-
-        // Generate random epsilon on CPU (no GPU RNG available) and upload
-        var epsilonData = new float[totalElements];
-        var random = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < totalElements; i++)
-        {
-            // Box-Muller transform for standard normal distribution
-            double u1 = 1.0 - random.NextDouble(); // Uniform(0,1] to avoid log(0)
-            double u2 = random.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            epsilonData[i] = (float)z;
-        }
-        var epsilonBuffer = backend.AllocateBuffer(epsilonData);
-
-        // Compute stdDev = exp(logvar * 0.5) on GPU
-        using var scaledLogvarBuffer = backend.AllocateBuffer(totalElements);
-        backend.Scale(logvarBuffer, scaledLogvarBuffer, 0.5f, totalElements);
-
-        var stdDevBuffer = backend.AllocateBuffer(totalElements);
-        backend.Exp(scaledLogvarBuffer, stdDevBuffer, totalElements);
-
-        // Compute scaledEpsilon = stdDev * epsilon on GPU
-        using var scaledEpsilonBuffer = backend.AllocateBuffer(totalElements);
-        backend.Multiply(stdDevBuffer, epsilonBuffer, scaledEpsilonBuffer, totalElements);
-
-        // Compute output = mean + scaledEpsilon on GPU
-        var outputBuffer = backend.AllocateBuffer(totalElements);
-        backend.Add(meanBuffer, scaledEpsilonBuffer, outputBuffer, totalElements);
-
-        // Cache GPU tensors for backward pass (keep on GPU for efficiency)
-        if (IsTrainingMode)
-        {
-            int[] latentShape = [batchSize, latentSize];
-            _gpuMean = GpuTensorHelper.UploadToGpu<T>(backend, meanBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuLogVar = GpuTensorHelper.UploadToGpu<T>(backend, logvarBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuEpsilon = GpuTensorHelper.UploadToGpu<T>(backend, epsilonBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuStdDev = GpuTensorHelper.UploadToGpu<T>(backend, stdDevBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuBatchSize = batchSize;
-            _gpuLatentSize = latentSize;
-
-            // Also cache CPU tensors for CPU backward compatibility
-            var meanData = backend.DownloadBuffer(meanBuffer);
-            var logvarData = backend.DownloadBuffer(logvarBuffer);
-            _lastMean = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(meanData), latentShape);
-            _lastLogVar = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(logvarData), latentShape);
-            _lastEpsilon = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(epsilonData), latentShape);
-        }
-        else
-        {
-            // Not training - dispose intermediate buffers
-            meanBuffer.Dispose();
-            logvarBuffer.Dispose();
-            epsilonBuffer.Dispose();
-            stdDevBuffer.Dispose();
-        }
-
-        // Determine output shape (half the input size in feature dimension)
-        int[] outputShape;
-        if (rank == 1)
-        {
-            outputShape = [latentSize];
-        }
-        else if (rank == 2)
-        {
-            outputShape = [batchSize, latentSize];
-        }
-        else
-        {
-            // Restore original batch dimensions for higher-rank input
-            outputShape = new int[rank];
-            for (int d = 0; d < rank - 1; d++)
-                outputShape[d] = shape[d];
-            outputShape[rank - 1] = latentSize;
-        }
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -580,12 +393,6 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
         _lastMean = null;
         _lastLogVar = null;
         _lastEpsilon = null;
-
-        // Clear cached GPU tensors
-        _gpuMean = null;
-        _gpuLogVar = null;
-        _gpuEpsilon = null;
-        _gpuStdDev = null;
     }
 
 }

@@ -332,189 +332,97 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
-    [Scratch]
-    private Tensor<T>? _lastInputGpu;
-    [Scratch]
-    private Tensor<T>? _lastOutputGpu;
-    [Scratch]
-    private Tensor<T>? _presynapticTracesGpu;
-    [Scratch]
-    private Tensor<T>? _postsynapticTracesGpu;
-    [Scratch]
-    private Tensor<T>? _presynapticSpikesGpu;
-    [Scratch]
-    private Tensor<T>? _postsynapticSpikesGpu;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        var input = inputs[0];
-
-        // Pass-through layer
-        // Cache GPU input/output for UpdateParameters
-        if (IsTrainingMode)
-        {
-            // We need to keep a reference or copy. 
-            // ForwardGpu inputs are usually transient unless we own them.
-            // But if we are in a chain, we might just keep the reference.
-            // However, input might be reused/overwritten.
-            // Safer to create a view or rely on upstream not modifying it.
-            // Let's keep it. If we need persistent storage we might need Copy.
-            _lastInputGpu = input;
-            _lastOutputGpu = input; // Pass-through
-
-            // Also update CPU cache for compatibility if needed, or skip if fully GPU
-            // _lastInput = input; 
-        }
-
-        return input;
-    }
-
     public override void UpdateParameters(T learningRate)
     {
-        if (Engine is DirectGpuTensorEngine gpuEngine && _lastInputGpu is { } lastInputGpu)
-        {
-            int size = GetInputShape()[0];
-            float decay = (float)_traceDecay;
-            float threshold = 0.5f;
+        int size = GetInputShape()[0];
 
-            if (_presynapticTracesGpu == null)
+        // Update spike traces (exponential decay)
+        for (int i = 0; i < size; i++)
+        {
+            // Decay traces over time
+            _presynapticTraces[i] = NumOps.Multiply(_presynapticTraces[i], NumOps.FromDouble(_traceDecay));
+            _postsynapticTraces[i] = NumOps.Multiply(_postsynapticTraces[i], NumOps.FromDouble(_traceDecay));
+
+            // Record new spikes (assuming binary activation where 1.0 = spike)
+            if (NumOps.GreaterThan(_lastInput[i], NumOps.FromDouble(0.5)))
             {
-                _presynapticTracesGpu = gpuEngine.ZerosGpu<T>([size]);
-                _postsynapticTracesGpu = gpuEngine.ZerosGpu<T>([size]);
-                _presynapticSpikesGpu = gpuEngine.ZerosGpu<T>([size]);
-                _postsynapticSpikesGpu = gpuEngine.ZerosGpu<T>([size]);
+                _presynapticSpikes[i] = NumOps.One;
+                _presynapticTraces[i] = NumOps.One; // Set trace to 1.0 when spike occurs
+            }
+            else
+            {
+                _presynapticSpikes[i] = NumOps.Zero;
             }
 
-            var presynapticTracesGpu = _presynapticTracesGpu
-                ?? throw new InvalidOperationException("Presynaptic trace storage was not initialized.");
-            var postsynapticTracesGpu = _postsynapticTracesGpu
-                ?? throw new InvalidOperationException("Postsynaptic trace storage was not initialized.");
-            var presynapticSpikesGpu = _presynapticSpikesGpu
-                ?? throw new InvalidOperationException("Presynaptic spike storage was not initialized.");
-            var postsynapticSpikesGpu = _postsynapticSpikesGpu
-                ?? throw new InvalidOperationException("Postsynaptic spike storage was not initialized.");
-            var lastOutputGpu = _lastOutputGpu
-                ?? throw new InvalidOperationException("GPU forward output is unavailable.");
-
-            // Update traces and detect spikes directly on GPU
-            gpuEngine.UpdateTracesGpu(presynapticTracesGpu, presynapticSpikesGpu, lastInputGpu, decay, threshold);
-            gpuEngine.UpdateTracesGpu(postsynapticTracesGpu, postsynapticSpikesGpu, lastOutputGpu, decay, threshold);
-
-            // Execute STDP update kernel
-            gpuEngine.StdpUpdateGpu(
-                _weights,
-                presynapticTracesGpu,
-                postsynapticTracesGpu,
-                presynapticSpikesGpu,
-                postsynapticSpikesGpu,
-                _stdpLtpRate, _stdpLtdRate, _homeostasisRate,
-                _minWeight, _maxWeight);
+            if (NumOps.GreaterThan(_lastOutput[i], NumOps.FromDouble(0.5)))
+            {
+                _postsynapticSpikes[i] = NumOps.One;
+                _postsynapticTraces[i] = NumOps.One; // Set trace to 1.0 when spike occurs
+            }
+            else
+            {
+                _postsynapticSpikes[i] = NumOps.Zero;
+            }
         }
-        else
+
+        // Apply STDP rule to update weights
+        for (int i = 0; i < size; i++)
         {
-            int size = GetInputShape()[0];
-
-            // Update spike traces (exponential decay)
-            for (int i = 0; i < size; i++)
+            for (int j = 0; j < size; j++)
             {
-                // Decay traces over time
-                _presynapticTraces[i] = NumOps.Multiply(_presynapticTraces[i], NumOps.FromDouble(_traceDecay));
-                _postsynapticTraces[i] = NumOps.Multiply(_postsynapticTraces[i], NumOps.FromDouble(_traceDecay));
+                // Skip self-connections
+                if (i == j) continue;
 
-                // Record new spikes (assuming binary activation where 1.0 = spike)
-                if (NumOps.GreaterThan(_lastInput[i], NumOps.FromDouble(0.5)))
+                T currentWeight = _weights[i, j];
+                T weightChange = NumOps.Zero;
+
+                // LTP: If presynaptic neuron fired before postsynaptic neuron
+                if (NumOps.Equals(_presynapticSpikes[i], NumOps.One) &&
+                    NumOps.GreaterThan(_postsynapticTraces[j], NumOps.Zero))
                 {
-                    _presynapticSpikes[i] = NumOps.One;
-                    _presynapticTraces[i] = NumOps.One; // Set trace to 1.0 when spike occurs
-                }
-                else
-                {
-                    _presynapticSpikes[i] = NumOps.Zero;
-                }
-
-                if (NumOps.GreaterThan(_lastOutput[i], NumOps.FromDouble(0.5)))
-                {
-                    _postsynapticSpikes[i] = NumOps.One;
-                    _postsynapticTraces[i] = NumOps.One; // Set trace to 1.0 when spike occurs
-                }
-                else
-                {
-                    _postsynapticSpikes[i] = NumOps.Zero;
-                }
-            }
-
-            // Apply STDP rule to update weights
-            for (int i = 0; i < size; i++)
-            {
-                for (int j = 0; j < size; j++)
-                {
-                    // Skip self-connections
-                    if (i == j) continue;
-
-                    T currentWeight = _weights[i, j];
-                    T weightChange = NumOps.Zero;
-
-                    // LTP: If presynaptic neuron fired before postsynaptic neuron
-                    if (NumOps.Equals(_presynapticSpikes[i], NumOps.One) &&
-                        NumOps.GreaterThan(_postsynapticTraces[j], NumOps.Zero))
-                    {
-                        // The strength of potentiation depends on the postsynaptic trace
-                        T potentiation = NumOps.Multiply(
-                            NumOps.FromDouble(_stdpLtpRate),
-                            NumOps.Multiply(_postsynapticTraces[j],
-                                NumOps.Subtract(NumOps.FromDouble(_maxWeight), currentWeight))
-                        );
-                        weightChange = NumOps.Add(weightChange, potentiation);
-                    }
-
-                    // LTD: If postsynaptic neuron fired before presynaptic neuron
-                    if (NumOps.Equals(_postsynapticSpikes[j], NumOps.One) &&
-                        NumOps.GreaterThan(_presynapticTraces[i], NumOps.Zero))
-                    {
-                        // The strength of depression depends on the presynaptic trace
-                        T depression = NumOps.Multiply(
-                            NumOps.FromDouble(_stdpLtdRate),
-                            NumOps.Multiply(_presynapticTraces[i],
-                                NumOps.Subtract(currentWeight, NumOps.FromDouble(_minWeight)))
-                        );
-                        weightChange = NumOps.Subtract(weightChange, depression);
-                    }
-
-                    // Apply calcium-based metaplasticity (homeostasis)
-                    // If a synapse is very strong, make it harder to strengthen further
-                    T homeostasisFactor = NumOps.Multiply(
-                        NumOps.FromDouble(_homeostasisRate),
-                        NumOps.Subtract(currentWeight, NumOps.FromDouble(0.5))
+                    // The strength of potentiation depends on the postsynaptic trace
+                    T potentiation = NumOps.Multiply(
+                        NumOps.FromDouble(_stdpLtpRate),
+                        NumOps.Multiply(_postsynapticTraces[j],
+                            NumOps.Subtract(NumOps.FromDouble(_maxWeight), currentWeight))
                     );
-                    weightChange = NumOps.Subtract(weightChange, homeostasisFactor);
-
-                    // Apply neuromodulation (using the provided learning rate as a global modulator)
-                    weightChange = NumOps.Multiply(weightChange, learningRate);
-
-                    // Update weight
-                    _weights[i, j] = NumOps.Add(currentWeight, weightChange);
-
-                    // Ensure weight stays within bounds
-                    if (NumOps.LessThan(_weights[i, j], NumOps.FromDouble(_minWeight)))
-                        _weights[i, j] = NumOps.FromDouble(_minWeight);
-                    if (NumOps.GreaterThan(_weights[i, j], NumOps.FromDouble(_maxWeight)))
-                        _weights[i, j] = NumOps.FromDouble(_maxWeight);
+                    weightChange = NumOps.Add(weightChange, potentiation);
                 }
+
+                // LTD: If postsynaptic neuron fired before presynaptic neuron
+                if (NumOps.Equals(_postsynapticSpikes[j], NumOps.One) &&
+                    NumOps.GreaterThan(_presynapticTraces[i], NumOps.Zero))
+                {
+                    // The strength of depression depends on the presynaptic trace
+                    T depression = NumOps.Multiply(
+                        NumOps.FromDouble(_stdpLtdRate),
+                        NumOps.Multiply(_presynapticTraces[i],
+                            NumOps.Subtract(currentWeight, NumOps.FromDouble(_minWeight)))
+                    );
+                    weightChange = NumOps.Subtract(weightChange, depression);
+                }
+
+                // Apply calcium-based metaplasticity (homeostasis)
+                // If a synapse is very strong, make it harder to strengthen further
+                T homeostasisFactor = NumOps.Multiply(
+                    NumOps.FromDouble(_homeostasisRate),
+                    NumOps.Subtract(currentWeight, NumOps.FromDouble(0.5))
+                );
+                weightChange = NumOps.Subtract(weightChange, homeostasisFactor);
+
+                // Apply neuromodulation (using the provided learning rate as a global modulator)
+                weightChange = NumOps.Multiply(weightChange, learningRate);
+
+                // Update weight
+                _weights[i, j] = NumOps.Add(currentWeight, weightChange);
+
+                // Ensure weight stays within bounds
+                if (NumOps.LessThan(_weights[i, j], NumOps.FromDouble(_minWeight)))
+                    _weights[i, j] = NumOps.FromDouble(_minWeight);
+                if (NumOps.GreaterThan(_weights[i, j], NumOps.FromDouble(_maxWeight)))
+                    _weights[i, j] = NumOps.FromDouble(_maxWeight);
             }
         }
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _presynapticTracesGpu?.Dispose();
-            _postsynapticTracesGpu?.Dispose();
-            _presynapticSpikesGpu?.Dispose();
-            _postsynapticSpikesGpu?.Dispose();
-        }
-        base.Dispose(disposing);
     }
 
     /// <summary>Construction state: the 'size' the layer was built with.</summary>
