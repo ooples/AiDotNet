@@ -68,10 +68,7 @@ internal sealed class LazyWeight<T>
     });
 
     /// <summary>A constant fill (a norm's scale of one or shift of zero).</summary>
-    public static LazyWeight<T> Constant(int[] shape, double value) => new(shape, (tensor, _) =>
-    {
-        if (value != 0) tensor.Fill(NumOps.FromDouble(value));
-    });
+    public static LazyWeight<T> Constant(int[] shape, double value) => new(shape, (tensor, _) => tensor.Fill(NumOps.FromDouble(value)));
 }
 
 /// <summary>
