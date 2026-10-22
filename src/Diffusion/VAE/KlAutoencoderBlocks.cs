@@ -81,16 +81,21 @@ internal sealed class KlConv2d<T> : KlModule<T>
     }
 }
 
-/// <summary>nn.GroupNorm with an affine scale and shift (epsilon 1e-6, as the KL autoencoder uses).</summary>
+/// <summary>
+/// nn.GroupNorm with an affine scale and shift over [B, C, ...] (epsilon 1e-6, as the KL autoencoder uses, unless
+/// given).
+/// </summary>
 internal sealed class KlGroupNorm<T> : KlModule<T>
 {
     private readonly int _groups;
+    private readonly double _epsilon;
 
-    public KlGroupNorm(int groups, int channels)
+    public KlGroupNorm(int groups, int channels, double epsilon = 1e-6)
     {
         if (groups <= 0 || channels % groups != 0)
             throw new ArgumentException($"{channels} channels do not split into {groups} groups.", nameof(groups));
         _groups = groups;
+        _epsilon = epsilon;
         _gamma = LazyWeight<T>.Constant(new[] { channels }, 1.0);
         _beta = LazyWeight<T>.Constant(new[] { channels }, 0.0);
     }
@@ -98,7 +103,7 @@ internal sealed class KlGroupNorm<T> : KlModule<T>
     private readonly LazyWeight<T> _gamma;
     private readonly LazyWeight<T> _beta;
 
-    public Tensor<T> Forward(Tensor<T> x) => Engine.GroupNorm(x, _groups, _gamma.Value, _beta.Value, 1e-6, out _, out _);
+    public Tensor<T> Forward(Tensor<T> x) => Engine.GroupNorm(x, _groups, _gamma.Value, _beta.Value, _epsilon, out _, out _);
 
     public override IEnumerable<(string Name, Tensor<T> Tensor)> NamedTensors(string prefix)
     {
