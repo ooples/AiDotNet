@@ -25,6 +25,19 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        try
+        {
+            return Run(args);
+        }
+        catch (UsageException e)
+        {
+            Console.Error.WriteLine(e.Message);
+            return 2;
+        }
+    }
+
+    private static int Run(string[] args)
+    {
         if (args.Length < 1)
         {
             Console.Error.WriteLine("usage: DiffusionTraceProbe <ModelName> [--train-iters N] [--predict 0|1]");
@@ -38,6 +51,7 @@ internal static class Program
         // P0 (#642): isolate the SD-UNet forward and time it at a chosen degree of
         // parallelism so the 1-vs-N speedup curve = parallel efficiency = utilization.
         if (args[0] == "--unet") return RunUNetParallelProbe(args);
+        if (args[0] == "--dit") return RunDiTParallelProbe(args);
 
         string modelName = args[0];
         int trainIters = ArgInt(args, "--train-iters", 5);
@@ -278,12 +292,17 @@ internal static class Program
     /// </summary>
     private static int RunUNetParallelProbe(string[] args)
     {
-        int baseCh = ArgInt(args, "--base", 128);
+        // Defaults are the SD-style UNet this probe started with. --kandinsky selects Kandinsky 2.2's decoder UNet as
+        // KandinskyModel builds it: base 384, multipliers [1,2,4,4], 3 res blocks, attention at [4,2,1], context 1280.
+        bool kandinsky = args.Contains("--kandinsky");
+        int baseCh = ArgInt(args, "--base", kandinsky ? 384 : 128);
         int maxdop = ArgInt(args, "--maxdop", Environment.ProcessorCount);
         int reps = ArgInt(args, "--reps", 3);
         int height = ArgInt(args, "--height", 64);
         bool attn = ArgInt(args, "--attn", 1) != 0;
         bool compile = ArgInt(args, "--compile", 0) != 0;
+        int resBlocks = ArgInt(args, "--resblocks", kandinsky ? 3 : 2);
+        int contextDim = ArgInt(args, "--context", kandinsky ? 1280 : 768);
 
         // Fail fast on a non-positive rep count before allocating buffers / constructing the predictor:
         // --reps 0 would index an empty times[] (IndexOutOfRange), and a negative value throws on the
@@ -295,52 +314,93 @@ internal static class Program
         }
 
         AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = maxdop;
-        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = compile;
+        SetCompilation(compile);
 
-        var predictor = new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>(
+        // Disposed on every exit path: if PredictNoise / ParameterCount / output formatting throws, the model and its
+        // backing buffers would otherwise leak for the rest of the process.
+        using var predictor = new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>(
             inputChannels: 4, outputChannels: 4, baseChannels: baseCh,
-            channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocks: 2,
+            channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocks: resBlocks,
             attentionResolutions: attn ? new[] { 4, 2, 1 } : Array.Empty<int>(),
-            contextDim: 768, numHeads: 8, inputHeight: height, seed: 42);
+            contextDim: contextDim, numHeads: 8, inputHeight: height, seed: 42);
 
-        // Dispose the predictor on every exit path: if PredictNoise / ParameterCount / output
-        // formatting throws, the model and its backing buffers would otherwise leak for the rest
-        // of the process.
-        try
+        var rng = new Random(42);
+        var input = RandomTensor(new[] { 1, 4, height, height }, rng);
+        var cond = attn ? RandomTensor(new[] { 1, 77, contextDim }, rng) : null;
+        const int t = 500;
+
+        // Warm-up: lazy weight allocation + (if enabled) first-forward trace/compile.
+        // Excluded from timing so steady-state per-op cost is what we measure.
+        var sww = Stopwatch.StartNew();
+        _ = predictor.PredictNoise(input, t, cond);
+        sww.Stop();
+
+        var times = TimeForwards(args, reps, () => predictor.PredictNoise(input, t, cond));
+        double median = times[reps / 2];
+        long pc = -1;
+        pc = TryParamCount(() => predictor.ParameterCount);
+        Console.WriteLine(
+            $"UNET {(kandinsky ? "kandinsky " : "")}base={baseCh} resblocks={resBlocks} attn={attn} h={height} compile={compile} " +
+            $"maxdop={maxdop} procs={Environment.ProcessorCount} params={pc} " +
+            $"warmup_ms={sww.Elapsed.TotalMilliseconds:F0} median_ms={median:F1} min_ms={times[0]:F1}");
+        return 0;
+    }
+
+    // #653: a DiT forward (DiTNoisePredictor's defaults are DiT-XL/2: hidden 1152, 28 layers, 16 heads, patch 2, a 32x32
+    // latent) at a chosen degree of parallelism, the transformer counterpart of --unet.
+    private static int RunDiTParallelProbe(string[] args)
+    {
+        int maxdop = ArgInt(args, "--maxdop", Environment.ProcessorCount);
+        int reps = ArgInt(args, "--reps", 3);
+        int hidden = ArgInt(args, "--hidden", 1152);
+        int layers = ArgInt(args, "--layers", 28);
+        int heads = ArgInt(args, "--heads", 16);
+        int latent = ArgInt(args, "--latent", 32);
+        int contextDim = ArgInt(args, "--context", 1024);
+        bool compile = ArgInt(args, "--compile", 0) != 0;
+        const int patch = 2;
+        if (reps <= 0)
         {
-            var rng = new Random(42);
-            var input = RandomTensor(new[] { 1, 4, height, height }, rng);
-            var cond = attn ? RandomTensor(new[] { 1, 77, 768 }, rng) : null;
-            const int t = 500;
-
-            // Warm-up: lazy weight allocation + (if enabled) first-forward trace/compile.
-            // Excluded from timing so steady-state per-op cost is what we measure.
-            var sww = Stopwatch.StartNew();
-            _ = predictor.PredictNoise(input, t, cond);
-            sww.Stop();
-
-            var times = new double[reps];
-            for (int i = 0; i < reps; i++)
-            {
-                var sw = Stopwatch.StartNew();
-                _ = predictor.PredictNoise(input, t, cond);
-                sw.Stop();
-                times[i] = sw.Elapsed.TotalMilliseconds;
-            }
-            Array.Sort(times);
-            double median = times[reps / 2];
-            long pc = -1;
-            try { pc = predictor.ParameterCount; } catch { }
-            Console.WriteLine(
-                $"UNET base={baseCh} attn={attn} h={height} compile={compile} " +
-                $"maxdop={maxdop} procs={Environment.ProcessorCount} params={pc} " +
-                $"warmup_ms={sww.Elapsed.TotalMilliseconds:F0} median_ms={median:F1} min_ms={times[0]:F1}");
-            return 0;
+            Console.Error.WriteLine($"--reps must be a positive integer (got {reps}).");
+            return 1;
         }
-        finally
+        if (maxdop <= 0 || hidden <= 0 || layers <= 0 || heads <= 0 || latent <= 0 || contextDim <= 0)
         {
-            if (predictor is IDisposable d) d.Dispose();
+            Console.Error.WriteLine("--maxdop, --hidden, --layers, --heads, --latent and --context must be positive integers.");
+            return 1;
         }
+        if (hidden % heads != 0)
+        {
+            Console.Error.WriteLine($"--hidden ({hidden}) must be divisible by --heads ({heads}).");
+            return 1;
+        }
+        if (latent % patch != 0)
+        {
+            Console.Error.WriteLine($"--latent ({latent}) must be divisible by the patch size ({patch}).");
+            return 1;
+        }
+
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = maxdop;
+        SetCompilation(compile);
+        using var predictor = new AiDotNet.Diffusion.NoisePredictors.DiTNoisePredictor<float>(
+            inputChannels: 4, hiddenSize: hidden, numLayers: layers, numHeads: heads, patchSize: patch,
+            contextDim: contextDim, latentSpatialSize: latent, seed: 42);
+
+        var rng = new Random(42);
+        var input = RandomTensor(new[] { 1, 4, latent, latent }, rng);
+        var cond = RandomTensor(new[] { 1, 77, contextDim }, rng);
+        const int t = 500;
+
+        var sww = Stopwatch.StartNew();
+        _ = predictor.PredictNoise(input, t, cond);
+        sww.Stop();
+
+        var times = TimeForwards(args, reps, () => predictor.PredictNoise(input, t, cond));
+        Console.WriteLine(
+            $"DIT hidden={hidden} layers={layers} heads={heads} latent={latent} compile={compile} maxdop={maxdop} " +
+            $"procs={Environment.ProcessorCount} warmup_ms={sww.Elapsed.TotalMilliseconds:F0} " +
+            $"median_ms={times[reps / 2]:F1} min_ms={times[0]:F1}");
+        return 0;
     }
 
     private static object? Construct(string modelName)
@@ -411,10 +471,31 @@ internal static class Program
         }
     }
 
-    private static long SafeParamCount(IFullModel<float, Tensor<float>, Tensor<float>> model)
+    private static long SafeParamCount(IFullModel<float, Tensor<float>, Tensor<float>> model) =>
+        TryParamCount(() => ((IDiffusionModel<float>)model).ParameterCount);
+
+    // The count is informational: a model that cannot report it (not a diffusion model, or a parameter surface that is
+    // not materialised) prints -1 and says why, rather than failing the probe.
+    private static long TryParamCount(Func<long> read)
     {
-        try { return ((IDiffusionModel<float>)model).ParameterCount; }
-        catch { return -1; }
+        try
+        {
+            return read();
+        }
+        catch (Exception e) when (e is InvalidCastException or InvalidOperationException or NotSupportedException or NotImplementedException)
+        {
+            Console.Error.WriteLine($"ParameterCount unavailable: {e.GetType().Name}: {e.Message}");
+            return -1;
+        }
+    }
+
+    // TensorCodecOptions.Current is per thread; installing it through SetCurrent is the documented way to make the
+    // setting take effect for the forwards this thread runs.
+    private static void SetCompilation(bool compile)
+    {
+        var options = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        options.EnableCompilation = compile;
+        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(options);
     }
 
     private static Tensor<float> RandomTensor(int[] shape, Random rng)
@@ -424,10 +505,51 @@ internal static class Program
         return t;
     }
 
+    // A flag that is absent takes its default; one that is present must carry an integer, or the run would measure a
+    // configuration nobody asked for.
     private static int ArgInt(string[] args, string flag, int fallback)
     {
         int idx = Array.IndexOf(args, flag);
-        if (idx >= 0 && idx + 1 < args.Length && int.TryParse(args[idx + 1], out int v)) return v;
-        return fallback;
+        if (idx < 0) return fallback;
+        if (idx + 1 < args.Length && int.TryParse(args[idx + 1], out int v)) return v;
+        throw new UsageException(idx + 1 < args.Length
+            ? $"{flag} must be an integer (got '{args[idx + 1]}')."
+            : $"{flag} needs an integer value.");
+    }
+
+    private sealed class UsageException : Exception
+    {
+        public UsageException(string message) : base(message) { }
+    }
+
+    // The timed forwards, sorted ascending. --op-profile prints the engine's per-op rollup over them (inclusive; nested
+    // ops count in both).
+    private static double[] TimeForwards(string[] args, int reps, Action forward)
+    {
+        bool opProfile = args.Contains("--op-profile");
+        var profiler = AiDotNet.Tensors.Engines.Optimization.PerformanceProfiler.Instance;
+        if (opProfile) { profiler.Clear(); profiler.Enabled = true; }
+        var times = new double[reps];
+        try
+        {
+            for (int i = 0; i < reps; i++)
+            {
+                var sw = Stopwatch.StartNew();
+                forward();
+                sw.Stop();
+                times[i] = sw.Elapsed.TotalMilliseconds;
+            }
+        }
+        finally
+        {
+            if (opProfile) profiler.Enabled = false;
+        }
+        if (opProfile)
+        {
+            foreach (var op in profiler.GetAllStats().OrderByDescending(o => o.TotalTicks).Take(25))
+                Console.WriteLine($"  op {op.OperationName,-40} calls/fwd {op.CallCount / (double)reps,8:F1}  ms/fwd {op.TotalMilliseconds / reps,9:F1}");
+        }
+        Array.Sort(times);
+        return times;
     }
 }

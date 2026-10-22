@@ -173,9 +173,6 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="TemporalMemoryLayer{T}"/> class.
     /// </summary>
@@ -290,34 +287,6 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>, IShapeContract
         var output = Engine.TensorMultiply(mask, flatCellStates);
 
         return output;
-    }
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable");
-
-        var input = inputs[0];
-        int outputSize = ColumnCount * CellsPerColumn;
-
-        // Convert cell states to float array and upload to GPU
-        var cellStatesData = DirectGpuEngine.ToFloatArray<T>(CellStates.Data.ToArray());
-        using var cellStatesBuffer = backend.AllocateBuffer(cellStatesData);
-        var outputBuffer = backend.AllocateBuffer(outputSize);
-
-        // Use BroadcastMultiplyFirstAxis: output[col, cell] = cellStates[col, cell] * input[col]
-        // This broadcasts input[ColumnCount] across the CellsPerColumn dimension without CPU download
-        backend.BroadcastMultiplyFirstAxis(cellStatesBuffer, input.Buffer, outputBuffer, ColumnCount, CellsPerColumn);
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, new[] { outputSize }, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

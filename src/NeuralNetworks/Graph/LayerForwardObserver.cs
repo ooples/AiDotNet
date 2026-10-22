@@ -78,6 +78,15 @@ internal sealed class LayerForwardObserver<T> : IDisposable
     public IReadOnlyList<(ILayer<T> Layer, Tensor<T> Input, Tensor<T> Output)> Calls => _calls;
 
     /// <summary>
+    /// True once a convolution/batch-norm pair ran unfolded only because this observer was attached, so
+    /// the traced forward differs by rounding from the same forward without an observer.
+    /// </summary>
+    public bool SuppressedFolding { get; private set; }
+
+    /// <summary>Records that <see cref="ConvolutionBatchNormFolding{T}"/> declined a fold for this trace.</summary>
+    public void NoteSuppressedFolding() => SuppressedFolding = true;
+
+    /// <summary>
     /// Validates the actual producer-consumer edge before the consumer kernel executes.
     /// Tensor identity makes this branch-safe: unrelated neighbors in a flattened layer registry
     /// are never compared.

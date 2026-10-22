@@ -160,11 +160,6 @@ public partial class ReshapeLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     private Tensor<T>? _lastInput;
 
     /// <summary>
-    /// Cached GPU input shape for backward pass.
-    /// </summary>
-    private int[]? _gpuCachedInputShape;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -331,55 +326,6 @@ public partial class ReshapeLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     {
         // Clear cached values from forward pass
         _lastInput = null;
-        _gpuCachedInputShape = null;
     }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because reshape is a zero-copy operation that can be done via GPU tensor view.
-    /// </value>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Performs the forward pass on GPU using a zero-copy view reshape.
-    /// </summary>
-    /// <param name="input">The GPU-resident input tensor.</param>
-    /// <returns>A GPU tensor view with the reshaped dimensions.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements GPU-resident reshape by creating a view into the input tensor
-    /// with the target shape. No data is copied - only the shape interpretation changes.
-    /// </para>
-    /// <para><b>For Beginners:</b> The GPU version of reshape is very efficient because:
-    /// - It doesn't move any data
-    /// - It just tells the GPU "interpret this same data with a different shape"
-    /// - This is called a "view" operation
-    ///
-    /// For example, if input has shape [32, 28, 28, 1] and target is [784],
-    /// the view will have shape [32, 784] but still points to the same GPU memory.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var input = inputs[0];
-
-        // Cache input shape for backward pass
-        if (IsTrainingMode)
-        {
-            _gpuCachedInputShape = (int[])input._shape.Clone();
-        }
-
-        // Calculate full target shape including batch dimension
-        int batchSize = input.Shape[0];
-        int[] targetShape = new int[_outputShape.Length + 1];
-        targetShape[0] = batchSize;
-        Array.Copy(_outputShape, 0, targetShape, 1, _outputShape.Length);
-
-        return input.Reshape(targetShape);
-    }
 }

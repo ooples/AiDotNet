@@ -119,14 +119,6 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _gammaVelocity;
     private Tensor<T>? _betaVelocity;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuLastInput;
-    [ExternalState]
-    private Tensor<T>? _gpuSaveMean;
-    [ExternalState]
-    private Tensor<T>? _gpuSaveInvVar;
-
     /// <summary>
     /// Returns layer-specific metadata required for cloning/serialization.
     /// </summary>
@@ -176,11 +168,6 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     /// <remarks>Normalization is elementwise over the feature axis, so the output shape is the input shape.</remarks>
     protected override bool IsShapePreserving => true;
-
-    /// <summary>
-    /// Indicates whether this layer supports GPU-resident execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the gamma (scale) parameters of the layer normalization layer.
@@ -562,51 +549,6 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// GPU-resident forward pass for layer normalization.
-    /// Normalizes input across the feature dimension entirely on GPU.
-    /// </summary>
-    /// <param name="input">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident normalized output tensor.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Lazy-shape resolution must run before any read of _gamma/_beta:
-        // a lazily-constructed LayerNormalizationLayer holds zero-length
-        // placeholder gamma/beta until its first Forward — matches the
-        // CPU Forward contract above (which calls EnsureInitializedFromInput
-        // before doing anything with _gamma/_beta).
-        EnsureInitializedFromInput(input);
-
-        double epsilonDouble = NumOps.ToDouble(_epsilon);
-
-        var (output, saveMean, saveInvVar) = gpuEngine.LayerNormGpu(
-            input, _gamma, _beta, epsilonDouble);
-
-        // Cache state for backward pass only during training. Also skip inside an
-        // InferenceMode scope (no backward runs; retaining these would pin / alias
-        // per-step buffers under the denoise-loop arena — #1668).
-        // Skip this expensive download during inference (50% overhead reduction)
-        if (IsTrainingMode && !InferenceMode.IsActive)
-        {
-            _gpuLastInput = input;
-            _gpuSaveMean = saveMean;
-            _gpuSaveInvVar = saveInvVar;
-            _lastInput = input;
-            _lastMean = saveMean;
-            _lastVariance = saveInvVar;
-        }
-
-        return output;
-    }
-
-    /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -672,10 +614,6 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 
     public override void ResetState()
     {
-        // Clear GPU cached values
-        _gpuLastInput = null;
-        _gpuSaveMean = null;
-        _gpuSaveInvVar = null;
 
         // Clear cached values from forward and backward passes
         _lastInput = null;

@@ -460,15 +460,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         }
         return true;
     }
-
-    // GPU-resident cached tensors for GPU training pipeline
-    [Scratch]
-    private Tensor<T>? _lastInputGpu;
     [Scratch]
     private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
     [Scratch]
     private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
-    private int[]? _gpuOriginalInputShape;
 
 
     /// <summary>
@@ -1442,140 +1437,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         return result;
     }
 
-    /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Performs a GPU-resident forward pass, keeping tensors on GPU.
-    /// Use this for chained layer execution to avoid CPU round-trips.
-    /// Supports any-rank tensor input (1D, 2D, or ND), matching CPU Forward behavior.
-    /// </summary>
-    /// <param name="inputs">GPU-resident input tensors (uses first input). Last dimension is features.</param>
-    /// <returns>GPU-resident output tensor with same batch dimensions, outputSize as last dim.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        EnsureInitialized();
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var input = inputs[0];
-
-        // Store for potential backward pass
-        _originalInputShape = input._shape;
-
-        int actualInputSize = input.Shape[^1]; // Last dimension is always features
-        int expectedInputSize = _weights.Shape[0];
-
-        // Dynamic input size adaptation
-        if (actualInputSize != expectedInputSize)
-        {
-            EnsureWeightShapeForInput(actualInputSize);
-        }
-
-        int outputSize = OutputShape[0];
-
-        // Determine if reshape is needed and compute the effective batch dimension
-        int batchDim;
-        bool needsReshape = false;
-        int[] originalBatchDims = Array.Empty<int>();
-
-        if (input.Shape.Length == 1)
-        {
-            // 1D input [features] -> treat as single sample
-            batchDim = 1;
-            needsReshape = true;
-        }
-        else if (input.Shape.Length == 2)
-        {
-            // 2D input [batch, features] -> standard case, no reshape needed
-            batchDim = input.Shape[0];
-            needsReshape = false;
-        }
-        else
-        {
-            // ND input [dim0, dim1, ..., features] -> flatten batch dims, then reshape back
-            needsReshape = true;
-            originalBatchDims = new int[input.Shape.Length - 1];
-            batchDim = 1;
-            for (int i = 0; i < input.Shape.Length - 1; i++)
-            {
-                originalBatchDims[i] = input.Shape[i];
-                batchDim *= input.Shape[i];
-            }
-        }
-
-        // Reshape ND input to 2D [totalBatch, features] for matrix multiply
-        Tensor<T> input2D = input;
-        if (needsReshape && input.Shape.Length > 2)
-        {
-            input2D = Engine.Reshape(input, [batchDim, actualInputSize]);
-        }
-        else if (needsReshape && input.Shape.Length == 1)
-        {
-            input2D = Engine.Reshape(input, [1, actualInputSize]);
-        }
-
-        // Get the fused activation type
-        var fusedActivation = GetFusedActivationType();
-
-        // Use GPU-resident FusedLinear - NO CPU round-trip
-        // Result is [batchDim, outputSize]
-        var result = gpuEngine.FusedLinearGpu(input2D, _weights, BiasOrNull(), fusedActivation);
-
-        // Cache state for backward pass only during training - KEEP ON GPU for GPU-resident training
-        if (IsTrainingMode)
-        {
-            // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
-            _lastInputGpu = input2D;
-            _gpuOriginalInputShape = input._shape.ToArray();
-
-            // For fused activations, we need pre-activation for gradient computation
-            if (fusedActivation != FusedActivationType.None)
-            {
-                _lastPreActivationGpu = gpuEngine.FusedLinearGpu(input2D, _weights, BiasOrNull(), FusedActivationType.None);
-                _lastOutputGpu = result; // Post-activation for sigmoid/tanh backward
-            }
-            else
-            {
-                _lastPreActivationGpu = result;
-                _lastOutputGpu = result;
-            }
-
-            // Also download to CPU for hybrid CPU/GPU backward compatibility
-            _lastInput = input;
-            _lastOutput = _lastPreActivationGpu;
-        }
-
-        // Reshape output back to original batch dimensions if needed
-        if (input.Shape.Length == 1)
-        {
-            // 1D input -> 1D output [outputSize]
-            result = Engine.Reshape(result, [outputSize]);
-        }
-        else if (input.Shape.Length > 2)
-        {
-            // ND input -> ND output [dim0, dim1, ..., outputSize]
-            int[] outputShape = new int[originalBatchDims.Length + 1];
-            for (int i = 0; i < originalBatchDims.Length; i++)
-            {
-                outputShape[i] = originalBatchDims[i];
-            }
-            outputShape[^1] = outputSize;
-            result = Engine.Reshape(result, outputShape);
-        }
-        // 2D input: result is already [batch, outputSize]
-
-        return result;
-    }
-
     /// <summary>
     /// Computes activation gradient using GPU-resident backward operations.
     /// </summary>
@@ -1811,12 +1672,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         _lastOutput = null;
         _weightsGradient = null;
         _biasesGradient = null;
-
-        // Clear GPU-resident cached tensors
-        _lastInputGpu = null;
         _lastPreActivationGpu = null;
         _lastOutputGpu = null;
-        _gpuOriginalInputShape = null;
     }
 
     /// <summary>
@@ -1862,12 +1719,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             _biasesGradient = null;
             _lastInput = null;
             _lastOutput = null;
-
-            // Clear GPU-resident cached tensors
-            _lastInputGpu = null;
             _lastPreActivationGpu = null;
             _lastOutputGpu = null;
-            _gpuOriginalInputShape = null;
         }
 
         base.Dispose(disposing);

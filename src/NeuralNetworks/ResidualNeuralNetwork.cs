@@ -460,9 +460,6 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: perform forward pass through all layers sequentially (wrapped in the #1622
         // verify-then-trust compiled gate; no-op unless acceleration is engaged).

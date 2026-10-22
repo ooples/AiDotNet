@@ -132,11 +132,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastInput;
 
     /// <summary>
-    /// Cached input shape from GPU forward pass for backward pass.
-    /// </summary>
-    private int[]? _gpuCachedInputShape;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -159,11 +154,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UpsamplingLayer{T}"/> class.
@@ -292,31 +282,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Performs the forward pass on GPU tensors.
-    /// </summary>
-    /// <param name="inputs">GPU tensor inputs.</param>
-    /// <returns>GPU tensor output after upsampling.</returns>
-    /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Cache input shape for backward pass during training
-        if (IsTrainingMode)
-        {
-            _gpuCachedInputShape = (int[])input._shape.Clone();
-        }
-
-        return gpuEngine.UpsampleGpu(input, _scaleFactor);
-    }
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -339,7 +304,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
     {
         // Clear the cached input
         _lastInput = null;
-        _gpuCachedInputShape = null;
     }
 
     internal override Dictionary<string, string> GetMetadata()

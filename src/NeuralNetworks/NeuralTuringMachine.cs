@@ -798,9 +798,6 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
     /// <returns>The output tensor after processing.</returns>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return ForwardTape(input);
     }

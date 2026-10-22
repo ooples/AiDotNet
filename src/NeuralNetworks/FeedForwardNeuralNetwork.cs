@@ -491,10 +491,6 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     {
         ValidateInputShape(input, "forward pass");
 
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         // CPU path: each layer processes input and may download results
         Tensor<T> output = input;
         foreach (var layer in Layers)

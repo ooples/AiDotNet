@@ -346,10 +346,6 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // Set to inference mode
         SetTrainingMode(false);
 
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         // Simple layer-by-layer forward pass (wrapped in the #1622 verify-then-trust compiled gate;
         // no-op unless acceleration is engaged). Each layer (including LSTM layers) handles its own
         // time-stepping internally — matching the industry-standard approach used by GRU networks.

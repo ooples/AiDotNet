@@ -1013,9 +1013,6 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Match NeuralNetworkBase.Predict's eval-mode wrapper so stateful
         // layers (Dropout, BatchNorm batch-stats vs running-stats, the

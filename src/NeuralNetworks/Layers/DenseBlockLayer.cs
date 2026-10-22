@@ -82,14 +82,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _relu2Out;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuBn1Out;
-    [ExternalState]
-    private Tensor<T>? _gpuConv1Out;
-    [ExternalState]
-    private Tensor<T>? _gpuBn2Out;
-
     public override bool SupportsTraining => true;
 
     public override void ClearGradients()
@@ -97,11 +89,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         base.ClearGradients();
         _bn1.ClearGradients(); _conv1x1.ClearGradients(); _bn2.ClearGradients(); _conv3x3.ClearGradients();
     }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Lazy ctor — input depth/height/width come from the first
@@ -235,57 +222,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         return output;
     }
 
-    /// <summary>
-    /// Performs the GPU-resident forward pass of the dense block layer.
-    /// </summary>
-    /// <param name="inputs">The GPU input tensors.</param>
-    /// <returns>The GPU output tensor.</returns>
-    /// <remarks>
-    /// Chains GPU operations: BN1 → ReLU → Conv1x1 → BN2 → ReLU → Conv3x3.
-    /// All computations stay on GPU.
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var gpuEngine = Engine as DirectGpuTensorEngine;
-        if (gpuEngine == null)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Mirror Forward()'s lazy-resolution gate. Without this, a layer
-        // whose first execution lands on the GPU path runs ForwardGpu
-        // against unresolved sub-layer shapes (and skips the
-        // _pendingParameters / _pendingExtraParameters replay above) —
-        // the BN running stats stay at zero, weights stay random, and
-        // checkpointed inference produces wrong output. OnFirstForward
-        // resolves shapes + replays buffered params before any sub-
-        // layer's first GPU forward runs.
-        if (!IsShapeResolved) OnFirstForward(input);
-
-        // BN1 → ReLU → Conv1x1
-        var bn1Output = _bn1.ForwardGpu(input);
-        var relu1Output = gpuEngine.ActivationGpu(bn1Output, FusedActivationType.ReLU);
-        var conv1Output = _conv1x1.ForwardGpu(relu1Output);
-
-        // BN2 → ReLU → Conv3x3
-        var bn2Output = _bn2.ForwardGpu(conv1Output);
-        var relu2Output = gpuEngine.ActivationGpu(bn2Output, FusedActivationType.ReLU);
-        var output = _conv3x3.ForwardGpu(relu2Output);
-
-        // Cache tensors for backward pass (need BN outputs for ReLU backward)
-        if (IsTrainingMode)
-        {
-            _gpuBn1Out = bn1Output;
-            _gpuConv1Out = conv1Output;
-            _gpuBn2Out = bn2Output;
-        }
-
-        return output;
-    }
-
     private Tensor<T> ApplyReluDerivative(Tensor<T> input, Tensor<T> grad)
     {
         var result = new T[grad.Data.Length];
@@ -338,10 +274,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _conv1Out = null;
         _bn2Out = null;
         _relu2Out = null;
-
-        _gpuBn1Out = null;
-        _gpuConv1Out = null;
-        _gpuBn2Out = null;
 
         _bn1.ResetState();
         _conv1x1.ResetState();

@@ -190,8 +190,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _gpuInput;
     [ExternalState]
     private Tensor<T>? _gpuOutput;
-    private int[]? _gpuInputShape4D;
-    private bool _gpuAddedBatchDimension;
 
     /// <summary>
     /// Gets the depth (number of channels) of the input data.
@@ -332,11 +330,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     public override bool HasUninitializedParameters => !IsShapeResolved;
 
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeconvolutionalLayer{T}"/> class with the specified
@@ -665,119 +658,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return result;
     }
 
-    /// <summary>
-    /// Performs a GPU-resident forward pass using fused ConvTranspose2D + Bias + Activation.
-    /// </summary>
-    /// <param name="inputs">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident output tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
-    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var input = inputs[0];
-
-        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
-        if (input.Shape.Length < 3)
-        {
-            throw new ArgumentException(
-                $"ConvTranspose2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
-        }
-
-        var originalInputShape = input._shape;
-        int rank = input.Shape.Length;
-        bool addedBatchDimension = false;
-
-        // Reshape input to 4D [B, C, H, W] for transposed convolution
-        Tensor<T> input4D;
-        if (rank == 3)
-        {
-            // 3D [C, H, W] -> 4D [1, C, H, W]
-            addedBatchDimension = true;
-            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
-        }
-        else if (rank == 4)
-        {
-            // 4D [B, C, H, W] - no reshaping needed
-            input4D = input;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-            {
-                flatBatch *= input.Shape[d];
-            }
-            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
-        }
-
-        // Validate input channels
-        int actualInputChannels = input4D.Shape[1];
-        if (actualInputChannels != InputDepth)
-        {
-            throw new ArgumentException(
-                $"Expected input depth {InputDepth}, but got {actualInputChannels}.");
-        }
-
-        // Map activation function to FusedActivationType
-        var fusedActivation = GetFusedActivationType();
-
-        // Execute GPU-fused ConvTranspose2D + Bias + Activation
-        var result = gpuEngine.FusedConvTranspose2DGpu(
-            input4D,
-            _kernels,
-            _biases,
-            Stride, Stride,      // strideH, strideW
-            Padding, Padding,    // padH, padW
-            0, 0,                // outputPadH, outputPadW
-            fusedActivation);
-
-        // Cache input and output for backward pass during training
-        if (IsTrainingMode)
-        {
-            _gpuInput?.Dispose();
-            _gpuOutput?.Dispose();
-            _gpuInput = input4D;
-            _gpuOutput = result;
-            _gpuInputShape4D = input4D._shape;
-            _gpuAddedBatchDimension = addedBatchDimension;
-        }
-
-        // Restore original shape if needed
-        if (originalInputShape.Length > 4)
-        {
-            // Restore original batch dimensions for higher-rank input
-            var outputShape = new int[originalInputShape.Length];
-            for (int d = 0; d < originalInputShape.Length - 3; d++)
-            {
-                outputShape[d] = originalInputShape[d];
-            }
-            outputShape[originalInputShape.Length - 3] = OutputDepth;
-            outputShape[originalInputShape.Length - 2] = result.Shape[2];
-            outputShape[originalInputShape.Length - 1] = result.Shape[3];
-            return result.Reshape(outputShape);
-        }
-
-        if (addedBatchDimension)
-        {
-            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
-        }
-
-        return result;
-    }
-
     private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
     {
         if (ScalarActivation == null)
@@ -883,8 +763,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         _gpuOutput?.Dispose();
         _gpuInput = null;
         _gpuOutput = null;
-        _gpuInputShape4D = null;
-        _gpuAddedBatchDimension = false;
     }
 
     /// <summary>

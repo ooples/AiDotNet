@@ -128,12 +128,15 @@ public partial class EQVAEModel<T> : VAEModelBase<T>
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
 
-        foreach (int mult in multipliers)
+        // SD-VAE layout, which EQ-VAE regularizes without changing: every block but the last halves the
+        // resolution, so the four multipliers give the 8x DownsampleFactor (a stride-2 last block gave 16x).
+        for (int b = 0; b < multipliers.Length; b++)
         {
-            int outChannels = _baseChannels * mult;
+            int outChannels = _baseChannels * multipliers[b];
+            bool downsample = b < multipliers.Length - 1;
             _encoderLayers.Add(new ConvolutionalLayer<T>(
                 outputDepth: outChannels,
-                kernelSize: 3, stride: 2, padding: 1,
+                kernelSize: 3, stride: downsample ? 2 : 1, padding: 1,
                 activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
             channels = outChannels;
         }
@@ -150,13 +153,24 @@ public partial class EQVAEModel<T> : VAEModelBase<T>
             kernelSize: 1, stride: 1, padding: 0,
             activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
 
+        // Mirror of the encoder: the deepest block keeps the latent resolution, the other three double it.
         for (int i = multipliers.Length - 1; i >= 0; i--)
         {
             int outChannels = i == 0 ? _baseChannels : _baseChannels * multipliers[i - 1];
-            _decoderLayers.Add(new DeconvolutionalLayer<T>(
-                outputDepth: outChannels,
-                kernelSize: 4, stride: 2, padding: 1,
-                activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
+            if (i == multipliers.Length - 1)
+            {
+                _decoderLayers.Add(new ConvolutionalLayer<T>(
+                    outputDepth: outChannels,
+                    kernelSize: 3, stride: 1, padding: 1,
+                    activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
+            }
+            else
+            {
+                _decoderLayers.Add(new DeconvolutionalLayer<T>(
+                    outputDepth: outChannels,
+                    kernelSize: 4, stride: 2, padding: 1,
+                    activationFunction: (IActivationFunction<T>)new GELUActivation<T>()));
+            }
             channels = outChannels;
         }
 
@@ -181,8 +195,8 @@ public partial class EQVAEModel<T> : VAEModelBase<T>
         // shape inference path (OnFirstForward) and then EnsureInitialized,
         // so ParameterCount becomes nonzero immediately but no activations
         // are computed and no engine kernels are invoked at construction
-        // time. The 64×64 probe matches the 4× stride-2 downsample chain so
-        // each spatial dim stays positive through the encoder.
+        // time. The 64×64 probe keeps every spatial dim positive through the
+        // three stride-2 downsamples of the encoder.
         const int probeSize = 64;
         int[] shape = new[] { 1, _inputChannels, probeSize, probeSize };
         try

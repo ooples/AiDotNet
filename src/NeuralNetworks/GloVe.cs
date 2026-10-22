@@ -328,9 +328,6 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         public Tensor<T> Forward(Tensor<T> input)
         {
-            // GPU optimization path
-            if (TryForwardGpuOptimized(input, out var gpuResult))
-                return gpuResult;
 
             // Paper Eq. (final), Section 4.3 footnote 5: w_i^(final) = W[i] + W̃[i]
             // The biases b and b̃ participate in the training objective (Eq. 8)

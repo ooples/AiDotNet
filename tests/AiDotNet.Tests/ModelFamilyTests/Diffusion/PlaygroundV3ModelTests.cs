@@ -1,18 +1,30 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.TextToImage;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Compute-bound foundation-scale model: the training probe exceeds the 120s
-// [Fact(Timeout)] in isolation (verified), so it belongs in the HeavyTimeout
-// nightly lane rather than the default PR gate (#1706/#1305).
-[Xunit.Trait("Category", "HeavyTimeout")]
+[Xunit.Collection("FoundationScaleSerial")]
+// #2087 / #1706: out of the HeavyTimeout lane. The default foundation-scale config is too large for
+// the PR gate, so per the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects
+// a small same-architecture MMDiTXNoisePredictor and StandardVAE. Channel counts, context widths,
+// patch sizes and scale factors keep the model's defaults; only width and depth shrink.
 public class PlaygroundV3ModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 16, 32, 32];
-    protected override int[] OutputShape => [1, 16, 32, 32];
+    protected override int[] InputShape => [1, 16, 16, 16];
+    protected override int[] OutputShape => [1, 16, 16, 16];
 
     protected override IDiffusionModel<float> CreateModel()
-        => new PlaygroundV3Model<float>(seed: 42);
+        => new PlaygroundV3Model<float>(
+            predictor: new MMDiTXNoisePredictor<float>(
+                variant: MMDiTXVariant.Large, numLayersOverride: 2, numHeadsOverride: 4,
+                hiddenSizeOverride: 64, seed: 42),
+            vae: new StandardVAE<float>(
+                inputChannels: 3, latentChannels: 16, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1,
+                latentScaleFactor: 1.5305, seed: 42),
+            seed: 42);
 }

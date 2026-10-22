@@ -444,8 +444,6 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
     /// <returns>A tensor containing the network's prediction.</returns>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Per Ahmad & Hawkins 2015: HTM + supervised readout.
         // Forward through full layer chain: SP -> TM -> Dense -> (optional Softmax)

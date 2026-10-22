@@ -1,18 +1,27 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.MotionGeneration;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Compute-bound foundation-scale motion-generation diffusion: the training probe
-// exceeds the 120s [Fact(Timeout)] in isolation (verified), so it belongs in the
-// HeavyTimeout nightly lane rather than the default PR gate (#1706/#1305).
-[Xunit.Trait("Category", "HeavyTimeout")]
+[Xunit.Collection("FoundationScaleSerial")]
+// #2087 / #1706: out of the HeavyTimeout lane. The default foundation-scale config is too large for
+// the PR gate, so per the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects
+// a small same-architecture SiTPredictor and StandardVAE. Channel counts, context widths, patch
+// sizes and scale factors keep the model's defaults; only width and depth shrink.
 public class MoMaskModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 4, 32, 32];
-    protected override int[] OutputShape => [1, 4, 32, 32];
+    protected override int[] InputShape => [1, 4, 16, 16];
+    protected override int[] OutputShape => [1, 4, 16, 16];
 
     protected override IDiffusionModel<float> CreateModel()
-        => new MoMaskModel<float>(seed: 42);
+        => new MoMaskModel<float>(
+            predictor: new SiTPredictor<float>(
+                inputChannels: 4, numHeads: 2, hiddenSize: 64, numLayers: 2, seed: 42),
+            vae: new StandardVAE<float>(
+                inputChannels: 3, latentChannels: 4, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: 42),
+            seed: 42);
 }

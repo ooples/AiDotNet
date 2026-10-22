@@ -229,9 +229,6 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
 
     private Tensor<T> PredictForward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Set network to inference mode (not training)
         bool originalTrainingMode = IsTrainingMode;

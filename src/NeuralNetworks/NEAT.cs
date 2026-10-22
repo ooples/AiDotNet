@@ -848,9 +848,6 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Get the best genome (the one with highest fitness)
         var bestGenome = RequireBestGenome();

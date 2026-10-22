@@ -714,9 +714,6 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Generate(input);
     }

@@ -46,15 +46,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class AddLayer<T> : LayerBase<T>, IShapeContract
 {
-    /// <summary>
-    /// Stores the input tensors from the most recent forward pass for use in the backward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field caches the input tensors from the most recent call to Forward(). During backpropagation,
-    /// these cached inputs are used to calculate the gradients. The field is nullable and will be null
-    /// until Forward() is called at least once.
-    /// </remarks>
-    private Tensor<T>[]? _lastInputs;
 
     /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in the backward pass.
@@ -70,7 +61,6 @@ public partial class AddLayer<T> : LayerBase<T>, IShapeContract
     // GPU-resident cached tensors for GPU training pipeline
     [Scratch]
     private Tensor<T>? _lastOutputGpu;
-    private int _lastInputCountGpu;
 
     /// <summary>
     /// Indicates whether this layer has trainable parameters.
@@ -95,55 +85,7 @@ public partial class AddLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => false;
 
     /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length < 2)
-        {
-            throw new ArgumentException("AddLayer requires at least two input tensors.", nameof(inputs));
-        }
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-        }
-
-        // Add all inputs element-wise: result = inputs[0] + inputs[1] + ...
-        var result = inputs[0];
-        for (int i = 1; i < inputs.Length; i++)
-        {
-            result = gpuEngine.AddGpu(result, inputs[i]);
-        }
-
-        // Apply activation if needed
-        var fusedOp = MapActivationToFused();
-        if (fusedOp != FusedActivationType.None)
-        {
-            result = gpuEngine.ActivationGpu(result, fusedOp);
-        }
-
-        // Cache state for backward pass only during training
-        if (IsTrainingMode)
-        {
-            _lastInputs = new Tensor<T>[inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
-            {
-                _lastInputs[i] = inputs[i];
-            }
-            _lastOutput = result;
-
-            // Cache GPU output for GPU backward pass
-            _lastOutputGpu = result;
-            _lastInputCountGpu = inputs.Length;
-        }
-
-        return result;
-    }
 
     /// <summary>
     /// Computes the activation backward gradient on GPU.
@@ -364,8 +306,6 @@ public partial class AddLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException("AddLayer requires at least two input tensors.", nameof(inputs));
         }
 
-        _lastInputs = inputs;
-
         // Use Engine.TensorAddMany for GPU/CPU accelerated element-wise addition of all tensors
         // This is production-grade: no loops, single optimized call that batches all additions
         var result = Engine.TensorAddMany(inputs);
@@ -410,12 +350,10 @@ public partial class AddLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastInputs = null;
         _lastOutput = null;
 
         // Clear GPU cached data
         _lastOutputGpu?.Dispose();
         _lastOutputGpu = null;
-        _lastInputCountGpu = 0;
     }
 }

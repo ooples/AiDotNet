@@ -276,9 +276,6 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     /// <returns>The output class logits.</returns>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Accept 3D [C, H, W] (single unbatched sample) or 4D [B, C, H, W].
         // Internal layers — especially BatchNormalizationLayer —

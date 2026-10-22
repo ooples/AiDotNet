@@ -149,8 +149,6 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Wrapped in the #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
         return Accelerate(input, () =>

@@ -40,10 +40,19 @@ $script:EnvelopePatterns = @(
     "^System\.AggregateException : One or more errors occurred\.( \(Exception of type 'System\.OutOfMemoryException' was thrown\.\))+\s*$"
 )
 
+# A "does not throw" test records the exception and asserts it is null, so an out-of-memory error reaches the TRX as
+# an assertion whose Actual value is the exception: SegmentationTrainingRobustnessTests.OpenVocabSAM_MultiStepTrain
+# failed the 2026-10-19 lane that way. Only that exact shape counts, with the exception as the WHOLE Actual value;
+# any other exception recorded the same way is still a failure.
+$script:RecordedEnvelopePattern = '(?m)^\s*Actual:\s+System\.OutOfMemoryException: '
+
 function Test-EnvelopeMessage([string] $Message) {
     $first = ($Message -split "`r?`n")[0].Trim()
     foreach ($pattern in $script:EnvelopePatterns) {
         if ($first -match $pattern) { return $true }
+    }
+    if ($first -eq 'Assert.Null() Failure: Value is not null' -and $Message -match $script:RecordedEnvelopePattern) {
+        return $true
     }
     return $false
 }
@@ -152,6 +161,8 @@ function Invoke-SelfTest {
     $oom = "System.OutOfMemoryException : Exception of type 'System.OutOfMemoryException' was thrown."
     $aggOom = "System.AggregateException : One or more errors occurred. (Exception of type 'System.OutOfMemoryException' was thrown.) (Exception of type 'System.OutOfMemoryException' was thrown.)"
     $disk = "System.IO.IOException : No space left on device : '/tmp/aidotnet-streaming-pool/backing.bin'"
+    $recordedOom = "Assert.Null() Failure: Value is not null`nExpected: null`nActual:   System.OutOfMemoryException: Exception of type 'System.OutOfMemoryException' was thrown."
+    $recordedOther = "Assert.Null() Failure: Value is not null`nExpected: null`nActual:   System.ArgumentException: Shapes do not match."
     try {
         Assert-Outcome 'exit_zero' Passed '' '0'
         Assert-Outcome 'all_oom' Envelope (New-Trx 'oom' 'Failed' @(
@@ -174,6 +185,10 @@ function Invoke-SelfTest {
                 @{ Name = 'A'; Outcome = 'Failed'; Message = "System.AggregateException : One or more errors occurred. (Exception of type 'System.OutOfMemoryException' was thrown.) (Index was outside the bounds of the array.)" })) '1'
         Assert-Outcome 'oom_mentioned_in_assertion' Failed (New-Trx 'mention' 'Failed' @(
                 @{ Name = 'A'; Outcome = 'Failed'; Message = 'Assert.Throws() Failure: expected System.OutOfMemoryException : none thrown' })) '1'
+        Assert-Outcome 'recorded_oom' Envelope (New-Trx 'recorded' 'Failed' @(
+                @{ Name = 'A'; Outcome = 'Failed'; Message = $recordedOom })) '1'
+        Assert-Outcome 'recorded_other_exception' Failed (New-Trx 'recorded-other' 'Failed' @(
+                @{ Name = 'A'; Outcome = 'Failed'; Message = $recordedOther })) '1'
         Assert-Outcome 'aborted_run' Failed (New-Trx 'aborted' 'Aborted' @(
                 @{ Name = 'A'; Outcome = 'Failed'; Message = $oom })) '1'
         Assert-Outcome 'no_failed_test' Failed (New-Trx 'none' 'Failed' @(

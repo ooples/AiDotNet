@@ -159,7 +159,8 @@ namespace AiDotNet.NeuralNetworks
                     MaxTokens,
                     _numLayers,
                     _numHeads,
-                    _feedForwardDim));
+                    _feedForwardDim,
+                    hiddenDimension: EmbeddingDimension));
             }
         }
 

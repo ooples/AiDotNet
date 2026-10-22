@@ -178,14 +178,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// PrimaryCapsuleLayer requires Im2Col transformation and data reordering that don't have
-    /// GPU kernel implementations. The previous "GPU" implementation downloaded to CPU for these
-    /// operations, defeating GPU benefits - CPU fallback is used instead.
-    /// </remarks>
-    protected override bool SupportsGpuExecution => true;
-
     /// <inheritdoc />
     /// <remarks>
     /// <para>
@@ -717,112 +709,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return _lastOutput;
-    }
-
-    /// <summary>
-    /// Performs GPU-accelerated forward pass through the primary capsule layer.
-    /// </summary>
-    /// <param name="inputs">GPU-resident input tensors.</param>
-    /// <returns>GPU-resident output tensor after capsule transformation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the forward pass using GPU-resident operations where possible.
-    /// The convolution and reshape operations are kept on GPU for efficiency.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        var input = inputs[0];
-
-        // Mirror the CPU Forward's lazy-init dispatch — without this, a
-        // lazy-ctor PrimaryCapsuleLayer that takes the GPU path on first
-        // use would dereference the [0,0] / [0] zero-sized convWeights
-        // / convBias tensors. OnFirstForward resolves _inputChannels
-        // from input.Shape and EnsureInitialized allocates the conv
-        // tensors at the right size.
-        if (!IsShapeResolved) OnFirstForward(input);
-        EnsureInitialized();
-
-        // Detect input format: NCHW [B, C, H, W] vs NHWC [B, H, W, C]
-        // NCHW has channels in dim 1, NHWC has channels in dim 3
-        // LIMITATION: This heuristic is ambiguous when spatial dimensions equal channel count
-        // (e.g., 32x32 image with 32 channels). In such cases, prefer NCHW format or use
-        // explicit format parameter in a future API enhancement.
-        bool inputIsNCHW = input.Shape[1] == _inputChannels && input.Shape[3] != _inputChannels;
-
-        // Get spatial dimensions based on format
-        int batchSize, inputHeight, inputWidth;
-        Tensor<T>? inputNCHW = null;
-        Tensor<T>? convOutput = null;
-        Tensor<T>? convNHWC = null;
-        Tensor<T>? capsuleLayout = null;
-        Tensor<T>? kernelNCHW = null;
-
-        try
-        {
-            if (inputIsNCHW)
-            {
-                batchSize = input.Shape[0];
-                inputHeight = input.Shape[2];
-                inputWidth = input.Shape[3];
-                // Don't assign to inputNCHW to avoid disposing the input tensor
-            }
-            else
-            {
-                // NHWC [B, H, W, C] -> NCHW [B, C, H, W]
-                batchSize = input.Shape[0];
-                inputHeight = input.Shape[1];
-                inputWidth = input.Shape[2];
-                inputNCHW = gpuEngine.PermuteGpu(input, [0, 3, 1, 2]);
-            }
-
-            int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
-            int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
-
-            // Reshape weights to Conv2D kernel format [outChannels, inChannels, kH, kW].
-            // Tracked via the outer kernelNCHW so the finally block can release the GPU
-            // tensor — otherwise every ForwardGpu call leaks one reshape tensor.
-            int outputChannels = _capsuleChannels * _capsuleDimension;
-            kernelNCHW = Engine.Reshape(_convWeights, new[] { outputChannels, _inputChannels, _kernelSize, _kernelSize });
-
-            // GPU Convolution + Bias (FusedActivationType.None since we apply Squash separately)
-            convOutput = gpuEngine.FusedConv2DGpu<T>(
-                inputNCHW ?? input, kernelNCHW, _convBias,
-                strideH: _stride, strideW: _stride,
-                padH: 0, padW: 0,
-                dilationH: 1, dilationW: 1,
-                FusedActivationType.None);
-
-            // Convert back to NHWC: [B, outC, OH, OW] -> [B, OH, OW, outC]
-            convNHWC = gpuEngine.PermuteGpu(convOutput, [0, 2, 3, 1]);
-
-            // Reshape to capsule layout: [B, OH, OW, capsuleChannels * capsuleDim] -> [B, OH, OW, capsuleChannels, capsuleDim]
-            capsuleLayout = gpuEngine.ReshapeGpu(convNHWC, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
-
-            // Apply Squash activation to the last axis (capsule dimension)
-            var output = gpuEngine.SquashGpu(capsuleLayout, axis: -1);
-
-            return output;
-        }
-        finally
-        {
-            // Dispose all intermediate tensors (not the input or final output)
-            kernelNCHW?.Dispose();
-            inputNCHW?.Dispose();
-            convOutput?.Dispose();
-            convNHWC?.Dispose();
-            capsuleLayout?.Dispose();
-        }
     }
 
 

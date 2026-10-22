@@ -303,9 +303,6 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Set network AND layers to inference mode.
         // Critical: BatchNorm in training mode with batch_size=1 normalizes everything

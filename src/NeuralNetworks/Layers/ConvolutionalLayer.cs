@@ -313,6 +313,23 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>What the caller asked for; <see cref="UseBias"/> is the resolved answer.</summary>
     private readonly BiasMode _biasMode;
 
+    /// <summary>The live kernels, for folding a following batch norm (<see cref="ConvolutionBatchNormFolding{T}"/>).</summary>
+    internal Tensor<T> KernelsForFolding => _kernels;
+
+    /// <summary>The live bias, or null without one, for folding a following batch norm.</summary>
+    internal Tensor<T>? BiasesForFolding => UseBias ? _biases : null;
+
+    /// <summary>
+    /// Whether a following batch norm can fold into this convolution: a dense (ungrouped) convolution with no
+    /// activation of its own whose kernels are allocated, [OutputDepth, InputDepth, KernelSize, KernelSize].
+    /// </summary>
+    internal bool CanFoldFollowingBatchNorm
+        => Groups == 1 && VectorActivation is null
+           && (ScalarActivation is null || ScalarActivation is IdentityActivation<T>)
+           && _kernels.Rank == 4 && OutputDepth > 0 && _kernels.Shape[0] == OutputDepth
+           && _kernels.Shape[1] == InputDepth && _kernels.Shape[2] == KernelSize && _kernels.Shape[3] == KernelSize
+           && (!UseBias || _biases.Length == OutputDepth);
+
     /// <summary>
     /// Whether this convolution carries its own additive bias.
     /// </summary>
@@ -481,13 +498,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     // [1,128,16,16] output. It also made a model appear to change size once a forward had run.
     [Scratch]
     private Tensor<T> _lastOutput;
-
-    // GPU-resident cached tensors for GPU training pipeline
-    [Scratch]
-    private Tensor<T>? _lastInputGpu;
     [Scratch]
     private Tensor<T>? _lastOutputGpu;
-    private int[]? _gpuInputShape4D;
 
     /// <summary>
     /// Tracks whether a batch dimension was added during the forward pass.
@@ -1636,129 +1648,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Gets whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Performs a GPU-resident forward pass using fused Conv2D + Bias + Activation.
-    /// </summary>
-    /// <param name="input">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident output tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
-    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        EnsureInitializedFromInput(inputs[0]);
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var input = inputs[0];
-
-        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
-        if (input.Shape.Length < 3)
-        {
-            throw new ArgumentException(
-                $"Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
-        }
-
-        _originalInputShape = input._shape;
-        int rank = input.Shape.Length;
-
-        // Reshape input to 4D [B, C, H, W] for convolution
-        Tensor<T> input4D;
-        if (rank == 3)
-        {
-            // 3D [C, H, W] -> 4D [1, C, H, W]
-            _addedBatchDimension = true;
-            input4D = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
-        }
-        else if (rank == 4)
-        {
-            // 4D [B, C, H, W] - no reshaping needed
-            _addedBatchDimension = false;
-            input4D = input;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            _addedBatchDimension = false;
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-            {
-                flatBatch *= input.Shape[d];
-            }
-            input4D = Engine.Reshape(input, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
-        }
-
-        // Validate input channels
-        int actualInputChannels = input4D.Shape[1];
-        if (actualInputChannels != InputDepth)
-        {
-            throw new ArgumentException(
-                $"Expected input depth {InputDepth}, but got {actualInputChannels}.");
-        }
-
-        // Map activation function to FusedActivationType
-        var fusedActivation = MapActivationToFused();
-
-        // Execute GPU-fused Conv2D + Bias + Activation
-        var result = gpuEngine.FusedConv2DGpu(
-            input4D,
-            _kernels,
-            _biases,
-            Stride, Stride,      // strideH, strideW
-            Padding, Padding,    // padH, padW
-            1, 1,                // dilationH, dilationW
-            fusedActivation);
-
-        // Cache state for backward pass only during training - KEEP ON GPU for GPU-resident training
-        if (IsTrainingMode)
-        {
-            // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
-            _lastInputGpu = input4D;
-            _lastOutputGpu = result;
-            _gpuInputShape4D = input4D._shape;
-
-            // Also download to CPU for hybrid CPU/GPU backward compatibility
-            _lastInput = input4D;
-            _lastOutput = result;
-        }
-
-        // Restore original shape if needed
-        if (_originalInputShape != null && _originalInputShape.Length > 4)
-        {
-            // Restore original batch dimensions for higher-rank input
-            var outputShape = new int[_originalInputShape.Length];
-            for (int d = 0; d < _originalInputShape.Length - 3; d++)
-            {
-                outputShape[d] = _originalInputShape[d];
-            }
-            outputShape[_originalInputShape.Length - 3] = OutputDepth;
-            outputShape[_originalInputShape.Length - 2] = result.Shape[2];
-            outputShape[_originalInputShape.Length - 1] = result.Shape[3];
-            return Engine.Reshape(result, outputShape);
-        }
-
-        if (_addedBatchDimension)
-        {
-            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return Engine.Reshape(result, [OutputDepth, result.Shape[2], result.Shape[3]]);
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// Computes activation gradient for convolutional layer using GPU-resident backward operations.
     /// </summary>
     private Tensor<T> ComputeConvActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, FusedActivationType activation)
@@ -1970,11 +1859,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             _lastOutput = new Tensor<T>([0, 0, 0, 0]);
         }
         _addedBatchDimension = false;
-
-        // Clear GPU-resident cached tensors
-        _lastInputGpu = null;
         _lastOutputGpu = null;
-        _gpuInputShape4D = null;
     }
 
 
@@ -2024,11 +1909,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // Clear other managed resources (CPU)
             _kernelsGradient = null;
             _biasesGradient = null;
-
-            // Clear GPU-resident cached tensors
-            _lastInputGpu = null;
             _lastOutputGpu = null;
-            _gpuInputShape4D = null;
         }
 
         base.Dispose(disposing);

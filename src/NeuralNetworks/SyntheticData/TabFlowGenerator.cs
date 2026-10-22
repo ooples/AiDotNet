@@ -255,9 +255,6 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: forward pass through each layer sequentially
         Tensor<T> currentOutput = input;

@@ -196,9 +196,6 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Handle any-rank input by reshaping to match expected shape
         var expectedShape = Architecture.GetInputShape();

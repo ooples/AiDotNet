@@ -254,12 +254,6 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     [Scratch]
     private Tensor<T>? _biasesGradient;
-
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuInput;
-    [ExternalState]
-    private Tensor<T>? _gpuPreActivation;
     private int[] _gpuInputShape = [];
 
     /// <summary>
@@ -712,10 +706,6 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
         _lastPreActivation = null;
         _weightsGradient = null;
         _biasesGradient = null;
-
-        // Clear GPU cached tensors
-        _gpuInput = null;
-        _gpuPreActivation = null;
         _gpuInputShape = [];
     }
 
@@ -725,122 +715,4 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override Tensor<T>? GetBiases() => _biases;
 
-    /// <summary>
-    /// Gets whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Performs a GPU-resident forward pass, keeping tensors on GPU.
-    /// Use this for chained layer execution to avoid CPU round-trips.
-    /// </summary>
-    /// <param name="inputs">GPU-resident input tensors (uses first input).</param>
-    /// <returns>GPU-resident output tensor.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var input = inputs[0];
-        int[] inputShape = input._shape;
-
-        // Lazy-shape resolution must run before any read of _weights.Shape:
-        // a lazily-constructed FullyConnectedLayer holds zero-length
-        // placeholder weights with no resolved input feature size.
-        // EnsureInitializedFromInput resolves shapes from input.Shape[^1]
-        // via OnFirstForward (no-op once resolved) and then allocates the
-        // real weights — same contract as the CPU Forward path above.
-        EnsureInitializedFromInput(input);
-
-        // FullyConnectedLayer stores weights as [outputSize, inputSize]
-        // We need to transpose for FusedLinearGpu which expects [inputSize, outputSize]
-        int outputSize = _weights.Shape[0];
-        int inputSize = _weights.Shape[1];
-
-        // Determine batch size and input features
-        int batchSize = inputShape.Length >= 2 ? inputShape[0] : 1;
-        int inputFeatures = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
-
-        // Validate dimensions
-        if (inputFeatures != inputSize)
-            throw new ArgumentException($"Input feature dimension {inputFeatures} does not match weights input dimension {inputSize}");
-
-        // Transpose weights from [outputSize, inputSize] to [inputSize, outputSize]
-        // This is needed because FusedLinearGpu expects weights in [inputSize, outputSize] format
-        var weightsT = Engine.TensorTranspose(_weights);
-
-        // Get the fused activation type using the base class method
-        var fusedActivation = GetFusedActivationType();
-
-        // Handle input shape conversion for FusedLinearGpu
-        Tensor<T> input2D = input;
-        bool needsReshape = inputShape.Length != 2;
-
-        if (inputShape.Length == 1)
-        {
-            // 1D input [features] -> [1, features]
-            input2D = input.Reshape([1, inputFeatures]);
-        }
-        else if (inputShape.Length > 2)
-        {
-            // ND input -> flatten to [batchDim, features]
-            input2D = input.Reshape([batchSize, inputFeatures]);
-        }
-
-        // Use GPU-resident FusedLinear - NO CPU round-trip
-        // Result is [batchDim, outputSize]
-        var result = gpuEngine.FusedLinearGpu(input2D, weightsT, _biases, fusedActivation);
-
-        // Cache state for backward pass only during training
-        if (IsTrainingMode)
-        {
-            // Cache GPU tensors for GPU-resident backward pass
-            _gpuInput = input2D;
-            _gpuInputShape = inputShape;
-
-            // For fused activations, we need pre-activation for gradient computation
-            if (fusedActivation != FusedActivationType.None)
-            {
-                var preActivation = gpuEngine.FusedLinearGpu(input2D, weightsT, _biases, FusedActivationType.None);
-                _gpuPreActivation = preActivation;
-                _lastOutput = preActivation;
-            }
-            else
-            {
-                _gpuPreActivation = result;
-                _lastOutput = result;
-            }
-
-            // Also cache CPU tensors for fallback backward pass
-            _lastInput = input;
-        }
-
-        // Reshape output back to original batch dimensions if needed
-        if (inputShape.Length == 1)
-        {
-            // 1D input -> 1D output [outputSize]
-            result = result.Reshape([outputSize]);
-        }
-        else if (inputShape.Length > 2)
-        {
-            // ND input -> ND output with same leading dimensions
-            int[] outputShape = new int[inputShape.Length];
-            for (int i = 0; i < inputShape.Length - 1; i++)
-            {
-                outputShape[i] = inputShape[i];
-            }
-            outputShape[^1] = outputSize;
-            result = result.Reshape(outputShape);
-        }
-        // 2D input: result is already [batch, outputSize]
-
-        return result;
-    }
 }

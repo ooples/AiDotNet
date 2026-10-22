@@ -1123,9 +1123,6 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Extract input as vector
         Vector<T> inputVector = input.ToVector();
@@ -1179,8 +1176,8 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
                 nameof(input));
         }
 
-        // The managed path deliberately, not TryForwardGpuOptimized: the intermediate reservoir
-        // state is the point of this method, and the fused GPU path only yields the final output.
+        // The managed path deliberately: the intermediate reservoir state is the point of this method,
+        // and a layer-chain forward only yields the final output.
         SettleReservoirState(inputVector);
 
         // CLONE, do not alias. Tensor<T>(shape, vector) wraps the vector it is handed, and

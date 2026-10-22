@@ -1,20 +1,29 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.Video;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
-// HeavyTimeout (#1706): foundation-scale VideoCrafter2 video diffusion. Verified genuine OOM — throws
-// System.OutOfMemoryException during CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI
-// runner ceiling (Metadata_ShouldExist alone OOMs), OS-OOM-killing the Diffusion T-Z shard. Runs in the
-// nightly heavy lane. Drop once weight streaming lets it fit.
-[Xunit.Trait("Category", "HeavyTimeout")]
+[Xunit.Collection("FoundationScaleSerial")]
+// #2087 / #1706: out of the HeavyTimeout lane. The default foundation-scale config is too large for
+// the PR gate, so per the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects
+// a small same-architecture VideoUNetPredictor and TemporalVAE. Channel counts, context widths,
+// patch sizes and scale factors keep the model's defaults; only width and depth shrink.
 public class VideoCrafter2ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 16, 16];
     protected override int[] OutputShape => [1, 4, 16, 16];
 
     protected override IDiffusionModel<float> CreateModel()
-        => new VideoCrafter2Model<float>();
+        => new VideoCrafter2Model<float>(
+            predictor: new VideoUNetPredictor<float>(
+                inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 },
+                numResBlocks: 1, numHeads: 4, contextDim: 768, inputHeight: 16, inputWidth: 16,
+                numTemporalLayers: 1, attentionResolutions: new[] { 1 }, seed: 42),
+            temporalVAE: new TemporalVAE<float>(
+                inputChannels: 3, latentChannels: 4, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numTemporalLayers: 1, temporalKernelSize: 3,
+                causalMode: false, latentScaleFactor: 0.18215, seed: 42));
 }

@@ -74,16 +74,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private int[]? _originalInputShape;
 
-    /// <summary>
-    /// Cached GPU input shape for backward pass.
-    /// </summary>
-    private int[]? _gpuCachedInputShape;
-
-    /// <summary>
-    /// Whether a batch dimension was added for 3D input in GPU forward.
-    /// </summary>
-    private bool _gpuAdded3DBatch;
-
     #endregion
 
     #region Properties
@@ -142,12 +132,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Indicates whether this layer supports GPU execution.
-    /// PixelShuffle uses GPU Reshape and Permute operations for efficient rearrangement.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     #endregion
 
@@ -374,106 +358,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
         throw new ArgumentException($"Pixel shuffle requires at least 3 dimensions, got {shape.Length}.");
     }
 
-    /// <summary>
-    /// Performs the forward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="inputs">The GPU-resident input tensors.</param>
-    /// <returns>A GPU-resident output tensor after pixel shuffle.</returns>
-    /// <remarks>
-    /// <para>
-    /// Pixel shuffle is implemented as: Reshape -> Permute -> Reshape
-    /// [N, C*r², H, W] -> [N, C, r, r, H, W] -> [N, C, H, r, W, r] -> [N, C, H*r, W*r]
-    /// All operations stay GPU-resident.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-        var shape = input._shape;
-        int r = _upscaleFactor;
-        int r2 = r * r;
-
-        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
-        if (shape.Length < 3)
-            throw new ArgumentException($"PixelShuffle requires at least 3D tensor [C, H, W]. Got rank {shape.Length}.");
-
-        int batch, channels, height, width;
-        bool added3DBatch = false;
-        var originalShape = shape;
-
-        if (shape.Length == 4)
-        {
-            batch = shape[0];
-            channels = shape[1];
-            height = shape[2];
-            width = shape[3];
-        }
-        else if (shape.Length == 3)
-        {
-            batch = 1;
-            channels = shape[0];
-            height = shape[1];
-            width = shape[2];
-            added3DBatch = true;
-            input = gpuEngine.ReshapeGpu(input, new[] { 1, channels, height, width });
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            batch = 1;
-            for (int d = 0; d < shape.Length - 3; d++)
-                batch *= shape[d];
-            channels = shape[shape.Length - 3];
-            height = shape[shape.Length - 2];
-            width = shape[shape.Length - 1];
-            input = gpuEngine.ReshapeGpu(input, new[] { batch, channels, height, width });
-        }
-
-        // Cache for backward pass
-        if (IsTrainingMode)
-        {
-            _gpuCachedInputShape = (int[])originalShape.Clone();
-            _gpuAdded3DBatch = added3DBatch;
-        }
-
-        int outChannels = channels / r2;
-
-        // Step 1: Reshape [N, C*r², H, W] -> [N, C, r, r, H, W]
-        var reshaped1 = gpuEngine.ReshapeGpu(input, new[] { batch, outChannels, r, r, height, width });
-
-        // Step 2: Permute [N, C, r, r, H, W] -> [N, C, H, r, W, r]
-        var permuted = gpuEngine.PermuteGpu(reshaped1, new[] { 0, 1, 4, 2, 5, 3 });
-
-        // Step 3: Reshape [N, C, H, r, W, r] -> [N, C, H*r, W*r]
-        int outHeight = height * r;
-        int outWidth = width * r;
-        var result = gpuEngine.ReshapeGpu(permuted, new[] { batch, outChannels, outHeight, outWidth });
-
-        // Restore original tensor rank
-        if (originalShape.Length > 4)
-        {
-            var restoreShape = new int[originalShape.Length];
-            for (int d = 0; d < originalShape.Length - 3; d++)
-                restoreShape[d] = originalShape[d];
-            restoreShape[originalShape.Length - 3] = outChannels;
-            restoreShape[originalShape.Length - 2] = outHeight;
-            restoreShape[originalShape.Length - 1] = outWidth;
-            result = gpuEngine.ReshapeGpu(result, restoreShape);
-        }
-        else if (added3DBatch)
-        {
-            result = gpuEngine.ReshapeGpu(result, new[] { outChannels, outHeight, outWidth });
-        }
-
-        return result;
-    }
-
     #endregion
 
     #region Backward Pass
@@ -487,8 +371,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
     {
         _lastInput = null;
         _originalInputShape = null;
-        _gpuCachedInputShape = null;
-        _gpuAdded3DBatch = false;
     }
 
     #endregion

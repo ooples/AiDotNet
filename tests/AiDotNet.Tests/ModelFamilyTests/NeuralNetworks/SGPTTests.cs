@@ -1,20 +1,34 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-// #1706/#1305: GPT-style sentence-embedding transformer. Training_ShouldReduceLoss /
-// Clone_ShouldProduceIdenticalOutput run two full generations of training/inference and are
-// inherently >120s under single-threaded determinism BLAS even uncontended — not a regression and
-// not shrinkable. Tag HeavyTimeout so it runs full-fidelity nightly (deferred, not skipped);
-// RequiresHeavySerialization serializes it there.
-[Trait("Category", "HeavyTimeout")]
+// #2087 / #1706: out of the HeavyTimeout lane. At its default BERT-base scale (768 wide, 12 layers,
+// 3072 FFN) the training invariants ran past the 120 s gate, so per the #1706 out-of-memory ladder
+// the test shrinks the encoder to 128 wide, 2 layers, 2 heads and a 512 FFN. The vocabulary, the
+// pooling and every head keep their defaults.
 public class SGPTTests : NeuralNetworkModelTestBase<float>
 {
     protected override bool RequiresHeavySerialization => true;
 
+    private const int Width = 128;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new SGPT<float>();
+        => new SGPT<float>(
+            new NeuralNetworkArchitecture<float>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: Width,
+                outputSize: Width),
+            new SGPTOptions
+            {
+                EmbeddingDimension = Width,
+                NumLayers = 2,
+                NumHeads = 2,
+                FeedForwardDim = 4 * Width,
+            });
 }

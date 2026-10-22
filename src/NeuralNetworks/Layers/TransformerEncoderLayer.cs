@@ -106,12 +106,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     private int[]? _originalInputShape;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuInput3D;
-    [ExternalState]
-    private Tensor<T>? _gpuNormalized1;
-
     /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
     /// </summary>
@@ -334,11 +328,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _selfAttention.ClearGradients(); _norm1.ClearGradients();
         _feedForward1.ClearGradients(); _feedForward2.ClearGradients(); _norm2.ClearGradients();
     }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Returns layer-specific metadata for serialization.
@@ -723,116 +712,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
-    /// Performs the forward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="input">The GPU-resident input tensor.</param>
-    /// <returns>A GPU-resident output tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs the entire transformer encoder forward pass on the GPU without downloading
-    /// intermediate results to CPU. All sublayer operations (self-attention, layer normalization,
-    /// feed-forward networks, residual connections) remain GPU-resident for maximum performance.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        // Lazy ctor path: resolve _embeddingSize from inputs[0].Shape[^1] and construct
-        // sublayers before any GPU code dereferences them.
-        EnsureInitializedFromInput(inputs[0]);
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Get dimensions from input shape
-        int[] inputShape = input._shape;
-        int rank = inputShape.Length;
-
-        Tensor<T> input3D;
-        int[] originalShape = inputShape;
-        bool was2D = rank == 2;
-
-        // Cache shape info for backward pass consistency with CPU Forward
-        // (even though backward uses gradient shape, this maintains API consistency)
-        if (IsTrainingMode)
-        {
-            _inputWas2D = was2D;
-            _originalInputShape = inputShape;
-        }
-
-        if (was2D)
-        {
-            // 2D: [seqLen, embedDim] -> add batch dim
-            input3D = gpuEngine.ReshapeGpu(input, [1, inputShape[0], inputShape[1]]);
-        }
-        else if (rank == 3)
-        {
-            // Standard 3D: [batch, seqLen, embedDim]
-            input3D = input;
-        }
-        else if (rank > 3)
-        {
-            // Higher-rank: collapse leading dims into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 2; d++)
-                flatBatch *= inputShape[d];
-            input3D = gpuEngine.ReshapeGpu(input, [flatBatch, inputShape[rank - 2], inputShape[rank - 1]]);
-        }
-        else
-        {
-            throw new ArgumentException($"TransformerEncoderLayer requires at least 2D input, got {rank}D");
-        }
-
-        // 1. Self-attention sublayer
-        var attention = _selfAttention.ForwardGpu(input3D);
-
-        // 2. First residual connection: input + attention
-        var residual1 = gpuEngine.AddGpu(input3D, attention);
-
-        // 3. First layer normalization
-        var (normalized1, _, _) = gpuEngine.LayerNormGpu(residual1, _norm1.GetGammaTensor(), _norm1.GetBetaTensor(), Convert.ToDouble(_norm1.GetEpsilon()));
-
-        // 4. Feed-forward network (two layers)
-        var ffExpanded = _feedForward1.ForwardGpu(normalized1);
-        var ffProjected = _feedForward2.ForwardGpu(ffExpanded);
-
-        // 5. Second residual connection: normalized1 + ffProjected
-        var residual2 = gpuEngine.AddGpu(normalized1, ffProjected);
-
-        // 6. Second layer normalization
-        var (output, _, _) = gpuEngine.LayerNormGpu(residual2, _norm2.GetGammaTensor(), _norm2.GetBetaTensor(), Convert.ToDouble(_norm2.GetEpsilon()));
-
-        // Cache tensors for backward pass
-        if (IsTrainingMode)
-        {
-            _gpuInput3D = input3D;
-            _gpuNormalized1 = normalized1;
-        }
-
-        // Restore original tensor shape
-        if (was2D)
-        {
-            output = gpuEngine.ReshapeGpu(output, [originalShape[0], originalShape[1]]);
-        }
-        else if (rank > 3)
-        {
-            // Restore original batch dimensions for higher-rank input
-            int[] newShape = new int[rank];
-            for (int d = 0; d < rank - 2; d++)
-                newShape[d] = originalShape[d];
-            newShape[rank - 2] = output.Shape[1];
-            newShape[rank - 1] = output.Shape[2];
-            output = gpuEngine.ReshapeGpu(output, newShape);
-        }
-
-        return output;
-    }
-
-    /// <summary>
     /// Updates the parameters of all sublayers using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for parameter updates.</param>
@@ -912,9 +791,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override void ResetState()
     {
-        // Clear GPU cached tensors (always safe — these are local fields).
-        _gpuInput3D = null;
-        _gpuNormalized1 = null;
 
         // Sublayers do not exist on a lazy encoder until first Forward.
         if (!_isInitialized) return;

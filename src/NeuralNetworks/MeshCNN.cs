@@ -312,9 +312,6 @@ public partial class MeshCNN<T> : GraphModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return WalkLayersWithMeshReshape(input, activations: null);
     }

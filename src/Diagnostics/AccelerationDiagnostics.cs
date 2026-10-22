@@ -6,7 +6,7 @@ namespace AiDotNet.Diagnostics;
 
 /// <summary>
 /// Snapshots the live acceleration environment so users can see which SIMD, GPU, and
-/// native BLAS paths are actually engaged at runtime, instead of assuming from config.
+/// GPU library paths are actually engaged at runtime, instead of assuming from config.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -43,7 +43,9 @@ public static class AccelerationDiagnostics
 
         sb.AppendLine("  GPU backends:     " +
             $"CUDA={caps.HasCudaSupport} OpenCL={caps.HasOpenCLSupport} HIP={caps.HasHipSupport}");
-        sb.AppendLine("  Native BLAS:      " +
+        // The CPU GEMM is managed code since AiDotNet.Tensors removed its native OpenBLAS/MKL routes (Tensors #368).
+        sb.AppendLine("  CPU BLAS:         managed (BlasManaged)");
+        sb.AppendLine("  GPU BLAS:         " +
             $"CLBlast={nativeStatus.HasClBlast}");
         sb.AppendLine("  Native GPU libs:  " +
             $"CUDA={nativeStatus.HasCuda} HIP={nativeStatus.HasHip} OpenCL={nativeStatus.HasOpenCl}");
@@ -104,7 +106,13 @@ public sealed class AccelerationSnapshot
     public bool HasCuda { get; init; }
     public bool HasOpenCl { get; init; }
     public bool HasHip { get; init; }
+    /// <summary>Always false: AiDotNet.Tensors no longer has a native OpenBLAS route; the CPU GEMM is managed.</summary>
+    [Obsolete("AiDotNet.Tensors removed its native OpenBLAS route (Tensors #368); the CPU GEMM is managed. Always false.")]
+    public bool HasOpenBlas { get; init; }
     public bool HasClBlast { get; init; }
+    /// <summary>Always false: AiDotNet.Tensors no longer has a native MKL route; the CPU GEMM is managed.</summary>
+    [Obsolete("AiDotNet.Tensors removed its native MKL route (Tensors #368); the CPU GEMM is managed. Always false.")]
+    public bool HasMkl { get; init; }
     public bool HasGpuAcceleration { get; init; }
     public int ProcessorCount { get; init; }
     public int L1CacheKB { get; init; }

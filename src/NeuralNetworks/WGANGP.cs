@@ -986,9 +986,6 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // A GAN predicts by generating, so hand back an IMAGE rather than the generator's flat
         // projection — the same shape the critic and the training targets use.

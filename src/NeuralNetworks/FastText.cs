@@ -231,8 +231,6 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         public Tensor<T> Forward(Tensor<T> input)
         {
-            if (TryForwardGpuOptimized(input, out var gpuResult))
-                return gpuResult;
 
             Tensor<T> output = input;
             foreach (var layer in Layers)

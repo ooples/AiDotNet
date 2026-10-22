@@ -129,14 +129,12 @@ public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
     }
 
     private readonly int _axis;
-    private Tensor<T>[]? _lastInputs;
     [Scratch]
     private Tensor<T>? _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
     [Scratch]
     private Tensor<T>? _lastOutputGpu;
-    private int[]? _lastInputSizesGpu;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -165,139 +163,7 @@ public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
     public override bool SupportsTraining => false;
 
     /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length < 2)
-        {
-            throw new ArgumentException("ConcatenateLayer requires at least two inputs.");
-        }
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-        }
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        // 1. Handle Axis Permutation (Move concatenation axis to last dimension)
-        int rank = inputs[0].Shape.Length;
-        int axis = _axis < 0 ? rank + _axis : _axis;
-
-        Tensor<T>[] processedInputs = inputs;
-        bool needsPermute = axis != rank - 1;
-        int[]? permutation = null;
-        int[]? invPermutation = null;
-
-        if (needsPermute)
-        {
-            permutation = new int[rank];
-            invPermutation = new int[rank];
-            int j = 0;
-            for (int i = 0; i < rank; i++)
-            {
-                if (i != axis) permutation[j++] = i;
-            }
-            permutation[rank - 1] = axis;
-
-            for (int i = 0; i < rank; i++) invPermutation[permutation[i]] = i;
-
-            processedInputs = new Tensor<T>[inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
-            {
-                processedInputs[i] = gpuEngine.PermuteGpu(inputs[i], permutation);
-            }
-        }
-
-        // 2. Flatten to 2D [Outer, AxisDim]
-        // Since axis is now last, Outer = product of all other dims
-        long outerSize = 1;
-        for (int i = 0; i < rank - 1; i++)
-        {
-            if (needsPermute && permutation is not null)
-                outerSize *= inputs[0].Shape[permutation[i]];
-            else
-                outerSize *= inputs[0].Shape[i];
-        }
-        // For inputs[0], dimension at axis index is Shape[axis]. After permute it is Shape[rank-1].
-        // But outer dimensions must match across all inputs.
-
-        // Calculate total output size on axis
-        int totalAxisDim = 0;
-        foreach (var input in processedInputs)
-        {
-            totalAxisDim += input.Shape[rank - 1];
-        }
-
-        // 3. Allocate Output
-        int totalSize = (int)(outerSize * totalAxisDim); // Assuming fits in int
-        var outputBuffer = backend.AllocateBuffer(totalSize);
-
-        // 4. Copy Inputs with Offset
-        int currentOffset = 0;
-        foreach (var input in processedInputs)
-        {
-            int axisDim = input.Shape[rank - 1];
-            // Copy2DStrided(source, dest, numRows, srcCols, destTotalCols, destColOffset)
-            backend.Copy2DStrided(input.Buffer, outputBuffer, (int)outerSize, axisDim, totalAxisDim, currentOffset);
-            currentOffset += axisDim;
-        }
-
-        // 5. Create Output Tensor
-        // First as 2D [Outer, TotalAxisDim] or permuted shape
-        int[] permutedOutputShape = new int[rank];
-        if (needsPermute && permutation is not null)
-        {
-            for (int i = 0; i < rank - 1; i++) permutedOutputShape[i] = inputs[0].Shape[permutation[i]];
-            permutedOutputShape[rank - 1] = totalAxisDim;
-        }
-        else
-        {
-            Array.Copy(inputs[0].Shape.ToArray(), permutedOutputShape, rank);
-            permutedOutputShape[axis] = totalAxisDim;
-        }
-
-        Tensor<T> result = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, permutedOutputShape, GpuTensorRole.Activation, ownsBuffer: true);
-
-        // 6. Inverse Permute if needed
-        if (needsPermute)
-        {
-            var invPerm = invPermutation ?? throw new InvalidOperationException("Inverse permutation has not been initialized.");
-            var prePerm = result;
-            result = gpuEngine.PermuteGpu(result, invPerm);
-            prePerm.Dispose();
-            // Clean up temporary permuted inputs
-            foreach (var pInput in processedInputs) pInput.Dispose();
-        }
-
-        // 7. Apply Activation
-        var fusedOp = MapActivationToFused();
-        if (fusedOp != FusedActivationType.None)
-        {
-            result = gpuEngine.ActivationGpu(result, fusedOp);
-        }
-
-        // 8. Cache for Training
-        if (IsTrainingMode)
-        {
-            _lastInputs = new Tensor<T>[inputs.Length];
-            _lastInputSizesGpu = new int[inputs.Length];
-            for (int i = 0; i < inputs.Length; i++)
-            {
-                _lastInputs[i] = inputs[i];
-                _lastInputSizesGpu[i] = inputs[i].Shape[axis];
-            }
-            _lastOutput = result;
-            _lastOutputGpu = result;
-        }
-
-        return result;
-    }
 
     /// <summary>
     /// Computes the activation backward gradient on GPU.
@@ -493,8 +359,6 @@ public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
         {
             throw new ArgumentException("ConcatenateLayer requires at least two inputs.");
         }
-
-        _lastInputs = inputs;
         _lastOutput = Engine.Concat(inputs, _axis);
 
         if (ScalarActivation != null)
@@ -591,12 +455,10 @@ public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastInputs = null;
         _lastOutput = null;
 
         // Clear GPU cached data
         _lastOutputGpu?.Dispose();
         _lastOutputGpu = null;
-        _lastInputSizesGpu = null;
     }
 }

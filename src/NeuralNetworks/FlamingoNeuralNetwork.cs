@@ -965,9 +965,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         SetTrainingMode(false);
         return Accelerate(input, () =>

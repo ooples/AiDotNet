@@ -301,9 +301,6 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Validate input
         if (input == null)

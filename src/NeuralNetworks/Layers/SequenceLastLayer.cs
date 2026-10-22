@@ -67,11 +67,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
     /// </value>
     public override bool SupportsTraining => false;
 
-    /// <summary>
-    /// Indicates whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
     /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
 
@@ -125,59 +120,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
             int seqLen = input.Shape[0];
             _lastSequenceLength = seqLen;
             return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
-        }
-    }
-
-    /// <summary>
-    /// GPU-accelerated forward pass that extracts the last timestep from a sequence.
-    /// Uses zero-copy CreateView to extract the last slice directly on GPU.
-    /// </summary>
-    /// <param name="inputs">GPU-resident input tensors.</param>
-    /// <returns>GPU-resident output tensor containing the last timestep.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var input = inputs[0];
-        var shape = input._shape;
-        int rank = shape.Length;
-
-        _originalShape = shape;
-
-        if (rank == 1)
-        {
-            _lastSequenceLength = 1;
-            return input;
-        }
-        else if (rank >= 2)
-        {
-            // Shape: [seqLen, ...rest] -> [...rest]
-            int seqLen = shape[0];
-            _lastSequenceLength = seqLen;
-
-            // Output shape is input shape minus the first dimension
-            var outputShape = new int[rank - 1];
-            int sliceSize = 1;
-            for (int d = 1; d < rank; d++)
-            {
-                outputShape[d - 1] = shape[d];
-                sliceSize *= shape[d];
-            }
-
-            // Zero-copy view of the last slice
-            int offset = (seqLen - 1) * sliceSize;
-            return input.CreateView(offset, outputShape);
-        }
-        else
-        {
-            throw new ArgumentException($"SequenceLastLayer expects at least 1D input, got {rank}D.");
         }
     }
 

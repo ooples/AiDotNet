@@ -219,7 +219,6 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     // GPU-resident cached tensors for GPU training pipeline
     [Scratch]
     private Tensor<T>? _lastOutputGpu;
-    private int[]? _lastInputGpuShape;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -564,60 +563,8 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
         return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
     }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    /// <value><c>true</c> if GPU execution is supported; otherwise, <c>false</c>.</value>
-    protected override bool SupportsGpuExecution => true;
-
     /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
-
-    /// <summary>
-    /// Performs GPU-accelerated forward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="input">The GPU-resident input tensor.</param>
-    /// <returns>The GPU-resident output tensor after global pooling.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
-
-        var input = inputs[0];
-
-        Tensor<T> output;
-        if (_poolingType == PoolingType.Average)
-        {
-            output = gpuEngine.GlobalMeanPoolGpu(input);
-            _maxIndices = null;
-        }
-        else // Max pooling
-        {
-            output = gpuEngine.GlobalMaxPoolGpu(input, out _maxIndices);
-        }
-
-        // Apply activation on GPU if non-trivial activation exists
-        var fusedType = MapActivationToFused();
-        if (fusedType != FusedActivationType.None)
-        {
-            output = gpuEngine.ActivationGpu(output, fusedType);
-        }
-
-        // Cache state for backward pass only during training
-        // Skip this expensive download during inference (50% overhead reduction)
-        if (IsTrainingMode)
-        {
-            _lastInput = input;
-            _lastOutput = output;
-            _lastOutputGpu = output;
-            _lastInputGpuShape = input._shape.ToArray();
-        }
-
-        return output;
-    }
 
     /// <summary>
     /// Computes the activation backward gradient on GPU.
@@ -668,6 +615,5 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
         // Clear GPU cached data
         _lastOutputGpu?.Dispose();
         _lastOutputGpu = null;
-        _lastInputGpuShape = null;
     }
 }

@@ -197,45 +197,6 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0) throw new ArgumentException("RBFLayer requires an input tensor.");
-        var input = inputs[0];
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        // Mirror the CPU Forward's lazy-init dispatch — without this, a
-        // lazy-ctor RBFLayer that takes the GPU path on first use would
-        // send the [0,0] / [0] zero-sized centers / widths placeholders
-        // into RbfKernelGpu. OnFirstForward resolves _inputSize from
-        // input.Shape and EnsureInitialized allocates the parameter
-        // tensors at the right size.
-        if (!IsShapeResolved) OnFirstForward(input);
-        EnsureInitialized();
-
-        // Input: [batch, inputSize] (ensure 2D)
-        int batch = input.Shape[0];
-        var input2D = input.Shape.Length == 1 ? gpuEngine.ReshapeGpu(input, [1, input.Shape[0]]) : input;
-        PlaceCentersFromFirstBatch(input2D);
-
-        // Use custom RBF kernel on GPU
-        // Weights are persistent tensors, handled by engine
-        var output = gpuEngine.RbfKernelGpu(input2D, _centers, _widths);
-
-        if (ShouldCacheForBackward) // #1668: skip backward caches in inference (arena safety)
-        {
-            _lastInput = input;
-            _lastOutput = output;
-        }
-
-        return output;
-    }
-
     /// <summary>
     /// Initializes a new instance of the <see cref="RBFLayer{T}"/> class with specified dimensions and radial basis function.
     /// </summary>

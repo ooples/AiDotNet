@@ -252,11 +252,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Creates a new patch embedding layer with the specified dimensions.
     /// </summary>
     /// <param name="imageHeight">The height of the input image.</param>
@@ -727,126 +722,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         var metadata = base.GetMetadata();
         metadata["PatchSize"] = _patchSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
-    }
-
-    /// <summary>
-    /// Performs GPU-accelerated forward pass for patch embedding.
-    /// </summary>
-    /// <param name="inputs">The input GPU tensors. Expects one tensor with shape [batch, channels, height, width].</param>
-    /// <returns>The GPU-resident output tensor with shape [batch, num_patches, embedding_dim].</returns>
-    /// <exception cref="ArgumentException">Thrown when no inputs provided.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when engine is not a DirectGpuTensorEngine.</exception>
-    /// <remarks>
-    /// <para>
-    /// This implementation keeps all operations GPU-resident without CPU roundtrips:
-    /// 1. Reshape to split spatial dimensions into patches
-    /// 2. Permute to group patch dimensions
-    /// 3. Reshape to flatten patches
-    /// 4. Linear projection with fused bias addition
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-        var shape = input._shape;
-
-        // PatchEmbedding expects 4D input [B, C, H, W]
-        bool hasBatch = shape.Length == 4;
-        int batchSize;
-        Tensor<T> processInput;
-
-        if (shape.Length == 3)
-        {
-            // 3D [C, H, W] -> [1, C, H, W]
-            processInput = gpuEngine.ReshapeGpu(input, [1, shape[0], shape[1], shape[2]]);
-            batchSize = 1;
-        }
-        else if (shape.Length == 4)
-        {
-            processInput = input;
-            batchSize = shape[0];
-        }
-        else
-        {
-            throw new ArgumentException(
-                $"PatchEmbeddingLayer expects 3D [C,H,W] or 4D [B,C,H,W] input, got {shape.Length}D.", nameof(inputs));
-        }
-
-        // Recompute the patch grid from THIS input's live spatial dims (mirrors the CPU Forward):
-        // ForwardGpu bypasses OnFirstForward, so without this it would reshape against the stale
-        // cached grid and fail / mis-truncate on a resolution change. Validates channels + rejects
-        // sub-patch tensors, and writes _numPatchesHeight/_numPatchesWidth/_numPatches for the crop,
-        // reshape, and output steps below.
-        RefreshLivePatchGrid(processInput);
-
-        int patchDim = _channels * _patchSize * _patchSize;
-
-        // Crop any partial-patch remainder rows/columns to complete patches — the SAME contract as
-        // the CPU Forward (which crops to _numPatchesHeight/_numPatchesWidth * _patchSize), now using
-        // the freshly-recomputed live grid so CPU and GPU stay consistent for non-patch-aligned input.
-        int gpuCropHeight = _numPatchesHeight * _patchSize;
-        int gpuCropWidth = _numPatchesWidth * _patchSize;
-        if (gpuCropHeight != processInput.Shape[2])
-            processInput = gpuEngine.SliceGpu(processInput, 2, 0, gpuCropHeight);
-        if (gpuCropWidth != processInput.Shape[3])
-            processInput = gpuEngine.SliceGpu(processInput, 3, 0, gpuCropWidth);
-
-        // GPU-resident patchify using Reshape and Permute
-        // 1. Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
-        var reshaped = gpuEngine.ReshapeGpu(processInput,
-            [batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize]);
-
-        // 2. Permute to group patch dimensions: [B, Nh, Nw, C, P, P]
-        var permuted = gpuEngine.PermuteGpu(reshaped, [0, 2, 4, 1, 3, 5]);
-
-        // 3. Reshape to flatten patches: [B, N, patchDim]
-        var patches = gpuEngine.ReshapeGpu(permuted, [batchSize, _numPatches, patchDim]);
-
-        // 4. Flatten for matrix multiplication: [B*N, patchDim]
-        var patchesFlat = gpuEngine.ReshapeGpu(patches, [batchSize * _numPatches, patchDim]);
-
-        // 5. GPU-resident linear projection: [B*N, patchDim] @ [patchDim, embedDim] + bias -> [B*N, embedDim]
-        var projectedFlat = gpuEngine.FusedLinearGpu(patchesFlat, _projectionWeights, _projectionBias, FusedActivationType.None);
-
-        // 6. Reshape back to 3D: [B, N, embedDim]
-        var output = gpuEngine.ReshapeGpu(projectedFlat, [batchSize, _numPatches, _embeddingDim]);
-
-        // Cache GPU tensors for backward pass during training
-        if (IsTrainingMode)
-        {
-            _gpuInput = processInput != input ? processInput : input;
-            _gpuPatchesFlat = patchesFlat;
-            _gpuBatchSize = batchSize;
-            _gpuHasBatch = hasBatch;
-        }
-        else
-        {
-            // Dispose intermediate GPU tensors if not training
-            if (processInput != input)
-                processInput.Dispose();
-            patchesFlat.Dispose();
-        }
-
-        // Dispose other intermediate GPU tensors that are no longer needed
-        reshaped.Dispose();
-        permuted.Dispose();
-        patches.Dispose();
-        projectedFlat.Dispose();
-
-        // Remove batch dimension if input didn't have it
-        if (!hasBatch && output.Shape[0] == 1)
-        {
-            var result = gpuEngine.ReshapeGpu(output, [_numPatches, _embeddingDim]);
-            output.Dispose();
-            return result;
-        }
-
-        return output;
     }
 
     /// <summary>

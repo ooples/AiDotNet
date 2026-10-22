@@ -1,19 +1,30 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.FastGeneration;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 [Xunit.Collection("FoundationScaleSerial")]
-// HeavyTimeout (#1706): foundation-scale SD3 MM-DiT — verified OOM (System.OutOfMemoryException at
-// CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling; Metadata_ShouldExist
-// alone OOMs), OS-OOM-kills its Diffusion shard. Nightly heavy lane; drop once streaming fits it.
-[Xunit.Trait("Category", "HeavyTimeout")]
+// #2087 / #1706: out of the HeavyTimeout lane. The default foundation-scale config is too large for
+// the PR gate, so per the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects
+// a small same-architecture MMDiTXNoisePredictor and StandardVAE. Channel counts, context widths,
+// patch sizes and scale factors keep the model's defaults; only width and depth shrink.
 public class SD3FlashModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 16, 64, 64];
-    protected override int[] OutputShape => [1, 16, 64, 64];
+    protected override int[] InputShape => [1, 16, 16, 16];
+    protected override int[] OutputShape => [1, 16, 16, 16];
 
     protected override IDiffusionModel<float> CreateModel()
-        => new SD3FlashModel<float>(seed: 42);
+        => new SD3FlashModel<float>(
+            predictor: new MMDiTXNoisePredictor<float>(
+                variant: MMDiTXVariant.Medium, inputChannels: 16, patchSize: 2, contextDim: 4096,
+                numLayersOverride: 2, numHeadsOverride: 4, hiddenSizeOverride: 64, seed: 42),
+            vae: new StandardVAE<float>(
+                inputChannels: 3, latentChannels: 16, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1,
+                latentScaleFactor: 1.5305, seed: 42),
+            seed: 42);
 }

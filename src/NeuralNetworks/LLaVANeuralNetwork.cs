@@ -1154,9 +1154,6 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         SetTrainingMode(false);
         return Accelerate(input, () =>

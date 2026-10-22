@@ -302,8 +302,6 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         if (_usingCustomLayers)
         {
