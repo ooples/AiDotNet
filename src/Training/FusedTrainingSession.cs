@@ -459,6 +459,11 @@ internal sealed class FusedTrainingSession<T>
         InvalidateDerivedWeightCaches();
         if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
             scheduled.OnBatchEnd();
+
+        // Counted here, where every base class's fused step lands, and regardless of the diagnostics level: the hit
+        // counter exists to answer "did the fused path engage at all?" after a run (#1930), and the network's own
+        // hit event fires only at PerStep, so FusedOptimizerHits stayed 0 through any number of fused steps.
+        AiDotNet.Configuration.TrainingDiagnosticsConfig.RecordFusedOptimizerPath(hit: true, reason: null);
         return FusedStepOutcome.Stepped;
     }
 
@@ -699,6 +704,12 @@ internal sealed class FusedTrainingSession<T>
             Array.Copy(sparse.Values, head, take);
             return new Tensor<T>(head, new[] { take });
         }
+        // A streamed weight holds an empty vector until it is paged back (WeightRegistry.RegisterWeight), and a
+        // Reshape inspects the storage before any kernel would page it in: OpenVocabSAM, which streams at its
+        // default size, threw "View exceeds storage bounds" from this probe on its first training step. Page it in
+        // first, as LayerBase does at a layer boundary.
+        if (tensor.Lifetime == WeightLifetime.Streaming)
+            WeightRegistry.Materialize(tensor);
         return engine.TensorNarrow(engine.Reshape(tensor, new[] { tensor.Length }), 0, 0, count);
     }
 }
