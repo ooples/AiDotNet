@@ -109,8 +109,8 @@ internal sealed class GlammNetwork<T>
     /// </summary>
     public IEnumerable<LayerBase<T>> TrainableLayers()
     {
-        yield return Llm.Embeddings;
-        yield return Llm.LmHead;
+        yield return Llm.Embeddings ?? throw new InvalidOperationException("GLaMM's LLaMA has a token table.");
+        yield return Llm.LmHead ?? throw new InvalidOperationException("GLaMM's LLaMA has a language-model head.");
         foreach (var layer in Llm.Layers)
             foreach (var lora in new[] { layer.QueryLora, layer.ValueLora })
                 if (lora is not null)
