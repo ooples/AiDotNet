@@ -144,34 +144,42 @@ internal sealed class BertNetwork<T>
     /// <param name="positionIds">Position ids, or null for 0..L-1.</param>
     /// <param name="attentionMask">1 where a query may attend a key: <c>[B, L]</c> (per key) or <c>[B, L, L]</c> (per
     /// query and key); null attends everywhere.</param>
-    public Tensor<T> Encode(int[,] inputIds, int[,]? tokenTypeIds = null, int[,]? positionIds = null, bool[,,]? attentionMask = null)
+    /// <param name="prefix">Per-layer key and value prefixes <c>[prefixLength, Hidden]</c> that every query also attends
+    /// to, as Hugging Face's <c>past_key_values</c> carry them (P-tuning v2's deep prompts, Liu et al. 2022); the
+    /// default positions then start after the prefix, as there.</param>
+    public Tensor<T> Encode(int[,] inputIds, int[,]? tokenTypeIds = null, int[,]? positionIds = null, bool[,,]? attentionMask = null,
+        IReadOnlyList<(Tensor<T> Key, Tensor<T> Value)>? prefix = null)
     {
         var c = Configuration;
         int b = inputIds.GetLength(0), l = inputIds.GetLength(1);
-        if (l > c.MaxPositions) throw new ArgumentException($"At most {c.MaxPositions} tokens.", nameof(inputIds));
+        if (prefix is not null && prefix.Count != c.Layers)
+            throw new ArgumentException($"Expected a key and value prefix for each of the {c.Layers} layers.", nameof(prefix));
+        int prefixLength = prefix is null ? 0 : prefix[0].Key.Shape[0];
+        if (l + prefixLength > c.MaxPositions) throw new ArgumentException($"At most {c.MaxPositions} positions.", nameof(inputIds));
         tokenTypeIds ??= new int[b, l];
         if (positionIds is null)
         {
             positionIds = new int[b, l];
-            for (int i = 0; i < b; i++) for (int j = 0; j < l; j++) positionIds[i, j] = j;
+            for (int i = 0; i < b; i++) for (int j = 0; j < l; j++) positionIds[i, j] = prefixLength + j;
         }
         var x = _engine.TensorAdd(_engine.TensorAdd(Lookup(WordEmbeddings, c.VocabSize, inputIds),
             Lookup(TypeEmbeddings, c.TypeVocabSize, tokenTypeIds)), Lookup(PositionEmbeddings, c.MaxPositions, positionIds));
         x = Drop(EmbeddingDropout, Rows(EmbeddingNorm, x));
 
         // HF's extended mask: (1 - m) * finfo.min added to the scores.
+        // The prefix positions are always attended to.
         Tensor<T>? bias = null;
         if (attentionMask is not null)
         {
-            bias = new Tensor<T>(new[] { b * c.Heads, l, l });
+            bias = new Tensor<T>(new[] { b * c.Heads, l, prefixLength + l });
             var blocked = NumOps.FromDouble(typeof(T) == typeof(float) ? float.MinValue : double.MinValue);   // torch.finfo(dtype).min
             for (int i = 0; i < b; i++)
                 for (int h = 0; h < c.Heads; h++)
                     for (int q = 0; q < l; q++)
                         for (int k = 0; k < l; k++)
-                            if (!attentionMask[i, q, k]) bias[(i * c.Heads) + h, q, k] = blocked;
+                            if (!attentionMask[i, q, k]) bias[(i * c.Heads) + h, q, prefixLength + k] = blocked;
         }
-        foreach (var layer in Layers) x = Run(layer, x, bias);
+        for (int i = 0; i < Layers.Count; i++) x = Run(Layers[i], x, bias, prefix?[i]);
         return x;
     }
 
@@ -186,16 +194,29 @@ internal sealed class BertNetwork<T>
         return mask;
     }
 
-    private Tensor<T> Run(Layer layer, Tensor<T> x, Tensor<T>? bias)
+    private Tensor<T> Run(Layer layer, Tensor<T> x, Tensor<T>? bias, (Tensor<T> Key, Tensor<T> Value)? prefix)
     {
         var c = Configuration;
         int b = x.Shape[0], l = x.Shape[1], hd = c.Hidden / c.Heads;
-        Tensor<T> Heads(DenseLayer<T> projection) => _engine.Reshape(
-            _engine.TensorPermute(_engine.Reshape(Rows(projection, x), new[] { b, l, c.Heads, hd }), new[] { 0, 2, 1, 3 }),
-            new[] { b * c.Heads, l, hd });
+        Tensor<T> Split(Tensor<T> rows, int length) => _engine.Reshape(
+            _engine.TensorPermute(_engine.Reshape(rows, new[] { b, length, c.Heads, hd }), new[] { 0, 2, 1, 3 }),
+            new[] { b * c.Heads, length, hd });
+        Tensor<T> Heads(DenseLayer<T> projection) => Split(Rows(projection, x), l);
+        // A prefix [P, Hidden] is shared by every batch row and precedes the keys and values.
+        Tensor<T> Prefixed(Tensor<T> heads, Tensor<T> prefixRows)
+        {
+            int p = prefixRows.Shape[0];
+            var tiled = _engine.TensorTile(_engine.Reshape(prefixRows, new[] { 1, p, c.Hidden }), new[] { b, 1, 1 });
+            return _engine.TensorConcatenate(new[] { Split(tiled, p), heads }, 1);
+        }
         var q = Heads(layer.Query);
         var k = Heads(layer.Key);
         var v = Heads(layer.Value);
+        if (prefix is { } kv)
+        {
+            k = Prefixed(k, kv.Key);
+            v = Prefixed(v, kv.Value);
+        }
         var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })), NumOps.FromDouble(1.0 / Math.Sqrt(hd)));
         if (bias is not null) scores = _engine.TensorAdd(scores, bias);
         var probabilities = Drop(layer.AttentionDropout, _engine.Softmax(scores, axis: 2));
