@@ -132,8 +132,12 @@ internal static class StyleTtsOps
     public static DenseLayer<T> Linear<T>(int outputs) => new(outputs, (IActivationFunction<T>)new IdentityActivation<T>());
 
     public static NormedConv1DLayer<T> WeightNormConv<T>(int input, int output, int kernel, int stride = 1, int padding = -1,
-        int groups = 1, bool bias = true) =>
-        new(input, output, kernel, stride, 1, groups, padding < 0 ? (kernel - 1) / 2 : padding, false, ConvolutionNormalization.Weight, bias);
+        int groups = 1, bool bias = true, int dilation = 1) =>
+        new(input, output, kernel, stride, dilation, groups, padding < 0 ? dilation * (kernel - 1) / 2 : padding, false,
+            ConvolutionNormalization.Weight, bias);
+
+    public static NormedConv1DLayer<T> PlainConv<T>(int input, int output, int kernel, int stride = 1, int padding = 0) =>
+        new(input, output, kernel, stride, 1, 1, padding, false, ConvolutionNormalization.None);
 }
 
 /// <summary>
