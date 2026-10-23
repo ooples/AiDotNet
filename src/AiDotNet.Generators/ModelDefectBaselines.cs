@@ -271,7 +271,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.MultiModal.StepAudio<T>",
             "AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T>",
             "AiDotNet.TextToSpeech.StyleEmotion.EmotiVoice<T>",
-            "AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>",
