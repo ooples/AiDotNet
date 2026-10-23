@@ -195,7 +195,9 @@ public sealed class TextGenerationService : ITextGenerationService
             SpeculationDepth = disableSpeculation ? 0 : request.NumDraftTokens,
             // An explicit request seed (OpenAI `seed`) wins for reproducibility; otherwise derive a stable
             // per-request seed from the request id so greedy stays deterministic and sampling is reproducible.
-            Seed = request.Seed ?? (request.RequestId is { } id ? id.GetHashCode() : (int?)null),
+            // A stable hash: string.GetHashCode() changes per process, so a retried request was not reproducible
+            // across server restarts (#2361).
+            Seed = request.Seed ?? (request.RequestId is { } id ? AiDotNet.Helpers.StableHash.Seed(id) : (int?)null),
             Constraint = request.Constraint,
             LogitBias = request.LogitBias,
             FrequencyPenalty = (float)request.FrequencyPenalty,

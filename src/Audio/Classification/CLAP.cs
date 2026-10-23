@@ -506,7 +506,8 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             // Create input features from text for the text encoder
             for (int d = 0; d < _options.ProjectionDim; d++)
             {
-                int hash = _textPrompts[i].GetHashCode() ^ (int)((uint)d * 2654435761U);
+                // A stable hash: string.GetHashCode() changes per process, so the ONNX text features did too (#2361).
+                int hash = AiDotNet.Helpers.StableHash.Seed(_textPrompts[i]) ^ (int)((uint)d * 2654435761U);
                 textInput[d] = NumOps.FromDouble((hash & 0xFFFF) / 65535.0 * 2.0 - 1.0);
             }
             var textEmbedding = _textEncoder.Run(textInput);
