@@ -764,7 +764,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         backend.RmspropUpdate(
             parameters,
             gradients,
-            _gpuSquaredAvg!,
+            (_gpuSquaredAvg ?? throw new InvalidOperationException("_gpuSquaredAvg is null where it is required.")),
             (float)NumOps.ToDouble(CurrentLearningRate),
             (float)_options.Decay,
             (float)_options.Epsilon,

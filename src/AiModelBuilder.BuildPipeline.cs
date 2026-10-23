@@ -586,7 +586,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         TInput xTrain, TOutput yTrain,
         IOptimizer<T, TInput, TOutput> optimizer)
     {
-        var kd = _knowledgeDistillationOptions!;
+        var kd = _knowledgeDistillationOptions;
 
         if (xTrain is not Tensor<T> studentInputs || yTrain is not Tensor<T> studentTargets)
         {
@@ -595,7 +595,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 $"targets); this build supplied {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
-        var teacherForward = ResolveTeacherForward(kd);
+        var teacherForward = ResolveTeacherForward((kd ?? throw new InvalidOperationException("kd is null where it is required.")));
         var strategy = kd.Strategy
             ?? KnowledgeDistillation.DistillationStrategyFactory<T>.CreateResponseBasedStrategy(
                 kd.Temperature, kd.Alpha);
@@ -635,17 +635,23 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         if (kd.TeacherForward is not null)
         {
-            return input => (Tensor<T>)(object)kd.TeacherForward((TInput)(object)input)!;
+            return input => kd.TeacherForward((TInput)(object)input) is Tensor<T> logits
+                ? logits
+                : throw new InvalidOperationException("The distillation TeacherForward did not return a Tensor<T>.");
         }
 
         if (kd.TeacherModel is not null)
         {
-            return input => (Tensor<T>)(object)kd.TeacherModel.Predict((TInput)(object)input)!;
+            return input => kd.TeacherModel.Predict((TInput)(object)input) is Tensor<T> logits
+                ? logits
+                : throw new InvalidOperationException("The distillation TeacherModel did not predict a Tensor<T>.");
         }
 
         if (kd.Teacher is not null)
         {
-            return input => (Tensor<T>)(object)kd.Teacher.GetLogits((TInput)(object)input)!;
+            return input => kd.Teacher.GetLogits((TInput)(object)input) is Tensor<T> logits
+                ? logits
+                : throw new InvalidOperationException("The distillation Teacher did not return Tensor<T> logits.");
         }
 
         throw new InvalidOperationException(
@@ -2073,8 +2079,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var r = splitter.SplitTensor(xt, yt);
             xTrain = (TInput)(object)r.XTrain;
             xTest = (TInput)(object)r.XTest;
-            yTrain = (TOutput)(object)r.yTrain!;
-            yTest = (TOutput)(object)r.yTest!;
+            yTrain = r.yTrain is TOutput splitYTrain
+                ? splitYTrain
+                : throw new InvalidOperationException($"Splitter '{splitter.Description}' returned no training targets.");
+            yTest = r.yTest is TOutput splitYTest
+                ? splitYTest
+                : throw new InvalidOperationException($"Splitter '{splitter.Description}' returned no test targets.");
             if (r.XValidation is not null)
             {
                 xVal = (TInput)(object)r.XValidation;
@@ -2704,7 +2714,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     if (TryStackTensorBatch(inputArray, out var batchedInput) &&
                         TryStackTensorBatch(outputArray, out var batchedTarget))
                     {
-                        nn.Train(batchedInput!, batchedTarget!);
+                        nn.Train((batchedInput ?? throw new InvalidOperationException("batchedInput is null where it is required.")), (batchedTarget ?? throw new InvalidOperationException("batchedTarget is null where it is required.")));
                         var lastLoss = nn.GetLastLoss();
                         epochLoss = numOps.Add(epochLoss, lastLoss);
                         epochBatches++;
@@ -2863,7 +2873,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         if (stepBudgetReached)
         {
-            streamingStopReason ??= $"step budget of {streamingOptions!.MaxSteps} reached";
+            streamingStopReason ??= $"step budget of {(streamingOptions ?? throw new InvalidOperationException("streamingOptions is null where it is required.")).MaxSteps} reached";
         }
 
         // Final held-out evaluation, unless the last step was just evaluated.
@@ -4102,7 +4112,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int expectedFederatedSampleCount = 0;
         if (usePartitionedFederatedData)
         {
-            foreach (var range in federatedClientRanges!)
+            foreach (var range in (federatedClientRanges ?? throw new InvalidOperationException("federatedClientRanges is null where it is required.")))
             {
                 expectedFederatedSampleCount += range.SampleCount;
             }
@@ -4133,15 +4143,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         TInput XTrain;
         TOutput yTrain;
-        // These variables are assigned in all code paths before use (train/val/test split or
-        // federated path). The pragma suppresses nullable warnings for the initial default
-        // declarations since TInput/TOutput are reference types (Matrix<T>/Vector<T>).
-#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type
-        TInput XVal = default;
-        TOutput yVal = default;
-        TInput XTest = default;
-        TOutput yTest = default;
-#pragma warning restore CS8600
+        // The split assigns all four. The partitioned federated path trains on every row and has no validation
+        // or test set, so there they stay unset.
+        TInput? XVal = default;
+        TOutput? yVal = default;
+        TInput? XTest = default;
+        TOutput? yTest = default;
 
         if (usePartitionedFederatedData)
         {
@@ -4585,7 +4592,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     {
                         trialResult = finalOptimizer.Optimize(
                             OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                                XTrain, yTrain, XVal, yVal, XTest, yTest));
+                                XTrain, yTrain, (XVal ?? throw new InvalidOperationException("XVal is null where it is required.")), (yVal ?? throw new InvalidOperationException("yVal is null where it is required.")), (XTest ?? throw new InvalidOperationException("XTest is null where it is required.")), (yTest ?? throw new InvalidOperationException("yTest is null where it is required."))));
                     }
 #pragma warning restore CS8604
 
@@ -4662,7 +4669,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         OptimizationResult<T, TInput, TOutput> optimizationResult;
         FederatedLearningMetadata? federatedLearningMetadata = null;
 #pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
-        var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
+        var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, (XVal ?? throw new InvalidOperationException("XVal is null where it is required.")), (yVal ?? throw new InvalidOperationException("yVal is null where it is required.")), (XTest ?? throw new InvalidOperationException("XTest is null where it is required.")), (yTest ?? throw new InvalidOperationException("yTest is null where it is required.")));
 #pragma warning restore CS8604
 
         // ============================================================================
@@ -4744,7 +4751,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 clientPartitions = CreateFederatedClientPartitionsFromClientRanges(
                     XTrain,
                     yTrain,
-                    federatedClientRanges!);
+                    (federatedClientRanges ?? throw new InvalidOperationException("federatedClientRanges is null where it is required.")));
 
                 effectiveClientCount = clientPartitions.Count;
 
@@ -5354,7 +5361,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         // (review #1361 fix #5).
                         currentModel = await stage.CustomTrainingFunction(
                             currentModel,
-                            stage.TrainingData!,
+                            (stage.TrainingData ?? throw new InvalidOperationException("stage.TrainingData is null where it is required.")),
                             cancellationToken).ConfigureAwait(false);
                         if (currentModel is null)
                             throw new InvalidOperationException(

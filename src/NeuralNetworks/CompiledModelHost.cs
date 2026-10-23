@@ -740,7 +740,7 @@ internal sealed class CompiledModelHost<T> : IDisposable
                     // VALUE-STABLE REPLAY: rebind the current call's data into
                     // the cached plan's input buffer. See the matching
                     // comment in the sync Predict path.
-                    preloadedPlan!.SetInputs(new[] { input });
+                    (preloadedPlan ?? throw new InvalidOperationException("preloadedPlan is null where it is required.")).SetInputs(new[] { input });
                     return await preloadedPlan.ExecuteAsync(cancellationToken).ConfigureAwait(false);
                 }
 
@@ -978,7 +978,7 @@ internal sealed class CompiledModelHost<T> : IDisposable
         if (TryGetDiskCachedPlan(concreteShape, structureVersion, out var plan))
         {
             // VALUE-STABLE REPLAY: see comment in Predict above.
-            plan!.SetInputs(new[] { currentInput });
+            (plan ?? throw new InvalidOperationException("plan is null where it is required.")).SetInputs(new[] { currentInput });
             result = plan.Execute();
             // Capture this plan as the hot-path target too — the disk-cache
             // early-return path is also amortisable across calls. Without

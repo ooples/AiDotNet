@@ -81,7 +81,7 @@ public class BucketPaddingStrategy : IPaddingStrategy
                 }
                 else
                 {
-                    paddedMatrix[i, j] = default(T)!;
+                    paddedMatrix[i, j] = zero;
                     attentionMask[i, j] = zero;
                 }
             }

@@ -65,7 +65,7 @@ internal static class RedditFederatedBenchmarkSuiteRunner
         };
 
         var leafLoader = new LeafRedditFederatedDatasetLoader();
-        var dataset = leafLoader.LoadDatasetFromFiles(reddit.TrainFilePath!, reddit.TestFilePath, loadOptions);
+        var dataset = leafLoader.LoadDatasetFromFiles((reddit.TrainFilePath ?? throw new InvalidOperationException("reddit.TrainFilePath is null where it is required.")), reddit.TestFilePath, loadOptions);
 
         var trainClientData = dataset.Train.ToClientIdDictionary(out _);
         var testSplit = dataset.Test ?? dataset.Train;

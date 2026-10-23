@@ -774,7 +774,7 @@ public readonly struct LayerStateBag
         {
             var copy = (Array)array.Clone();
             visited[source] = copy;
-            if (!type.GetElementType()!.IsValueType)
+            if (!(type.GetElementType() ?? throw new InvalidOperationException("type.GetElementType() is null where it is required.")).IsValueType)
             {
                 // Array.GetValue(int) is valid only for rank-one arrays. Construction objects can
                 // legitimately contain rectangular arrays, so walk the actual bounds and preserve

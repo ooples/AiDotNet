@@ -371,12 +371,12 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
             var weightStd = Engine.TensorSqrt(Engine.TensorExp(_weightLogVar));
             effectiveWeights = Engine.TensorAdd(
                 _weightMean,
-                Engine.TensorMultiply(weightStd, _sampledWeightEpsilon!));
+                Engine.TensorMultiply(weightStd, (_sampledWeightEpsilon ?? throw new InvalidOperationException("_sampledWeightEpsilon is null where it is required."))));
 
             var biasStd = Engine.TensorSqrt(Engine.TensorExp(_biasLogVar));
             effectiveBias = Engine.TensorAdd(
                 _biasMean,
-                Engine.TensorMultiply(biasStd, _sampledBiasEpsilon!));
+                Engine.TensorMultiply(biasStd, (_sampledBiasEpsilon ?? throw new InvalidOperationException("_sampledBiasEpsilon is null where it is required."))));
         }
 
         _samplePending = false;

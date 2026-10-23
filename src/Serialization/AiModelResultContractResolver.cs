@@ -37,7 +37,7 @@ internal sealed class AiModelResultContractResolver : DefaultContractResolver
                 return true;
             }
 
-            type = type.BaseType!;
+            type = (type.BaseType ?? throw new InvalidOperationException("type.BaseType is null where it is required."));
         }
 
         return false;

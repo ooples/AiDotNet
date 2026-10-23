@@ -65,7 +65,7 @@ internal static class StackOverflowFederatedBenchmarkSuiteRunner
         };
 
         var leafLoader = new LeafTokenSequenceFederatedDatasetLoader();
-        var dataset = leafLoader.LoadDatasetFromFiles(stackOverflow.TrainFilePath!, stackOverflow.TestFilePath, loadOptions);
+        var dataset = leafLoader.LoadDatasetFromFiles((stackOverflow.TrainFilePath ?? throw new InvalidOperationException("stackOverflow.TrainFilePath is null where it is required.")), stackOverflow.TestFilePath, loadOptions);
 
         var trainClientData = dataset.Train.ToClientIdDictionary(out _);
         var testSplit = dataset.Test ?? dataset.Train;

@@ -95,9 +95,9 @@ public class AnswerCorrectnessMetric<T> : RAGMetricBase<T>
         if (string.IsNullOrWhiteSpace(answer.Answer) || string.IsNullOrWhiteSpace(groundTruth))
             return NumOps.Zero;
 
-        double? judgeScore = _generator != null ? RateWithJudge(answer.Answer, groundTruth!) : (double?)null;
+        double? judgeScore = _generator != null ? RateWithJudge(answer.Answer, (groundTruth ?? throw new InvalidOperationException("groundTruth is null where it is required."))) : (double?)null;
         double? semanticScore = _embeddingModel != null
-            ? Math.Max(0.0, EmbeddingCosine(_embeddingModel, answer.Answer, groundTruth!))
+            ? Math.Max(0.0, EmbeddingCosine(_embeddingModel, answer.Answer, (groundTruth ?? throw new InvalidOperationException("groundTruth is null where it is required."))))
             : (double?)null;
 
         if (judgeScore.HasValue && semanticScore.HasValue)
@@ -108,7 +108,7 @@ public class AnswerCorrectnessMetric<T> : RAGMetricBase<T>
             return NumOps.FromDouble(semanticScore.Value);
 
         // Offline lexical fallback: Jaccard word overlap.
-        return NumOps.FromDouble(JaccardSimilarity(answer.Answer, groundTruth!));
+        return NumOps.FromDouble(JaccardSimilarity(answer.Answer, (groundTruth ?? throw new InvalidOperationException("groundTruth is null where it is required."))));
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public class AnswerCorrectnessMetric<T> : RAGMetricBase<T>
             "On a scale of 0 to 10, how factually correct and complete is the answer compared to " +
             "the reference answer? Reply with only a single number.\n\n" +
             $"Reference: {groundTruth}\n\nAnswer: {answerText}\n\nCorrectness (0-10):";
-        var reply = _generator!.Generate(prompt);
+        var reply = (_generator ?? throw new InvalidOperationException("_generator is null where it is required.")).Generate(prompt);
         var match = Regex.Match(reply ?? string.Empty, @"\d+(\.\d+)?", RegexOptions.None, RegexTimeout);
         if (match.Success && double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double raw))
             return Math.Min(1.0, Math.Max(0.0, raw / 10.0));

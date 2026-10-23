@@ -332,8 +332,8 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         // for buffered Deserialize parameters to slice correctly.
         if (_hasExpansion)
         {
-            _expandConv!.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
-            _expandBn!.ResolveFromShape(new[] { 1, hiddenDim, inputHeight, inputWidth });
+            (_expandConv ?? throw new InvalidOperationException("_expandConv is null where it is required.")).ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
+            (_expandBn ?? throw new InvalidOperationException("_expandBn is null where it is required.")).ResolveFromShape(new[] { 1, hiddenDim, inputHeight, inputWidth });
         }
         _dwConv.ResolveFromShape(new[] { dwInputChannels, inputHeight, inputWidth });
         _dwBn.ResolveFromShape(new[] { 1, dwInputChannels, dwOutH, dwOutW });

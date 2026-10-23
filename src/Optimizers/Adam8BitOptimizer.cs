@@ -654,7 +654,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             Tensor<T> m;
             if (_options.CompressBothMoments)
             {
-                m = DequantizeTensor(state.MQuantized!, state.MScales!, param._shape, state.NumBlocks, isSigned: true);
+                m = DequantizeTensor((state.MQuantized ?? throw new InvalidOperationException("state.MQuantized is null where it is required.")), (state.MScales ?? throw new InvalidOperationException("state.MScales is null where it is required.")), param._shape, state.NumBlocks, isSigned: true);
             }
             else
             {
@@ -723,7 +723,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // false, m IS state.MFullPrecision and was updated in place above — no copy needed.
             if (_options.CompressBothMoments)
             {
-                QuantizeTensor(m, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
+                QuantizeTensor(m, (state.MQuantized ?? throw new InvalidOperationException("state.MQuantized is null where it is required.")), (state.MScales ?? throw new InvalidOperationException("state.MScales is null where it is required.")), state.NumBlocks, isSigned: true);
             }
             QuantizeTensor(v, vQuantized, vScales, state.NumBlocks, isSigned: false);
 
@@ -2088,16 +2088,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 if (_options.CompressBothMoments)
                 {
-                    writer.Write(_mQuantized!.Length);
+                    writer.Write((_mQuantized ?? throw new InvalidOperationException("_mQuantized is null where it is required.")).Length);
                     WriteVectorBytesChunked(writer, _mQuantized);
-                    foreach (var scale in _mScales!)
+                    foreach (var scale in (_mScales ?? throw new InvalidOperationException("_mScales is null where it is required.")))
                     {
                         writer.Write(scale);
                     }
                 }
                 else
                 {
-                    writer.Write(_mFullPrecision!.Length);
+                    writer.Write((_mFullPrecision ?? throw new InvalidOperationException("_mFullPrecision is null where it is required.")).Length);
                     foreach (var value in _mFullPrecision)
                     {
                         writer.Write(Convert.ToDouble(value));
@@ -2111,7 +2111,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 writer.Write(_vQuantized.Length);
                 WriteVectorBytesChunked(writer, _vQuantized);
-                foreach (var scale in _vScales!)
+                foreach (var scale in (_vScales ?? throw new InvalidOperationException("_vScales is null where it is required.")))
                 {
                     writer.Write(scale);
                 }

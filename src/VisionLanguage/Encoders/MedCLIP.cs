@@ -224,7 +224,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             pooled = pooled is null ? layerPooled : Engine.TensorAdd(pooled, layerPooled);
         }
         pooled = Engine.TensorMultiplyScalar(
-            pooled!, NumOps.FromDouble(1.0 / semanticStates.Count));
+            (pooled ?? throw new InvalidOperationException("pooled is null where it is required.")), NumOps.FromDouble(1.0 / semanticStates.Count));
         return L2Normalize(TextEncoderLayers[^1].Forward(pooled));
     }
 
@@ -455,7 +455,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     private ITokenizer CreateTokenizer()
     {
         if (!string.IsNullOrWhiteSpace(_options.TokenizerDirectory))
-            return HuggingFaceTokenizerLoader.LoadFromDirectory(_options.TokenizerDirectory!);
+            return HuggingFaceTokenizerLoader.LoadFromDirectory((_options.TokenizerDirectory ?? throw new InvalidOperationException("_options.TokenizerDirectory is null where it is required.")));
 
         // Offline/randomly initialized models use a deterministic BERT-compatible fallback.
         // A pretrained MedCLIP checkpoint must set TokenizerDirectory so token IDs match

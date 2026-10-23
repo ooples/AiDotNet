@@ -498,7 +498,7 @@ public class HtmlDashboard : ITrainingDashboard
         {
             sb.AppendLine("<section id=\"model\" class=\"card\">");
             sb.AppendLine("    <h2>Model Architecture</h2>");
-            sb.AppendLine($"    <pre class=\"model-graph\">{EscapeHtml(modelGraph)}</pre>");
+            sb.AppendLine($"    <pre class=\"model-graph\">{EscapeHtml((modelGraph ?? throw new InvalidOperationException("modelGraph is null where it is required.")))}</pre>");
             sb.AppendLine("</section>");
         }
 

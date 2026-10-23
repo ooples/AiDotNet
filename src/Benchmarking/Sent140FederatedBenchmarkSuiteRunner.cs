@@ -68,7 +68,7 @@ internal static class Sent140FederatedBenchmarkSuiteRunner
         };
 
         var leafLoader = new LeafSent140FederatedDatasetLoader();
-        var dataset = leafLoader.LoadDatasetFromFiles(sent140.TrainFilePath!, sent140.TestFilePath, loadOptions);
+        var dataset = leafLoader.LoadDatasetFromFiles((sent140.TrainFilePath ?? throw new InvalidOperationException("sent140.TrainFilePath is null where it is required.")), sent140.TestFilePath, loadOptions);
 
         var trainClientData = dataset.Train.ToClientIdDictionary(out _);
         var testSplit = dataset.Test ?? dataset.Train;
@@ -299,11 +299,11 @@ internal static class Sent140FederatedBenchmarkSuiteRunner
             return;
         }
 
-        var ids = tokenIds!;
+        var ids = tokenIds;
         int take = Math.Min(count, maxSequenceLength);
         for (int col = 0; col < take; col++)
         {
-            matrix[row, col] = numOps.FromDouble(ids[col]);
+            matrix[row, col] = numOps.FromDouble((ids ?? throw new InvalidOperationException("ids is null where it is required."))[col]);
         }
 
         for (int col = take; col < maxSequenceLength; col++)

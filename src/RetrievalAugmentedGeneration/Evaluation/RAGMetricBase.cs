@@ -159,7 +159,7 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
         if (string.IsNullOrWhiteSpace(reply))
             return result;
 
-        var lines = reply!.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        var lines = (reply ?? throw new InvalidOperationException("reply is null where it is required.")).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
             var cleaned = System.Text.RegularExpressions.Regex.Replace(
@@ -183,7 +183,7 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
         if (string.IsNullOrWhiteSpace(reply))
             return false;
 
-        var s = reply!.Trim().ToLowerInvariant();
+        var s = (reply ?? throw new InvalidOperationException("reply is null where it is required.")).Trim().ToLowerInvariant();
         if (s.StartsWith("yes") || s.StartsWith("true") || s.StartsWith("support"))
             return true;
         if (s.StartsWith("no") || s.StartsWith("false") || s.StartsWith("not"))

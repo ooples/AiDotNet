@@ -275,10 +275,10 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         for (int i = 0; i < state.Length; i++)
         {
             double value = NumOps.ToDouble(state[i]);
-            double delta = value - _observationMean![i];
+            double delta = value - (_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i];
             _observationMean[i] += delta / _observationCount;
             double delta2 = value - _observationMean[i];
-            _observationM2![i] += delta * delta2;
+            (_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i] += delta * delta2;
         }
     }
 
@@ -979,8 +979,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         for (int i = 0; i < length; i++)
         {
-            writer.Write(_observationMean![i]);
-            writer.Write(_observationM2![i]);
+            writer.Write((_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i]);
+            writer.Write((_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i]);
         }
     }
 
@@ -994,8 +994,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         for (int i = 0; i < length; i++)
         {
-            _observationMean![i] = reader.ReadDouble();
-            _observationM2![i] = reader.ReadDouble();
+            (_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i] = reader.ReadDouble();
+            (_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i] = reader.ReadDouble();
         }
     }
 

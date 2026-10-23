@@ -50,9 +50,9 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _cache = cache ?? new InMemoryEmbeddingCache<T>();
-        _namespace = string.IsNullOrEmpty(modelNamespace)
+        _namespace = (string.IsNullOrEmpty(modelNamespace)
             ? $"{_inner.GetType().FullName}:{_inner.EmbeddingDimension}"
-            : modelNamespace!;
+            : modelNamespace ?? throw new InvalidOperationException("string.IsNullOrEmpty(modelNamespace) ? $\"{_inner.GetType().FullName}:{_inner.... is null where it is required."));
     }
 
     /// <summary>

@@ -60,7 +60,7 @@ internal static class LeafFederatedBenchmarkSuiteRunner
         };
 
         var loader = DataLoaders.FromLeafFederatedJsonFiles<T>(
-            trainFilePath: leaf.TrainFilePath!,
+            trainFilePath: (leaf.TrainFilePath ?? throw new InvalidOperationException("leaf.TrainFilePath is null where it is required.")),
             testFilePath: leaf.TestFilePath,
             options: loadOptions);
 

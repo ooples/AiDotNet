@@ -336,7 +336,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
                 var genome = GetBestGenome();
                 int n = genome?.Connections?.Count ?? 0;
                 var values = new Vector<T>(n);
-                for (int i = 0; i < n; i++) values[i] = genome!.Connections[i].Weight;
+                for (int i = 0; i < n; i++) values[i] = (genome ?? throw new InvalidOperationException("genome is null where it is required.")).Connections[i].Weight;
                 return values;
             },
             values =>
@@ -345,7 +345,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
                 int n = genome?.Connections?.Count ?? 0;
                 for (int i = 0; i < n && i < values.Length; i++)
                 {
-                    genome!.Connections[i].Weight = values[i];
+                    (genome ?? throw new InvalidOperationException("genome is null where it is required.")).Connections[i].Weight = values[i];
                 }
             }));
     }

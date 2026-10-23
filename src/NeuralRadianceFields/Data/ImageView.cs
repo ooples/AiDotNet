@@ -66,14 +66,14 @@ public sealed class ImageView<T>
         Tensor<T> photo,
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
-        T focalLength = default!,
+        T? focalLength = default,
         ExifIntrinsics? exif = null,
         LearnedPrior<T>? prior = null)
     {
         Photo          = photo          ?? throw new ArgumentNullException(nameof(photo));
         CameraPosition = cameraPosition ?? throw new ArgumentNullException(nameof(cameraPosition));
         CameraRotation = cameraRotation ?? throw new ArgumentNullException(nameof(cameraRotation));
-        FocalLength    = focalLength;
+        FocalLength    = focalLength ?? AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
         Exif           = exif;
         Prior          = prior;
 

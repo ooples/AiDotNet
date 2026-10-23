@@ -723,7 +723,7 @@ public sealed class OpenAiController : ControllerBase
         if (string.IsNullOrEmpty(eos)) return -1;
         try
         {
-            var ids = tokenizer.ConvertTokensToIds(new List<string> { eos! });
+            var ids = tokenizer.ConvertTokensToIds(new List<string> { eos });
             return ids.Count > 0 ? ids[0] : -1;
         }
         catch (Exception ex)

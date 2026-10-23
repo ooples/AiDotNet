@@ -264,7 +264,7 @@ public class SelfSupervisedLearningSession<T>
             _method.Encode(dataLoader().First()));
 
         _history.AddEpochMetrics(
-            epochLoss, std, knnAcc,
+            (epochLoss ?? throw new InvalidOperationException("epochLoss is null where it is required.")), std, knnAcc,
             _method is SelfSupervisedLearningMethodBase<T> baseMethod ? baseMethod.GetEffectiveLearningRate() : 0,
             0);
 

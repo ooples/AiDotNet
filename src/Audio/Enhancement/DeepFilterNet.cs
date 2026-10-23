@@ -638,7 +638,7 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
 
         // Apply ERB-band gains to every frequency bin (band gain broadcast to its bins via a matmul).
         EnsureErbMatrices();
-        var gainPerBin = Engine.TensorMatMul(gains, _erbExpandMatrix!); // [T, numFreqs]
+        var gainPerBin = Engine.TensorMatMul(gains, (_erbExpandMatrix ?? throw new InvalidOperationException("_erbExpandMatrix is null where it is required."))); // [T, numFreqs]
         var reEnh = Engine.TensorMultiply(re, gainPerBin);
         var imEnh = Engine.TensorMultiply(im, gainPerBin);
 
@@ -752,7 +752,7 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         EnsureErbMatrices();
         var mag2 = Engine.TensorAdd(Engine.TensorMultiply(re, re), Engine.TensorMultiply(im, im));
         var mag = Engine.TensorSqrt(Engine.TensorAdd(mag2, MakeScalarLike(mag2, 1e-8))); // [T, numFreqs]
-        return Engine.TensorMatMul(mag, _erbPoolMatrix!);                                 // [T, numErbBands]
+        return Engine.TensorMatMul(mag, (_erbPoolMatrix ?? throw new InvalidOperationException("_erbPoolMatrix is null where it is required.")));                                 // [T, numErbBands]
     }
 
     /// <summary>

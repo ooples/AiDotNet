@@ -115,7 +115,7 @@ public class FaithfulnessMetric<T> : RAGMetricBase<T>
                 "You are a strict fact-checker. Determine whether the statement can be directly " +
                 "inferred from the context. Reply with only 'yes' or 'no'.\n\n" +
                 $"Context: {context}\n\nStatement: {claim}\n\nSupported (yes/no):";
-            var reply = _generator!.Generate(prompt);
+            var reply = (_generator ?? throw new InvalidOperationException("_generator is null where it is required.")).Generate(prompt);
             if (ParseAffirmative(reply))
                 supported++;
         }

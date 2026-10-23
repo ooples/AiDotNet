@@ -102,7 +102,7 @@ internal sealed class VectorIndexDocumentStore<T> : IDocumentStore<T>
         foreach (var (id, score) in hits)
         {
             if (!_documents.TryGetValue(id, out var vd)) continue;
-            if (hasFilters && !MatchesFilters(vd.Document, metadataFilters!)) continue;
+            if (hasFilters && !MatchesFilters(vd.Document, (metadataFilters ?? throw new InvalidOperationException("metadataFilters is null where it is required.")))) continue;
 
             var doc = vd.Document;
             doc.RelevanceScore = score;

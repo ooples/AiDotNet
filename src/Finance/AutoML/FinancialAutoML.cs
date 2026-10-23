@@ -81,7 +81,7 @@ public partial class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>
         }
 
         _financeSearchSpace = new FinancialSearchSpace(_options.Domain);
-        _modelFactory = new FinancialModelFactory<T>(_options.Architecture!);
+        _modelFactory = new FinancialModelFactory<T>(_options.Architecture);
 
         ApplyBudget(_options.Budget);
 

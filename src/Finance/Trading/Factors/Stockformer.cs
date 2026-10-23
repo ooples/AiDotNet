@@ -237,10 +237,10 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
         var (fusedLast, lowLast) = ForwardCore(features, out int assets);
 
         return new Prediction(
-            ToVector(_returnHead!.Forward(fusedLast)),
-            ToVector(_returnHead!.Forward(lowLast)),
-            ToVector(_directionHead!.Forward(fusedLast)),
-            ToVector(_directionHead!.Forward(lowLast)));
+            ToVector((_returnHead ?? throw new InvalidOperationException("_returnHead is null where it is required.")).Forward(fusedLast)),
+            ToVector(_returnHead.Forward(lowLast)),
+            ToVector((_directionHead ?? throw new InvalidOperationException("_directionHead is null where it is required.")).Forward(fusedLast)),
+            ToVector(_directionHead.Forward(lowLast)));
     }
 
     private static Vector<T> ToVector(Tensor<T> t)
@@ -340,7 +340,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
     public override IReadOnlyList<Tensor<T>> PredictAllTasks(Tensor<T> input)
     {
         var (fusedLast, _) = ForwardCore(input, out _);
-        return new[] { _returnHead!.Forward(fusedLast), _directionHead!.Forward(fusedLast) };
+        return new[] { (_returnHead ?? throw new InvalidOperationException("_returnHead is null where it is required.")).Forward(fusedLast), (_directionHead ?? throw new InvalidOperationException("_directionHead is null where it is required.")).Forward(fusedLast) };
     }
 
     /// <inheritdoc/>
@@ -353,7 +353,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
         // No Vector round-trip: that would sever the tape and leave training with no gradient path
         // from the loss back through the encoder.
         var (fusedLast, _) = ForwardCore(input, out _);
-        return _returnHead!.Forward(fusedLast);
+        return (_returnHead ?? throw new InvalidOperationException("_returnHead is null where it is required.")).Forward(fusedLast);
     }
 
     /// <inheritdoc/>
@@ -682,8 +682,8 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
         }
 
         // Eq. 3-4: learnable inverse filters restore each band to the FULL window length.
-        return (Restore(lowBands, _lowUpsample!, assets, time, featureCount),
-                Restore(highBands, _highUpsample!, assets, time, featureCount));
+        return (Restore(lowBands, (_lowUpsample ?? throw new InvalidOperationException("_lowUpsample is null where it is required.")), assets, time, featureCount),
+                Restore(highBands, (_highUpsample ?? throw new InvalidOperationException("_highUpsample is null where it is required.")), assets, time, featureCount));
     }
 
     /// <summary>

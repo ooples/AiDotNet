@@ -378,7 +378,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <inheritdoc />
     public IAiModelBuilder<T, TInput, TOutput> ConfigureLicenseKey(AiDotNetLicenseKey licenseKey)
     {
-        _licensing!.ConfigureLicenseKey(licenseKey);
+        (_licensing ?? throw new InvalidOperationException("_licensing is null where it is required.")).ConfigureLicenseKey(licenseKey);
         _licenseKey = _licensing.LicenseKey;
         _licenseValidator = _licensing.Validator;
         return this;
@@ -2654,7 +2654,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 {
                     var greedyAction = rlAgent.SelectAction(state, explore: false);
                     action = explorationStrategy.GetExplorationAction(
-                        state, greedyAction, greedyAction.Length, explorationRng!);
+                        state, greedyAction, greedyAction.Length, (explorationRng ?? throw new InvalidOperationException("explorationRng is null where it is required.")));
                 }
                 else
                 {
