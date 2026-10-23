@@ -431,8 +431,12 @@ internal sealed class MatchaDecoder<T>
         {
             upMask = masks[^1];
             masks.RemoveAt(masks.Count - 1);
-            h = resnet.Forward(_engine.TensorConcatenate(new[] { h, hiddens[^1] }, 1), upMask, time);
+            var skip = hiddens[^1];
             hiddens.RemoveAt(hiddens.Count - 1);
+            // CosyVoice's decoder crops the up path to the skip connection (x[:, :, :skip.shape[-1]]): an odd frame count
+            // upsamples one frame long. Matcha's frames are a multiple of 4, where this changes nothing.
+            if (h.Shape[2] != skip.Shape[2]) h = _engine.TensorSlice(h, new[] { 0, 0, 0 }, new[] { h.Shape[0], h.Shape[1], skip.Shape[2] });
+            h = resnet.Forward(_engine.TensorConcatenate(new[] { h, skip }, 1), upMask, time);
             foreach (var transformer in transformers) h = transformer.Forward(h, upMask);
             h = up.Forward(Mask(h, upMask));
         }

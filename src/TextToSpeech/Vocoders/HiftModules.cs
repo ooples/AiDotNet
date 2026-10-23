@@ -36,7 +36,7 @@ internal sealed class HiftGenerator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
-    private readonly Tensor<T> _window;
+    private readonly Tensor<T> _stftBasis;   // [n_fft + 2, 1, 1, n_fft]: the windowed cosines, then the negated sines
     private readonly InverseStft<T> _istft;
 
     internal sealed record ResBlock(List<SnakeLayer<T>> Snakes1, List<NormedConv1DLayer<T>> Convs1, List<SnakeLayer<T>> Snakes2,
@@ -77,7 +77,7 @@ internal sealed class HiftGenerator<T>
         }
         // Source downsampling: cumulative rates of [1] + reversed rates without its last, reversed again.
         var rates = new List<int> { 1 };
-        rates.AddRange(c.UpsampleRates.Reverse().Take(c.UpsampleRates.Length - 1));
+        rates.AddRange(Enumerable.Reverse(c.UpsampleRates).Take(c.UpsampleRates.Length - 1));   // net471: an array's .Reverse() is the in-place void one
         var cumulative = new int[rates.Count];
         for (int i = 0, p = 1; i < rates.Count; i++) cumulative[i] = p *= rates[i];
         Array.Reverse(cumulative);
@@ -108,10 +108,18 @@ internal sealed class HiftGenerator<T>
             return block;
         }
 
-        _window = new Tensor<T>(new[] { c.FftSize });
-        // scipy.signal.get_window("hann", n_fft, fftbins=True): the periodic window.
-        for (int i = 0; i < c.FftSize; i++) _window[i] = NumOps.FromDouble(0.5 - 0.5 * Math.Cos(2.0 * Math.PI * i / c.FftSize));
+        // scipy.signal.get_window("hann", n_fft, fftbins=True), the periodic window, is the STFT basis's window below.
         _istft = new InverseStft<T>(engine, c.FftSize, c.HopSize, c.FftSize);
+        int bins = c.FftSize / 2 + 1;
+        _stftBasis = new Tensor<T>(new[] { 2 * bins, 1, 1, c.FftSize });
+        for (int k = 0; k < bins; k++)
+            for (int n = 0; n < c.FftSize; n++)
+            {
+                double w = 0.5 - 0.5 * Math.Cos(2.0 * Math.PI * n / c.FftSize), a = 2.0 * Math.PI * k * n / c.FftSize;
+                _stftBasis[k, 0, 0, n] = NumOps.FromDouble(w * Math.Cos(a));
+                // The DC and Nyquist bins' imaginary parts are exactly zero.
+                _stftBasis[bins + k, 0, 0, n] = NumOps.FromDouble(k == 0 || 2 * k == c.FftSize ? 0.0 : -w * Math.Sin(a));
+            }
     }
 
     public HiftConfiguration Configuration { get; }
@@ -151,13 +159,30 @@ internal sealed class HiftGenerator<T>
     public Tensor<T> Source(Tensor<T> f0, Random random)
     {
         var c = Configuration;
-        int frames = f0.Length, scale = c.UpsampleScale, samples = frames * scale, harmonics = c.Harmonics + 1;
-        var sines = new Tensor<T>(new[] { 1, harmonics, samples });
+        int samples = f0.Length * c.UpsampleScale, harmonics = c.Harmonics + 1;
         var phases = new double[harmonics];
         for (int h = 1; h < harmonics; h++) phases[h] = -Math.PI + 2 * Math.PI * random.NextDouble();
+        var noise = new double[harmonics, samples];
+        for (int h = 0; h < harmonics; h++)
+            for (int s = 0; s < samples; s++)
+                noise[h, s] = Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
+        return Merge(Harmonics(f0, phases, noise));
+    }
+
+    /// <summary>
+    /// <c>SineGen</c>'s harmonics <c>[1, H+1, samples]</c> of F0 per frame (nearest-upsampled to the samples), given each
+    /// harmonic's starting phase (the fundamental's is always 0) and standard-normal noise <c>[H+1, samples]</c>: the
+    /// voiced samples' sines plus noise of σ <c>NsfSigma</c>, the unvoiced samples' noise of σ <c>NsfAlpha / 3</c>. F0 is
+    /// data here, as SineGen runs without gradients.
+    /// </summary>
+    public Tensor<T> Harmonics(Tensor<T> f0, double[] phases, double[,] noise)
+    {
+        var c = Configuration;
+        int frames = f0.Length, scale = c.UpsampleScale, samples = frames * scale, harmonics = c.Harmonics + 1;
+        var sines = new Tensor<T>(new[] { 1, harmonics, samples });
         for (int h = 0; h < harmonics; h++)
         {
-            double cumulative = 0;
+            double cumulative = 0, phase = h == 0 ? 0.0 : phases[h];
             for (int s = 0; s < samples; s++)
             {
                 double f = NumOps.ToDouble(f0[s / scale]);
@@ -165,11 +190,10 @@ internal sealed class HiftGenerator<T>
                 double theta = 2 * Math.PI * (cumulative - Math.Floor(cumulative));
                 bool voiced = f > c.VoicedThreshold;
                 double noiseAmplitude = voiced ? c.NsfSigma : c.NsfAlpha / 3;
-                double z = Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
-                sines[0, h, s] = NumOps.FromDouble((voiced ? c.NsfAlpha * Math.Sin(theta + phases[h]) : 0.0) + noiseAmplitude * z);
+                sines[0, h, s] = NumOps.FromDouble((voiced ? c.NsfAlpha * Math.Sin(theta + phase) : 0.0) + noiseAmplitude * noise[h, s]);
             }
         }
-        return Merge(sines);
+        return sines;
     }
 
     /// <summary>The merged excitation <c>[1, 1, samples]</c> of harmonics <c>[1, H+1, samples]</c>: tanh of the linear merge.</summary>
@@ -185,16 +209,19 @@ internal sealed class HiftGenerator<T>
         return x;
     }
 
-    /// <summary>The source's STFT as <c>[1, n_fft + 2, frames]</c>: the real parts, then the imaginary parts.</summary>
+    /// <summary>
+    /// The source's STFT (<c>torch.stft</c>, centred with reflection padding, the periodic Hann window) as
+    /// <c>[1, n_fft + 2, frames]</c>: the real parts, then the imaginary parts. A fixed convolution, so the gradient reaches
+    /// the source merge, which trains through it in the reference.
+    /// </summary>
     internal Tensor<T> SourceStft(Tensor<T> source)
     {
         var c = Configuration;
-        var waveform = _engine.Reshape(source, new[] { 1, source.Length });
-        _engine.STFT(waveform, c.FftSize, c.HopSize, _window, center: true, out var magnitude, out var phase);
-        int bins = c.FftSize / 2 + 1, frames = magnitude.Length / bins;
-        var m = _engine.Reshape(magnitude, new[] { 1, bins, frames });
-        var p = _engine.Reshape(phase, new[] { 1, bins, frames });
-        return _engine.TensorConcatenate(new[] { _engine.TensorMultiply(m, _engine.TensorCos(p)), _engine.TensorMultiply(m, _engine.TensorSin(p)) }, 1);
+        int pad = c.FftSize / 2;
+        var padded = VocoderOps.ReflectPad(_engine, _engine.Reshape(source, new[] { 1, 1, source.Length }), pad, pad);
+        var spectrum = _engine.Conv2D(_engine.Reshape(padded, new[] { 1, 1, 1, padded.Shape[2] }), _stftBasis,
+            new[] { 1, c.HopSize }, new[] { 0, 0 }, new[] { 1, 1 });                                       // [1, n_fft + 2, 1, frames]
+        return _engine.Reshape(spectrum, new[] { 1, spectrum.Shape[1], spectrum.Shape[3] });
     }
 
     /// <summary>The waveform <c>[samples]</c> of a mel <c>[1, InChannels, frames]</c> and its excitation
@@ -202,8 +229,8 @@ internal sealed class HiftGenerator<T>
     public Tensor<T> Decode(Tensor<T> mel, Tensor<T> source)
     {
         var c = Configuration;
-        Tensor<T> stft;
-        using (new NoGradScope<T>()) stft = SourceStft(source);
+        // In the graph: the reference trains m_source.l_linear through the source's STFT and source_downs.
+        var stft = SourceStft(source);
         var x = ConvPre.Forward(mel);
         for (int i = 0; i < Ups.Count; i++)
         {

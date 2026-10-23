@@ -53,7 +53,7 @@ public class CosyVoiceFlowReferenceTests
             RegulatorStages: (int)f["regulator_stages"]!, DecoderChannels: d["channels"]!.Select(v => (int)v).ToArray(),
             DecoderHeads: (int)d["num_heads"]!, DecoderHeadDim: (int)d["attention_head_dim"]!, DecoderBlocksPerLevel: (int)d["n_blocks"]!,
             DecoderMidBlocks: (int)d["num_mid_blocks"]!, SigmaMin: 1e-6, TrainingCfgRate: 0.2, InferenceCfgRate: 0.7,
-            Timesteps: (int)f["steps"]!);
+            Timesteps: (int)f["steps"]!, Loss: CosyVoiceFlowLoss.SquaredError);   // the code's compute_loss, which this fixture records
         var layers = new List<LayerBase<double>>();
         var flow = new CosyVoiceFlow<double>(AiDotNetEngine.Current, layers, configuration, new Random(0));
         string path = Path.Combine(Path.GetTempPath(), $"cosyvoice_flow_{Guid.NewGuid():N}.safetensors");
