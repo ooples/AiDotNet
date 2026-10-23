@@ -343,14 +343,16 @@ internal sealed class StyleTtsProsodyPredictor<T>
     private readonly IEngine _engine;
     private readonly double _dropout;
 
-    public StyleTtsProsodyPredictor(IEngine engine, List<LayerBase<T>> layers, int styleDim, int hidden, int layerCount, double dropout)
+    public StyleTtsProsodyPredictor(IEngine engine, List<LayerBase<T>> layers, int styleDim, int hidden, int layerCount, double dropout,
+        int durationBins = 1)
     {
         _engine = engine;
         _dropout = dropout;
         for (int i = 0; i < layerCount; i++)
             EncoderLayers.Add((new StyleTtsBiLstm<T>(engine, layers, hidden + styleDim, hidden / 2), new StyleTtsAdaLayerNorm<T>(engine, layers, styleDim, hidden)));
         Lstm = new StyleTtsBiLstm<T>(engine, layers, hidden + styleDim, hidden / 2);
-        DurationProjection = StyleTtsOps.Own(layers, StyleTtsOps.Linear<T>(1));
+        DurationProjection = StyleTtsOps.Own(layers, StyleTtsOps.Linear<T>(durationBins));
+        DurationBins = durationBins;
         Shared = new StyleTtsBiLstm<T>(engine, layers, hidden + styleDim, hidden / 2);
         foreach (var stack in new[] { F0, N })
         {
@@ -375,6 +377,9 @@ internal sealed class StyleTtsProsodyPredictor<T>
     public int Hidden { get; }
     public int StyleDim { get; }
 
+    /// <summary>1 for StyleTTS's scalar duration; StyleTTS 2's <c>max_dur</c> (50), whose sigmoids sum to the duration.</summary>
+    public int DurationBins { get; }
+
     private Tensor<T> WithStyle(Tensor<T> rows, Tensor<T> style) =>
         _engine.TensorConcatenate(new[] { rows, _engine.TensorTile(style, new[] { rows.Shape[0], 1 }) }, 1);
 
@@ -392,12 +397,12 @@ internal sealed class StyleTtsProsodyPredictor<T>
     }
 
     /// <summary>The predicted duration of each phoneme <c>[L]</c> (in frames before rounding) from the duration encoder's
-    /// output.</summary>
+    /// output; with duration bins, the per-bin logits <c>[L, bins]</c> instead.</summary>
     public Tensor<T> Durations(Tensor<T> encoded, bool training, Random random)
     {
         var x = Lstm.Apply(encoded);
         var d = DurationProjection.Forward(StyleTtsOps.Dropout(_engine, x, 0.5, training, random));
-        return _engine.Reshape(d, new[] { d.Shape[0] });
+        return DurationBins == 1 ? _engine.Reshape(d, new[] { d.Shape[0] }) : d;
     }
 
     /// <summary>Pitch and energy <c>[1, 2T]</c> from the duration encoder's output aligned to the frames,
@@ -425,7 +430,7 @@ internal sealed class StyleTtsProsodyPredictor<T>
             EncoderLayers[i].Norm.Load(read, $"{name}.text_encoder.lstms.{2 * i + 1}");
         }
         Lstm.Load(read, name + ".lstm");
-        StyleTtsOps.LoadLinear(_engine, DurationProjection, read, name + ".duration_proj.linear_layer", Hidden, 1);
+        StyleTtsOps.LoadLinear(_engine, DurationProjection, read, name + ".duration_proj.linear_layer", Hidden, DurationBins);
         Shared.Load(read, name + ".shared");
         for (int i = 0; i < F0.Count; i++) F0[i].Load(read, $"{name}.F0.{i}");
         for (int i = 0; i < N.Count; i++) N[i].Load(read, $"{name}.N.{i}");

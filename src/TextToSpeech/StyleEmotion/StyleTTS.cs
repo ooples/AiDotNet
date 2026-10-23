@@ -79,27 +79,10 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     private readonly List<LayerBase<T>> _alignerLayers = new();
     private readonly List<LayerBase<T>> _pitchLayers = new();
     private readonly List<LayerBase<T>> _discriminatorLayers = new();
-    private CenteredComplexStft<T>? _stft;
-    private Tensor<T>? _melBasis;
-
-    // The released symbol table (text_utils.py): pad, punctuation, letters, IPA. A repeated symbol keeps its last index,
-    // as the reference's dictionary does.
-    private static readonly IReadOnlyDictionary<char, int> SymbolIds = BuildSymbols();
-
-    private static Dictionary<char, int> BuildSymbols()
-    {
-        const string pad = "$";
-        const string punctuation = ";:,.!?¡¿—…\"«»“” ";
-        const string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-        const string ipa = "ɑɐɒæɓʙβɔɕçɗɖðʤəɘɚɛɜɝɞɟʄɡɠɢʛɦɧħɥʜɨɪʝɭɬɫɮʟɱɯɰŋɳɲɴøɵɸθœɶʘɹɺɾɻʀʁɽʂʃʈʧʉʊʋⱱʌɣɤʍχʎʏʑʐʒʔʡʕʢǀǁǂǃˈˌːˑʼʴʰʱʲʷˠˤ˞↓↑→↗↘'̩'ᵻ";
-        var symbols = pad + punctuation + letters + ipa;
-        var ids = new Dictionary<char, int>();
-        for (int i = 0; i < symbols.Length; i++) ids[symbols[i]] = i;
-        return ids;
-    }
+    private StyleTtsFrontEnd<T>? _frontEnd;
 
     /// <summary>The number of entries in the released symbol table (178).</summary>
-    public const int SymbolCount = 178;
+    public const int SymbolCount = StyleTtsFrontEnd<T>.SymbolCount;
 
     /// <inheritdoc />
     public override ModelOptions GetOptions() => _options;
@@ -287,12 +270,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// symbol as the reference frames them; characters outside the table are skipped, as the reference skips them.</summary>
     public int[] EncodePhonemes(string phonemes)
     {
-        if (phonemes is null) throw new ArgumentNullException(nameof(phonemes));
-        var ids = new List<int> { 0 };
-        foreach (char c in phonemes)
-            if (SymbolIds.TryGetValue(c, out int id)) ids.Add(id);
-        ids.Add(0);
-        return ids.ToArray();
+        return StyleTtsFrontEnd<T>.EncodePhonemes(phonemes);
     }
 
     /// <inheritdoc />
@@ -333,47 +311,13 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <c>MelSpectrogram</c> (centred STFT, periodic Hann window, power 2, HTK mel scale), then
     /// <c>(log(1e-5 + mel) − mean) / std</c>, as the reference preprocesses.
     /// </summary>
-    public Tensor<T> ComputeMel(Tensor<T> audio)
-    {
-        if (audio is null) throw new ArgumentNullException(nameof(audio));
-        var o = _options;
-        _stft ??= new CenteredComplexStft<T>(Engine, o.FftSize, o.HopSize, o.WindowLength);
-        if (_melBasis is null)
-        {
-            var basis = MelFilterbanks.Htk(o.SampleRate, o.FftSize, o.MelChannels, 0.0, Math.Floor(o.SampleRate / 2.0));
-            _melBasis = new Tensor<T>(new[] { o.MelChannels, o.FftSize / 2 + 1 });
-            for (int m = 0; m < o.MelChannels; m++)
-                for (int k = 0; k < o.FftSize / 2 + 1; k++) _melBasis[m, k] = NumOps.FromDouble(basis[m, k]);
-        }
-        using var _ = new NoGradScope<T>();
-        var (re, im) = _stft.Forward(Engine.Reshape(audio, new[] { audio.Length }));
-        int bins = re.Shape[1], frames = re.Shape[2];
-        var power = Engine.TensorAdd(Engine.TensorMultiply(re, re), Engine.TensorMultiply(im, im));
-        var mel = Engine.TensorMatMul(_melBasis, Engine.Reshape(power, new[] { bins, frames }));
-        var result = new Tensor<T>(new[] { o.MelChannels, frames });
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.FromDouble((Math.Log(1e-5 + NumOps.ToDouble(mel[i])) - o.MelMean) / o.MelStd);
-        return result;
-    }
+    public Tensor<T> ComputeMel(Tensor<T> audio) => FrontEnd.ComputeMel(audio);
 
     /// <summary>The energy of each frame of a normalized mel spectrogram <c>[mels, frames]</c>: the log of the L2 norm of
     /// the de-normalized mel magnitudes (the reference's <c>log_norm</c>).</summary>
-    internal Tensor<T> LogNorm(Tensor<T> mel)
-    {
-        int mels = mel.Shape[0], frames = mel.Shape[1];
-        var result = new Tensor<T>(new[] { 1, frames });
-        for (int f = 0; f < frames; f++)
-        {
-            double sum = 0;
-            for (int m = 0; m < mels; m++)
-            {
-                double v = Math.Exp(NumOps.ToDouble(mel[m, f]) * _options.MelStd + _options.MelMean);
-                sum += v * v;
-            }
-            result[0, f] = NumOps.FromDouble(Math.Log(Math.Sqrt(sum)));
-        }
-        return result;
-    }
+    internal Tensor<T> LogNorm(Tensor<T> mel) => FrontEnd.LogNorm(mel);
+
+    private StyleTtsFrontEnd<T> FrontEnd => _frontEnd ??= new StyleTtsFrontEnd<T>(Engine, _options);
 
     /// <summary>A voice for <see cref="TtsModelBase{T}.Voice"/>: a reference recording at the model's sample rate whose
     /// speaking style the synthesized speech takes.</summary>
@@ -458,7 +402,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 
     // ---------------------------------------------------------------- pretrained weights
 
-    private static TorchReader Reader(string path, params string[] prefixes)
+    internal static TorchReader Reader(string path, params string[] prefixes)
     {
         var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
         return (name, shape) =>
@@ -503,7 +447,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <c>.pt</c>).</summary>
     public void LoadPitchExtractorWeights(string path) => PitchModule.Load(StripPrefix(Reader(path, "net."), "pitch_extractor."), "pitch_extractor");
 
-    private static TorchReader StripPrefix(TorchReader read, string prefix) =>
+    internal static TorchReader StripPrefix(TorchReader read, string prefix) =>
         (name, shape) => read(name.StartsWith(prefix, StringComparison.Ordinal) ? name.Substring(prefix.Length) : name, shape);
 
     // ---------------------------------------------------------------- housekeeping
