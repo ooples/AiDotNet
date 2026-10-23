@@ -46,6 +46,11 @@ internal sealed class StyleTts2SlmDiscriminator<T>
 public partial class StyleTTS2<T>
 {
     private CosyVoiceHiFTDiscriminators<T>? _waveDiscriminators;
+    private AiDotNet.Audio.Foundations.WavLmNetwork<T>? _slm;
+    private readonly List<LayerBase<T>> _slmLayers = new();
+
+    /// <summary>The frozen WavLM the SLM losses read (never trained).</summary>
+    internal AiDotNet.Audio.Foundations.WavLmNetwork<T> SlmNetwork => _slm ?? throw NotNative();
     private StyleTts2SlmDiscriminator<T>? _slmDiscriminator;
     private readonly List<LayerBase<T>> _slmDiscriminatorLayers = new();
 
@@ -56,13 +61,14 @@ public partial class StyleTTS2<T>
     internal StyleTts2SlmDiscriminator<T> SlmDiscriminator => _slmDiscriminator ?? throw NotNative();
 
     private IEnumerable<LayerBase<T>> DiscriminatorLayerList =>
-        (_waveDiscriminators?.Layers ?? Array.Empty<LayerBase<T>>()).Concat(_slmDiscriminatorLayers);
+        (_waveDiscriminators?.Layers ?? Array.Empty<LayerBase<T>>()).Concat(_slmDiscriminatorLayers).Concat(_slmLayers);
 
     private void InitializeDiscriminators()
     {
         var o = _options;
         _waveDiscriminators = new CosyVoiceHiFTDiscriminators<T>(Engine);
         _slmDiscriminator = new StyleTts2SlmDiscriminator<T>(Engine, _slmDiscriminatorLayers, o.SlmHidden, o.SlmLayers, o.SlmDiscriminatorChannels);
+        _slm = new AiDotNet.Audio.Foundations.WavLmNetwork<T>(Engine, _slmLayers, o.SlmConfiguration);
     }
 
     private void AddDiscriminatorLayers() => ComponentLayers.AddRange(DiscriminatorLayerList);
@@ -72,6 +78,19 @@ public partial class StyleTTS2<T>
         var o = _options;
         _waveDiscriminators!.Forward(new Tensor<T>(new[] { 2 * o.HopSize }));
         _slmDiscriminator!.Forward(new Tensor<T>(new[] { 1, o.SlmHidden * o.SlmLayers, 4 }));
+        _slm!.HiddenStates(new Tensor<T>(new[] { 800 }));
+    }
+
+    /// <summary>
+    /// Loads WavLM (a transformers <c>WavLMModel</c> state dict such as <c>microsoft/wavlm-base-plus</c>, safetensors or
+    /// <c>.pt</c>; the position convolution's weight norm under either its old <c>weight_g</c>/<c>weight_v</c> names or the
+    /// parametrized ones).
+    /// </summary>
+    public void LoadSlmWeights(string path)
+    {
+        var names = new HashSet<string>(new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path).Keys, StringComparer.Ordinal);
+        var read = StyleTTS<T>.Reader(path, "wavlm.");
+        SlmNetwork.LoadTorchWeights((name, shape) => read(name, shape), name => names.Contains(name) || names.Contains("wavlm." + name));
     }
 
     /// <summary>Loads the reference's <c>mpd</c>, <c>msd</c> and <c>wd</c> state (old-style <c>weight_g</c>/<c>weight_v</c>

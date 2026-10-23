@@ -124,6 +124,8 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         base.HiddenDim = o.HiddenDim;
         if (o.HiddenDim % 2 != 0) throw new ArgumentException("StyleTTS's BiLSTMs split the hidden width in half; use an even HiddenDim.");
         if (o.WindowLength > o.FftSize) throw new ArgumentException("The analysis window must fit the FFT.");
+        // The reference clips no gradient.
+        MaxGradNorm = NumOps.Zero;
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;

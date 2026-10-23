@@ -6615,6 +6615,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "StyleEncoderDim = 4, MaxConvDim = 16, ResidualDim = 8, AlignerHidden = 16, AlignerTokenEmbedding = 8, " +
                     "AlignerConvLayers = 1, PitchExtractorChannels = [4, 8, 8, 8], PitchExtractorLstm = 8, TmaStartStep = 1000 })";
             }
+            else if (model.ClassName == "StyleTTS2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.StyleEmotion.", System.StringComparison.Ordinal))
+            {
+                // StyleTTS 2's released model adds a 768-wide 12-layer PL-BERT, a 1024-wide decoder ending in a 512-channel
+                // HiFi-GAN with a 300x upsampling, full-width MPD/MRD discriminators and WavLM-base-plus; keep every module
+                // at a tiny width: StyleTTS's sizes, a 2-layer 16-wide PL-BERT, a 1-block style denoiser, a 16-channel
+                // generator upsampling 2x4 (an 8-sample hop, with a 64-point analysis FFT), a 3-state 8-wide WavLM, and
+                // 40 samples of loader padding instead of 5000. The aligner's objectives (and with them the
+                // discriminators and WavLM) start after 1000 updates, past every probe, as for StyleTTS.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options { HiddenDim = 16, StyleDim = 8, TextLayers = 2, " +
+                    "StyleEncoderDim = 4, MaxConvDim = 16, ResidualDim = 8, AlignerHidden = 16, AlignerTokenEmbedding = 8, " +
+                    "AlignerConvLayers = 1, PitchExtractorChannels = [4, 8, 8, 8], PitchExtractorLstm = 8, TmaStartStep = 1000, " +
+                    "DurationBins = 6, DecoderBottleneck = 16, UpsampleInitialChannels = 16, UpsampleRates = [2, 4], UpsampleKernels = [4, 8], " +
+                    "HopSize = 8, FftSize = 64, WindowLength = 64, WavePadding = 40, TrimEndSamples = 0, " +
+                    "BertHidden = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, BertEmbedding = 8, BertMaxPositions = 64, " +
+                    "DiffusionLayers = 1, DiffusionHeads = 2, DiffusionHeadFeatures = 4, DiffusionMaxLength = 64, " +
+                    "SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8, SlmPositionalConvKernel = 16, " +
+                    "SlmPositionalConvGroups = 2, SlmDiscriminatorChannels = 4 })";
+            }
             else if (model.ClassName == "HiFiGAN" && model.TypeParameterCount == 1)
             {
                 // HiFi-GAN V1 is a 512-channel generator and 32-1024-channel multi-period / multi-scale discriminators;
@@ -15955,6 +15978,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "StyleTTS2")
+                {
+                    // StyleTTS 2 reads phoneme ids and trains on the waveform (its mel spectrogram at an 8-sample hop); the
+                    // style encoders pool by 16, so the voice's reference spectrogram is 96 frames. Training needs segments
+                    // of at least 80 mel frames, so the waveform targets are repeated to 1280 samples (160 frames). Its
+                    // synthesized length follows the predicted durations, so the text-sensitivity probes compare the
+                    // deterministic training objective, as for StyleTTS.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 24 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 1280 };");
+                    sb.AppendLine("    protected override int VoiceReferenceFrames => 96;");
+                    sb.AppendLine("    private static AiDotNet.Tensors.LinearAlgebra.Tensor<double> Extend(AiDotNet.Tensors.LinearAlgebra.Tensor<double> target)");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        if (target.Length >= 1280) return new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { target.Length }, target.ToVector());");
+                    sb.AppendLine("        var extended = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1280 });");
+                    sb.AppendLine("        for (int i = 0; i < 1280; i++) extended[i] = target[i % target.Length];");
+                    sb.AppendLine("        return extended;");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("    protected override void TrainOn(AiDotNet.Interfaces.INeuralNetworkModel<double> network, AiDotNet.Tensors.LinearAlgebra.Tensor<double> input, AiDotNet.Tensors.LinearAlgebra.Tensor<double> target)");
+                    sb.AppendLine("        => base.TrainOn(network, input, Extend(target));");
+                    sb.AppendLine("    protected override double MeasureLoss(AiDotNet.Interfaces.INeuralNetworkModel<double> network, AiDotNet.Tensors.LinearAlgebra.Tensor<double> input, AiDotNet.Tensors.LinearAlgebra.Tensor<double> output, AiDotNet.Tensors.LinearAlgebra.Tensor<double> target)");
+                    sb.AppendLine("        => base.MeasureLoss(network, input, output, Extend(target));");
+                    sb.AppendLine("    protected override void RunRecalibrationPass(AiDotNet.NeuralNetworks.NeuralNetworkBase<double> network, AiDotNet.Tensors.LinearAlgebra.Tensor<double> input, AiDotNet.Tensors.LinearAlgebra.Tensor<double>? target)");
+                    sb.AppendLine("        => base.RunRecalibrationPass(network, input, target is null ? null : Extend(target));");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                        ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS")
                 {
                     // VITS, VITS2 and Piper read characters or phoneme ids and train on the waveform: four ids (nine tokens
@@ -16040,7 +16095,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
                     sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
-                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS")
+                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
                         // random choice of soft or hard alignment, so its training loss is one draw too.

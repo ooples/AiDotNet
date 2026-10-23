@@ -23,11 +23,12 @@ public enum StyleTtsTrainingStage
     Prosody,
 }
 
-/// <summary>Options for StyleTTS (Li et al. 2022, "StyleTTS: A Style-Based Generative Model for Natural and Diverse
-/// Text-to-Speech Synthesis").</summary>
+/// <summary>The options StyleTTS (Li et al. 2022) and StyleTTS 2 (Li et al. 2023) share: audio features, the text
+/// encoder, style encoders, decoder residual widths, prosody predictor, text aligner and pitch extractor, and the
+/// AdamW settings and first-stage schedule of both.</summary>
 /// <remarks>
 /// <para>
-/// The defaults are the paper's (§III, Appendix D) with the released code's configuration where the paper is silent
+/// The defaults are StyleTTS's paper's (§III, Appendix D) with the released code's configuration where the paper is silent
 /// (yl4579/StyleTTS <c>Configs/config.yml</c>): 24 kHz audio, 80-bin mel spectrograms from a 2048-point FFT with a
 /// 1200-sample window and 300-sample hop, normalized as <c>(log(1e-5 + mel) + 4) / 4</c>; 178 phoneme symbols; a
 /// 512-wide text encoder of three convolutions and a BiLSTM; 128-dimensional styles from a style encoder whose first
@@ -38,10 +39,10 @@ public enum StyleTtsTrainingStage
 /// <para><b>For Beginners:</b> These options set the sizes of StyleTTS's networks, its audio features and how it is
 /// trained. The defaults reproduce the paper.</para>
 /// </remarks>
-public class StyleTTSOptions : TtsModelOptions
+public abstract class StyleTtsBaseOptions : TtsModelOptions
 {
-    /// <summary>Creates the paper's options.</summary>
-    public StyleTTSOptions()
+    /// <summary>Creates the papers' shared options.</summary>
+    protected StyleTtsBaseOptions()
     {
         SampleRate = 24000;
         HopSize = 300;
@@ -55,7 +56,7 @@ public class StyleTTSOptions : TtsModelOptions
     }
 
     /// <summary>Creates a copy of <paramref name="other"/>.</summary>
-    public StyleTTSOptions(StyleTTSOptions other)
+    protected StyleTtsBaseOptions(StyleTtsBaseOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
         WindowLength = other.WindowLength;
@@ -75,12 +76,9 @@ public class StyleTTSOptions : TtsModelOptions
         Beta1 = other.Beta1;
         Beta2 = other.Beta2;
         Epsilon = other.Epsilon;
-        Objective = other.Objective;
         HardAlignmentProbability = other.HardAlignmentProbability;
         TmaStartStep = other.TmaStartStep;
-        R1Weight = other.R1Weight;
         MinTrainingFrames = other.MinTrainingFrames;
-        MaxStretch = other.MaxStretch;
         SamplingSeed = other.SamplingSeed;
     }
 
@@ -135,9 +133,6 @@ public class StyleTTSOptions : TtsModelOptions
     /// <summary>AdamW ε (1e-9, the released code's).</summary>
     public double Epsilon { get; set; } = 1e-9;
 
-    /// <summary>The loss weighting (the paper's).</summary>
-    public StyleTtsObjective Objective { get; set; } = StyleTtsObjective.Paper;
-
     /// <summary>The share of reconstruction steps that read the hard monotonic alignment instead of the soft attention
     /// (0.5: the paper's 50%-50% strategy, §II-B and Appendix A-A).</summary>
     public double HardAlignmentProbability { get; set; } = 0.5;
@@ -146,17 +141,52 @@ public class StyleTTSOptions : TtsModelOptions
     /// (0; the released code waits 20 epochs, whose length depends on your data — set it for yours).</summary>
     public int TmaStartStep { get; set; }
 
+    /// <summary>Training segments shorter than this many frames are skipped, as the released code skips them (80).</summary>
+    public int MinTrainingFrames { get; set; } = 80;
+
+    /// <summary>Seed of the training draws and of dropout.</summary>
+    public int SamplingSeed { get; set; }
+}
+
+/// <summary>Options for StyleTTS (Li et al. 2022, "StyleTTS: A Style-Based Generative Model for Natural and Diverse
+/// Text-to-Speech Synthesis").</summary>
+/// <remarks>
+/// <para>
+/// The defaults are the paper's (§III, Appendix D) with the released code's configuration where the paper is silent
+/// (yl4579/StyleTTS <c>Configs/config.yml</c>): 24 kHz audio, 80-bin mel spectrograms from a 2048-point FFT with a
+/// 1200-sample window and 300-sample hop, normalized as <c>(log(1e-5 + mel) + 4) / 4</c>; 178 phoneme symbols; a
+/// 512-wide text encoder of three convolutions and a BiLSTM; 128-dimensional styles from a style encoder whose first
+/// width is 64; a decoder of seven residual blocks with 64-wide residual features; a three-layer prosody predictor with
+/// dropout 0.2; a text aligner pre-trained for ASR (256 wide, 512-dimensional token embeddings) and a JDC pitch extractor.
+/// Both stages train with AdamW (β = 0, 0.99, weight decay 1e-4, learning rate 1e-4).
+/// </para>
+/// <para><b>For Beginners:</b> These options set the sizes of StyleTTS's networks, its audio features and how it is
+/// trained. The defaults reproduce the paper.</para>
+/// </remarks>
+public class StyleTTSOptions : StyleTtsBaseOptions
+{
+    /// <summary>Creates the paper's options.</summary>
+    public StyleTTSOptions()
+    {
+    }
+
+    /// <summary>Creates a copy of <paramref name="other"/>.</summary>
+    public StyleTTSOptions(StyleTTSOptions other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        Objective = other.Objective;
+        R1Weight = other.R1Weight;
+        MaxStretch = other.MaxStretch;
+    }
+
+    /// <summary>The loss weighting (the paper's).</summary>
+    public StyleTtsObjective Objective { get; set; } = StyleTtsObjective.Paper;
+
     /// <summary>Weight of the discriminator's R1 penalty on real spectrograms (1, the released code's; the paper does not
     /// mention it).</summary>
     public double R1Weight { get; set; } = 1.0;
 
-    /// <summary>Training segments shorter than this many frames are skipped, as the released code skips them (80).</summary>
-    public int MinTrainingFrames { get; set; } = 80;
-
     /// <summary>The largest relative time stretch of the prosody stage's augmentation (0.25: scales from 0.75 to 1.25,
     /// §III-B).</summary>
     public double MaxStretch { get; set; } = 0.25;
-
-    /// <summary>Seed of the training draws and of dropout.</summary>
-    public int SamplingSeed { get; set; }
 }
