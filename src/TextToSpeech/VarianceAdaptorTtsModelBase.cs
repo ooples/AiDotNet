@@ -105,7 +105,7 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
             return x;
         }
 
-        var conditioned = ConditionForInference(RunEncoder(input));
+        var conditioned = EncodeForInference(input);
         var adapted = VarianceAdaptor.Forward(conditioned.Hidden);
         return RunDecoderLayers(adapted, conditioned.DecoderCondition);
     }
@@ -127,6 +127,19 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
     protected virtual AcousticConditioning<T> ConditionForTraining(
         Tensor<T> hidden, TtsTrainingSample<T> sample, Tensor<T> mel, int[] durations)
         => new(hidden, null, null);
+
+    /// <summary>
+    /// The phoneme hidden sequence and its conditions in training: by default the encoder layers, then
+    /// <see cref="ConditionForTraining"/>. A model whose condition enters the encoder itself (PromptTTS prepends its
+    /// style representation to every encoder block) runs its encoder here.
+    /// </summary>
+    protected virtual AcousticConditioning<T> EncodeForTraining(Tensor<T> tokens, TtsTrainingSample<T> sample, Tensor<T> mel,
+        int[] durations)
+        => ConditionForTraining(RunEncoder(tokens), sample, mel, durations);
+
+    /// <summary>The phoneme hidden sequence and its conditions at inference: by default the encoder layers, then
+    /// <see cref="ConditionForInference"/>.</summary>
+    protected virtual AcousticConditioning<T> EncodeForInference(Tensor<T> input) => ConditionForInference(RunEncoder(input));
 
     /// <summary>Adds the inference-time acoustic conditions (from <see cref="TtsModelBase{T}.Voice"/> and the
     /// model's own predictors) to the phoneme hidden sequence.</summary>
@@ -228,7 +241,7 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
 
         Tensor<T> Objective(Tensor<T> tokens, Tensor<T> mel)
         {
-            var conditioned = ConditionForTraining(RunEncoder(tokens), sample, mel, durations);
+            var conditioned = EncodeForTraining(tokens, sample, mel, durations);
             var adapted = VarianceAdaptor.Adapt(conditioned.Hidden, adaptorTargets);
 
             var loss = MelObjective(adapted.Expanded, conditioned.DecoderCondition, mel);

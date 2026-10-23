@@ -13,6 +13,13 @@ that produce those values, so you can check them yourself or regenerate them.
 | `pitch_reference.py` | `Audio/Pitch/ReferenceData/pyworld_dio_stonemask.json` and `natspeech_pitch_cwt.json` | PyWorld, and NATSpeech's `cwt.py` (vendored unchanged in `natspeech_cwt.py`) |
 | `tacotron_mel_reference.py` | `TextToSpeech/ReferenceData/librosa_tacotron_mel.json` | librosa |
 | `t5_reference.py` | `TextToSpeech/ReferenceData/t5_reference.json` | Hugging Face `transformers` `T5ForConditionalGeneration` (Pheme's text-to-semantic model) |
+| `speartts_reference.py` | `TextToSpeech/ReferenceData/speartts_reference.json` | Hugging Face `transformers` `T5ForConditionalGeneration` with its own encoder table (SPEAR-TTS's reading model): label smoothing, a reading-stage SGD step, beam search |
+| `chattts_reference.py` | `TextToSpeech/ReferenceData/chattts_reference.json` | 2noise/ChatTTS's `Embed`, `Speaker.apply` and `DVAE` (pass a checkout with `--chattts`) around Hugging Face `LlamaModel` |
+| `hift_reference.py` | `TextToSpeech/ReferenceData/hift_reference.json` | FunAudioLLM/CosyVoice's `HiFTGenerator` and `ConvRNNF0Predictor` (pass a checkout with `--cosyvoice`) |
+| `wenet_encoder_reference.py` | `TextToSpeech/ReferenceData/wenet_encoder_reference.json` | FunAudioLLM/CosyVoice's wenet `ConformerEncoder` / `TransformerEncoder` with ESPnet relative positions (pass a checkout with `--cosyvoice`) |
+| `cosyvoice_decoder_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_decoder_reference.json` | FunAudioLLM/CosyVoice's `ConditionalDecoder` over Matcha-TTS at CosyVoice's pinned commit (pass checkouts with `--cosyvoice` and `--matcha`) |
+| `cosyvoice_flow_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_flow_reference.json` | FunAudioLLM/CosyVoice's `MaskedDiffWithXvec`, `InterpolateRegulator` and `ConditionalCFM` (pass checkouts with `--cosyvoice` and `--matcha`) |
+| `cosyvoice_lm_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_lm_reference.json` | FunAudioLLM/CosyVoice's `TransformerLM` (pass checkouts with `--cosyvoice` and `--matcha`) |
 | `conformer_reference.py` | `TextToSpeech/ReferenceData/soundstorm_conformer_reference.json` | Pheme's `modules/conformer.py` (needs `--pheme`, a checkout of PolyAI-LDN/pheme) |
 | `pheme_s2a_reference.py` | `TextToSpeech/ReferenceData/pheme_s2a_reference.json` | Pheme's `modules/s2a_model.py` `TTSConformer` (needs `--pheme`) |
 | `valle_reference.py` | `TextToSpeech/ReferenceData/valle_reference.json` | lifeiteng/vall-e's `VALLE` (needs `--valle`, a checkout of lifeiteng/vall-e) |
@@ -25,6 +32,8 @@ that produce those values, so you can check them yourself or regenerate them.
 | `xvector_reference.py` | `TextToSpeech/ReferenceData/pyannote_xvector_reference.json` | pyannote.audio `XVectorSincNet` |
 | `espeak_g2p_reference.py` | `TextToSpeech/ReferenceData/espeak_arctic_phonemes.json` | espeak-ng through `phonemizer` (the front end Pheme was trained with) |
 | `g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz` and `nrl_rules.tsv` (the English G2P's data, not a test fixture) | CMUdict and NRL Report 7948's rules, from pinned sources |
+| `parler_tts_reference.py` | `TextToSpeech/ReferenceData/parler_tts_reference.json` | huggingface/parler-tts's `ParlerTTSForConditionalGeneration` (needs `--parler`, a checkout of huggingface/parler-tts, and its own environment; see below) |
+| `prompttts_style_reference.py` | `TextToSpeech/ReferenceData/prompttts_style_reference.json` | THUDM/P-tuning-v2's `BertPrefixForSequenceClassification` (PromptTTS's style encoder; needs `--ptuning`, a checkout of THUDM/P-tuning-v2, and the Parler-TTS environment) |
 
 ## Set up
 
@@ -41,6 +50,20 @@ install the two together. pycwt runs correctly on numpy 2 (the checks below pass
 already lists what it needs.
 
 On macOS or Linux the interpreter is `.venv/bin/python`.
+
+Parler-TTS's code runs only on `transformers` 4.46 (it imports helpers that later versions removed), so
+`parler_tts_reference.py` needs an environment of its own:
+
+```
+python -m venv .venv-parler
+.venv-parler\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+.venv-parler\Scripts\python -m pip install transformers==4.46.1 sentencepiece safetensors "numpy<2.6" protobuf
+.venv-parler\Scripts\python tools/reference-data/parler_tts_reference.py --parler <checkout> --stubs <dir>
+```
+
+The `parler_tts` package imports descript's `dac` package for its own DAC wrapper, which the script does not use.
+Without that package installed, pass `--stubs`, a directory holding `dac/__init__.py` (empty) and `dac/model.py`
+(`class DAC: pass`).
 
 ## Check the committed fixtures
 

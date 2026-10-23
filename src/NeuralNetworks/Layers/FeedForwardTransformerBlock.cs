@@ -27,6 +27,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <para>With a non-zero <c>conditionSize</c> both normalizations are <see cref="ConditionalLayerNormalizationLayer{T}"/>,
 /// whose scale and bias come from a conditioning vector passed as a second input — AdaSpeech's mel decoder
 /// (Chen et al. 2021, §2.2), which conditions every decoder layer normalization on the speaker embedding.</para>
+/// <para>With <c>prependCondition</c> the second input is instead one <c>hidden</c>-wide vector placed before the
+/// sequence as an extra position, attended to by every position and dropped from the output — PromptTTS (Guo et al.
+/// 2023, §2.3–2.4), which prepends its style representation to the input of every Transformer block.</para>
 /// <para><b>For Beginners:</b> Attention lets every phoneme (or mel frame) look at every other one; the small
 /// convolution then mixes each position with its immediate neighbours, which suits speech, where neighbouring
 /// sounds blend into each other.</para>
@@ -51,6 +54,7 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
     [SubLayerInput("1, _hiddenSize")]
     private readonly MultiHeadAttentionLayer<T> _attention;
     private readonly int _conditionSize;
+    private readonly bool _prependCondition;
 
     [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T>? _attentionNorm;
@@ -78,6 +82,8 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
     /// <param name="dropoutRate">Dropout after each sublayer, before the residual add (0.1 in FastSpeech 2).</param>
     /// <param name="conditionSize">Width of a conditioning vector for conditional layer normalization; 0 (the
     /// default) uses ordinary layer normalization and a single input.</param>
+    /// <param name="prependCondition">Whether the second input is a <paramref name="hiddenSize"/>-wide vector prepended
+    /// to the sequence as one more position and removed from the output (PromptTTS's style representation).</param>
     public FeedForwardTransformerBlock(
         [LayerState] int hiddenSize,
         [LayerState] int numHeads,
@@ -85,7 +91,8 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
         [LayerState] int firstKernelSize = 9,
         [LayerState] int secondKernelSize = 1,
         [LayerState] double dropoutRate = 0.0,
-        [LayerState] int conditionSize = 0)
+        [LayerState] int conditionSize = 0,
+        [LayerState] bool prependCondition = false)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
         if (hiddenSize <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
@@ -99,6 +106,8 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
             throw new ArgumentException($"Hidden size ({hiddenSize}) must be divisible by the number of heads ({numHeads}).", nameof(hiddenSize));
         if (dropoutRate < 0 || dropoutRate >= 1) throw new ArgumentOutOfRangeException(nameof(dropoutRate));
         if (conditionSize < 0) throw new ArgumentOutOfRangeException(nameof(conditionSize));
+        if (prependCondition && conditionSize > 0)
+            throw new ArgumentException("A prepended condition and conditional layer normalization are separate modes.", nameof(prependCondition));
 
         _hiddenSize = hiddenSize;
         _numHeads = numHeads;
@@ -107,6 +116,7 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
         _secondKernelSize = secondKernelSize;
         _dropoutRate = dropoutRate;
         _conditionSize = conditionSize;
+        _prependCondition = prependCondition;
 
         _attention = new MultiHeadAttentionLayer<T>(numHeads, hiddenSize / numHeads, activationFunction: new IdentityActivation<T>());
         if (conditionSize > 0)
@@ -151,7 +161,10 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
     public int ConditionSize => _conditionSize;
 
     /// <inheritdoc/>
-    public override bool RequiresMultipleInputs => _conditionSize > 0;
+    public override bool RequiresMultipleInputs => _conditionSize > 0 || _prependCondition;
+
+    /// <summary>Whether the second input is prepended to the sequence as one more position.</summary>
+    public bool PrependsCondition => _prependCondition;
 
     /// <summary>Runs the block with its layer normalizations conditioned on <paramref name="condition"/>.</summary>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> condition) => Forward(new[] { input, condition });
@@ -159,9 +172,9 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        if (_conditionSize > 0)
+        if (_conditionSize > 0 || _prependCondition)
             throw new InvalidOperationException(
-                "This block uses conditional layer normalization; call Forward(input, condition).");
+                "This block reads a condition; call Forward(input, condition).");
         return Run(input, null);
     }
 
@@ -172,7 +185,7 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
         if (inputs.Length == 1)
             return ForwardTraced(inputs[0]);
-        if (_conditionSize == 0 || inputs.Length != 2)
+        if ((_conditionSize == 0 && !_prependCondition) || inputs.Length != 2)
             throw new ArgumentException(
                 "Expected the features and a conditioning vector, and a block built with a condition size.", nameof(inputs));
         return Run(inputs[0], inputs[1]);
@@ -182,6 +195,14 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
     {
         bool unbatched = input.Rank == 2;
         var x = unbatched ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] }) : input;
+        if (_prependCondition)
+        {
+            int batch = x.Shape[0];
+            if (condition is null || condition.Length != batch * _hiddenSize)
+                throw new ArgumentException($"Expected one prepended vector of width {_hiddenSize} per batch row ({batch}).", nameof(condition));
+            x = Engine.TensorConcatenate(new[] { Engine.Reshape(condition, new[] { batch, 1, _hiddenSize }), x }, 1);
+            condition = null;
+        }
 
         var attended = _attention.Forward(x);
         if (_attentionDropout is not null) attended = _attentionDropout.Forward(attended);
@@ -193,6 +214,8 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
         var convOut = Engine.TensorPermute(_conv2.Forward(hidden), new[] { 0, 2, 1 }).Contiguous();
         if (_convDropout is not null) convOut = _convDropout.Forward(convOut);
         var z = Normalize(_convNorm, _convConditionalNorm, Engine.TensorAdd(y, convOut), condition);
+        if (_prependCondition)
+            z = Engine.TensorSlice(z, new[] { 0, 1, 0 }, new[] { z.Shape[0], z.Shape[1] - 1, _hiddenSize });
 
         return unbatched ? Engine.Reshape(z, input._shape) : z;
     }
@@ -229,6 +252,7 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
         metadata["SecondKernelSize"] = _secondKernelSize.ToString(inv);
         metadata["DropoutRate"] = _dropoutRate.ToString(inv);
         metadata["ConditionSize"] = _conditionSize.ToString(inv);
+        metadata["PrependCondition"] = _prependCondition.ToString(inv);
         return metadata;
     }
 }

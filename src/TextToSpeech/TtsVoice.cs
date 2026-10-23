@@ -38,4 +38,11 @@ public sealed class TtsVoice<T>
 
     /// <summary>Index of the language in a multilingual model's language table.</summary>
     public int? LanguageId { get; init; }
+
+    /// <summary>
+    /// A natural-language description of the voice ("A female speaker delivers a slightly expressive speech with a
+    /// moderate pitch") as the model's description token ids <c>[tokens]</c>, for models that synthesize from one
+    /// (Parler-TTS).
+    /// </summary>
+    public Tensor<T>? Description { get; init; }
 }

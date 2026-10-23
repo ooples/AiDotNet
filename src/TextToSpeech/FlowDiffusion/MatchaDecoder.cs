@@ -93,16 +93,18 @@ internal sealed partial class KaimingLinearLayer<T> : LayerBase<T>, IShapeContra
 
     public override void UpdateParameters(T learningRate) => KaimingInit.Step(this, learningRate, _weight, _bias);
 
-    internal int InFeatures => _in;
-    internal int OutFeatures => _out;
-
-    /// <summary>Loads PyTorch's <c>weight [out, in]</c> and, when the layer has one, <c>bias [out]</c>.</summary>
-    internal void Load(double[] weight, double[]? bias)
+    /// <summary>Loads a PyTorch <c>nn.Linear</c>'s weight <c>[out, in]</c> and bias (left at zero when null).</summary>
+    internal void LoadTorch(double[] weight, double[]? bias)
     {
-        if (weight.Length != _in * _out) throw new ArgumentException($"Expected {_in * _out} weights, got {weight.Length}.", nameof(weight));
-        for (int o = 0; o < _out; o++)
-            for (int i = 0; i < _in; i++) _weight[i, o] = NumOps.FromDouble(weight[o * _in + i]);
-        for (int o = 0; o < _out; o++) _bias[o] = NumOps.FromDouble(bias is null ? 0.0 : bias[o]);
+        int inputs = _weight.Shape[0], outputs = _weight.Shape[1];
+        if (weight.Length != inputs * outputs) throw new ArgumentException($"Expected {inputs * outputs} weights, got {weight.Length}.", nameof(weight));
+        for (int o = 0; o < outputs; o++)
+            for (int i = 0; i < inputs; i++) _weight[i, o] = NumOps.FromDouble(weight[o * inputs + i]);
+        if (bias is not null)
+        {
+            if (bias.Length != outputs) throw new ArgumentException($"Expected {outputs} biases, got {bias.Length}.", nameof(bias));
+            for (int o = 0; o < outputs; o++) _bias[o] = NumOps.FromDouble(bias[o]);
+        }
         Engine.InvalidatePersistentTensor(_weight);
         Engine.InvalidatePersistentTensor(_bias);
     }
@@ -184,8 +186,9 @@ internal sealed partial class KaimingConv1DLayer<T> : LayerBase<T>, IShapeContra
 
     public override void UpdateParameters(T learningRate) => KaimingInit.Step(this, learningRate, _weight, _bias);
 
-    /// <summary>Loads PyTorch's weight (<c>[out, in, k]</c>, or <c>[in, out, k]</c> transposed) and bias.</summary>
-    internal void Load(double[] weight, double[] bias)
+    /// <summary>Loads a PyTorch <c>Conv1d</c> (<c>[out, in, k]</c>) or <c>ConvTranspose1d</c> (<c>[in, out, k]</c>)
+    /// weight, which is this layer's in the same order, and its bias.</summary>
+    internal void LoadTorch(double[] weight, double[] bias)
     {
         if (weight.Length != _weight.Length) throw new ArgumentException($"Expected {_weight.Length} weights, got {weight.Length}.", nameof(weight));
         if (bias.Length != _out) throw new ArgumentException($"Expected {_out} biases, got {bias.Length}.", nameof(bias));
@@ -194,11 +197,6 @@ internal sealed partial class KaimingConv1DLayer<T> : LayerBase<T>, IShapeContra
         Engine.InvalidatePersistentTensor(_weight);
         Engine.InvalidatePersistentTensor(_bias);
     }
-
-    internal int InChannels => _in;
-    internal int OutChannels => _out;
-    internal int KernelSize => _kernel;
-    internal bool Transposed => _transposed;
 
     public override void ResetState()
     {
@@ -255,17 +253,14 @@ internal sealed partial class SnakeBetaLayer<T> : LayerBase<T>, IShapeContract
 
     internal KaimingLinearLayer<T> Projection => _projection;
 
-    /// <summary>Loads Matcha's SnakeBeta: the projection (<c>proj.weight [out, in]</c>, <c>proj.bias</c>) and the log-scale
-    /// <c>alpha</c> and <c>beta</c>.</summary>
-    internal void Load(double[] weight, double[] bias, double[] alpha, double[] beta)
+    /// <summary>Loads Matcha's SnakeBeta: the projection and the log-scale <c>alpha</c> and <c>beta</c>.</summary>
+    internal void LoadTorch(double[] weight, double[] bias, double[] alpha, double[] beta)
     {
-        _projection.Load(weight, bias);
-        if (alpha.Length != _outFeatures || beta.Length != _outFeatures)
-            throw new ArgumentException($"Expected {_outFeatures} alphas and betas.");
-        for (int i = 0; i < _outFeatures; i++)
+        _projection.LoadTorch(weight, bias);
+        for (int c = 0; c < _outFeatures; c++)
         {
-            _logAlpha[i] = NumOps.FromDouble(alpha[i]);
-            _logBeta[i] = NumOps.FromDouble(beta[i]);
+            _logAlpha[c] = NumOps.FromDouble(alpha[c]);
+            _logBeta[c] = NumOps.FromDouble(beta[c]);
         }
         Engine.InvalidatePersistentTensor(_logAlpha);
         Engine.InvalidatePersistentTensor(_logBeta);
@@ -305,20 +300,28 @@ internal sealed partial class SnakeBetaLayer<T> : LayerBase<T>, IShapeContract
     }
 }
 
+/// <summary>The feed-forward activation of the decoder's Transformer blocks.</summary>
+internal enum MatchaFeedForward
+{
+    /// <summary>Matcha-TTS's SnakeBeta (a linear map to 4·dim, then SnakeBeta).</summary>
+    SnakeBeta,
+
+    /// <summary>diffusers' GELU (a linear map to 4·dim, then the exact GELU), as CosyVoice's decoder uses.</summary>
+    Gelu,
+}
+
 /// <summary>
 /// Matcha-TTS's flow-matching vector field estimator v_θ(x_t, μ, t) (reference <c>matcha/models/components/decoder.py</c>):
 /// a 1-D U-Net over <c>[x; μ]</c> with a sinusoidal time embedding (scale 1000) and a SiLU MLP, ResNet blocks
-/// (conv–GroupNorm(8)–Mish with a Mish–Linear time shift), pre-norm Transformer blocks at each level (SnakeBeta
+/// (conv–GroupNorm(8)–Mish with a Mish–Linear time shift), one pre-norm Transformer block per level (SnakeBeta
 /// feed-forward ×4, dropout), a strided-convolution down path, mid blocks, and a transposed-convolution up path with
 /// skip connections. Every convolution and linear layer is Kaiming-normal initialized with zero bias.
 /// </summary>
-/// <remarks>
-/// <para>The reference passes the 0/1 frame mask to diffusers' <c>Attention</c>, which ADDS it to the attention
-/// logits rather than masking with −∞; that behaviour is reproduced.</para>
-/// <para>CosyVoice's <c>ConditionalDecoder</c> is the same network with more conditioning channels (see
-/// <see cref="Estimate(Tensor{T}, double, Tensor{T})"/>), several Transformer blocks per level, a GELU feed-forward and
-/// the up path cropped to each skip connection's length, so any frame count works.</para>
-/// </remarks>
+/// <remarks>The reference passes the 0/1 frame mask to diffusers' <c>Attention</c>, which ADDS it to the attention
+/// logits rather than masking with −∞; that behaviour is reproduced.</remarks>
+/// <remarks>CosyVoice's <c>ConditionalDecoder</c> is the same network with several Transformer blocks per level, a GELU
+/// feed-forward and a proper key mask (<c>mask_to_bias</c>: −1e10 on padding); <see cref="MatchaDecoder{T}(IEngine, int, int, int[], double, int, int, int, int, MatchaFeedForward, bool)"/>
+/// selects those.</remarks>
 internal sealed class MatchaDecoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -330,42 +333,46 @@ internal sealed class MatchaDecoder<T>
     private readonly List<(ResnetBlock Resnet, List<TransformerBlock> Transformers, KaimingConv1DLayer<T> Down)> _downs = new();
     private readonly List<(ResnetBlock Resnet, List<TransformerBlock> Transformers)> _mids = new();
     private readonly List<(ResnetBlock Resnet, List<TransformerBlock> Transformers, KaimingConv1DLayer<T> Up)> _ups = new();
+    private readonly MatchaFeedForward _feedForward;
+    private readonly bool _biasMask;
     private readonly Block _finalBlock;
     private readonly KaimingConv1DLayer<T> _finalProjection;
 
+    /// <param name="blocksPerLevel">Transformer blocks after each ResNet block (Matcha: 1).</param>
+    /// <param name="feedForward">The Transformer blocks' feed-forward activation (Matcha: SnakeBeta).</param>
+    /// <param name="biasMask">Mask padded keys with −1e10 (CosyVoice's <c>mask_to_bias</c>) instead of adding the 0/1
+    /// frame mask to the logits as Matcha does.</param>
     public MatchaDecoder(IEngine engine, int inChannels, int outChannels, int[] channels, double dropout, int headDim,
-        int heads, int midBlocks, int transformerBlocks = 1, bool geluFeedForward = false)
+        int heads, int midBlocks, int blocksPerLevel = 1, MatchaFeedForward feedForward = MatchaFeedForward.SnakeBeta,
+        bool biasMask = false)
     {
+        if (blocksPerLevel < 1) throw new ArgumentOutOfRangeException(nameof(blocksPerLevel), "Each level has at least one Transformer block.");
         _engine = engine;
         _inChannels = inChannels;
+        _feedForward = feedForward;
+        _biasMask = biasMask;
+        List<TransformerBlock> Transformers(int dim) =>
+            Enumerable.Range(0, blocksPerLevel).Select(_ => new TransformerBlock(this, dim, heads, headDim, dropout)).ToList();
         int timeDim = channels[0] * 4;
         _time1 = Add(new KaimingLinearLayer<T>(inChannels, timeDim, true));
         _time2 = Add(new KaimingLinearLayer<T>(timeDim, timeDim, true));
-        List<TransformerBlock> Transformers(int dim) =>
-            Enumerable.Range(0, transformerBlocks).Select(_ => new TransformerBlock(this, dim, heads, headDim, dropout, geluFeedForward)).ToList();
         int output = inChannels;
         for (int i = 0; i < channels.Length; i++)
         {
             int input = output;
             output = channels[i];
             bool last = i == channels.Length - 1;
-            var resnet = new ResnetBlock(this, input, output, timeDim);
-            var transformers = Transformers(output);
-            _downs.Add((resnet, transformers, Add(new KaimingConv1DLayer<T>(output, output, 3, last ? 1 : 2, 1, false))));
+            _downs.Add((new ResnetBlock(this, input, output, timeDim), Transformers(output),
+                Add(new KaimingConv1DLayer<T>(output, output, 3, last ? 1 : 2, 1, false))));
         }
         for (int i = 0; i < midBlocks; i++)
-        {
-            var resnet = new ResnetBlock(this, channels[^1], output, timeDim);
-            _mids.Add((resnet, Transformers(output)));
-        }
+            _mids.Add((new ResnetBlock(this, channels[^1], output, timeDim), Transformers(output)));
         // Enumerable.Reverse explicitly: on net471 an array's .Reverse() binds to the in-place MemoryExtensions.Reverse.
         var up = Enumerable.Reverse(channels).Append(channels[0]).ToArray();
         for (int i = 0; i < up.Length - 1; i++)
         {
             bool last = i == up.Length - 2;
-            var resnet = new ResnetBlock(this, 2 * up[i], up[i + 1], timeDim);
-            var transformers = Transformers(up[i + 1]);
-            _ups.Add((resnet, transformers,
+            _ups.Add((new ResnetBlock(this, 2 * up[i], up[i + 1], timeDim), Transformers(up[i + 1]),
                 last
                     ? Add(new KaimingConv1DLayer<T>(up[i + 1], up[i + 1], 3, 1, 1, false))
                     : Add(new KaimingConv1DLayer<T>(up[i + 1], up[i + 1], 4, 2, 1, true))));
@@ -389,16 +396,16 @@ internal sealed class MatchaDecoder<T>
     public Tensor<T> Estimate(Tensor<T> x, Tensor<T> mu, double t, Tensor<T> mask)
     {
         int frames = x.Shape[0];
-        var input = _engine.Reshape(_engine.TensorTranspose(_engine.TensorConcatenate(new[] { x, mu }, 1)), new[] { 1, _inChannels, frames });
-        var output = Estimate(input, t, mask);                                                  // [1, mel, frames]
-        return _engine.TensorTranspose(_engine.Reshape(output, new[] { output.Shape[1], frames }));
+        return EstimateChannels(_engine.Reshape(_engine.TensorTranspose(_engine.TensorConcatenate(new[] { x, mu }, 1)), new[] { 1, _inChannels, frames }),
+            t, mask);
     }
 
-    /// <summary>The vector field <c>[1, out, frames]</c> for a channels-first input <c>[1, in, frames]</c> that already
-    /// stacks x and its conditions (CosyVoice: x, μ, the speaker embedding and the prompt mel).</summary>
-    public Tensor<T> Estimate(Tensor<T> input, double t, Tensor<T> mask)
+    /// <summary>The vector field <c>[frames, out]</c> of an input already stacked on channels, <c>[1, in, frames]</c>
+    /// (CosyVoice stacks x, μ, the speaker embedding repeated over frames, and the prompt condition).</summary>
+    public Tensor<T> EstimateChannels(Tensor<T> h, double t, Tensor<T> mask)
     {
-        var h = input;
+        int frames = h.Shape[2];
+        if (h.Shape[1] != _inChannels) throw new ArgumentException($"Expected {_inChannels} input channels.", nameof(h));
         var time = _time2.Forward(_engine.Swish(_time1.Forward(TimeEmbedding(t))));
 
         var masks = new List<Tensor<T>> { mask };
@@ -426,14 +433,56 @@ internal sealed class MatchaDecoder<T>
             masks.RemoveAt(masks.Count - 1);
             var skip = hiddens[^1];
             hiddens.RemoveAt(hiddens.Count - 1);
-            // The reference crops the up path to the skip connection's length (x[:, :, :skip.shape[-1]]).
+            // CosyVoice's decoder crops the up path to the skip connection (x[:, :, :skip.shape[-1]]): an odd frame count
+            // upsamples one frame long. Matcha's frames are a multiple of 4, where this changes nothing.
             if (h.Shape[2] != skip.Shape[2]) h = _engine.TensorSlice(h, new[] { 0, 0, 0 }, new[] { h.Shape[0], h.Shape[1], skip.Shape[2] });
             h = resnet.Forward(_engine.TensorConcatenate(new[] { h, skip }, 1), upMask, time);
             foreach (var transformer in transformers) h = transformer.Forward(h, upMask);
             h = up.Forward(Mask(h, upMask));
         }
         h = _finalBlock.Forward(h, upMask);
-        return Mask(_finalProjection.Forward(Mask(h, upMask)), mask);
+        var output = Mask(_finalProjection.Forward(Mask(h, upMask)), mask);           // [1, mel, frames]
+        return _engine.TensorTranspose(_engine.Reshape(output, new[] { output.Shape[1], frames }));
+    }
+
+    /// <summary>
+    /// Loads a Matcha-style estimator's state (Matcha's <c>Decoder</c>, CosyVoice's <c>ConditionalDecoder</c>):
+    /// <c>{prefix}time_mlp.linear_1/2</c>, <c>down_blocks</c>, <c>mid_blocks</c>, <c>up_blocks</c> (ResNet block,
+    /// Transformer blocks, then the resampling convolution, nested as <c>.conv</c> except on the last level),
+    /// <c>final_block</c> and <c>final_proj</c>. <paramref name="read"/> returns a tensor's values in PyTorch order;
+    /// the shape it is given is empty (each layer checks its own size).
+    /// </summary>
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    {
+        _time1.LoadTorch(read(prefix + "time_mlp.linear_1.weight", Array.Empty<int>()), read(prefix + "time_mlp.linear_1.bias", Array.Empty<int>()));
+        _time2.LoadTorch(read(prefix + "time_mlp.linear_2.weight", Array.Empty<int>()), read(prefix + "time_mlp.linear_2.bias", Array.Empty<int>()));
+        void Resample(KaimingConv1DLayer<T> conv, string p, bool nested) =>
+            conv.LoadTorch(read(p + (nested ? ".conv" : "") + ".weight", Array.Empty<int>()), read(p + (nested ? ".conv" : "") + ".bias", Array.Empty<int>()));
+        for (int i = 0; i < _downs.Count; i++)
+        {
+            var (resnet, transformers, down) = _downs[i];
+            string p = $"{prefix}down_blocks.{i}.";
+            resnet.LoadTorch(read, p + "0.");
+            for (int j = 0; j < transformers.Count; j++) transformers[j].LoadTorch(read, $"{p}1.{j}.");
+            Resample(down, p + "2", i < _downs.Count - 1);
+        }
+        for (int i = 0; i < _mids.Count; i++)
+        {
+            var (resnet, transformers) = _mids[i];
+            string p = $"{prefix}mid_blocks.{i}.";
+            resnet.LoadTorch(read, p + "0.");
+            for (int j = 0; j < transformers.Count; j++) transformers[j].LoadTorch(read, $"{p}1.{j}.");
+        }
+        for (int i = 0; i < _ups.Count; i++)
+        {
+            var (resnet, transformers, up) = _ups[i];
+            string p = $"{prefix}up_blocks.{i}.";
+            resnet.LoadTorch(read, p + "0.");
+            for (int j = 0; j < transformers.Count; j++) transformers[j].LoadTorch(read, $"{p}1.{j}.");
+            Resample(up, p + "2", i < _ups.Count - 1);
+        }
+        _finalBlock.LoadTorch(read, prefix + "final_block.");
+        _finalProjection.LoadTorch(read(prefix + "final_proj.weight", Array.Empty<int>()), read(prefix + "final_proj.bias", Array.Empty<int>()));
     }
 
     // SinusoidalPosEmb(in_channels) of 1000·t: [sin, cos] over in_channels / 2 log-spaced frequencies.
@@ -463,79 +512,6 @@ internal sealed class MatchaDecoder<T>
         return result;
     }
 
-    /// <summary>
-    /// The reference's initialization (<c>ConditionalDecoder.initialize_weights</c>): every <c>nn.Conv1d</c> and
-    /// <c>nn.Linear</c> Kaiming-normal (ReLU) with zero bias, GroupNorm and LayerNorm ones and zeros; the transposed
-    /// convolutions are not <c>nn.Conv1d</c>, so they keep PyTorch's default (uniform on ±1/√fan_in, fan_in = out·k).
-    /// </summary>
-    public void InitializeLikeReference(Random random)
-    {
-        double Normal()
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-        }
-        foreach (var layer in _layers)
-        {
-            switch (layer)
-            {
-                case KaimingLinearLayer<T> linear:
-                {
-                    int inputs = linear.InFeatures, outputs = linear.OutFeatures;
-                    double std = Math.Sqrt(2.0 / inputs);
-                    linear.Load(Enumerable.Range(0, inputs * outputs).Select(_ => std * Normal()).ToArray(), new double[outputs]);
-                    break;
-                }
-                case KaimingConv1DLayer<T> conv when conv.Transposed:
-                {
-                    double bound = 1.0 / Math.Sqrt(conv.OutChannels * conv.KernelSize);
-                    int count = conv.InChannels * conv.OutChannels * conv.KernelSize;
-                    conv.Load(Enumerable.Range(0, count).Select(_ => (random.NextDouble() * 2 - 1) * bound).ToArray(),
-                        Enumerable.Range(0, conv.OutChannels).Select(_ => (random.NextDouble() * 2 - 1) * bound).ToArray());
-                    break;
-                }
-                case KaimingConv1DLayer<T> conv:
-                {
-                    double std = Math.Sqrt(2.0 / (conv.InChannels * conv.KernelSize));
-                    int count = conv.InChannels * conv.OutChannels * conv.KernelSize;
-                    conv.Load(Enumerable.Range(0, count).Select(_ => std * Normal()).ToArray(), new double[conv.OutChannels]);
-                    break;
-                }
-            }
-        }
-    }
-
-    /// <summary>Loads a CosyVoice <c>ConditionalDecoder</c> (or Matcha <c>Decoder</c>) state dict under <paramref name="prefix"/>.</summary>
-    public void LoadTorch(IReadOnlyDictionary<string, double[]> state, string prefix)
-    {
-        _time1.Load(state[prefix + "time_mlp.linear_1.weight"], state[prefix + "time_mlp.linear_1.bias"]);
-        _time2.Load(state[prefix + "time_mlp.linear_2.weight"], state[prefix + "time_mlp.linear_2.bias"]);
-        void Level(string p, ResnetBlock resnet, List<TransformerBlock> transformers)
-        {
-            resnet.Load(state, p + "0.");
-            for (int j = 0; j < transformers.Count; j++) transformers[j].Load(state, $"{p}1.{j}.");
-        }
-        // Downsample1D and Upsample1D wrap their convolution as ".conv"; the last level's plain Conv1d has none.
-        void Conv(KaimingConv1DLayer<T> conv, string name)
-        {
-            string key = state.ContainsKey(name + ".weight") ? name : name + ".conv";
-            conv.Load(state[key + ".weight"], state[key + ".bias"]);
-        }
-        for (int i = 0; i < _downs.Count; i++)
-        {
-            Level($"{prefix}down_blocks.{i}.", _downs[i].Resnet, _downs[i].Transformers);
-            Conv(_downs[i].Down, $"{prefix}down_blocks.{i}.2");
-        }
-        for (int i = 0; i < _mids.Count; i++) Level($"{prefix}mid_blocks.{i}.", _mids[i].Resnet, _mids[i].Transformers);
-        for (int i = 0; i < _ups.Count; i++)
-        {
-            Level($"{prefix}up_blocks.{i}.", _ups[i].Resnet, _ups[i].Transformers);
-            Conv(_ups[i].Up, $"{prefix}up_blocks.{i}.2");
-        }
-        _finalBlock.Load(state, prefix + "final_block.");
-        Conv(_finalProjection, prefix + "final_proj");
-    }
-
     /// <summary>Conv(3) → GroupNorm(8) → Mish, with the input and output masked.</summary>
     private sealed class Block
     {
@@ -559,11 +535,11 @@ internal sealed class MatchaDecoder<T>
             return _owner.Mask(engine.Mish(h), mask);
         }
 
-        public void Load(IReadOnlyDictionary<string, double[]> state, string p)
+        /// <summary>Loads <c>{p}block.0</c> (the convolution) and <c>{p}block.1</c> (the GroupNorm).</summary>
+        public void LoadTorch(Func<string, int[], double[]> read, string p)
         {
-            _conv.Load(state[p + "block.0.weight"], state[p + "block.0.bias"]);
-            var affine = state[p + "block.1.weight"].Concat(state[p + "block.1.bias"]).Select(v => NumOps.FromDouble(v)).ToArray();
-            _norm.SetParameters(new Vector<T>(affine));
+            _conv.LoadTorch(read(p + "block.0.weight", Array.Empty<int>()), read(p + "block.0.bias", Array.Empty<int>()));
+            _norm.LoadAffine(read(p + "block.1.weight", Array.Empty<int>()), read(p + "block.1.bias", Array.Empty<int>()));
         }
     }
 
@@ -597,18 +573,18 @@ internal sealed class MatchaDecoder<T>
             return engine.TensorAdd(h, _residual.Forward(_owner.Mask(x, mask)));
         }
 
-        public void Load(IReadOnlyDictionary<string, double[]> state, string p)
+        /// <summary>Loads Matcha's <c>ResnetBlock1D</c>: <c>mlp.1</c>, <c>block1</c>, <c>block2</c>, <c>res_conv</c>.</summary>
+        public void LoadTorch(Func<string, int[], double[]> read, string p)
         {
-            _timeProjection.Load(state[p + "mlp.1.weight"], state[p + "mlp.1.bias"]);
-            _block1.Load(state, p + "block1.");
-            _block2.Load(state, p + "block2.");
-            _residual.Load(state[p + "res_conv.weight"], state[p + "res_conv.bias"]);
+            _timeProjection.LoadTorch(read(p + "mlp.1.weight", Array.Empty<int>()), read(p + "mlp.1.bias", Array.Empty<int>()));
+            _block1.LoadTorch(read, p + "block1.");
+            _block2.LoadTorch(read, p + "block2.");
+            _residual.LoadTorch(read(p + "res_conv.weight", Array.Empty<int>()), read(p + "res_conv.bias", Array.Empty<int>()));
         }
     }
 
     /// <summary>diffusers' BasicTransformerBlock as Matcha configures it: pre-norm self-attention (no QKV bias, an
-    /// output projection then dropout) and a pre-norm feed-forward (SnakeBeta, or a GELU projection, to 4·dim, dropout,
-    /// linear), each residual.</summary>
+    /// output projection then dropout) and a pre-norm feed-forward (SnakeBeta to 4·dim, dropout, linear), each residual.</summary>
     private sealed class TransformerBlock
     {
         private readonly MatchaDecoder<T> _owner;
@@ -626,7 +602,7 @@ internal sealed class MatchaDecoder<T>
         private readonly KaimingLinearLayer<T> _ffOut;
         private readonly DropoutLayer<T>? _dropout;
 
-        public TransformerBlock(MatchaDecoder<T> owner, int dim, int heads, int headDim, double dropout, bool gelu)
+        public TransformerBlock(MatchaDecoder<T> owner, int dim, int heads, int headDim, double dropout)
         {
             _owner = owner;
             _dim = dim;
@@ -639,8 +615,8 @@ internal sealed class MatchaDecoder<T>
             _value = owner.Add(new KaimingLinearLayer<T>(dim, inner, false));
             _out = owner.Add(new KaimingLinearLayer<T>(inner, dim, true));
             _norm3 = owner.Add(new LayerNormalizationLayer<T>(dim, 1e-5));
-            if (gelu) _ffGelu = owner.Add(new KaimingLinearLayer<T>(dim, 4 * dim, true));
-            else _ffSnake = owner.Add(new SnakeBetaLayer<T>(dim, 4 * dim));
+            if (owner._feedForward == MatchaFeedForward.SnakeBeta) _ffSnake = owner.Add(new SnakeBetaLayer<T>(dim, 4 * dim));
+            else _ffGelu = owner.Add(new KaimingLinearLayer<T>(dim, 4 * dim, true));
             _ffOut = owner.Add(new KaimingLinearLayer<T>(4 * dim, dim, true));
             _dropout = dropout > 0 ? owner.Add(new DropoutLayer<T>(dropout)) : null;
         }
@@ -656,8 +632,11 @@ internal sealed class MatchaDecoder<T>
             var q = _query.Forward(normed);
             var k = _key.Forward(normed);
             var v = _value.Forward(normed);
-            // diffusers adds the float 0/1 key mask to the logits.
-            var additiveMask = engine.TensorTile(engine.Reshape(mask, new[] { 1, frames }), new[] { frames, 1 });
+            // Matcha: diffusers adds the float 0/1 key mask to the logits. CosyVoice: mask_to_bias, (1 − mask) · −1e10.
+            var keyMask = _owner._biasMask
+                ? engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorNegate(mask), NumOps.One), NumOps.FromDouble(-1e10))
+                : mask;
+            var additiveMask = engine.TensorTile(engine.Reshape(keyMask, new[] { 1, frames }), new[] { frames, 1 });
             var heads = new Tensor<T>[_heads];
             for (int i = 0; i < _heads; i++)
             {
@@ -672,29 +651,33 @@ internal sealed class MatchaDecoder<T>
             if (_dropout is not null) attended = _dropout.Forward(attended);
             h = engine.TensorAdd(h, attended);
 
-            var normed3 = _norm3.Forward(h);
-            var ff = _ffGelu is not null
-                ? AiDotNet.Helpers.ActivationHelper.ExactGelu(_ffGelu.Forward(normed3), engine)
-                : _ffSnake!.Forward(normed3);
+            var normedFeed = _norm3.Forward(h);
+            // diffusers GELU (approximate="none"): a linear map, then the exact GELU.
+            var ff = _ffSnake is not null ? _ffSnake.Forward(normedFeed) : ActivationHelper.ExactGelu((_ffGelu ?? throw new InvalidOperationException("A GELU block has its linear map.")).Forward(normedFeed), engine);
             if (_dropout is not null) ff = _dropout.Forward(ff);
             h = engine.TensorAdd(h, _ffOut.Forward(ff));
             return engine.Reshape(engine.TensorTranspose(h), new[] { 1, _dim, frames });
         }
 
-        public void Load(IReadOnlyDictionary<string, double[]> state, string p)
+        /// <summary>Loads diffusers' <c>BasicTransformerBlock</c> names: <c>norm1</c>, <c>attn1.to_q/k/v</c>,
+        /// <c>attn1.to_out.0</c>, <c>norm3</c>, <c>ff.net.0</c> (the GELU's <c>proj</c>, or SnakeBeta) and
+        /// <c>ff.net.2</c>.</summary>
+        public void LoadTorch(Func<string, int[], double[]> read, string p)
         {
             var engine = _owner._engine;
-            AiDotNet.TextToSpeech.CodecBased.TorchParameters.LayerNorm(engine, _norm1, state[p + "norm1.weight"], state[p + "norm1.bias"]);
-            _query.Load(state[p + "attn1.to_q.weight"], null);
-            _key.Load(state[p + "attn1.to_k.weight"], null);
-            _value.Load(state[p + "attn1.to_v.weight"], null);
-            _out.Load(state[p + "attn1.to_out.0.weight"], state[p + "attn1.to_out.0.bias"]);
-            AiDotNet.TextToSpeech.CodecBased.TorchParameters.LayerNorm(engine, _norm3, state[p + "norm3.weight"], state[p + "norm3.bias"]);
+            CodecBased.TorchParameters.LayerNorm(engine, _norm1, read(p + "norm1.weight", Array.Empty<int>()), read(p + "norm1.bias", Array.Empty<int>()));
+            _query.LoadTorch(read(p + "attn1.to_q.weight", Array.Empty<int>()), null);
+            _key.LoadTorch(read(p + "attn1.to_k.weight", Array.Empty<int>()), null);
+            _value.LoadTorch(read(p + "attn1.to_v.weight", Array.Empty<int>()), null);
+            _out.LoadTorch(read(p + "attn1.to_out.0.weight", Array.Empty<int>()), read(p + "attn1.to_out.0.bias", Array.Empty<int>()));
+            CodecBased.TorchParameters.LayerNorm(engine, _norm3, read(p + "norm3.weight", Array.Empty<int>()), read(p + "norm3.bias", Array.Empty<int>()));
             if (_ffGelu is not null)
-                _ffGelu.Load(state[p + "ff.net.0.proj.weight"], state[p + "ff.net.0.proj.bias"]);
+                _ffGelu.LoadTorch(read(p + "ff.net.0.proj.weight", Array.Empty<int>()), read(p + "ff.net.0.proj.bias", Array.Empty<int>()));
             else
-                _ffSnake!.Load(state[p + "ff.net.0.proj.weight"], state[p + "ff.net.0.proj.bias"], state[p + "ff.net.0.alpha"], state[p + "ff.net.0.beta"]);
-            _ffOut.Load(state[p + "ff.net.2.weight"], state[p + "ff.net.2.bias"]);
+                (_ffSnake ?? throw new InvalidOperationException("The block has a feed-forward input.")).LoadTorch(
+                    read(p + "ff.net.0.proj.weight", Array.Empty<int>()), read(p + "ff.net.0.proj.bias", Array.Empty<int>()),
+                    read(p + "ff.net.0.alpha", Array.Empty<int>()), read(p + "ff.net.0.beta", Array.Empty<int>()));
+            _ffOut.LoadTorch(read(p + "ff.net.2.weight", Array.Empty<int>()), read(p + "ff.net.2.bias", Array.Empty<int>()));
         }
     }
 }
