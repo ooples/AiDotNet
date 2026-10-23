@@ -181,9 +181,19 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectivePr
         }
         else if (UseNativeMode)
         {
+            // The class count is the architecture's stated output size or, when it states none, the options'
+            // NumClasses. Reading only the architecture built a one-class head for an architecture that left its
+            // output unstated (as #2147 allows), and a one-class softmax has no gradient to train on.
             Layers.AddRange(LayerHelper<T>.CreateDefaultSECBERTLayers(
-                Architecture, MaxSequenceLength, VocabularySize, HiddenDimension,
-                12, 12, _dropout)); // Default heads/layers
+                vocabularySize: VocabularySize,
+                maxSequenceLength: MaxSequenceLength,
+                hiddenDimension: HiddenDimension,
+                numAttentionHeads: 12, // Default heads/layers
+                intermediateDimension: HiddenDimension * 4,
+                numLayers: 12,
+                numClasses: Architecture.OutputSize > 0 ? Architecture.OutputSize : _options.NumClasses,
+                dropoutRate: _dropout,
+                taskType: "classification"));
 
         }
     }
