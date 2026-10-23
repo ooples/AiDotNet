@@ -77,7 +77,8 @@ public partial class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 10,
-            outputSize: 1))
+            // One weight per asset for the default 10 assets (#2147).
+            outputSize: 10))
     {
     }
 

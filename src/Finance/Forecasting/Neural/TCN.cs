@@ -1,4 +1,4 @@
-﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -284,7 +284,8 @@ public partial class TCN<T> : ForecastingModelBase<T>
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: 1,
-            outputSize: 1))
+            // The forecast spans the default options' 24-step horizon (#2147).
+            outputSize: 24))
     {
     }
 

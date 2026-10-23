@@ -6655,7 +6655,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputSize: 4, outputSize: 3), " +
+                    // #2147: the stated input is the options' 16-token sequence length.
+                    "inputSize: 16, outputSize: 3), " +
                     "new AiDotNet.Models.Options.FinMAOptions<double> { MaxSequenceLength = 16, " +
                     "VocabularySize = 64, HiddenDimension = 32, NumAttentionHeads = 4, " +
                     "IntermediateDimension = 64, NumLayers = 2, NumClasses = 3, NumAgents = 1, " +
@@ -9972,7 +9973,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 128, outputSize: 4), " +
-                    "new AiDotNet.Models.Options.SECBERTOptions<double> { DropoutRate = 0.0 })";
+                    // #2147: the stated 128-token input is the options' sequence length, not the 512 default.
+                    "new AiDotNet.Models.Options.SECBERTOptions<double> { MaxSequenceLength = 128, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "SpeakerLM" && model.TypeParameterCount == 1)
             {
@@ -13425,6 +13427,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     if (model.ClassName is "NeuralGARCH" or "RealizedVolatilityTransformer")
                     {
                         inputSize1D = 1;
+                    }
+
+                    // The factor models size their input layer from their options' NumFeatures (50 by default),
+                    // so the generic 16 states an input the model was not built for (#2147).
+                    if (model.ClassName is "AlphaFactorModel" or "FactorVAE")
+                    {
+                        inputSize1D = 50;
+                    }
+
+                    // Likewise NeuralVaR (10 features by default) and TSMixer, whose flat input size is its feature
+                    // count (7 by default), not a context length (#2147).
+                    if (model.ClassName == "NeuralVaR")
+                    {
+                        inputSize1D = 10;
+                    }
+                    if (model.ClassName == "TSMixer")
+                    {
+                        inputSize1D = 7;
                     }
 
                     // Sequence-labeling NER models (LSTM-CRF family) are language-domain, so the

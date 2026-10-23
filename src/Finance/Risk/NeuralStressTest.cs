@@ -80,7 +80,8 @@ public partial class NeuralStressTest<T> : RiskModelBase<T>
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 10,
-            outputSize: 1))
+            // One impact per stress scenario: the default 10 scenarios (#2147).
+            outputSize: 10))
     {
     }
 
