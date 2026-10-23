@@ -56,6 +56,7 @@ public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
     [TrainableParameter(Optional = true)]
     private readonly IProjectorHead<T>? _predictor;
     private readonly InfoNCELoss<T> _loss;
+    private readonly double _temperature;
     private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
 
     /// <inheritdoc />
@@ -93,8 +94,14 @@ public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
         Guard.NotNull(momentumProjector);
         _momentumProjector = momentumProjector;
         _predictor = predictor;
+        // The momentum projector tracks the online one by EMA, element for element, so the two must match in size.
+        if (projector is not null && momentumProjector is not null && projector.ParameterCount != momentumProjector.ParameterCount)
+            throw new ArgumentException(
+                $"The momentum projector has {momentumProjector.ParameterCount} parameters; the projector it tracks has {projector.ParameterCount}.",
+                nameof(momentumProjector));
 
         var temperature = _config.Temperature ?? 0.2; // MoCo v3 uses higher temperature
+        _temperature = temperature;
         _loss = new InfoNCELoss<T>(temperature);
         _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
@@ -146,46 +153,67 @@ public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
         };
     }
 
-    private void UpdateParameters(T learningRate)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Chen, Xie and He 2021, Alg. 1: each view's query (encoder, projector, predictor) is contrasted in-batch with
+    /// the other view's key from the momentum branch, L = ctr(q1, k2) + ctr(q2, k1), each scaled by 2t as in the
+    /// official code. Keys carry no gradient.
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2)
     {
-        // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // Update projector
-        if (_projector is not null)
-        {
-            var projGrads = new Vector<T>(_projector.GetParameterGradients());
-            var projParams = _projector.GetParameters();
-            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
-        }
-
-        // Update predictor
-        if (_predictor is not null)
-        {
-            var predGrads = new Vector<T>(_predictor.GetParameterGradients());
-            var predParams = _predictor.GetParameters();
-            _predictor.SetParameters(Engine.Subtract(predParams, Engine.Multiply(predGrads, learningRate)));
-        }
+        var q1 = Query(view1);
+        var q2 = Query(view2);
+        var k1 = Engine.StopGradient(Key(view1));
+        var k2 = Engine.StopGradient(Key(view2));
+        var total = Engine.TensorAdd(_loss.ComputeLoss(q1, k2), _loss.ComputeLoss(q2, k1));
+        return Engine.TensorMultiplyScalar(total, NumOps.FromDouble(2 * _temperature));
     }
 
-    private Tensor<T> ScaleGradient(Tensor<T> grad, T scale)
+    private Tensor<T> Query(Tensor<T> view)
     {
-        var batchSize = grad.Shape[0];
-        var dim = grad.Shape[1];
-        var scaled = new T[batchSize * dim];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                scaled[i * dim + j] = NumOps.Multiply(grad[i, j], scale);
-            }
-        }
-
-        return new Tensor<T>(scaled, [batchSize, dim]);
+        var z = EncodeForTraining(view);
+        if (_projector is not null) z = _projector.Project(z);
+        return _predictor is null ? z : _predictor.Project(z);
     }
+
+    private Tensor<T> Key(Tensor<T> view)
+    {
+        var k = _momentumEncoder.Encode(view);
+        return _momentumProjector is null ? k : _momentumProjector.Project(k);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The predictor is part of the online network.</remarks>
+    protected override IReadOnlyList<Tensor<T>> GetOnlineTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>(base.GetOnlineTrainableTensors());
+        if (_predictor is not null) tensors.AddRange(_predictor.GetTrainableTensors());
+        return tensors;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The momentum encoder and projector follow the online ones by EMA.</remarks>
+    protected override void AfterOptimizerStep()
+    {
+        _momentumEncoder.UpdateFromMainEncoder(_encoder);
+        if (_projector is null || _momentumProjector is null) return;
+        double m = _momentumEncoder.Momentum;
+        var online = _projector.GetParameters();
+        var target = _momentumProjector.GetParameters();
+        var updated = new Vector<T>(target.Length);
+        for (int i = 0; i < target.Length; i++)
+            updated[i] = NumOps.Add(NumOps.Multiply(target[i], NumOps.FromDouble(m)),
+                NumOps.Multiply(online[i], NumOps.FromDouble(1.0 - m)));
+        _momentumProjector.SetParameters(updated);
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => _augmentation.ApplyBYOL(batch);
+
+    /// <inheritdoc />
+    /// <remarks>The paper trains ViT backbones with AdamW (Sec. 4).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.AdamW;
 
     /// <inheritdoc />
     public override void OnEpochStart(int epochNumber)

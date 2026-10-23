@@ -72,6 +72,15 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Huang et al. 2017, Sec. 4: SGD with Nesterov momentum 0.9 without dampening and weight decay 1e-4, initial learning rate 0.1 divided by 10 at 50% and 75% of the total epochs, batch size 64 on CIFAR (256 on ImageNet). The decay points are kept as the fractions the paper states rather than transcribed for one epoch count. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
+    /// <inheritdoc/>
+    /// <remarks>An architecture may state the image it is configured for, height x width x channels (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        new[] { _configuration.InputHeight * _configuration.InputWidth * _configuration.InputChannels };
+
     private readonly DenseNetOptions _options;
 
     private readonly ILossFunction<T> _lossFunction;
@@ -292,7 +301,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         else
         {
             // Use DenseNet-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultDenseNetLayers(Architecture, _configuration));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultDenseNetLayers(_configuration));
         }
     }
 

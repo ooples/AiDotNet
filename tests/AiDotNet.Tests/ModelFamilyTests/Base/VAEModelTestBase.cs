@@ -129,4 +129,27 @@ public abstract class VAEModelTestBase
         Assert.True(parameters.Length > 0, "A VAE has learnable parameters.");
         Assert.Equal(vae.ParameterCount, parameters.Length);
     }
+
+    [SkippableFact(Timeout = 120000)]
+    public async Task VideoEncode_CompressesTimeAsDeclared()
+    {
+        await Task.Yield();
+        var vae = CreateVAE();
+        Skip.IfNot(vae is IVideoVAEModel<double>, $"{vae.GetType().Name} is an image VAE.");
+        var video = (IVideoVAEModel<double>)vae;
+        // A causal clip of 1 + 2 x TemporalCompression frames.
+        int frames = 1 + 2 * video.TemporalCompression;
+        int size = Math.Max(ImageSize, 2 * vae.DownsampleFactor);
+        var clip = new Tensor<double>(new[] { 1, vae.InputChannels, frames, size, size });
+        var rng = RandomHelper.CreateSeededRandom(7);
+        for (int i = 0; i < clip.Length; i++) clip[i] = rng.NextDouble() * 2 - 1;
+
+        var latent = vae.Encode(clip, sampleMode: false);
+        var reconstruction = vae.Decode(latent);
+
+        Assert.Equal(3, video.GetLatentFrameCount(frames));
+        Assert.Equal(new[] { 1, vae.LatentChannels, 3, size / vae.DownsampleFactor, size / vae.DownsampleFactor }, latent.Shape.ToArray());
+        Assert.Equal(clip.Shape.ToArray(), reconstruction.Shape.ToArray());
+        AssertFinite(reconstruction, "video reconstruction");
+    }
 }

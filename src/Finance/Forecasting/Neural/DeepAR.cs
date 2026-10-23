@@ -266,7 +266,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         : base(architecture, onnxModelPath,
                OptionsOrDefault(options).LookbackWindow,
                OptionsOrDefault(options).ForecastHorizon,
-               architecture.InputSize)
+               ArchitectureAgreement.SequenceFeatureCount(architecture))
     {
         options ??= new DeepAROptions<T>();
         _options = options;
@@ -333,7 +333,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         : base(architecture,
                OptionsOrDefault(options).LookbackWindow,
                OptionsOrDefault(options).ForecastHorizon,
-               architecture.InputSize,
+               ArchitectureAgreement.SequenceFeatureCount(architecture),
                lossFunction)
     {
         options ??= new DeepAROptions<T>();
@@ -588,7 +588,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     /// For example, the 0.5 quantile is the median prediction, while 0.1 and 0.9 give you an 80% confidence interval.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         // Point forecast = the distribution mean from the layer stack, computed
         // identically to the training-path forward (ForwardNativeForTraining also
@@ -769,14 +769,16 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         Tensor<T> mu = current;
         Tensor<T> sigma = current;
 
+        // The heads map every step to the horizon; the forecast is made from the last step's hidden state, which the
+        // recurrence has carried through the whole conditioning range.
         if (_muProjection is not null)
         {
-            mu = _muProjection.Forward(current);
+            mu = LastTimeStep(_muProjection.Forward(current));
         }
 
         if (_sigmaProjection is not null)
         {
-            sigma = _sigmaProjection.Forward(current);
+            sigma = LastTimeStep(_sigmaProjection.Forward(current));
             // Both parameters are scaled: mu is a value in the series' units and sigma a spread in
             // the same units, so both carry the factor back (paper section 3.3).
             _lastSigma = MultiplyBySeriesScale(sigma, scale);

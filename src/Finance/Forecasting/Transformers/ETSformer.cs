@@ -268,7 +268,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.SequenceLength;
         _predictionHorizon = options.PredictionHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _modelDimension = options.ModelDimension;
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
@@ -318,7 +318,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.SequenceLength;
         _predictionHorizon = options.PredictionHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _modelDimension = options.ModelDimension;
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
@@ -499,7 +499,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the ETSformer model, Forecast produces predictions from input data. This is the main inference step of the ETSformer architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (_useInstanceNormalization)
             historicalData = ApplyInstanceNormalization(historicalData);

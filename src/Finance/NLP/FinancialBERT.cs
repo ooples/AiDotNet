@@ -157,9 +157,18 @@ public partial class FinancialBERT<T> : FinancialNLPModelBase<T>
         }
         else if (UseNativeMode)
         {
+            // The class count is the architecture's stated output size or, when it states none, the options'
+            // NumClasses: an unstated output (as #2147 allows) otherwise built a one-class head with no gradient.
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinancialBERTLayers(
-                Architecture, MaxSequenceLength, VocabularySize, HiddenDimension,
-                _options.NumAttentionHeads, _options.NumLayers, _dropout));
+                vocabularySize: VocabularySize,
+                maxSequenceLength: MaxSequenceLength,
+                hiddenDimension: HiddenDimension,
+                numAttentionHeads: _options.NumAttentionHeads,
+                intermediateDimension: HiddenDimension * 4,
+                numLayers: _options.NumLayers,
+                numClasses: Architecture.OutputSize > 0 ? Architecture.OutputSize : _options.NumClasses,
+                dropoutRate: _dropout,
+                taskType: "sentiment"));
 
         }
     }

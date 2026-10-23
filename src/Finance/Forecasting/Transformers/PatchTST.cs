@@ -698,7 +698,7 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// Together, these form a prediction interval that shows how confident the model is.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));

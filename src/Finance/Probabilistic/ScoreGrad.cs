@@ -336,7 +336,6 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultScoreGradLayers(
-                Architecture,
                 _sequenceLength,
                 _forecastHorizon,
                 _numFeatures,
@@ -576,7 +575,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     /// If quantiles are specified, generates multiple samples and computes percentiles.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         _random = CreateSamplingStream();
         if (quantiles is not null && quantiles.Length > 0)

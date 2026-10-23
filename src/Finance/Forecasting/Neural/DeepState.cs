@@ -290,7 +290,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _stateDimension = options.StateDimension;
         _hiddenDimension = options.HiddenDimension;
         _numRnnLayers = options.NumRnnLayers;
@@ -342,7 +342,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _stateDimension = options.StateDimension;
         _hiddenDimension = options.HiddenDimension;
         _numRnnLayers = options.NumRnnLayers;
@@ -383,7 +383,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultDeepStateLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _stateDimension, _hiddenDimension, _numRnnLayers, _dropout));
 
             ExtractLayerReferences();
@@ -577,7 +577,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the DeepState model, Forecast produces predictions from input data. This is the main inference step of the DeepState architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }

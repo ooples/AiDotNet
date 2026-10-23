@@ -55,6 +55,10 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762")]
     public partial class TransformerEmbeddingNetwork<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
+        /// <inheritdoc/>
+        /// <remarks>An architecture may state the embedding width or the maximum token count (#2147).</remarks>
+        protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions => new[] { EmbeddingDimension, MaxTokens };
+
         private readonly TransformerEmbeddingOptions _options;
 
         #region Fields
