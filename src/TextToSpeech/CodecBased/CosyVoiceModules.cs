@@ -4,13 +4,26 @@ using AiDotNet.TextToSpeech.FlowDiffusion;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
+/// <summary>The loss CosyVoice's flow matching minimizes.</summary>
+public enum CosyVoiceFlowLoss
+{
+    /// <summary>
+    /// The paper's eq. 10, <c>|ω_t − ν_t|</c>: the absolute error between the target vector field and the network's,
+    /// averaged over the mel channels and frames.
+    /// </summary>
+    AbsoluteError,
+
+    /// <summary>The official code's <c>compute_loss</c>: the squared error (<c>F.mse_loss</c>), averaged the same way.</summary>
+    SquaredError,
+}
+
 /// <summary>The sizes of CosyVoice 1's flow model (<c>MaskedDiffWithXvec</c> with its encoder, length regulator and
 /// conditional flow matching).</summary>
 internal sealed record CosyVoiceFlowConfiguration(
     int VocabSize, int InputSize, int OutputSize, int SpeakerDim, int InputFrameRate, int SampleRate, int HopSize,
     WenetEncoderConfiguration Encoder, int RegulatorStages, int[] DecoderChannels, int DecoderHeads, int DecoderHeadDim,
     int DecoderBlocksPerLevel, int DecoderMidBlocks, double SigmaMin, double TrainingCfgRate, double InferenceCfgRate,
-    int Timesteps);
+    int Timesteps, CosyVoiceFlowLoss Loss = CosyVoiceFlowLoss.AbsoluteError);
 
 /// <summary>
 /// CosyVoice 1's flow model (FunAudioLLM/CosyVoice <c>cosyvoice/flow</c>: <c>MaskedDiffWithXvec</c>,
@@ -24,7 +37,9 @@ internal sealed record CosyVoiceFlowConfiguration(
 /// <para>Training (<c>compute_loss</c>): t ~ U(0, 1), noise z, the path y = (1 − (1 − σ)t) z + t x₁ and target
 /// u = x₁ − (1 − σ) z; with probability <see cref="CosyVoiceFlowConfiguration.TrainingCfgRate"/> the encoder output,
 /// the x-vector and the prompt condition are dropped; the loss is the masked mean square of the estimator's field
-/// against u. Half the utterances condition on a random prefix of up to 30 % of their own mel.</para>
+/// against u — by default the paper's absolute error (eq. 10), or the code's squared error
+/// (<see cref="CosyVoiceFlowConfiguration.Loss"/>). Half the utterances condition on a random prefix of up to 30 % of
+/// their own mel (<see cref="TrainingLoss"/> draws all of this).</para>
 /// <para>Inference: Euler steps over the cosine schedule t = 1 − cos(πs/2), each estimate guided as
 /// (1 + w)·v(cond) − w·v(uncond) with w = <see cref="CosyVoiceFlowConfiguration.InferenceCfgRate"/>.</para>
 /// </remarks>
@@ -173,9 +188,71 @@ internal sealed class CosyVoiceFlow<T>
         }
         var mask = Ones(frames);
         var difference = _engine.TensorSubtract(Field(y, mu, speaker, condition, t, mask), u);
-        // F.mse_loss(..., reduction="sum") / (Σ mask · channels).
-        return _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), new[] { 0, 1, 2 }, false),
+        // Σ |·| or Σ (·)² over the frames, divided by (Σ mask · channels), as compute_loss normalizes.
+        var pointwise = c.Loss == CosyVoiceFlowLoss.SquaredError ? _engine.TensorMultiply(difference, difference) : _engine.TensorAbs(difference);
+        return _engine.TensorMultiplyScalar(_engine.ReduceSum(pointwise, new[] { 0, 1, 2 }, false),
             NumOps.FromDouble(1.0 / (frames * c.OutputSize)));
+    }
+
+    /// <summary>
+    /// <c>MaskedDiffWithXvec.forward</c> for one utterance with every random draw made from <paramref name="random"/>:
+    /// half the time no prompt, otherwise a prefix of U{0, …, ⌊0.3 · frames⌋} frames of the target as the condition;
+    /// t ~ U(0, 1); the noise; and the conditions dropped with probability <see cref="CosyVoiceFlowConfiguration.TrainingCfgRate"/>.
+    /// </summary>
+    /// <param name="tokens">The utterance's speech tokens.</param>
+    /// <param name="mel">Its mel <c>[1, OutputSize, frames]</c>.</param>
+    /// <param name="xvector">Its speaker x-vector.</param>
+    /// <param name="training">Whether dropout is active.</param>
+    /// <param name="random">The draws' source.</param>
+    public Tensor<T> TrainingLoss(IReadOnlyList<int> tokens, Tensor<T> mel, Tensor<T> xvector, bool training, Random random)
+    {
+        var c = Configuration;
+        int frames = mel.Shape[2];
+        var mu = Stretch(Encode(tokens, training, random), frames);
+        int prompt = random.NextDouble() < 0.5 ? 0 : random.Next((int)(0.3 * frames) + 1);
+        var condition = new Tensor<T>(new[] { 1, c.OutputSize, frames });
+        for (int m = 0; m < c.OutputSize; m++)
+            for (int f = 0; f < prompt; f++) condition[0, m, f] = mel[0, m, f];
+        double t = random.NextDouble();
+        var noise = new Tensor<T>(new[] { 1, c.OutputSize, frames });
+        for (int i = 0; i < noise.Length; i++)
+            noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
+        bool drop = !(random.NextDouble() > c.TrainingCfgRate);
+        return Loss(mel, mu, ProjectSpeaker(xvector), condition, t, noise, drop);
+    }
+
+    /// <summary>
+    /// μ for generation (<c>InterpolateRegulator.inference</c>): the prompt's and the text's encoded tokens
+    /// <c>[tokens, OutputSize]</c> stretched separately to their frame counts — the text's first and last 20 tokens each
+    /// to <c>int(20 / frame rate · sample rate / hop)</c> frames when it has more than 40 — then the regulator's stages;
+    /// <c>[1, OutputSize, promptFrames + textFrames]</c>.
+    /// </summary>
+    public Tensor<T> StretchForInference(Tensor<T> promptEncoded, Tensor<T> textEncoded, int promptFrames, int textFrames)
+    {
+        var c = Configuration;
+        Tensor<T> Channels(Tensor<T> encoded, int start, int count) =>
+            _engine.Reshape(_engine.TensorTranspose(_engine.TensorSlice(encoded, new[] { start, 0 }, new[] { count, encoded.Shape[1] })),
+                new[] { 1, encoded.Shape[1], count });
+        int tokens = textEncoded.Shape[0];
+        Tensor<T> text;
+        if (tokens > 40)
+        {
+            int edge = MelFrames(20);
+            text = _engine.TensorConcatenate(new[]
+            {
+                Interpolate(Channels(textEncoded, 0, 20), edge),
+                Interpolate(Channels(textEncoded, 20, tokens - 40), textFrames - 2 * edge),
+                Interpolate(Channels(textEncoded, tokens - 20, 20), edge),
+            }, 2);
+        }
+        else
+        {
+            text = Interpolate(Channels(textEncoded, 0, tokens), textFrames);
+        }
+        var x = promptEncoded.Shape[0] != 0
+            ? _engine.TensorConcatenate(new[] { Interpolate(Channels(promptEncoded, 0, promptEncoded.Shape[0]), promptFrames), text }, 2)
+            : text;
+        return Regulate(x);
     }
 
     /// <summary>
