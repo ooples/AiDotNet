@@ -435,6 +435,77 @@ public class OptionsSeedReassignmentTests
         return model.GetParameters().ToArray();
     }
 
+    /// <summary>
+    /// Adopts the caller's layers only when its parameters are first read, in <c>EnsureParametersReady</c>, as models
+    /// that assemble their stack lazily do. The seed has to be wired after that, onto the adopted layers.
+    /// </summary>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    private sealed class AdoptsCallerBuiltLayersLazily : NeuralNetworkBase<double>
+    {
+        private readonly NeuralNetworkOptions _options;
+
+        public AdoptsCallerBuiltLayersLazily(NeuralNetworkArchitecture<double> architecture, int? seed)
+            : base(architecture, new MeanSquaredErrorLoss<double>())
+        {
+            _options = new NeuralNetworkOptions { Seed = seed };
+        }
+
+        public override ModelOptions GetOptions() => _options;
+
+        protected override void EnsureParametersReady()
+        {
+            if (Layers.Count == 0)
+                InitializeLayers();
+        }
+
+        protected override void InitializeLayers()
+        {
+            foreach (var layer in Architecture.Layers)
+                Layers.Add(layer);
+        }
+
+        public override IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
+            => new AdoptsCallerBuiltLayersLazily(Architecture, _options.Seed);
+
+        public override ModelMetadata<double> GetModelMetadata() => new()
+        {
+            Name = nameof(AdoptsCallerBuiltLayersLazily),
+            Description = "Test double that adopts the caller's layers on the first parameter read.",
+        };
+    }
+
+    private static double[] LazilyAdoptedLayerParameters(int seed)
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4, outputSize: 4,
+            layers: new List<ILayer<double>>
+            {
+                new FullyConnectedLayer<double>(
+                    8, (IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()),
+                new FullyConnectedLayer<double>(
+                    4, (IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()),
+            });
+        // GetParameters is the first read: it assembles the stack and materialises the weights in one call.
+        return new AdoptsCallerBuiltLayersLazily(architecture, seed).GetParameters().ToArray();
+    }
+
+    [Fact]
+    public void OptionsKeptByAModelThatAdoptsLayersLazily_SeedTheAdoptedLayers()
+    {
+        var first = LazilyAdoptedLayerParameters(2290);
+        AdvanceTheSharedGenerator();
+        var second = LazilyAdoptedLayerParameters(2290);
+        var other = LazilyAdoptedLayerParameters(2291);
+
+        Assert.NotEmpty(first);
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, other);
+    }
+
     [Fact]
     public void OptionsKeptByAModelThatBuildsNoLayer_StillSeedItsInitialWeights()
     {

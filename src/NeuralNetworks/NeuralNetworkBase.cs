@@ -949,8 +949,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     private AiDotNet.Models.Parameters.ParameterLayoutSnapshot BuildParameterLayout()
     {
-        CompleteOwnOptionsSeedDeferral();
         EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
 
         var slots = new List<AiDotNet.Models.Parameters.ParameterSlotDescriptor>();
@@ -1123,8 +1123,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // that builds its layers lazily has nothing to walk until it has run its own initializer.
         // Reading the parameters materialises lazy weights, so the options seed of a model that kept its options
         // to itself has to reach its layers before that (see CompleteOwnOptionsSeedDeferral).
-        CompleteOwnOptionsSeedDeferral();
         EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
 
         // Size the flat buffer from the SAME quantity that fills it — each
@@ -5407,8 +5407,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     public void MaterializeParameters()
     {
         // Drawing the weights is the last moment a pending options seed can still decide them.
-        CompleteOwnOptionsSeedDeferral();
         EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
 
         if (Layers is not null)
@@ -5430,8 +5430,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
         AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
     {
-        CompleteOwnOptionsSeedDeferral();
         EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
         if (intent != AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe)
             MaterializeParameters();
@@ -6783,6 +6783,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
         RequireArchitectureAgreesWithInput();
+        // A model that assembles its layers lazily does so here; the seed must be wired onto those layers.
+        EnsureParametersReady();
         CompleteOwnOptionsSeedDeferral();
 
         // Inference semantics belong in the NON-VIRTUAL funnel. Keeping this transition inside the
