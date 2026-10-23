@@ -7458,9 +7458,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     /// <summary>
     /// Applies the seed of the options a derived model returns from <see cref="GetOptions"/>, for the layer
-    /// initialization scope's deferral (see the constructor). Returns <c>false</c> while the model has no options of
-    /// its own yet, and <c>true</c> once it has applied their seed, found none, or already holds layers.
+    /// initialization scope's deferral (see the constructor). Returns <c>false</c> while the model's options are the
+    /// base's, and <c>true</c> once it has applied its own options' seed, found none, or a layer already exists.
     /// </summary>
+    /// <remarks>
+    /// It runs inside a layer's constructor while the model is still being built, so it reads nothing but
+    /// <see cref="GetOptions"/>. It used to enumerate <see cref="GetExtraTrainableLayers"/> to find layers kept outside
+    /// <see cref="Layers"/>, and a generated enumeration reads properties that throw until the model has assigned
+    /// them: every native Florence-2 and GOT-OCR2 failed to construct.
+    /// </remarks>
     private bool TryApplyConstructionOptionsSeed()
     {
         // The Options setter's rule: a seed applies only while no layer exists yet. A model that already holds layers
@@ -7468,15 +7474,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // thread (a standalone backbone after a detector), which must not inherit this model's seed.
         if (_optionsSeed is not null || _layers is { Count: > 0 })
             return true;
-        if (GetOptions() is not { } own || ReferenceEquals(own, _modelOptions))
+        var own = GetOptions();
+        // A layer asking before the model's own options exist is one the model built first, wherever it keeps it
+        // (Layers or a field of its own), so by the same rule the seed no longer applies; the deferral ends here rather
+        // than handing that seed to an unrelated layer requested after construction.
+        if (own is null)
+            return true;
+        if (ReferenceEquals(own, _modelOptions))
             return false;
-        // Layers held outside Layers count as built too: a model that keeps its layers only there and built them
-        // before its options existed would otherwise hand its seed to an unrelated layer requested later.
-        foreach (var extra in GetExtraTrainableLayers())
-        {
-            if (extra is not null)
-                return true;
-        }
         if (own.Seed is int seed)
             ApplyOptionsSeed(seed);
         return true;
