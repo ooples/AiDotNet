@@ -271,7 +271,7 @@ public class ResourceMonitor : IDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ResourceMonitor] Error sampling resources: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"[ResourceMonitor] Error sampling resources: {ex}");
         }
     }
 
