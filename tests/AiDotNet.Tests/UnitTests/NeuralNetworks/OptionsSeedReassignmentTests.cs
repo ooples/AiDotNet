@@ -70,6 +70,68 @@ public class OptionsSeedReassignmentTests
         Assert.Equal(first.Length, second.Length);
         Assert.NotEqual(first, second);
     }
+/// <summary>
+    /// The same reassignment in a model that keeps its layers outside Layers, as detection backbones and the audio
+    /// and vision-language text encoders do. The setter's "no layer exists yet" check looked only at Layers.
+    /// </summary>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    private sealed class ReassignsOptionsOffList : NeuralNetworkBase<double>
+    {
+        private readonly NeuralNetworkOptions _options;
+        private readonly FullyConnectedLayer<double> _first;
+        private readonly FullyConnectedLayer<double> _second;
+
+        public ReassignsOptionsOffList(NeuralNetworkArchitecture<double> architecture, int seed)
+            : base(architecture, new MeanSquaredErrorLoss<double>())
+        {
+            _options = new NeuralNetworkOptions { Seed = seed };
+            Options = _options;
+            _first = new FullyConnectedLayer<double>(4, 4, new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+
+            // The same seeded options, assigned again part-way through construction.
+            Options = _options;
+            _second = new FullyConnectedLayer<double>(4, 4, new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+        }
+
+        public FullyConnectedLayer<double> First => _first;
+
+        public FullyConnectedLayer<double> Second => _second;
+
+        protected override System.Collections.Generic.IEnumerable<LayerBase<double>?> GetExtraTrainableLayers()
+        {
+            yield return _first;
+            yield return _second;
+        }
+
+        protected override void InitializeLayers()
+        {
+        }
+
+        public override IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
+            => new ReassignsOptionsOffList(Architecture, _options.Seed ?? 0);
+
+        public override ModelMetadata<double> GetModelMetadata() => new()
+        {
+            Name = nameof(ReassignsOptionsOffList),
+            Description = "Test double that reassigns its seeded options between two off-list layers.",
+        };
+    }
+
+    [Fact]
+    public void ReassigningTheSameSeededOptions_DoesNotRepeatTheSeedsOfOffListLayers()
+    {
+        var model = new ReassignsOptionsOffList(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 4, outputSize: 4),
+            seed: 2290);
+
+        Assert.NotNull(model.First.RandomSeed);
+        Assert.NotEqual(model.First.RandomSeed, model.Second.RandomSeed);
+    }
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,

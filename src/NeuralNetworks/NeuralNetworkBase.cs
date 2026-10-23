@@ -299,9 +299,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _modelOptions = value;
             // Only while no layer exists yet: restarting the construction scope after layers were built
             // would hand later layers the seeds earlier ones already used, so they would initialise alike.
-            if (_layers is null || _layers.Count == 0)
+            if (!HasBuiltLayers())
                 ApplyOptionsSeed(value?.Seed);
         }
+    }
+
+    /// <summary>
+    /// Whether this model holds any layer yet, in <see cref="Layers"/> or outside it
+    /// (<see cref="GetExtraTrainableLayers"/>), as detection backbones and the audio and vision-language text
+    /// encoders do.
+    /// </summary>
+    private bool HasBuiltLayers()
+    {
+        if (_layers is { Count: > 0 })
+            return true;
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is not null)
+                return true;
+        }
+        return false;
     }
 
     private ModelOptions _modelOptions = new NeuralNetworkOptions();
@@ -384,7 +401,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _creditRule = rule;
         if (seed.HasValue)
         {
-            _creditRuleRandom = new Random(seed.Value);
+            _creditRuleRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value);
         }
     }
 
@@ -5595,7 +5612,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 int[]? rootOutput = null;
                 try { rootOutput = layer.GetOutputShape(); }
-                catch { }
+                catch (Exception ex)
+                {
+                    // A root whose shape waits for its first input stops the walk below, as an unknown shape does.
+                    System.Diagnostics.Trace.TraceInformation(
+                        $"Shape walk: {layer.GetType().Name} could not report its output shape yet " +
+                        $"({ex.GetType().Name}: {ex.Message}).");
+                }
 
                 if (rootOutput is null
                     || rootOutput.Length == 0
