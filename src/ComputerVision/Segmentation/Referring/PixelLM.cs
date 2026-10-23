@@ -73,7 +73,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 public partial class PixelLM<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly PixelLMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only PixelLM's OWN configuration lives here. _height, _width, _channels, _numClasses,

@@ -45,14 +45,14 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ResearchPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition Models from Encoder-Decoder to LLM Integration", "https://arxiv.org/abs/2501.14350", Year = 2025, Authors = "FireRed Team")]
 public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly FireRedASRLLMOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly FireRedASRLLMOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public FireRedASRLLM(NeuralNetworkArchitecture<T> architecture, string modelPath, FireRedASRLLMOptions? options = null) : base(architecture) { _options = options ?? new FireRedASRLLMOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
-    public FireRedASRLLM(NeuralNetworkArchitecture<T> architecture, FireRedASRLLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new FireRedASRLLMOptions(); ValidateOptions(_options); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
+    public FireRedASRLLM(NeuralNetworkArchitecture<T> architecture, string modelPath, FireRedASRLLMOptions? options = null) : base(architecture) { _options = options ?? new FireRedASRLLMOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
+    public FireRedASRLLM(NeuralNetworkArchitecture<T> architecture, FireRedASRLLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new FireRedASRLLMOptions(); Options = _options; ValidateOptions(_options); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using FireRedASR encoder + Qwen2 LLM decoder.

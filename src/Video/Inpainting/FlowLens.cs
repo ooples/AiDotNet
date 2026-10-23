@@ -61,9 +61,6 @@ public partial class FlowLens<T> : VideoInpaintingBase<T>
 {
     private readonly FlowLensOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -80,6 +77,7 @@ public partial class FlowLens<T> : VideoInpaintingBase<T>
         if (string.IsNullOrEmpty(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new FlowLensOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsTemporalPropagation = true;
         _options.ModelPath = modelPath;
@@ -97,6 +95,7 @@ public partial class FlowLens<T> : VideoInpaintingBase<T>
         : base(architecture)
     {
         _options = options ?? new FlowLensOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,

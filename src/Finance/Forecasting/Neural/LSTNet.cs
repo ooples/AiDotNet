@@ -193,9 +193,6 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly LSTNetOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The lookback window size.
     /// </summary>

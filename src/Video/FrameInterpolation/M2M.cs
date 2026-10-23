@@ -69,7 +69,6 @@ public partial class M2M<T> : FrameInterpolationBase<T>
     #region Fields
 
     private readonly M2MOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -85,6 +84,7 @@ public partial class M2M<T> : FrameInterpolationBase<T>
         if (string.IsNullOrEmpty(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new M2MOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
         _options.ModelPath = modelPath;
@@ -98,6 +98,7 @@ public partial class M2M<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new M2MOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

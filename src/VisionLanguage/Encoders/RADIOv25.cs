@@ -68,8 +68,6 @@ public partial class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly RADIOv25Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -82,6 +80,7 @@ public partial class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         : base(architecture)
     {
         _options = options ?? new RADIOv25Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -103,6 +102,7 @@ public partial class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         : base(architecture)
     {
         _options = options ?? new RADIOv25Options();
+        Options = _options;
         if (architecture.InputHeight > 0)
         {
             if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
@@ -116,6 +116,7 @@ public partial class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
                     nameof(architecture)
                 );
             _options = new RADIOv25Options(_options) { ImageSize = architecture.InputHeight };
+            Options = _options;
         }
         _useNativeMode = true;
         _optimizer = optimizer

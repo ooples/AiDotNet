@@ -85,9 +85,6 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
 {
     private readonly CogVideoOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

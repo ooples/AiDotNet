@@ -79,9 +79,6 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly EfficientNetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly EfficientNetConfiguration _configuration;

@@ -109,8 +109,6 @@ public partial class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<
     private bool _disposed;
     private int _encoderLayerEnd;
 
-    public override ModelOptions GetOptions() => _options;
-
     public RT2(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -119,6 +117,7 @@ public partial class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<
         : base(architecture)
     {
         _options = options ?? new RT2Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -143,6 +142,7 @@ public partial class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<
         : base(architecture)
     {
         _options = options ?? new RT2Options();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;

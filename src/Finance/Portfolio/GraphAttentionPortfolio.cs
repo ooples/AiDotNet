@@ -64,9 +64,6 @@ public partial class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
 {
     private readonly GraphAttentionPortfolioOptions<T> _options;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Gets the graph builder: volatility series, distance correlation and TMFG filtering.</summary>
     public AssetGraphBuilder<T> Graph { get; }
 

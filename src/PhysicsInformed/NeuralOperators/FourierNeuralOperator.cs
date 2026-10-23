@@ -126,9 +126,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     {
         private readonly FourierNeuralOperatorOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly int _modes; // Number of Fourier modes to keep
         private readonly int _width; // Channel width of the network
         private readonly int[] _spatialDimensions;

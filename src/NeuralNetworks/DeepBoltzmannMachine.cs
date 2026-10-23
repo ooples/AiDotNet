@@ -61,9 +61,6 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     private readonly DeepBoltzmannMachineOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the bias vectors for each layer in the network.
     /// </summary>

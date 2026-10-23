@@ -45,14 +45,14 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("Qwen3-ASR Technical Report", "https://qwenlm.github.io/blog/qwen3/", Year = 2025, Authors = "Qwen Team")]
 public partial class Qwen3ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly Qwen3ASROptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly Qwen3ASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public Qwen3ASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Qwen3ASROptions? options = null) : base(architecture) { _options = options ?? new Qwen3ASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en", "ja", "ko", "de", "es", "fr", "it", "pt", "ru", "ar", "hi", "tr", "vi", "th" }; InitializeLayers(); }
-    public Qwen3ASR(NeuralNetworkArchitecture<T> architecture, Qwen3ASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Qwen3ASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en", "ja", "ko", "de", "es", "fr", "it", "pt", "ru", "ar", "hi", "tr", "vi", "th" }; InitializeLayers(); }
+    public Qwen3ASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Qwen3ASROptions? options = null) : base(architecture) { _options = options ?? new Qwen3ASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en", "ja", "ko", "de", "es", "fr", "it", "pt", "ru", "ar", "hi", "tr", "vi", "th" }; InitializeLayers(); }
+    public Qwen3ASR(NeuralNetworkArchitecture<T> architecture, Qwen3ASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Qwen3ASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en", "ja", "ko", "de", "es", "fr", "it", "pt", "ru", "ar", "hi", "tr", "vi", "th" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Conformer encoder + Qwen3 LLM decoder.

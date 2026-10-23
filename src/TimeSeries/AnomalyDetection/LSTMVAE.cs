@@ -57,8 +57,6 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
 {
     private readonly LSTMVAEOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     // Encoder (Tensor-based)
@@ -79,6 +77,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         : base(options ??= new LSTMVAEOptions<T>())
     {
         _options = options;
+        Options = _options;
 
         _encoder = new LSTMEncoderTensor<T>(_options.WindowSize, _options.LatentDim, _options.HiddenSize, SeedOr(42));
         _decoder = new LSTMDecoderTensor<T>(_options.LatentDim, _options.WindowSize, _options.HiddenSize, SeedOr(42));

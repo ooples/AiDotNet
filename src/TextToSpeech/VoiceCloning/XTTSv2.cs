@@ -39,8 +39,6 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly XTTSv2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -53,6 +51,7 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new XTTSv2Options();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -75,6 +74,7 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(classAxis: -1))
     {
         _options = options ?? new XTTSv2Options();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;

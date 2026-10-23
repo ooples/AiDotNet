@@ -80,6 +80,7 @@ public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceL
         : base(architecture)
     {
         _options = options;
+        Options = _options;
         _options.ModelPath = modelPath;
         _useNativeMode = false;
         _modelName = modelName;
@@ -101,6 +102,7 @@ public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceL
         : base(architecture)
     {
         _options = options;
+        Options = _options;
         _useNativeMode = true;
         _modelName = modelName;
         _paperCitation = paperCitation;
@@ -115,9 +117,6 @@ public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceL
     #endregion
 
     #region Properties
-
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Gets the options for this transformer NER model.

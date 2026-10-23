@@ -58,9 +58,6 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
 {
     private readonly ClipOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private string _imageEncoderPath;
     private string _textEncoderPath;
     private readonly ITokenizer _tokenizer;

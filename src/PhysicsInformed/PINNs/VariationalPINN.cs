@@ -103,9 +103,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
     {
         private readonly VariationalPINNOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly Func<T[], T[], T[,], T[], T[,], T> _weakFormResidual;
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;

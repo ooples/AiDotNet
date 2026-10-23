@@ -55,14 +55,14 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
                 Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. No learning rate is declared because Table 19 states one per model size and this type does not select one.")]
 public partial class WhisperLive<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly WhisperLiveOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly WhisperLiveOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
     public bool SupportsWordTimestamps => false;
 
-    public WhisperLive(NeuralNetworkArchitecture<T> architecture, string modelPath, WhisperLiveOptions? options = null) : base(architecture) { _options = options ?? new WhisperLiveOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi" }; InitializeLayers(); }
-    public WhisperLive(NeuralNetworkArchitecture<T> architecture, WhisperLiveOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WhisperLiveOptions(); _useNativeMode = true; _optimizer = optimizer
+    public WhisperLive(NeuralNetworkArchitecture<T> architecture, string modelPath, WhisperLiveOptions? options = null) : base(architecture) { _options = options ?? new WhisperLiveOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi" }; InitializeLayers(); }
+    public WhisperLive(NeuralNetworkArchitecture<T> architecture, WhisperLiveOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WhisperLiveOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
      ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
      ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi" }; InitializeLayers(); }
 

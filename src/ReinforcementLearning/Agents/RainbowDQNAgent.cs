@@ -89,8 +89,6 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     }
     private RainbowDQNOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     [ParameterAlias("rainbow/online-network")]
@@ -124,6 +122,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         }
 
         _options = options;
+        Options = _options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
             InitialLearningRate = 0.0001,

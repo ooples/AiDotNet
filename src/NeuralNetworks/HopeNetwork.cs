@@ -49,9 +49,6 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HopeNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly int _hiddenDim;
     private readonly int _numCMSLevels;
     private readonly int _numRecurrentLayers;

@@ -63,8 +63,6 @@ public partial class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     private bool _disposed;
     private int _encoderLayerEnd;
 
-    public override ModelOptions GetOptions() => _options;
-
     public AdaSpeech(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -73,6 +71,7 @@ public partial class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new AdaSpeechOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -96,6 +95,7 @@ public partial class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new AdaSpeechOptions();
+        Options = _options;
         _useNativeMode = true;
         // AdaSpeech (Chen et al., 2021, arXiv:2103.00993 §4.1) trains with Adam,
         // beta1 = 0.9, beta2 = 0.98, epsilon = 1e-9. The paper states no learning rate, so the

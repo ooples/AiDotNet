@@ -90,9 +90,6 @@ public partial class Mcnet<T> : VideoNeuralNetworkBase<T>
 
     private readonly McnetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -113,6 +110,7 @@ public partial class Mcnet<T> : VideoNeuralNetworkBase<T>
         : base(architecture)
     {
         _options = options ?? new McnetOptions();
+        Options = _options;
         _useNativeMode = false;
         _options.ModelPath = modelPath;
         _decomposition = new McnetDecomposition<T>(_options.NumScales);
@@ -126,6 +124,7 @@ public partial class Mcnet<T> : VideoNeuralNetworkBase<T>
         : base(architecture)
     {
         _options = options ?? new McnetOptions();
+        Options = _options;
         _useNativeMode = true;
         _decomposition = new McnetDecomposition<T>(_options.NumScales);
 

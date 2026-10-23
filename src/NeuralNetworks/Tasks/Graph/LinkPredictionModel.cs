@@ -101,9 +101,6 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 {
     private readonly LinkPredictionOptions _options;
 
-    /// <inheritdoc/>
-    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
-
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly LinkPredictionDecoder _decoderType;

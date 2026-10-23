@@ -44,8 +44,6 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
 {
     private readonly OpenVoiceV2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -58,6 +56,7 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         : base(architecture)
     {
         _options = options ?? new OpenVoiceV2Options();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -80,6 +79,7 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         : base(architecture)
     {
         _options = options ?? new OpenVoiceV2Options();
+        Options = _options;
         _useNativeMode = true;
         // Honor the model's paper-derived optimizer options rather than AdamW's generic defaults.
         // The helper also keeps the released no-clipping policy consistent with the MeloTTS path.

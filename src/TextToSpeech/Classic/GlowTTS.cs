@@ -62,8 +62,6 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     private bool _disposed;
     private int _encoderLayerEnd;
 
-    public override ModelOptions GetOptions() => _options;
-
     public GlowTTS(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -72,6 +70,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new GlowTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -95,6 +94,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new GlowTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

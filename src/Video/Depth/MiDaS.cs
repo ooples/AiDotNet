@@ -74,9 +74,6 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
 {
     private readonly MiDaSOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     private readonly bool _useNativeMode;

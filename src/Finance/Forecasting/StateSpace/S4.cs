@@ -123,9 +123,6 @@ public partial class S4<T> : ForecastingModelBase<T>
     private int[]? _residualBlockLengths;    private readonly ILossFunction<T> _lossFunction;
     private readonly S4Options<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _modelDimension;

@@ -142,9 +142,6 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly MambaOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>

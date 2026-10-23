@@ -65,8 +65,6 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
 {
     private readonly GroundedSAM2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -81,6 +79,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         : base(architecture)
     {
         _options = options ?? new GroundedSAM2Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -103,6 +102,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         : base(architecture)
     {
         _options = options ?? new GroundedSAM2Options();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;

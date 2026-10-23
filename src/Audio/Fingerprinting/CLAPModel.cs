@@ -111,9 +111,6 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     private readonly Random _trainingRandom;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
-    /// <inheritdoc/>
     public string Name => _useNativeMode ? "CLAP-Native" : "CLAP-ONNX";
 
     /// <inheritdoc/>
@@ -135,6 +132,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(audioEncoderPath))
             throw new ArgumentException("Audio encoder path is required for ONNX mode.", nameof(audioEncoderPath));
         if (!File.Exists(audioEncoderPath))
@@ -182,6 +180,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        Options = _options;
         _options.Validate();
         _frontEnd = new ClapAudioFrontEnd<T>(_options);
         _trainingRandom = RandomHelper.CreateSeededRandom(_options.Seed ?? 0);

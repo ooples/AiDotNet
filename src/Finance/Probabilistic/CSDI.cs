@@ -121,9 +121,6 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly CSDIOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _sequenceLength;
     private int _numFeatures;
     private int _hiddenDimension;

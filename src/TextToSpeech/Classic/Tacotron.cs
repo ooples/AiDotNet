@@ -63,8 +63,6 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     private bool _disposed;
     private int _encoderLayerEnd;
 
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="Tacotron{T}"/> class in ONNX inference mode.
     /// </summary>
@@ -79,6 +77,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new TacotronOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -108,6 +107,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new TacotronOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
             optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(

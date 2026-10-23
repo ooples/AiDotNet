@@ -53,9 +53,6 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly QuantumNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the number of qubits used in the quantum neural network.
     /// </summary>

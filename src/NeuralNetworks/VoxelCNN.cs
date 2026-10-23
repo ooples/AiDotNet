@@ -53,9 +53,6 @@ public partial class VoxelCNN<T> : VolumetricModelLayoutBase<T>
 {
     private readonly VoxelCNNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to compute the error between predictions and targets.
     /// </summary>

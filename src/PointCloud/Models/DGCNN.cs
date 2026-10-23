@@ -101,9 +101,6 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
 {
     private readonly DGCNNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _numClasses;
     private int _inputFeatureDim;
     private int _knnK; // Number of nearest neighbors
