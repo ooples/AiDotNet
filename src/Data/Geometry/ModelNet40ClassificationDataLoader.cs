@@ -384,8 +384,12 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
                 {
                     File.Delete(tempFile);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    // A leftover temporary download is harmless, but it should not vanish silently.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"ModelNet40 loader: deleting the temporary download '{tempFile}' failed " +
+                        $"({ex.GetType().Name}: {ex.Message}).");
                 }
             }
         }
