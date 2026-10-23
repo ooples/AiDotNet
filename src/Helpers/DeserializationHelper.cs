@@ -4483,6 +4483,20 @@ public static class DeserializationHelper
             return;
         }
 
+        // A declared rank-3 layout ([B, C, T] versus [C, H, W]). Data written before the layout was
+        // persisted has none and keeps the default, Infer.
+        if (layer is BatchNormalizationLayer<T> batchNorm)
+        {
+            string? layout = TryGetString(additionalParams, "Layout");
+            if (!string.IsNullOrEmpty(layout))
+            {
+                if (!Enum.TryParse<BatchNormDataLayout>(layout, ignoreCase: false, out var parsed))
+                    throw new InvalidOperationException($"BatchNormalizationLayer persisted an unknown layout '{layout}'.");
+                batchNorm.Layout = parsed;
+            }
+            return;
+        }
+
         string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
         if (string.IsNullOrWhiteSpace(positionalEncoding)
             || !Enum.TryParse<Enums.PositionalEncodingType>(

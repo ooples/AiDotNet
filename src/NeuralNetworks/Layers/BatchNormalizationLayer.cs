@@ -388,11 +388,15 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
     internal override Dictionary<string, string> GetMetadata()
     {
-        return new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["Epsilon"] = NumOps.ToDouble(_epsilon).ToString("R", System.Globalization.CultureInfo.InvariantCulture),
-            ["Momentum"] = NumOps.ToDouble(_momentum).ToString("R", System.Globalization.CultureInfo.InvariantCulture)
-        };
+        // base writes the generated construction state (numFeatures among it). Without it a restored layer
+        // came back lazy, its construction state differed from the model's sized one, and deserialization
+        // replaced the model's layer instead of restoring into it.
+        var metadata = base.GetMetadata();
+        metadata["Epsilon"] = NumOps.ToDouble(_epsilon).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Momentum"] = NumOps.ToDouble(_momentum).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        // A declared layout is configuration: a restored layer left at Infer reads [B, C, T] differently.
+        metadata["Layout"] = Layout.ToString();
+        return metadata;
     }
 
     /// <inheritdoc />
