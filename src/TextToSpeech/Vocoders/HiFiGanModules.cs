@@ -96,6 +96,37 @@ internal sealed class HiFiGanGenerator<T>
     /// conditioning), or null.</summary>
     public NormedConv1DLayer<T>? Condition { get; }
 
+    /// <summary>
+    /// Loads a VITS/HiFi-GAN generator's PyTorch state: <c>conv_pre</c>, <c>cond</c>, <c>ups.{i}</c>,
+    /// <c>resblocks.{i·K + j}.convs1/convs2.{n}</c> and <c>conv_post</c>, each weight-normalized one as <c>weight_g</c> /
+    /// <c>weight_v</c> (or the parametrization's <c>original0</c> / <c>original1</c>).
+    /// </summary>
+    internal void LoadTorch(Func<string, double[]?> read, string prefix = "")
+    {
+        void Load(NormedConv1DLayer<T> conv, string name)
+        {
+            var v = read(name + ".weight_v") ?? read(name + ".parametrizations.weight.original1");
+            var g = read(name + ".weight_g") ?? read(name + ".parametrizations.weight.original0");
+            var bias = read(name + ".bias") ?? new double[conv.OutputChannels];
+            if (v is not null) conv.LoadTorchWeights(v, g, bias);
+            else conv.LoadTorchWeights(read(name + ".weight") ?? throw new KeyNotFoundException(name + ".weight"), null, bias);
+        }
+        Load(_pre, prefix + "conv_pre");
+        if (Condition is not null) Load(Condition, prefix + "cond");
+        for (int i = 0; i < _ups.Count; i++)
+        {
+            Load(_ups[i], $"{prefix}ups.{i}");
+            for (int j = 0; j < _blocks[i].Count; j++)
+            {
+                var (first, second) = _blocks[i][j];
+                string block = $"{prefix}resblocks.{i * _blocks[i].Count + j}";
+                for (int n = 0; n < first.Count; n++) Load(first[n], $"{block}.convs1.{n}");
+                for (int n = 0; n < second.Count; n++) Load(second[n], $"{block}.convs2.{n}");
+            }
+        }
+        Load(_post, prefix + "conv_post");
+    }
+
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
 
     private NormedConv1DLayer<T> Conv(int input, int output, int kernel, int stride, int dilation, int padding)
