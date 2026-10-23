@@ -13,11 +13,11 @@ internal sealed class StyleTtsFrontEnd<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
-    private readonly StyleTTSOptions _options;
+    private readonly StyleTtsBaseOptions _options;
     private CenteredComplexStft<T>? _stft;
     private Tensor<T>? _melBasis;
 
-    public StyleTtsFrontEnd(IEngine engine, StyleTTSOptions options)
+    public StyleTtsFrontEnd(IEngine engine, StyleTtsBaseOptions options)
     {
         _engine = engine;
         _options = options;

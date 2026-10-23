@@ -201,6 +201,9 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         {
             Tokens = tokens.Rank == 1 ? tokens : new Tensor<T>(new[] { tokenCount }, tokens.ToVector()),
             Mel = mel,
+            // A model that reconstructs the recording (StyleTTS 2) and outputs a waveform trains on the target itself.
+            Audio = network is not null && target.Rank == 1 && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Recording) != 0
+                ? target : null,
             Durations = durations,
             Pitch = pitch,
             Energy = energy,

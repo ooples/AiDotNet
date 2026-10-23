@@ -57,6 +57,7 @@ TOKENS = [0, 51, 157, 102, 16, 83, 56, 135, 47, 102, 4]
 REFERENCE_FRAMES = 96
 STEPS = 5
 SIGMA = 0.7
+EDM_SIGMA = 0.35
 GUIDANCE = 1.5
 # The multi-period and multi-resolution discriminators are CosyVoice HiFT's (full width: 30M parameters); their port is
 # tested with CosyVoice, so their weights stay out of this fixture.
@@ -151,7 +152,9 @@ def inputs():
     steps = [torch.randn(1, 1, 2 * COMMON["style_dim"], generator=g, dtype=torch.float32) for _ in range(STEPS - 1)]
     probe = torch.randn(1, 1, 2 * COMMON["style_dim"], generator=g, dtype=torch.float32)
     hidden = torch.randn(1, 8 * 3, 12, generator=g, dtype=torch.float32)
-    return reference, noise, steps, probe, hidden
+    edm_target = torch.randn(1, 1, 2 * COMMON["style_dim"], generator=g, dtype=torch.float32) * 0.3
+    edm_noise = torch.randn(1, 1, 2 * COMMON["style_dim"], generator=g, dtype=torch.float32)
+    return reference, noise, steps, probe, hidden, edm_target, edm_noise
 
 
 @contextlib.contextmanager
@@ -196,7 +199,7 @@ def run_double(loaded, module, name):
     sampler = loaded[5]
     config = CONFIGS[name]
     multispeaker = config["multispeaker"]
-    reference, noise, steps, probe, hidden = inputs()
+    reference, noise, steps, probe, hidden, edm_target, edm_noise = inputs()
     tokens = torch.tensor([TOKENS])
     lengths = torch.tensor([len(TOKENS)])
     text_mask = torch.zeros(1, len(TOKENS), dtype=torch.bool)
@@ -215,6 +218,9 @@ def run_double(loaded, module, name):
             ref_s = torch.cat([module["style_encoder"](mel), module["predictor_encoder"](mel)], dim=1)
             out["reference_style"] = flat(ref_s)
         diffusion = module["diffusion"].diffusion
+        # KDiffusion.forward (the EDM loss) at a fixed noise level and noise.
+        diffusion.sigma_distribution = lambda num_samples, device=None: torch.full((num_samples,), EDM_SIGMA)
+        out["edm_loss"] = [float(diffusion(edm_target.double(), noise=edm_noise.double(), embedding=bert_dur, features=ref_s))]
         out["denoised"] = flat(diffusion.denoise_fn(probe.double(), sigma=SIGMA, embedding=bert_dur, features=ref_s,
                                                     embedding_scale=GUIDANCE))
         draw = sampler.DiffusionSampler(diffusion, sampler=sampler.ADPM2Sampler(),
@@ -272,11 +278,12 @@ def main():
     args = parser.parse_args()
     os.chdir(args.styletts2)
     loaded = load(args.styletts2)
-    reference, noise, steps, probe, hidden = inputs()
+    reference, noise, steps, probe, hidden, edm_target, edm_noise = inputs()
     shared = {"tokens": TOKENS, "reference": flat(reference[0]), "reference_frames": REFERENCE_FRAMES, "noise": flat(noise),
               "step_noise": [flat(s) for s in steps], "probe": flat(probe), "sigma": SIGMA, "guidance": GUIDANCE, "steps": STEPS,
               "bert": BERT, "asr": v1.ASR, "jdc_widths": v1.JDC_WIDTHS, "jdc_lstm": v1.JDC_LSTM, "bottleneck": BOTTLENECK,
-              "residual": RESIDUAL, "inference": INFERENCE, "hidden": flat(hidden)}
+              "residual": RESIDUAL, "inference": INFERENCE, "hidden": flat(hidden),
+              "edm_sigma": EDM_SIGMA, "edm_target": flat(edm_target), "edm_noise": flat(edm_noise)}
     if args.write:
         data = {"shared": shared}
         for name in CONFIGS:

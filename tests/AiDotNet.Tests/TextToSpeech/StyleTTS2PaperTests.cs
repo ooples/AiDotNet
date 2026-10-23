@@ -51,7 +51,7 @@ public class StyleTTS2PaperTests
         var asr = shared["asr"]!;
         bool istft = (string)decoder["type"]! == "istftnet";
         var rates = Ints(decoder["upsample_rates"]!);
-        int hop = 2 * rates.Aggregate(1, (a, b) => a * b) * (istft ? (int)decoder["gen_istft_hop_size"]! : 1);
+        int hop = rates.Aggregate(1, (a, b) => a * b) * (istft ? (int)decoder["gen_istft_hop_size"]! : 1);
         var model = new StyleTTS2<double>(Architecture(), new StyleTTS2Options
         {
             SampleRate = 24000, HopSize = hop,
@@ -73,6 +73,8 @@ public class StyleTTS2PaperTests
             DiffusionHeadFeatures = (int)transformer["head_features"]!, DiffusionMultiplier = (int)transformer["multiplier"]!,
             SigmaData = (double)c["diffusion"]!["dist"]!["sigma_data"]!,
             SlmHidden = (int)c["slm"]!["hidden"]!, SlmLayers = (int)c["slm"]!["nlayers"]!, SlmDiscriminatorChannels = (int)c["slm"]!["initial_channel"]!,
+            // WavLM is not part of the reference checkpoint (its weights are loaded separately); a tiny one.
+            SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8, SlmPositionalConvKernel = 16, SlmPositionalConvGroups = 2,
             AlignerHidden = (int)asr["hidden_dim"]!, AlignerTokenEmbedding = (int)asr["token_embedding_dim"]!, AlignerConvLayers = (int)asr["n_layers"]!,
             PitchExtractorChannels = Ints(shared["jdc_widths"]!), PitchExtractorLstm = (int)shared["jdc_lstm"]!,
             DiffusionSteps = (int)shared["steps"]!, Alpha = (double)shared["inference"]!["alpha"]!, Beta = (double)shared["inference"]!["beta"]!,
@@ -154,6 +156,9 @@ public class StyleTTS2PaperTests
         var probe = Matrix(Values(shared["probe"]!), 1, width);
         Close(Values(fixture["denoised"]!), model.DiffusionNetwork.Denoise(probe, (double)shared["sigma"]!, bert, reference,
             (double)shared["guidance"]!), "denoised style");
+
+        Close(Values(fixture["edm_loss"]!), model.DiffusionNetwork.Loss(Matrix(Values(shared["edm_target"]!), 1, width), bert, reference,
+            (double)shared["edm_sigma"]!, Matrix(Values(shared["edm_noise"]!), 1, width)), "EDM loss");
 
         var noise = Matrix(Values(shared["noise"]!), 1, width);
         var draws = shared["step_noise"]!.Select(d => Matrix(Values(d), 1, width)).ToArray();

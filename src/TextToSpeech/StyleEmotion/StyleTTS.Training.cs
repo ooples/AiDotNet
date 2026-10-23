@@ -447,6 +447,8 @@ public partial class StyleTTS<T>
             Beta2 = o.Beta2,
             Epsilon = o.Epsilon,
             WeightDecay = o.WeightDecay,
+            // The reference clips no gradient.
+            EnableGradientClipping = false,
         };
         return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options), component);
     }

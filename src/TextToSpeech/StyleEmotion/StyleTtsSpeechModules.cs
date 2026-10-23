@@ -377,6 +377,9 @@ internal sealed class StyleTtsProsodyPredictor<T>
     public int Hidden { get; }
     public int StyleDim { get; }
 
+    /// <summary>The duration path's layers: its BiLSTM and the duration head.</summary>
+    public IEnumerable<LayerBase<T>> DurationLayers => new LayerBase<T>[] { Lstm.ForwardCell, Lstm.BackwardCell, DurationProjection };
+
     /// <summary>1 for StyleTTS's scalar duration; StyleTTS 2's <c>max_dur</c> (50), whose sigmoids sum to the duration.</summary>
     public int DurationBins { get; }
 

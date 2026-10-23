@@ -131,8 +131,10 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (o.ResBlockKernels.Length != o.ResBlockDilations.Length)
             throw new ArgumentException("Give one dilation list per residual-block kernel.");
         int hop = o.UpsampleRates.Aggregate(1, (a, b) => a * b) * (o.DecoderType == StyleTts2DecoderType.IstftNet ? o.IstftHopSize : 1);
-        if (2 * hop != o.HopSize)
-            throw new ArgumentException($"The generator's hop ({hop}) must be half the mel hop ({o.HopSize}): the decoder upsamples the frames by 2.");
+        // The decoder reads the aligner's frames (half the mel rate), doubles them, and the generator upsamples each mel
+        // frame to one hop of samples.
+        if (hop != o.HopSize)
+            throw new ArgumentException($"The generator's hop ({hop}) must equal the mel hop ({o.HopSize}).");
         if (o.UpsampleInitialChannels >> o.UpsampleRates.Length < 1)
             throw new ArgumentException("Too many upsampling stages for the initial channel count.");
         if (o.Bert.VocabSize < o.VocabSize)

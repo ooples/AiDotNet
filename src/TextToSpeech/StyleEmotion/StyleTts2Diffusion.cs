@@ -184,9 +184,13 @@ internal sealed class StyleTts2StyleDenoiser<T>
     }
 
     /// <summary>The output with classifier-free guidance: <c>u + (c − u) · scale</c> of the conditional and unconditional
-    /// runs (just the conditional one at scale 1).</summary>
-    public Tensor<T> Forward(Tensor<T> x, double time, Tensor<T> embedding, Tensor<T>? style, double embeddingScale)
+    /// runs (just the conditional one at scale 1). With <paramref name="maskProbability"/> the conditioning is first
+    /// replaced by the unconditional table with that probability (the reference's <c>embedding_mask_proba</c>).</summary>
+    public Tensor<T> Forward(Tensor<T> x, double time, Tensor<T> embedding, Tensor<T>? style, double embeddingScale,
+        double maskProbability = 0.0, Random? random = null)
     {
+        if (maskProbability > 0 && (random ?? throw new ArgumentNullException(nameof(random))).NextDouble() < maskProbability)
+            embedding = Unconditional(embedding.Shape[0]);
         var conditional = Run(x, time, embedding, style);
         if (embeddingScale == 1.0) return conditional;
         var unconditional = Run(x, time, Unconditional(embedding.Shape[0]), style);
@@ -240,11 +244,13 @@ internal sealed class StyleTts2StyleDiffusion<T>
         Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
 
     /// <summary>The denoised style <c>[1, channels]</c> of a noisy one at noise level σ.</summary>
-    public Tensor<T> Denoise(Tensor<T> noisy, double sigma, Tensor<T> embedding, Tensor<T>? style, double embeddingScale)
+    public Tensor<T> Denoise(Tensor<T> noisy, double sigma, Tensor<T> embedding, Tensor<T>? style, double embeddingScale,
+        double maskProbability = 0.0, Random? random = null)
     {
         double d = SigmaData, s2 = sigma * sigma + d * d;
         double cSkip = d * d / s2, cOut = sigma * d / Math.Sqrt(s2), cIn = 1.0 / Math.Sqrt(s2), cNoise = Math.Log(sigma) * 0.25;
-        var prediction = Denoiser.Forward(_engine.TensorMultiplyScalar(noisy, NumOps.FromDouble(cIn)), cNoise, embedding, style, embeddingScale);
+        var prediction = Denoiser.Forward(_engine.TensorMultiplyScalar(noisy, NumOps.FromDouble(cIn)), cNoise, embedding, style, embeddingScale,
+            maskProbability, random);
         return _engine.TensorAdd(_engine.TensorMultiplyScalar(noisy, NumOps.FromDouble(cSkip)), _engine.TensorMultiplyScalar(prediction, NumOps.FromDouble(cOut)));
     }
 
@@ -264,7 +270,7 @@ internal sealed class StyleTts2StyleDiffusion<T>
     /// draws standard normals from <paramref name="random"/>.
     /// </summary>
     public Tensor<T> Sample(Tensor<T> noise, Tensor<T> embedding, Tensor<T>? style, int steps, double embeddingScale, Random random,
-        Func<int, Tensor<T>>? stepNoise = null, double sigmaMin = 1e-4, double sigmaMax = 3.0, double rho = 9.0)
+        Func<int, Tensor<T>>? stepNoise = null, double maskProbability = 0.0, double sigmaMin = 1e-4, double sigmaMax = 3.0, double rho = 9.0)
     {
         var sigmas = KarrasSchedule(steps, sigmaMin, sigmaMax, rho);
         var x = _engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sigmas[0]));
@@ -273,9 +279,11 @@ internal sealed class StyleTts2StyleDiffusion<T>
             double sigma = sigmas[i], next = sigmas[i + 1];
             double up = Math.Sqrt(next * next * (sigma * sigma - next * next) / (sigma * sigma));
             double down = Math.Sqrt(next * next - up * up), mid = (sigma + down) / 2;
-            var d = _engine.TensorMultiplyScalar(_engine.TensorSubtract(x, Denoise(x, sigma, embedding, style, embeddingScale)), NumOps.FromDouble(1.0 / sigma));
+            var d = _engine.TensorMultiplyScalar(_engine.TensorSubtract(x, Denoise(x, sigma, embedding, style, embeddingScale, maskProbability, random)),
+                NumOps.FromDouble(1.0 / sigma));
             var xMid = _engine.TensorAdd(x, _engine.TensorMultiplyScalar(d, NumOps.FromDouble(mid - sigma)));
-            var dMid = _engine.TensorMultiplyScalar(_engine.TensorSubtract(xMid, Denoise(xMid, mid, embedding, style, embeddingScale)), NumOps.FromDouble(1.0 / mid));
+            var dMid = _engine.TensorMultiplyScalar(_engine.TensorSubtract(xMid, Denoise(xMid, mid, embedding, style, embeddingScale, maskProbability, random)),
+                NumOps.FromDouble(1.0 / mid));
             x = _engine.TensorAdd(x, _engine.TensorMultiplyScalar(dMid, NumOps.FromDouble(down - sigma)));
             Tensor<T> fresh;
             if (stepNoise is not null) fresh = stepNoise(i);
@@ -300,6 +308,13 @@ internal sealed class StyleTts2StyleDiffusion<T>
         var noise = new Tensor<T>(target._shape);
         for (int j = 0; j < noise.Length; j++) noise[j] = NumOps.FromDouble(Gaussian(random));
         if (maskProbability > 0 && random.NextDouble() < maskProbability) embedding = Denoiser.Unconditional(embedding.Shape[0]);
+        return Loss(target, embedding, style, sigma, noise);
+    }
+
+    /// <summary>The EDM loss at noise level <paramref name="sigma"/> with the given standard-normal
+    /// <paramref name="noise"/> (the reference's <c>KDiffusion.forward</c>).</summary>
+    internal Tensor<T> Loss(Tensor<T> target, Tensor<T> embedding, Tensor<T>? style, double sigma, Tensor<T> noise)
+    {
         var noisy = _engine.TensorAdd(target, _engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sigma)));
         var error = _engine.TensorSubtract(Denoise(noisy, sigma, embedding, style, 1.0), target);
         double d = SigmaData, weight = (sigma * sigma + d * d) / (sigma * d * sigma * d);
