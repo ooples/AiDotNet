@@ -858,6 +858,15 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             input = Engine.Reshape(input, [leadingBatch, featureSize]);
             restoreInputShape = true;
         }
+        else if (channelsFirstDeclared && input.Rank == 3)
+        {
+            // A declared [B, C, T] sequence normalizes per channel over batch and time, as nn.BatchNorm1d does. Viewed
+            // as [B, C, T, 1] it takes the NCHW path; Engine.BatchNorm given the rank-3 tensor itself reduces the
+            // wrong axes in training.
+            preFlattenShape = input._shape;
+            input = Engine.Reshape(input, [input.Shape[0], input.Shape[1], input.Shape[2], 1]);
+            restoreInputShape = true;
+        }
         else if (!channelsLastDeclared && input.Rank > 4 && input.Shape[1] == featureSize)
         {
             // Volumetric channels-first input, [N, C, D, H, W] and up. The engine's batch normalization takes at most
