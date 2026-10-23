@@ -64,7 +64,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 public partial class MedSegDiffV2Segmentation<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSegDiffV2SegmentationOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only MedSegDiff-V2's OWN configuration lives here. _height, _width, _channels, _numClasses,

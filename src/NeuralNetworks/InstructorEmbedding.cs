@@ -56,9 +56,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly InstructorEmbeddingOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         private string _defaultInstruction = "Represent this text for retrieval: ";

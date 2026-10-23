@@ -56,7 +56,6 @@ public partial class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator
     #region Fields
 
     private readonly SCNetOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
     [Scratch]
@@ -72,6 +71,7 @@ public partial class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator
         : base(architecture)
     {
         _options = options is null ? new SCNetOptions() : new SCNetOptions(options);
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -87,6 +87,7 @@ public partial class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator
         : base(architecture)
     {
         _options = options is null ? new SCNetOptions() : new SCNetOptions(options);
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;

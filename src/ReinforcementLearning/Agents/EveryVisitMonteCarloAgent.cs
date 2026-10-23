@@ -53,8 +53,6 @@ public partial class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
     }
     private MonteCarloOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, List<T>>> _returns;
     private List<(string state, int action, T reward)> _episode;
@@ -78,6 +76,7 @@ public partial class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
         }
 
         _options = options;
+        Options = _options;
 
         // Validate EpsilonDecay is in (0, 1] range (1.0 means no decay, which is valid)
         if (_options.EpsilonDecay <= 0.0 || _options.EpsilonDecay > 1.0)

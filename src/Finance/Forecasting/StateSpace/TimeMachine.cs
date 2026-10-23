@@ -98,9 +98,6 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _modelDimension;

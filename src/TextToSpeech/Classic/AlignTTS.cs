@@ -74,8 +74,6 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     private bool _disposed;
     private int _encoderLayerEnd;
 
-    public override ModelOptions GetOptions() => _options;
-
     public AlignTTS(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -84,6 +82,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new AlignTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -107,6 +106,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new AlignTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         // AlignTTS (Zeng et al., 2020, arXiv:2003.01950 §4) trains with Adam,
         // beta1 = 0.9, beta2 = 0.98, epsilon = 1e-9, at a fixed learning rate of 1e-4 -- which is

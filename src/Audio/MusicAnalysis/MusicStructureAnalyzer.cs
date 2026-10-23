@@ -55,7 +55,6 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
     #region Fields
 
     private readonly MusicStructureAnalyzerOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -71,6 +70,7 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         : base(architecture)
     {
         _options = options ?? new MusicStructureAnalyzerOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -87,6 +87,7 @@ public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         : base(architecture)
     {
         _options = options ?? new MusicStructureAnalyzerOptions();
+        Options = _options;
         // Music-structure segmentation is a per-frame MULTI-CLASS classifier over the NumSections section
         // labels (intro/verse/chorus/bridge/outro). The NeuralNetworkBase default MSE loss is unstable on raw
         // classification logits, so LossStrictlyDecreases / Training_ShouldReduceLoss do not hold. The

@@ -48,8 +48,6 @@ public partial class DiffWave<T> : VocoderBase<T>
 {
     private readonly DiffWaveOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _preserveSuppliedOptimizer;
     private bool _useNativeMode;
@@ -63,6 +61,7 @@ public partial class DiffWave<T> : VocoderBase<T>
         : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
     {
         _options = options ?? new DiffWaveOptions();
+        Options = _options;
         _useNativeMode = false;
         _preserveSuppliedOptimizer = false;
         base.SampleRate = _options.SampleRate;
@@ -85,6 +84,7 @@ public partial class DiffWave<T> : VocoderBase<T>
         : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
     {
         _options = options ?? new DiffWaveOptions();
+        Options = _options;
         _useNativeMode = true;
         _preserveSuppliedOptimizer = optimizer is not null;
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,

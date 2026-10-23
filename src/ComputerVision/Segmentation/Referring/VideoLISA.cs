@@ -75,7 +75,6 @@ public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
         => SpatialStrideContract(inputRank, 1);
 
     private readonly VideoLISAOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only VideoLISA's OWN configuration lives here. _height, _width, _channels, _numClasses,

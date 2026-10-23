@@ -64,17 +64,6 @@ public partial class MaskDINO<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly MaskDINOOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this Mask DINO model.
-    /// </summary>
-    /// <returns>The <see cref="MaskDINOOptions"/> for this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only Mask DINO's OWN configuration lives here. _height, _width, _channels, _numClasses,

@@ -110,9 +110,6 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly NHiTSOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The lookback window size.
     /// </summary>

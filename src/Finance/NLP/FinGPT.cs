@@ -72,9 +72,6 @@ public partial class FinGPT<T> : FinancialNLPModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private double _dropout;
 
-    /// <inheritdoc/>
-    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
-
     #endregion
 
     #region Interface Properties

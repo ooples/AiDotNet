@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -132,5 +133,38 @@ public class OptionsSeedReassignmentTests
         model.Train(input, target);
 
         Assert.Equal(777, layer.RandomSeed);
+    }
+
+    /// <summary>
+    /// The base owns a network's options: a model hands them over with <c>Options = _options</c> and inherits
+    /// <c>GetOptions()</c>. About a thousand models instead repeated <c>GetOptions() => _options</c> and many of them
+    /// never assigned <c>Options</c>, so the base never saw their seed. An override that only returns the model's
+    /// options is that defect waiting to recur; one with real logic belongs in a base, not a leaf model.
+    /// </summary>
+    [Fact]
+    public void NetworkModels_InheritGetOptionsFromTheBase()
+    {
+        var redeclaring = typeof(NeuralNetworkBase<double>).Assembly.GetTypes()
+            .Where(type => type != typeof(NeuralNetworkBase<>) && DerivesFromNeuralNetworkBase(type))
+            .Where(type => type.GetMethod(
+                nameof(NeuralNetworkBase<double>.GetOptions),
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.DeclaredOnly,
+                null, Type.EmptyTypes, null) is not null)
+            .Select(type => type.FullName ?? type.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(redeclaring.Length == 0,
+            "These network types declare their own GetOptions(); assign Options in the constructor instead: "
+            + string.Join(", ", redeclaring));
+    }
+
+    private static bool DerivesFromNeuralNetworkBase(Type type)
+    {
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+            if (current.IsGenericType && current.GetGenericTypeDefinition() == typeof(NeuralNetworkBase<>))
+                return true;
+        return false;
     }
 }

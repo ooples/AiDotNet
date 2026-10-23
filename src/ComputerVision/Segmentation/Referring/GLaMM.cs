@@ -65,7 +65,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 public partial class GLaMM<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly GLaMMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only GLaMM's OWN configuration lives here. _height, _width, _channels, _numClasses,

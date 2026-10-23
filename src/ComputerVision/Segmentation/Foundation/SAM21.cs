@@ -89,11 +89,6 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SAM21Options _options;
 
-    /// <summary>
-    /// Gets the configuration options for this SAM 2.1 model.
-    /// </summary>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only SAM 2.1's OWN configuration lives here. _height, _width, _channels, _numClasses,

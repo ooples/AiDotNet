@@ -68,7 +68,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly KMaXDeepLabOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only KMaXDeepLab's OWN configuration lives here. _height, _width, _channels, _numClasses,

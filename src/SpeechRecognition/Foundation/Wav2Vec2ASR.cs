@@ -52,14 +52,14 @@ namespace AiDotNet.SpeechRecognition.Foundation;
                 Source = "Baevski et al. 2020, fine-tuning setup: Adam with a tri-state schedule -- warmup over the first 10% of updates, held constant for the next 40%, then linearly decayed for the remainder. The rate is recorded as searched: the paper reports a seed search over 2e-5 and 3e-5, and both are carried rather than one being presented as chosen.")]
 public partial class Wav2Vec2ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly Wav2Vec2ASROptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly Wav2Vec2ASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public Wav2Vec2ASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Wav2Vec2ASROptions? options = null) : base(architecture) { _options = options ?? new Wav2Vec2ASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public Wav2Vec2ASR(NeuralNetworkArchitecture<T> architecture, Wav2Vec2ASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Wav2Vec2ASROptions(); _useNativeMode = true; _optimizer = optimizer
+    public Wav2Vec2ASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Wav2Vec2ASROptions? options = null) : base(architecture) { _options = options ?? new Wav2Vec2ASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public Wav2Vec2ASR(NeuralNetworkArchitecture<T> architecture, Wav2Vec2ASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Wav2Vec2ASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 

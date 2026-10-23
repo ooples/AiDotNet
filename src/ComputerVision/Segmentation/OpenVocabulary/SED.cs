@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly SEDOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only SED's OWN configuration lives here. _height, _width, _channels, _numClasses,

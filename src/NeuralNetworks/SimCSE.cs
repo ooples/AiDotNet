@@ -57,9 +57,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly SimCSEOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         private SimCSEType _simCseType;

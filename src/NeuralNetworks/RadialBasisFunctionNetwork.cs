@@ -59,9 +59,6 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
     private readonly RadialBasisFunctionNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the size of the input layer (number of input features).
     /// </summary>

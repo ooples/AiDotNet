@@ -68,7 +68,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly VisionMambaOptions _options;
-    public override ModelOptions GetOptions() => _options;
     protected override double DefaultLearningRate => _options.LearningRate;
     protected override double DefaultWeightDecay => _options.WeightDecay;
 

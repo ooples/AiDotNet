@@ -57,9 +57,6 @@ public partial class Zamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Gets the vocabulary size.</summary>
     public int VocabSize => _vocabSize;
 

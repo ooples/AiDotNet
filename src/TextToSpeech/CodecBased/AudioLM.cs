@@ -55,8 +55,6 @@ public partial class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
     private bool _useNativeMode;
     private bool _disposed;
 
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="AudioLM{T}"/> class in ONNX inference mode.
     /// </summary>
@@ -71,6 +69,7 @@ public partial class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new AudioLMOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -99,6 +98,7 @@ public partial class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new AudioLMOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;

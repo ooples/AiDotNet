@@ -73,7 +73,6 @@ public partial class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
     #region Fields
 
     private readonly DACOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -100,6 +99,7 @@ public partial class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         : base(architecture)
     {
         _options = options ?? new DACOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -113,6 +113,7 @@ public partial class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         : base(architecture)
     {
         _options = options ?? new DACOptions();
+        Options = _options;
         _useNativeMode = true;
         // Official DAC 44.1 kHz training recipe:
         // AdamW(lr=1e-4, betas=[0.8, 0.99]), ExponentialLR(gamma=0.999996)

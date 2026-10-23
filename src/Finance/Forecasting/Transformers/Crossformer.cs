@@ -148,9 +148,6 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly CrossformerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The input sequence length.
     /// </summary>

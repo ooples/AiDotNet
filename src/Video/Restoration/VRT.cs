@@ -70,9 +70,6 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
 {
     private readonly VRTOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

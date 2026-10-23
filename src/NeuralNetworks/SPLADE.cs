@@ -61,9 +61,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly SPLADEOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         private int _vocabSize;

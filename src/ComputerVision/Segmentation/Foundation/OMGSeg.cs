@@ -63,17 +63,6 @@ public partial class OMGSeg<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly OMGSegOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this OMG-Seg model.
-    /// </summary>
-    /// <returns>The <see cref="OMGSegOptions"/> for this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only OMG-Seg's OWN configuration lives here. _height, _width, _channels, _numClasses,

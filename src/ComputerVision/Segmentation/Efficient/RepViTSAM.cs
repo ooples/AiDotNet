@@ -58,7 +58,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly RepViTSAMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only RepViT-SAM's OWN configuration lives here. _height, _width, _channels, _numClasses,

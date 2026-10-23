@@ -45,8 +45,6 @@ public partial class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAg
 {
     private MonteCarloExploringStartsOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, List<T>>> _returns;
     private List<(Vector<T> state, int action, T reward)> _episode;
@@ -70,6 +68,7 @@ public partial class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAg
         }
 
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _returns = new Dictionary<string, Dictionary<int, List<T>>>();
         _episode = new List<(Vector<T>, int, T)>();

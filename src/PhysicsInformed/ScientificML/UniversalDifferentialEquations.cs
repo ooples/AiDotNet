@@ -83,9 +83,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     {
         private readonly UniversalDifferentialEquationsOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly Func<T[], T, T[]> _knownDynamics;
         private readonly int _stateDim;
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
