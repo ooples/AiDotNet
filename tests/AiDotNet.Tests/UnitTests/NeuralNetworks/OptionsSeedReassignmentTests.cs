@@ -289,9 +289,10 @@ public class OptionsSeedReassignmentTests
     [Fact]
     public void OptionsKeptByTheModel_SeedItsDropoutStream()
     {
-        double[] Trained()
+        double[] Trained(out double[] initial)
         {
             var model = BuildKeepsOwnOptions(2290);
+            initial = model.GetParameters().ToArray();
             var input = new Tensor<double>(new[] { 2, 4 });
             var target = new Tensor<double>(new[] { 2, 4 });
             for (int i = 0; i < input.Length; i++)
@@ -304,9 +305,17 @@ public class OptionsSeedReassignmentTests
             return model.GetParameters().ToArray();
         }
 
-        var first = Trained();
+        var first = Trained(out var initial);
+
+        // Equal trained parameters say something about the dropout stream only if training moved them: a model
+        // whose Train left its weights alone would be compared at its initial weights, which the seed already
+        // fixes, and this test would pass without the dropout masks ever entering the result.
+        Assert.NotEmpty(initial);
+        Assert.NotEmpty(first);
+        Assert.NotEqual(initial, first);
+
         AdvanceTheSharedGenerator();
-        Assert.Equal(first, Trained());
+        Assert.Equal(first, Trained(out _));
     }
 
     /// <summary>
@@ -353,7 +362,7 @@ public class OptionsSeedReassignmentTests
     [Fact]
     public void AFinishedModelWithOffListLayers_DoesNotSeedALayerBuiltAfterIt()
     {
-        _ = new KeepsLayersOffList(
+        var finished = new KeepsLayersOffList(
             new NeuralNetworkArchitecture<double>(
                 inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
                 inputSize: 4, outputSize: 4),
@@ -362,6 +371,81 @@ public class OptionsSeedReassignmentTests
 
         // Handing the finished model's seed to the scope would give this layer the first draw of that seed's stream.
         Assert.NotEqual(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2290).Next(), unrelated.RandomSeed);
+
+        // The deferral holds the model weakly and ends when it is collected, so a collected model would make this
+        // test pass with no finished model left to leak a seed. Keep it alive past the assertion.
+        GC.KeepAlive(finished);
+    }
+
+    /// <summary>
+    /// Keeps its options to itself and builds no layer of its own: it adopts the layers the caller built. No layer
+    /// constructor runs after its options exist, so nothing asks the construction scope for a seed and only the
+    /// base's completion path can still apply it.
+    /// </summary>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    private sealed class AdoptsCallerBuiltLayers : NeuralNetworkBase<double>
+    {
+        private readonly NeuralNetworkOptions _options;
+
+        public AdoptsCallerBuiltLayers(NeuralNetworkArchitecture<double> architecture, int? seed)
+            : base(architecture, new MeanSquaredErrorLoss<double>())
+        {
+            _options = new NeuralNetworkOptions { Seed = seed };
+            InitializeLayers();
+        }
+
+        public override ModelOptions GetOptions() => _options;
+
+        protected override void InitializeLayers()
+        {
+            foreach (var layer in Architecture.Layers)
+                Layers.Add(layer);
+        }
+
+        public override IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
+            => new AdoptsCallerBuiltLayers(Architecture, _options.Seed);
+
+        public override ModelMetadata<double> GetModelMetadata() => new()
+        {
+            Name = nameof(AdoptsCallerBuiltLayers),
+            Description = "Test double that adopts the caller's layers and builds none of its own.",
+        };
+    }
+
+    private static double[] AdoptedLayerParameters(int seed)
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4, outputSize: 4,
+            layers: new List<ILayer<double>>
+            {
+                // Lazy-shaped layers: they draw their weights when the model materialises them, which is what the
+                // model's seed can still decide. A layer the caller constructs with its input size known draws in
+                // its own constructor, before this model exists, and no seed of the model's can reproduce that.
+                new FullyConnectedLayer<double>(
+                    8, (IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()),
+                new FullyConnectedLayer<double>(
+                    4, (IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()),
+            });
+        var model = new AdoptsCallerBuiltLayers(architecture, seed);
+        model.MaterializeParameters();
+        return model.GetParameters().ToArray();
+    }
+
+    [Fact]
+    public void OptionsKeptByAModelThatBuildsNoLayer_StillSeedItsInitialWeights()
+    {
+        var first = AdoptedLayerParameters(2290);
+        AdvanceTheSharedGenerator();
+        var second = AdoptedLayerParameters(2290);
+        var other = AdoptedLayerParameters(2291);
+
+        Assert.NotEmpty(first);
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, other);
     }
 
     /// <summary>

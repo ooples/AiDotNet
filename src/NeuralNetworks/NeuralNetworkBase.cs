@@ -949,6 +949,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     private AiDotNet.Models.Parameters.ParameterLayoutSnapshot BuildParameterLayout()
     {
+        CompleteOwnOptionsSeedDeferral();
         EnsureParametersReady();
         ResolveLazyLayerShapes();
 
@@ -1120,6 +1121,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         //
         // EnsureParametersReady first, for the same reason ParameterCount calls it first: a model
         // that builds its layers lazily has nothing to walk until it has run its own initializer.
+        // Reading the parameters materialises lazy weights, so the options seed of a model that kept its options
+        // to itself has to reach its layers before that (see CompleteOwnOptionsSeedDeferral).
+        CompleteOwnOptionsSeedDeferral();
         EnsureParametersReady();
         ResolveLazyLayerShapes();
 
@@ -5402,6 +5406,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     public void MaterializeParameters()
     {
+        // Drawing the weights is the last moment a pending options seed can still decide them.
+        CompleteOwnOptionsSeedDeferral();
         EnsureParametersReady();
         ResolveLazyLayerShapes();
 
@@ -5424,6 +5430,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
         AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
     {
+        CompleteOwnOptionsSeedDeferral();
         EnsureParametersReady();
         ResolveLazyLayerShapes();
         if (intent != AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe)
@@ -6776,6 +6783,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
         RequireArchitectureAgreesWithInput();
+        CompleteOwnOptionsSeedDeferral();
 
         // Inference semantics belong in the NON-VIRTUAL funnel. Keeping this transition inside the
         // default PredictCore meant every model that correctly overrode PredictCore (diffusion,
@@ -7515,6 +7523,50 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     private int? OwnOptionsSeed
         => GetOptions() is { } own && !ReferenceEquals(own, _modelOptions) ? own.Seed : null;
+
+    // Settled once the constructor's deferral has been resolved after construction, so the completion path
+    // below costs one bool test on the surfaces that call it.
+    private bool _ownOptionsSeedCompleted;
+
+    /// <summary>
+    /// Finishes the constructor's options-seed deferral for a model that never asked the construction scope for a
+    /// seed: one that keeps a distinct options object and builds no layer of its own, only copying the layers of
+    /// <see cref="NeuralNetworkArchitecture{T}.Layers"/>. No <see cref="Layers.LayerBase{T}"/> constructor runs to
+    /// trigger the deferred callback there, so its <see cref="Models.Options.ModelOptions.Seed"/> reached nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The deferral cannot run itself: the base gets no hook once the derived constructor has stored its options, so
+    /// the surfaces that first materialise a caller-built layer's weights -- a parameter read and a prediction --
+    /// call this first. The training forward already covers itself through <see cref="EnsureLayerRandomSeedsWired"/>,
+    /// whose <see cref="EffectiveRandomSeed"/> falls back to <see cref="OwnOptionsSeed"/>.
+    /// </para>
+    /// <para>
+    /// It wires the layer seeds from that fallback rather than restarting the thread's construction scope the way
+    /// <see cref="ApplyOptionsSeed"/> does: a model that reads a nested backbone's parameters while still being
+    /// constructed itself must keep its own scope. A model whose options are the base's has no own options seed, so
+    /// this changes nothing for it.
+    /// </para>
+    /// </remarks>
+    private void CompleteOwnOptionsSeedDeferral()
+    {
+        if (_ownOptionsSeedCompleted || _optionsSeed is not null || _layerRandomSeedsWired)
+            return;
+
+        if (Architecture is { HasExplicitRandomSeed: true })
+        {
+            _ownOptionsSeedCompleted = true;
+            return;
+        }
+
+        // Not latched while the model has no own options seed: a derived constructor that reads its own parameters
+        // gets here before it has stored its options, and settling then would drop the seed for good.
+        if (OwnOptionsSeed is null)
+            return;
+
+        _ownOptionsSeedCompleted = true;
+        EnsureLayerRandomSeedsWired();
+    }
 
     /// <summary>
     /// Applies the seed of the options a derived model returns from <see cref="GetOptions"/>, for the layer
