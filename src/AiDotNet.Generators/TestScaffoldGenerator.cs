@@ -9972,9 +9972,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 128, outputSize: 4), " +
-                    // #2147: the stated 128-token input is the options' sequence length, not the 512 default.
-                    "new AiDotNet.Models.Options.SECBERTOptions<double> { MaxSequenceLength = 128, DropoutRate = 0.0 })";
+                    // #2147: the stated input is the default options' 512-token sequence length.
+                    "inputSize: 512, outputSize: 4), " +
+                    "new AiDotNet.Models.Options.SECBERTOptions<double> { DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "SpeakerLM" && model.TypeParameterCount == 1)
             {

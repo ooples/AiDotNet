@@ -173,7 +173,10 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         }
         else if (UseNativeMode)
         {
+            // This overload reads the architecture's input width; without it the call binds to the unrelated
+            // (numFeatures, hiddenDimension, sequenceLength) recurrent factory.
             Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralVaRLayers(
+                Architecture,
                 NumFeatures,
                 _options.HiddenLayers,
                 _options.HiddenDimension));
