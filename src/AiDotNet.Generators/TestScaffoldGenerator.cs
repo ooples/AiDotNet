@@ -6587,6 +6587,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, FftFilterSize = 64, " +
                     "VariancePredictorFilterSize = 32 })";
             }
+            else if (model.ClassName == "PromptTTS" && model.TypeParameterCount == 1)
+            {
+                // PromptTTS is FastSpeech 2 with a BERT-base style encoder whose [CLS] state is prepended to every block;
+                // keep FastSpeech 2's bounded fixture and a 16-wide, two-layer BERT with P-tuning v2's prefixes.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.DescriptionBased.PromptTTSOptions { EncoderDim = 32, HiddenDim = 32, MelChannels = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, FftFilterSize = 64, " +
+                    "VariancePredictorFilterSize = 32, StyleHiddenDim = 16, StyleLayers = 2, StyleHeads = 2, StyleIntermediateDim = 32 })";
+            }
             else if (model.ClassName == "HiFiGAN" && model.TypeParameterCount == 1)
             {
                 // HiFi-GAN V1 is a 512-channel generator and 32-1024-channel multi-period / multi-scale discriminators;
@@ -15783,7 +15795,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     const int DefaultTtsSmokeIterations = 2;
                     const int E2TtsMemorizationIterations = 15;
                     int ttsSmokeIterations = model.ClassName is "FastSpeech" or "AdaSpeech" or "AdaSpeech2" ? FastSpeechSmokeIterations
-                                           : model.ClassName == "FastSpeech2" || naturalSpeechWarmup
+                                           : model.ClassName is "FastSpeech2" or "PromptTTS" || naturalSpeechWarmup
                                                ? PastWarmupTtsIterations : DefaultTtsSmokeIterations;
                     sb.AppendLine($"    protected override int TrainingIterations => {ttsSmokeIterations};");
                     sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
@@ -15816,7 +15828,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         // instead of the dropout mask.
                         sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
                     }
-                    else if (model.ClassName is "FastSpeech2" or "AdaSpeech" or "AdaSpeech2"
+                    else if (model.ClassName is "FastSpeech2" or "PromptTTS" or "AdaSpeech" or "AdaSpeech2"
                              or "PortaSpeech" or "ProDiff" or "VoiceFlow" or "E2TTS" or "F5TTS")
                     {
                         // E2 TTS and F5-TTS draw a fresh infilling span, noise and flow time every step, so their training
@@ -21431,6 +21443,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // ForwardTacotron, etc. all use CreateDefaultAcousticModelLayers.
             "FastSpeech" => true,
             "FastSpeech2" => true,
+            "PromptTTS" => true,
             "AdaSpeech" => true,
             "AdaSpeech2" => true,
             "AlignTTS" => true,
