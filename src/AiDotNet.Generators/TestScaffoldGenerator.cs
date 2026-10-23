@@ -6559,6 +6559,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "Dilations = new[] { 1, 2, 3, 4, 1 }, Res2NetScale = 4, SEBottleneckDim = 8, " +
                     "EmbeddingDim = 16, PoolingDim = 32, AttentionChannels = 8 })";
             }
+            else if (model.ClassName == "CAMPlusPlus" && model.TypeParameterCount == 1)
+            {
+                // CAM++ keeps its FCM head and all 52 D-TDNN layers (12/24/16); the widths are bounded
+                // through the public options. 32 filterbank bands is a multiple of 8, as the FCM head needs.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
+                    "new AiDotNet.Audio.Speaker.CAMPlusPlusOptions { NumMels = 32, InitialChannels = 16, " +
+                    "GrowthRate = 8, BottleneckMultiplier = 2, EmbeddingDim = 16 })";
+            }
             else if (model.ClassName == "FastSpeech" && model.TypeParameterCount == 1)
             {
                 // Keep FastSpeech's encoder -> duration predictor -> length regulator -> decoder
@@ -16415,7 +16426,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // The vision path already closes this gap through
                 // GeneratedVisionFixtureContract.TryGetArchitectureSpatialSize; the mechanism was
                 // simply never wired up for audio. Reuse it rather than adding a second parser.
-                if (TryGetVisionFixtureSpatialSize(constructorExpr, out int audioHeight, out int audioWidth))
+                if (model.ClassName == "CAMPlusPlus" && TryGetVisionFixtureSpatialSize(constructorExpr, out int camFrames, out int camBands))
+                {
+                    // Eight utterances: the embedding's affine-free BatchNorm normalizes across the batch in
+                    // training. One utterance has no batch statistics (PyTorch's BatchNorm1d refuses it too), and
+                    // two are normalized to exactly ±1 in every dimension whatever the weights, which leaves a
+                    // regression target nothing to fit.
+                    sb.AppendLine($"    protected override int[] InputShape => new[] {{ 8, {camFrames}, {camBands} }};");
+                }
+                else if (TryGetVisionFixtureSpatialSize(constructorExpr, out int audioHeight, out int audioWidth))
                 {
                     sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, {audioHeight}, {audioWidth} }};");
                 }
@@ -16574,7 +16593,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             // ECAPATDNNSpeaker takes time-major [B, frames, mels] features: the mel axis is its first
             // convolution's channel count, fixed by the weights, so the variable length is axis 1.
-            if (model.ClassName == "ECAPATDNNSpeaker")
+            if (model.ClassName is "ECAPATDNNSpeaker" or "CAMPlusPlus")
             {
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }

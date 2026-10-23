@@ -8,117 +8,6 @@ using AiDotNet.TextToSpeech.Vocoders;
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>
-/// A weight-normalized 2-D convolution (<c>weight_norm(nn.Conv2d(...))</c>, dim 0): <c>w = g · v / ‖v‖</c> per output
-/// channel, then a convolution with zero padding.
-/// </summary>
-[LayerCategory(LayerCategory.Convolution)]
-[LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 2, 6, 8", TestConstructorArgs = "2, 3, 3, 3, 1, 2, 1, 1")]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-internal sealed partial class WeightNormConv2DLayer<T> : LayerBase<T>, IShapeContract
-{
-    private readonly int _inChannels, _outChannels, _kernelHeight, _kernelWidth, _strideHeight, _strideWidth, _paddingHeight, _paddingWidth;
-
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _direction;
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _gain;
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
-    private Tensor<T> _bias;
-
-    public override bool SupportsTraining => true;
-
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
-
-    public WeightNormConv2DLayer([LayerState] int inChannels, [LayerState] int outChannels, [LayerState] int kernelHeight,
-        [LayerState] int kernelWidth, [LayerState] int strideHeight, [LayerState] int strideWidth,
-        [LayerState] int paddingHeight, [LayerState] int paddingWidth)
-        : base(new[] { inChannels }, new[] { outChannels })
-    {
-        if (inChannels <= 0 || outChannels <= 0 || kernelHeight <= 0 || kernelWidth <= 0 || strideHeight <= 0 || strideWidth <= 0
-            || paddingHeight < 0 || paddingWidth < 0)
-            throw new ArgumentOutOfRangeException(nameof(inChannels));
-        (_inChannels, _outChannels, _kernelHeight, _kernelWidth, _strideHeight, _strideWidth, _paddingHeight, _paddingWidth) =
-            (inChannels, outChannels, kernelHeight, kernelWidth, strideHeight, strideWidth, paddingHeight, paddingWidth);
-        // PyTorch's Conv2d default: uniform on ±1/√fan_in; weight_norm then starts g at ‖v‖.
-        var random = RandomSeed.HasValue
-            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
-            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-        double bound = 1.0 / Math.Sqrt(inChannels * kernelHeight * kernelWidth);
-        _direction = new Tensor<T>(new[] { outChannels, inChannels, kernelHeight, kernelWidth });
-        for (int i = 0; i < _direction.Length; i++) _direction[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
-        _bias = new Tensor<T>(new[] { outChannels });
-        for (int i = 0; i < outChannels; i++) _bias[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
-        _gain = new Tensor<T>(new[] { outChannels });
-        ResetGainToNorm();
-        RegisterTrainableParameter(_direction, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_gain, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
-    }
-
-    private void ResetGainToNorm()
-    {
-        int per = _direction.Length / _outChannels;
-        for (int o = 0; o < _outChannels; o++)
-        {
-            double sum = 0;
-            for (int i = 0; i < per; i++)
-            {
-                double v = NumOps.ToDouble(_direction[o * per + i]);
-                sum += v * v;
-            }
-            _gain[o] = NumOps.FromDouble(Math.Sqrt(sum));
-        }
-    }
-
-    protected override Tensor<T> ForwardTraced(Tensor<T> input)
-    {
-        int per = _inChannels * _kernelHeight * _kernelWidth;
-        var flat = Engine.Reshape(_direction, new[] { _outChannels, per });
-        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(flat, flat), new[] { 1 }, keepDims: true));   // [out, 1]
-        var scale = Engine.TensorDivide(Engine.Reshape(_gain, new[] { _outChannels, 1 }), norm);
-        var weight = Engine.Reshape(Engine.TensorMultiply(flat, Engine.TensorTile(scale, new[] { 1, per })), new[] { _outChannels, _inChannels, _kernelHeight, _kernelWidth });
-        var y = Engine.Conv2D(input, weight, new[] { _strideHeight, _strideWidth }, new[] { _paddingHeight, _paddingWidth }, new[] { 1, 1 });
-        var bias = Engine.TensorTile(Engine.Reshape(_bias, new[] { 1, _outChannels, 1, 1 }), new[] { y.Shape[0], 1, y.Shape[2], y.Shape[3] });
-        return Engine.TensorAdd(y, bias);
-    }
-
-    /// <summary>Loads PyTorch's <c>original1</c> (v, <c>[out, in, kh, kw]</c>), <c>original0</c> (g) and bias.</summary>
-    internal void LoadTorchWeights(double[] direction, double[] gain, double[] bias)
-    {
-        if (direction.Length != _direction.Length || gain.Length != _outChannels || bias.Length != _outChannels)
-            throw new ArgumentException($"Expected {_direction.Length} direction, {_outChannels} gain and {_outChannels} bias values.");
-        for (int i = 0; i < direction.Length; i++) _direction[i] = NumOps.FromDouble(direction[i]);
-        for (int i = 0; i < _outChannels; i++)
-        {
-            _gain[i] = NumOps.FromDouble(gain[i]);
-            _bias[i] = NumOps.FromDouble(bias[i]);
-        }
-        Engine.InvalidatePersistentTensor(_direction);
-        Engine.InvalidatePersistentTensor(_gain);
-        Engine.InvalidatePersistentTensor(_bias);
-    }
-
-    public override void UpdateParameters(T learningRate)
-    {
-        var gradients = GetParameterGradients();
-        if (gradients.Length != _direction.Length + _gain.Length + _bias.Length) return;
-        int k = 0;
-        foreach (var tensor in new[] { _direction, _gain, _bias })
-        {
-            for (int i = 0; i < tensor.Length; i++, k++) tensor[i] = NumOps.Subtract(tensor[i], NumOps.Multiply(learningRate, gradients[k]));
-            Engine.InvalidatePersistentTensor(tensor);
-        }
-    }
-
-    public override void ResetState()
-    {
-    }
-}
-
-/// <summary>
 /// The discriminators CosyVoice trains HiFT against (the reference's <c>MultipleDiscriminator</c>): HiFi-GAN's
 /// multi-period discriminator (periods 2, 3, 5, 7, 11) and a multi-resolution spectrogram discriminator — for each STFT
 /// (1024/120/600, 2048/240/1200, 512/50/240), five weight-normalized 2-D convolutions with leaky ReLU (0.1) and an output
@@ -177,10 +66,10 @@ internal sealed class CosyVoiceHiFTDiscriminators<T>
             for (int j = 0; j < s.Convs.Count; j++)
             {
                 var (v, g, b) = Normed($"{prefix}mrd.discriminators.{d}.discriminators.{j}");
-                s.Convs[j].LoadTorchWeights(v, g, b);
+                s.Convs[j].LoadTorchWeights(v, b, gain: g);
             }
             var (ov, og, ob) = Normed($"{prefix}mrd.discriminators.{d}.out");
-            s.Output.LoadTorchWeights(ov, og, ob);
+            s.Output.LoadTorchWeights(ov, ob, gain: og);
         }
     }
 
@@ -200,9 +89,9 @@ internal sealed class CosyVoiceHiFTDiscriminators<T>
             _owner = owner;
             _fft = fft;
             _hop = hop;
-            WeightNormConv2DLayer<T> Conv(int input, int output, int kh, int kw, int sh, int sw, int ph, int pw)
+            NormedConv2DLayer<T> Conv(int input, int output, int kh, int kw, int sh, int sw, int ph, int pw)
             {
-                var layer = new WeightNormConv2DLayer<T>(input, output, kh, kw, sh, sw, ph, pw);
+                var layer = new NormedConv2DLayer<T>(input, output, kh, kw, sh, sw, ph, pw, 1, ConvolutionNormalization.Weight);
                 owner._layers.Add(layer);
                 return layer;
             }
@@ -226,8 +115,8 @@ internal sealed class CosyVoiceHiFTDiscriminators<T>
                 }
         }
 
-        public List<WeightNormConv2DLayer<T>> Convs { get; } = new();
-        public WeightNormConv2DLayer<T> Output { get; }
+        public List<NormedConv2DLayer<T>> Convs { get; } = new();
+        public NormedConv2DLayer<T> Output { get; }
 
         public (Tensor<T> Score, List<Tensor<T>> Features) Forward(Tensor<T> audio)
         {
