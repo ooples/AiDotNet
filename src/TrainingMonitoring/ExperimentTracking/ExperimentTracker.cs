@@ -1,6 +1,7 @@
 #if !NET6_0_OR_GREATER
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604
 #endif
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -815,7 +816,7 @@ public class ExperimentTracker : IExperimentTracker
         if (field.StartsWith("metrics."))
         {
             var metricKey = field.Substring(8);
-            if (double.TryParse(valueStr, out var value))
+            if (double.TryParse(valueStr, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
             {
                 query = op switch
                 {

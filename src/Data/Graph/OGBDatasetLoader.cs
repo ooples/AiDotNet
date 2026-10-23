@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Text;
@@ -477,7 +478,7 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
         }
 
         string[] lines = await FilePolyfill.ReadAllLinesAsync(filePath, cancellationToken);
-        bool hasHeader = lines.Length > 0 && !double.TryParse(lines[0].Split(',')[0], out _);
+        bool hasHeader = lines.Length > 0 && !double.TryParse(lines[0].Split(',')[0], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out _);
 
         for (int i = hasHeader ? 1 : 0; i < lines.Length; i++)
         {
@@ -491,7 +492,7 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
             var featureVector = new double[parts.Length];
             for (int j = 0; j < parts.Length; j++)
             {
-                double.TryParse(parts[j], out featureVector[j]);
+                double.TryParse(parts[j], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out featureVector[j]);
             }
             features.Add(featureVector);
         }

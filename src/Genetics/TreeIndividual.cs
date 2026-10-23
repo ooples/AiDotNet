@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace AiDotNet.Genetics;
 
 /// <summary>
@@ -105,7 +107,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
             }
 
             // Otherwise, it's a constant
-            return double.Parse(node.Value);
+            return double.Parse(node.Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
         }
         else
         {

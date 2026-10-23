@@ -1,3 +1,4 @@
+using System.Globalization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1254,7 +1255,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             var numOps = MathHelper.GetNumericOperations<T>();
 
-            if (type == SymbolicExpressionType.Constant && double.TryParse(expression, out double constant))
+            if (type == SymbolicExpressionType.Constant && double.TryParse(expression, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double constant))
             {
                 return new SymbolicExpressionNode<T>(numOps.FromDouble(constant));
             }

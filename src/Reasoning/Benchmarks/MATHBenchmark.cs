@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
@@ -312,7 +313,7 @@ public class MATHBenchmark<T> : IBenchmark<T>
             return true;
 
         // Try numerical comparison
-        if (double.TryParse(answer1, out double val1) && double.TryParse(answer2, out double val2))
+        if (double.TryParse(answer1, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double val1) && double.TryParse(answer2, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double val2))
         {
             return Math.Abs(val1 - val2) < 0.01;
         }

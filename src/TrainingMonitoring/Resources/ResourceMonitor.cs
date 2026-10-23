@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AiDotNet.Attributes;
@@ -451,9 +452,9 @@ public class ResourceMonitor : IDisposable
             var parts = output.Trim().Split(',');
             if (parts.Length >= 3)
             {
-                if (double.TryParse(parts[0].Trim(), out var utilization) &&
-                    double.TryParse(parts[1].Trim(), out var memoryUsed) &&
-                    double.TryParse(parts[2].Trim(), out var memoryTotal))
+                if (double.TryParse(parts[0].Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var utilization) &&
+                    double.TryParse(parts[1].Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var memoryUsed) &&
+                    double.TryParse(parts[2].Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var memoryTotal))
                 {
                     return (utilization, memoryUsed, memoryTotal);
                 }

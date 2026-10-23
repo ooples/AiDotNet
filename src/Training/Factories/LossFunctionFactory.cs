@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 
@@ -138,7 +139,7 @@ public static class LossFunctionFactory<T>
             float f => f,
             int i => i,
             long l => l,
-            string s when double.TryParse(s, out var parsed) => parsed,
+            string s when double.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed) => parsed,
             _ => Convert.ToDouble(value)
         };
     }

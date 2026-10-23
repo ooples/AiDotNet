@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Net.Http;
 using AiDotNet.Data.Loaders;
@@ -443,7 +444,7 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
             var featureValues = new double[parts.Length - 2];
             for (int i = 1; i < parts.Length - 1; i++)
             {
-                if (double.TryParse(parts[i], out double value))
+                if (double.TryParse(parts[i], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double value))
                 {
                     featureValues[i - 1] = value;
                 }

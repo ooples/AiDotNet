@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -277,7 +278,7 @@ public class SelfConsistencyHallucinationDetector<T> : TextSafetyModuleBase<T>
                     i++;
                 }
                 string numStr = text.Substring(start, i - start).Replace(",", "");
-                if (double.TryParse(numStr, out double num))
+                if (double.TryParse(numStr, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double num))
                 {
                     numbers.Add(num);
                 }
@@ -292,7 +293,7 @@ public class SelfConsistencyHallucinationDetector<T> : TextSafetyModuleBase<T>
 
     private static bool IsNumber(string text)
     {
-        return double.TryParse(text.Replace(",", ""), out _);
+        return double.TryParse(text.Replace(",", ""), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out _);
     }
 
     private Vector<T> ComputeEmbedding(string text)

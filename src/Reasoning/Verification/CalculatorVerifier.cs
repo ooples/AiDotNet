@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Data;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
@@ -157,8 +158,8 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
         var percentMatches = Regex.Matches(text, @"([0-9\.]+)%\s+of\s+([0-9\.]+)", RegexOptions.None, RegexTimeout);
         foreach (Match match in percentMatches)
         {
-            double percent = double.Parse(match.Groups[1].Value);
-            double number = double.Parse(match.Groups[2].Value);
+            double percent = double.Parse(match.Groups[1].Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
+            double number = double.Parse(match.Groups[2].Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
             string expr = $"{percent / 100} * {number}";
 
             // Try to find the claimed result nearby
@@ -224,8 +225,8 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
             var match = Regex.Match(expression, @"([0-9\.]+)\s*\*\*\s*([0-9\.]+)", RegexOptions.None, RegexTimeout);
             if (!match.Success) break;
 
-            double baseNum = double.Parse(match.Groups[1].Value);
-            double exponent = double.Parse(match.Groups[2].Value);
+            double baseNum = double.Parse(match.Groups[1].Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
+            double exponent = double.Parse(match.Groups[2].Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
             double result = Math.Pow(baseNum, exponent);
 
             expression = expression.Replace(match.Value, result.ToString());
@@ -239,10 +240,10 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
     /// </summary>
     private bool CompareResults(string expected, string actual)
     {
-        if (!double.TryParse(expected, out double expectedValue))
+        if (!double.TryParse(expected, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double expectedValue))
             return false;
 
-        if (!double.TryParse(actual, out double actualValue))
+        if (!double.TryParse(actual, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double actualValue))
             return false;
 
         // Allow small floating point differences

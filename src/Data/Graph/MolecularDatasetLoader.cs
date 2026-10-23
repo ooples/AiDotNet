@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Text;
@@ -569,6 +570,7 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             // Parse atom block
             var atomTypes = new List<int>();
             var atomPositions = new List<(double x, double y, double z)>();
+            bool malformed = false;
 
             for (int i = 0; i < numAtoms && lineIdx < lines.Length; i++, lineIdx++)
             {
@@ -576,9 +578,15 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
                 string[] atomParts = atomLine.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 if (atomParts.Length >= 4)
                 {
-                    double.TryParse(atomParts[0], out double x);
-                    double.TryParse(atomParts[1], out double y);
-                    double.TryParse(atomParts[2], out double z);
+                    // A coordinate that does not parse makes the molecule malformed, and it is skipped; it used to
+                    // become 0 silently (#2359).
+                    if (!double.TryParse(atomParts[0], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double x) ||
+                        !double.TryParse(atomParts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double y) ||
+                        !double.TryParse(atomParts[2], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double z))
+                    {
+                        malformed = true;
+                        continue;
+                    }
                     string atomSymbol = atomParts[3].Trim();
 
                     atomPositions.Add((x, y, z));
@@ -612,7 +620,7 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             lineIdx++; // Skip $$$$
 
             // Build graph if we have valid data
-            if (atomTypes.Count > 0)
+            if (atomTypes.Count > 0 && !malformed)
             {
                 var graph = BuildMolecularGraph(atomTypes, edges, atomPositions);
                 graphs.Add(graph);
@@ -652,9 +660,13 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             if (parts.Length >= 4)
             {
                 string atomSymbol = parts[0];
-                double.TryParse(parts[1], out double x);
-                double.TryParse(parts[2], out double y);
-                double.TryParse(parts[3], out double z);
+                // A coordinate that does not parse makes the record malformed; it used to become 0 silently (#2359).
+                if (!double.TryParse(parts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double x) ||
+                    !double.TryParse(parts[2], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double y) ||
+                    !double.TryParse(parts[3], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double z))
+                {
+                    return null;
+                }
 
                 atomTypes.Add(AtomTypeMap.GetValueOrDefault(atomSymbol, 0));
                 atomPositions.Add((x, y, z));
