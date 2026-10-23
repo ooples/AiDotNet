@@ -364,10 +364,9 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
         string tempFile = Path.Combine(Path.GetTempPath(), $"modelnet40_{Guid.NewGuid()}.zip");
         try
         {
-            using (var httpClient = new HttpClient())
+            using (var download = AiDotNet.Helpers.SharedHttp.WithTimeout(TimeSpan.FromMinutes(30), cancellationToken))
             {
-                httpClient.Timeout = TimeSpan.FromMinutes(30);
-                using var response = await httpClient.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                using var response = await AiDotNet.Helpers.SharedHttp.Downloads.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead, download.Token);
                 response.EnsureSuccessStatusCode();
 
                 using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);

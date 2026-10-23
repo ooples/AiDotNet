@@ -433,10 +433,9 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
         string tempFile = Path.Combine(Path.GetTempPath(), $"shapenetcore_{Guid.NewGuid()}.zip");
         try
         {
-            using (var httpClient = new HttpClient())
+            using (var download = AiDotNet.Helpers.SharedHttp.WithTimeout(TimeSpan.FromMinutes(60), cancellationToken))
             {
-                httpClient.Timeout = TimeSpan.FromMinutes(60);
-                using var response = await httpClient.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                using var response = await AiDotNet.Helpers.SharedHttp.Downloads.GetAsync(DownloadUrl, HttpCompletionOption.ResponseHeadersRead, download.Token);
                 response.EnsureSuccessStatusCode();
 
                 using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);

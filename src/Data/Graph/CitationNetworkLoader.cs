@@ -216,11 +216,9 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
         try
         {
             // Download the archive
-            using (var httpClient = new HttpClient())
+            using (var download = AiDotNet.Helpers.SharedHttp.WithTimeout(TimeSpan.FromMinutes(10), cancellationToken))
             {
-                httpClient.Timeout = TimeSpan.FromMinutes(10);
-
-                using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                using var response = await AiDotNet.Helpers.SharedHttp.Downloads.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, download.Token);
                 response.EnsureSuccessStatusCode();
 
                 using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
