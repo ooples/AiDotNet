@@ -30,13 +30,6 @@ public sealed class MandarinG2P
 {
     private static readonly Lazy<MandarinG2P> SharedInstance = new(() => new MandarinG2P(), isThreadSafe: true);
 
-    // jieba
-    private readonly Dictionary<string, long> _frequency = new(StringComparer.Ordinal);
-    private readonly double _logTotal;
-    private readonly Dictionary<char, double> _hmmStart = new();
-    private readonly Dictionary<char, Dictionary<char, double>> _hmmTransition = new();
-    private readonly Dictionary<char, Dictionary<string, double>> _hmmEmission = new();
-
     // pypinyin
     private readonly Dictionary<string, string[]> _phrases = new(StringComparer.Ordinal);
     private readonly HashSet<string> _phrasePrefixes = new(StringComparer.Ordinal);
@@ -44,41 +37,6 @@ public sealed class MandarinG2P
 
     private MandarinG2P()
     {
-        long total = 0;
-        foreach (var line in ReadLines("jieba_dict.tsv.gz"))
-        {
-            int tab = line.IndexOf('\t');
-            string word = line.Substring(0, tab);
-            long frequency = long.Parse(line.Substring(tab + 1), CultureInfo.InvariantCulture);
-            _frequency[word] = frequency;
-            total += frequency;
-            var codepoints = Codepoints(word);
-            var prefix = new StringBuilder();
-            for (int i = 0; i < codepoints.Count - 1; i++)
-            {
-                prefix.Append(codepoints[i]);
-                string fragment = prefix.ToString();
-                if (!_frequency.ContainsKey(fragment)) _frequency[fragment] = 0;
-            }
-        }
-        _logTotal = Math.Log(total);
-
-        var hmm = JObject.Parse(string.Join("\n", ReadLines("jieba_hmm.json.gz")));
-        foreach (var state in (JObject)hmm["start"]!)
-            _hmmStart[state.Key[0]] = (double)state.Value!;
-        foreach (var from in (JObject)hmm["trans"]!)
-        {
-            var row = new Dictionary<char, double>();
-            foreach (var to in (JObject)from.Value!) row[to.Key[0]] = (double)to.Value!;
-            _hmmTransition[from.Key[0]] = row;
-        }
-        foreach (var state in (JObject)hmm["emit"]!)
-        {
-            var row = new Dictionary<string, double>(StringComparer.Ordinal);
-            foreach (var emission in (JObject)state.Value!) row[emission.Key] = (double)emission.Value!;
-            _hmmEmission[state.Key[0]] = row;
-        }
-
         foreach (var line in ReadLines("pypinyin_chars.tsv.gz"))
         {
             int tab = line.IndexOf('\t');
@@ -287,7 +245,7 @@ public sealed class MandarinG2P
         (0x30EDD, 0x30EDE), (0x31350, 0x32389),
     };
 
-    private static bool IsHan(string codepoint)
+    internal static bool IsHan(string codepoint)
     {
         int value = char.ConvertToUtf32(codepoint, 0);
         foreach (var (from, to) in HanRanges)
@@ -378,183 +336,6 @@ public sealed class MandarinG2P
         return piece.Select(c => _characters.TryGetValue(c, out var reading) ? reading : c);
     }
 
-    // ---------------------------------------------------------------- jieba
-
-    private static readonly Regex JiebaHan = new("([一-鿕a-zA-Z0-9+#&\\._%\\-]+)");
-    private static readonly Regex JiebaSkip = new("(\r\n|\\s)");
-    private static readonly Regex HmmHan = new("([一-鿕]+)");
-    private static readonly Regex HmmSkip = new("([a-zA-Z0-9]+(?:\\.\\d+)?%?)");
-
-    /// <summary>jieba's <c>lcut(text, cut_all=False)</c> (HMM on).</summary>
-    internal List<string> JiebaCut(string sentence)
-    {
-        var words = new List<string>();
-        foreach (var block in JiebaHan.Split(sentence))
-        {
-            if (block.Length == 0) continue;
-            if (JiebaHan.IsMatch(block) && JiebaHan.Match(block).Index == 0)
-            {
-                words.AddRange(CutDag(Codepoints(block)));
-                continue;
-            }
-            foreach (var x in JiebaSkip.Split(block))
-            {
-                if (x.Length == 0) continue;
-                if (JiebaSkip.Match(x) is { Success: true, Index: 0 }) words.Add(x);
-                else words.AddRange(Codepoints(x));
-            }
-        }
-        return words;
-    }
-
-    private long? Frequency(string word) => _frequency.TryGetValue(word, out long f) ? f : null;
-
-    // Tokenizer.__cut_DAG
-    private IEnumerable<string> CutDag(List<string> sentence)
-    {
-        int n = sentence.Count;
-        string Slice(int from, int to) => string.Concat(sentence.GetRange(from, to - from));
-        // get_DAG
-        var dag = new List<int>[n];
-        for (int k = 0; k < n; k++)
-        {
-            var ends = new List<int>();
-            int i = k;
-            string fragment = sentence[k];
-            while (i < n && _frequency.TryGetValue(fragment, out long f))
-            {
-                if (f > 0) ends.Add(i);
-                i++;
-                if (i < n) fragment = Slice(k, i + 1);
-            }
-            if (ends.Count == 0) ends.Add(k);
-            dag[k] = ends;
-        }
-        // calc: route[idx] = max over x of (log(FREQ[sentence[idx:x+1]] or 1) − log total + route[x+1].0, x)
-        var route = new (double Score, int End)[n + 1];
-        route[n] = (0, 0);
-        for (int idx = n - 1; idx >= 0; idx--)
-        {
-            (double Score, int End) best = (double.NegativeInfinity, -1);
-            foreach (int x in dag[idx])
-            {
-                long f = Frequency(Slice(idx, x + 1)) ?? 0;
-                double score = Math.Log(f == 0 ? 1 : f) - _logTotal + route[x + 1].Score;
-                if (score > best.Score || (score == best.Score && x > best.End)) best = (score, x);
-            }
-            route[idx] = best;
-        }
-        var buffer = new StringBuilder();
-        int bufferCount = 0;
-        IEnumerable<string> Flush()
-        {
-            if (bufferCount == 0) yield break;
-            string pending = buffer.ToString();
-            if (bufferCount == 1) yield return pending;
-            else if (Frequency(pending) is not > 0)
-                foreach (var t in FinalSegCut(pending)) yield return t;
-            else
-                foreach (var c in Codepoints(pending)) yield return c;
-            buffer.Clear();
-            bufferCount = 0;
-        }
-        int at = 0;
-        while (at < n)
-        {
-            int y = route[at].End + 1;
-            if (y - at == 1)
-            {
-                buffer.Append(sentence[at]);
-                bufferCount++;
-            }
-            else
-            {
-                foreach (var t in Flush()) yield return t;
-                yield return Slice(at, y);
-            }
-            at = y;
-        }
-        foreach (var t in Flush()) yield return t;
-    }
-
-    // finalseg.cut
-    private IEnumerable<string> FinalSegCut(string sentence)
-    {
-        foreach (var block in HmmHan.Split(sentence))
-        {
-            if (block.Length == 0) continue;
-            if (HmmHan.Match(block) is { Success: true, Index: 0 } m && m.Length == block.Length)
-            {
-                foreach (var word in Viterbi(Codepoints(block))) yield return word;
-                continue;
-            }
-            foreach (var x in HmmSkip.Split(block))
-                if (x.Length > 0) yield return x;
-        }
-    }
-
-    private const double MinFloat = -3.14e100;
-    private static readonly Dictionary<char, string> PreviousStates = new()
-    {
-        ['B'] = "ES", ['M'] = "MB", ['S'] = "SE", ['E'] = "BM",
-    };
-
-    // finalseg.__cut: the B/M/E/S Viterbi path, then words from it.
-    private IEnumerable<string> Viterbi(List<string> observations)
-    {
-        const string states = "BMES";
-        double Emit(char state, string observation) =>
-            _hmmEmission[state].TryGetValue(observation, out double p) ? p : MinFloat;
-        double Transition(char from, char to) =>
-            _hmmTransition[from].TryGetValue(to, out double p) ? p : MinFloat;
-        var probability = new Dictionary<char, double>();
-        var path = new Dictionary<char, List<char>>();
-        foreach (char y in states)
-        {
-            probability[y] = _hmmStart[y] + Emit(y, observations[0]);
-            path[y] = new List<char> { y };
-        }
-        for (int t = 1; t < observations.Count; t++)
-        {
-            var next = new Dictionary<char, double>();
-            var nextPath = new Dictionary<char, List<char>>();
-            foreach (char y in states)
-            {
-                double emission = Emit(y, observations[t]);
-                (double Score, char State) best = (double.NegativeInfinity, '\0');
-                foreach (char y0 in PreviousStates[y])
-                {
-                    double score = probability[y0] + Transition(y0, y) + emission;
-                    if (score > best.Score || (score == best.Score && y0 > best.State)) best = (score, y0);
-                }
-                next[y] = best.Score;
-                nextPath[y] = new List<char>(path[best.State]) { y };
-            }
-            probability = next;
-            path = nextPath;
-        }
-        // max((V[-1][y], y) for y in "ES"): a tie goes to "S".
-        char last = probability['E'] > probability['S'] ? 'E' : 'S';
-        var positions = path[last];
-        int begin = 0, nextIndex = 0;
-        for (int i = 0; i < observations.Count; i++)
-        {
-            char position = positions[i];
-            if (position == 'B')
-            {
-                begin = i;
-            }
-            else if (position == 'E')
-            {
-                yield return string.Concat(observations.GetRange(begin, i - begin + 1));
-                nextIndex = i + 1;
-            }
-            else if (position == 'S')
-            {
-                yield return observations[i];
-                nextIndex = i + 1;
-            }
-        }
-        if (nextIndex < observations.Count) yield return string.Concat(observations.GetRange(nextIndex, observations.Count - nextIndex));
-    }
+    /// <summary>jieba's <c>lcut(text, cut_all=False)</c> (HMM on), from the shared <see cref="JiebaSegmenter"/>.</summary>
+    internal List<string> JiebaCut(string sentence) => JiebaSegmenter.Default.Cut(sentence);
 }
