@@ -305,9 +305,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// Whether this model holds any layer yet, in <see cref="Layers"/> or outside it
-    /// (<see cref="GetExtraTrainableLayers"/>), as detection backbones and the audio and vision-language text
-    /// encoders do.
+    /// Whether this model holds any layer yet: in <see cref="Layers"/>, in <see cref="GetExtraTrainableLayers"/>
+    /// (the audio and vision-language text encoders), or in a generated additional-layer group (layers a model
+    /// keeps in fields, such as the detection backbones). The generated getters tolerate members a running
+    /// constructor has not assigned yet.
     /// </summary>
     private bool HasBuiltLayers()
     {
@@ -317,6 +318,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (extra is not null)
                 return true;
+        }
+        foreach (var group in GetGeneratedAdditionalLayerGroups())
+        {
+            foreach (var layer in group.Get())
+            {
+                if (layer is not null)
+                    return true;
+            }
         }
         return false;
     }
@@ -1227,10 +1236,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             long total = Layers.Sum(layer => (long)ActualLayerLength(layer));
             total += GetExtraTrainableLayers()
                 .Where(layer => layer is not null)
-                .Sum(layer => (long)ActualLayerLength(layer!));
+                .Sum(layer => (long)ActualLayerLength((layer ?? throw new InvalidOperationException("layer is null where it is required."))));
             total += GetExtraTrainableTensors()
                 .Where(tensor => tensor is not null)
-                .Sum(tensor => (long)tensor!.Length);
+                .Sum(tensor => (long)tensor.Length);
             total += ParameterComponents.Sum(component => (long)component.GetParameters().Length);
             return ParameterCountHelper.ToFlatVectorSize(total);
         }
@@ -4141,7 +4150,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (IsDeferredOrAgnosticShape(architectureInputShape))
             return true;
 
-        if (AreShapesCompatible(architectureInputShape!, layerInputShape!))
+        if (AreShapesCompatible((architectureInputShape ?? throw new InvalidOperationException("architectureInputShape is null where it is required.")), (layerInputShape ?? throw new InvalidOperationException("layerInputShape is null where it is required."))))
             return true;
 
         // Flat-reshape boundary: architecture may declare a structured
@@ -4162,7 +4171,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // layer declaring [2, 8] fed by a flat [16]) must use an explicit
         // ReshapeLayer, mirroring the layer-to-layer "no implicit flatten"
         // contract — so it is NOT accepted here.
-        if (layerInputShape!.Length == 1 && TotalElementsMatch(architectureInputShape!, layerInputShape!))
+        if (layerInputShape.Length == 1 && TotalElementsMatch(architectureInputShape, layerInputShape))
             return true;
 
         return false;
@@ -4200,7 +4209,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return true;
         }
 
-        int[] outputShape = layerOutputShape!;
+        int[] outputShape = (layerOutputShape ?? throw new InvalidOperationException("layerOutputShape is null where it is required."));
 
         // Partially-deferred shapes — e.g. a transposed-conv generator that
         // emits [3, -1, -1] until first Forward resolves H/W from runtime
@@ -4226,7 +4235,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // keeps the surface narrow: any future "d > 0 but doesn't
         // match" path still gets the clear "output shape ... must match
         // architecture output size" error.
-        if (outputShape.Any(d => d < 0))
+        if ((outputShape ?? throw new InvalidOperationException("outputShape is null where it is required.")).Any(d => d < 0))
         {
             error = string.Empty;
             return true;
@@ -4590,7 +4599,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         bool currentIsLazy = IsDeferredOrAgnosticShape(currentInputShape);
         if (!currentIsLazy
             && !IsDeferredOrAgnosticShape(prevOutputShape)
-            && !AreShapesCompatible(prevOutputShape!, currentInputShape!))
+            && !AreShapesCompatible((prevOutputShape ?? throw new InvalidOperationException("prevOutputShape is null where it is required.")), (currentInputShape ?? throw new InvalidOperationException("currentInputShape is null where it is required."))))
             return false;
 
         // Special checks for specific layer combinations
@@ -4619,7 +4628,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // leading dims <= 1, which silently strips a leading -1 too —
             // turning [-1, 32] into [32] and breaking the product check.
             // Closes the #1330 InferenceOptimizerIntegrationTests cluster.
-            if (AreShapesCompatible(reshapeLayer.GetOutputShape(), currentInputShape!))
+            if (AreShapesCompatible(reshapeLayer.GetOutputShape(), (currentInputShape ?? throw new InvalidOperationException("currentInputShape is null where it is required."))))
                 return true;
 
             // Fall back to product-of-known-dims for the implicit-flatten
@@ -4629,7 +4638,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // a -1 in any non-leading position still survives and short-
             // circuits the comparison.
             var reshapeOutputShape = TrimLeadingBatchLikeDimensions(reshapeLayer.GetOutputShape());
-            var normalizedCurrentInputShape = TrimLeadingBatchLikeDimensions(currentInputShape!);
+            var normalizedCurrentInputShape = TrimLeadingBatchLikeDimensions(currentInputShape);
 
             if (reshapeOutputShape.Any(d => d <= 0) || normalizedCurrentInputShape.Any(d => d <= 0))
                 return true;
@@ -5599,7 +5608,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // across ALL model families, not just whichever layer breaks first.
         int[] lastGoodShape = currentShape;
 
-        for (int i = 0; hasOwnLayers && i < Layers!.Count; i++)
+        for (int i = 0; hasOwnLayers && i < (Layers ?? throw new InvalidOperationException("Layers is null where it is required.")).Count; i++)
         {
             var layer = Layers[i];
             if (layer is null) continue;
@@ -12073,8 +12082,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                             : MixedPrecision.BitConverterHelper.Bf16RoundTrip(fp32Value);
                         fp32Span[i] = rounded;
                     }
-                    mpFp32Snapshots!.Add(snapshot);
-                    mpSnapshotTargets!.Add(param);
+                    mpFp32Snapshots.Add(snapshot);
+                    mpSnapshotTargets.Add(param);
                 }
 
                 for (int p = 0; p < trainableParams.Count; p++)
@@ -14693,8 +14702,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var pairType = GetGenericEnumerableElementTypes(value.GetType()).FirstOrDefault(IsKeyValuePair);
         if (pairType is null) return sequence;
 
-        var valueProperty = pairType.GetProperty(nameof(KeyValuePair<object, object>.Value))!;
-        return sequence.Cast<object>().Select(pair => valueProperty.GetValue(pair));
+        var valueProperty = pairType.GetProperty(nameof(KeyValuePair<object, object>.Value));
+        return sequence.Cast<object>().Select(pair => (valueProperty ?? throw new InvalidOperationException("valueProperty is null where it is required.")).GetValue(pair));
     }
 
     private static void ResetIfOptimizer(object? value, HashSet<object> resetOptimizers)
@@ -16057,7 +16066,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 Dictionary<string, object>? metadata = metadataCount == 0
                     ? null
                     : new Dictionary<string, object>(metadataCount, StringComparer.Ordinal);
-                for (int m = 0; m < metadataCount; m++) metadata![reader.ReadString()] = reader.ReadString();
+                for (int m = 0; m < metadataCount; m++) (metadata ?? throw new InvalidOperationException("metadata is null where it is required."))[reader.ReadString()] = reader.ReadString();
                 int stateLength = reader.ReadInt32();
                 byte[] state = reader.ReadBytes(stateLength);
                 if (state.Length != stateLength)
@@ -16114,9 +16123,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 replacements.Add(layer);
             }
             if (savedPartitionSizes is not null)
-                targetGroup.ReplacePartitioned!(replacements, savedPartitionSizes);
+                (targetGroup.ReplacePartitioned ?? throw new InvalidOperationException("targetGroup.ReplacePartitioned is null where it is required."))(replacements, savedPartitionSizes);
             else
-                targetGroup.Replace!(replacements);
+                (targetGroup.Replace ?? throw new InvalidOperationException("targetGroup.Replace is null where it is required."))(replacements);
         }
 
         InvalidateParameterCountCache();
@@ -18485,9 +18494,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     : layer.GetParameters().Length;
 
             var layerCounts = restoreLayers.Select(ActualParameterLength).ToList();
-            var extraLayerCounts = restoreExtraLayers.Select(layer => ActualParameterLength(layer!)).ToList();
+            var extraLayerCounts = restoreExtraLayers.Select(layer => ActualParameterLength((layer ?? throw new InvalidOperationException("layer is null where it is required.")))).ToList();
             int extraTensorCount = ParameterCountHelper.ToFlatVectorSize(
-                restoreExtraTensors.Sum(tensor => (long)tensor!.Length));
+                restoreExtraTensors.Sum(tensor => (long)tensor.Length));
             int componentCount = ParameterCountHelper.ToFlatVectorSize(
                 restoreComponents.Sum(component => (long)component.GetParameters().Length));
             long total = layerCounts.Sum(count => (long)count)
@@ -18555,12 +18564,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (extraCount == 0) continue;
             var extraParameters = new Vector<T>(extraCount);
             srcSpan.Slice(currentIndex, extraCount).CopyTo(extraParameters.AsWritableSpan());
-            restoreExtraLayers[i]!.SetParameters(extraParameters);
+            (restoreExtraLayers[i] ?? throw new InvalidOperationException("restoreExtraLayers[i] is null where it is required.")).SetParameters(extraParameters);
             currentIndex += extraCount;
         }
         foreach (var tensor in restoreExtraTensors)
         {
-            if (tensor!.Length == 0) continue;
+            if (tensor.Length == 0) continue;
             srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
             currentIndex += tensor.Length;
         }

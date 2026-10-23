@@ -1307,10 +1307,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
                 _ => false,
             };
-            string nestedGetter = nestedCollectionNullable
-                ? $"() => ({member.Name} ?? (global::System.Collections.Generic.IEnumerable<{outerElementName}>)" +
-                  $"global::System.Array.Empty<{outerElementName}>()).SelectMany(__layers => __layers)"
-                : $"() => {member.Name}.SelectMany(__layers => __layers)";
+            // Null-tolerant even for a non-nullable member: the base enumerates these groups while a derived
+            // constructor is still running (the Options setter's layer check), before the member is assigned.
+            string nestedGetter =
+                $"() => ({member.Name} ?? (global::System.Collections.Generic.IEnumerable<{outerElementName}>)" +
+                $"global::System.Array.Empty<{outerElementName}>()).SelectMany(__layers => __layers)";
             string partitionGetter =
                 $"() => GetGeneratedAdditionalLayerPartitionSizes<{nestedElementName}>({member.Name})";
             string nestedReplace = nestedCollectionNullable
@@ -1332,9 +1333,9 @@ public class ModelParameterGenerator : IIncrementalGenerator
             IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
             _ => false,
         };
-        string getter = collectionNullable
-            ? $"() => {member.Name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)global::System.Array.Empty<{elementName}>()"
-            : $"() => {member.Name}";
+        // Null-tolerant for the same reason as the nested getter above.
+        string getter =
+            $"() => {member.Name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)global::System.Array.Empty<{elementName}>()";
         string collectionReplace = collectionNullable
             ? collectionWritable
                 ? $"__layers => {member.Name} = RestoreGeneratedAdditionalLayerCollection({member.Name}, __layers, nameof({member.Name}))"
@@ -1693,10 +1694,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
         if (DictionaryTypes(type, out var key, out var value))
         {
-            family = NumericFamilyFor(value!, elem);
+            family = NumericFamilyFor((value ?? throw new System.InvalidOperationException("value is null where it is required.")), elem);
             if (family is not null)
             {
-                var keyType = key!.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+                var keyType = (key ?? throw new System.InvalidOperationException("key is null where it is required.")).WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
                 return $"new Keyed{family}CollectionParameterSource<{elem}, {keyType}>(() => {name})";
             }
         }
