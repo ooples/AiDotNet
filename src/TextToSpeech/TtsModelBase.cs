@@ -343,6 +343,14 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// </summary>
     public TtsSupervision TrainingSupervision => RequiredSupervision;
 
+    /// <summary>
+    /// Whether the model trains and is measured through its sample-level objective
+    /// (<see cref="Train(TtsTrainingSample{T})"/>, <see cref="EvaluateTrainingObjective"/>): always when it needs
+    /// supervision a token/mel pair lacks, and for a model whose synthesized length follows its own predictions, so
+    /// that its prediction cannot be compared frame by frame with a target (StyleTTS).
+    /// </summary>
+    public virtual bool TrainsOnSampleObjective => RequiredSupervision != TtsSupervision.None;
+
     /// <summary>Trains on one utterance with the supervision its paper uses.</summary>
     /// <returns>The training loss of the step.</returns>
     public T Train(TtsTrainingSample<T> sample)

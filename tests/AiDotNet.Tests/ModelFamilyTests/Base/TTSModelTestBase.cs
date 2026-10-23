@@ -38,9 +38,10 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             && tts.SynthesisVoiceRequirement != AiDotNet.TextToSpeech.TtsSupervision.None)
         {
             int melChannels = tts.MelChannels;
-            var reference = new Tensor<T>(new[] { 12, melChannels });
+            int referenceFrames = VoiceReferenceFrames;
+            var reference = new Tensor<T>(new[] { referenceFrames, melChannels });
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-            for (int f = 0; f < 12; f++)
+            for (int f = 0; f < referenceFrames; f++)
                 for (int c = 0; c < melChannels; c++)
                     reference[f, c] = ops.FromDouble(Math.Sin(0.37 * f + 0.21 * c));
             // A second of a two-tone waveform at the model's rate, for models whose speaker encoder reads audio (YourTTS).
@@ -60,6 +61,9 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         return network;
     }
 
+    /// <summary>Frames of the voice's reference mel spectrogram (12; a style encoder that pools by 16 needs more).</summary>
+    protected virtual int VoiceReferenceFrames => 12;
+
     /// <summary>
     /// Trains a model whose paper needs supervision a token/mel pair does not carry (FastSpeech 2's forced-alignment
     /// durations) through its typed entry point, with synthetic supervision consistent with the fixture's target:
@@ -69,7 +73,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     protected override void TrainOn(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
         if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
-            && tts.TrainingSupervision != AiDotNet.TextToSpeech.TtsSupervision.None)
+            && tts.TrainsOnSampleObjective)
         {
             tts.Train(SyntheticSupervision(input, target, tts));
             return;
@@ -85,7 +89,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     protected override double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> output, Tensor<T> target)
     {
         if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
-            && tts.TrainingSupervision != AiDotNet.TextToSpeech.TtsSupervision.None)
+            && tts.TrainsOnSampleObjective)
             return ConvertToDouble(tts.EvaluateTrainingObjective(SyntheticSupervision(input, target, tts)));
         return base.MeasureLoss(network, input, output, target);
     }
@@ -96,7 +100,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     protected override void RunRecalibrationPass(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input, Tensor<T>? target)
     {
         if (target is not null && network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
-            && tts.TrainingSupervision != AiDotNet.TextToSpeech.TtsSupervision.None)
+            && tts.TrainsOnSampleObjective)
         {
             tts.EvaluateTrainingObjective(SyntheticSupervision(input, target, tts));
             return;
@@ -197,6 +201,9 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         {
             Tokens = tokens.Rank == 1 ? tokens : new Tensor<T>(new[] { tokenCount }, tokens.ToVector()),
             Mel = mel,
+            // A model that reconstructs the recording (StyleTTS 2) and outputs a waveform trains on the target itself.
+            Audio = network is not null && target.Rank == 1 && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Recording) != 0
+                ? target : null,
             Durations = durations,
             Pitch = pitch,
             Energy = energy,
