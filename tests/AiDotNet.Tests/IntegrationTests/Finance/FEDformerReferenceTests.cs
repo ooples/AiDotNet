@@ -193,9 +193,9 @@ public class FEDformerReferenceTests
     /// FEDformer's dropout masks are drawn inside its one network layer, so a compiled training plan used to replay the
     /// traced step's masks on every later step; FEDformer opted out of fused training instead. The masks now come from
     /// CompiledStepRandom, which refills them before each replay, so the fused loss follows the eager loss step for
-    /// step. A plan replaying frozen masks drops different elements from step 2 on and diverges. Run in double, where the
-    /// two arms differ by at most about 3e-6 (the compiled plan's own rounding) and frozen masks by 2e-2 to 9e-2, so the
-    /// 1e-4 tolerance sits well clear of both. In float the arms drifted 3e-4 apart within three steps on a CI runner.
+    /// step. A plan replaying frozen masks drops different elements from step 2 on and diverges, by 2e-2 to 9e-2 in
+    /// loss. The 3e-4 float gap this test first met on a CI runner was not rounding: the compiled plan's divide backward
+    /// dropped the cross-attention's gradient (see the next test).
     /// </summary>
     [Fact(Timeout = 120000)]
     public async Task Fused_training_redraws_dropout_masks_like_the_eager_step()
@@ -228,6 +228,63 @@ public class FEDformerReferenceTests
             Assert.True(
                 Math.Abs(fused - eager) <= 1e-4 * Math.Max(1.0, Math.Abs(eager)),
                 $"step {step}: fused loss {fused} differs from eager loss {eager}; the plan is not redrawing its masks.");
+        }
+    }
+
+    /// <summary>
+    /// Every parameter's fused update equals its eager-tape update, not only the loss. FEDformer's loss is dominated by
+    /// the target's variance, so a wrong gradient on a small branch moves it by far less than its own scale. The Fourier
+    /// cross-attention's complex tanh divides and multiplies by one sech, and AiDotNet.Tensors' compiled divide backward
+    /// copied its gradient over the multiply's, so the encoder and both cross-attention projections updated 20-80% off
+    /// the eager tape while the loss agreed to 3e-6 (AiDotNet.Tensors#1533). Without dropout the two arms run the same
+    /// arithmetic, so they agree to double rounding.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Fused_training_updates_every_parameter_like_the_eager_step()
+    {
+        await Task.Yield();
+        const int sequence = 16, label = 8, horizon = 4, features = 3, batch = 2;
+        FedformerNetwork<double> Build() => new(sequence, label, horizon, features, modelDimension: 8, heads: 2,
+            feedForward: 16, encoderLayers: 1, decoderLayers: 1, modes: 4, FourierModeSelection.Lowest,
+            modeSelectionSeed: 1, movingAverage: 5, dropout: 0.0) { RandomSeed = 11 };
+        var fusedNetwork = Build();
+        var eagerNetwork = Build();
+        var warm = new Tensor<double>(new[] { batch, sequence, features });
+        fusedNetwork.Forward(warm);
+        eagerNetwork.Forward(warm);
+        eagerNetwork.SetParameters(fusedNetwork.GetParameters());
+        fusedNetwork.SetTrainingMode(true);
+        eagerNetwork.SetTrainingMode(true);
+
+        var stepper = new TapeTrainingStepper<double>(new object());
+        var fusedOptimizer = Sgd();
+        var eagerOptimizer = Sgd();
+        var data = RandomHelper.CreateSeededRandom(5);
+        for (int step = 0; step < 3; step++)
+        {
+            var input = Random(data, batch, sequence, features);
+            var target = Random(data, batch, horizon, features);
+            var before = fusedNetwork.NamedTensors.Select(p => p.Tensor.ToVector().ToArray()).ToArray();
+            stepper.Step(Request(fusedNetwork, input, target, fusedOptimizer));
+            Assert.True(stepper.LastStepFused, $"step {step}: fused path did not engage ({stepper.Session.LastMissReason}).");
+            TapeTrainingStepper<double>.EagerStep(Request(eagerNetwork, input, target, eagerOptimizer));
+
+            var fusedNamed = fusedNetwork.NamedTensors;
+            var eagerNamed = eagerNetwork.NamedTensors;
+            for (int n = 0; n < fusedNamed.Count; n++)
+            {
+                var fused = fusedNamed[n].Tensor;
+                var eager = eagerNamed[n].Tensor;
+                double worst = 0, scale = 1e-12;
+                for (int k = 0; k < fused.Length; k++)
+                {
+                    double eagerUpdate = eager[k] - before[n][k];
+                    worst = Math.Max(worst, Math.Abs((fused[k] - before[n][k]) - eagerUpdate));
+                    scale = Math.Max(scale, Math.Abs(eagerUpdate));
+                }
+                Assert.True(worst <= 1e-9 * scale,
+                    $"step {step}: {fusedNamed[n].Name} updated {worst:G3} off the eager tape (its largest update is {scale:G3}).");
+            }
         }
     }
 

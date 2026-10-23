@@ -63,7 +63,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     [
         // MetaLearnerBase and NeuralProcessBase are no longer excluded: MetaLearnerTestBase supplies the inner
         // model a meta-learner wraps, so the fixture only names the algorithm and its options type (#2139).
-        "MetaLearningModelBase",     // The adapted models Adapt returns: results of a meta-learner, not learners
+        // MetaLearningModelBase is no longer excluded: an adapted model is what a meta-learner's Adapt returns, so
+        // AdaptedMetaModelTestBase adapts a learner that produces it (AdaptedMetaModelProducers) and tests the result.
         // NoisePredictorBase is no longer excluded: NoisePredictorTestBase drives PredictNoise directly, and each
         // predictor is built at a reduced size from NoisePredictorFixtureArgs (#2139).
         // ShardedModelBase is no longer excluded: ShardedModelTestBase wraps a seeded network at world size 1, where
@@ -75,7 +76,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // method from small real parts (SslFixtureArgs) and drives TrainStep (#2139).
         // PolicyBase is no longer excluded: the RL agent family asserted agent semantics a policy does not have
         // (Train is a no-op, sampling is stochastic), so policies have their own family, PolicyTestBase (#2139).
-        "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
+        // ImageWatermarkerBase is no longer excluded: its three watermark detectors are built from defaults alone and
+        // are image safety modules like ImageWatermarker, so SafetyModuleTestBase drives them ("wraps images" was not
+        // a composition: nothing is wrapped) (#2139).
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
         // VAEModelBase is no longer excluded: VAEs implement IVAEModel, not IDiffusionModel, so they now have their
         // own family (VAEModelTestBase) instead of being routed to a diffusion family that cannot construct them (#2139).
@@ -631,6 +634,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> MetaLearnerTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "FeatureCount", "NumWays", "MetaModelFrozenByDesign" };
+
+    /// <summary>Overridable surface of <c>AdaptedMetaModelTestBase</c>: the scalar learner's, plus the adapted type.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> AdaptedMetaModelTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "FeatureCount", "NumWays", "MetaModelFrozenByDesign", "AdaptedModelType" };
+
+    /// <summary>Overridable surface of <c>ClassificationAdaptedMetaModelTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> ClassificationAdaptedMetaModelTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "FeatureCount", "EmbeddingDimension", "NumWays", "MetaModelFrozenByDesign", "AdaptedModelType" };
+
+    /// <summary>
+    /// The meta-learner whose Adapt builds each adapted model (MetaLearningModelBase), by metadata name (#2139).
+    /// </summary>
+    /// <remarks>
+    /// An adapted model's constructor takes the pieces adaptation computes (adapted parameters, an episodic memory, a
+    /// context representation), so a fixture could only hand it invented ones. Its family instead adapts a learner that
+    /// produces it, and asserts that Adapt returned this type. SparseMAML is one of the many algorithms returning
+    /// AdaptedMetaModel, NP one of the neural processes returning NeuralProcessModel, and MbPA the one algorithm
+    /// returning MbPAAdaptedModel. LFTAdaptedModel has a hand-written test class (LFTAdaptedModelTests), so it is
+    /// not generated.
+    /// </remarks>
+    private static readonly System.Collections.Generic.Dictionary<string, string> AdaptedMetaModelProducers =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["AdaptedMetaModel"] = "AiDotNet.MetaLearning.Algorithms.SparseMAMLAlgorithm`3",
+            ["MbPAAdaptedModel"] = "AiDotNet.MetaLearning.Algorithms.MbPAAlgorithm`3",
+            ["NeuralProcessModel"] = "AiDotNet.MetaLearning.Algorithms.NPAlgorithm`3",
+        };
 
     /// <summary>
     /// Meta-learners whose paper keeps the meta-model frozen by default and meta-trains other state instead.
@@ -3683,6 +3715,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                     || family.Value is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation or TestFamily.MetaLearning
                                         or TestFamily.Sharded
                                         or TestFamily.ClassificationMetaLearning
+                                        or TestFamily.AdaptedMetaModel or TestFamily.ClassificationAdaptedMetaModel
                                     || ExplicitlyConstructedClassNames.Contains(model.ClassName)
                                     // A self-supervised method wraps parts the caller supplies; its fixture builds them.
                                     || (family.Value == TestFamily.SelfSupervised && SslFixtureArgs.ContainsKey(model.ClassName))
@@ -4005,6 +4038,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsPolicy = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
+        bool extendsMetaLearningModel = false;
         bool extendsClassicalVolatility = false;
         bool implementsDetectionBackbone = false;
         bool implementsVocoder = false;
@@ -4227,6 +4261,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
                 extendsMetaLearner = true;
+            else if (baseName.StartsWith("MetaLearningModelBase", System.StringComparison.Ordinal))
+                extendsMetaLearningModel = true;
             else if (baseName.StartsWith("ClassicalVolatilityModelBase", System.StringComparison.Ordinal))
                 extendsClassicalVolatility = true;
             else if (baseName.StartsWith("AnomalyDetectorBase", System.StringComparison.Ordinal))
@@ -4400,10 +4436,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 ? RenderClosedOptionsType(declaredOptionsType)
                 : null;
 
-        string metaLearnerOptionsType = extendsMetaLearner ? FindSingleOptionsConstructorType(modelClass) : string.Empty;
-        string metaLearnerOptionsSizes = extendsMetaLearner ? FindMetaLearnerTaskSizeInitializer(modelClass) : string.Empty;
-        bool metaLearnerIsClassifier = extendsMetaLearner && IsClassifierMetaLearner(modelClass);
-        string classifierOptionsSizes = metaLearnerIsClassifier ? FindClassifierMetaLearnerSizeInitializer(modelClass) : string.Empty;
+        // An adapted model (MetaLearningModelBase) is tested through a meta-learner that produces it, so its fixture
+        // carries that learner's options exactly as the learner's own fixture would (#2139).
+        INamedTypeSymbol? adaptedProducer = extendsMetaLearningModel
+            && AdaptedMetaModelProducers.TryGetValue(modelClass.Name, out var producerMetadataName)
+                ? modelClass.ContainingAssembly.GetTypeByMetadataName(producerMetadataName)
+                : null;
+        string adaptedMetaModelProducer = adaptedProducer is not null
+            ? "global::" + adaptedProducer.ContainingNamespace.ToDisplayString() + "." + adaptedProducer.Name
+            : string.Empty;
+        INamedTypeSymbol? learnerClass = extendsMetaLearner ? modelClass : adaptedProducer;
+        string metaLearnerOptionsType = learnerClass is not null ? FindSingleOptionsConstructorType(learnerClass) : string.Empty;
+        string metaLearnerOptionsSizes = learnerClass is not null ? FindMetaLearnerTaskSizeInitializer(learnerClass) : string.Empty;
+        bool metaLearnerIsClassifier = learnerClass is not null && IsClassifierMetaLearner(learnerClass);
+        string classifierOptionsSizes = metaLearnerIsClassifier && learnerClass is not null
+            ? FindClassifierMetaLearnerSizeInitializer(learnerClass)
+            : string.Empty;
 
         var className = modelClass.Name;
         var info = new ModelTestInfo
@@ -4437,6 +4485,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             MetaLearnerOptionsSizes = metaLearnerOptionsSizes,
             MetaLearnerIsClassifier = metaLearnerIsClassifier,
             ClassifierOptionsSizes = classifierOptionsSizes,
+            AdaptedMetaModelProducer = adaptedMetaModelProducer,
             ExtendsClassicalVolatilityBase = extendsClassicalVolatility,
             UsesTensorInput = usesTensorInput,
             UsesMatrixInput = usesMatrixInput,
@@ -5179,6 +5228,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsMetaLearnerBase && model.MetaLearnerOptionsType.Length > 0)
             return TestFamily.MetaLearning;
 
+        // An adapted model is what a meta-learner's Adapt returns, judged through a learner that produces it (#2139).
+        if (model.AdaptedMetaModelProducer.Length > 0 && model.MetaLearnerOptionsType.Length > 0)
+            return model.MetaLearnerIsClassifier ? TestFamily.ClassificationAdaptedMetaModel : TestFamily.AdaptedMetaModel;
+
         // Priority 0e: Volatility. The GARCH-type models fit a return series (Train ignores its target)
         // and forecast conditional volatility; they implement IVolatilityModel, not a model interface
         // any other family can drive, so without this they resolved to no family at all.
@@ -5753,7 +5806,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 constructorExpr = $"new {typeName}<double>(threshold: 0.0)";
             }
-            else if (model.ClassName is "ImageWatermarker")
+            else if (model.ClassName is "ImageWatermarker" or "FrequencyImageWatermarker" or "InvisibleImageWatermarker"
+                     or "NeuralImageWatermarker")
             {
                 constructorExpr = $"new {typeName}<double>(detectionThreshold: 0.0)";
             }
@@ -13647,6 +13701,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
+            || baseClassName == "AdaptedMetaModelTestBase"
+            || baseClassName == "ClassificationAdaptedMetaModelTestBase"
             || baseClassName == "VolatilityModelTestBase";
         // A non-generic model (LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>)
         // has no type argument to rewrite, so a float scaffold would declare IFullModel<float, ...>
@@ -13789,6 +13845,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // has no pair, so by design Evaluate(Vector) reports no findings.
             if (model.ClassName is "MultimodalGuardrail")
                 sb.AppendLine("    protected override bool ProducesFindings => false;");
+
+            // The frequency detector scores 8x8 blocks and needs at least four, so 100 values return before any is
+            // read; 64x64 gives it its full 64 blocks. The base's text and all-zero contents carry no watermark and it
+            // scores both 0, correctly, so the sensitivity check (two inputs scored differently) cannot apply (#2139).
+            if (model.ClassName is "FrequencyImageWatermarker")
+            {
+                sb.AppendLine("    protected override int ContentSize => 4096;");
+                sb.AppendLine("    protected override bool ProducesFindings => false;");
+            }
         }
 
         // Override InputShape/OutputShape for domain-appropriate test data.
@@ -17606,7 +17671,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // second copy of a number the base already holds - the pattern behind every architecture /
         // fixture disagreement this generator has produced.
         bool parameterizedFactory = family is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation
-            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning or TestFamily.Sharded;
+            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning or TestFamily.Sharded
+            or TestFamily.AdaptedMetaModel or TestFamily.ClassificationAdaptedMetaModel;
         if (family == TestFamily.TensorModule)
         {
             sb.AppendLine($"    protected override {returnTypeCode} CreateModel(int width)");
@@ -17636,6 +17702,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override bool MetaModelFrozenByDesign => true;");
             }
+        }
+        else if (family is TestFamily.AdaptedMetaModel or TestFamily.ClassificationAdaptedMetaModel)
+        {
+            // The learner that produces this adapted model is built exactly as its own fixture builds it; the base
+            // adapts it to a task and requires Adapt to return this type.
+            const string matrix = "AiDotNet.Tensors.LinearAlgebra.Matrix<double>";
+            bool scalar = family == TestFamily.AdaptedMetaModel;
+            string output = scalar ? "AiDotNet.Tensors.LinearAlgebra.Vector<double>" : "AiDotNet.Tensors.LinearAlgebra.Tensor<double>";
+            string sizes = scalar ? model.MetaLearnerOptionsSizes : model.ClassifierOptionsSizes;
+            sb.AppendLine($"    protected override {returnTypeCode} CreateLearner(AiDotNet.Interfaces.IFullModel<double, {matrix}, {output}> innerModel)");
+            sb.AppendLine($"        => new {model.AdaptedMetaModelProducer}<double, {matrix}, {output}>(new {model.MetaLearnerOptionsType}<double, {matrix}, {output}>(innerModel){sizes});");
+            sb.AppendLine($"    protected override System.Type AdaptedModelType => typeof({typeName}<,,>);");
         }
         else if (family == TestFamily.Sharded)
         {
@@ -17903,6 +17981,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
+            TestFamily.AdaptedMetaModel => AdaptedMetaModelTestBaseMembers,
+            TestFamily.ClassificationAdaptedMetaModel => ClassificationAdaptedMetaModelTestBaseMembers,
             TestFamily.Volatility => VolatilityModelTestBaseMembers,
             _ => null,
         };
@@ -18077,6 +18157,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.MetaLearning:
             case TestFamily.ClassificationMetaLearning:
                 return model.ExtendsMetaLearnerBase && model.MetaLearnerOptionsType.Length > 0;
+            case TestFamily.AdaptedMetaModel:
+            case TestFamily.ClassificationAdaptedMetaModel:
+                return model.AdaptedMetaModelProducer.Length > 0 && model.MetaLearnerOptionsType.Length > 0;
             case TestFamily.Volatility:
                 return model.ExtendsClassicalVolatilityBase;
 
@@ -20506,6 +20589,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// <summary>The classifier family's options initializer: class count, embedding and input widths.</summary>
         public string ClassifierOptionsSizes { get; set; } = string.Empty;
 
+        /// <summary>For an adapted model: the meta-learner whose Adapt produces it, as a global type name; else empty.</summary>
+        public string AdaptedMetaModelProducer { get; set; } = string.Empty;
+
         public bool ExtendsClassicalVolatilityBase { get; set; }
 
         // Input type detection (from IFullModel type arguments)
@@ -20728,6 +20814,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
+        AdaptedMetaModel,
+        ClassificationAdaptedMetaModel,
         Volatility,
         ObjectDetection,
         TextDetection,
@@ -21577,6 +21665,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
+            case TestFamily.AdaptedMetaModel:      return "AdaptedMetaModelTestBase";
+            case TestFamily.ClassificationAdaptedMetaModel: return "ClassificationAdaptedMetaModelTestBase";
             case TestFamily.Volatility:            return "VolatilityModelTestBase";
             case TestFamily.NeuralNetwork:         return "NeuralNetworkModelTestBase";
             default:                               return "RegressionModelTestBase";
@@ -21644,6 +21734,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "CreateSegmenter";
             case TestFamily.MetaLearning:
             case TestFamily.ClassificationMetaLearning:
+            case TestFamily.AdaptedMetaModel:
+            case TestFamily.ClassificationAdaptedMetaModel:
                 return "CreateLearner";
             default:
                 return "CreateModel";
@@ -21721,9 +21813,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:
+            case TestFamily.AdaptedMetaModel:
                 return "AiDotNet.Interfaces.IMetaLearner<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, "
                     + "AiDotNet.Tensors.LinearAlgebra.Vector<double>>";
             case TestFamily.ClassificationMetaLearning:
+            case TestFamily.ClassificationAdaptedMetaModel:
                 return "AiDotNet.Interfaces.IMetaLearner<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, "
                     + "AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
             case TestFamily.Volatility:

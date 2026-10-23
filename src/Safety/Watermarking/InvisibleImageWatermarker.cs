@@ -42,7 +42,9 @@ public class InvisibleImageWatermarker<T> : ImageWatermarkerBase<T>
     /// Initializes a new invisible spatial-domain image watermarker.
     /// </summary>
     /// <param name="watermarkStrength">Embedding strength (0.0-1.0). Default: 0.3.</param>
-    public InvisibleImageWatermarker(double watermarkStrength = 0.3) : base(watermarkStrength) { }
+    /// <param name="detectionThreshold">Score at or above which a watermark finding is reported. Default: 0.3.</param>
+    public InvisibleImageWatermarker(double watermarkStrength = 0.3, double detectionThreshold = 0.3)
+        : base(watermarkStrength, detectionThreshold) { }
 
     /// <inheritdoc />
     public override double DetectWatermark(Tensor<T> image)
@@ -101,10 +103,13 @@ public class InvisibleImageWatermarker<T> : ImageWatermarkerBase<T>
 
         double pairCorrelation = (double)matchingPairs / totalPairs;
         // Natural: ~0.5; Watermarked with error diffusion: >0.6
-        double corrScore = pairCorrelation > 0.55 ? (pairCorrelation - 0.55) / 0.3 : 0;
+        // Each piece of evidence saturates smoothly, 1 - exp(-excess / scale), from the same threshold and scale it was
+        // clipped at. The clip made every chi-squared above 13.84 (and every pair correlation above 0.85) read 1.0, so a
+        // mildly biased image and a constant one were scored alike (#2139).
+        double corrScore = pairCorrelation > 0.55 ? 1.0 - Math.Exp(-(pairCorrelation - 0.55) / 0.3) : 0;
 
         // Chi-squared score (>3.84 is significant at p=0.05)
-        double chi2Score = chi2 > 3.84 ? Math.Min(1.0, (chi2 - 3.84) / 10.0) : 0;
+        double chi2Score = chi2 > 3.84 ? 1.0 - Math.Exp(-(chi2 - 3.84) / 10.0) : 0;
 
         return Math.Max(0, Math.Min(1.0, Math.Max(corrScore, chi2Score)));
     }
@@ -115,7 +120,7 @@ public class InvisibleImageWatermarker<T> : ImageWatermarkerBase<T>
         var findings = new List<SafetyFinding>();
         double score = DetectWatermark(image);
 
-        if (score >= 0.3)
+        if (score >= DetectionThreshold)
         {
             findings.Add(new SafetyFinding
             {

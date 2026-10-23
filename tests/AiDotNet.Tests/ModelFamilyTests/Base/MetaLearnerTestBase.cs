@@ -50,10 +50,10 @@ public abstract class MetaLearnerTestBase
     protected abstract IMetaLearner<double, Matrix<double>, Vector<double>> CreateLearner(
         IFullModel<double, Matrix<double>, Vector<double>> innerModel);
 
-    private IMetaLearner<double, Matrix<double>, Vector<double>> CreateLearner()
+    private protected IMetaLearner<double, Matrix<double>, Vector<double>> CreateLearner()
         => CreateLearner(new LinearVectorModel(FeatureCount));
 
-    private MetaLearningTask<double, Matrix<double>, Vector<double>> CreateTask(int seed)
+    private protected MetaLearningTask<double, Matrix<double>, Vector<double>> CreateTask(int seed)
     {
         var rng = RandomHelper.CreateSeededRandom(seed);
 

@@ -260,6 +260,15 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     // SetParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     /// <inheritdoc/>
+    /// <remarks>
+    /// The vector is the one <see cref="ModelWrapperBase{T, TInput, TOutput}.GetParameters"/> reports, laid out by the
+    /// registered components, so it is written back through the same fold. Passing it to the constructor as theta used
+    /// to treat the whole vector as the output head, and WithParameters(GetParameters()) predicted differently (#2139).
+    /// </remarks>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-        => new MbPAAdaptedModel<T, TInput, TOutput>(BaseModel, _memory, parameters, _options);
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
 }

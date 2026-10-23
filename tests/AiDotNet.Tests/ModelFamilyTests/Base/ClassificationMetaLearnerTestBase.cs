@@ -62,14 +62,14 @@ public abstract class ClassificationMetaLearnerTestBase
     protected abstract IMetaLearner<double, Matrix<double>, Tensor<double>> CreateLearner(
         IFullModel<double, Matrix<double>, Tensor<double>> innerModel);
 
-    private IMetaLearner<double, Matrix<double>, Tensor<double>> CreateLearner()
+    private protected IMetaLearner<double, Matrix<double>, Tensor<double>> CreateLearner()
         => CreateLearner(new LinearEmbeddingModel(FeatureCount, EmbeddingDimension));
 
     /// <summary>
     /// A task whose classes are separable: each class's examples sit around its own centre, so a classifier has
     /// something to learn.
     /// </summary>
-    private MetaLearningTask<double, Matrix<double>, Tensor<double>> CreateTask(int seed)
+    private protected MetaLearningTask<double, Matrix<double>, Tensor<double>> CreateTask(int seed)
     {
         var rng = RandomHelper.CreateSeededRandom(seed);
         var centres = Enumerable.Range(0, NumWays)

@@ -43,7 +43,9 @@ public class NeuralImageWatermarker<T> : ImageWatermarkerBase<T>
     /// Initializes a new neural image watermarker.
     /// </summary>
     /// <param name="watermarkStrength">Embedding strength (0.0-1.0). Default: 0.5.</param>
-    public NeuralImageWatermarker(double watermarkStrength = 0.5) : base(watermarkStrength) { }
+    /// <param name="detectionThreshold">Score at or above which a watermark finding is reported. Default: 0.3.</param>
+    public NeuralImageWatermarker(double watermarkStrength = 0.5, double detectionThreshold = 0.3)
+        : base(watermarkStrength, detectionThreshold) { }
 
     /// <inheritdoc />
     public override double DetectWatermark(Tensor<T> image)
@@ -102,7 +104,7 @@ public class NeuralImageWatermarker<T> : ImageWatermarkerBase<T>
         var findings = new List<SafetyFinding>();
         double score = DetectWatermark(image);
 
-        if (score >= 0.3)
+        if (score >= DetectionThreshold)
         {
             findings.Add(new SafetyFinding
             {
