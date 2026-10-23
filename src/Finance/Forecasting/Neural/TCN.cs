@@ -1,4 +1,4 @@
-﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -262,7 +262,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _numChannels = options.NumChannels;
         _kernelSize = options.KernelSize;
         _numLayers = options.NumLayers;
@@ -281,7 +281,8 @@ public partial class TCN<T> : ForecastingModelBase<T>
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: 1,
-            outputSize: 1))
+            // The forecast spans the default options' 24-step horizon (#2147).
+            outputSize: 24))
     {
     }
 
@@ -329,7 +330,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _numChannels = options.NumChannels;
         _kernelSize = options.KernelSize;
         _numLayers = options.NumLayers;
@@ -364,7 +365,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTCNLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _numChannels, _kernelSize, _numLayers, _dropout, _useResidualConnections));
 
             ExtractLayerReferences();
@@ -570,7 +571,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TCN model, Forecast produces predictions from input data. This is the main inference step of the TCN architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }
@@ -726,7 +727,8 @@ public partial class TCN<T> : ForecastingModelBase<T>
             current = _outputProjection.Forward(current);
         }
 
-        return current;
+        // The head maps every step to the horizon; the forecast is the last step's, which has seen the whole window.
+        return LastTimeStep(current);
     }
 
     /// <summary>

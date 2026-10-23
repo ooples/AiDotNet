@@ -58,6 +58,10 @@ namespace AiDotNet.NeuralNetworks
     "C-Pack: Packed Resources For General Chinese Embeddings", "https://arxiv.org/abs/2309.07597", Year = 2023, Authors = "Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff")]
     public partial class BGE<T> : TransformerEmbeddingNetwork<T>
     {
+        /// <inheritdoc/>
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
         private readonly BGEOptions _options;
 
         #region Fields
@@ -158,7 +162,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultBGELayers(
-                    Architecture,
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,

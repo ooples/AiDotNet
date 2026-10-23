@@ -90,20 +90,22 @@ public class BarlowTwins<T> : SelfSupervisedLearningMethodBase<T>
         _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
 
-    private void UpdateParameters(T learningRate, Vector<T> accumulatedProjGrads)
-    {
-        // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
+    /// <inheritdoc />
+    /// <remarks>
+    /// Zbontar et al. 2021, Sec. 2: the cross-correlation of the two views' projections is driven to the identity
+    /// (invariance on the diagonal, redundancy reduction off it).
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2) =>
+        _loss.ComputeLoss(Projector.Project(EncodeForTraining(view1)), Projector.Project(EncodeForTraining(view2)));
 
-        // Update projector with accumulated gradients from both views
-        if (_projector is not null)
-        {
-            var projParams = _projector.GetParameters();
-            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(accumulatedProjGrads, learningRate)));
-        }
-    }
+    /// <inheritdoc />
+    /// <remarks>Barlow Twins uses BYOL's augmentation pipeline (Sec. 4).</remarks>
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => _augmentation.ApplyBYOL(batch);
+
+    /// <inheritdoc />
+    /// <remarks>The paper trains with LARS (Sec. 4).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.LARS;
 
     /// <summary>
     /// Creates a Barlow Twins instance with default configuration.

@@ -281,13 +281,7 @@ public partial class MusicGenModel<T> : AudioDiffusionModelBase<T>
         int? seed)
     {
         // Initialize music VAE with high capacity
-        _musicVAE = musicVAE ?? new AudioVAE<T>(
-            melChannels: MUSICGEN_MEL_CHANNELS,
-            latentChannels: MUSICGEN_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: new[] { 1, 2, 4, 8, 8 },
-            numResBlocks: 3,
-            seed: seed);
+        _musicVAE = musicVAE ?? new AudioVAE<T>(melBins: MUSICGEN_MEL_CHANNELS, latentChannels: MUSICGEN_LATENT_CHANNELS, seed: seed);
 
         // Initialize U-Net with size-dependent architecture
         if (unet != null)
@@ -609,9 +603,9 @@ public partial class MusicGenModel<T> : AudioDiffusionModelBase<T>
         // Calculate latent dimensions
         var numSamples = (int)(durationSeconds * SampleRate);
         var numFrames = numSamples / HopLength + 1;
-        var latentTimeFrames = numFrames / 4;
+        var latentTimeFrames = numFrames / VAE.DownsampleFactor;
 
-        var latentShape = new[] { 1, LatentChannels, latentTimeFrames, MelChannels / 8 };
+        var latentShape = new[] { 1, LatentChannels, latentTimeFrames, MelChannels / VAE.DownsampleFactor };
 
         // Build conditioning
         Tensor<T>? textEmbedding = null;
@@ -701,9 +695,9 @@ public partial class MusicGenModel<T> : AudioDiffusionModelBase<T>
     {
         var numSamples = (int)(durationSeconds * SampleRate);
         var numFrames = numSamples / HopLength + 1;
-        var latentTimeFrames = numFrames / 4;
+        var latentTimeFrames = numFrames / VAE.DownsampleFactor;
 
-        var latentShape = new[] { 1, LatentChannels, latentTimeFrames, MelChannels / 8 };
+        var latentShape = new[] { 1, LatentChannels, latentTimeFrames, MelChannels / VAE.DownsampleFactor };
 
         // Encode text if provided
         Tensor<T>? textEmbedding = null;
@@ -740,15 +734,15 @@ public partial class MusicGenModel<T> : AudioDiffusionModelBase<T>
         for (int i = 0; i < latentSpan.Length; i++)
         {
             // Calculate position
-            var timePos = (i / (LatentChannels * (MelChannels / 8))) % latentTimeFrames;
+            var timePos = (i / (LatentChannels * (MelChannels / VAE.DownsampleFactor))) % latentTimeFrames;
             var blendFactor = Math.Min(1.0, timePos / (double)transitionLen);
 
             var noiseVal = NumOps.ToDouble(noiseSpan[i]);
 
             // Find corresponding prompt position
             var promptPos = Math.Max(0, promptTimeLen - transitionLen + Math.Min(timePos, transitionLen));
-            var promptIdx = (i % (LatentChannels * (MelChannels / 8))) +
-                           promptPos * LatentChannels * (MelChannels / 8);
+            var promptIdx = (i % (LatentChannels * (MelChannels / VAE.DownsampleFactor))) +
+                           promptPos * LatentChannels * (MelChannels / VAE.DownsampleFactor);
 
             if (promptIdx < promptSpan.Length)
             {

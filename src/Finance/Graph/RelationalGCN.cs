@@ -389,7 +389,6 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultRelationalGCNLayers(
-                Architecture,
                 _numNodes,
                 _numFeatures,
                 _numRelations,
@@ -699,7 +698,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// to aggregate information across the knowledge graph, then projects to forecasts.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {

@@ -77,6 +77,15 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Tan and Le 2019, Sec. 5.2: RMSProp with decay 0.9 and momentum 0.9, and weight decay 1e-5. The paper also gives an initial learning rate of 0.256 decaying by 0.97 every 2.4 epochs; neither is declared. The rate is tuned for the paper scale and RMSProp has no published batch-scaling rule, and a 2.4-epoch interval is not a whole number of epochs, which the step schedule cannot express. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
+    /// <inheritdoc/>
+    /// <remarks>An architecture may state the image it is configured for, height x width x channels (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        new[] { _configuration.GetInputHeight() * _configuration.GetInputWidth() * _configuration.InputChannels };
+
     private readonly EfficientNetOptions _options;
 
     private readonly ILossFunction<T> _lossFunction;
@@ -305,7 +314,7 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         else
         {
             // Use EfficientNet-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientNetLayers(Architecture, _configuration));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientNetLayers(_configuration));
         }
     }
 

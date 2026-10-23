@@ -264,7 +264,7 @@ public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTinyTimeMixersLayers(
-                Architecture, _contextLength, _forecastHorizon, _numFeatures,
+                _contextLength, _forecastHorizon, _numFeatures,
                 _patchLength, _hiddenDimension, _numMixerLayers, _expansionFactor,
                 _dropout));
         }
@@ -358,7 +358,7 @@ public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }

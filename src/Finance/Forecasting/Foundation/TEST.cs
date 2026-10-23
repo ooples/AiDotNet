@@ -216,7 +216,7 @@ public partial class TEST<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTESTLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchLength,
+                _contextLength, _forecastHorizon, _patchLength,
                 _hiddenDimension, _textEmbeddingDimension, _numLayers, _numHeads,
                 _numPrototypes, _dropout));
         }
@@ -272,7 +272,7 @@ public partial class TEST<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
             throw new NotSupportedException("TEST does not support quantile forecasting. Pass null for point forecasts.");

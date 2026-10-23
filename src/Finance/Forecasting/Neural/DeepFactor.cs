@@ -302,7 +302,7 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _numFactors = options.NumFactors;
         _factorHiddenDim = options.FactorHiddenDimension;
         _localHiddenDim = options.LocalHiddenDimension;
@@ -355,7 +355,7 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _numFactors = options.NumFactors;
         _factorHiddenDim = options.FactorHiddenDimension;
         _localHiddenDim = options.LocalHiddenDimension;
@@ -392,7 +392,7 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultDeepFactorLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _numFactors, _factorHiddenDim, _localHiddenDim,
                 _numFactorLayers, _numLocalLayers, _dropout));
 
@@ -590,7 +590,7 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the DeepFactor model, Forecast produces predictions from input data. This is the main inference step of the DeepFactor architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }

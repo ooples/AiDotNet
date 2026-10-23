@@ -369,7 +369,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimesNetLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                _sequenceLength, _predictionHorizon, _numFeatures,
                 _modelDimension, _feedForwardDimension, _numLayers, _topK,
                 _convKernelSize, _dropout));
 
@@ -639,7 +639,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TimesNet model, Forecast produces predictions from input data. This is the main inference step of the TimesNet architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (_useInstanceNormalization)
             historicalData = ApplyInstanceNormalization(historicalData);

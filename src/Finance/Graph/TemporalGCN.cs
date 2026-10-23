@@ -353,7 +353,6 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTemporalGCNLayers(
-                Architecture,
                 _sequenceLength,
                 _forecastHorizon,
                 _numNodes,
@@ -693,7 +692,7 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
     /// predictions especially when some nodes have sparse or noisy data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {

@@ -286,11 +286,9 @@ public partial class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         int? seed)
     {
         _audioVAE = audioVAE ?? new AudioVAE<T>(
-            melChannels: AUDIOLDM2_MEL_CHANNELS,
+            melBins: AUDIOLDM2_MEL_CHANNELS,
             latentChannels: AUDIOLDM2_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: new[] { 1, 2, 4, 4, 8 },
-            numResBlocks: 3,
+            latentScaleFactor: AudioVAE<T>.AudioLdm2LatentScale,
             seed: seed);
 
         var (baseChannels, numResBlocks) = variant switch
@@ -494,9 +492,9 @@ public partial class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         // Calculate latent dimensions for the duration
         var numSamples = (int)(durationSeconds * SampleRate);
         var numFrames = numSamples / HopLength + 1;
-        var latentTimeFrames = numFrames / 4; // VAE downsampling
+        var latentTimeFrames = numFrames / VAE.DownsampleFactor;
 
-        var latentShape = new[] { 1, LatentChannels, latentTimeFrames, MelChannels / 8 };
+        var latentShape = new[] { 1, LatentChannels, latentTimeFrames, MelChannels / VAE.DownsampleFactor };
 
         // Encode prompts with both encoders
         Tensor<T>? combinedEmbedding = null;

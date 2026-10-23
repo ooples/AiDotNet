@@ -72,6 +72,45 @@ public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMetho
     public override bool RequiresMemoryBank => false;
 
     /// <summary>
+    /// The local crops of the current training step, seen by the student only (empty without multi-crop, or when the
+    /// step's views were supplied precomputed).
+    /// </summary>
+    protected IReadOnlyList<Tensor<T>> LocalViews { get; private set; } = Array.Empty<Tensor<T>>();
+
+    /// <inheritdoc />
+    protected override (Tensor<T> View1, Tensor<T> View2) CreateViews(
+        Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext)
+    {
+        LocalViews = Array.Empty<Tensor<T>>();
+        return base.CreateViews(batch, augmentationContext);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Multi-crop (Caron et al. 2021, Sec. 3.1): two global crops, which both networks see, and
+    /// <see cref="NumLocalCrops"/> local crops (5-50% of the image, resized to the input size the encoder takes), which
+    /// only the student sees; they are kept in <see cref="LocalViews"/>.
+    /// </remarks>
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch)
+    {
+        var (globalViews, localViews) = Augmentation.ApplyDINO(batch, 2, NumLocalCrops);
+        LocalViews = localViews;
+        return (globalViews[0], globalViews[1]);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The teacher (encoder and projector) follows the student by EMA.</remarks>
+    protected override void AfterOptimizerStep() => UpdateTeacher();
+
+    /// <inheritdoc />
+    /// <remarks>The paper trains with AdamW (Sec. 4).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.AdamW;
+
+    /// <inheritdoc />
+    protected override double DefaultLearningRate => 5e-4;
+
+    /// <summary>
     /// Initializes a new instance of the TeacherStudentSSL class.
     /// </summary>
     /// <param name="studentEncoder">The student encoder network.</param>
@@ -100,37 +139,11 @@ public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMetho
     }
 
     /// <summary>
-    /// Creates augmented views for teacher-student training.
-    /// </summary>
-    /// <param name="batch">Input batch.</param>
-    /// <returns>Global and local crop views.</returns>
-    protected virtual (List<Tensor<T>> globalViews, List<Tensor<T>> localViews) CreateMultiCropViews(Tensor<T> batch)
-    {
-        var globalViews = new List<Tensor<T>>();
-        var localViews = new List<Tensor<T>>();
-
-        // Create global crops (full resolution)
-        var (dinoGlobal, dinoLocal) = Augmentation.ApplyDINO(batch, NumGlobalCrops, NumLocalCrops);
-        foreach (var view in dinoGlobal)
-        {
-            globalViews.Add(view);
-        }
-
-        // Add local crops (lower resolution) if specified
-        foreach (var view in dinoLocal)
-        {
-            localViews.Add(view);
-        }
-
-        return (globalViews, localViews);
-    }
-
-    /// <summary>
     /// Performs forward pass through student network.
     /// </summary>
     protected virtual Tensor<T> ForwardStudent(Tensor<T> view)
     {
-        var h = _encoder.ForwardWithMemory(view);
+        var h = EncodeForTraining(view);
         var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
         return projector.Project(h);
     }
@@ -162,25 +175,6 @@ public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMetho
         TeacherProjector.SetParameters(Engine.Add(
             Engine.Multiply(teacherParams, momentum),
             Engine.Multiply(studentParams, oneMinusMomentum)));
-    }
-
-    /// <summary>
-    /// Updates student network parameters with gradients.
-    /// </summary>
-    protected virtual void UpdateStudent(T learningRate)
-    {
-        // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // Update projector
-        if (_projector is not null)
-        {
-            var projGrads = _projector.GetParameterGradients();
-            var projParams = _projector.GetParameters();
-            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
-        }
     }
 
     /// <inheritdoc />

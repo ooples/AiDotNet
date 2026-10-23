@@ -338,7 +338,6 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultSTGNNLayers(
-                Architecture,
                 _sequenceLength,
                 _forecastHorizon,
                 _numNodes,
@@ -534,7 +533,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     /// from their neighbors through graph convolution.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {

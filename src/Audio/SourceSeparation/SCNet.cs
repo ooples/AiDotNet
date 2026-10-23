@@ -44,6 +44,10 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ResearchPaper("SCNet: Sparse Compression Network for Music Source Separation", "https://doi.org/10.48550/arXiv.2401.13276", Year = 2024, Authors = "Weinan Tong, Jiaxu Zhu, Jun Chen, Shiyin Kang, Tao Jiang, Yang Li, Zhiyong Wu, Helen Meng")]
 public partial class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
     /// <inheritdoc />
     /// <remarks>
     /// DERIVED, not stored: PredictCore calls ForwardNative, which walks Layers in order and only
@@ -205,7 +209,6 @@ public partial class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
         else Layers.AddRange(LayerHelper<T>.CreateDefaultSCNetLayers(
-            architecture: Architecture,
             numClusters: _options.NumClusters, compressionDim: _options.CompressionDim,
             numEncoderBlocks: _options.NumEncoderBlocks, numDecoderBlocks: _options.NumDecoderBlocks,
             numAttentionHeads: _options.NumAttentionHeads,

@@ -755,7 +755,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the DCRNN model, Forecast produces predictions from input data. This is the main inference step of the DCRNN architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {

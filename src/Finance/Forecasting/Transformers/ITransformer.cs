@@ -674,7 +674,7 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// relationships before generating forecasts.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));

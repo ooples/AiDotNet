@@ -132,6 +132,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        // Through the base, so Options.Seed seeds the layers' weights and their stochastic streams (SpecAugment,
+        // drop-path, dropout); held only in _options, the seed reached nothing but the crop generator.
         Options = _options;
         if (string.IsNullOrWhiteSpace(audioEncoderPath))
             throw new ArgumentException("Audio encoder path is required for ONNX mode.", nameof(audioEncoderPath));
@@ -180,6 +182,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        // Through the base, so Options.Seed seeds the layers' weights and their stochastic streams (SpecAugment,
+        // drop-path, dropout); held only in _options, the seed reached nothing but the crop generator.
         Options = _options;
         _options.Validate();
         _frontEnd = new ClapAudioFrontEnd<T>(_options);
