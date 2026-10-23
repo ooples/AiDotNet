@@ -151,7 +151,7 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
         _adapter = new TimestepDependentLora<T>(
             rank: Math.Max(1, Math.Min(rank, channels)),
             inputDim: channels, outputDim: channels,
-            totalTimesteps: totalTimesteps, random: random ?? new Random());
+            totalTimesteps: totalTimesteps, random: random ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom());
     }
 
     /// <summary>

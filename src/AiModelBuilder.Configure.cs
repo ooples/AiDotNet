@@ -2374,7 +2374,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ? Math.Max(1, _optimizer.GetOptions().MaxIterations)
             : 100;
 
-        var rng = _allowNondeterminism ? new Random() : new Random(42);
+        var rng = _allowNondeterminism ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom() : AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int epoch = 0; epoch < epochs; epoch++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -2620,7 +2620,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var explorationStrategy = _rlOptions.ExplorationStrategy ?? _configuredExplorationStrategy;
         Random? explorationRng = explorationStrategy is null
             ? null
-            : (_rlOptions.Seed.HasValue ? new Random(_rlOptions.Seed.Value) : new Random());
+            : (_rlOptions.Seed.HasValue ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_rlOptions.Seed.Value) : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom());
 
         // Curiosity: an intrinsic-reward module adds a novelty bonus to each step's reward (order-
         // independent with ConfigureReinforcementLearning via the configured-field fallback).
