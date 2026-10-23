@@ -16,8 +16,6 @@ namespace AiDotNet.Data.Text;
 /// </remarks>
 public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
 {
-    /// <summary>Bounds every regex evaluation so a pathological input cannot hang tokenization (ReDoS).</summary>
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     private readonly StreamingTextDatasetOptions _options;
     private readonly string _dataPath;
@@ -64,8 +62,8 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         {
             cancellationToken.ThrowIfCancellationRequested();
             string text = await FilePolyfill.ReadAllTextAsync(file, cancellationToken);
-            var words = System.Text.RegularExpressions.Regex.Split(
-                text.ToLowerInvariant(), @"\s+", System.Text.RegularExpressions.RegexOptions.None, RegexTimeout);
+            // A whitespace split, without a regex: nothing to time out on a large file.
+            var words = text.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
             foreach (string word in words)
             {

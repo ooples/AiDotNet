@@ -130,6 +130,7 @@ public class OptionsSeedReassignmentTests
             seed: 2290);
 
         Assert.NotNull(model.First.RandomSeed);
+        Assert.NotNull(model.Second.RandomSeed);
         Assert.NotEqual(model.First.RandomSeed, model.Second.RandomSeed);
     }
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,

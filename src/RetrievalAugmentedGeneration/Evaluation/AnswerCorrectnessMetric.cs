@@ -122,7 +122,17 @@ public class AnswerCorrectnessMetric<T> : RAGMetricBase<T>
             "the reference answer? Reply with only a single number.\n\n" +
             $"Reference: {groundTruth}\n\nAnswer: {answerText}\n\nCorrectness (0-10):";
         var reply = (_generator ?? throw new InvalidOperationException("_generator is null where it is required.")).Generate(prompt);
-        var match = Regex.Match(reply ?? string.Empty, @"\d+(\.\d+)?", RegexOptions.None, RegexTimeout);
+        Match match;
+        try
+        {
+            match = Regex.Match(reply ?? string.Empty, @"\d+(\.\d+)?", RegexOptions.None, RegexTimeout);
+        }
+        catch (RegexMatchTimeoutException ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"AnswerCorrectnessMetric: reading the judge's score timed out; using lexical overlap. {ex.Message}");
+            return JaccardSimilarity(answerText, groundTruth);
+        }
         if (match.Success && double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double raw))
             return Math.Min(1.0, Math.Max(0.0, raw / 10.0));
 

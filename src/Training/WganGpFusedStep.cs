@@ -154,9 +154,16 @@ public sealed class WganGpFusedStep<T> : IDisposable
             realBatch.Contiguous().AsSpan().CopyTo(_persistentSlots[0].AsWritableSpan());
             fakeBatch.Contiguous().AsSpan().CopyTo(_persistentSlots[1].AsWritableSpan());
             var eps01 = epsilonSampler(batchSize);
+            RequirePerExampleEpsilon(eps01, realBatch);
             if (_persistentSlots.Length < 3)
             {
                 _persistentSlots = ExtendSlots(_persistentSlots, eps01._shape);
+            }
+            else if (!ShapeMatches(eps01, _persistentSlots[2]))
+            {
+                throw new ArgumentException(
+                    $"epsilonSampler returned [{string.Join(",", eps01._shape)}] after earlier steps returned " +
+                    $"[{string.Join(",", _persistentSlots[2]._shape)}].", nameof(epsilonSampler));
             }
             eps01.Contiguous().AsSpan().CopyTo(_persistentSlots[2].AsWritableSpan());
 
@@ -309,6 +316,22 @@ public sealed class WganGpFusedStep<T> : IDisposable
         extended[1] = slots[1];
         extended[2] = new Tensor<T>((int[])epsShape.Clone());
         return extended;
+    }
+
+    // WGAN-GP draws one interpolation weight per example: [B, 1, ...], every axis after the batch axis a singleton,
+    // so it broadcasts across the sample. A [B, D] draw would weight each feature separately.
+    private static void RequirePerExampleEpsilon(Tensor<T> epsilon, Tensor<T> batch)
+    {
+        bool perExample = epsilon.Rank >= 1 && epsilon.Rank <= batch.Rank && epsilon.Shape[0] == batch.Shape[0];
+        for (int axis = 1; perExample && axis < epsilon.Rank; axis++)
+            perExample = epsilon.Shape[axis] == 1;
+        if (!perExample)
+        {
+            throw new ArgumentException(
+                $"epsilonSampler must return one weight per example, shaped [{batch.Shape[0]}, 1, ...]; " +
+                $"it returned [{string.Join(",", epsilon._shape)}] for a [{string.Join(",", batch._shape)}] batch.",
+                "epsilonSampler");
+        }
     }
 
     private static bool ShapeMatches(Tensor<T> a, Tensor<T> b)

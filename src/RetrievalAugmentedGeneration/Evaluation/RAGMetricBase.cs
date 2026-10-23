@@ -162,9 +162,20 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
         var lines = (reply ?? throw new InvalidOperationException("reply is null where it is required.")).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
-            var cleaned = System.Text.RegularExpressions.Regex.Replace(
-                line.Trim(), @"^\s*(\d+[\.\)]|[-*•])\s*", string.Empty,
-                System.Text.RegularExpressions.RegexOptions.None, RegexTimeout).Trim();
+            string cleaned;
+            try
+            {
+                cleaned = System.Text.RegularExpressions.Regex.Replace(
+                    line.Trim(), @"^\s*(\d+[\.\)]|[-*•])\s*", string.Empty,
+                    System.Text.RegularExpressions.RegexOptions.None, RegexTimeout).Trim();
+            }
+            catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)
+            {
+                // Keep the line with its marker rather than lose it.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"RAG metric: stripping a list marker timed out; keeping the line as written. {ex.Message}");
+                cleaned = line.Trim();
+            }
             if (cleaned.Length > 0)
                 result.Add(cleaned);
         }

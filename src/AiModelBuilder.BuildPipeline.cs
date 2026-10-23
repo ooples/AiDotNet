@@ -1585,9 +1585,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             catch (Exception ex)
             {
                 // A constructor that rejects this series leaves the next candidate to try.
+                // Invoke wraps the constructor's own failure; log the whole chain so the cause is visible.
                 System.Diagnostics.Trace.TraceInformation(
-                    $"Time-series decomposition audit: {type.Name}({ps.Length} parameters) could not rebuild over the series " +
-                    $"({ex.GetType().Name}: {ex.Message}).");
+                    $"Time-series decomposition audit: {type.Name}({ps.Length} parameters) could not rebuild over the series: {ex}");
             }
         }
 
