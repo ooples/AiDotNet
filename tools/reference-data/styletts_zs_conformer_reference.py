@@ -39,6 +39,26 @@ def load(root):
     return attention, convolution, embedding, encoder_layer, positionwise_feed_forward, activation
 
 
+def attention(state=None):
+    torch.manual_seed(77)
+    module = torch.nn.MultiheadAttention(DIM, HEADS, batch_first=True)
+    if state is not None:
+        module.load_state_dict(state, strict=True)
+    return module.eval()
+
+
+def attention_inputs():
+    g = torch.Generator().manual_seed(8)
+    return torch.randn(1, 4, DIM, generator=g, dtype=torch.float32), torch.randn(1, LENGTH, DIM, generator=g, dtype=torch.float32)
+
+
+def run_attention(module):
+    query, memory = attention_inputs()
+    with torch.no_grad():
+        out, _ = module(query.double(), memory.double(), memory.double(), need_weights=False)
+    return [float(v) for v in out.reshape(-1).tolist()]
+
+
 class Stack(torch.nn.Module):
     def __init__(self, loaded):
         super().__init__()
@@ -109,6 +129,11 @@ def main():
                 "input": [float(v) for v in inputs().reshape(-1).tolist()],
                 "safetensors_base64": base64.b64encode(save_safetensors(state)).decode("ascii"),
                 "output": run(build(loaded, state).double())}
+        astate = {k: v.float().clone().contiguous() for k, v in attention().state_dict().items()}
+        query, memory = attention_inputs()
+        data["attention"] = {"query": [float(v) for v in query.reshape(-1).tolist()], "memory": [float(v) for v in memory.reshape(-1).tolist()],
+                             "safetensors_base64": base64.b64encode(save_safetensors(astate)).decode("ascii"),
+                             "output": run_attention(attention(astate).double())}
         _fixture.save(FIXTURE, data, __file__)
         print("wrote " + FIXTURE)
         return
@@ -116,6 +141,8 @@ def main():
     again = run(build(loaded, load_safetensors(base64.b64decode(data["safetensors_base64"]))).double())
     check = _fixture.Comparison("StyleTTS-ZS conformer")
     check.floats("output", data["output"], again, 1e-12, float)
+    astate = load_safetensors(base64.b64decode(data["attention"]["safetensors_base64"]))
+    check.floats("attention", data["attention"]["output"], run_attention(attention(astate).double()), 1e-12, float)
     check.report(exact=False)
 
 

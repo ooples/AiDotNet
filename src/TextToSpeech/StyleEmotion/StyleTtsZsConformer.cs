@@ -86,8 +86,9 @@ internal sealed class StyleTtsZsConformer<T>
     private Tensor<T> FeedForwardOf(DenseLayer<T> first, DenseLayer<T> second, Tensor<T> x, bool training, Random random) =>
         second.Forward(Dropout(_engine.Swish(first.Forward(x)), training, random));
 
-    /// <summary>The stack's output <c>[L, d]</c> for inputs <c>[L, d]</c> (one sequence, every position attended).</summary>
-    public Tensor<T> Forward(Tensor<T> input, bool training, Random random)
+    /// <summary>The stack's output <c>[L, d]</c> for inputs <c>[L, d]</c> (one sequence, every position attended); each
+    /// block's output is added to <paramref name="states"/> when given.</summary>
+    public Tensor<T> Forward(Tensor<T> input, bool training, Random random, List<Tensor<T>>? states = null)
     {
         int length = input.Shape[0], d = Dim, heads = Heads, dk = d / heads;
         var x = Dropout(_engine.TensorMultiplyScalar(input, NumOps.FromDouble(Math.Sqrt(d))), training, random);
@@ -131,6 +132,7 @@ internal sealed class StyleTtsZsConformer<T>
             x = _engine.TensorAdd(x, _engine.TensorMultiplyScalar(Dropout(FeedForwardOf(b.FeedForward1, b.FeedForward2, b.NormFeedForward.Forward(x), training, random),
                 training, random), half));
             x = b.NormFinal.Forward(x);
+            states?.Add(x);
         }
         return x;
     }

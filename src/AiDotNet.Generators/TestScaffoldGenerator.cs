@@ -1460,7 +1460,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // agreed precision-first timeout rung only; its production topology and defaults remain
         // unchanged. If the measured FP32 fixture still overruns, cap repetitions next.
         "TransUNet",
-        "StyleTTSZS",         // zero-shot style TTS — DifferentInputs / Metadata timeout
         "SceneLLM",           // 3D scene LLM — LossStrictlyDecreases timeout
         "RealisVSR",          // realistic video super-resolution — ScaledInput timeout
         // Foundation self-supervised ASR family on CreateDefaultFoundationASRLayers (12-layer / 768-dim
@@ -6637,6 +6636,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DiffusionLayers = 1, DiffusionHeads = 2, DiffusionHeadFeatures = 4, DiffusionMaxLength = 64, " +
                     "SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8, SlmPositionalConvKernel = 16, " +
                     "SlmPositionalConvGroups = 2, SlmDiscriminatorChannels = 4 })";
+            }
+            else if (model.ClassName == "StyleTTSZS" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.StyleEmotion.", System.StringComparison.Ordinal))
+            {
+                // StyleTTS-ZS's paper model is 512-wide conformer stacks of 6 to 12 blocks, StyleTTS 2's decoder and
+                // PL-BERT, WavLM-base-plus and a WeSpeaker ResNet34; keep every module at a tiny width with one conformer
+                // block each, StyleTTS 2's tiny fixture for the shared modules, a 4-row style quantized by 2 codebooks of
+                // 8 codes, and 4 DDIM steps. The aligner's objectives and the waveform adversarial terms start after 1000
+                // updates, past every probe, as for StyleTTS 2.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions { ModelDim = 16, StyleDim = 16, Heads = 2, FeedForwardDim = 32, " +
+                    "PromptTextKernels = [3], ProsodyEncoderKernels = [3], ProsodyDecoderKernels = [3], DenoiserKernels = [3], DiscriminatorKernels = [3], " +
+                    "MaxPhonemes = 64, StyleLength = 4, Quantizers = 2, CodebookSize = 8, CodeDim = 2, SamplingSteps = 4, " +
+                    "ResidualDim = 8, AlignerHidden = 16, AlignerTokenEmbedding = 8, AlignerConvLayers = 1, PitchExtractorChannels = [4, 8, 8, 8], " +
+                    "PitchExtractorLstm = 8, TmaStartStep = 1000, DecoderBottleneck = 16, UpsampleInitialChannels = 16, UpsampleRates = [2, 4], " +
+                    "UpsampleKernels = [4, 8], HopSize = 8, FftSize = 64, WindowLength = 64, WavePadding = 40, PromptFrames = 96, " +
+                    "BertHidden = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, BertEmbedding = 8, BertMaxPositions = 64, " +
+                    "SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8, SlmPositionalConvKernel = 16, " +
+                    "SlmPositionalConvGroups = 2, SpeakerChannels = 2, SpeakerBlocks = [1, 1, 1, 1], SpeakerEmbedding = 8 })";
             }
             else if (model.ClassName == "HiFiGAN" && model.TypeParameterCount == 1)
             {
@@ -15978,7 +15999,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
-                else if (model.ClassName == "StyleTTS2")
+                else if (model.ClassName is "StyleTTS2" or "StyleTTSZS")
                 {
                     // StyleTTS 2 reads phoneme ids and trains on the waveform (its mel spectrogram at an 8-sample hop); the
                     // style encoders pool by 16, so the voice's reference spectrogram is 96 frames. Training needs segments
@@ -16094,8 +16115,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
-                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2")
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
                         // random choice of soft or hard alignment, so its training loss is one draw too.

@@ -72,4 +72,25 @@ public class StyleTTSZSPaperTests
         Assert.Empty(unused());
         Close(Values(fixture["output"]!), stack.Forward(x, false, new Random(0)), "conformer output");
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task CrossAttention_MatchesMultiheadAttention()
+    {
+        await Task.Yield();
+        var fixture = (JObject)Reference("styletts_zs_conformer_reference.json")["attention"]!;
+        var root = Reference("styletts_zs_conformer_reference.json");
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int dim = (int)root["dim"]!;
+        var layers = new List<LayerBase<double>>();
+        var attention = new StyleTtsZsCrossAttention<double>(engine, layers, dim, (int)root["heads"]!);
+        var q = Values(fixture["query"]!);
+        var m = Values(fixture["memory"]!);
+        var query = new Tensor<double>(new[] { q.Length / dim, dim }, new Vector<double>(q));
+        var memory = new Tensor<double>(new[] { m.Length / dim, dim }, new Vector<double>(m));
+        attention.Forward(query, memory);
+        var (read, unused, _) = Weights(fixture);
+        attention.Load(read, "");
+        Assert.Empty(unused());
+        Close(Values(fixture["output"]!), attention.Forward(query, memory), "attention output");
+    }
 }
