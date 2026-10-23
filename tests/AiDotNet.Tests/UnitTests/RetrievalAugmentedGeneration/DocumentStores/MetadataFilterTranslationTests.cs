@@ -40,7 +40,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var json = JObject.Parse(JsonConvert.SerializeObject(QdrantDocumentStore<float>.TranslateFilter(Sample)));
             var must = (JArray)(json["must"] ?? throw new InvalidOperationException("(JArray)json[\"must\"] is null where it is required."));
             Assert.Equal("metadata.category", (string?)(must ?? throw new InvalidOperationException("must is null where it is required."))[0]?["key"]);
-            Assert.Equal(2020.0, (double)((must[1]?["range"]?["gte"] ?? throw new InvalidOperationException("must[1]?[\"range\"][\"gte\"] is null where it is required.")));
+            Assert.Equal(2020.0, (double)(must[1]?["range"]?["gte"] ?? throw new InvalidOperationException("must[1]?[\"range\"][\"gte\"] is null where it is required.")));
         }
 
         [Fact]
@@ -78,7 +78,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var json = JObject.Parse(JsonConvert.SerializeObject(PineconeDocumentStore<float>.TranslateFilter(Sample)));
             var and = (JArray)(json["$and"] ?? throw new InvalidOperationException("(JArray)json[\"$and\"] is null where it is required."));
             Assert.Equal("science", (string?)(and[0]?["category"] ?? throw new InvalidOperationException("and[0]?[\"category\"] is null where it is required."))["$eq"]);
-            Assert.Equal(2020.0, (double)((and[1]?["year"]?["$gte"] ?? throw new InvalidOperationException("and[1]?[\"year\"][\"$gte\"] is null where it is required.")));
+            Assert.Equal(2020.0, (double)(and[1]?["year"]?["$gte"] ?? throw new InvalidOperationException("and[1]?[\"year\"][\"$gte\"] is null where it is required.")));
         }
 
         [Fact]
@@ -110,7 +110,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             var exists = JObject.Parse(JsonConvert.SerializeObject(
                 PineconeDocumentStore<float>.TranslateFilter(MetadataFilter.Exists("author"))));
-            Assert.True((bool)((exists["author"]?["$exists"] ?? throw new InvalidOperationException("exists[\"author\"][\"$exists\"] is null where it is required.")));
+            Assert.True((bool)(exists["author"]?["$exists"] ?? throw new InvalidOperationException("exists[\"author\"][\"$exists\"] is null where it is required.")));
         }
 
         // ------------------------------------------------------------------

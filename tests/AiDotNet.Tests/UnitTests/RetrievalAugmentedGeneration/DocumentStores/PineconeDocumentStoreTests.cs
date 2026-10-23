@@ -201,7 +201,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 ?? throw new InvalidOperationException("The query sent no filter.");
 
             Assert.Equal("science", (string?)filter["category"]?["$eq"]);
-            Assert.Equal(2020.0, (double)((filter["year"]?["$gte"] ?? throw new InvalidOperationException("filter[\"year\"][\"$gte\"] is null where it is required.")));
+            Assert.Equal(2020.0, (double)(filter["year"]?["$gte"] ?? throw new InvalidOperationException("filter[\"year\"][\"$gte\"] is null where it is required.")));
             var inArray = (JArray)(filter["tags"]?["$in"] ?? throw new InvalidOperationException("(JArray)filter[\"tags\"][\"$in\"] is null where it is required."));
             Assert.Equal(new[] { "a", "b" }, (inArray ?? throw new InvalidOperationException("inArray is null where it is required.")).Select(t => (string?)t).ToArray());
         }

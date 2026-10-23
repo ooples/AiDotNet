@@ -126,7 +126,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(4, store.VectorDimension);
             var create = handler.Requests.Single(r => r.Method == "PUT" && r.Path == "/collections/test");
             var body = JObject.Parse(create.Body);
-            Assert.Equal(4, (int)((body["vectors"]?["size"] ?? throw new InvalidOperationException("body[\"vectors\"][\"size\"] is null where it is required.")));
+            Assert.Equal(4, (int)(body["vectors"]?["size"] ?? throw new InvalidOperationException("body[\"vectors\"][\"size\"] is null where it is required.")));
             Assert.Equal("Euclid", (string?)(body["vectors"] ?? throw new InvalidOperationException("body[\"vectors\"] is null where it is required."))["distance"]);
         }
 
@@ -218,7 +218,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("science", (string?)(categoryCond["match"] ?? throw new InvalidOperationException("categoryCond[\"match\"] is null where it is required."))["value"]);
 
             var yearCond = must.Single(c => (string?)c["key"] == "metadata.year");
-            Assert.Equal(2020.0, (double)((yearCond["range"]?["gte"] ?? throw new InvalidOperationException("yearCond[\"range\"][\"gte\"] is null where it is required.")));
+            Assert.Equal(2020.0, (double)(yearCond["range"]?["gte"] ?? throw new InvalidOperationException("yearCond[\"range\"][\"gte\"] is null where it is required.")));
         }
 
         [Fact]
