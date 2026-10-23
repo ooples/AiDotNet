@@ -7,6 +7,8 @@ namespace AiDotNet.NeuralNetworks;
 /// <summary>The shape of a LLaMA decoder; the defaults are LLaMA 2 7B (Vicuna-7B v1.5).</summary>
 internal sealed record LlamaConfiguration
 {
+    /// <summary>Token vocabulary; 0 builds no token table and no <c>lm_head</c>, a bare <c>LlamaModel</c> whose input
+    /// embeddings come from elsewhere.</summary>
     public int VocabSize { get; init; } = 32000;
 
     public int Hidden { get; init; } = 4096;
@@ -81,7 +83,8 @@ internal sealed class LlamaNetwork<T>
             }
             return new Lora(Linear(c.Hidden, c.LoraRank), Linear(c.LoraRank, outputs), dropout);
         }
-        Embeddings = Values(c.VocabSize * c.Hidden);
+        if (c.VocabSize < 0) throw new ArgumentOutOfRangeException(nameof(configuration), "The vocabulary is 0 (none) or positive.");
+        Embeddings = c.VocabSize > 0 ? Values(c.VocabSize * c.Hidden) : null;
         for (int i = 0; i < c.Layers; i++)
         {
             var input = Values(c.Hidden);
@@ -94,7 +97,7 @@ internal sealed class LlamaNetwork<T>
                 Linear(c.Hidden, c.Intermediate), Linear(c.Intermediate, c.Hidden), queryLora, valueLora));
         }
         FinalNorm = Values(c.Hidden);
-        LmHead = Linear(c.Hidden, c.VocabSize);
+        LmHead = c.VocabSize > 0 ? Linear(c.Hidden, c.VocabSize) : null;
     }
 
     public LlamaConfiguration Configuration { get; }
@@ -114,13 +117,15 @@ internal sealed class LlamaNetwork<T>
 
     private bool _training;
 
-    public BiasFreeLinearLayer<T> Embeddings { get; }
+    /// <summary>The token table; null for a bare decoder (<see cref="LlamaConfiguration.VocabSize"/> 0).</summary>
+    public BiasFreeLinearLayer<T>? Embeddings { get; }
 
     public List<Layer> Layers { get; } = new();
 
     public BiasFreeLinearLayer<T> FinalNorm { get; }
 
-    public BiasFreeLinearLayer<T> LmHead { get; }
+    /// <summary>The language-model head; null for a bare decoder.</summary>
+    public BiasFreeLinearLayer<T>? LmHead { get; }
 
     private Tensor<T> Value(BiasFreeLinearLayer<T> holder) => holder.Forward(new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.One })));
 
@@ -146,7 +151,8 @@ internal sealed class LlamaNetwork<T>
                 if (id < 0 || id >= c.VocabSize) throw new ArgumentOutOfRangeException(nameof(ids), $"Id {id} is outside [0, {c.VocabSize}).");
                 index[i * l + j] = id;
             }
-        var table = _engine.Reshape(Value(Embeddings), new[] { c.VocabSize, c.Hidden });
+        var embeddings = Embeddings ?? throw new InvalidOperationException("This decoder has no token table; pass input embeddings to Forward.");
+        var table = _engine.Reshape(Value(embeddings), new[] { c.VocabSize, c.Hidden });
         return _engine.Reshape(_engine.TensorIndexSelect(table, index, 0), new[] { b, l, c.Hidden });
     }
 
@@ -163,12 +169,12 @@ internal sealed class LlamaNetwork<T>
 
     /// <summary>
     /// The decoder on input embeddings <c>[B, L, Hidden]</c>: the final normalized hidden states <c>[B, L, Hidden]</c>
-    /// (Hugging Face's last <c>hidden_states</c> entry) and the logits <c>[B, L, VocabSize]</c>.
+    /// (Hugging Face's last <c>hidden_states</c> entry) and the logits <c>[B, L, VocabSize]</c>, null for a bare decoder.
     /// </summary>
     /// <param name="embeddings">The input embeddings (token embeddings, or a multimodal sequence built from them).</param>
     /// <param name="attentionMask">False for padding keys, <c>[B, L]</c>; null attends to every earlier position.</param>
     /// <param name="positionIds">Rotary positions <c>[B, L]</c>; null for 0..L-1.</param>
-    public (Tensor<T> Hidden, Tensor<T> Logits) Forward(Tensor<T> embeddings, bool[,]? attentionMask = null, int[,]? positionIds = null)
+    public (Tensor<T> Hidden, Tensor<T>? Logits) Forward(Tensor<T> embeddings, bool[,]? attentionMask = null, int[,]? positionIds = null)
     {
         var c = Configuration;
         int b = embeddings.Shape[0], l = embeddings.Shape[1], hd = c.Hidden / c.Heads, half = hd / 2;
@@ -202,7 +208,15 @@ internal sealed class LlamaNetwork<T>
         var x = embeddings;
         foreach (var layer in Layers) x = Run(layer, x, cos, sin, bias);
         var hidden = RmsNorm(FinalNorm, x);
-        return (hidden, Rows(LmHead, hidden));
+        return (hidden, LmHead is null ? null : Rows(LmHead, hidden));
+    }
+
+    /// <summary><see cref="Forward"/> for a decoder with a head: the hidden states and the logits, never null.</summary>
+    public (Tensor<T> Hidden, Tensor<T> Logits) ForwardWithLogits(Tensor<T> embeddings, bool[,]? attentionMask = null, int[,]? positionIds = null)
+    {
+        if (LmHead is null) throw new InvalidOperationException("This decoder has no language-model head.");
+        var (hidden, logits) = Forward(embeddings, attentionMask, positionIds);
+        return (hidden, logits ?? throw new InvalidOperationException("The head produced no logits."));
     }
 
     private Tensor<T> Rotate(Tensor<T> x, Tensor<T> cos, Tensor<T> sin)
@@ -292,7 +306,7 @@ internal sealed class LlamaNetwork<T>
             => TorchParameters.Linear(layer, inputs, outputs, read(name, new[] { outputs, inputs }));
         void Vector(BiasFreeLinearLayer<T> holder, string name, int[] shape)
             => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), read(name, shape));
-        Vector(Embeddings, $"{prefix}embed_tokens.weight", new[] { c.VocabSize, h });
+        if (Embeddings is not null) Vector(Embeddings, $"{prefix}embed_tokens.weight", new[] { c.VocabSize, h });
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
@@ -318,7 +332,7 @@ internal sealed class LlamaNetwork<T>
             }
         }
         Vector(FinalNorm, $"{prefix}norm.weight", new[] { h });
-        Linear(LmHead, headName, h, c.VocabSize);
+        if (LmHead is not null) Linear(LmHead, headName, h, c.VocabSize);
     }
 
     /// <summary>The reference initialization (Hugging Face <c>LlamaPreTrainedModel._init_weights</c>): linear weights and

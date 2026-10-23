@@ -69,4 +69,10 @@ public sealed class TtsTrainingSample<T>
     /// with an acoustic prompt from a different sentence (VALL-E X).
     /// </summary>
     public Tensor<T>? PromptCodecTokens { get; init; }
+
+    /// <summary>
+    /// The description of how the recording sounds (speaker, pitch, speed, recording quality), as the model's description
+    /// token ids <c>[tokens]</c>, for models that synthesize from a description (Parler-TTS).
+    /// </summary>
+    public Tensor<T>? Description { get; init; }
 }
