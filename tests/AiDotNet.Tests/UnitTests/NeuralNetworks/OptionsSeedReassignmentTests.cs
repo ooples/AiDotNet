@@ -173,15 +173,97 @@ public class OptionsSeedReassignmentTests
         };
     }
 
-    private static KeepsOwnOptions BuildKeepsOwnOptions(int? seed)
+    private static KeepsOwnOptions BuildKeepsOwnOptions(int? seed, int? architectureSeed = null)
     {
-        var model = new KeepsOwnOptions(
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4, outputSize: 4);
+        if (architectureSeed is int explicitSeed)
+            architecture.RandomSeed = explicitSeed;
+        var model = new KeepsOwnOptions(architecture, seed);
+        model.MaterializeParameters();
+        return model;
+    }
+
+    /// <summary>
+    /// Keeps its options to itself and, before building its own layers, builds a nested network inside a captured
+    /// scope, as TimeDiff and FinancialSACAgent do. The nested constructor resets the scope; restoring it must bring
+    /// back this model's deferred options seed.
+    /// </summary>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    private sealed class BuildsANestedNetworkFirst : NeuralNetworkBase<double>
+    {
+        private readonly NeuralNetworkOptions _options;
+
+        public BuildsANestedNetworkFirst(NeuralNetworkArchitecture<double> architecture, int? seed)
+            : base(architecture, new MeanSquaredErrorLoss<double>())
+        {
+            _options = new NeuralNetworkOptions { Seed = seed };
+            var scope = LayerInitializationSeedScope.CaptureScope();
+            try
+            {
+                _ = BuildKeepsOwnOptions(seed: null);
+            }
+            finally
+            {
+                LayerInitializationSeedScope.RestoreScope(scope);
+            }
+            InitializeLayers();
+        }
+
+        public override ModelOptions GetOptions() => _options;
+
+        protected override void InitializeLayers()
+        {
+            Layers.Add(new FullyConnectedLayer<double>(4, 4, new AiDotNet.ActivationFunctions.IdentityActivation<double>()));
+        }
+
+        public override IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()
+            => new BuildsANestedNetworkFirst(Architecture, _options.Seed);
+
+        public override ModelMetadata<double> GetModelMetadata() => new()
+        {
+            Name = nameof(BuildsANestedNetworkFirst),
+            Description = "Test double that builds a nested network before its own layers.",
+        };
+    }
+
+    private static double[] NestedFirstParameters(int seed)
+    {
+        var model = new BuildsANestedNetworkFirst(
             new NeuralNetworkArchitecture<double>(
                 inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
                 inputSize: 4, outputSize: 4),
             seed);
         model.MaterializeParameters();
-        return model;
+        return model.GetParameters().ToArray();
+    }
+
+    [Fact]
+    public void ANestedConstructionInACapturedScope_KeepsTheEnclosingOptionsSeed()
+    {
+        var first = NestedFirstParameters(2290);
+        AdvanceTheSharedGenerator();
+        var second = NestedFirstParameters(2290);
+        var other = NestedFirstParameters(2291);
+
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, other);
+    }
+
+    [Fact]
+    public void AnExplicitArchitectureSeed_TakesPrecedenceOverTheOptionsSeed()
+    {
+        var first = BuildKeepsOwnOptions(2290, architectureSeed: 7).GetParameters().ToArray();
+        AdvanceTheSharedGenerator();
+        var second = BuildKeepsOwnOptions(2291, architectureSeed: 7).GetParameters().ToArray();
+        var otherArchitecture = BuildKeepsOwnOptions(2290, architectureSeed: 8).GetParameters().ToArray();
+
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, otherArchitecture);
     }
 
     // Draws from the thread's shared generator, which unseeded initialization falls back to, so a model that ignored
