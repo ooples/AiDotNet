@@ -65,9 +65,6 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 {
     private readonly UDOPOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     /// <summary>T5 decoder start token, which is also the pad token.</summary>

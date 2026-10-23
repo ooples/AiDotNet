@@ -65,8 +65,6 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
     private bool _disposed;
     private int _encoderLayerEnd;
 
-    public override ModelOptions GetOptions() => _options;
-
     public ProDiff(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -75,6 +73,7 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new ProDiffOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
@@ -99,6 +98,7 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new ProDiffOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = true;
         _usesDefaultOptimizer = optimizer is null;

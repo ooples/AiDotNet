@@ -67,8 +67,6 @@ public partial class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
     }
     private MonteCarloOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, List<T>>> _returns;
     private List<(string state, int action, T reward)> _episode;
@@ -92,6 +90,7 @@ public partial class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
         }
 
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _returns = new Dictionary<string, Dictionary<int, List<T>>>();
         _episode = new List<(string, int, T)>();

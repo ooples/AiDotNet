@@ -44,8 +44,6 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
     private List<(string state, int action)> _visitedStateActions;
@@ -58,6 +56,7 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _model = new Dictionary<string, Dictionary<int, (string, T)>>();
         _visitedStateActions = new List<(string, int)>();

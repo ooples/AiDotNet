@@ -36,9 +36,6 @@ public partial class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T
     private readonly Tacotron2Options _options;
     private readonly ITokenizer _tokenizer;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates the native paper architecture.</summary>
     public Tacotron2(
         NeuralNetworkArchitecture<T> architecture,
@@ -79,6 +76,7 @@ public partial class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T
     {
         _ = nativeMarker;
         _options = options;
+        Options = _options;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: options.VocabSize);
     }
 
@@ -112,6 +110,7 @@ public partial class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T
     {
         _ = onnxMarker;
         _options = options;
+        Options = _options;
         _options.ModelPath = modelPath;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: options.VocabSize);
     }

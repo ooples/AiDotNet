@@ -65,8 +65,6 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
 {
     private readonly IDEFICSOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -83,6 +81,7 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         : base(architecture)
     {
         _options = options ?? new IDEFICSOptions();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -106,6 +105,7 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         : base(architecture)
     {
         _options = options ?? new IDEFICSOptions();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer

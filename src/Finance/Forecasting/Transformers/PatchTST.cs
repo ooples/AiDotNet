@@ -111,9 +111,6 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly PatchTSTOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The patch size.
     /// </summary>

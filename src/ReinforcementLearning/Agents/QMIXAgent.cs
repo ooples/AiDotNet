@@ -77,8 +77,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
     private QMIXOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // Per-agent Q-networks
@@ -108,6 +106,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
             InitialLearningRate = 0.001,

@@ -203,9 +203,6 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly DeepFactorOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _lookbackWindow;
     private int _forecastHorizon;
     private int _numFeatures;

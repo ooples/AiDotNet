@@ -78,7 +78,6 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     private const double CharbonnierEpsilon = 1e-3;
 
     private readonly MIAVSROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -112,6 +111,7 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new MIAVSROptions();
+        Options = _options;
         _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
@@ -133,6 +133,7 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         : base(architecture, new CharbonnierLoss<T>(CharbonnierEpsilon))
     {
         _options = options ?? new MIAVSROptions();
+        Options = _options;
         _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _useNativeMode = true;
         _flowEstimator = flowEstimator;

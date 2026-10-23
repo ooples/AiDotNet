@@ -66,14 +66,14 @@ public partial class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     /// </remarks>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
-    private readonly ParakeetCTCOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly ParakeetCTCOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public ParakeetCTC(NeuralNetworkArchitecture<T> architecture, string modelPath, ParakeetCTCOptions? options = null) : base(architecture) { _options = options ?? new ParakeetCTCOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public ParakeetCTC(NeuralNetworkArchitecture<T> architecture, ParakeetCTCOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ParakeetCTCOptions(); _useNativeMode = true; _optimizer = optimizer
+    public ParakeetCTC(NeuralNetworkArchitecture<T> architecture, string modelPath, ParakeetCTCOptions? options = null) : base(architecture) { _options = options ?? new ParakeetCTCOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public ParakeetCTC(NeuralNetworkArchitecture<T> architecture, ParakeetCTCOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ParakeetCTCOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 

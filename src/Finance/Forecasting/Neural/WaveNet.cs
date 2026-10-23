@@ -130,9 +130,6 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly WaveNetOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _lookbackWindow;
     private int _forecastHorizon;
     private int _numFeatures;

@@ -59,9 +59,6 @@ public partial class SAINT<T> : RiskModelBase<T>
 
     private readonly SAINTOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 

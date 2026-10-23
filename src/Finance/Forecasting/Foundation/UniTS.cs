@@ -173,9 +173,6 @@ public partial class UniTS<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly UniTSOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>

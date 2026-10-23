@@ -65,9 +65,6 @@ public partial class BigGAN<T> : GenerativeAdversarialNetwork<T>
     private readonly int _generatorChannels;
     private readonly int _discriminatorChannels;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Gets the size of the latent (noise) vector input to the generator.</summary>
     public int LatentSize => _latentSize;
 

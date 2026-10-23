@@ -107,9 +107,6 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     private readonly ASTOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -161,6 +158,7 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new ASTOptions();
+        Options = _options;
         _options.ModelPath = modelPath;
         _useNativeMode = false;
 
@@ -207,6 +205,7 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         : base(architecture)
     {
         _options = options ?? new ASTOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

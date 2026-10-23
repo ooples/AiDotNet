@@ -78,9 +78,6 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 {
     private readonly StableVideoDiffusionOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private int _height;

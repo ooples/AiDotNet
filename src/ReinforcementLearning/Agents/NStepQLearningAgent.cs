@@ -53,8 +53,6 @@ public partial class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>,
     }
     private NStepQLearningOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private List<(string state, int action, T reward)> _nStepBuffer;
     private double _epsilon;
@@ -77,6 +75,7 @@ public partial class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>,
         }
 
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _nStepBuffer = new List<(string, int, T)>();
         _epsilon = _options.EpsilonStart;

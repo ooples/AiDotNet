@@ -90,9 +90,6 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly RWKVForecastingOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _lastForwardSeqLen;
     private int _lastForwardBatchSize;

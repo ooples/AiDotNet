@@ -55,9 +55,6 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
 {
     private readonly UnifiedMultimodalNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Constants
 
     private const int DEFAULT_EMBEDDING_DIM = 768;

@@ -70,9 +70,6 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VGGOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>

@@ -73,9 +73,6 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
 {
     private readonly AnimateDiffOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

@@ -72,9 +72,6 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
 {
     private readonly Tacotron2ModelOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

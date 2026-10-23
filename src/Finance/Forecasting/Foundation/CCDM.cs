@@ -80,8 +80,6 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     private readonly ILossFunction<T> _lossFunction;
     private readonly CCDMOptions<T> _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _numFeatures;

@@ -91,9 +91,6 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphSAGEOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>

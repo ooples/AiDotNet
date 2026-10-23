@@ -111,9 +111,6 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     private readonly Random _trainingRandom;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
-    /// <inheritdoc/>
     public string Name => _useNativeMode ? "CLAP-Native" : "CLAP-ONNX";
 
     /// <inheritdoc/>

@@ -72,9 +72,6 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
     /// </summary>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #endregion
 
     #region Constructors

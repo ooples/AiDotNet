@@ -82,7 +82,6 @@ public partial class VMamba<T> : Common.SemanticSegmentationBase<T>
         => PaperOptimizerFactory.VerifyHandBuilt(
             this, CreateAdamWOptimizer(DefaultLearningRate, DefaultWeightDecay));
     private readonly VMambaOptions _options;
-    public override ModelOptions GetOptions() => _options;
     protected override double DefaultLearningRate => _options.LearningRate;
     protected override double DefaultWeightDecay => _options.WeightDecay;
 

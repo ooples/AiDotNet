@@ -91,9 +91,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     // Removed under AIDN082.
     private readonly InfoGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions(double learningRate = 2e-4)
         => new()
         {

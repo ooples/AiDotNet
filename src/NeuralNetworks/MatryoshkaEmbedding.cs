@@ -69,9 +69,6 @@ namespace AiDotNet.NeuralNetworks
 
         private readonly MatryoshkaEmbeddingOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         private int[] _nestedDimensions;

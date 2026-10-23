@@ -65,9 +65,6 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     private readonly SiameseNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (contrastive/triplet loss) should be used during training.
     /// </summary>

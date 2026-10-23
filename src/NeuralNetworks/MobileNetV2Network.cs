@@ -91,9 +91,6 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     /// <inheritdoc/>
     protected override bool FusedTrainingDisabledByConfiguration => _options is not null && _options.DisableFusedOptimizerStep;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly MobileNetV2Configuration _configuration;

@@ -65,7 +65,6 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SonataOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only Sonata's OWN configuration lives here. _height, _width, _channels, _numClasses,

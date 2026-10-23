@@ -76,9 +76,6 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly VITSModelOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Default phoneme vocabulary size for character-level models.</summary>
     private const int DefaultPhonemeVocabSize = 128;
 

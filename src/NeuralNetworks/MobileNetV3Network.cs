@@ -71,9 +71,6 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
 
     private readonly MobileNetV3Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly MobileNetV3Configuration _configuration;

@@ -66,9 +66,6 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectivePr
     private double _dropout;
 
     /// <inheritdoc/>
-    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
-
-    /// <inheritdoc/>
     public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 
     /// <inheritdoc/>

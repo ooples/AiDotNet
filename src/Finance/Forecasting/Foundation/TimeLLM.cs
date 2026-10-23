@@ -144,9 +144,6 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly TimeLLMOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>

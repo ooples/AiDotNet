@@ -66,7 +66,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSAM2Options _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only MedSAM2's OWN configuration lives here. _height, _width, _channels, _numClasses,

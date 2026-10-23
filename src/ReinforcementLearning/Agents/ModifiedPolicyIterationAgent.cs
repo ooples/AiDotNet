@@ -65,8 +65,6 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
 {
     private ModifiedPolicyIterationOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, T> _valueTable;
     private Dictionary<string, int> _policy;
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;
@@ -88,6 +86,7 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
         }
 
         _options = options;
+        Options = _options;
         _valueTable = new Dictionary<string, T>();
         _policy = new Dictionary<string, int>();
         _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();

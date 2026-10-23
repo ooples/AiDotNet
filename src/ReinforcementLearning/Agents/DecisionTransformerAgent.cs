@@ -81,8 +81,6 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     }
     private DecisionTransformerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _transformerNetwork;
@@ -98,6 +96,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
             InitialLearningRate = 0.001,

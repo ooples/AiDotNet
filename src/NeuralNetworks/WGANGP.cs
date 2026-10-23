@@ -95,9 +95,6 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     // with `public new`, so its result depends on the static type of the reference.
     private readonly WGANGPOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly List<T> _criticLosses = new List<T>();
     private readonly List<T> _generatorLosses = new List<T>();
 

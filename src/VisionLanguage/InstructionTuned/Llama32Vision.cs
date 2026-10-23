@@ -67,8 +67,6 @@ public partial class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstruction
 {
     private readonly Llama32VisionOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -83,6 +81,7 @@ public partial class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstruction
         : base(architecture)
     {
         _options = options ?? new Llama32VisionOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -105,6 +104,7 @@ public partial class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstruction
         : base(architecture)
     {
         _options = options ?? new Llama32VisionOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

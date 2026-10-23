@@ -136,9 +136,6 @@ public partial class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly MOMENTOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics, captured by
     // ApplyInstanceNormalization so ForwardNative can restore each instance's level on the
     // way out. Without the reverse step the forecast head emits in normalized space, so the

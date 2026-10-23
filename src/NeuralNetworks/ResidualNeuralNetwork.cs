@@ -63,9 +63,6 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
     private readonly ResidualNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (deep supervision) should be used during training.
     /// </summary>

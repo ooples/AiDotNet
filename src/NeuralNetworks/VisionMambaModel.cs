@@ -105,9 +105,6 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Gets the image height.</summary>
     public int ImageHeight => _imageHeight;
 

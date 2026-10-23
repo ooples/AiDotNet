@@ -79,17 +79,6 @@ public partial class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
 
     private readonly ViTCoMerOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this ViT-CoMer model.
-    /// </summary>
-    /// <returns>The <see cref="ViTCoMerOptions"/> for this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only ViT-CoMer's OWN configuration lives here. _height, _width, _channels, _numClasses,

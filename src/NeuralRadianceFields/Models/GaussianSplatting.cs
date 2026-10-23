@@ -195,9 +195,6 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
 {
     private readonly GaussianSplattingOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Represents a single 3D Gaussian in the scene.
     /// </summary>

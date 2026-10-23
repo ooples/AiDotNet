@@ -72,8 +72,6 @@ public partial class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly DINOv3Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -86,6 +84,7 @@ public partial class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         : base(architecture)
     {
         _options = options ?? new DINOv3Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -107,6 +106,7 @@ public partial class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         : base(architecture)
     {
         _options = options ?? new DINOv3Options();
+        Options = _options;
         if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0)
         {
             if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
@@ -120,6 +120,7 @@ public partial class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
                     nameof(architecture)
                 );
             _options = new DINOv3Options(_options) { ImageSize = architecture.InputHeight };
+            Options = _options;
         }
         _useNativeMode = true;
         _optimizer = optimizer

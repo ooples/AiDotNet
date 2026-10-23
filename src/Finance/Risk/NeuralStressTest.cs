@@ -51,9 +51,6 @@ public partial class NeuralStressTest<T> : RiskModelBase<T>
 
     private readonly NeuralStressTestOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 

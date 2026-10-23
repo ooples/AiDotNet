@@ -44,9 +44,6 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the simulation time step for the spiking neural network.
     /// </summary>

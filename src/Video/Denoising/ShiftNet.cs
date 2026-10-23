@@ -93,9 +93,6 @@ public partial class ShiftNet<T> : VideoDenoisingBase<T>
     /// </remarks>
     public GroupedSpatialTemporalShift<T> Shift => _shift;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -110,6 +107,7 @@ public partial class ShiftNet<T> : VideoDenoisingBase<T>
         : base(architecture)
     {
         _options = options ?? new ShiftNetOptions();
+        Options = _options;
         _useNativeMode = false;
         TemporalRadius = _options.ShiftRadius;
         _options.ModelPath = modelPath;
@@ -127,6 +125,7 @@ public partial class ShiftNet<T> : VideoDenoisingBase<T>
         : base(architecture)
     {
         _options = options ?? new ShiftNetOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
