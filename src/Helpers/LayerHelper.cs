@@ -20265,48 +20265,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for the CAM++ speaker verification model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultCAMPlusPlusLayers(
-        int numMels = 80, int initialChannels = 512, int growthRate = 64,
-        int numBlocks = 6, int bottleneckDim = 128, int maskingDim = 256,
-        int poolingDim = 1536, int embeddingDim = 192, double dropoutRate = 0.0)
-    {
-        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
-        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
-
-        // Input projection
-        yield return new DenseLayer<T>(initialChannels, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
-
-        // D-TDNN blocks with dense connections
-        int currentDim = initialChannels;
-        for (int i = 0; i < numBlocks; i++)
-        {
-            // Bottleneck
-            yield return new DenseLayer<T>(bottleneckDim, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-
-            // TDNN layer
-            yield return new DenseLayer<T>(growthRate, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-
-            currentDim += growthRate;
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // Context-aware masking
-        yield return new DenseLayer<T>(maskingDim, reluActivation);
-        yield return new DenseLayer<T>(currentDim, identityActivation);
-
-        // Pooling and embedding projection
-        yield return new DenseLayer<T>(poolingDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new DenseLayer<T>(embeddingDim, identityActivation);
-        yield return new BatchNormalizationLayer<T>();
-    }
-
-    /// <summary>
     /// Creates default layers for the Wav2Small lightweight SER model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultWav2SmallLayers(

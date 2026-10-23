@@ -21,7 +21,7 @@ that produce those values, so you can check them yourself or regenerate them.
 | `cosyvoice_flow_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_flow_reference.json` | FunAudioLLM/CosyVoice's `MaskedDiffWithXvec`, `InterpolateRegulator` and `ConditionalCFM` (pass checkouts with `--cosyvoice` and `--matcha`) |
 | `cosyvoice_lm_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_lm_reference.json` | FunAudioLLM/CosyVoice's `TransformerLM` (pass checkouts with `--cosyvoice` and `--matcha`) |
 | `s3tokenizer_reference.py` | `TextToSpeech/ReferenceData/s3tokenizer_reference.json` | xingchensong/S3Tokenizer v1 at 9bf5d84, the PyTorch form of CosyVoice's `speech_tokenizer_v1` (pass a checkout with `--s3tokenizer`) |
-| `campplus_reference.py` | `TextToSpeech/ReferenceData/campplus_reference.json` | modelscope/3D-Speaker's `CAMPPlus` at 065629c, CosyVoice's x-vector extractor (pass a directory holding the `speakerlab` package with `--speakerlab`) |
+| `campplus_reference.py` | `TextToSpeech/ReferenceData/campplus_reference.json` | modelscope/3D-Speaker's `CAMPPlus` at 065629c, CosyVoice's x-vector extractor, and CosyVoice's front end for it (torchaudio's `kaldi.fbank`, mean-normalized) (pass a directory holding the `speakerlab` package with `--speakerlab`) |
 | `conformer_reference.py` | `TextToSpeech/ReferenceData/soundstorm_conformer_reference.json` | Pheme's `modules/conformer.py` (needs `--pheme`, a checkout of PolyAI-LDN/pheme) |
 | `pheme_s2a_reference.py` | `TextToSpeech/ReferenceData/pheme_s2a_reference.json` | Pheme's `modules/s2a_model.py` `TTSConformer` (needs `--pheme`) |
 | `valle_reference.py` | `TextToSpeech/ReferenceData/valle_reference.json` | lifeiteng/vall-e's `VALLE` (needs `--valle`, a checkout of lifeiteng/vall-e) |

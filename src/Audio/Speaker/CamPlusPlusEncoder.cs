@@ -33,9 +33,9 @@ internal sealed record CamPlusPlusConfiguration(int FeatureDim = 80, int Embeddi
 /// <para>Context-aware masking (§2.2): each layer's local output is scaled by
 /// <c>σ(W₂ ReLU(W₁ (mean_T(x) + segment_mean(x))))</c>, where the segment mean averages 100-frame segments (the last one
 /// shorter) and spreads each back over its frames.</para>
-/// <para>The embedding's BatchNorm has no affine parameters (<c>batchnorm_</c>); it is computed here, with running
-/// statistics in <see cref="EmbeddingRunningMean"/> and <see cref="EmbeddingRunningVariance"/> (momentum 0.1, the
-/// unbiased batch variance), since <see cref="BatchNormalizationLayer{T}"/> always trains a scale and shift.</para>
+/// <para>The embedding's BatchNorm has no affine parameters (<c>batchnorm_</c>). <see cref="EmbeddingNorm"/> is a
+/// <see cref="BatchNormalizationLayer{T}"/>, which always carries a scale and shift; they are held at 1 and 0 and listed in
+/// <see cref="FrozenParameters"/>, which training must leave out.</para>
 /// </remarks>
 internal sealed class CamPlusPlusEncoder<T>
 {
@@ -116,8 +116,9 @@ internal sealed class CamPlusPlusEncoder<T>
         }
         OutputNorm = Norm(channels, true);
         Dense = Conv1d(2 * channels, c.EmbeddingSize, 1, 1, 1, 0, false);
-        EmbeddingRunningMean = new Tensor<T>(new[] { c.EmbeddingSize });
-        EmbeddingRunningVariance = new Tensor<T>(new[] { c.EmbeddingSize }, new Vector<T>(Enumerable.Repeat(NumOps.One, c.EmbeddingSize).ToArray()));
+        EmbeddingNorm = Norm(c.EmbeddingSize, false);
+        var unit = Enumerable.Repeat(1.0, c.EmbeddingSize).ToArray();
+        TorchParameters.BatchNorm(EmbeddingNorm, unit, new double[c.EmbeddingSize], new double[c.EmbeddingSize], unit);
     }
 
     public CamPlusPlusConfiguration Configuration { get; }
@@ -134,17 +135,26 @@ internal sealed class CamPlusPlusEncoder<T>
     public BatchNormalizationLayer<T> OutputNorm { get; }
     public NormedConv1DLayer<T> Dense { get; }
 
-    /// <summary>The non-affine embedding BatchNorm's running mean.</summary>
-    public Tensor<T> EmbeddingRunningMean { get; private set; }
+    /// <summary>The embedding's BatchNorm, its scale and shift held at 1 and 0.</summary>
+    public BatchNormalizationLayer<T> EmbeddingNorm { get; }
 
-    /// <summary>The non-affine embedding BatchNorm's running variance.</summary>
-    public Tensor<T> EmbeddingRunningVariance { get; private set; }
+    /// <summary>The embedding BatchNorm's scale and shift, which the reference does not have: training must not move them.</summary>
+    public IReadOnlyList<Tensor<T>> FrozenParameters => new[] { EmbeddingNorm.GetGamma(), EmbeddingNorm.GetBeta() };
 
     /// <summary>Puts every layer in training (batch statistics) or evaluation (running statistics) mode.</summary>
     public void SetTrainingMode(bool training)
     {
         foreach (var layer in _owned) layer.SetTrainingMode(training);
         Training = training;
+    }
+
+    /// <summary>Whether <paramref name="layers"/> are exactly the layers this encoder runs, in the order it built them.</summary>
+    public bool Runs(IReadOnlyList<AiDotNet.Interfaces.ILayer<T>> layers)
+    {
+        if (layers.Count != _owned.Count) return false;
+        for (int i = 0; i < _owned.Count; i++)
+            if (!ReferenceEquals(layers[i], _owned[i])) return false;
+        return true;
     }
 
     /// <summary>Whether the encoder normalizes with batch statistics (and updates the running ones).</summary>
@@ -229,38 +239,9 @@ internal sealed class CamPlusPlusEncoder<T>
         var stats = Pool(Head(_engine.TensorPermute(features, new[] { 0, 2, 1 })));
         int b = stats.Shape[0], width = stats.Shape[1], e = Configuration.EmbeddingSize;
         var x = _engine.Reshape(Dense.Forward(_engine.Reshape(stats, new[] { b, width, 1 })), new[] { b, e });
-        return NormalizeEmbedding(x);
-    }
-
-    private Tensor<T> NormalizeEmbedding(Tensor<T> x)
-    {
-        int b = x.Shape[0], e = x.Shape[1];
-        var shape = new[] { b, e };
-        if (!Training)
-        {
-            var scale = new Tensor<T>(new[] { 1, e });
-            for (int j = 0; j < e; j++) scale[0, j] = NumOps.FromDouble(1.0 / Math.Sqrt(NumOps.ToDouble(EmbeddingRunningVariance[j]) + Epsilon));
-            var centredRunning = _engine.TensorSubtract(x, _engine.TensorBroadcastTo(_engine.Reshape(EmbeddingRunningMean, new[] { 1, e }), shape));
-            return _engine.TensorMultiply(centredRunning, _engine.TensorBroadcastTo(scale, shape));
-        }
-        if (b < 2) throw new ArgumentException("Training-mode BatchNorm needs more than one embedding per batch.", nameof(x));
-        var mean = _engine.ReduceMean(x, new[] { 0 }, true);
-        var centred = _engine.TensorSubtract(x, _engine.TensorBroadcastTo(mean, shape));
-        var variance = _engine.ReduceMean(_engine.TensorMultiply(centred, centred), new[] { 0 }, true);
-        var output = _engine.TensorDivide(centred,
-            _engine.TensorBroadcastTo(_engine.TensorSqrt(_engine.TensorAddScalar(variance, NumOps.FromDouble(Epsilon))), shape));
-        // running ← 0.9 running + 0.1 batch, the variance unbiased; off the tape.
-        var updatedMean = new Tensor<T>(new[] { e });
-        var updatedVariance = new Tensor<T>(new[] { e });
-        for (int j = 0; j < e; j++)
-        {
-            updatedMean[j] = NumOps.FromDouble(0.9 * NumOps.ToDouble(EmbeddingRunningMean[j]) + 0.1 * NumOps.ToDouble(mean[0, j]));
-            updatedVariance[j] = NumOps.FromDouble(0.9 * NumOps.ToDouble(EmbeddingRunningVariance[j])
-                + 0.1 * NumOps.ToDouble(variance[0, j]) * b / (b - 1));
-        }
-        EmbeddingRunningMean = updatedMean;
-        EmbeddingRunningVariance = updatedVariance;
-        return output;
+        // BatchNorm1d refuses one value per channel in training, and so does this: a batch of one has no statistics.
+        if (Training && b < 2) throw new ArgumentException("Training CAM++ needs more than one utterance per batch.", nameof(features));
+        return EmbeddingNorm.Forward(x);
     }
 
     /// <summary>Loads a 3D-Speaker <c>CAMPPlus</c> state dict (<c>num_batches_tracked</c> is read and not used).</summary>
@@ -332,8 +313,9 @@ internal sealed class CamPlusPlusEncoder<T>
         Norm(OutputNorm, "xvector.out_nonlinear.batchnorm", channels);
         Conv(Dense, "xvector.dense.linear", 2 * channels, 1, false);
         var e = new[] { c.EmbeddingSize };
-        EmbeddingRunningMean = new Tensor<T>(e, new Vector<T>(read("xvector.dense.nonlinear.batchnorm.running_mean", e).Select(NumOps.FromDouble).ToArray()));
-        EmbeddingRunningVariance = new Tensor<T>(e, new Vector<T>(read("xvector.dense.nonlinear.batchnorm.running_var", e).Select(NumOps.FromDouble).ToArray()));
+        var unit = Enumerable.Repeat(1.0, c.EmbeddingSize).ToArray();
+        TorchParameters.BatchNorm(EmbeddingNorm, unit, new double[c.EmbeddingSize],
+            read("xvector.dense.nonlinear.batchnorm.running_mean", e), read("xvector.dense.nonlinear.batchnorm.running_var", e));
         read("xvector.dense.nonlinear.batchnorm.num_batches_tracked", Array.Empty<int>());
     }
 }

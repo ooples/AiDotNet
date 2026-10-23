@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 
@@ -79,5 +80,21 @@ public class BatchNormalizationLayoutAndRecalibrationTests
         var evaluation = layer.Forward(input);
         for (int i = 0; i < training.Length; i++)
             Assert.Equal(training[i], evaluation[i], 9);
+    }
+
+    [Fact]
+    public void Deserialization_RebuildsASizedLayer_WithItsDeclaredLayout()
+    {
+        // The metadata once held only epsilon and momentum: the rebuilt layer was lazy and Infer. A model restoring
+        // into its own sized ChannelsFirst layer then saw different construction state and replaced that layer, so a
+        // model holding it directly (CAM++'s encoder) ran its pre-restore weights.
+        var layer = new BatchNormalizationLayer<double>(4) { Layout = BatchNormDataLayout.ChannelsFirst };
+        var metadata = layer.GetMetadata().ToDictionary(pair => pair.Key, pair => (object)pair.Value);
+        var rebuilt = AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<double>(
+            typeof(BatchNormalizationLayer<>).FullName ?? nameof(BatchNormalizationLayer<double>), new[] { -1 }, new[] { -1 }, metadata);
+
+        var restored = Assert.IsType<BatchNormalizationLayer<double>>(rebuilt);
+        Assert.Equal(BatchNormDataLayout.ChannelsFirst, restored.Layout);
+        Assert.Equal(layer.ParameterCount, restored.ParameterCount);
     }
 }
