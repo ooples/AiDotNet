@@ -96,8 +96,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException($"Groups ({groups}) must divide the input ({inChannels}) and output ({outChannels}) channels.", nameof(groups));
         if (kernelSize <= 0 || stride <= 0 || dilation <= 0 || padding < 0)
             throw new ArgumentOutOfRangeException(nameof(kernelSize));
-        if (transposed && (dilation != 1 || groups != 1))
-            throw new ArgumentException("A transposed convolution here has dilation 1 and one group.", nameof(transposed));
+        if (transposed && (dilation != 1 || (groups != 1 && (groups != inChannels || groups != outChannels))))
+            throw new ArgumentException("A transposed convolution here has dilation 1 and one group, or is depthwise (groups = channels).", nameof(transposed));
         _in = inChannels;
         _out = outChannels;
         _kernel = kernelSize;
@@ -111,10 +111,10 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         var random = RandomSeed.HasValue
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-        int fanIn = (transposed ? outChannels : inChannels / groups) * kernelSize;
+        int fanIn = (transposed ? outChannels / groups : inChannels / groups) * kernelSize;
         double bound = 1.0 / Math.Sqrt(fanIn);
         _direction = transposed
-            ? new Tensor<T>(new[] { inChannels, outChannels, 1, kernelSize })
+            ? new Tensor<T>(new[] { inChannels, outChannels / groups, 1, kernelSize })
             : new Tensor<T>(new[] { outChannels, inChannels / groups, 1, kernelSize });
         for (int i = 0; i < _direction.Length; i++) _direction[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
         _bias = new Tensor<T>(new[] { outChannels });
@@ -317,7 +317,12 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         var kernel = Kernel();
         var x4 = Engine.Reshape(input, new[] { batch, _in, 1, time });
         Tensor<T> y;
-        if (_transposed)
+        if (_transposed && _groups > 1)
+        {
+            var depthwise = DepthwiseTransposed(input, kernel);
+            y = Engine.Reshape(depthwise, new[] { batch, _out, 1, depthwise.Shape[2] });
+        }
+        else if (_transposed)
         {
             y = Engine.ConvTranspose2D(x4, kernel, new[] { 1, _stride }, new[] { 0, _padding }, new[] { 0, _outputPadding });
         }
@@ -339,6 +344,36 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         if (!_useBias) return Engine.Reshape(y, new[] { batch, _out, outTime });
         var bias = Engine.TensorTile(Engine.Reshape(_bias, new[] { 1, _out, 1, 1 }), new[] { batch, 1, 1, outTime });
         return Engine.Reshape(Engine.TensorAdd(y, bias), new[] { batch, _out, outTime });
+    }
+
+    /// <summary>
+    /// A depthwise transposed convolution (PyTorch's <c>ConvTranspose1d(C, C, k, stride, padding, output_padding,
+    /// groups=C)</c>): the input zero-stuffed by the stride, padded by <c>k − 1 − padding</c> on the left and that plus the
+    /// output padding on the right, convolved per channel with the flipped kernel.
+    /// </summary>
+    private Tensor<T> DepthwiseTransposed(Tensor<T> input, Tensor<T> kernel)
+    {
+        int batch = input.Shape[0], time = input.Shape[2];
+        var x = input;
+        if (_stride > 1)
+        {
+            var columns = Engine.Reshape(input, new[] { batch, _in, time, 1 });
+            var zeros = new Tensor<T>(new[] { batch, _in, time, _stride - 1 });
+            x = Engine.Reshape(Engine.TensorConcatenate(new[] { columns, zeros }, 3), new[] { batch, _in, time * _stride });
+            x = Engine.TensorSlice(x, new[] { 0, 0, 0 }, new[] { batch, _in, (time - 1) * _stride + 1 });
+        }
+        int left = _kernel - 1 - _padding, right = left + _outputPadding;
+        if (left < 0) throw new InvalidOperationException("The padding exceeds the kernel.");
+        var parts = new List<Tensor<T>>();
+        if (left > 0) parts.Add(new Tensor<T>(new[] { batch, _in, left }));
+        parts.Add(x);
+        if (right > 0) parts.Add(new Tensor<T>(new[] { batch, _in, right }));
+        if (parts.Count > 1) x = Engine.TensorConcatenate(parts.ToArray(), 2);
+        // [C, 1, 1, k] → [C, 1, k], flipped along the kernel.
+        var flat = Engine.Reshape(kernel, new[] { _in, 1, _kernel });
+        var flipped = Engine.TensorConcatenate(Enumerable.Range(0, _kernel).Reverse()
+            .Select(j => Engine.TensorSlice(flat, new[] { 0, 0, j }, new[] { _in, 1, 1 })).ToArray(), 2);
+        return Engine.DepthwiseConv1D(x, flipped, 1, 0);
     }
 
     /// <summary>One output step <c>[1, out, 1]</c> of the convolution from the inputs its kernel positions see:

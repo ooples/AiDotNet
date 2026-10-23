@@ -34,6 +34,7 @@ that produce those values, so you can check them yourself or regenerate them.
 | `g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz` and `nrl_rules.tsv` (the English G2P's data, not a test fixture) | CMUdict and NRL Report 7948's rules, from pinned sources |
 | `parler_tts_reference.py` | `TextToSpeech/ReferenceData/parler_tts_reference.json` | huggingface/parler-tts's `ParlerTTSForConditionalGeneration` (needs `--parler`, a checkout of huggingface/parler-tts, and its own environment; see below) |
 | `prompttts_style_reference.py` | `TextToSpeech/ReferenceData/prompttts_style_reference.json` | THUDM/P-tuning-v2's `BertPrefixForSequenceClassification` (PromptTTS's style encoder; needs `--ptuning`, a checkout of THUDM/P-tuning-v2, and the Parler-TTS environment) |
+| `styletts_reference.py` | `TextToSpeech/ReferenceData/styletts_reference.json` | yl4579/StyleTTS's `models.py`, `Utils/ASR` and `Utils/JDC`, and resemble-ai/monotonic_align (needs `--styletts`, a checkout of yl4579/StyleTTS, and the Parler-TTS environment with torchaudio, munch, pyyaml and monotonic_align built from its repository) |
 
 ## Set up
 
