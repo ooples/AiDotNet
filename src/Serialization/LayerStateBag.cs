@@ -845,9 +845,9 @@ public readonly struct LayerStateBag
         return structural;
     }
 
-    private static bool TryCloneParameterizedActivation(object source, out object clone)
+    private static bool TryCloneParameterizedActivation(object source, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? clone)
     {
-        clone = null!;
+        clone = null;
         Type type = source.GetType();
         bool isActivation = type.GetInterfaces().Any(iface =>
             iface.IsGenericType

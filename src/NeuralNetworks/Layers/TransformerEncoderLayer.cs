@@ -195,7 +195,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("1, _embeddingSize")]
-    private MultiHeadAttentionLayer<T> _selfAttention;
+    private MultiHeadAttentionLayer<T>? _selfAttention;
 
     /// <summary>
     /// The layer normalization applied after self-attention.
@@ -217,7 +217,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("_embeddingSize")]
-    private LayerNormalizationLayer<T> _norm1;
+    private LayerNormalizationLayer<T>? _norm1;
 
     /// <summary>
     /// The feed-forward network for additional transformation of the sequence.
@@ -239,7 +239,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("_embeddingSize")]
-    private FeedForwardLayer<T> _feedForward1;
+    private FeedForwardLayer<T>? _feedForward1;
 
     /// <summary>
     /// The second (projection) layer of the feed-forward network.
@@ -249,7 +249,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// A proper transformer FFN has two layers: expansion and projection.
     /// </remarks>
     [SubLayerInput("_feedForwardDim")]
-    private FeedForwardLayer<T> _feedForward2;
+    private FeedForwardLayer<T>? _feedForward2;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -271,7 +271,22 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("_embeddingSize")]
-    private LayerNormalizationLayer<T> _norm2;
+    private LayerNormalizationLayer<T>? _norm2;
+
+    private MultiHeadAttentionLayer<T> SelfAttentionLayer => _selfAttention ?? throw new InvalidOperationException(
+        "TransformerEncoderLayer._selfAttention is used before the layer has built its sublayers.");
+
+    private LayerNormalizationLayer<T> Norm1Layer => _norm1 ?? throw new InvalidOperationException(
+        "TransformerEncoderLayer._norm1 is used before the layer has built its sublayers.");
+
+    private FeedForwardLayer<T> FeedForward1Layer => _feedForward1 ?? throw new InvalidOperationException(
+        "TransformerEncoderLayer._feedForward1 is used before the layer has built its sublayers.");
+
+    private FeedForwardLayer<T> FeedForward2Layer => _feedForward2 ?? throw new InvalidOperationException(
+        "TransformerEncoderLayer._feedForward2 is used before the layer has built its sublayers.");
+
+    private LayerNormalizationLayer<T> Norm2Layer => _norm2 ?? throw new InvalidOperationException(
+        "TransformerEncoderLayer._norm2 is used before the layer has built its sublayers.");
 
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
@@ -316,8 +331,8 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             return Array.Empty<Tensor<T>>();
 
         var parameters = new List<Tensor<T>>();
-        parameters.AddRange(_norm1.GetTrainableParameters());
-        parameters.AddRange(_norm2.GetTrainableParameters());
+        parameters.AddRange(Norm1Layer.GetTrainableParameters());
+        parameters.AddRange(Norm2Layer.GetTrainableParameters());
         return parameters;
     }
 
@@ -325,8 +340,8 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         base.ClearGradients();
         if (!_isInitialized) return;
-        _selfAttention.ClearGradients(); _norm1.ClearGradients();
-        _feedForward1.ClearGradients(); _feedForward2.ClearGradients(); _norm2.ClearGradients();
+        SelfAttentionLayer.ClearGradients(); Norm1Layer.ClearGradients();
+        FeedForward1Layer.ClearGradients(); FeedForward2Layer.ClearGradients(); Norm2Layer.ClearGradients();
     }
 
     /// <summary>
@@ -397,11 +412,11 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _feedForwardDim = feedForwardDim;
 
         // Sublayers constructed lazily inside EnsureInitialized once _embeddingSize is known.
-        _selfAttention = null!;
-        _norm1 = null!;
-        _feedForward1 = null!;
-        _feedForward2 = null!;
-        _norm2 = null!;
+        _selfAttention = null;
+        _norm1 = null;
+        _feedForward1 = null;
+        _feedForward2 = null;
+        _norm2 = null;
 
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
@@ -544,11 +559,11 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                     (IActivationFunction<T>?)null);
                 _norm2 = new LayerNormalizationLayer<T>();
 
-                RegisterSubLayer(_selfAttention);
-                RegisterSubLayer(_norm1);
-                RegisterSubLayer(_feedForward1);
-                RegisterSubLayer(_feedForward2);
-                RegisterSubLayer(_norm2);
+                RegisterSubLayer(SelfAttentionLayer);
+                RegisterSubLayer(Norm1Layer);
+                RegisterSubLayer(FeedForward1Layer);
+                RegisterSubLayer(FeedForward2Layer);
+                RegisterSubLayer(Norm2Layer);
 
             // Propagate a deterministic per-sublayer init seed derived from THIS layer's
             // wired RandomSeed. The sublayers are constructed HERE, at first-forward — long
@@ -572,11 +587,11 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 if (RandomSeed.HasValue)
                 {
                     var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
-                    _selfAttention.RandomSeed = subSeedRng.Next();
-                    _norm1.RandomSeed = subSeedRng.Next();
-                    _feedForward1.RandomSeed = subSeedRng.Next();
-                    _feedForward2.RandomSeed = subSeedRng.Next();
-                    _norm2.RandomSeed = subSeedRng.Next();
+                    SelfAttentionLayer.RandomSeed = subSeedRng.Next();
+                    Norm1Layer.RandomSeed = subSeedRng.Next();
+                    FeedForward1Layer.RandomSeed = subSeedRng.Next();
+                    FeedForward2Layer.RandomSeed = subSeedRng.Next();
+                    Norm2Layer.RandomSeed = subSeedRng.Next();
                 }
             }
 
@@ -660,12 +675,12 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             input3D = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
-        var attention = _selfAttention.Forward(input3D);
+        var attention = SelfAttentionLayer.Forward(input3D);
         // Residual connection: input + attention
         var residual1 = Engine.TensorAdd(input3D, attention);
 
         // Layer norm now supports any-rank tensors (normalizes over last dimension)
-        var normalized1 = _norm1.Forward(residual1);
+        var normalized1 = Norm1Layer.Forward(residual1);
 
         // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed),
         // applied independently to every (batch, seq) position. The underlying
@@ -679,13 +694,13 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         int ffSeq = normalized1.Shape[1];
         int ffEmbed = normalized1.Shape[2];
         var ffInput2D = Engine.Reshape(normalized1, [ffBatch * ffSeq, ffEmbed]);
-        var ffExpanded = _feedForward1.Forward(ffInput2D);
-        var ffProjected2D = _feedForward2.Forward(ffExpanded);
+        var ffExpanded = FeedForward1Layer.Forward(ffInput2D);
+        var ffProjected2D = FeedForward2Layer.Forward(ffExpanded);
         var ffProjected = Engine.Reshape(ffProjected2D, [ffBatch, ffSeq, ffEmbed]);
 
         // Residual connection: normalized1 + ffProjected
         var residual2 = Engine.TensorAdd(normalized1, ffProjected);
-        var output = _norm2.Forward(residual2);
+        var output = Norm2Layer.Forward(residual2);
 
         // Restore original tensor shape
         if (_originalInputShape != null && _originalInputShape.Length == 1)
@@ -737,11 +752,11 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         if (!_isInitialized) return;
         // Update parameters for each sub-layer
-        _selfAttention.UpdateParameters(learningRate);
-        _norm1.UpdateParameters(learningRate);
-        _feedForward1.UpdateParameters(learningRate);
-        _feedForward2.UpdateParameters(learningRate);
-        _norm2.UpdateParameters(learningRate);
+        SelfAttentionLayer.UpdateParameters(learningRate);
+        Norm1Layer.UpdateParameters(learningRate);
+        FeedForward1Layer.UpdateParameters(learningRate);
+        FeedForward2Layer.UpdateParameters(learningRate);
+        Norm2Layer.UpdateParameters(learningRate);
     }
 
     /// <summary>
@@ -758,11 +773,11 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         if (!_isInitialized) return;
         // Update parameters for each sub-layer using GPU optimizer
-        _selfAttention.UpdateParametersGpu(config);
-        _norm1.UpdateParametersGpu(config);
-        _feedForward1.UpdateParametersGpu(config);
-        _feedForward2.UpdateParametersGpu(config);
-        _norm2.UpdateParametersGpu(config);
+        SelfAttentionLayer.UpdateParametersGpu(config);
+        Norm1Layer.UpdateParametersGpu(config);
+        FeedForward1Layer.UpdateParametersGpu(config);
+        FeedForward2Layer.UpdateParametersGpu(config);
+        Norm2Layer.UpdateParametersGpu(config);
     }
 
     /// <summary>
@@ -796,11 +811,11 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (!_isInitialized) return;
 
         // Reset all sublayers
-        _selfAttention.ResetState();
-        _norm1.ResetState();
-        _feedForward1.ResetState();
-        _feedForward2.ResetState();
-        _norm2.ResetState();
+        SelfAttentionLayer.ResetState();
+        Norm1Layer.ResetState();
+        FeedForward1Layer.ResetState();
+        FeedForward2Layer.ResetState();
+        Norm2Layer.ResetState();
     }
 
     /// <summary>

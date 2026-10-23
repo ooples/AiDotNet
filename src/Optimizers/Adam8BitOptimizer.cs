@@ -461,12 +461,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public int NumBlocks;
         public Vector<byte>? MQuantized;        // null when CompressBothMoments == false
         public Tensor<T>? MFullPrecision;       // null when CompressBothMoments == true
-        // Initialized to null! — AllocateTapeState always overwrites these
-        // before the state is reachable from anywhere else, so the
-        // immediate-discard `new(0)` defaults were just GC pressure.
-        public Vector<byte> VQuantized = null!;
+        // Null under BF16 moment storage and for a state restored without them; AllocateTapeState fills them for
+        // the byte-quantized layout.
+        public Vector<byte>? VQuantized;
         public Vector<double>? MScales;         // null when CompressBothMoments == false
-        public Vector<double> VScales = null!;
+        public Vector<double>? VScales;
 
         // BF16 moment storage (UseBFloat16MomentStorage == true): 2 bytes/element, no per-block
         // scales. Mutually exclusive with the byte-quantized fields above — only one set is allocated.
@@ -537,10 +536,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     stateSp = AllocateTapeState(param.Length);
                     _tapeStates[param] = stateSp;
                 }
-                if (!stateSp.FullPrecisionMoments && SparseEmbeddingOptimizerHelpers.TryApplyAdam8BitSparse(
+                if (!stateSp.FullPrecisionMoments
+                    && stateSp.VQuantized is { } sparseVQuantized
+                    && stateSp.VScales is { } sparseVScales
+                    && SparseEmbeddingOptimizerHelpers.TryApplyAdam8BitSparse(
                         param,
                         stateSp.MQuantized, stateSp.MScales,
-                        stateSp.VQuantized, stateSp.VScales,
+                        sparseVQuantized, sparseVScales,
                         _options.BlockSize, stateSp.NumBlocks,
                         NumOps.ToDouble(CurrentLearningRate),
                         NumOps.ToDouble(beta1), NumOps.ToDouble(beta2),
@@ -693,7 +695,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 }
                 m = state.MFullPrecision;
             }
-            Tensor<T> v = DequantizeTensor(state.VQuantized, state.VScales, param._shape, state.NumBlocks, isSigned: false);
+            var vQuantized = state.VQuantized ?? throw new InvalidOperationException(
+                "Adam8Bit: this parameter's byte-quantized second moment was never allocated or restored.");
+            var vScales = state.VScales ?? throw new InvalidOperationException(
+                "Adam8Bit: this parameter's second-moment block scales were never allocated or restored.");
+            Tensor<T> v = DequantizeTensor(vQuantized, vScales, param._shape, state.NumBlocks, isSigned: false);
 
             // Update biased first / second moments IN PLACE to minimize per-parameter transient
             // allocations (#1688 Fix 2). Identical recurrences to the legacy path, but expressed with
@@ -719,7 +725,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 QuantizeTensor(m, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
             }
-            QuantizeTensor(v, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
+            QuantizeTensor(v, vQuantized, vScales, state.NumBlocks, isSigned: false);
 
             // Apply the bias-corrected Adam update directly to the parameter.
             //     update = lr · (m_t / (1 - beta1^t)) / (sqrt(v_t / (1 - beta2^t)) + eps)
@@ -1690,9 +1696,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             NumBlocks = reader.ReadInt32(),
             MQuantized = ReadByteVector(reader),
             MFullPrecision = ReadTensor(reader),
-            VQuantized = ReadByteVector(reader) ?? null!,
+            VQuantized = ReadByteVector(reader),
             MScales = ReadDoubleVector(reader),
-            VScales = ReadDoubleVector(reader) ?? null!,
+            VScales = ReadDoubleVector(reader),
             MBf16 = ReadUShortArray(reader),
             VBf16 = ReadUShortArray(reader),
         };

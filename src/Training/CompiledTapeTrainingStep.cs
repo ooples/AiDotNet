@@ -174,7 +174,7 @@ public static class CompiledTapeTrainingStep<T>
     /// model from two threads at once would race on a single plan, so that caller takes the eager path instead. The
     /// claim never blocks, so it cannot deadlock against the first-compiled-step allocation gate.
     /// </summary>
-    private static bool TryEnterState(object owner, object layerSetKey, out OwnerStates ownerStates, out TrainingState state)
+    private static bool TryEnterState(object owner, object layerSetKey, out OwnerStates ownerStates, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out TrainingState? state)
     {
         ownerStates = States.GetValue(owner, _ => new OwnerStates());
         int me = System.Environment.CurrentManagedThreadId;
@@ -182,13 +182,17 @@ public static class CompiledTapeTrainingStep<T>
         {
             if (ownerStates.BusyThread != 0 && ownerStates.BusyThread != me)
             {
-                state = null!;
+                state = null;
                 return false;
             }
 
             ownerStates.BusyThread = me;
             ownerStates.Depth++;
-            if (!ownerStates.ByLayerSet.TryGetValue(layerSetKey, out state!))
+            if (ownerStates.ByLayerSet.TryGetValue(layerSetKey, out var existing))
+            {
+                state = existing;
+            }
+            else
             {
                 state = new TrainingState();
                 ownerStates.ByLayerSet[layerSetKey] = state;

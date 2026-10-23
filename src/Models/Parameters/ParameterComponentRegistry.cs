@@ -902,7 +902,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     private static bool TryGetNetwork(
         IParameterSource<T>? source,
-        out NeuralNetworks.NeuralNetworkBase<T> network)
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out NeuralNetworks.NeuralNetworkBase<T>? network)
     {
         var current = source is ComponentAccessorParameterSource<T> accessor
             ? accessor.Current
@@ -913,7 +913,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             return true;
         }
 
-        network = null!;
+        network = null;
         return false;
     }
 

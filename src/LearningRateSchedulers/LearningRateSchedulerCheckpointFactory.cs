@@ -138,11 +138,11 @@ internal static class LearningRateSchedulerCheckpointFactory
     internal static bool TryCreateBuiltInScheduler(
         string serializedTypeName,
         Dictionary<string, object> state,
-        out ILearningRateScheduler scheduler)
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ILearningRateScheduler? scheduler)
     {
         if (!BuiltInFactoriesByTypeName.TryGetValue(serializedTypeName, out var factory))
         {
-            scheduler = null!;
+            scheduler = null;
             return false;
         }
 

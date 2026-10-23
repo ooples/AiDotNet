@@ -802,9 +802,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     private sealed class Fp32AdamSlot
     {
-        public float[] P = default!;
-        public float[] M = default!;
-        public float[] V = default!;
+        public float[] P = Array.Empty<float>();
+        public float[] M = Array.Empty<float>();
+        public float[] V = Array.Empty<float>();
         public int N;
     }
     private readonly ConcurrentDictionary<Tensor<T>, Fp32AdamSlot> _fp32StepCache =

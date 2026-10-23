@@ -973,7 +973,7 @@ internal sealed class CompiledModelHost<T> : IDisposable
         int[] concreteShape,
         int structureVersion,
         Tensor<T> currentInput,
-        out Tensor<T> result)
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Tensor<T>? result)
     {
         if (TryGetDiskCachedPlan(concreteShape, structureVersion, out var plan))
         {
@@ -993,7 +993,7 @@ internal sealed class CompiledModelHost<T> : IDisposable
             }
             return true;
         }
-        result = null!;
+        result = null;
         return false;
     }
 

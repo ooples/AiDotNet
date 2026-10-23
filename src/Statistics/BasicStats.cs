@@ -48,7 +48,7 @@ public partial class BasicStats<T>
     /// The mean gives you the "center" of your data, but can be pulled in the direction of very large or small values.
     /// </para>
     /// </remarks>
-    private T _mean = default!;
+    private T _mean = ZeroValue;
     public T Mean { get { EnsureFullStatsComputed(); return _mean; } private set { _mean = value; } }
 
     /// <summary>
@@ -69,7 +69,7 @@ public partial class BasicStats<T>
     /// Higher variance means values are more spread out; lower variance means they're more clustered around the mean.
     /// </para>
     /// </remarks>
-    private T _variance = default!;
+    private T _variance = ZeroValue;
     public T Variance { get { EnsureFullStatsComputed(); return _variance; } private set { _variance = value; } }
 
     /// <summary>
@@ -93,7 +93,7 @@ public partial class BasicStats<T>
     /// fall roughly between 70 and 80.
     /// </para>
     /// </remarks>
-    private T _standardDeviation = default!;
+    private T _standardDeviation = ZeroValue;
     public T StandardDeviation { get { EnsureFullStatsComputed(); return _standardDeviation; } private set { _standardDeviation = value; } }
 
     /// <summary>
@@ -116,7 +116,7 @@ public partial class BasicStats<T>
     /// but a few extremely wealthy individuals pull the right tail out.
     /// </para>
     /// </remarks>
-    private T _skewness = default!;
+    private T _skewness = ZeroValue;
     public T Skewness { get { EnsureFullStatsComputed(); return _skewness; } private set { _skewness = value; } }
 
     /// <summary>
@@ -138,7 +138,7 @@ public partial class BasicStats<T>
     /// but occasionally have extreme movements.
     /// </para>
     /// </remarks>
-    private T _kurtosis = default!;
+    private T _kurtosis = ZeroValue;
     public T Kurtosis { get { EnsureFullStatsComputed(); return _kurtosis; } private set { _kurtosis = value; } }
 
     /// <summary>
@@ -156,7 +156,7 @@ public partial class BasicStats<T>
     /// or setting valid ranges.
     /// </para>
     /// </remarks>
-    private T _min = default!;
+    private T _min = ZeroValue;
     public T Min { get { EnsureFullStatsComputed(); return _min; } private set { _min = value; } }
 
     /// <summary>
@@ -173,7 +173,7 @@ public partial class BasicStats<T>
     /// Together with the minimum, it tells you the full range of your data.
     /// </para>
     /// </remarks>
-    private T _max = default!;
+    private T _max = ZeroValue;
     public T Max { get { EnsureFullStatsComputed(); return _max; } private set { _max = value; } }
 
     /// <summary>
@@ -216,7 +216,7 @@ public partial class BasicStats<T>
     /// The median is often better than the mean for describing "typical" values when your data has outliers.
     /// </para>
     /// </remarks>
-    private T _median = default!;
+    private T _median = ZeroValue;
     public T Median { get { EnsureFullStatsComputed(); return _median; } private set { _median = value; } }
 
     /// <summary>
@@ -236,7 +236,7 @@ public partial class BasicStats<T>
     /// scored below and 15 students scored above.
     /// </para>
     /// </remarks>
-    private T _firstQuartile = default!;
+    private T _firstQuartile = ZeroValue;
     public T FirstQuartile { get { EnsureFullStatsComputed(); return _firstQuartile; } private set { _firstQuartile = value; } }
 
     /// <summary>
@@ -256,7 +256,7 @@ public partial class BasicStats<T>
     /// scored below and 5 students scored above.
     /// </para>
     /// </remarks>
-    private T _thirdQuartile = default!;
+    private T _thirdQuartile = ZeroValue;
     public T ThirdQuartile { get { EnsureFullStatsComputed(); return _thirdQuartile; } private set { _thirdQuartile = value; } }
 
     /// <summary>
@@ -281,7 +281,7 @@ public partial class BasicStats<T>
     /// span a 15-point range.
     /// </para>
     /// </remarks>
-    private T _interquartileRange = default!;
+    private T _interquartileRange = ZeroValue;
     public T InterquartileRange { get { EnsureFullStatsComputed(); return _interquartileRange; } private set { _interquartileRange = value; } }
 
     /// <summary>
@@ -303,7 +303,7 @@ public partial class BasicStats<T>
     /// Think of it as measuring the "typical" distance from the center, ignoring extreme values.
     /// </para>
     /// </remarks>
-    private T _mAD = default!;
+    private T _mAD = ZeroValue;
     public T MAD { get { EnsureFullStatsComputed(); return _mAD; } private set { _mAD = value; } }
 
     /// <summary>
@@ -325,6 +325,9 @@ public partial class BasicStats<T>
     /// and _numOps makes sure we're using the right calculator for the job.
     /// </para>
     /// </remarks>
+    /// <summary>The value every statistic holds until it is computed: zero, which is what <c>default</c> is for the numeric types.</summary>
+    private static readonly T ZeroValue = MathHelper.GetNumericOperations<T>().Zero;
+
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>

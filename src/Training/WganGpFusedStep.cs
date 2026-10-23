@@ -292,20 +292,23 @@ public sealed class WganGpFusedStep<T> : IDisposable
 
     private void AllocatePersistentSlots(Tensor<T> realBatch)
     {
-        // Slot 0: real, Slot 1: fake, Slot 2: epsilon (allocated on first Step
-        // when epsilonSampler is called).
-        _persistentSlots = new Tensor<T>[3];
-        _persistentSlots[0] = new Tensor<T>((int[])realBatch._shape.Clone());
-        _persistentSlots[1] = new Tensor<T>((int[])realBatch._shape.Clone());
-        // Slot 2 shape depends on epsilon shape; allocated at first refresh.
-        _persistentSlots[2] = null!;  // placeholder — replaced on first Refresh.
+        // Slot 0: real, Slot 1: fake. Slot 2 (epsilon) takes the sampler's shape, which is known only once the
+        // step draws it, so ExtendSlots appends it then. The array used to be sized 3 with a null placeholder in
+        // slot 2, which made the "Length < 3" check in TryStep always false: the first step dereferenced null.
+        _persistentSlots = new[]
+        {
+            new Tensor<T>((int[])realBatch._shape.Clone()),
+            new Tensor<T>((int[])realBatch._shape.Clone()),
+        };
     }
 
     private static Tensor<T>[] ExtendSlots(Tensor<T>[] slots, int[] epsShape)
     {
-        // Called if slot 2 was allocated as a null placeholder.
-        slots[2] = new Tensor<T>((int[])epsShape.Clone());
-        return slots;
+        var extended = new Tensor<T>[3];
+        extended[0] = slots[0];
+        extended[1] = slots[1];
+        extended[2] = new Tensor<T>((int[])epsShape.Clone());
+        return extended;
     }
 
     private static bool ShapeMatches(Tensor<T> a, Tensor<T> b)

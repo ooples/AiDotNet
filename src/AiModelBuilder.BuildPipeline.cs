@@ -921,7 +921,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     width = w;
                     break;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    // Expected while probing: a width the model does not accept throws, and the next one is tried.
+                    System.Diagnostics.Trace.TraceInformation(
+                        $"Robustness audit: the model rejected a {w}-column probe ({ex.GetType().Name}: {ex.Message}).");
+                }
             }
 
             if (width < 0) return;
@@ -1571,7 +1576,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
             if (!ok) continue;
             try { return ctor.Invoke(args) as ITimeSeriesDecomposition<T>; }
-            catch { }
+            catch (Exception ex)
+            {
+                // A constructor that rejects this series leaves the next candidate to try.
+                System.Diagnostics.Trace.TraceInformation(
+                    $"Time-series decomposition audit: {type.Name}({ps.Length} parameters) could not rebuild over the series " +
+                    $"({ex.GetType().Name}: {ex.Message}).");
+            }
         }
 
         return null;
@@ -1985,13 +1996,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     private bool TrySplitWithConfiguredSplitter(
         TInput preparedX, TOutput preparedY,
-        out TInput xTrain, out TOutput yTrain,
-        out TInput xVal, out TOutput yVal,
-        out TInput xTest, out TOutput yTest)
+        [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TInput xTrain, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TOutput yTrain,
+        [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TInput xVal, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TOutput yVal,
+        [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TInput xTest, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TOutput yTest)
     {
-        xTrain = default!; yTrain = default!;
-        xVal = default!; yVal = default!;
-        xTest = default!; yTest = default!;
+        xTrain = default; yTrain = default;
+        xVal = default; yVal = default;
+        xTest = default; yTest = default;
 
         var splitter = _configuredDataSplitter;
         if (splitter is null)
@@ -3337,7 +3348,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     /// <summary>
     /// Shared image-space training loop used by both <see cref="BuildImageOnlyInternalAsync"/>
-    /// and the <c>imageSpaceHandled</c> branch inside <see cref="BuildSupervisedInternalAsync"/>.
+    /// and the image-space branch inside <see cref="BuildSupervisedInternalAsync"/>.
     /// Runs <paramref name="epochs"/> iterations of <c>TrainOnImageBatch</c> and, when the
     /// model is a <see cref="NeuralRadianceFields.Models.GaussianSplatting{T}"/> with
     /// <see cref="AiDotNet.Models.Options.GaussianSplattingOptions.CompressOnBuildComplete"/>
@@ -4212,8 +4223,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // ConfigureDataSplitter silently dropped its argument — which also left every splitter
             // under Preprocessing/DataPreparation/Splitting (walk-forward, purged k-fold,
             // combinatorial purged, ...) unreachable from the facade despite being implemented.
-            if (!TrySplitWithConfiguredSplitter(preparedX, preparedY,
-                    out XTrain, out yTrain, out XVal, out yVal, out XTest, out yTest))
+            if (TrySplitWithConfiguredSplitter(preparedX, preparedY,
+                    out var splitXTrain, out var splitYTrain, out var splitXVal, out var splitYVal,
+                    out var splitXTest, out var splitYTest))
+            {
+                (XTrain, yTrain, XVal, yVal, XTest, yTest) =
+                    (splitXTrain, splitYTrain, splitXVal, splitYVal, splitXTest, splitYTest);
+            }
+            else
             {
                 // Family-aware DEFAULT: forecast-horizon models get a purged/embargoed chronological split
                 // (gap sized from the horizon so labels never straddle a boundary); i.i.d. families get the
@@ -4642,7 +4659,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ? _model.DeepCopy()
             : null;
 
-        OptimizationResult<T, TInput, TOutput> optimizationResult = null!;
+        OptimizationResult<T, TInput, TOutput> optimizationResult;
         FederatedLearningMetadata? federatedLearningMetadata = null;
 #pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
         var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
@@ -5083,7 +5100,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // truth photo pixels) that don't fit the standard (input, target) row shape, so we
             // route around the supervised optimizer.Optimize flow. Paper-standard AdamOptimizer
             // BatchSize is the rays-per-batch count for radiance fields.
-            bool imageSpaceHandled = false;
+            OptimizationResult<T, TInput, TOutput>? imageSpaceResult = null;
             if (_imageDataLoader is not null
                 && model is NeuralRadianceFields.Interfaces.IImageTrainable<T> imageTrainable
                 && _imageDataLoader is IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> typedImageLoader)
@@ -5110,16 +5127,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     cancellationToken: cancellationToken,
                     epochBridge: epochBridge);
 
-                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                imageSpaceResult = new OptimizationResult<T, TInput, TOutput>
                 {
                     BestSolution = model,
                 };
-                imageSpaceHandled = true;
             }
 
-            if (imageSpaceHandled)
+            if (imageSpaceResult is not null)
             {
-                // handled above — skip the standard-supervised branches
+                // Trained above; the standard-supervised branches are skipped.
+                optimizationResult = imageSpaceResult;
             }
             else if (_trainingGroups is not null
                 && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet

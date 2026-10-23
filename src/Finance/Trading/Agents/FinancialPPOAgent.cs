@@ -90,7 +90,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private Vector<T>? _lastActionVector;
     [Scratch]
     private Vector<T>? _lastStoredNextRawState;
-    private T _lastActionLogProb = default!;
+    // Meaningful only while _hasLastActionLogProb is set.
+    private T _lastActionLogProb = MathHelper.GetNumericOperations<T>().Zero;
     private bool _hasLastActionLogProb;
 
     /// <summary>
@@ -315,7 +316,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private bool TryGetCachedPolicyState(
         Vector<T> state,
         Vector<T> action,
-        out Vector<T> normalizedState,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Vector<T>? normalizedState,
         out T logProb,
         out bool[]? mask)
     {
@@ -326,7 +327,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             !VectorsApproximatelyEqual(_lastActionRawState, state) ||
             !VectorsApproximatelyEqual(_lastActionVector, action))
         {
-            normalizedState = null!;
+            normalizedState = null;
             logProb = NumOps.Zero;
             mask = null;
             return false;
@@ -934,9 +935,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         MarkHiddenEpisodeBoundaryIfNeeded(state);
 
-        bool usedCachedPolicy = TryGetCachedPolicyState(
-            state, action, out var normalizedState, out var logProb, out var mask);
-        if (!usedCachedPolicy)
+        if (!TryGetCachedPolicyState(state, action, out var normalizedState, out var logProb, out var mask))
         {
             // Refused rather than degraded, for the reason IMaskableAgent gives. The cache is the only
             // record of which actions were legal when this action was chosen; without it the old

@@ -44,7 +44,7 @@ public sealed class ImageView<T>
     /// using <c>T?</c> because T is unconstrained (may be reference-nullable or value-
     /// nullable) and mixing produces ambiguous overload resolution at call sites.
     /// </summary>
-    public T FocalLength { get; init; } = default!;
+    public T FocalLength { get; init; } = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Optional EXIF metadata bundle (35mm-equivalent focal length in mm + sensor width). When

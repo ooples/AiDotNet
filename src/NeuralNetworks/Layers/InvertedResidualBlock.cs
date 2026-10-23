@@ -228,10 +228,10 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         // _expandConv, _expandBn, _dwConv, _dwBn, _se, _projectConv,
         // _projectBn are allocated in OnFirstForward — their channel
         // dimensions all derive from the resolved inChannels.
-        _projectConv = null!;
-        _projectBn = null!;
-        _dwConv = null!;
-        _dwBn = null!;
+        _projectConv = null;
+        _projectBn = null;
+        _dwConv = null;
+        _dwBn = null;
     }
 
     private readonly int _seRatio;
