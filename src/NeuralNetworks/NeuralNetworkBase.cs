@@ -305,30 +305,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// Whether this model holds any layer yet: in <see cref="Layers"/>, in <see cref="GetExtraTrainableLayers"/>
-    /// (the audio and vision-language text encoders), or in a generated additional-layer group (layers a model
-    /// keeps in fields, such as the detection backbones). The generated getters tolerate members a running
-    /// constructor has not assigned yet.
+    /// Whether this model has built a layer yet: one in <see cref="Layers"/>, or one kept anywhere else (a field, a
+    /// generated group, a text encoder) that already drew its seed from this model's construction scope.
     /// </summary>
+    /// <remarks>
+    /// The scope's own count answers the second half, so nothing walks the model's members. Enumerating
+    /// <see cref="GetExtraTrainableLayers"/> here broke construction: the setter runs inside the derived constructor,
+    /// and generated enumerations read properties that throw until assigned (every native Florence-2 and GOT-OCR2).
+    /// Caller-built layers are excluded: the position is recorded after they are seeded, and an options seed is meant
+    /// to re-seed them.
+    /// </remarks>
     private bool HasBuiltLayers()
-    {
-        if (_layers is { Count: > 0 })
-            return true;
-        foreach (var extra in GetExtraTrainableLayers())
-        {
-            if (extra is not null)
-                return true;
-        }
-        foreach (var group in GetGeneratedAdditionalLayerGroups())
-        {
-            foreach (var layer in group.Get())
-            {
-                if (layer is not null)
-                    return true;
-            }
-        }
-        return false;
-    }
+        => _layers is { Count: > 0 }
+            || AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.HasDrawnSince(_constructionScopePosition);
+
+    // The construction scope's position right after this model reset it and seeded its caller-built layers.
+    private (int Generation, int SeedsDrawn) _constructionScopePosition;
 
     private ModelOptions _modelOptions = new NeuralNetworkOptions();
 
@@ -690,6 +682,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
         SeedCallerBuiltLayers();
+        _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
         _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
@@ -7561,12 +7554,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _optionsSeed = null;
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
             SeedCallerBuiltLayers();
+            _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
             return;
         }
 
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
         SeedCallerBuiltLayers();
+        _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
     }
 
     // The caller-built layers this model gave a seed, so a later options seed can replace those seeds and no others.

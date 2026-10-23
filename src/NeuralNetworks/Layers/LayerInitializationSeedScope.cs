@@ -91,7 +91,29 @@ internal static class LayerInitializationSeedScope
         _rng = effectiveSeed.HasValue
             ? RandomHelper.CreateSeededRandom(effectiveSeed.Value)
             : null;
+        _generation++;
+        _seedsDrawn = 0;
     }
+
+    [ThreadStatic]
+    private static int _generation;
+
+    [ThreadStatic]
+    private static int _seedsDrawn;
+
+    /// <summary>
+    /// Where this thread's construction scope stands: which reset it is on and how many seeds that reset has handed
+    /// out. A model records it after its own reset and compares later (<see cref="HasDrawnSince"/>).
+    /// </summary>
+    internal static (int Generation, int SeedsDrawn) Position => (_generation, _seedsDrawn);
+
+    /// <summary>
+    /// Whether the scope a model recorded with <see cref="Position"/> is still current and has handed out a seed
+    /// since, meaning some layer of that model already initialised from it. This needs no walk of the model's members:
+    /// a layer kept in a field or a generated group is counted the moment its constructor draws.
+    /// </summary>
+    internal static bool HasDrawnSince((int Generation, int SeedsDrawn) recorded)
+        => _generation == recorded.Generation && _seedsDrawn > recorded.SeedsDrawn;
 
     /// <summary>
     /// Captures the current construction scope so a caller that reseeds it for a nested construction can
@@ -169,7 +191,10 @@ internal static class LayerInitializationSeedScope
         if (_rng is null && _ambientFallbackSeed.HasValue)
             _rng = RandomHelper.CreateSeededRandom(_ambientFallbackSeed.Value);
 
-        return _rng is null ? (int?)null : _rng.Next();
+        if (_rng is null)
+            return null;
+        _seedsDrawn++;
+        return _rng.Next();
     }
 
     /// <summary>

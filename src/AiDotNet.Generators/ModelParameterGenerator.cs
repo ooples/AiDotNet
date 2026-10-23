@@ -1307,11 +1307,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
                 _ => false,
             };
-            // Null-tolerant even for a non-nullable member: the base enumerates these groups while a derived
-            // constructor is still running (the Options setter's layer check), before the member is assigned.
-            string nestedGetter =
-                $"() => ({member.Name} ?? (global::System.Collections.Generic.IEnumerable<{outerElementName}>)" +
-                $"global::System.Array.Empty<{outerElementName}>()).SelectMany(__layers => __layers)";
+            string nestedGetter = nestedCollectionNullable
+                ? $"() => ({member.Name} ?? (global::System.Collections.Generic.IEnumerable<{outerElementName}>)" +
+                  $"global::System.Array.Empty<{outerElementName}>()).SelectMany(__layers => __layers)"
+                : $"() => {member.Name}.SelectMany(__layers => __layers)";
             string partitionGetter =
                 $"() => GetGeneratedAdditionalLayerPartitionSizes<{nestedElementName}>({member.Name})";
             string nestedReplace = nestedCollectionNullable
@@ -1333,9 +1332,9 @@ public class ModelParameterGenerator : IIncrementalGenerator
             IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
             _ => false,
         };
-        // Null-tolerant for the same reason as the nested getter above.
-        string getter =
-            $"() => {member.Name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)global::System.Array.Empty<{elementName}>()";
+        string getter = collectionNullable
+            ? $"() => {member.Name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)global::System.Array.Empty<{elementName}>()"
+            : $"() => {member.Name}";
         string collectionReplace = collectionNullable
             ? collectionWritable
                 ? $"__layers => {member.Name} = RestoreGeneratedAdditionalLayerCollection({member.Name}, __layers, nameof({member.Name}))"
