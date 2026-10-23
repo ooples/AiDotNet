@@ -69,9 +69,6 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     private Tensor<T>? _hannWindow;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
-    /// <inheritdoc/>
     public string Name => _useNativeMode ? "AST-Native" : "AST-ONNX";
 
     /// <inheritdoc/>
@@ -87,6 +84,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         : base(architecture)
     {
         _options = options ?? new ASTModelOptions();
+        Options = _options;
         ValidateOptions(_options);
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
@@ -117,6 +115,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         : base(architecture)
     {
         _options = options ?? new ASTModelOptions();
+        Options = _options;
         ValidateOptions(_options);
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;

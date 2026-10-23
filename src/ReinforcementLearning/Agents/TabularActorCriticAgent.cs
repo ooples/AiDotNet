@@ -44,8 +44,6 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
 {
     private TabularActorCriticOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _policy;  // Actor: π(a|s)
     private Dictionary<string, T> _valueTable;  // Critic: V(s)
 
@@ -61,6 +59,7 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _policy = new Dictionary<string, Dictionary<int, T>>();
         _valueTable = new Dictionary<string, T>();
     }

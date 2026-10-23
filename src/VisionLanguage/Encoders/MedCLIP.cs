@@ -71,8 +71,6 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     private const int MedClipExtrasFormatVersion = 1;
     private readonly MedCLIPOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -87,6 +85,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         : base(architecture)
     {
         _options = options is null ? new MedCLIPOptions() : new MedCLIPOptions(options);
+        Options = _options;
         _logitScale = new LearnableLogitScaleLayer<T>(_options.Temperature);
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
@@ -123,6 +122,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         : base(architecture)
     {
         _options = options is null ? new MedCLIPOptions() : new MedCLIPOptions(options);
+        Options = _options;
         _logitScale = new LearnableLogitScaleLayer<T>(_options.Temperature);
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;

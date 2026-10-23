@@ -164,9 +164,6 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly TSMixerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The input sequence length (lookback window).
     /// </summary>
@@ -406,7 +403,6 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTSMixerLayers(
-                Architecture,
                 _sequenceLength,
                 _predictionHorizon,
                 _numFeatures,
@@ -623,7 +619,7 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     /// You provide historical data, and it returns predictions for the future.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         // Apply RevIN normalization if enabled
         if (_useRevIN)

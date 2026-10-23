@@ -199,9 +199,7 @@ public partial class UdioModel<T> : AudioDiffusionModelBase<T>
             numLayers: NUM_LAYERS, numHeads: NUM_HEADS,
             patchSize: 1, contextDim: CONTEXT_DIM);
 
-        _audioVAE = audioVAE ?? new AudioVAE<T>(
-            melChannels: MEL_CHANNELS, latentChannels: LATENT_CHANNELS,
-            baseChannels: 128, numResBlocks: 3);
+        _audioVAE = audioVAE ?? new AudioVAE<T>(melBins: MEL_CHANNELS, latentChannels: LATENT_CHANNELS);
     }
 
     #endregion

@@ -54,8 +54,6 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly E2TTSOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -68,6 +66,7 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new E2TTSOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
@@ -91,6 +90,7 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new E2TTSOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateDefaultOptimizer();

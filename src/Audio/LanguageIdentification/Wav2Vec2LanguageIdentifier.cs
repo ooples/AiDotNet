@@ -60,6 +60,10 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, Michael Auli")]
 public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
     /// <inheritdoc />
     /// <remarks>
     /// Traced from output construction: PredictCore returns ForwardNative, whose last step is
@@ -73,9 +77,6 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
 
     private readonly INumericOperations<T> _numOps;
     private readonly Wav2Vec2LidOptions _options;
-
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
 
     private readonly ILossFunction<T> _lossFunction;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -212,7 +213,6 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         // forward needs, in the factory's documented order. The partition fails loudly if the two
         // ever drift apart, and Layers publishes exactly these instances.
         var built = LayerHelper<T>.CreateDefaultWav2Vec2LanguageIdentifierLayers(
-            Architecture,
             hiddenSize: _options.HiddenSize,
             numLayers: _options.NumLayers,
             numAttentionHeads: _options.NumAttentionHeads,

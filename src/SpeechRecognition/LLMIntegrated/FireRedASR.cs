@@ -64,7 +64,6 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private bool _useNativeMode;
     private bool _disposed;
 
-    public override ModelOptions GetOptions() => _options;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
@@ -76,6 +75,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new FireRedASROptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -96,6 +96,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         : base(architecture)
     {
         _options = options ?? new FireRedASROptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;

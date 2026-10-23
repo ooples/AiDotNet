@@ -62,9 +62,6 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
 {
     private readonly NEATOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <inheritdoc />
     /// <remarks>
     /// Every non-input node is passed through <see cref="ApplySigmoid"/>, including

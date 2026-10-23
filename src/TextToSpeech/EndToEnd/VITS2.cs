@@ -44,8 +44,6 @@ public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITS2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     [Scratch]
     private readonly bool _usesDefaultOptimizer;
@@ -61,6 +59,7 @@ public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new VITS2Options();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -83,6 +82,7 @@ public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new VITS2Options();
+        Options = _options;
         _useNativeMode = true;
         _usesDefaultOptimizer = optimizer is null;
         _optimizer = optimizer ?? CreatePaperOptimizer();

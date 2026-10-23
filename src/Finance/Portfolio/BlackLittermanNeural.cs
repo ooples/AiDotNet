@@ -51,9 +51,6 @@ public partial class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
 
     private readonly BlackLittermanNeuralOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _hiddenDimension;
@@ -77,7 +74,8 @@ public partial class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 10,
-            outputSize: 10))
+            // The head emits an expected return and a confidence per asset: 2 x the default 10 assets (#2147).
+            outputSize: 2 * 10))
     {
     }
 
@@ -146,7 +144,6 @@ public partial class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultBlackLittermanNeuralLayers(
-                Architecture,
                 NumFeatures,
                 _hiddenDimension,
                 _numAssets,

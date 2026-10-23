@@ -71,10 +71,16 @@ namespace AiDotNet.Video.Generation;
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITrainingObjectiveProvider<T>
 {
-    private readonly OpenSoraOptions _options;
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
+    /// <remarks>An architecture may state the image it is configured for, height x width x channels (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        new[] { _height * _width * _channels };
+
+    private readonly OpenSoraOptions _options;
 
     #region Fields
 
@@ -1107,7 +1113,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         {
             // Use default layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultOpenSoraLayers(
-                Architecture, _height, _width, _channels, _hiddenDim, _numLayers, _numHeads));
+                _height, _width, _channels, _hiddenDim, _numLayers, _numHeads));
 
             // Store references to specific layers for direct access
             ExtractLayerReferences();

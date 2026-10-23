@@ -79,9 +79,6 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
 {
     private readonly SlowFastOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     private readonly bool _useNativeMode;

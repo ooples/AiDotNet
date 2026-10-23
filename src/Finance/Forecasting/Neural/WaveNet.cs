@@ -130,9 +130,6 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly WaveNetOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _lookbackWindow;
     private int _forecastHorizon;
     private int _numFeatures;
@@ -218,7 +215,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _residualChannels = options.ResidualChannels;
         _skipChannels = options.SkipChannels;
         _dilationDepth = options.DilationDepth;
@@ -270,7 +267,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
 
         _lookbackWindow = options.LookbackWindow;
         _forecastHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture) is > 0 and var featureCount ? featureCount : 1;
         _residualChannels = options.ResidualChannels;
         _skipChannels = options.SkipChannels;
         _dilationDepth = options.DilationDepth;
@@ -308,7 +305,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultWaveNetLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numFeatures,
+                _lookbackWindow, _forecastHorizon, _numFeatures,
                 _residualChannels, _skipChannels, _dilationDepth, _numStacks, _dropout));
 
             ExtractLayerReferences();
@@ -499,7 +496,7 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the WaveNet model, Forecast produces predictions from input data. This is the main inference step of the WaveNet architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }
@@ -695,7 +692,9 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
             output = _output2.Forward(output);
         }
 
-        return output;
+        // The output head maps every step to the horizon; the forecast is the last step's, whose receptive field spans
+        // the window (van den Oord et al. 2016 predict the next sample from the last position).
+        return LastTimeStep(output);
     }
 
     /// <summary>

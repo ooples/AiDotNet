@@ -63,7 +63,6 @@ public partial class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Fields
 
     private readonly FDYSEDOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -81,6 +80,7 @@ public partial class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         : base(architecture)
     {
         _options = options ?? new FDYSEDOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
@@ -115,6 +115,7 @@ public partial class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new FDYSEDOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer

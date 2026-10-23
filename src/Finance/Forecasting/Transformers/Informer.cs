@@ -136,9 +136,6 @@ public partial class Informer<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly InformerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _sequenceLength;
     private int _labelLength;
     private int _predictionHorizon;
@@ -240,7 +237,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
         _sequenceLength = options.LookbackWindow;
         _labelLength = options.LookbackWindow / 2;
         _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
         _numHeads = options.NumAttentionHeads;
@@ -291,7 +288,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
         _sequenceLength = options.LookbackWindow;
         _labelLength = options.LookbackWindow / 2;
         _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
         _numHeads = options.NumAttentionHeads;
@@ -326,7 +323,6 @@ public partial class Informer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultInformerLayers(
-                Architecture,
                 _sequenceLength,
                 _predictionHorizon,
                 _numFeatures,
@@ -475,7 +471,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the Informer model, Forecast produces predictions from input data. This is the main inference step of the Informer architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));

@@ -78,9 +78,6 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
 {
     private readonly SAM2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly int _height;

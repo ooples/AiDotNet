@@ -58,9 +58,6 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
 
     private readonly SceneClassifierOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly MelSpectrogram<T> _melSpectrogram;
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -127,6 +124,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         : base(CreateMinimalArchitecture(options))
     {
         _options = options ?? new SceneClassifierOptions();
+        Options = _options;
         _useNativeMode = false;
         _options.ModelPath = modelPath;
 
@@ -155,6 +153,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         : base(architecture)
     {
         _options = options ?? new SceneClassifierOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -178,6 +177,7 @@ public partial class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifi
         : base(CreateMinimalArchitecture(options))
     {
         _options = options ?? new SceneClassifierOptions();
+        Options = _options;
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;

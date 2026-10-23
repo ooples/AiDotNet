@@ -71,17 +71,6 @@ public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly Mask2FormerOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this Mask2Former model.
-    /// </summary>
-    /// <returns>The <see cref="Mask2FormerOptions"/> for this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only Mask2Former's OWN configuration lives here. _height, _width, _channels, _numClasses,

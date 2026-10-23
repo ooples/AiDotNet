@@ -61,8 +61,6 @@ public partial class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private SARSALambdaOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, T>> _eligibilityTraces;
     private double _epsilon;
@@ -82,6 +80,7 @@ public partial class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _eligibilityTraces = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = options.EpsilonStart;

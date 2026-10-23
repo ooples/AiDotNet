@@ -64,7 +64,6 @@ public partial class DualXVSR<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly DualXVSROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -82,6 +81,7 @@ public partial class DualXVSR<T> : VideoSuperResolutionBase<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options is null ? new DualXVSROptions() : new DualXVSROptions(options);
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -95,6 +95,7 @@ public partial class DualXVSR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options is null ? new DualXVSROptions() : new DualXVSROptions(options);
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         ScaleFactor = _options.ScaleFactor;

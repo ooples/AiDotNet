@@ -55,9 +55,6 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
 {
     private readonly UnifiedMultimodalNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Constants
 
     private const int DEFAULT_EMBEDDING_DIM = 768;
@@ -126,6 +123,11 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     private const int DefaultOutputSize = 100;
+
+    // Feature widths the image, audio and video encoders read (EncodeModality's defaults).
+    private const int ImageFeatureWidth = 768;
+    private const int AudioFeatureWidth = 128;
+    private const int VideoFeatureWidth = 1024;
 
     public UnifiedMultimodalNetwork()
         : this(new NeuralNetworkArchitecture<T>(
@@ -262,6 +264,43 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         _generationHead = RequireLayer<DenseLayer<T>>(idx++, "generation head");
     }
 
+    /// <summary>One-shot latch for <see cref="ResolveLazyLayerShapes"/>.</summary>
+    private bool _topologyShapesResolved;
+
+    /// <summary>
+    /// Resolves each lazy layer from the input its forward actually receives, not from its predecessor
+    /// in <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// The layer list is flat, but the network is not a chain: the four modality decoders, the
+    /// classification head and the generation head each read the shared embedding, and each encoder
+    /// reads its own modality. The base walk fed every layer its predecessor's output, so the image
+    /// decoder took the text decoder's 50,000 logits as input, the audio decoder took the image
+    /// decoder's 2,304, and the video decoder took the audio decoder's 16,000 (a 295M-parameter
+    /// matrix). The model came to more than 500M parameters, and serializing it overflowed a byte
+    /// array ("Array dimensions exceeded supported range", nightly run 39554054058).
+    /// <see cref="LayerBase{T}.ResolveShapesOnly"/> sets shapes without allocating or drawing on the RNG.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_topologyShapesResolved) return;
+        _topologyShapesResolved = true;
+
+        int embedding = _embeddingDimension;
+        _textEncoder.ResolveShapesOnly([Architecture.InputSize > 0 ? Architecture.InputSize : embedding]);
+        _imageEncoder.ResolveShapesOnly([ImageFeatureWidth]);
+        _audioEncoder.ResolveShapesOnly([AudioFeatureWidth]);
+        _videoEncoder.ResolveShapesOnly([VideoFeatureWidth]);
+        foreach (var layer in _transformerLayers) layer.ResolveShapesOnly([1, 1, embedding]);
+        foreach (var layer in _crossModalAttention) layer.ResolveShapesOnly([1, 1, embedding]);
+        foreach (var decoder in new[] { _textDecoder, _imageDecoder, _audioDecoder, _videoDecoder })
+            decoder.ResolveShapesOnly([embedding]);
+        // Early fusion concatenates at most four modality embeddings.
+        _fusionLayer.ResolveShapesOnly([embedding * 4]);
+        _classificationHead.ResolveShapesOnly([embedding]);
+        _generationHead.ResolveShapesOnly([embedding]);
+    }
+
     #endregion
 
     #region Encoding
@@ -309,15 +348,15 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
                 encoder = _textEncoder;
                 break;
             case ModalityType.Image:
-                inputTensor = input.InternalData ?? new Tensor<T>(new[] { 768 });
+                inputTensor = input.InternalData ?? new Tensor<T>(new[] { ImageFeatureWidth });
                 encoder = _imageEncoder;
                 break;
             case ModalityType.Audio:
-                inputTensor = input.InternalData ?? new Tensor<T>(new[] { 128 });
+                inputTensor = input.InternalData ?? new Tensor<T>(new[] { AudioFeatureWidth });
                 encoder = _audioEncoder;
                 break;
             case ModalityType.Video:
-                inputTensor = input.InternalData ?? new Tensor<T>(new[] { 1024 });
+                inputTensor = input.InternalData ?? new Tensor<T>(new[] { VideoFeatureWidth });
                 encoder = _videoEncoder;
                 break;
             default:

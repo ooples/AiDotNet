@@ -63,7 +63,6 @@ public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     protected override int OutputFeatureWidth => _options.VocabSize;
 
     private readonly BranchformerOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode; private bool _disposed;
 
@@ -76,6 +75,7 @@ public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         : base(architecture)
     {
         _options = options ?? new BranchformerOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -93,6 +93,7 @@ public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         : base(architecture)
     {
         _options = options ?? new BranchformerOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

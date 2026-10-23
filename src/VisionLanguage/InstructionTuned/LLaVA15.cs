@@ -82,8 +82,6 @@ public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedV
 {
     private readonly LLaVA15Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -98,6 +96,7 @@ public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         : base(architecture)
     {
         _options = options ?? new LLaVA15Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -120,6 +119,7 @@ public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         : base(architecture)
     {
         _options = options ?? new LLaVA15Options();
+        Options = _options;
         _options.ValidateVisualSizing();
         _useNativeMode = true;
         _optimizer = optimizer

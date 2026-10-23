@@ -52,8 +52,6 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly CoMoSpeechOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -66,6 +64,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new CoMoSpeechOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -88,6 +87,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new CoMoSpeechOptions();
+        Options = _options;
         _useNativeMode = true;
         // CoMoSpeech (Ye et al., 2023, arXiv:2305.06908 §4) trains its TTS teacher with
         // Adam at a learning rate of 1e-4 -- already the TtsModelOptions default this reads. The

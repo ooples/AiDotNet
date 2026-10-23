@@ -55,10 +55,11 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("SimCSE: Simple Contrastive Learning of Sentence Embeddings", "https://arxiv.org/abs/2104.08821", Year = 2022, Authors = "Tianyu Gao, Xingcheng Yao, Danqi Chen")]
     public partial class SimCSE<T> : TransformerEmbeddingNetwork<T>
     {
-        private readonly SimCSEOptions _options;
-
         /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
+        private readonly SimCSEOptions _options;
 
         #region Fields
 
@@ -142,7 +143,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultSimCSELayers(
-                    Architecture,
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,

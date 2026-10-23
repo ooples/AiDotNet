@@ -45,8 +45,6 @@ public partial class WaveGrad<T> : VocoderBase<T>
 {
     private readonly WaveGradOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -59,6 +57,7 @@ public partial class WaveGrad<T> : VocoderBase<T>
         : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new WaveGradOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -80,6 +79,7 @@ public partial class WaveGrad<T> : VocoderBase<T>
         : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new WaveGradOptions();
+        Options = _options;
         _useNativeMode = true;
         // WaveGrad (Chen et al., 2021, S3.2) trains with Adam; WaveGradOptions.LearningRate carries
         // the paper's 2e-4 as its default and lets callers override it. Constructing the optimizer

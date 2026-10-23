@@ -183,9 +183,6 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly ChronosFinanceOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _numTokens;
@@ -399,7 +396,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultChronosLayers(
-                Architecture, _contextLength, _forecastHorizon, _numTokens,
+                _contextLength, _forecastHorizon, _numTokens,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
 
             ExtractLayerReferences();
@@ -647,7 +644,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the Chronos model, Forecast produces predictions from input data. This is the main inference step of the Chronos architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         Tensor<T> output;
         if (_useNativeMode)

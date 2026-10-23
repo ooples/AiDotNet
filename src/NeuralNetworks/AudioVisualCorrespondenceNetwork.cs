@@ -76,9 +76,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 {
     private readonly AudioVisualCorrespondenceOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Constants
 
     private const int DEFAULT_EMBEDDING_DIM = 512;

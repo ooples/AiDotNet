@@ -64,8 +64,6 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
 {
     private readonly GLaMMOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -80,6 +78,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         : base(architecture)
     {
         _options = options ?? new GLaMMOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -102,6 +101,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         : base(architecture)
     {
         _options = options ?? new GLaMMOptions();
+        Options = _options;
         _useNativeMode = true;
         // Honor the public options. Their defaults mirror the reference GLaMM
         // AdamW training recipe, while callers and bounded smoke fixtures can

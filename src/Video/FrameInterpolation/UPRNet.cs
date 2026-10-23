@@ -63,9 +63,6 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
     private readonly List<ILayer<T>> _synthDecoder0 = [];
     private ConvolutionalLayer<T>? _synthPrediction;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed UPR-Net.</summary>
     public UPRNet(
         NeuralNetworkArchitecture<T> architecture,
@@ -76,6 +73,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be empty.", nameof(modelPath));
         _options = options is null ? new UPRNetOptions() : new UPRNetOptions(options);
+        Options = _options;
         _options.Validate();
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
@@ -92,6 +90,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options is null ? new UPRNetOptions() : new UPRNetOptions(options);
+        Options = _options;
         _options.Validate();
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,

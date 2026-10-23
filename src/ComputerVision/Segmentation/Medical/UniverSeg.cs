@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly UniverSegOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only UniverSeg's OWN configuration lives here. _height, _width, _channels, _numClasses,

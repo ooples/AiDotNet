@@ -63,7 +63,6 @@ public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     #region Fields
 
     private readonly CosyVoice2Options _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
@@ -97,6 +96,7 @@ public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         : base(architecture)
     {
         _options = options ?? new CosyVoice2Options();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -128,6 +128,7 @@ public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         : base(architecture)
     {
         _options = options ?? new CosyVoice2Options();
+        Options = _options;
         _useNativeMode = true;
         // CosyVoice2Options.LearningRate was declared and never read: the optimizer was built on AdamW's
         // library default (1e-3), ten times the option's 1e-4, and the first steps overshot (loss 1.49 -> 4.21).

@@ -77,8 +77,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
             // Apply softmax to get probabilities
             var probabilities = Softmax(logits);
 
-            // Sample action from distribution
-            var policyAction = SampleCategorical(probabilities);
+            // Training samples the categorical distribution; inference takes its mode (the most probable action).
+            var policyAction = training ? SampleCategorical(probabilities) : OneHotArgMax(logits);
 
             if (training)
             {
@@ -96,9 +96,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var logitsTensor = _policyNetwork.Predict(stateTensor);
             var logits = logitsTensor.ToVector();
 
-            // Apply softmax
-            var probabilities = Softmax(logits);
-
             // Find which action was taken (one-hot encoded)
             int actionIndex = 0;
             for (int i = 0; i < action.Length; i++)
@@ -110,10 +107,13 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 }
             }
 
-            // Return log probability of that action
-            var prob = probabilities[actionIndex];
-            var logProb = NumOps.FromDouble(Math.Log(NumOps.ToDouble(prob) + 1e-8));
-            return logProb;
+            // Exact log-softmax, log p(a) = z_a - logsumexp(z), as torch's Categorical.log_prob. The former
+            // log(p + 1e-8) biased every log-probability and left the probabilities summing past 1.
+            double max = double.NegativeInfinity;
+            for (int i = 0; i < logits.Length; i++) max = Math.Max(max, NumOps.ToDouble(logits[i]));
+            double sum = 0;
+            for (int i = 0; i < logits.Length; i++) sum += Math.Exp(NumOps.ToDouble(logits[i]) - max);
+            return NumOps.FromDouble(NumOps.ToDouble(logits[actionIndex]) - max - Math.Log(sum));
         }
 
         public override IReadOnlyList<INeuralNetwork<T>> GetNetworks()
@@ -127,6 +127,18 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         // Helper methods
+        private Vector<T> OneHotArgMax(Vector<T> logits)
+        {
+            int best = 0;
+            // The argmax of the logits: softmax preserves their order, and a rounded probability can tie two
+            // logits that differ.
+            for (int k = 1; k < logits.Length; k++)
+                if (NumOps.GreaterThan(logits[k], logits[best])) best = k;
+            var oneHot = new Vector<T>(logits.Length);
+            oneHot[best] = NumOps.One;
+            return oneHot;
+        }
+
         private Vector<T> Softmax(Vector<T> logits)
         {
             var probabilities = new Vector<T>(logits.Length);

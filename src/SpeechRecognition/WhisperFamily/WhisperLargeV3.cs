@@ -54,14 +54,14 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
                 Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. No learning rate is declared because Table 19 states one per model size and this type does not select one.")]
 public partial class WhisperLargeV3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly WhisperLargeV3Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly WhisperLargeV3Options _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => true;
 
-    public WhisperLargeV3(NeuralNetworkArchitecture<T> architecture, string modelPath, WhisperLargeV3Options? options = null) : base(architecture) { _options = options ?? new WhisperLargeV3Options(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = _options.SupportedLanguagesList; InitializeLayers(); }
-    public WhisperLargeV3(NeuralNetworkArchitecture<T> architecture, WhisperLargeV3Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WhisperLargeV3Options(); _useNativeMode = true; _optimizer = optimizer
+    public WhisperLargeV3(NeuralNetworkArchitecture<T> architecture, string modelPath, WhisperLargeV3Options? options = null) : base(architecture) { _options = options ?? new WhisperLargeV3Options(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = _options.SupportedLanguagesList; InitializeLayers(); }
+    public WhisperLargeV3(NeuralNetworkArchitecture<T> architecture, WhisperLargeV3Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new WhisperLargeV3Options(); Options = _options; _useNativeMode = true; _optimizer = optimizer
      ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
      ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = _options.SupportedLanguagesList; InitializeLayers(); }
 

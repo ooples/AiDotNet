@@ -50,7 +50,6 @@ internal partial class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<
     #region Fields
 
     private readonly WavLMSEROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -69,6 +68,7 @@ internal partial class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WavLMSEROptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -81,6 +81,7 @@ internal partial class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WavLMSEROptions();
+        Options = _options;
         _useNativeMode = true;
         ValidateOptions(_options);
         // Train raw logits with the classifier objective and honor the public optimization options.
