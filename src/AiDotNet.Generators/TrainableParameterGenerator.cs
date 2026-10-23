@@ -1823,8 +1823,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         var referencedAxes = new SortedSet<int>();
         foreach (var parameter in paramFields)
         {
+            // A parameter with no declared shape references no input axis.
             foreach (Match match in Regex.Matches(
-                         parameter.Shape, @"InputShape\s*\[\s*(\d+)\s*\]"))
+                         parameter.Shape ?? string.Empty, @"InputShape\s*\[\s*(\d+)\s*\]",
+                         RegexOptions.None, System.TimeSpan.FromSeconds(1)))
             {
                 if (int.TryParse(match.Groups[1].Value, out int axis)) referencedAxes.Add(axis);
             }
@@ -1969,7 +1971,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                         rendered,
                         @"\b_?inputDepth\b",
                         inputChannels,
-                        RegexOptions.IgnoreCase);
+                        RegexOptions.IgnoreCase,
+                        System.TimeSpan.FromSeconds(1));
                 }
                 int score = axes.Sum(axis =>
                     axis.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Count() * 10
@@ -2103,7 +2106,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             .Select(axis => Regex.Replace(
                 axis,
                 $@"InputShape\s*\[\s*{inputAxis}\s*\]",
-                replacement))
+                replacement,
+                RegexOptions.None,
+                System.TimeSpan.FromSeconds(1)))
             .Select(axis => $"(long)({axis})")
             .ToArray();
         return axes.Length == 0 ? "0L" : string.Join(" * ", axes);
