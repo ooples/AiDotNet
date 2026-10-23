@@ -78,7 +78,7 @@ public class MAMLTrainerTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(null!));
+            new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(null));
     }
 
     #endregion
@@ -126,7 +126,7 @@ public class MAMLTrainerTests
         var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
+        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -168,7 +168,7 @@ public class MAMLTrainerTests
         var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
+        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null));
     }
 
     #endregion

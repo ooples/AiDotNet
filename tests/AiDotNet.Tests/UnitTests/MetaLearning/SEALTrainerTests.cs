@@ -75,7 +75,7 @@ public class SEALTrainerTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(null!));
+            new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(null));
     }
 
     #endregion
@@ -123,7 +123,7 @@ public class SEALTrainerTests
         var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
+        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -165,7 +165,7 @@ public class SEALTrainerTests
         var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
+        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null));
     }
 
     #endregion

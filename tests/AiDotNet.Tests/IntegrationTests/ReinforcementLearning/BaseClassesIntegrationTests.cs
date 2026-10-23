@@ -25,7 +25,7 @@ public partial class BaseClassesIntegrationTests
     {
         var policy = new TestPolicy();
 
-        Assert.Throws<ArgumentNullException>(() => policy.InvokeValidateState(null!));
+        Assert.Throws<ArgumentNullException>(() => policy.InvokeValidateState(null));
         Assert.Throws<ArgumentException>(() => policy.InvokeValidateState(new Vector<double>(0)));
         Assert.Throws<ArgumentException>(() => policy.InvokeValidateActionSize(expected: 2, actual: 1));
     }
@@ -63,7 +63,7 @@ public partial class BaseClassesIntegrationTests
     {
         var strategy = new TestExplorationStrategy();
 
-        var sample = strategy.SampleNormal(new Random(7));
+        var sample = strategy.SampleNormal(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7));
 
         Assert.False(double.IsNaN(sample));
         Assert.False(double.IsInfinity(sample));
@@ -143,7 +143,7 @@ public partial class BaseClassesIntegrationTests
 
     private sealed class TestPolicy : PolicyBase<double>
     {
-        public TestPolicy() : base(new Random(1))
+        public TestPolicy() : base(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1))
         {
         }
 

@@ -36,7 +36,7 @@ internal static class ShapeConformanceWorker
 
     private static ShapeProbeMeasurement Probe(string assemblyQualifiedType, int extent, int classes)
     {
-        var type = Type.GetType(assemblyQualifiedType, throwOnError: true)!;
+        var type = Type.GetType(assemblyQualifiedType, throwOnError: true);
         object? model = null;
         int[]? inputShape = null;
         int[]? predictedShape = null;
@@ -217,7 +217,7 @@ internal static class ShapeConformanceWorker
             else
             {
                 contract.RequireReady();
-                probe = InputContractTensorFactory.CreateValid<double>(contract, new Random(1789));
+                probe = InputContractTensorFactory.CreateValid<double>(contract, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1789));
                 contract.Validate(probe);
 
                 if (contract.PrimaryInput.ValueDomain.Kind !=

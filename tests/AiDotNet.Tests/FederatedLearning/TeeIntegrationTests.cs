@@ -392,8 +392,8 @@ public class TeeIntegrationTests
     [InlineData(typeof(ArmCcaTeeProvider<double>))]
     public void AllProviders_CanInitializeAndSealUnseal(Type providerType)
     {
-        var provider = (TeeProviderBase<double>)Activator.CreateInstance(providerType);
-        provider.Initialize(new TeeOptions { SimulationMode = true });
+        var provider = (TeeProviderBase<double>)(Activator.CreateInstance(providerType) ?? throw new InvalidOperationException("(TeeProviderBase<double>)Activator.CreateInstance(providerType) is null where it is required."));
+        (provider ?? throw new InvalidOperationException("provider is null where it is required.")).Initialize(new TeeOptions { SimulationMode = true });
 
         var plaintext = new byte[] { 10, 20, 30, 40, 50, 60, 70, 80 };
         var sealed_ = provider.SealData(plaintext);
@@ -409,9 +409,9 @@ public class TeeIntegrationTests
     [InlineData(typeof(ArmCcaTeeProvider<double>))]
     public void AllProviders_MaxEnclaveMemory_IsPositive(Type providerType)
     {
-        var provider = (TeeProviderBase<double>)Activator.CreateInstance(providerType);
+        var provider = (TeeProviderBase<double>)(Activator.CreateInstance(providerType) ?? throw new InvalidOperationException("(TeeProviderBase<double>)Activator.CreateInstance(providerType) is null where it is required."));
 
-        long maxMem = provider.GetMaxEnclaveMemory();
+        long maxMem = (provider ?? throw new InvalidOperationException("provider is null where it is required.")).GetMaxEnclaveMemory();
 
         Assert.True(maxMem > 0, $"{providerType.Name} should report positive max memory");
     }

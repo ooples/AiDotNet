@@ -10,7 +10,7 @@ public class AggregationStrategyBaseTests
     {
         Assert.Throws<ArgumentException>(() =>
             AggregationStrategyBaseAccessor.CallGetTotalWeightOrThrow(
-                clientWeights: null!,
+                clientWeights: null,
                 clientIds: new[] { 1 },
                 paramName: "weights"));
     }

@@ -55,7 +55,7 @@ public class QueryByCommitteeTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new QueryByCommittee<double>(null!));
+            new QueryByCommittee<double>(null));
     }
 
     [Fact(Timeout = 60000)]

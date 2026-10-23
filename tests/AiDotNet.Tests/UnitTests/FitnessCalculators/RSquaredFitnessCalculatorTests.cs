@@ -204,7 +204,7 @@ public class RSquaredFitnessCalculatorTests
         var calculator = new RSquaredFitnessCalculator<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null!));
+        Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>?)null));
     }
 
     [Fact(Timeout = 60000)]

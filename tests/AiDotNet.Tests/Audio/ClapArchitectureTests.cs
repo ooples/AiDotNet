@@ -219,7 +219,7 @@ public class ClapArchitectureTests
         await Task.Yield();
         var layer = new AttentionalFeatureFusionLayer<double>(8, 4);
         layer.SetTrainingMode(false);
-        var rng = new Random(2313);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2313);
         Tensor<double> Map()
         {
             var t = new Tensor<double>(new[] { 2, 8, 4, 4 });
@@ -250,13 +250,13 @@ public class ClapArchitectureTests
             {
                 Assert.True(gradients.TryGetValue(parameters[i], out var gradient) && gradient is not null,
                     $"a {string.Join("x", parameters[i].Shape.ToArray())} parameter received no gradient");
-                foreach (var g in gradient!.ToArray()) largest[i] = Math.Max(largest[i], Math.Abs(g));
+                foreach (var g in gradient.ToArray()) largest[i] = Math.Max(largest[i], Math.Abs(g));
             }
         }
 
         // Both attention branches (local and global context) and their batch norms train.
-        for (int i = 0; i < parameters!.Count; i++)
-            Assert.True(largest![i] > 1e-12,
+        for (int i = 0; i < (parameters ?? throw new InvalidOperationException("parameters is null where it is required.")).Count; i++)
+            Assert.True((largest ?? throw new InvalidOperationException("largest is null where it is required."))[i] > 1e-12,
                 $"parameter {i} ({string.Join("x", parameters[i].Shape.ToArray())}) received only zero gradients");
     }
 }

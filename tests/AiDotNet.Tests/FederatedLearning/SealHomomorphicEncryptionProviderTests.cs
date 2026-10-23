@@ -14,12 +14,12 @@ public class SealHomomorphicEncryptionProviderTests
         var baseline = new Vector<double>(new[] { 1.0 });
         var options = new HomomorphicEncryptionOptions();
 
-        Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(null!, new Dictionary<int, double>(), baseline, new[] { 0 }, options));
+        Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(null, new Dictionary<int, double>(), baseline, new[] { 0 }, options));
         Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>>(), new Dictionary<int, double>(), baseline, new[] { 0 }, options));
-        Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, null!, baseline, new[] { 0 }, options));
+        Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, null, baseline, new[] { 0 }, options));
         Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double>(), baseline, new[] { 0 }, options));
-        Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, null!, new[] { 0 }, options));
-        Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, baseline, new[] { 0 }, null!));
+        Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, null, new[] { 0 }, options));
+        Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, baseline, new[] { 0 }, null));
     }
 
     [Fact(Timeout = 60000)]

@@ -455,7 +455,7 @@ public class HyperparameterOptimizationIntegrationTests
     {
         var searchSpace = new HyperparameterSearchSpace();
         Assert.Throws<ArgumentException>(() => searchSpace.AddContinuous("", 0, 1));
-        Assert.Throws<ArgumentException>(() => searchSpace.AddContinuous(null!, 0, 1));
+        Assert.Throws<ArgumentException>(() => searchSpace.AddContinuous(null, 0, 1));
     }
 
     [Fact(Timeout = 120000)]
@@ -529,7 +529,7 @@ public class HyperparameterOptimizationIntegrationTests
     public async Task ContinuousDistribution_Sample_ReturnsValueInRange()
     {
         var dist = new ContinuousDistribution { Min = 0.001, Max = 0.1, LogScale = false };
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < 100; i++)
         {
@@ -542,7 +542,7 @@ public class HyperparameterOptimizationIntegrationTests
     public async Task ContinuousDistribution_Sample_LogScale()
     {
         var dist = new ContinuousDistribution { Min = 0.0001, Max = 0.1, LogScale = true };
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < 100; i++)
         {
@@ -562,7 +562,7 @@ public class HyperparameterOptimizationIntegrationTests
     public async Task IntegerDistribution_Sample_ReturnsValueInRange()
     {
         var dist = new IntegerDistribution { Min = 16, Max = 128, Step = 16 };
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < 100; i++)
         {
@@ -583,7 +583,7 @@ public class HyperparameterOptimizationIntegrationTests
     public async Task CategoricalDistribution_Sample_ReturnsValidChoice()
     {
         var dist = new CategoricalDistribution { Choices = new List<object> { "a", "b", "c" } };
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < 100; i++)
         {
@@ -769,7 +769,7 @@ public class HyperparameterOptimizationIntegrationTests
         var searchSpace = new HyperparameterSearchSpace();
         searchSpace.AddInteger("x", 1, 5);
 
-        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null!, searchSpace, 10));
+        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null, searchSpace, 10));
     }
 
     [Fact(Timeout = 120000)]
@@ -778,7 +778,7 @@ public class HyperparameterOptimizationIntegrationTests
         var optimizer = new GridSearchOptimizer<double, double[], double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            optimizer.Optimize(_ => 0, null!, 10));
+            optimizer.Optimize(_ => 0, null, 10));
     }
 
     [Fact(Timeout = 120000)]
@@ -839,7 +839,7 @@ public class HyperparameterOptimizationIntegrationTests
     public async Task GridSearchOptimizer_GetTrials_ThrowsOnNullFilter()
     {
         var optimizer = new GridSearchOptimizer<double, double[], double>();
-        Assert.Throws<ArgumentNullException>(() => optimizer.GetTrials(null!));
+        Assert.Throws<ArgumentNullException>(() => optimizer.GetTrials(null));
     }
 
     #endregion
@@ -1404,7 +1404,7 @@ public class HyperparameterOptimizationIntegrationTests
     public async Task HyperparameterOptimizerBase_ReportTrial_ThrowsOnNullTrial()
     {
         var optimizer = new RandomSearchOptimizer<double, double[], double>();
-        Assert.Throws<ArgumentNullException>(() => optimizer.ReportTrial(null!, 0.5));
+        Assert.Throws<ArgumentNullException>(() => optimizer.ReportTrial(null, 0.5));
     }
 
     [Fact(Timeout = 120000)]

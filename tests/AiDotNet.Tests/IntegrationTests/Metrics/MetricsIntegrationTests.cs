@@ -83,7 +83,7 @@ public class MetricsIntegrationTests
         var data = new double[16];
         var image = new Tensor<double>(new[] { 4, 4 }, new Vector<double>(data));
 
-        Assert.Throws<ArgumentNullException>(() => psnr.Compute(null!, image));
+        Assert.Throws<ArgumentNullException>(() => psnr.Compute(null, image));
     }
 
     [Fact(Timeout = 120000)]
@@ -93,7 +93,7 @@ public class MetricsIntegrationTests
         var data = new double[16];
         var image = new Tensor<double>(new[] { 4, 4 }, new Vector<double>(data));
 
-        Assert.Throws<ArgumentNullException>(() => psnr.Compute(image, null!));
+        Assert.Throws<ArgumentNullException>(() => psnr.Compute(image, null));
     }
 
     [Fact(Timeout = 120000)]
@@ -159,7 +159,7 @@ public class MetricsIntegrationTests
 
         var data1 = new double[8 * 8];
         var data2 = new double[8 * 8];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < data1.Length; i++)
         {
@@ -199,7 +199,7 @@ public class MetricsIntegrationTests
         var ssim = new StructuralSimilarity<double>();
         var image = new Tensor<double>(new[] { 8, 8 }, new Vector<double>(new double[64]));
 
-        Assert.Throws<ArgumentNullException>(() => ssim.Compute(null!, image));
+        Assert.Throws<ArgumentNullException>(() => ssim.Compute(null, image));
     }
 
     [Fact(Timeout = 120000)]
@@ -208,7 +208,7 @@ public class MetricsIntegrationTests
         var ssim = new StructuralSimilarity<double>();
         var image = new Tensor<double>(new[] { 8, 8 }, new Vector<double>(new double[64]));
 
-        Assert.Throws<ArgumentNullException>(() => ssim.Compute(image, null!));
+        Assert.Throws<ArgumentNullException>(() => ssim.Compute(image, null));
     }
 
     [Fact(Timeout = 120000)]
@@ -296,7 +296,7 @@ public class MetricsIntegrationTests
         var miou = new MeanIntersectionOverUnion<double>(numClasses: 2);
         var groundTruth = new Tensor<double>(new[] { 4 }, new Vector<double>(new double[4]));
 
-        Assert.Throws<ArgumentNullException>(() => miou.Compute(null!, groundTruth));
+        Assert.Throws<ArgumentNullException>(() => miou.Compute(null, groundTruth));
     }
 
     [Fact(Timeout = 120000)]
@@ -353,7 +353,7 @@ public class MetricsIntegrationTests
         var accuracy = new OverallAccuracy<double>();
         var groundTruth = new Tensor<double>(new[] { 4 }, new Vector<double>(new double[4]));
 
-        Assert.Throws<ArgumentNullException>(() => accuracy.Compute(null!, groundTruth));
+        Assert.Throws<ArgumentNullException>(() => accuracy.Compute(null, groundTruth));
     }
 
     [Fact(Timeout = 120000)]
@@ -566,7 +566,7 @@ public class MetricsIntegrationTests
     {
         var snr = new SignalToNoiseRatio<double>();
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var clean = new double[100];
         var noisy = new double[100];
 
@@ -600,7 +600,7 @@ public class MetricsIntegrationTests
     {
         var snr = new SignalToNoiseRatio<double>();
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var clean = new double[512];
         var noisy = new double[512];
 
@@ -681,7 +681,7 @@ public class MetricsIntegrationTests
         var estimated = new double[100];
         var baseline = new double[100];
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < target.Length; i++)
         {
             target[i] = Math.Sin(i * 0.1);
@@ -859,7 +859,7 @@ public class MetricsIntegrationTests
         var chamfer = new ChamferDistance<double>();
         var points = new Tensor<double>(new[] { 3, 3 }, new Vector<double>(new double[9]));
 
-        Assert.Throws<ArgumentNullException>(() => chamfer.Compute(null!, points));
+        Assert.Throws<ArgumentNullException>(() => chamfer.Compute(null, points));
     }
 
     [Fact(Timeout = 120000)]
@@ -951,8 +951,8 @@ public class MetricsIntegrationTests
         var emd = new EarthMoversDistance<double>();
         var points = new Tensor<double>(new[] { 3, 3 }, new Vector<double>(new double[9]));
 
-        Assert.Throws<ArgumentNullException>(() => emd.Compute(null!, points));
-        Assert.Throws<ArgumentNullException>(() => emd.Compute(points, null!));
+        Assert.Throws<ArgumentNullException>(() => emd.Compute(null, points));
+        Assert.Throws<ArgumentNullException>(() => emd.Compute(points, null));
     }
 
     [Fact(Timeout = 120000)]
@@ -1066,7 +1066,7 @@ public class MetricsIntegrationTests
         var fscore = new FScore<double>();
         var groundTruth = new Tensor<double>(new[] { 3, 3 }, new Vector<double>(new double[9]));
 
-        Assert.Throws<ArgumentNullException>(() => fscore.Compute(null!, groundTruth));
+        Assert.Throws<ArgumentNullException>(() => fscore.Compute(null, groundTruth));
     }
 
     #endregion
@@ -1138,7 +1138,7 @@ public class MetricsIntegrationTests
         var iou = new IoU3D<double>();
         var voxels = new Tensor<double>(new[] { 2, 2, 2 }, new Vector<double>(new double[8]));
 
-        Assert.Throws<ArgumentNullException>(() => iou.ComputeVoxelIoU(null!, voxels));
+        Assert.Throws<ArgumentNullException>(() => iou.ComputeVoxelIoU(null, voxels));
     }
 
     [Fact(Timeout = 120000)]

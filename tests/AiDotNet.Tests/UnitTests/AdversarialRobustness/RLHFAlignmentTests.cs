@@ -31,7 +31,7 @@ public class RLHFAlignmentTests
     [Fact(Timeout = 60000)]
     public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new RLHFAlignment<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new RLHFAlignment<double>(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -154,7 +154,7 @@ public class RLHFAlignmentTests
         var alignment = new RLHFAlignment<double>(options);
         var evalData = CreateSampleEvaluationData();
 
-        Assert.Throws<ArgumentNullException>(() => alignment.EvaluateAlignment(null!, evalData));
+        Assert.Throws<ArgumentNullException>(() => alignment.EvaluateAlignment(null, evalData));
     }
 
     [Fact(Timeout = 60000)]
@@ -164,7 +164,7 @@ public class RLHFAlignmentTests
         var alignment = new RLHFAlignment<double>(options);
         var model = new MockPredictiveModel();
 
-        Assert.Throws<ArgumentNullException>(() => alignment.EvaluateAlignment(model, null!));
+        Assert.Throws<ArgumentNullException>(() => alignment.EvaluateAlignment(model, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -272,7 +272,7 @@ public class RLHFAlignmentTests
         var alignment = new RLHFAlignment<double>(options);
         var principles = new[] { "Be helpful", "Be honest" };
 
-        Assert.Throws<ArgumentNullException>(() => alignment.ApplyConstitutionalPrinciples(null!, principles));
+        Assert.Throws<ArgumentNullException>(() => alignment.ApplyConstitutionalPrinciples(null, principles));
     }
 
     [Fact(Timeout = 60000)]
@@ -282,7 +282,7 @@ public class RLHFAlignmentTests
         var alignment = new RLHFAlignment<double>(options);
         var model = new MockPredictiveModel();
 
-        Assert.Throws<ArgumentNullException>(() => alignment.ApplyConstitutionalPrinciples(model, null!));
+        Assert.Throws<ArgumentNullException>(() => alignment.ApplyConstitutionalPrinciples(model, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -353,7 +353,7 @@ public class RLHFAlignmentTests
         var alignment = new RLHFAlignment<double>(options);
         var prompts = new Matrix<double>(2, 3);
 
-        Assert.Throws<ArgumentNullException>(() => alignment.PerformRedTeaming(null!, prompts));
+        Assert.Throws<ArgumentNullException>(() => alignment.PerformRedTeaming(null, prompts));
     }
 
     [Fact(Timeout = 60000)]
@@ -363,7 +363,7 @@ public class RLHFAlignmentTests
         var alignment = new RLHFAlignment<double>(options);
         var model = new MockPredictiveModel();
 
-        Assert.Throws<ArgumentNullException>(() => alignment.PerformRedTeaming(model, null!));
+        Assert.Throws<ArgumentNullException>(() => alignment.PerformRedTeaming(model, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -546,7 +546,7 @@ public class RLHFAlignmentTests
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => alignment.Deserialize(null!));
+        Assert.Throws<ArgumentNullException>(() => alignment.Deserialize(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -629,7 +629,7 @@ public class RLHFAlignmentTests
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
 
-        Assert.Throws<ArgumentException>(() => alignment.SaveModel(null!));
+        Assert.Throws<ArgumentException>(() => alignment.SaveModel(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -653,7 +653,7 @@ public class RLHFAlignmentTests
     {
         var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>());
 
-        Assert.Throws<ArgumentException>(() => alignment.LoadModel(null!));
+        Assert.Throws<ArgumentException>(() => alignment.LoadModel(null));
     }
 
     [Fact(Timeout = 60000)]

@@ -67,7 +67,7 @@ public class ConditionalGANTests : GANModelTestBase<float>
 
         Assert.Equal(32, cgan.Generator.Architecture.InputSize);
 
-        var noiseOnlyInput = CreateRandomTensor([1, 22], new Random(42));
+        var noiseOnlyInput = CreateRandomTensor([1, 22], AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42));
         var output = cgan.Predict(noiseOnlyInput);
 
         Assert.Equal(64, output.Length);

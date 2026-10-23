@@ -203,7 +203,7 @@ public class Adam8BitOptimizerIntegrationTests
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
         // Initialize parameters with random values
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var parameters = new Vector<double>(paramCount);
         for (int i = 0; i < paramCount; i++)
         {
@@ -490,8 +490,8 @@ public class Adam8BitOptimizerIntegrationTests
         ToLinear((Vector<byte>)Get(optimizer, "_vQuantized"), (Vector<double>)Get(optimizer, "_vScales"), 20, signed: false);
         var tapeStates = (System.Collections.IDictionary)Get(optimizer, "_tapeStates");
         Assert.Equal(1, tapeStates.Count);
-        object tapeState = tapeStates[tapeParameter]!;
-        ToLinear((Vector<byte>)Get(tapeState, "MQuantized"), (Vector<double>)Get(tapeState, "MScales"), 20, signed: true);
+        object tapeState = (tapeStates[tapeParameter] ?? throw new InvalidOperationException("tapeStates[tapeParameter] is null where it is required."));
+        ToLinear((Vector<byte>)Get((tapeState ?? throw new InvalidOperationException("tapeState is null where it is required.")), "MQuantized"), (Vector<double>)Get(tapeState, "MScales"), 20, signed: true);
         ToLinear((Vector<byte>)Get(tapeState, "VQuantized"), (Vector<double>)Get(tapeState, "VScales"), 20, signed: false);
 
         byte[] checkpoint = DowngradeAdam8BitPayloadToVersion2(optimizer.Serialize());
@@ -499,12 +499,12 @@ public class Adam8BitOptimizerIntegrationTests
         restored.Deserialize(checkpoint);
 
         var pending = (System.Collections.IDictionary)Get(restored, "_pendingTapeStatesByParameterIndex");
-        object restoredTape = pending[0]!;
+        object restoredTape = (pending[0] ?? throw new InvalidOperationException("pending[0] is null where it is required."));
         var actual = new (Vector<byte> q, Vector<double> scales, bool signed)[]
         {
             ((Vector<byte>)Get(restored, "_mQuantized"), (Vector<double>)Get(restored, "_mScales"), true),
             ((Vector<byte>)Get(restored, "_vQuantized"), (Vector<double>)Get(restored, "_vScales"), false),
-            ((Vector<byte>)Get(restoredTape, "MQuantized"), (Vector<double>)Get(restoredTape, "MScales"), true),
+            ((Vector<byte>)Get((restoredTape ?? throw new InvalidOperationException("restoredTape is null where it is required.")), "MQuantized"), (Vector<double>)Get(restoredTape, "MScales"), true),
             ((Vector<byte>)Get(restoredTape, "VQuantized"), (Vector<double>)Get(restoredTape, "VScales"), false),
         };
         string[] names = { "flat m", "flat v", "tape m", "tape v" };

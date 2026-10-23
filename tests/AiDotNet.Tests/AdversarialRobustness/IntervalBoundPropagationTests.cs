@@ -60,7 +60,7 @@ public class IntervalBoundPropagationTests
     public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(null!));
+        Assert.Throws<ArgumentNullException>(() => new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(null));
     }
 
     #endregion
@@ -75,7 +75,7 @@ public class IntervalBoundPropagationTests
         var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(null!, mockModel));
+        Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(null, mockModel));
     }
 
     [Fact(Timeout = 60000)]
@@ -86,7 +86,7 @@ public class IntervalBoundPropagationTests
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(input, null!));
+        Assert.Throws<ArgumentNullException>(() => ibp.CertifyPrediction(input, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -167,7 +167,7 @@ public class IntervalBoundPropagationTests
         var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(null!, mockModel));
+        Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(null, mockModel));
     }
 
     [Fact(Timeout = 60000)]
@@ -178,7 +178,7 @@ public class IntervalBoundPropagationTests
         var inputs = new Vector<double>[] { new Vector<double>(3), new Vector<double>(3) };
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(inputs, null!));
+        Assert.Throws<ArgumentNullException>(() => ibp.CertifyBatch(inputs, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -224,7 +224,7 @@ public class IntervalBoundPropagationTests
         var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(null!, mockModel));
+        Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(null, mockModel));
     }
 
     [Fact(Timeout = 60000)]
@@ -235,7 +235,7 @@ public class IntervalBoundPropagationTests
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(input, null!));
+        Assert.Throws<ArgumentNullException>(() => ibp.ComputeCertifiedRadius(input, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -299,7 +299,7 @@ public class IntervalBoundPropagationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            ibp.EvaluateCertifiedAccuracy(null!, labels, mockModel, 0.1));
+            ibp.EvaluateCertifiedAccuracy(null, labels, mockModel, 0.1));
     }
 
     [Fact(Timeout = 60000)]
@@ -312,7 +312,7 @@ public class IntervalBoundPropagationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            ibp.EvaluateCertifiedAccuracy(testData, null!, mockModel, 0.1));
+            ibp.EvaluateCertifiedAccuracy(testData, null, mockModel, 0.1));
     }
 
     [Fact(Timeout = 60000)]
@@ -325,7 +325,7 @@ public class IntervalBoundPropagationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            ibp.EvaluateCertifiedAccuracy(testData, labels, null!, 0.1));
+            ibp.EvaluateCertifiedAccuracy(testData, labels, null, 0.1));
     }
 
     [Fact(Timeout = 60000)]
@@ -414,7 +414,7 @@ public class IntervalBoundPropagationTests
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => ibp.Deserialize(null!));
+        Assert.Throws<ArgumentNullException>(() => ibp.Deserialize(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -460,7 +460,7 @@ public class IntervalBoundPropagationTests
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => ibp.SaveModel(null!));
+        Assert.Throws<ArgumentException>(() => ibp.SaveModel(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -480,7 +480,7 @@ public class IntervalBoundPropagationTests
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => ibp.LoadModel(null!));
+        Assert.Throws<ArgumentException>(() => ibp.LoadModel(null));
     }
 
     [Fact(Timeout = 60000)]

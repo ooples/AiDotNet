@@ -18,7 +18,7 @@ public sealed class SqlControllerTests
     {
         var controller = CreateController(new FakeSqlSandboxExecutor(_ => Task.FromResult(new SqlExecuteResponse { Success = true })));
 
-        var result = await controller.Execute(null!, CancellationToken.None);
+        var result = await controller.Execute(null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var payload = Assert.IsType<SqlExecuteResponse>(badRequest.Value);

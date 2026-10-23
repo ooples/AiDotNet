@@ -41,7 +41,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new HybridDocumentStore<float>(null!, keywordStore, 0.7f, 0.3f));
+                new HybridDocumentStore<float>(null, keywordStore, 0.7f, 0.3f));
         }
 
         [Fact(Timeout = 60000)]
@@ -52,7 +52,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new HybridDocumentStore<float>(vectorStore, null!, 0.7f, 0.3f));
+                new HybridDocumentStore<float>(vectorStore, null, 0.7f, 0.3f));
         }
 
         [Fact(Timeout = 60000)]
@@ -102,7 +102,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var hybridStore = new HybridDocumentStore<float>(vectorStore, keywordStore, 0.7f, 0.3f);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => hybridStore.Add(null!));
+            Assert.Throws<ArgumentNullException>(() => hybridStore.Add(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -161,7 +161,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var hybridStore = new HybridDocumentStore<float>(vectorStore, keywordStore, 0.7f, 0.3f);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => hybridStore.AddBatch(null!));
+            Assert.Throws<ArgumentNullException>(() => hybridStore.AddBatch(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -230,7 +230,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var hybridStore = new HybridDocumentStore<float>(vectorStore, keywordStore, 0.7f, 0.3f);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => hybridStore.GetSimilar(null!, topK: 5));
+            Assert.Throws<ArgumentNullException>(() => hybridStore.GetSimilar(null, topK: 5));
         }
 
         [Fact(Timeout = 60000)]
@@ -329,7 +329,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                hybridStore.GetSimilarWithFilters(queryVector, topK: 5, null!));
+                hybridStore.GetSimilarWithFilters(queryVector, topK: 5, null));
         }
 
         #endregion
@@ -379,7 +379,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var hybridStore = new HybridDocumentStore<float>(vectorStore, keywordStore, 0.7f, 0.3f);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => hybridStore.GetById(null!));
+            Assert.Throws<ArgumentException>(() => hybridStore.GetById(null));
         }
 
         #endregion
@@ -430,7 +430,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var hybridStore = new HybridDocumentStore<float>(vectorStore, keywordStore, 0.7f, 0.3f);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => hybridStore.Remove(null!));
+            Assert.Throws<ArgumentException>(() => hybridStore.Remove(null));
         }
 
         #endregion

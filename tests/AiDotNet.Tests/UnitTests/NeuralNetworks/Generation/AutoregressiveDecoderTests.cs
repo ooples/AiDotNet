@@ -96,6 +96,6 @@ public class AutoregressiveDecoderTests
     public void NullStepLogits_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            AutoregressiveDecoder<float>.Decode(null!, 4));
+            AutoregressiveDecoder<float>.Decode(null, 4));
     }
 }

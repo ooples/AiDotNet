@@ -52,7 +52,7 @@ public class Int8InferenceModelIntegrationTests
     {
         // Transformer<float> expects [batch, seqLen, embDim] for its attention path; build a
         // unit-batch tensor so callers can stay shape-agnostic about the batch axis.
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new float[seqLen * embDim];
         for (int i = 0; i < data.Length; i++)
             data[i] = (float)(rng.NextDouble() * 2 - 1);
@@ -313,7 +313,7 @@ public class Int8InferenceModelIntegrationTests
     public async Task FromTrained_RejectsNullModel()
     {
         await Task.Yield();
-        Assert.Throws<ArgumentNullException>(() => Int8InferenceModel.FromTrained(null!));
+        Assert.Throws<ArgumentNullException>(() => Int8InferenceModel.FromTrained(null));
     }
 
     [Fact(Timeout = 120000)]

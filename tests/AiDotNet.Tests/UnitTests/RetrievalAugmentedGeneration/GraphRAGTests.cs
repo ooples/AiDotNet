@@ -120,7 +120,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRAG<double>(null!, retriever));
+                new GraphRAG<double>(null, retriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -131,7 +131,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRAG<double>(generator, null!));
+                new GraphRAG<double>(generator, null));
         }
 
         [Fact(Timeout = 60000)]
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                graphRag.AddRelation(null!, "DISCOVERED", "Relativity"));
+                graphRag.AddRelation(null, "DISCOVERED", "Relativity"));
         }
 
         [Fact(Timeout = 60000)]
@@ -217,7 +217,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                graphRag.AddRelation("Einstein", null!, "Relativity"));
+                graphRag.AddRelation("Einstein", null, "Relativity"));
         }
 
         [Fact(Timeout = 60000)]
@@ -243,7 +243,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                graphRag.AddRelation("Einstein", "DISCOVERED", null!));
+                graphRag.AddRelation("Einstein", "DISCOVERED", null));
         }
 
         [Fact(Timeout = 60000)]
@@ -358,7 +358,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                graphRag.Retrieve(null!, 10));
+                graphRag.Retrieve(null, 10));
         }
 
         [Fact(Timeout = 60000)]

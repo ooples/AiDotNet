@@ -3359,7 +3359,7 @@ public class GradientBasedOptimizerIntegrationTests
             new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null)
         };
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var paramData = new double[dimensions];
         var gradData = new double[dimensions];
         for (int i = 0; i < dimensions; i++)
@@ -3950,7 +3950,7 @@ public class GradientBasedOptimizerIntegrationTests
             _ => throw new ArgumentException($"Unknown optimizer: {optimizerName}")
         };
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var initData = new double[dimensions];
         for (int i = 0; i < dimensions; i++)
         {
@@ -4222,7 +4222,7 @@ public class GradientBasedOptimizerIntegrationTests
         var inputData = new double[dim];
         var gradientData = new double[dim];
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < dim; i++)
         {
             parametersData[i] = rand.NextDouble() * 2 - 1;

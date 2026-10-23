@@ -97,7 +97,7 @@ public class ReasoningExtendedIntegrationTests
         var sampler = new DiversitySampler<double>();
         var t1 = new ThoughtNode<double> { Thought = "Some thought" };
 
-        double diversity = sampler.CalculateDiversity(t1, null!);
+        double diversity = sampler.CalculateDiversity(t1, null);
 
         Assert.Equal(0.0, diversity);
     }
@@ -314,7 +314,7 @@ public class ReasoningExtendedIntegrationTests
         if (method is null)
             throw new InvalidOperationException("Could not find HasObviousContradiction method");
 
-        return (bool)method.Invoke(detector, new object[] { text1, text2 })!;
+        return (bool)(method.Invoke(detector, new object[] { text1, text2 }) ?? throw new InvalidOperationException("method.Invoke(detector, new object[] { text1, text2 }) is null where it is required."));
     }
 
     #endregion
@@ -368,7 +368,7 @@ public class ReasoningExtendedIntegrationTests
     public async Task CalculatorVerifier_CanVerify_NullStep_ReturnsFalse()
     {
         var verifier = new CalculatorVerifier<double>();
-        Assert.False(verifier.CanVerify(null!));
+        Assert.False(verifier.CanVerify(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -463,7 +463,7 @@ public class ReasoningExtendedIntegrationTests
         var verifier = new CalculatorVerifier<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            verifier.VerifyStepAsync(null!));
+            verifier.VerifyStepAsync(null));
     }
 
     #endregion
@@ -761,7 +761,7 @@ public class ReasoningExtendedIntegrationTests
         var search = new BestFirstSearch<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(null!, new MockThoughtGenerator<double>(),
+            search.SearchAsync(null, new MockThoughtGenerator<double>(),
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 
@@ -834,7 +834,7 @@ public class ReasoningExtendedIntegrationTests
         var search = new BreadthFirstSearch<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(null!, new MockThoughtGenerator<double>(),
+            search.SearchAsync(null, new MockThoughtGenerator<double>(),
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 
@@ -878,7 +878,7 @@ public class ReasoningExtendedIntegrationTests
         var search = new DepthFirstSearch<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(null!, new MockThoughtGenerator<double>(),
+            search.SearchAsync(null, new MockThoughtGenerator<double>(),
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 
@@ -971,7 +971,7 @@ public class ReasoningExtendedIntegrationTests
         var mcts = new MonteCarloTreeSearch<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            mcts.SearchAsync(null!, new MockThoughtGenerator<double>(),
+            mcts.SearchAsync(null, new MockThoughtGenerator<double>(),
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 

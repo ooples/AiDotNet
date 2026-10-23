@@ -32,7 +32,7 @@ public class TransformerDefaultOptimizerTests
         // optimizer's GetType().Name — the only public surface to inspect
         // it (the field is private).
         var metadata = t.GetModelMetadata();
-        return metadata.AdditionalInfo!["Optimizer"]?.ToString() ?? "";
+        return metadata.AdditionalInfo["Optimizer"]?.ToString() ?? "";
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class TransformerDefaultOptimizerTests
                 "DeserializeNetworkSpecificData",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             Assert.NotNull(method);
-            method!.Invoke(transformer, new object[] { r });
+            method.Invoke(transformer, new object[] { r });
         }
 
         var optimizerName = GetOptimizerName(transformer);

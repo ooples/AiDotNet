@@ -262,7 +262,7 @@ public class GpuDiagnosticsConfigTests
     public void LoggerToSink_ThrowsOnNullLogger()
     {
         ILogger? logger = null;
-        Assert.Throws<ArgumentNullException>(() => logger!.ToSink());
+        Assert.Throws<ArgumentNullException>(() => (logger ?? throw new InvalidOperationException("logger is null where it is required.")).ToSink());
     }
 
     /// <summary>

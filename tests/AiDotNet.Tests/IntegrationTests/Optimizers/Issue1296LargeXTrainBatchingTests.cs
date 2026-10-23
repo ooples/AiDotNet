@@ -467,7 +467,7 @@ public partial class Issue1296LargeXTrainBatchingTests
         await Task.Yield();
         var (arch, _, _) = BuildFixture(sampleCount: 4);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
-        Assert.Throws<ArgumentNullException>(() => model.PredictInBatches(null!, batchSize: 32));
+        Assert.Throws<ArgumentNullException>(() => model.PredictInBatches(null, batchSize: 32));
     }
 
     /// <summary>
@@ -1171,7 +1171,7 @@ public partial class Issue1296LargeXTrainBatchingTests
 #endif
         double concatAllocMb = Math.Max(0, allocAfterConcat - allocBeforeConcat) / 1024.0 / 1024.0;
         GC.KeepAlive(concatOutput);
-        concatOutput = null!;
+        concatOutput = null;
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();

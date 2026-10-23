@@ -172,7 +172,7 @@ namespace AiDotNetTests.UnitTests.Training
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                LossFunctionFactory<double>.Create((string)null));
+                LossFunctionFactory<double>.Create((string?)null));
         }
 
         [Fact(Timeout = 60000)]

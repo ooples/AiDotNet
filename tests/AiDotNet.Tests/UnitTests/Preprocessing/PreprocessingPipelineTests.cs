@@ -231,7 +231,7 @@ namespace AiDotNetTests.UnitTests.Preprocessing
             var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => pipeline.Add(null!));
+            Assert.Throws<ArgumentNullException>(() => pipeline.Add(null));
         }
     }
 }

@@ -106,8 +106,8 @@ public class SelfSupervisedLearningIntegrationTests
         var validTensor = CreateRandomTensor(4, 8, seed: 42);
 
         // Assert
-        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(null!, validTensor));
-        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(validTensor, null!));
+        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(null, validTensor));
+        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(validTensor, null));
     }
 
     #endregion

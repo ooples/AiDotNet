@@ -102,7 +102,7 @@ public class ContinualLearningIntegrationTests
     {
         var ewc = new ElasticWeightConsolidation<double>();
 
-        Assert.Throws<ArgumentNullException>(() => ewc.BeforeTask(null!, taskId: 0));
+        Assert.Throws<ArgumentNullException>(() => ewc.BeforeTask(null, taskId: 0));
     }
 
     [Fact(Timeout = 120000)]
@@ -706,8 +706,8 @@ public class ContinualLearningIntegrationTests
 
         foreach (var strategy in strategies)
         {
-            Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null!, 0));
-            Assert.Throws<ArgumentNullException>(() => strategy.ComputeLoss(null!));
+            Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null, 0));
+            Assert.Throws<ArgumentNullException>(() => strategy.ComputeLoss(null));
         }
     }
 
@@ -722,7 +722,7 @@ public class ContinualLearningIntegrationTests
 
         foreach (var strategy in strategies)
         {
-            Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(network, null!));
+            Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(network, null));
         }
     }
 

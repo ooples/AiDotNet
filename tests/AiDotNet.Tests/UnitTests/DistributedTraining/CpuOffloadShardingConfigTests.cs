@@ -79,9 +79,9 @@ public class CpuOffloadShardingConfigTests
     {
         await Task.Yield();
         Assert.Throws<ArgumentNullException>(() =>
-            ShardingConfiguration<double>.CreateForZeROOffload(null!));
+            ShardingConfiguration<double>.CreateForZeROOffload(null));
         Assert.Throws<ArgumentNullException>(() =>
-            ShardingConfiguration<double>.CreateForZeROOffloadFull(null!));
+            ShardingConfiguration<double>.CreateForZeROOffloadFull(null));
     }
 
     [Fact(Timeout = 60000)]

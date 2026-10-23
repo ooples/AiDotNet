@@ -117,8 +117,8 @@ public class TrainingRecipeReportTests
 
         Assert.NotNull(shared);
         Assert.NotNull(discriminator);
-        Assert.Equal(1.5e-4, shared!.LearningRate, precision: 12);
-        Assert.Equal(3e-4, discriminator!.LearningRate, precision: 12);
+        Assert.Equal(1.5e-4, shared.LearningRate, precision: 12);
+        Assert.Equal(3e-4, discriminator.LearningRate, precision: 12);
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public class TrainingRecipeReportTests
         var unnamed = PaperOptimizerFactory.Find(new Composite(), component: "vocoder");
 
         Assert.NotNull(unnamed);
-        Assert.Equal(1.5e-4, unnamed!.LearningRate, precision: 12);
+        Assert.Equal(1.5e-4, unnamed.LearningRate, precision: 12);
     }
 
     [PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1.5e-4, Source = "fixture: shared default")]

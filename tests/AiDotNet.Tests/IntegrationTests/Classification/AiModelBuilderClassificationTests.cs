@@ -182,7 +182,7 @@ public class AiModelBuilderClassificationTests
     private static (Matrix<double> x, Vector<double> y) CreateBinaryClassificationData(
         int samplesPerClass, double separation, int features, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int totalSamples = samplesPerClass * 2;
         var x = new Matrix<double>(totalSamples, features);
         var y = new Vector<double>(totalSamples);

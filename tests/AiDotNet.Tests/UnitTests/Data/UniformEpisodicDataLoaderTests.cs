@@ -73,7 +73,7 @@ public class UniformEpisodicDataLoaderTests
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
             new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
-                datasetX: null!,
+                datasetX: null,
                 datasetY: Y,
                 nWay: 5,
                 kShot: 3,
@@ -92,7 +92,7 @@ public class UniformEpisodicDataLoaderTests
         var exception = Assert.Throws<ArgumentNullException>(() =>
             new UniformEpisodicDataLoader<double, Tensor<double>, Tensor<double>>(
                 datasetX: X,
-                datasetY: null!,
+                datasetY: null,
                 nWay: 5,
                 kShot: 3,
                 queryShots: 10));

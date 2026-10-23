@@ -444,7 +444,7 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         var teacher = new Matrix<double>(1, 3);
 
         Assert.Throws<ArgumentNullException>(() =>
-            loss.ComputeLoss(null!, teacher));
+            loss.ComputeLoss(null, teacher));
     }
 
     [Fact(Timeout = 120000)]
@@ -454,7 +454,7 @@ public class KnowledgeDistillationDeepMathIntegrationTests
         var student = new Matrix<double>(1, 3);
 
         Assert.Throws<ArgumentNullException>(() =>
-            loss.ComputeLoss(student, null!));
+            loss.ComputeLoss(student, null));
     }
 
     [Fact(Timeout = 120000)]

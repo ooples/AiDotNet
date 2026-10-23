@@ -47,7 +47,7 @@ public class ContentClassifierTests
     public async Task RuleBasedContentClassifier_WithNullPatterns_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new RuleBasedContentClassifier<double>(null!, threshold: 0.5));
+            new RuleBasedContentClassifier<double>(null, threshold: 0.5));
     }
 
     #endregion
@@ -59,7 +59,7 @@ public class ContentClassifierTests
     {
         var classifier = new RuleBasedContentClassifier<double>();
 
-        var resultNull = classifier.ClassifyText(null!);
+        var resultNull = classifier.ClassifyText(null);
         var resultEmpty = classifier.ClassifyText(string.Empty);
 
         Assert.False(resultNull.IsHarmful);
@@ -202,7 +202,7 @@ public class ContentClassifierTests
     {
         var classifier = new RuleBasedContentClassifier<double>();
 
-        Assert.Throws<ArgumentException>(() => classifier.AddPattern(null!, @"\btest\b"));
+        Assert.Throws<ArgumentException>(() => classifier.AddPattern(null, @"\btest\b"));
     }
 
     [Fact(Timeout = 60000)]
@@ -265,7 +265,7 @@ public class ContentClassifierTests
     {
         var classifier = new RuleBasedContentClassifier<double>();
 
-        Assert.Throws<ArgumentNullException>(() => classifier.Deserialize(null!));
+        Assert.Throws<ArgumentNullException>(() => classifier.Deserialize(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -294,7 +294,7 @@ public class ContentClassifierTests
     {
         var classifier = new RuleBasedContentClassifier<double>();
 
-        Assert.Throws<ArgumentException>(() => classifier.SaveModel(null!));
+        Assert.Throws<ArgumentException>(() => classifier.SaveModel(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -310,7 +310,7 @@ public class ContentClassifierTests
     {
         var classifier = new RuleBasedContentClassifier<double>();
 
-        Assert.Throws<ArgumentException>(() => classifier.LoadModel(null!));
+        Assert.Throws<ArgumentException>(() => classifier.LoadModel(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -355,7 +355,7 @@ public class ContentClassifierTests
     {
         var classifier = new RuleBasedContentClassifier<double>();
 
-        Assert.Throws<ArgumentNullException>(() => classifier.Classify(null!));
+        Assert.Throws<ArgumentNullException>(() => classifier.Classify(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -378,7 +378,7 @@ public class ContentClassifierTests
     {
         var classifier = new RuleBasedContentClassifier<double>();
 
-        Assert.Throws<ArgumentNullException>(() => classifier.ClassifyBatch(null!));
+        Assert.Throws<ArgumentNullException>(() => classifier.ClassifyBatch(null));
     }
 
     [Fact(Timeout = 60000)]

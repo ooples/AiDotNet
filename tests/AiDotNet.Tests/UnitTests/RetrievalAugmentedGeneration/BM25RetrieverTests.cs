@@ -153,7 +153,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new BM25Retriever<double>(null!));
+                new BM25Retriever<double>(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -291,7 +291,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null!).ToList());
+                retriever.Retrieve(null).ToList());
         }
 
         [Fact(Timeout = 60000)]

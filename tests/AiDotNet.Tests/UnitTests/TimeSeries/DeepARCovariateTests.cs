@@ -35,7 +35,7 @@ public sealed class DeepARCovariateTests
     // with the last covariate.
     private static (Matrix<double> x, Vector<double> y, Matrix<double> cov) CovariateDrivenSeries(int n)
     {
-        var rng = new Random(11);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         var y = new Vector<double>(n);
         var cov = new Matrix<double>(n, 1);
         double level = 0.0;

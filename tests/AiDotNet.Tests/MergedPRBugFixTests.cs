@@ -51,9 +51,9 @@ public class MergedPRBugFixTests
         // ACT: Infer prediction type - should not throw or return incorrect results due to overflow
         var method = typeof(PredictionTypeInference).GetMethod("Infer",
             BindingFlags.Public | BindingFlags.Static);
-        var genericMethod = method!.MakeGenericMethod(typeof(double));
+        var genericMethod = (method ?? throw new InvalidOperationException("method is null where it is required.")).MakeGenericMethod(typeof(double));
 
-        var result = (PredictionType)genericMethod.Invoke(null, new object[] { actual })!;
+        var result = (PredictionType)(genericMethod.Invoke(null, new object[] { actual }) ?? throw new InvalidOperationException("genericMethod.Invoke(null, new object[] { actual }) is null where it is required."));
 
         // ASSERT: With such a large range, it should be classified as regression
         // (not contiguous, high unique ratio)
@@ -71,9 +71,9 @@ public class MergedPRBugFixTests
         // ACT: Should not throw
         var method = typeof(PredictionTypeInference).GetMethod("Infer",
             BindingFlags.Public | BindingFlags.Static);
-        var genericMethod = method!.MakeGenericMethod(typeof(double));
+        var genericMethod = (method ?? throw new InvalidOperationException("method is null where it is required.")).MakeGenericMethod(typeof(double));
 
-        var result = (PredictionType)genericMethod.Invoke(null, new object[] { actual })!;
+        var result = (PredictionType)(genericMethod.Invoke(null, new object[] { actual }) ?? throw new InvalidOperationException("genericMethod.Invoke(null, new object[] { actual }) is null where it is required."));
 
         // ASSERT: Should classify as regression due to non-contiguous extreme range
         Assert.Equal(PredictionType.Regression, result);
@@ -92,9 +92,9 @@ public class MergedPRBugFixTests
         // ACT
         var method = typeof(PredictionTypeInference).GetMethod("Infer",
             BindingFlags.Public | BindingFlags.Static);
-        var genericMethod = method!.MakeGenericMethod(typeof(double));
+        var genericMethod = (method ?? throw new InvalidOperationException("method is null where it is required.")).MakeGenericMethod(typeof(double));
 
-        var result = (PredictionType)genericMethod.Invoke(null, new object[] { actual })!;
+        var result = (PredictionType)(genericMethod.Invoke(null, new object[] { actual }) ?? throw new InvalidOperationException("genericMethod.Invoke(null, new object[] { actual }) is null where it is required."));
 
         // ASSERT: Should be multiclass
         Assert.Equal(PredictionType.MultiClass, result);
@@ -275,7 +275,7 @@ public class MergedPRBugFixTests
 
         // We need to test the IsOutputMatch method via reflection since it's private
         var assembly = typeof(ProgramSynthesis.Engines.NeuralProgramSynthesizer<>).Assembly;
-        var synthType = assembly.GetType("AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1")!
+        var synthType = (assembly.GetType("AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1") ?? throw new InvalidOperationException("assembly.GetType(\"AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1\") is null where it is required."))
             .MakeGenericType(typeof(double));
 
         var isOutputMatchMethod = synthType.GetMethod("IsOutputMatch",
@@ -291,16 +291,16 @@ public class MergedPRBugFixTests
         // ACT & ASSERT: Large numbers with small relative difference should match
 
         // Test 1: Large numbers with negligible relative error
-        var result1 = (bool)isOutputMatchMethod.Invoke(null, new object[] { "1000000000000.0001", "1000000000000.0" })!;
+        var result1 = (bool)(isOutputMatchMethod.Invoke(null, new object[] { "1000000000000.0001", "1000000000000.0" }) ?? throw new InvalidOperationException("isOutputMatchMethod.Invoke(null, new object[] { \"1000000000000.0001\", \"100000... is null where it is required."));
         Assert.True(result1, "Large numbers with tiny relative error should match");
 
         // Test 2: Small numbers within absolute tolerance should match
         // absoluteTolerance is 1e-9, so 1e-10 vs 0 should match
-        var result2 = (bool)isOutputMatchMethod.Invoke(null, new object[] { "0.0000000001", "0.0" })!;
+        var result2 = (bool)(isOutputMatchMethod.Invoke(null, new object[] { "0.0000000001", "0.0" }) ?? throw new InvalidOperationException("isOutputMatchMethod.Invoke(null, new object[] { \"0.0000000001\", \"0.0\" }) is null where it is required."));
         Assert.True(result2, "Numbers near zero within absolute tolerance (1e-9) should match");
 
         // Test 3: Numbers with significant relative error should NOT match
-        var result3 = (bool)isOutputMatchMethod.Invoke(null, new object[] { "100.0", "99.0" })!;
+        var result3 = (bool)(isOutputMatchMethod.Invoke(null, new object[] { "100.0", "99.0" }) ?? throw new InvalidOperationException("isOutputMatchMethod.Invoke(null, new object[] { \"100.0\", \"99.0\" }) is null where it is required."));
         Assert.False(result3, "1% relative error should not match");
     }
 
@@ -309,7 +309,7 @@ public class MergedPRBugFixTests
     {
         // Numbers near zero should use absolute comparison
         var assembly = typeof(ProgramSynthesis.Engines.NeuralProgramSynthesizer<>).Assembly;
-        var synthType = assembly.GetType("AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1")!
+        var synthType = (assembly.GetType("AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1") ?? throw new InvalidOperationException("assembly.GetType(\"AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1\") is null where it is required."))
             .MakeGenericType(typeof(double));
 
         var isOutputMatchMethod = synthType.GetMethod("IsOutputMatch",
@@ -321,7 +321,7 @@ public class MergedPRBugFixTests
         }
 
         // Small numbers near zero should match if within absolute tolerance
-        var result = (bool)isOutputMatchMethod.Invoke(null, new object[] { "0.0000000001", "0.0" })!;
+        var result = (bool)(isOutputMatchMethod.Invoke(null, new object[] { "0.0000000001", "0.0" }) ?? throw new InvalidOperationException("isOutputMatchMethod.Invoke(null, new object[] { \"0.0000000001\", \"0.0\" }) is null where it is required."));
         Assert.True(result, "Tiny numbers should match using absolute tolerance");
     }
 
@@ -394,12 +394,12 @@ public class MergedPRBugFixTests
         // Test 1: Identical arrays should give log prob close to 0 (high probability)
         var identicalPred = new double[] { 0.2, 0.3, 0.5 }; // Valid probability distribution
         var identicalTarget = new double[] { 0.2, 0.3, 0.5 };
-        var logProbIdentical = (double)computeMethod.Invoke(dpo, new object[] { identicalPred, identicalTarget })!;
+        var logProbIdentical = (double)(computeMethod.Invoke(dpo, new object[] { identicalPred, identicalTarget }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { identicalPred, identicalTarget }) is null where it is required."));
 
         // Test 2: Different arrays should give more negative log prob
         var differentPred = new double[] { 0.8, 0.1, 0.1 }; // Different distribution
         var differentTarget = new double[] { 0.1, 0.1, 0.8 };
-        var logProbDifferent = (double)computeMethod.Invoke(dpo, new object[] { differentPred, differentTarget })!;
+        var logProbDifferent = (double)(computeMethod.Invoke(dpo, new object[] { differentPred, differentTarget }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { differentPred, differentTarget }) is null where it is required."));
 
         // ASSERT: Log probs should be different (not both 0.0)
         // Identical should be higher (less negative) than different
@@ -421,7 +421,7 @@ public class MergedPRBugFixTests
             .MakeGenericType(typeof(double), typeof(double[]), typeof(double[]));
         var dpo = Activator.CreateInstance(dpoType, options);
 
-        var computeMethod = dpoType.BaseType!.GetMethod(
+        var computeMethod = (dpoType.BaseType ?? throw new InvalidOperationException("dpoType.BaseType is null where it is required.")).GetMethod(
             "ComputeLogProbabilityFromPrediction",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
@@ -432,8 +432,8 @@ public class MergedPRBugFixTests
         var identical2 = new double[] { 5.0 };
         var different = new double[] { 10.0 };
 
-        var logProbIdentical = (double)computeMethod.Invoke(dpo, new object[] { identical1, identical2 })!;
-        var logProbDifferent = (double)computeMethod.Invoke(dpo, new object[] { different, identical1 })!;
+        var logProbIdentical = (double)(computeMethod.Invoke(dpo, new object[] { identical1, identical2 }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { identical1, identical2 }) is null where it is required."));
+        var logProbDifferent = (double)(computeMethod.Invoke(dpo, new object[] { different, identical1 }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { different, identical1 }) is null where it is required."));
 
         // ASSERT: Identical should have higher log prob than different
         Assert.True(logProbIdentical > logProbDifferent,
@@ -451,18 +451,18 @@ public class MergedPRBugFixTests
             .MakeGenericType(typeof(double), typeof(string), typeof(string));
         var dpo = Activator.CreateInstance(dpoType, options);
 
-        var computeMethod = dpoType.BaseType!.GetMethod(
+        var computeMethod = (dpoType.BaseType ?? throw new InvalidOperationException("dpoType.BaseType is null where it is required.")).GetMethod(
             "ComputeLogProbabilityFromPrediction",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
         if (computeMethod == null) return;
 
         // Test: Identical strings should give 0
-        var logProbIdentical = (double)computeMethod.Invoke(dpo, new object[] { "hello", "hello" })!;
+        var logProbIdentical = (double)(computeMethod.Invoke(dpo, new object[] { "hello", "hello" }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { \"hello\", \"hello\" }) is null where it is required."));
 
         // Test: Similar strings should give higher log prob than different
-        var logProbSimilar = (double)computeMethod.Invoke(dpo, new object[] { "hello", "hallo" })!;
-        var logProbDifferent = (double)computeMethod.Invoke(dpo, new object[] { "hello", "world" })!;
+        var logProbSimilar = (double)(computeMethod.Invoke(dpo, new object[] { "hello", "hallo" }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { \"hello\", \"hallo\" }) is null where it is required."));
+        var logProbDifferent = (double)(computeMethod.Invoke(dpo, new object[] { "hello", "world" }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { \"hello\", \"world\" }) is null where it is required."));
 
         // ASSERT
         Assert.Equal(0.0, logProbIdentical, precision: 10);
@@ -483,7 +483,7 @@ public class MergedPRBugFixTests
             .MakeGenericType(typeof(double), typeof(double[]), typeof(double[]));
         var dpo = Activator.CreateInstance(dpoType, options);
 
-        var computeMethod = dpoType.BaseType!.GetMethod(
+        var computeMethod = (dpoType.BaseType ?? throw new InvalidOperationException("dpoType.BaseType is null where it is required.")).GetMethod(
             "ComputeLogProbabilityFromPrediction",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
@@ -496,11 +496,11 @@ public class MergedPRBugFixTests
         var chosen2 = new double[] { 0.33, 0.33, 0.34 };
         var rejected2 = new double[] { 0.33, 0.34, 0.33 };
 
-        var logProbChosen1 = (double)computeMethod.Invoke(dpo, new object[] { chosen1, chosen1 })!;
-        var logProbRejected1 = (double)computeMethod.Invoke(dpo, new object[] { rejected1, chosen1 })!;
+        var logProbChosen1 = (double)(computeMethod.Invoke(dpo, new object[] { chosen1, chosen1 }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { chosen1, chosen1 }) is null where it is required."));
+        var logProbRejected1 = (double)(computeMethod.Invoke(dpo, new object[] { rejected1, chosen1 }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { rejected1, chosen1 }) is null where it is required."));
 
-        var logProbChosen2 = (double)computeMethod.Invoke(dpo, new object[] { chosen2, chosen2 })!;
-        var logProbRejected2 = (double)computeMethod.Invoke(dpo, new object[] { rejected2, chosen2 })!;
+        var logProbChosen2 = (double)(computeMethod.Invoke(dpo, new object[] { chosen2, chosen2 }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { chosen2, chosen2 }) is null where it is required."));
+        var logProbRejected2 = (double)(computeMethod.Invoke(dpo, new object[] { rejected2, chosen2 }) ?? throw new InvalidOperationException("computeMethod.Invoke(dpo, new object[] { rejected2, chosen2 }) is null where it is required."));
 
         // The margins should be different for different preference pairs
         var margin1 = logProbChosen1 - logProbRejected1;
@@ -750,7 +750,7 @@ public class MergedPRBugFixTests
             // ACT: Get model by stage and modify it
             var retrievedModel = registry.GetModelByStage("TestModel", ModelStage.Staging);
             Assert.NotNull(retrievedModel);
-            retrievedModel!.Description = "Modified externally";
+            retrievedModel.Description = "Modified externally";
 
             // Get again
             var retrievedAgain = registry.GetModelByStage("TestModel", ModelStage.Staging);
@@ -775,7 +775,7 @@ public class MergedPRBugFixTests
             var registry = new ModelRegistry<double, double[], double[]>(tempDir);
 
             // ACT & ASSERT: Null/empty model names should throw ArgumentException
-            Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion(null!, 1));
+            Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion(null, 1));
             Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion("", 1));
             Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion("   ", 1));
         }
@@ -940,8 +940,8 @@ public class MergedPRBugFixTests
         var validTensor = new Tensor<double>([1, 2, 2, 1]);
 
         // ACT & ASSERT: Null arguments should throw ArgumentNullException
-        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(null!, validTensor));
-        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(validTensor, null!));
+        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(null, validTensor));
+        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(validTensor, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -952,8 +952,8 @@ public class MergedPRBugFixTests
         var validTensor = new Tensor<double>([1000]);
 
         // ACT & ASSERT
-        Assert.Throws<ArgumentNullException>(() => stoi.Compute(null!, validTensor));
-        Assert.Throws<ArgumentNullException>(() => stoi.Compute(validTensor, null!));
+        Assert.Throws<ArgumentNullException>(() => stoi.Compute(null, validTensor));
+        Assert.Throws<ArgumentNullException>(() => stoi.Compute(validTensor, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -964,8 +964,8 @@ public class MergedPRBugFixTests
         var validTensor = new Tensor<double>([100]);
 
         // ACT & ASSERT
-        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(null!, validTensor));
-        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(validTensor, null!));
+        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(null, validTensor));
+        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(validTensor, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -990,8 +990,8 @@ public class MergedPRBugFixTests
         var validTensor = new Tensor<double>([100]);
 
         // ACT & ASSERT
-        Assert.Throws<ArgumentNullException>(() => snr.Compute(null!, validTensor));
-        Assert.Throws<ArgumentNullException>(() => snr.Compute(validTensor, null!));
+        Assert.Throws<ArgumentNullException>(() => snr.Compute(null, validTensor));
+        Assert.Throws<ArgumentNullException>(() => snr.Compute(validTensor, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -1018,8 +1018,8 @@ public class MergedPRBugFixTests
         var validBox = new double[] { 0, 0, 0, 5, 5, 5 };
 
         // ACT & ASSERT
-        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(null!, validBox));
-        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(validBox, null!));
+        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(null, validBox));
+        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(validBox, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -1070,7 +1070,7 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT
-            Assert.Throws<ArgumentNullException>(() => writer.AddScalars("test", null!));
+            Assert.Throws<ArgumentNullException>(() => writer.AddScalars("test", null));
         }
         finally
         {
@@ -1089,8 +1089,8 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT
-            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", (float[])null!));
-            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", (float[,])null!));
+            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", (float[]?)null));
+            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", (float[,]?)null));
         }
         finally
         {
@@ -1131,7 +1131,7 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT
-            Assert.Throws<ArgumentNullException>(() => writer.AddImages("test", null!));
+            Assert.Throws<ArgumentNullException>(() => writer.AddImages("test", null));
         }
         finally
         {
@@ -1150,8 +1150,8 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT: Null checks
-            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", null!, new float[] { 0.5f }));
-            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", new int[] { 1 }, null!));
+            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", null, new float[] { 0.5f }));
+            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", new int[] { 1 }, null));
 
             // ACT & ASSERT: Length mismatch
             Assert.Throws<ArgumentException>(() => writer.AddPrCurve("test", new int[] { 1, 0 }, new float[] { 0.5f }));
@@ -1173,7 +1173,7 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT
-            Assert.Throws<ArgumentNullException>(() => writer.LogWeights("layer1", null!));
+            Assert.Throws<ArgumentNullException>(() => writer.LogWeights("layer1", null));
         }
         finally
         {
@@ -1217,7 +1217,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetUniqueGroups(nullVector!));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetUniqueGroups((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required."))));
         Assert.Equal("sensitiveFeature", ex.ParamName);
     }
 
@@ -1229,7 +1229,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetGroupIndices(nullVector!, 1.0));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetGroupIndices((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required.")), 1.0));
         Assert.Equal("sensitiveFeature", ex.ParamName);
     }
 
@@ -1242,7 +1242,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset(nullVector!, indices));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required.")), indices));
         Assert.Equal("vector", ex.ParamName);
     }
 
@@ -1255,7 +1255,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset(vector, nullIndices!));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset(vector, (nullIndices ?? throw new InvalidOperationException("nullIndices is null where it is required."))));
         Assert.Equal("indices", ex.ParamName);
     }
 
@@ -1267,7 +1267,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePositiveRate(nullVector!));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePositiveRate((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required."))));
         Assert.Equal("predictions", ex.ParamName);
     }
 
@@ -1280,7 +1280,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(nullPredictions!, actualLabels));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate((nullPredictions ?? throw new InvalidOperationException("nullPredictions is null where it is required.")), actualLabels));
         Assert.Equal("predictions", ex.ParamName);
     }
 
@@ -1293,7 +1293,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(predictions, nullLabels!));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(predictions, (nullLabels ?? throw new InvalidOperationException("nullLabels is null where it is required."))));
         Assert.Equal("actualLabels", ex.ParamName);
     }
 
@@ -1306,7 +1306,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeFalsePositiveRate(nullPredictions!, actualLabels));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeFalsePositiveRate((nullPredictions ?? throw new InvalidOperationException("nullPredictions is null where it is required.")), actualLabels));
         Assert.Equal("predictions", ex.ParamName);
     }
 
@@ -1319,7 +1319,7 @@ public class MergedPRBugFixTests
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePrecision(nullPredictions!, actualLabels));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePrecision((nullPredictions ?? throw new InvalidOperationException("nullPredictions is null where it is required.")), actualLabels));
         Assert.Equal("predictions", ex.ParamName);
     }
 
@@ -1362,7 +1362,7 @@ public class MergedPRBugFixTests
         AiDotNet.Models.HyperparameterTrial<double>? nullTrial = null;
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune(nullTrial!, 1, 0.5));
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune((nullTrial ?? throw new InvalidOperationException("nullTrial is null where it is required.")), 1, 0.5));
         Assert.Equal("trial", ex.ParamName);
     }
 
@@ -1374,7 +1374,7 @@ public class MergedPRBugFixTests
         string? nullTrialId = null;
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune(nullTrialId!, 1, 0.5));
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune((nullTrialId ?? throw new InvalidOperationException("nullTrialId is null where it is required.")), 1, 0.5));
         Assert.Equal("trialId", ex.ParamName);
     }
 
@@ -1386,7 +1386,7 @@ public class MergedPRBugFixTests
         string? nullTrialId = null;
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => pruner.MarkComplete(nullTrialId!));
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.MarkComplete((nullTrialId ?? throw new InvalidOperationException("nullTrialId is null where it is required."))));
         Assert.Equal("trialId", ex.ParamName);
     }
 
@@ -1398,7 +1398,7 @@ public class MergedPRBugFixTests
         Random? nullRandom = null;
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom!));
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample((nullRandom ?? throw new InvalidOperationException("nullRandom is null where it is required."))));
         Assert.Equal("random", ex.ParamName);
     }
 
@@ -1410,7 +1410,7 @@ public class MergedPRBugFixTests
         Random? nullRandom = null;
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom!));
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample((nullRandom ?? throw new InvalidOperationException("nullRandom is null where it is required."))));
         Assert.Equal("random", ex.ParamName);
     }
 
@@ -1422,7 +1422,7 @@ public class MergedPRBugFixTests
         Random? nullRandom = null;
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom!));
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample((nullRandom ?? throw new InvalidOperationException("nullRandom is null where it is required."))));
         Assert.Equal("random", ex.ParamName);
     }
 
@@ -1448,7 +1448,7 @@ public class MergedPRBugFixTests
     public async Task ParameterDistribution_Sample_ValidInputs_WorksCorrectly()
     {
         // ARRANGE
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var continuousDist = new AiDotNet.Models.ContinuousDistribution { Min = 0.0, Max = 1.0 };
         var integerDist = new AiDotNet.Models.IntegerDistribution { Min = 0, Max = 10, Step = 2 };
         var categoricalDist = new AiDotNet.Models.CategoricalDistribution { Choices = new List<object> { "a", "b", "c" } };
@@ -1579,7 +1579,7 @@ public class MergedPRBugFixTests
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetExperiment(nullId!));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetExperiment((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
             Assert.Equal("experimentId", ex.ParamName);
         }
         finally
@@ -1599,7 +1599,7 @@ public class MergedPRBugFixTests
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetRun(nullId!));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetRun((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
             Assert.Equal("runId", ex.ParamName);
         }
         finally
@@ -1687,7 +1687,7 @@ public class MergedPRBugFixTests
         string? nullName = null;
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => run.GetLatestMetric(nullName!));
+        var ex = Assert.Throws<ArgumentNullException>(() => run.GetLatestMetric((nullName ?? throw new InvalidOperationException("nullName is null where it is required."))));
         Assert.Equal("metricName", ex.ParamName);
     }
 
@@ -1767,7 +1767,7 @@ public class MergedPRBugFixTests
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.ListRuns(nullId!));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.ListRuns((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
             Assert.Equal("experimentId", ex.ParamName);
         }
         finally
@@ -1787,7 +1787,7 @@ public class MergedPRBugFixTests
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteExperiment(nullId!));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteExperiment((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
             Assert.Equal("experimentId", ex.ParamName);
         }
         finally
@@ -1807,7 +1807,7 @@ public class MergedPRBugFixTests
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteRun(nullId!));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteRun((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
             Assert.Equal("runId", ex.ParamName);
         }
         finally
@@ -1874,7 +1874,7 @@ public class MergedPRBugFixTests
             // ACT & ASSERT
             Vector<double>? nullData = null;
             var ex = Assert.Throws<ArgumentNullException>(() =>
-                AiDotNet.DistributedTraining.CommunicationManager.ReduceScatter<double>(nullData!, AiDotNet.DistributedTraining.ReductionOperation.Sum));
+                AiDotNet.DistributedTraining.CommunicationManager.ReduceScatter<double>((nullData ?? throw new InvalidOperationException("nullData is null where it is required.")), AiDotNet.DistributedTraining.ReductionOperation.Sum));
             Assert.Equal("data", ex.ParamName);
         }
         finally
@@ -1892,7 +1892,7 @@ public class MergedPRBugFixTests
         // ACT & ASSERT - CalculateDistributionStats throws on null input
         Assert.Throws<ArgumentNullException>(() =>
             analyzer.CalculateDistributionStats(
-                (List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>)null));
+                (List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>?)null));
     }
 
     [Fact(Timeout = 60000)]
@@ -1915,7 +1915,7 @@ public class MergedPRBugFixTests
         // ACT & ASSERT
         AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateDefault(nullBackend!));
+            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateDefault((nullBackend ?? throw new InvalidOperationException("nullBackend is null where it is required."))));
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
@@ -1925,7 +1925,7 @@ public class MergedPRBugFixTests
         // ACT & ASSERT
         AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateForHighBandwidth(nullBackend!));
+            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateForHighBandwidth((nullBackend ?? throw new InvalidOperationException("nullBackend is null where it is required."))));
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
@@ -1935,7 +1935,7 @@ public class MergedPRBugFixTests
         // ACT & ASSERT
         AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateForLowBandwidth(nullBackend!));
+            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateForLowBandwidth((nullBackend ?? throw new InvalidOperationException("nullBackend is null where it is required."))));
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
@@ -2012,7 +2012,7 @@ public class MergedPRBugFixTests
         AiDotNet.Reasoning.Models.ReasoningStep<double>? nullStep = null;
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => chain.AddStep(nullStep!));
+        var ex = Assert.Throws<ArgumentNullException>(() => chain.AddStep((nullStep ?? throw new InvalidOperationException("nullStep is null where it is required."))));
         Assert.Equal("step", ex.ParamName);
     }
 

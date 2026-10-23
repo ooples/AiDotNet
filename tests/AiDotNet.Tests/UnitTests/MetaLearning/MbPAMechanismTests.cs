@@ -342,7 +342,7 @@ public class MbPAMechanismTests
     {
         var model = new IdentityEmbeddingModel(FeatureDim);
         Assert.Throws<ArgumentNullException>(() =>
-            new MbPAAlgorithm<double, Matrix<double>, Vector<double>>(null!));
+            new MbPAAlgorithm<double, Matrix<double>, Vector<double>>(null));
 
         // ThrowsAny, not Throws: MetaLearnerBase validates IMetaLearnerOptions before this class's
         // own range checks run, so the exact ArgumentException subtype is the base's choice. What
@@ -438,7 +438,7 @@ public class MbPAMechanismTests
 
     private static MbPAAlgorithm<double, Matrix<double>, Vector<double>> BuildAlgorithm(out Probe probe)
     {
-        var rng = new Random(4);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4);
         var support = new Matrix<double>(6, FeatureDim);
         var query = new Matrix<double>(4, FeatureDim);
         for (int i = 0; i < support.Rows; i++)

@@ -61,7 +61,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var detector = new NeuralNetworkFitDetector<double, Matrix<double>, Vector<double>>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => detector.DetectFit(null!));
+            Assert.Throws<ArgumentNullException>(() => detector.DetectFit(null));
         }
 
         [Fact(Timeout = 60000)]

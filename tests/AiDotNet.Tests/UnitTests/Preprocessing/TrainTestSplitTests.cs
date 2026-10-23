@@ -171,8 +171,8 @@ public class TrainTestSplitTests
         var y = CreateVector(10);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.Split(null!, y));
-        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.Split(X, null!));
+        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.Split(null, y));
+        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.Split(X, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -299,7 +299,7 @@ public class TrainTestSplitTests
     public async Task SplitX_NullInput_ThrowsException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.SplitX(null!));
+        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.SplitX(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -413,8 +413,8 @@ public class TrainTestSplitTests
         var y = CreateVector(10);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.KFoldSplit(null!, y));
-        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.KFoldSplit(X, null!));
+        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.KFoldSplit(null, y));
+        Assert.Throws<ArgumentNullException>(() => TrainTestSplit<double>.KFoldSplit(X, null));
     }
 
     [Fact(Timeout = 60000)]

@@ -125,7 +125,7 @@ public class InputLayerMultiDimShapeIssue1325IntegrationTests
     {
         // ParamName should match the public constructor parameter name ("inputShape"),
         // not the private helper's internal name ("shape"). CodeRabbit feedback on PR #1326.
-        var ex = Assert.Throws<ArgumentNullException>(() => new InputLayer<float>((int[])null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => new InputLayer<float>((int[]?)null));
         Assert.Equal("inputShape", ex.ParamName);
     }
 

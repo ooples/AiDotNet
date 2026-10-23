@@ -815,7 +815,7 @@ public class ReasoningIntegrationTests
     public async Task MajorityVotingAggregator_Aggregate_SkipsEmptyAnswers()
     {
         var aggregator = new MajorityVotingAggregator<double>();
-        var answers = new List<string> { "", "valid", " ", "valid", null! };
+        var answers = new List<string> { "", "valid", " ", "valid", null };
         var scores = new Vector<double>(answers.Count);
 
         var result = aggregator.Aggregate(answers, scores);
@@ -839,7 +839,7 @@ public class ReasoningIntegrationTests
         var aggregator = new MajorityVotingAggregator<double>();
         var scores = new Vector<double>(0);
 
-        Assert.Throws<ArgumentException>(() => aggregator.Aggregate(null!, scores));
+        Assert.Throws<ArgumentException>(() => aggregator.Aggregate(null, scores));
     }
 
     [Fact(Timeout = 120000)]
@@ -965,7 +965,7 @@ public class ReasoningIntegrationTests
         var config = new ReasoningConfig();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(null!, generator, evaluator, config));
+            search.SearchAsync(null, generator, evaluator, config));
     }
 
     [Fact(Timeout = 120000)]
@@ -977,7 +977,7 @@ public class ReasoningIntegrationTests
         var config = new ReasoningConfig();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(root, null!, evaluator, config));
+            search.SearchAsync(root, null, evaluator, config));
     }
 
     [Fact(Timeout = 120000)]
@@ -989,7 +989,7 @@ public class ReasoningIntegrationTests
         var config = new ReasoningConfig();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(root, generator, null!, config));
+            search.SearchAsync(root, generator, null, config));
     }
 
     [Fact(Timeout = 120000)]
@@ -1001,7 +1001,7 @@ public class ReasoningIntegrationTests
         var evaluator = new MockThoughtEvaluator<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(root, generator, evaluator, null!));
+            search.SearchAsync(root, generator, evaluator, null));
     }
 
     [Fact(Timeout = 120000)]

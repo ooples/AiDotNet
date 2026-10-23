@@ -249,7 +249,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                _retriever.Retrieve(null!, topK: 5));
+                _retriever.Retrieve(null, topK: 5));
         }
 
         [Fact(Timeout = 60000)]

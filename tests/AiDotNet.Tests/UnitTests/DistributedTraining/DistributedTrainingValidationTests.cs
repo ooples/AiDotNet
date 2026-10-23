@@ -23,7 +23,7 @@ public class DistributedTrainingValidationTests
     public async Task ShardingConfiguration_Constructor_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new ShardingConfiguration<double>(null!));
+            new ShardingConfiguration<double>(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -59,21 +59,21 @@ public class DistributedTrainingValidationTests
     public async Task ShardingConfiguration_CreateDefault_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ShardingConfiguration<double>.CreateDefault(null!));
+            ShardingConfiguration<double>.CreateDefault(null));
     }
 
     [Fact(Timeout = 60000)]
     public async Task ShardingConfiguration_CreateForHighBandwidth_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ShardingConfiguration<double>.CreateForHighBandwidth(null!));
+            ShardingConfiguration<double>.CreateForHighBandwidth(null));
     }
 
     [Fact(Timeout = 60000)]
     public async Task ShardingConfiguration_CreateForLowBandwidth_ThrowsOnNullBackend()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ShardingConfiguration<double>.CreateForLowBandwidth(null!));
+            ShardingConfiguration<double>.CreateForLowBandwidth(null));
     }
 
     #endregion

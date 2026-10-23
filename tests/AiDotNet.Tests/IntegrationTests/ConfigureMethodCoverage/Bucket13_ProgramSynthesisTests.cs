@@ -77,7 +77,7 @@ public class Bucket13_ProgramSynthesisTests : ConfigureMethodTestBase
             .BuildAsync();
 
         Assert.NotNull(result.ProgramSynthesisServingClientOptions);
-        Assert.Equal(sentinelEndpoint, result.ProgramSynthesisServingClientOptions!.BaseAddress);
+        Assert.Equal(sentinelEndpoint, result.ProgramSynthesisServingClientOptions.BaseAddress);
     }
 
     /// <summary>

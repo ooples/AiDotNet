@@ -529,7 +529,7 @@ public class DefaultGradientCacheIntegrationTests
         var cache = new DefaultGradientCache<double>();
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.GetCachedGradient(null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.GetCachedGradient(null));
         Assert.Equal("key", ex.ParamName);
     }
 
@@ -542,7 +542,7 @@ public class DefaultGradientCacheIntegrationTests
         var gradient = new TestGradientModel<double>(1.0);
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheGradient(null!, gradient));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheGradient(null, gradient));
         Assert.Equal("key", ex.ParamName);
     }
 
@@ -554,7 +554,7 @@ public class DefaultGradientCacheIntegrationTests
         var cache = new DefaultGradientCache<double>();
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheGradient("key", null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheGradient("key", null));
         Assert.Equal("gradient", ex.ParamName);
     }
 

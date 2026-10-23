@@ -36,8 +36,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
 
             var tool = new RecordingTool("add", "Adds two numbers.", args =>
             {
-                var a = (int)args["a"];
-                var b = (int)args["b"];
+                var a = (int)(args["a"] ?? throw new InvalidOperationException("args[\"a\"] is null where it is required."));
+                var b = (int)(args["b"] ?? throw new InvalidOperationException("args[\"b\"] is null where it is required."));
                 return (a + b).ToString();
             });
             var tools = new ToolCollection().Add(tool);
@@ -56,8 +56,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
 
             // The tool was invoked with the model's arguments.
             Assert.Single(tool.Invocations);
-            Assert.Equal(2, (int)tool.Invocations[0]["a"]);
-            Assert.Equal(3, (int)tool.Invocations[0]["b"]);
+            Assert.Equal(2, (int)(tool.Invocations[0]["a"] ?? throw new InvalidOperationException("tool.Invocations[0][\"a\"] is null where it is required.")));
+            Assert.Equal(3, (int)(tool.Invocations[0]["b"] ?? throw new InvalidOperationException("tool.Invocations[0][\"b\"] is null where it is required.")));
 
             // The second model call saw the tool-result message appended to the transcript.
             var secondRequest = client.Requests[1];

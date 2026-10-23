@@ -49,7 +49,7 @@ public class PiecewiseLinearEncodingLayerTests
         var loss = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.ReduceSum(output, null);
         var grads = tape.ComputeGradients(loss, new[] { input });
         Assert.True(grads.TryGetValue(input, out var g) && g is not null, "no gradient reached the input");
-        Assert.Equal(1.0, g![0], 9);
+        Assert.Equal(1.0, g[0], 9);
     }
 
     [Fact]

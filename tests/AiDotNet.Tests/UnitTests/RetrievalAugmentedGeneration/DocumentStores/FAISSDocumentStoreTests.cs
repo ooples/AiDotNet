@@ -92,7 +92,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new FAISSDocumentStore<float>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.Add(null!));
+            Assert.Throws<ArgumentNullException>(() => store.Add(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -103,7 +103,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var doc = new VectorDocument<float>
             {
                 Document = new Document<float>("doc1", "Test"),
-                Embedding = null!
+                Embedding = null
             };
 
             // Act & Assert
@@ -230,7 +230,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new FAISSDocumentStore<float>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.AddBatch(null!));
+            Assert.Throws<ArgumentNullException>(() => store.AddBatch(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -338,7 +338,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new FAISSDocumentStore<float>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.GetSimilar(null!, topK: 5));
+            Assert.Throws<ArgumentNullException>(() => store.GetSimilar(null, topK: 5));
         }
 
         [Fact(Timeout = 60000)]
@@ -487,7 +487,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                store.GetSimilarWithFilters(queryVector, topK: 5, null!));
+                store.GetSimilarWithFilters(queryVector, topK: 5, null));
         }
 
         #endregion
@@ -531,7 +531,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new FAISSDocumentStore<float>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => store.GetById(null!));
+            Assert.Throws<ArgumentException>(() => store.GetById(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -625,7 +625,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new FAISSDocumentStore<float>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => store.Remove(null!));
+            Assert.Throws<ArgumentException>(() => store.Remove(null));
         }
 
         #endregion

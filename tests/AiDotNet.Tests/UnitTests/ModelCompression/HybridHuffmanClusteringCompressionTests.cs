@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new HybridHuffmanClusteringCompression<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
+            Assert.Throws<ArgumentNullException>(() => compression.Compress(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -134,7 +134,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                compression.Decompress(null!, metadata));
+                compression.Decompress(null, metadata));
         }
 
         [Fact(Timeout = 60000)]
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                compression.Decompress(weights, null!));
+                compression.Decompress(weights, null));
         }
 
         #endregion
@@ -182,7 +182,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                compression.GetCompressedSize((Vector<double>)null!, metadata));
+                compression.GetCompressedSize((Vector<double>?)null, metadata));
         }
 
         [Fact(Timeout = 60000)]
@@ -194,7 +194,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                compression.GetCompressedSize(weights, null!));
+                compression.GetCompressedSize(weights, null));
         }
 
         #endregion
@@ -283,7 +283,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new HybridCompressionMetadata<double>(null!, huffmanMetadata, 10));
+                new HybridCompressionMetadata<double>(null, huffmanMetadata, 10));
         }
 
         [Fact(Timeout = 60000)]
@@ -295,7 +295,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new HybridCompressionMetadata<double>(clusteringMetadata, null!, 10));
+                new HybridCompressionMetadata<double>(clusteringMetadata, null, 10));
         }
 
         [Fact(Timeout = 60000)]
@@ -336,7 +336,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new HybridCompressionMetadata(null!, new object()));
+                new HybridCompressionMetadata(null, new object()));
         }
 
         [Fact(Timeout = 60000)]
@@ -344,7 +344,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new HybridCompressionMetadata(new object(), null!));
+                new HybridCompressionMetadata(new object(), null));
         }
 #pragma warning restore CS0618
 

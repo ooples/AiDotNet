@@ -65,11 +65,11 @@ public class VisionAndTabularBenchmarkingIntegrationTests
             .BuildAsync();
 
         Assert.NotNull(result.BenchmarkReport);
-        var suite = GetSuite(result.BenchmarkReport!, BenchmarkSuite.TabularNonIID);
+        var suite = GetSuite(result.BenchmarkReport, BenchmarkSuite.TabularNonIID);
         Assert.Equal(BenchmarkExecutionStatus.Succeeded, suite.Status);
         Assert.Equal(4.0, GetMetric(suite, BenchmarkMetric.TotalEvaluated));
         Assert.NotNull(suite.DataSelection);
-        Assert.Equal(2, suite.DataSelection!.ClientsUsed);
+        Assert.Equal(2, suite.DataSelection.ClientsUsed);
     }
 
     [Fact(Timeout = 120000)]
@@ -111,10 +111,10 @@ public class VisionAndTabularBenchmarkingIntegrationTests
                 .BuildAsync();
 
             Assert.NotNull(result.BenchmarkReport);
-            var suite = GetSuite(result.BenchmarkReport!, BenchmarkSuite.FEMNIST);
+            var suite = GetSuite(result.BenchmarkReport, BenchmarkSuite.FEMNIST);
             Assert.Equal(BenchmarkExecutionStatus.Succeeded, suite.Status);
             Assert.NotNull(suite.DataSelection);
-            Assert.Equal(1, suite.DataSelection!.ClientsUsed);
+            Assert.Equal(1, suite.DataSelection.ClientsUsed);
         }
         finally
         {
@@ -180,7 +180,7 @@ public class VisionAndTabularBenchmarkingIntegrationTests
                 .BuildAsync();
 
             Assert.NotNull(result.BenchmarkReport);
-            var suite = GetSuite(result.BenchmarkReport!, BenchmarkSuite.CIFAR10);
+            var suite = GetSuite(result.BenchmarkReport, BenchmarkSuite.CIFAR10);
             Assert.Equal(BenchmarkExecutionStatus.Succeeded, suite.Status);
             Assert.Equal(2.0, GetMetric(suite, BenchmarkMetric.TotalEvaluated));
         }
@@ -244,7 +244,7 @@ public class VisionAndTabularBenchmarkingIntegrationTests
                 .BuildAsync();
 
             Assert.NotNull(result.BenchmarkReport);
-            var suite = GetSuite(result.BenchmarkReport!, BenchmarkSuite.CIFAR100);
+            var suite = GetSuite(result.BenchmarkReport, BenchmarkSuite.CIFAR100);
             Assert.Equal(BenchmarkExecutionStatus.Succeeded, suite.Status);
             Assert.Equal(2.0, GetMetric(suite, BenchmarkMetric.TotalEvaluated));
         }

@@ -211,7 +211,7 @@ public class FinanceDataPreprocessorIntegrationTests
     {
         var provider = new MarketDataProvider<double>();
 
-        Assert.Throws<ArgumentNullException>(() => provider.Add(null!));
+        Assert.Throws<ArgumentNullException>(() => provider.Add(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -219,7 +219,7 @@ public class FinanceDataPreprocessorIntegrationTests
     {
         var provider = new MarketDataProvider<double>();
 
-        Assert.Throws<ArgumentNullException>(() => provider.AddRange(null!));
+        Assert.Throws<ArgumentNullException>(() => provider.AddRange(null));
     }
 
     #endregion
@@ -318,7 +318,7 @@ public class FinanceDataPreprocessorIntegrationTests
         var preprocessor = new FinancialPreprocessor<double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            preprocessor.CreateFeatureTensor(null!));
+            preprocessor.CreateFeatureTensor(null));
     }
 
     #endregion
@@ -505,7 +505,7 @@ public class FinanceDataPreprocessorIntegrationTests
         var preprocessor = new FinancialPreprocessor<double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            preprocessor.NormalizeMinMax(null!, out _));
+            preprocessor.NormalizeMinMax(null, out _));
     }
 
     #endregion
@@ -595,7 +595,7 @@ public class FinanceDataPreprocessorIntegrationTests
         var preprocessor = new FinancialPreprocessor<double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            preprocessor.NormalizeZScore(null!, out _));
+            preprocessor.NormalizeZScore(null, out _));
     }
 
     #endregion

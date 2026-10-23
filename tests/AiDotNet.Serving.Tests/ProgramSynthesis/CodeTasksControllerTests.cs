@@ -26,7 +26,7 @@ public sealed class CodeTasksControllerTests
                 return false;
             }));
 
-        var result = await controller.Completion(null!, CancellationToken.None);
+        var result = await controller.Completion(null, CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var payload = Assert.IsType<CodeCompletionResult>(badRequest.Value);

@@ -21,7 +21,7 @@ public class SimplePromptTemplateTests
     [Fact(Timeout = 60000)]
     public async Task Constructor_WithNullTemplate_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new SimplePromptTemplate(null!));
+        Assert.Throws<ArgumentNullException>(() => new SimplePromptTemplate(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -64,7 +64,7 @@ public class SimplePromptTemplateTests
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
 
-        Assert.Throws<ArgumentNullException>(() => template.Format(null!));
+        Assert.Throws<ArgumentNullException>(() => template.Format(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -101,7 +101,7 @@ public class SimplePromptTemplateTests
     {
         var template = new SimplePromptTemplate("Translate {text} to {language}");
 
-        var result = template.Validate(null!);
+        var result = template.Validate(null);
 
         Assert.False(result);
     }

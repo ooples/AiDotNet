@@ -40,7 +40,7 @@ public class TextProcessingHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SplitIntoSentences_NullString_ReturnsEmpty()
     {
-        var sentences = TextProcessingHelper.SplitIntoSentences(null!);
+        var sentences = TextProcessingHelper.SplitIntoSentences(null);
         Assert.Empty(sentences);
     }
 
@@ -101,7 +101,7 @@ public class TextProcessingHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Tokenize_NullString_ReturnsEmpty()
     {
-        var tokens = TextProcessingHelper.Tokenize(null!);
+        var tokens = TextProcessingHelper.Tokenize(null);
         Assert.Empty(tokens);
     }
 

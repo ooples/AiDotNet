@@ -122,7 +122,7 @@ public class ValidationHelperIntegrationTests
         // returned (or that let y.Length throw a contextless
         // NullReferenceException) doesn't slip through.
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            ValidationHelper<double>.ValidatePoissonData(null!));
+            ValidationHelper<double>.ValidatePoissonData(null));
         Assert.Equal("y", ex.ParamName);
         Assert.Contains("Poisson target vector cannot be null", ex.Message);
     }

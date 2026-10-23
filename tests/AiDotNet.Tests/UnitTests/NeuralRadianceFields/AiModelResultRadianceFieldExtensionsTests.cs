@@ -107,7 +107,7 @@ public class AiModelResultRadianceFieldExtensionsTests
         var pos = new Vector<float>(3);
         var rot = new Matrix<float>(3, 3);
         Assert.Throws<ArgumentNullException>(
-            () => result!.RenderImage(pos, rot, 8, 8, 100f));
+            () => (result ?? throw new InvalidOperationException("result is null where it is required.")).RenderImage(pos, rot, 8, 8, 100f));
     }
 
     [Fact]

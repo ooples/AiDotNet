@@ -261,7 +261,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRetriever<double>(null!, embeddingModel));
+                new GraphRetriever<double>(null, embeddingModel));
         }
 
         [Fact(Timeout = 60000)]
@@ -272,7 +272,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRetriever<double>(store, null!));
+                new GraphRetriever<double>(store, null));
         }
 
         [Fact(Timeout = 60000)]
@@ -280,7 +280,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRetriever<double>(null!, null!));
+                new GraphRetriever<double>(null, null));
         }
 
         #endregion
@@ -369,7 +369,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null!).ToList());
+                retriever.Retrieve(null).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -690,7 +690,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                retriever.Retrieve("content", topK: 5, null!).ToList());
+                retriever.Retrieve("content", topK: 5, null).ToList());
         }
 
         #endregion

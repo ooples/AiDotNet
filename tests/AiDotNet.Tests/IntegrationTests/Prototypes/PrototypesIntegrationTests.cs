@@ -432,7 +432,7 @@ public class PrototypesIntegrationTests
         var gradient = PrototypeVector<double>.Ones(5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.UpdateParameters(null!, gradient));
+        Assert.Throws<ArgumentNullException>(() => optimizer.UpdateParameters(null, gradient));
     }
 
     [Fact(Timeout = 120000)]
@@ -443,7 +443,7 @@ public class PrototypesIntegrationTests
         var parameters = PrototypeVector<double>.Ones(5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.UpdateParameters(parameters, null!));
+        Assert.Throws<ArgumentNullException>(() => optimizer.UpdateParameters(parameters, null));
     }
 
     [Fact(Timeout = 120000)]

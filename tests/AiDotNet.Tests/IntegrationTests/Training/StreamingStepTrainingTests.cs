@@ -41,7 +41,7 @@ public class StreamingStepTrainingTests : IDisposable
 
     private static (Tensor<float>[] x, Tensor<float>[] y) Data(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<float>[N];
         var y = new Tensor<float>[N];
         for (int i = 0; i < N; i++)
@@ -111,7 +111,7 @@ public class StreamingStepTrainingTests : IDisposable
     private static Vector<float> InitialWeights()
     {
         var probe = Model(Optimizer(1));
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var w = new float[probe.GetParameters().Length];
         for (int i = 0; i < w.Length; i++) w[i] = (float)(rng.NextDouble() * 0.6 - 0.3);
         return new Vector<float>(w);
@@ -290,7 +290,7 @@ public class StreamingStepTrainingTests : IDisposable
 
         var schedules = AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanLearningRateSchedules();
         Assert.NotNull(schedules);
-        var external = Assert.IsType<AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule>(Assert.Single(schedules!));
+        var external = Assert.IsType<AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule>(Assert.Single(schedules));
         Assert.Equal(after, external.LearningRate, 12);
     }
 
@@ -664,7 +664,7 @@ public class StreamingStepTrainingTests : IDisposable
         await Train(7, resume: false, ckpt, InitialWeights());
         var latest = ckpt.LoadLatestCheckpoint();
         Assert.NotNull(latest);
-        Assert.Equal(7, latest!.Step);
+        Assert.Equal(7, latest.Step);
     }
 
     [Fact(Timeout = 120000)]
@@ -717,7 +717,7 @@ public class StreamingStepTrainingTests : IDisposable
         var latest = reopened.LoadLatestCheckpoint();
         Assert.NotNull(latest);
         Assert.Equal(id, saved.CheckpointId);
-        Assert.Equal(id, latest!.CheckpointId);
+        Assert.Equal(id, latest.CheckpointId);
         Assert.Equal(saved.CreatedAt, latest.CreatedAt);
     }
 

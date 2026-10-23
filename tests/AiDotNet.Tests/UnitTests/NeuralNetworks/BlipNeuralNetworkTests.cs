@@ -26,7 +26,7 @@ public class BlipNeuralNetworkTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new BlipNeuralNetwork<float>(architecture, null!, "text_encoder.onnx", "decoder.onnx", tokenizer));
+            new BlipNeuralNetwork<float>(architecture, null, "text_encoder.onnx", "decoder.onnx", tokenizer));
 
         Assert.Contains("Vision encoder path", exception.Message);
     }
@@ -54,7 +54,7 @@ public class BlipNeuralNetworkTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new BlipNeuralNetwork<float>(architecture, "vision_encoder.onnx", null!, "decoder.onnx", tokenizer));
+            new BlipNeuralNetwork<float>(architecture, "vision_encoder.onnx", null, "decoder.onnx", tokenizer));
 
         Assert.Contains("Text encoder path", exception.Message);
     }
@@ -82,7 +82,7 @@ public class BlipNeuralNetworkTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new BlipNeuralNetwork<float>(architecture, "vision_encoder.onnx", "text_encoder.onnx", null!, tokenizer));
+            new BlipNeuralNetwork<float>(architecture, "vision_encoder.onnx", "text_encoder.onnx", null, tokenizer));
 
         Assert.Contains("Text decoder path", exception.Message);
     }

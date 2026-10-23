@@ -68,7 +68,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public async Task Constructor_WithNullPath_ThrowsArgumentException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => new FileGraphStore<double>(null!));
+            Assert.Throws<ArgumentException>(() => new FileGraphStore<double>(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             using var store = new FileGraphStore<double>(storagePath);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.AddNode(null!));
+            Assert.Throws<ArgumentNullException>(() => store.AddNode(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -182,7 +182,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             using var store = new FileGraphStore<double>(storagePath);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.AddEdge(null!));
+            Assert.Throws<ArgumentNullException>(() => store.AddEdge(null));
         }
 
         [Fact(Timeout = 60000)]

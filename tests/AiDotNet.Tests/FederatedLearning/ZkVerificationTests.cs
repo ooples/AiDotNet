@@ -25,7 +25,7 @@ public class ZkVerificationTests
     private static Tensor<double> CreateGradient(int size, double scale = 0.5)
     {
         var values = new double[size];
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < size; i++)
         {
             values[i] = (rng.NextDouble() * 2.0 - 1.0) * scale;

@@ -25,7 +25,7 @@ public class ClipNeuralNetworkTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new ClipNeuralNetwork<float>(architecture, null!, "text_encoder.onnx", tokenizer));
+            new ClipNeuralNetwork<float>(architecture, null, "text_encoder.onnx", tokenizer));
 
         Assert.Contains("Image encoder path", exception.Message);
     }
@@ -53,7 +53,7 @@ public class ClipNeuralNetworkTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentException>(() =>
-            new ClipNeuralNetwork<float>(architecture, "image_encoder.onnx", null!, tokenizer));
+            new ClipNeuralNetwork<float>(architecture, "image_encoder.onnx", null, tokenizer));
 
         Assert.Contains("Text encoder path", exception.Message);
     }

@@ -78,7 +78,7 @@ public class BpeTokenizerTests
         string? text = null;
 
         // Act
-        var tokens = _tokenizer.Tokenize(text!);
+        var tokens = _tokenizer.Tokenize((text ?? throw new InvalidOperationException("text is null where it is required.")));
 
         // Assert
         Assert.NotNull(tokens);
@@ -367,7 +367,7 @@ public class BpeTokenizerTests
     public async Task Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
-            BpeTokenizer.Train(null!, 100));
+            BpeTokenizer.Train(null, 100));
     }
 
     [Fact(Timeout = 60000)]

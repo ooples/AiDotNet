@@ -75,7 +75,7 @@ public class NullableReferenceTypeTests
 #pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
         object? boxed = null;
         // This cast succeeds at runtime even though the target type is "non-nullable".
-        string value = (string)boxed;
+        string value = (string)(boxed ?? throw new InvalidOperationException("(string)boxed is null where it is required."));
 #pragma warning restore CS8600
         Assert.Null(value);
     }

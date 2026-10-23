@@ -15,7 +15,7 @@ public class S6ScanGradientTest
     public async Task S6Scan_BackwardGradient_MatchesNumerical()
     {
         int batch = 1, seqLen = 2, innerDim = 3, stateDim = 2;
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         var x = new Tensor<double>(new[] { batch, seqLen, innerDim });
         var delta = new Tensor<double>(new[] { batch, seqLen, innerDim });
@@ -37,7 +37,7 @@ public class S6ScanGradientTest
             x, delta, aLog, b, c, d, batch, seqLen, innerDim, stateDim);
 
         // Random projection loss for gradient checking
-        var rngLoss = new Random(12345);
+        var rngLoss = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(12345);
         var projWeights = new double[output.Length];
         for (int i = 0; i < projWeights.Length; i++)
             projWeights[i] = rngLoss.NextDouble() * 2.0 - 1.0;
@@ -95,7 +95,7 @@ public class S6ScanGradientTest
     public async Task S6Scan_BackwardDeltaGradient_MatchesNumerical()
     {
         int batch = 1, seqLen = 2, innerDim = 3, stateDim = 2;
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         var x = new Tensor<double>(new[] { batch, seqLen, innerDim });
         var delta = new Tensor<double>(new[] { batch, seqLen, innerDim });
@@ -114,7 +114,7 @@ public class S6ScanGradientTest
         var (output, hidden) = S6Scan<double>.SequentialScanForward(
             x, delta, aLog, b, c, d, batch, seqLen, innerDim, stateDim);
 
-        var rngLoss = new Random(12345);
+        var rngLoss = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(12345);
         var projWeights = new double[output.Length];
         for (int i = 0; i < projWeights.Length; i++)
             projWeights[i] = rngLoss.NextDouble() * 2.0 - 1.0;

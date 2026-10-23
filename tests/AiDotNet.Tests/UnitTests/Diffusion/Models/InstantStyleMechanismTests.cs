@@ -122,8 +122,8 @@ public class InstantStyleMechanismTests
         Assert.Throws<ArgumentException>(
             () => model.DecoupleStyleFromContent(Features(8, 1, 1), Features(4, 1, 1)));
         Assert.Throws<ArgumentNullException>(
-            () => model.DecoupleStyleFromContent(null!, Features(4, 1, 1)));
+            () => model.DecoupleStyleFromContent(null, Features(4, 1, 1)));
         Assert.Throws<ArgumentNullException>(
-            () => model.DecoupleStyleFromContent(Features(4, 1, 1), null!));
+            () => model.DecoupleStyleFromContent(Features(4, 1, 1), null));
     }
 }

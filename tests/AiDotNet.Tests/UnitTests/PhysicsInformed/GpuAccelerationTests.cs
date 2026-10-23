@@ -271,7 +271,7 @@ public class GpuAccelerationTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new GpuPINNTrainer<double>(null!));
+            new GpuPINNTrainer<double>(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -329,7 +329,7 @@ public class GpuAccelerationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            trainer.UpdateOptions(null!));
+            trainer.UpdateOptions(null));
     }
 
     [Fact(Timeout = 60000)]

@@ -55,7 +55,7 @@ public class RAGDocumentStoreIntegrationTests
     {
         var store = new InMemoryDocumentStore<double>(vectorDimension: 3);
 
-        Assert.Throws<ArgumentNullException>(() => store.Add(null!));
+        Assert.Throws<ArgumentNullException>(() => store.Add(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -377,7 +377,7 @@ public class RAGDocumentStoreIntegrationTests
         var store = new InMemoryDocumentStore<double>(vectorDimension: 2);
 
         Assert.Throws<ArgumentNullException>(() =>
-            store.AddBatch(null!));
+            store.AddBatch(null));
     }
 
     [Fact(Timeout = 120000)]

@@ -209,7 +209,7 @@ public class WordPieceTokenizerTests
     public async Task Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
-            WordPieceTokenizer.Train(null!, 100));
+            WordPieceTokenizer.Train(null, 100));
     }
 
     [Fact(Timeout = 60000)]

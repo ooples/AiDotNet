@@ -91,7 +91,7 @@ public class ShapeRelationDiscoveryTests
 
         // Channels are fixed by the layer, independent of the input.
         Assert.Equal(AxisRelation.Form.Fixed, findings[0].Relation?.Kind);
-        Assert.Equal(6, findings[0].Relation!.Value);
+        Assert.Equal(6, (findings[0].Relation ?? throw new InvalidOperationException("findings[0].Relation is null where it is required.")).Value);
 
         // Height and Width follow the window formula with THIS layer's terms.
         foreach (int axis in new[] { 1, 2 })
@@ -104,7 +104,7 @@ public class ShapeRelationDiscoveryTests
             // and simplest description of that - so accept either, but require the recovered relation to
             // REPRODUCE every observation, which is the property that actually matters.
             Assert.True(
-                relation!.Kind is AxisRelation.Form.Window or AxisRelation.Form.Same
+                relation.Kind is AxisRelation.Form.Window or AxisRelation.Form.Same
                     or AxisRelation.Form.Scaled,
                 $"axis {axis} fitted an unexpected form: {relation.Kind}");
         }
@@ -254,7 +254,7 @@ public class ShapeRelationDiscoveryTests
         for (int i = 0; i < findings.Count; i++)
         {
             if (findings[i].Relation is null) return null;
-            if (!findings[i].Relation!.TryResolve(named, out result[i])) return null;
+            if (!(findings[i].Relation ?? throw new InvalidOperationException("findings[i].Relation is null where it is required.")).TryResolve(named, out result[i])) return null;
         }
         return result;
     }

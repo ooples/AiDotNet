@@ -340,7 +340,7 @@ public class ConversionsHelperIntegrationTests
     public async Task GetSampleCount_Null_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ConversionsHelper.GetSampleCount<double, Matrix<double>>(null!));
+            ConversionsHelper.GetSampleCount<double, Matrix<double>>(null));
     }
 
     #endregion

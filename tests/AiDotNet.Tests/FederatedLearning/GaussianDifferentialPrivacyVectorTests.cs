@@ -20,7 +20,7 @@ public class GaussianDifferentialPrivacyVectorTests
     {
         var dp = new GaussianDifferentialPrivacyVector<double>(clipNorm: 1.0, randomSeed: 1);
 
-        Assert.Throws<ArgumentNullException>(() => dp.ApplyPrivacy(model: null!, epsilon: 1.0, delta: 1e-5));
+        Assert.Throws<ArgumentNullException>(() => dp.ApplyPrivacy(model: null, epsilon: 1.0, delta: 1e-5));
     }
 
     [Theory]

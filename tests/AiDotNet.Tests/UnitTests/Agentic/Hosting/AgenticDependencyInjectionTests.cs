@@ -71,7 +71,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Hosting
 
             var services = new ServiceCollection();
             Assert.Throws<ArgumentNullException>(() =>
-                services.AddAgentChatClient<double>((IChatClient<double>)null));
+                services.AddAgentChatClient<double>((IChatClient<double>?)null));
             Assert.Throws<ArgumentNullException>(() => services.AddAgentTools(null));
         }
     }

@@ -195,7 +195,7 @@ public class FederatedLearningIntegrationTests
     public async Task UniformRandomClientSelectionStrategy_SelectClients_ThrowsOnNullRequest()
     {
         var strategy = new UniformRandomClientSelectionStrategy();
-        Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(null!));
+        Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -617,13 +617,13 @@ public class FederatedLearningIntegrationTests
         Assert.NotNull(splitMethod);
         Assert.NotNull(combineMethod);
 
-        var shares = (Dictionary<int, byte[]>)splitMethod!.Invoke(null,
-            new object[] { secret, xByRecipient, threshold, 42, "test" })!;
+        var shares = (Dictionary<int, byte[]>)(splitMethod.Invoke(null,
+            new object[] { secret, xByRecipient, threshold, 42, "test" }) ?? throw new InvalidOperationException("(Dictionary<int, byte[]>)splitMethod.Invoke(null, new object[] { secret, xByR... is null where it is required."));
 
-        Assert.Equal(numShares, shares.Count);
+        Assert.Equal(numShares, (shares ?? throw new InvalidOperationException("shares is null where it is required.")).Count);
 
-        var reconstructed = (byte[])combineMethod!.Invoke(null,
-            new object[] { shares, xByRecipient, threshold, secret.Length })!;
+        var reconstructed = (byte[])(combineMethod.Invoke(null,
+            new object[] { shares, xByRecipient, threshold, secret.Length }) ?? throw new InvalidOperationException("(byte[])combineMethod.Invoke(null, new object[] { shares, xByRecipient, thres... is null where it is required."));
 
         Assert.Equal(secret, reconstructed);
     }

@@ -119,7 +119,7 @@ public class AdamWWeightDecayMaskTests
         Assert.Equal(source.WeightDecay, copy.WeightDecay);
         Assert.NotNull(copy.WeightDecayMask);
         Assert.NotSame(sourceMask, copy.WeightDecayMask);
-        Assert.Equal(sourceMask.ToArray(), copy.WeightDecayMask!.ToArray());
+        Assert.Equal(sourceMask.ToArray(), copy.WeightDecayMask.ToArray());
 
         sourceMask[1] = 0.0;
         Assert.Equal(0.5, copy.WeightDecayMask[1], 12);

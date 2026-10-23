@@ -42,7 +42,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         [InlineData("   ")]
         public void EscapeIdentifier_Throws_OnNullOrWhitespace(string? identifier)
         {
-            Assert.Throws<ArgumentException>(() => Neo4jCypher.EscapeIdentifier(identifier!));
+            Assert.Throws<ArgumentException>(() => Neo4jCypher.EscapeIdentifier((identifier ?? throw new InvalidOperationException("identifier is null where it is required."))));
         }
 
         [Fact]
@@ -233,7 +233,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     var acme = new GraphNode<double>("acme", "COMPANY");
                     acme.SetProperty("name", "Acme");
 
-                    await store!.AddNodeAsync(alice);
+                    await store.AddNodeAsync(alice);
                     await store.AddNodeAsync(acme);
 
                     var edge = new GraphEdge<double>("alice", "acme", "WORKS_FOR", 0.9);
@@ -246,17 +246,17 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     // Get node round-trips label, properties, and embedding.
                     var fetched = await store.GetNodeAsync("alice");
                     Assert.NotNull(fetched);
-                    Assert.Equal("PERSON", fetched!.Label);
+                    Assert.Equal("PERSON", fetched.Label);
                     Assert.Equal("Alice", fetched.GetProperty<string>("name"));
                     Assert.Equal(30, fetched.GetProperty<int>("age"));
                     Assert.NotNull(fetched.Embedding);
-                    Assert.Equal(3, fetched.Embedding!.Length);
+                    Assert.Equal(3, fetched.Embedding.Length);
                     Assert.Equal(0.2, fetched.Embedding[1], 6);
 
                     // Get edge round-trips endpoints, type, weight, and properties.
                     var fetchedEdge = await store.GetEdgeAsync(edge.Id);
                     Assert.NotNull(fetchedEdge);
-                    Assert.Equal("WORKS_FOR", fetchedEdge!.RelationType);
+                    Assert.Equal("WORKS_FOR", fetchedEdge.RelationType);
                     Assert.Equal(0.9, fetchedEdge.Weight, 6);
                     Assert.Equal("2020", fetchedEdge.GetProperty<string>("since"));
 
@@ -279,7 +279,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     aliceUpdated.SetProperty("name", "Alice Smith");
                     await store.AddNodeAsync(aliceUpdated);
                     Assert.Equal(2, store.NodeCount);
-                    Assert.Equal("Alice Smith", (await store.GetNodeAsync("alice"))!.GetProperty<string>("name"));
+                    Assert.Equal("Alice Smith", ((await store.GetNodeAsync("alice") ?? throw new InvalidOperationException("await store.GetNodeAsync(\"alice\") is null where it is required."))).GetProperty<string>("name"));
 
                     // Removals.
                     Assert.True(await store.RemoveEdgeAsync(edge.Id));
@@ -290,7 +290,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 }
                 finally
                 {
-                    await store!.ClearAsync();
+                    await store.ClearAsync();
                 }
             }
         }
@@ -306,13 +306,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             {
                 try
                 {
-                    await store!.AddNodeAsync(new GraphNode<double>("only", "PERSON"));
+                    await store.AddNodeAsync(new GraphNode<double>("only", "PERSON"));
                     var dangling = new GraphEdge<double>("only", "ghost", "KNOWS");
                     await Assert.ThrowsAsync<InvalidOperationException>(() => store.AddEdgeAsync(dangling));
                 }
                 finally
                 {
-                    await store!.ClearAsync();
+                    await store.ClearAsync();
                 }
             }
         }

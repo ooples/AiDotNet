@@ -596,7 +596,7 @@ public class InputHelperIntegrationTests
         Matrix<double>? nullMatrix = null;
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetItem(nullMatrix!, 0));
+            InputHelper<double, Matrix<double>>.GetItem((nullMatrix ?? throw new InvalidOperationException("nullMatrix is null where it is required.")), 0));
     }
 
     #endregion
@@ -729,7 +729,7 @@ public class InputHelperIntegrationTests
         Matrix<double>? nullMatrix = null;
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetElement(nullMatrix!, 0, 0));
+            InputHelper<double, Matrix<double>>.GetElement((nullMatrix ?? throw new InvalidOperationException("nullMatrix is null where it is required.")), 0, 0));
     }
 
     [Fact(Timeout = 120000)]
@@ -738,7 +738,7 @@ public class InputHelperIntegrationTests
         Matrix<double>? nullMatrix = null;
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetBatch(nullMatrix!, new[] { 0 }));
+            InputHelper<double, Matrix<double>>.GetBatch((nullMatrix ?? throw new InvalidOperationException("nullMatrix is null where it is required.")), new[] { 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -747,7 +747,7 @@ public class InputHelperIntegrationTests
         var matrix = new Matrix<double>(3, 2);
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetBatch(matrix, null!));
+            InputHelper<double, Matrix<double>>.GetBatch(matrix, null));
     }
 
     [Fact(Timeout = 120000)]
@@ -756,7 +756,7 @@ public class InputHelperIntegrationTests
         Matrix<double>? nullMatrix = null;
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.CreateSingleItemBatch(nullMatrix!));
+            InputHelper<double, Matrix<double>>.CreateSingleItemBatch((nullMatrix ?? throw new InvalidOperationException("nullMatrix is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -765,7 +765,7 @@ public class InputHelperIntegrationTests
         Vector<double>? nullVector = null;
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Vector<double>>.GetFeatureValue(nullVector!, 0));
+            InputHelper<double, Vector<double>>.GetFeatureValue((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required.")), 0));
     }
 
     [Fact(Timeout = 120000)]

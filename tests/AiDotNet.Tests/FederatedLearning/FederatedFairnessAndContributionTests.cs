@@ -25,7 +25,7 @@ public class FederatedFairnessAndContributionTests
     private static Dictionary<int, Tensor<double>> CreateClientModels(int clientCount, int modelSize, double divergenceScale = 0.1)
     {
         var models = new Dictionary<int, Tensor<double>>();
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int c = 0; c < clientCount; c++)
         {
@@ -55,7 +55,7 @@ public class FederatedFairnessAndContributionTests
     private static Dictionary<int, List<Tensor<double>>> CreateClientHistories(int clientCount, int rounds, int modelSize)
     {
         var histories = new Dictionary<int, List<Tensor<double>>>();
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int c = 0; c < clientCount; c++)
         {

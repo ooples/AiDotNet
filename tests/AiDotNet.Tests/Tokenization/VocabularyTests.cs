@@ -146,7 +146,7 @@ namespace AiDotNet.Tests.Tokenization
         public async Task Constructor_FromDictionary_ThrowsOnNullTokenToId()
         {
             Assert.Throws<ArgumentNullException>(() =>
-                new Vocabulary((Dictionary<string, int>)null!));
+                new Vocabulary((Dictionary<string, int>?)null));
         }
 
         [Fact(Timeout = 60000)]
@@ -155,7 +155,7 @@ namespace AiDotNet.Tests.Tokenization
             var vocab = new Vocabulary("[UNK]");
 
             Assert.Throws<ArgumentNullException>(() =>
-                vocab.AddTokens(null!));
+                vocab.AddTokens(null));
         }
 
         #endregion

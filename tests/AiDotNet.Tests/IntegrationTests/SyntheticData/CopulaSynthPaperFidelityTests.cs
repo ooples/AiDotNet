@@ -35,7 +35,7 @@ public class CopulaSynthPaperFidelityTests
     public void Copula_PreservesPlantedCorrelation_WithinTolerance()
     {
         const int rows = 400;
-        var rng = new Random(Seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
 
         // Two continuous columns with a planted linear relationship:
         //   x ~ N(0,1);  y = rho*x + sqrt(1-rho^2)*noise  → Corr(x,y) ≈ rho.
@@ -77,7 +77,7 @@ public class CopulaSynthPaperFidelityTests
     public void Copula_CategoricalColumn_NeverLeaksFloatNoise()
     {
         const int rows = 300;
-        var rng = new Random(Seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         var data = new Matrix<double>(rows, 2);
         var valid = new HashSet<double> { 0, 1, 2, 3 };
         for (int i = 0; i < rows; i++)
@@ -112,7 +112,7 @@ public class CopulaSynthPaperFidelityTests
     public void Copula_DiscreteColumn_StaysIntegral()
     {
         const int rows = 200;
-        var rng = new Random(Seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         var data = new Matrix<double>(rows, 1);
         for (int i = 0; i < rows; i++) data[i, 0] = rng.Next(0, 11); // counts 0..10
 

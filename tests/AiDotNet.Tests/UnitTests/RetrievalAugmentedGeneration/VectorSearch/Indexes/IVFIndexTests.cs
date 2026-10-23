@@ -15,7 +15,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         public async Task Constructor_WithNullMetric_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new IVFIndex<double>(null!));
+            Assert.Throws<ArgumentNullException>(() => new IVFIndex<double>(null));
         }
 
         [Fact(Timeout = 60000)]

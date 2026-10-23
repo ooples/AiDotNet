@@ -138,7 +138,7 @@ public class AdversarialTrainingTests
     [Fact(Timeout = 60000)]
     public async Task Constructor_WithNullOptions_ThrowsException()
     {
-        Assert.Throws<ArgumentNullException>(() => new AdversarialTraining<double, Vector<double>, Vector<double>>(null!));
+        Assert.Throws<ArgumentNullException>(() => new AdversarialTraining<double, Vector<double>, Vector<double>>(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -164,7 +164,7 @@ public class AdversarialTrainingTests
         var data = CreateInputs(3, 4);
         var labels = CreateLabels(new[] { 0, 1, 2 });
 
-        Assert.Throws<ArgumentNullException>(() => defense.ApplyDefense(data, labels, null!));
+        Assert.Throws<ArgumentNullException>(() => defense.ApplyDefense(data, labels, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -327,7 +327,7 @@ public class AdversarialTrainingTests
         var labels = CreateLabels(new[] { 0, 1, 2 });
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(null!, testData, labels, attack));
+        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(null, testData, labels, attack));
     }
 
     [Fact(Timeout = 60000)]
@@ -339,7 +339,7 @@ public class AdversarialTrainingTests
         var labels = CreateLabels(new[] { 0, 1, 2 });
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, null!, labels, attack));
+        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, null, labels, attack));
     }
 
     [Fact(Timeout = 60000)]
@@ -351,7 +351,7 @@ public class AdversarialTrainingTests
         var testData = CreateInputs(3, 4);
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, null!, attack));
+        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, null, attack));
     }
 
     [Fact(Timeout = 60000)]
@@ -363,7 +363,7 @@ public class AdversarialTrainingTests
         var testData = CreateInputs(3, 4);
         var labels = CreateLabels(new[] { 0, 1, 2 });
 
-        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, labels, null!));
+        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, labels, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -466,7 +466,7 @@ public class AdversarialTrainingTests
     {
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => defense.Deserialize(null!));
+        Assert.Throws<ArgumentNullException>(() => defense.Deserialize(null));
     }
 
     [Fact(Timeout = 60000)]

@@ -97,7 +97,7 @@ public class RAGChunkingConfigIntegrationTests
     {
         var strategy = new FixedSizeChunkingStrategy(chunkSize: 100);
 
-        Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null!).ToList());
+        Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null).ToList());
     }
 
     [Fact(Timeout = 120000)]
@@ -350,7 +350,7 @@ public class RAGChunkingConfigIntegrationTests
     {
         var strategy = new SentenceChunkingStrategy();
 
-        Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null!).ToList());
+        Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null).ToList());
     }
 
     [Fact(Timeout = 120000)]

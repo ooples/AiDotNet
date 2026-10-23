@@ -318,7 +318,7 @@ public class TrialStateManagerTests : IDisposable
     [Fact(Timeout = 60000)]
     public async Task Constructor_NullPath_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new TrialStateManager(null!));
+        Assert.Throws<ArgumentNullException>(() => new TrialStateManager(null));
     }
 
     [Fact(Timeout = 60000)]

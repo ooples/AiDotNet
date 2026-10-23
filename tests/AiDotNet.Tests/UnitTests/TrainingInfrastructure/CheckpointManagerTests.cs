@@ -217,7 +217,7 @@ public class CheckpointManagerTests : IDisposable
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            _manager.SaveCheckpoint<ModelMetadata<double>>(null!, optimizer, epoch: 1, step: 1, metrics));
+            _manager.SaveCheckpoint<ModelMetadata<double>>(null, optimizer, epoch: 1, step: 1, metrics));
     }
 
     [Fact(Timeout = 60000)]
@@ -229,7 +229,7 @@ public class CheckpointManagerTests : IDisposable
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            _manager.SaveCheckpoint(model, null!, epoch: 1, step: 1, metrics));
+            _manager.SaveCheckpoint(model, null, epoch: 1, step: 1, metrics));
     }
 
     #endregion
@@ -759,7 +759,7 @@ public class CheckpointManagerTests : IDisposable
             new Dictionary<string, double> { ["loss"] = 0.5 });
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _manager.RestoreModelState(checkpointId, null!));
+        Assert.Throws<ArgumentNullException>(() => _manager.RestoreModelState(checkpointId, null));
     }
 
     [Fact(Timeout = 60000)]

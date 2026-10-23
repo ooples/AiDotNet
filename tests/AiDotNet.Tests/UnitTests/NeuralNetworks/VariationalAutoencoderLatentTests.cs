@@ -57,15 +57,15 @@ public class VariationalAutoencoderLatentTests
             inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
             inputSize: 12, outputSize: 12);
         var vae = new ProbedVae(architecture, latent: 3);
-        var rng = new Random(2326);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2326);
         var batch = new Tensor<double>(new[] { 5, 12 });
         for (int i = 0; i < batch.Length; i++) batch.AsWritableSpan()[i] = rng.NextDouble();
 
         vae.SetTrainingMode(true);
         vae.ForwardForTraining(batch);
         var latentLayer = vae.Layers.OfType<RepParameterizationLayer<double>>().Single();
-        var mu = latentLayer.LastMean!.ToArray();
-        var logVar = latentLayer.LastLogVariance!.ToArray();
+        var mu = (latentLayer.LastMean ?? throw new InvalidOperationException("latentLayer.LastMean is null where it is required.")).ToArray();
+        var logVar = (latentLayer.LastLogVariance ?? throw new InvalidOperationException("latentLayer.LastLogVariance is null where it is required.")).ToArray();
         Assert.Equal(5 * 3, mu.Length);
         double kl = 0;
         for (int i = 0; i < mu.Length; i++) kl += 0.5 * (Math.Exp(logVar[i]) + mu[i] * mu[i] - 1 - logVar[i]);
@@ -73,7 +73,7 @@ public class VariationalAutoencoderLatentTests
 
         var term = vae.TakeAuxiliaryLoss();
         Assert.NotNull(term);
-        Assert.Equal(1, term!.Length);
+        Assert.Equal(1, term.Length);
         Assert.Equal(expected, term.ToArray()[0], 10);
         Assert.Null(vae.TakeAuxiliaryLoss());   // consumed once, so a later step never re-adds it
         vae.SetTrainingMode(false);

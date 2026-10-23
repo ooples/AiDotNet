@@ -151,7 +151,7 @@ public class BuildKeyAndEncryptionTests
     public async Task Encrypt_WithNullPayload_ThrowsArgumentNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.Encrypt(null!, "key", "aad"));
+            ModelPayloadEncryption.Encrypt(null, "key", "aad"));
     }
 
     [Fact(Timeout = 60000)]
@@ -165,14 +165,14 @@ public class BuildKeyAndEncryptionTests
     public async Task Decrypt_WithNullCiphertext_ThrowsArgumentNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.Decrypt(null!, "key", new byte[16], new byte[12], new byte[16], "aad"));
+            ModelPayloadEncryption.Decrypt(null, "key", new byte[16], new byte[12], new byte[16], "aad"));
     }
 
     [Fact(Timeout = 60000)]
     public async Task Decrypt_WithNullSalt_ThrowsArgumentNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.Decrypt(new byte[10], "key", null!, new byte[12], new byte[16], "aad"));
+            ModelPayloadEncryption.Decrypt(new byte[10], "key", null, new byte[12], new byte[16], "aad"));
     }
 
     // ─── EncryptSigned fork-incompatibility tests ───
@@ -351,7 +351,7 @@ public class BuildKeyAndEncryptionTests
     [Fact(Timeout = 60000)]
     public async Task BuildAad_NullTypeName_DoesNotThrow()
     {
-        var aad = ModelPayloadEncryption.BuildAad(null!, [10], [1]);
+        var aad = ModelPayloadEncryption.BuildAad(null, [10], [1]);
         // Assert the exact AAD format: null type name should be normalized (empty or "null")
         Assert.NotNull(aad);
         Assert.Equal("|10|1", aad);

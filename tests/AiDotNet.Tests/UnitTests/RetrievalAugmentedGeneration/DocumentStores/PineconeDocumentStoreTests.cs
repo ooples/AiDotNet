@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 var body = request.Content != null
                     ? await request.Content.ReadAsStringAsync().ConfigureAwait(false)
                     : string.Empty;
-                var path = request.RequestUri!.AbsolutePath;
+                var path = (request.RequestUri ?? throw new InvalidOperationException("request.RequestUri is null where it is required.")).AbsolutePath;
                 Requests.Add(new RecordedRequest(request.Method.Method, request.RequestUri.PathAndQuery, body));
 
                 foreach (var route in _routes)
@@ -123,11 +123,11 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             Assert.Equal(1, store.DocumentCount);
             var upsert = handler.Requests.Single(r => r.Path.Contains("/vectors/upsert"));
-            var vector = JObject.Parse(upsert.Body)["vectors"]![0]!;
-            Assert.Equal("doc1", (string?)vector["id"]);
-            Assert.Equal(3, ((JArray)vector["values"]!).Count);
-            Assert.Equal("Hello world", (string?)vector["metadata"]!["_content"]);
-            Assert.Equal("science", (string?)vector["metadata"]!["category"]);
+            var vector = (JObject.Parse(upsert.Body)["vectors"] ?? throw new InvalidOperationException("JObject.Parse(upsert.Body)[\"vectors\"] is null where it is required."))[0];
+            Assert.Equal("doc1", (string?)(vector ?? throw new InvalidOperationException("vector is null where it is required."))["id"]);
+            Assert.Equal(3, ((JArray)(vector["values"] ?? throw new InvalidOperationException("(JArray)vector[\"values\"] is null where it is required."))).Count);
+            Assert.Equal("Hello world", (string?)(vector["metadata"] ?? throw new InvalidOperationException("vector[\"metadata\"] is null where it is required."))["_content"]);
+            Assert.Equal("science", (string?)(vector["metadata"] ?? throw new InvalidOperationException("vector[\"metadata\"] is null where it is required."))["category"]);
         }
 
         [Fact]
@@ -147,7 +147,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             Assert.Equal(3, store.DocumentCount);
             var upsert = handler.Requests.Single(r => r.Path.Contains("/vectors/upsert"));
-            Assert.Equal(3, ((JArray)JObject.Parse(upsert.Body)["vectors"]!).Count);
+            Assert.Equal(3, ((JArray)(JObject.Parse(upsert.Body)["vectors"] ?? throw new InvalidOperationException("(JArray)JObject.Parse(upsert.Body)[\"vectors\"] is null where it is required."))).Count);
         }
 
         [Fact]
@@ -175,9 +175,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             var query = handler.Requests.Single(r => r.Path.Contains("/query"));
             var body = JObject.Parse(query.Body);
-            Assert.Equal(2, (int)body["topK"]!);
-            Assert.True((bool)body["includeMetadata"]!);
-            Assert.Equal(3, ((JArray)body["vector"]!).Count);
+            Assert.Equal(2, (int)(body["topK"] ?? throw new InvalidOperationException("body[\"topK\"] is null where it is required.")));
+            Assert.True((bool)(body["includeMetadata"] ?? throw new InvalidOperationException("body[\"includeMetadata\"] is null where it is required.")));
+            Assert.Equal(3, ((JArray)(body["vector"] ?? throw new InvalidOperationException("(JArray)body[\"vector\"] is null where it is required."))).Count);
         }
 
         [Fact]
@@ -197,12 +197,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             store.GetSimilarWithFilters(new Vector<float>(new float[] { 1, 0, 0 }), 10, filters).ToList();
 
             var query = handler.Requests.Single(r => r.Path.Contains("/query"));
-            var filter = JObject.Parse(query.Body)["filter"]!;
+            var filter = JObject.Parse(query.Body)["filter"]
+                ?? throw new InvalidOperationException("The query sent no filter.");
 
-            Assert.Equal("science", (string?)filter["category"]!["$eq"]);
-            Assert.Equal(2020.0, (double)filter["year"]!["$gte"]!);
-            var inArray = (JArray)filter["tags"]!["$in"]!;
-            Assert.Equal(new[] { "a", "b" }, inArray.Select(t => (string?)t).ToArray());
+            Assert.Equal("science", (string?)filter["category"]?["$eq"]);
+            Assert.Equal(2020.0, (double)((filter["year"]?["$gte"] ?? throw new InvalidOperationException("filter[\"year\"][\"$gte\"] is null where it is required.")));
+            var inArray = (JArray)(filter["tags"]?["$in"] ?? throw new InvalidOperationException("(JArray)filter[\"tags\"][\"$in\"] is null where it is required."));
+            Assert.Equal(new[] { "a", "b" }, (inArray ?? throw new InvalidOperationException("inArray is null where it is required.")).Select(t => (string?)t).ToArray());
         }
 
         [Fact]
@@ -217,7 +218,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var doc = store.GetById("doc1");
 
             Assert.NotNull(doc);
-            Assert.Equal("doc1", doc!.Id);
+            Assert.Equal("doc1", doc.Id);
             Assert.Equal("hi", doc.Content);
             Assert.Equal("v", doc.Metadata["k"].ToString());
         }
@@ -245,8 +246,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             Assert.True(removed);
             var delete = handler.Requests.Single(r => r.Path.Contains("/vectors/delete"));
-            var ids = (JArray)JObject.Parse(delete.Body)["ids"]!;
-            Assert.Equal("doc1", (string?)ids[0]);
+            var ids = (JArray)(JObject.Parse(delete.Body)["ids"] ?? throw new InvalidOperationException("(JArray)JObject.Parse(delete.Body)[\"ids\"] is null where it is required."));
+            Assert.Equal("doc1", (string?)(ids ?? throw new InvalidOperationException("ids is null where it is required."))[0]);
         }
 
         [Fact]
@@ -261,7 +262,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             Assert.Equal(0, store.DocumentCount);
             var delete = handler.Requests.Single(r => r.Path.Contains("/vectors/delete"));
-            Assert.True((bool)JObject.Parse(delete.Body)["deleteAll"]!);
+            Assert.True((bool)(JObject.Parse(delete.Body)["deleteAll"] ?? throw new InvalidOperationException("JObject.Parse(delete.Body)[\"deleteAll\"] is null where it is required.")));
         }
 
         [Fact]
@@ -317,7 +318,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Skip.If(string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(apiKey),
                 "Set PINECONE_INDEX_URL and PINECONE_API_KEY to run Pinecone integration tests.");
 
-            var store = new PineconeDocumentStore<float>("integration", url!, apiKey!,
+            var store = new PineconeDocumentStore<float>("integration", url, apiKey,
                 @namespace: "aidotnet-tests");
 
             var dim = store.VectorDimension > 0 ? store.VectorDimension : 8;

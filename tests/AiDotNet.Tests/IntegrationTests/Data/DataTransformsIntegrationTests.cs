@@ -137,7 +137,7 @@ public class DataTransformsIntegrationTests
     public async Task Compose_NullTransforms_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new Compose<int>((ITransform<int, int>[])null));
+            new Compose<int>((ITransform<int, int>[]?)null));
     }
 
     [Fact(Timeout = 120000)]
@@ -158,7 +158,7 @@ public class DataTransformsIntegrationTests
     public async Task Compose_NullEnumerable_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new Compose<int>((IEnumerable<ITransform<int, int>>)null));
+            new Compose<int>((IEnumerable<ITransform<int, int>>?)null));
     }
 
     [Fact(Timeout = 120000)]

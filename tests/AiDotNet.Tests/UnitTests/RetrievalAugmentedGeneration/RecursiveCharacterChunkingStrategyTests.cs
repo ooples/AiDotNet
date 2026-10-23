@@ -93,7 +93,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                strategy.Chunk(null!).ToList());
+                strategy.Chunk(null).ToList());
         }
 
         [Fact(Timeout = 60000)]

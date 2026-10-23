@@ -79,7 +79,7 @@ public class iMAMLAlgorithmTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(null!));
+            new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -90,7 +90,7 @@ public class iMAMLAlgorithmTests
         var algorithm = new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
+        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -145,7 +145,7 @@ public class iMAMLAlgorithmTests
         var algorithm = new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
+        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null));
     }
 
     [Fact(Timeout = 60000)]

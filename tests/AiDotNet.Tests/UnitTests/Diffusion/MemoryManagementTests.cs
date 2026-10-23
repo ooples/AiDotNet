@@ -172,7 +172,7 @@ public class MemoryManagementTests : DiffusionUnitTestBase
         using var pool = new ActivationPool<float>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => pool.Rent(null!));
+        Assert.Throws<ArgumentException>(() => pool.Rent(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -192,7 +192,7 @@ public class MemoryManagementTests : DiffusionUnitTestBase
         using var pool = new ActivationPool<float>();
 
         // Act & Assert - Should not throw
-        pool.Return(null!);
+        pool.Return(null);
     }
 
     [Fact(Timeout = 120000)]

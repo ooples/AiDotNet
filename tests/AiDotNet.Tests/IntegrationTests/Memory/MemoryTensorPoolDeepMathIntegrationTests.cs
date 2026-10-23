@@ -326,7 +326,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
     public async Task Rent_NullShape_Throws()
     {
         using var pool = new TensorPool<double>();
-        Assert.Throws<ArgumentException>(() => pool.Rent(null!));
+        Assert.Throws<ArgumentException>(() => pool.Rent(null));
     }
 
     [Fact(Timeout = 120000)]

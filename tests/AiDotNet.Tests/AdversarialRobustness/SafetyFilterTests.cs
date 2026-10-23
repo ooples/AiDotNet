@@ -37,7 +37,7 @@ public class SafetyFilterTests
     public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new SafetyFilter<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new SafetyFilter<double>(null));
     }
 
     #endregion
@@ -56,7 +56,7 @@ public class SafetyFilterTests
         var filter = new SafetyFilter<double>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => filter.ValidateInput(null!));
+        Assert.Throws<ArgumentNullException>(() => filter.ValidateInput(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -194,7 +194,7 @@ public class SafetyFilterTests
         var filter = new SafetyFilter<double>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => filter.FilterOutput(null!));
+        Assert.Throws<ArgumentNullException>(() => filter.FilterOutput(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -479,7 +479,7 @@ public class SafetyFilterTests
         var filter = new SafetyFilter<double>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => filter.Deserialize(null!));
+        Assert.Throws<ArgumentNullException>(() => filter.Deserialize(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -519,7 +519,7 @@ public class SafetyFilterTests
         var filter = new SafetyFilter<double>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => filter.SaveModel(null!));
+        Assert.Throws<ArgumentException>(() => filter.SaveModel(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -552,7 +552,7 @@ public class SafetyFilterTests
         var filter = new SafetyFilter<double>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => filter.LoadModel(null!));
+        Assert.Throws<ArgumentException>(() => filter.LoadModel(null));
     }
 
     [Fact(Timeout = 60000)]

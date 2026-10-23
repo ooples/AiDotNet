@@ -12,7 +12,7 @@ public sealed class DockerRunnerValidationTests
         var runner = new DockerRunner();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            runner.RunAsync(null!, stdIn: null, timeout: TimeSpan.FromSeconds(1), maxStdOutChars: 1, maxStdErrChars: 1, cancellationToken: default));
+            runner.RunAsync(null, stdIn: null, timeout: TimeSpan.FromSeconds(1), maxStdOutChars: 1, maxStdErrChars: 1, cancellationToken: default));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             runner.RunAsync("   ", stdIn: null, timeout: TimeSpan.FromSeconds(1), maxStdOutChars: 1, maxStdErrChars: 1, cancellationToken: default));

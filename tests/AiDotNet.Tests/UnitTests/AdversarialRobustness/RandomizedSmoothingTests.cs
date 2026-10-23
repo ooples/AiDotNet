@@ -146,7 +146,7 @@ public class RandomizedSmoothingTests
     public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new RandomizedSmoothing<double, Vector<double>, Vector<double>>(null!));
+        Assert.Throws<ArgumentNullException>(() => new RandomizedSmoothing<double, Vector<double>, Vector<double>>(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -188,7 +188,7 @@ public class RandomizedSmoothingTests
         var model = new MockPredictiveModel();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => smoothing.CertifyPrediction(null!, model));
+        Assert.Throws<ArgumentNullException>(() => smoothing.CertifyPrediction(null, model));
     }
 
     [Fact(Timeout = 60000)]
@@ -200,7 +200,7 @@ public class RandomizedSmoothingTests
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => smoothing.CertifyPrediction(input, null!));
+        Assert.Throws<ArgumentNullException>(() => smoothing.CertifyPrediction(input, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -319,7 +319,7 @@ public class RandomizedSmoothingTests
         var model = new MockPredictiveModel();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => smoothing.CertifyBatch(null!, model));
+        Assert.Throws<ArgumentNullException>(() => smoothing.CertifyBatch(null, model));
     }
 
     [Fact(Timeout = 60000)]
@@ -390,7 +390,7 @@ public class RandomizedSmoothingTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            smoothing.EvaluateCertifiedAccuracy(null!, labels, model, 0.5));
+            smoothing.EvaluateCertifiedAccuracy(null, labels, model, 0.5));
     }
 
     [Fact(Timeout = 60000)]
@@ -404,7 +404,7 @@ public class RandomizedSmoothingTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            smoothing.EvaluateCertifiedAccuracy(testData, null!, model, 0.5));
+            smoothing.EvaluateCertifiedAccuracy(testData, null, model, 0.5));
     }
 
     [Fact(Timeout = 60000)]
@@ -418,7 +418,7 @@ public class RandomizedSmoothingTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            smoothing.EvaluateCertifiedAccuracy(testData, labels, null!, 0.5));
+            smoothing.EvaluateCertifiedAccuracy(testData, labels, null, 0.5));
     }
 
     [Fact(Timeout = 60000)]
@@ -526,7 +526,7 @@ public class RandomizedSmoothingTests
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => smoothing.Deserialize(null!));
+        Assert.Throws<ArgumentNullException>(() => smoothing.Deserialize(null));
     }
 
     [Fact(Timeout = 60000)]

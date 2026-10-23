@@ -324,6 +324,6 @@ public class CompiledModelHostTests
         using var host = new CompiledModelHost<float>();
         var input = MakeInput(new[] { 2, 3 });
         Assert.Throws<ArgumentNullException>(() =>
-            host.Predict(input, structureVersion: 0, eagerForward: null!));
+            host.Predict(input, structureVersion: 0, eagerForward: null));
     }
 }

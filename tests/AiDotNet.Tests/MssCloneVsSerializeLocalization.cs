@@ -51,7 +51,7 @@ public class MssCloneVsSerializeLocalization
             inputSize: Samples, outputSize: 256);
         using var model = Create(arch);
 
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var input = new Tensor<double>([1, Samples]);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 2 - 1;
 

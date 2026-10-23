@@ -52,7 +52,7 @@ public class AiModelResultFamilyExtensionsTests
     public void Diffusion_Generate_NullResult_ThrowsArgumentNullException()
     {
         AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
-        Assert.Throws<ArgumentNullException>(() => result!.Generate(new[] { 1, 3, 8, 8 }));
+        Assert.Throws<ArgumentNullException>(() => (result ?? throw new InvalidOperationException("result is null where it is required.")).Generate(new[] { 1, 3, 8, 8 }));
     }
 
     // ---------------- Transformer ----------------
@@ -117,7 +117,7 @@ public class AiModelResultFamilyExtensionsTests
                 }),
         };
         Assert.Throws<ArgumentNullException>(
-            () => result.GenerateSampled(null!, maxNewTokens: 4, temperature: 1.0f));
+            () => result.GenerateSampled(null, maxNewTokens: 4, temperature: 1.0f));
     }
 
     // ---------------- Graph ----------------
@@ -145,6 +145,6 @@ public class AiModelResultFamilyExtensionsTests
         var result = BuildWrongFamilyResult();
         var feat = new Tensor<float>(new[] { 3, 2 }, new Vector<float>(new float[6]));
         Assert.Throws<InvalidOperationException>(
-            () => result.PredictLink(null!, feat, sourceNode: 0, targetNode: 1));
+            () => result.PredictLink(null, feat, sourceNode: 0, targetNode: 1));
     }
 }

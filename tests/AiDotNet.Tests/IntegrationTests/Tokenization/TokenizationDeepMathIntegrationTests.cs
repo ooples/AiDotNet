@@ -57,7 +57,7 @@ public class TokenizationDeepMathIntegrationTests
     {
         Dictionary<string, int>? nullDict = null;
         Assert.Throws<ArgumentNullException>(() =>
-            new Vocabulary(nullDict!));
+            new Vocabulary((nullDict ?? throw new InvalidOperationException("nullDict is null where it is required."))));
     }
 
     // ============================
@@ -102,7 +102,7 @@ public class TokenizationDeepMathIntegrationTests
     public async Task AddToken_NullString_Throws()
     {
         var vocab = new Vocabulary();
-        Assert.Throws<ArgumentException>(() => vocab.AddToken(null!));
+        Assert.Throws<ArgumentException>(() => vocab.AddToken(null));
     }
 
     // ============================
@@ -239,7 +239,7 @@ public class TokenizationDeepMathIntegrationTests
     public async Task AddTokens_NullCollection_Throws()
     {
         var vocab = new Vocabulary();
-        Assert.Throws<ArgumentNullException>(() => vocab.AddTokens(null!));
+        Assert.Throws<ArgumentNullException>(() => vocab.AddTokens(null));
     }
 
     [Fact(Timeout = 120000)]

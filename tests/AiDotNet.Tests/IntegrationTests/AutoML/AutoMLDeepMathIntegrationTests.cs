@@ -133,7 +133,7 @@ public class AutoMLDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Architecture_FromJson_NullThrows()
     {
-        Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromJson(null!));
+        Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromJson(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -167,7 +167,7 @@ public class AutoMLDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Architecture_FromBytes_NullThrows()
     {
-        Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromBytes(null!));
+        Assert.Throws<ArgumentNullException>(() => Architecture<double>.FromBytes(null));
     }
 
     [Fact(Timeout = 120000)]

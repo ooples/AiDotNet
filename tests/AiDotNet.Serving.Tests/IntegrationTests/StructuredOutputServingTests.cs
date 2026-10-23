@@ -154,7 +154,7 @@ public class StructuredOutputServingTests
 
         Assert.Null(resp.Error);
         Assert.NotNull(resp.LogProbs);
-        Assert.Equal(resp.NumGenerated, resp.LogProbs!.Count);
+        Assert.Equal(resp.NumGenerated, resp.LogProbs.Count);
         Assert.All(resp.LogProbs, p =>
         {
             Assert.Equal(5, p.TokenId);            // greedy picks the top-logit token
@@ -261,11 +261,11 @@ public class StructuredOutputServingTests
         var choice = response.Choices[0];
 
         Assert.Equal("tool_calls", choice.FinishReason);
-        Assert.Null(choice.Message!.Content);
+        Assert.Null((choice.Message ?? throw new InvalidOperationException("choice.Message is null where it is required.")).Content);
         Assert.NotNull(choice.Message.ToolCalls);
-        var call = choice.Message.ToolCalls![0];
-        Assert.Equal("set_status", call.Function!.Name);
+        var call = choice.Message.ToolCalls[0];
+        Assert.Equal("set_status", (call.Function ?? throw new InvalidOperationException("call.Function is null where it is required.")).Name);
         var args = JObject.Parse(call.Function.Arguments);
-        Assert.Equal("on", args["status"]!.ToString());
+        Assert.Equal("on", (args["status"] ?? throw new InvalidOperationException("args[\"status\"] is null where it is required.")).ToString());
     }
 }

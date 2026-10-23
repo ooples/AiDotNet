@@ -282,7 +282,7 @@ public class AutoMLCoreComponentsIntegrationTests
         var searchSpace = new Dictionary<string, ParameterRange>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            AutoMLParameterSampler.Sample(null!, searchSpace));
+            AutoMLParameterSampler.Sample(null, searchSpace));
     }
 
     [Fact(Timeout = 120000)]
@@ -291,7 +291,7 @@ public class AutoMLCoreComponentsIntegrationTests
         var random = RandomHelper.CreateSeededRandom(42);
 
         Assert.Throws<ArgumentNullException>(() =>
-            AutoMLParameterSampler.Sample(random, null!));
+            AutoMLParameterSampler.Sample(random, null));
     }
 
     [Fact(Timeout = 120000)]

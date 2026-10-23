@@ -250,7 +250,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new DenseRetriever<double>(null!, embeddingModel));
+                new DenseRetriever<double>(null, embeddingModel));
         }
 
         [Fact(Timeout = 60000)]
@@ -261,7 +261,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new DenseRetriever<double>(store, null!));
+                new DenseRetriever<double>(store, null));
         }
 
         [Fact(Timeout = 60000)]
@@ -269,7 +269,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert - should throw for the first null parameter (documentStore)
             Assert.Throws<ArgumentNullException>(() =>
-                new DenseRetriever<double>(null!, null!));
+                new DenseRetriever<double>(null, null));
         }
 
         #endregion
@@ -375,7 +375,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null!).ToList());
+                retriever.Retrieve(null).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -578,7 +578,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                retriever.Retrieve("content", topK: 5, null!).ToList());
+                retriever.Retrieve("content", topK: 5, null).ToList());
         }
 
         [Fact(Timeout = 60000)]

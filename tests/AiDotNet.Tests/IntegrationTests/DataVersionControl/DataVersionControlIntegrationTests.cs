@@ -153,7 +153,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         var dataPath = CreateTestFile("test.csv", "data");
 
         Assert.Throws<ArgumentException>(() =>
-            dvc.CreateDatasetVersion(null!, dataPath));
+            dvc.CreateDatasetVersion(null, dataPath));
     }
 
     [Fact(Timeout = 120000)]
@@ -408,7 +408,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         var dvc = new DataVersionControl<double>(_storageDirectory);
 
         Assert.Throws<ArgumentException>(() =>
-            dvc.ComputeDatasetHash(null!));
+            dvc.ComputeDatasetHash(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -663,7 +663,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         var hash = dvc.CreateDatasetVersion("dataset", dataPath);
 
         Assert.Throws<ArgumentNullException>(() =>
-            dvc.RecordDatasetLineage("dataset", hash, null!));
+            dvc.RecordDatasetLineage("dataset", hash, null));
     }
 
     #endregion
@@ -839,7 +839,7 @@ public class DataVersionControlIntegrationTests : IDisposable
         var hash = dvc.CreateDatasetVersion("dataset", dataPath);
 
         Assert.Throws<ArgumentException>(() =>
-            dvc.CreateDatasetSnapshot(null!, new Dictionary<string, string> { { "dataset", hash } }));
+            dvc.CreateDatasetSnapshot(null, new Dictionary<string, string> { { "dataset", hash } }));
     }
 
     [Fact(Timeout = 120000)]

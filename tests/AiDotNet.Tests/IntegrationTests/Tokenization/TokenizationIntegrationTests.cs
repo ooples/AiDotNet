@@ -204,7 +204,7 @@ public class TokenizationIntegrationTests
     {
         var vocabulary = new Vocabulary();
 
-        Assert.Throws<ArgumentException>(() => vocabulary.AddToken(null!));
+        Assert.Throws<ArgumentException>(() => vocabulary.AddToken(null));
         Assert.Throws<ArgumentException>(() => vocabulary.AddToken(""));
     }
 
@@ -548,7 +548,7 @@ public class TokenizationIntegrationTests
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
-        var tokens = tokenizer.Tokenize(null!);
+        var tokens = tokenizer.Tokenize(null);
 
         Assert.Empty(tokens);
     }
@@ -703,7 +703,7 @@ public class TokenizationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CharacterTokenizer_Train_ThrowsOnNullCorpus()
     {
-        Assert.Throws<ArgumentNullException>(() => CharacterTokenizer.Train(null!));
+        Assert.Throws<ArgumentNullException>(() => CharacterTokenizer.Train(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -844,7 +844,7 @@ public class TokenizationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BpeTokenizer_Train_ThrowsOnNullCorpus()
     {
-        Assert.Throws<ArgumentNullException>(() => BpeTokenizer.Train(null!, vocabSize: 100));
+        Assert.Throws<ArgumentNullException>(() => BpeTokenizer.Train(null, vocabSize: 100));
     }
 
     [Fact(Timeout = 120000)]
@@ -875,7 +875,7 @@ public class TokenizationIntegrationTests
         var corpus = new[] { "hello world" };
         var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 50);
 
-        var tokens = tokenizer.Tokenize(null!);
+        var tokens = tokenizer.Tokenize(null);
 
         Assert.Empty(tokens);
     }
@@ -1167,7 +1167,7 @@ public class TokenizationIntegrationTests
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
-        var tokens = tokenizer.Tokenize(null!);
+        var tokens = tokenizer.Tokenize(null);
 
         Assert.Empty(tokens);
     }
@@ -1393,7 +1393,7 @@ public class TokenizationIntegrationTests
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
 
-        var decoded = tokenizer.Decode(null!);
+        var decoded = tokenizer.Decode(null);
 
         Assert.Equal(string.Empty, decoded);
     }

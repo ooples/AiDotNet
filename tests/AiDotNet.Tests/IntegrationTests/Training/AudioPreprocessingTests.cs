@@ -143,8 +143,8 @@ public class AudioPreprocessingTests
         await Task.Yield();
         var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>();
 
-        Assert.Throws<ArgumentNullException>(() => builder.ConfigureAudioEnhancer(null!));
-        Assert.Throws<ArgumentNullException>(() => builder.ConfigureAudioEffect(null!));
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureAudioEnhancer(null));
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureAudioEffect(null));
     }
 
     [Fact(Timeout = 120000)]

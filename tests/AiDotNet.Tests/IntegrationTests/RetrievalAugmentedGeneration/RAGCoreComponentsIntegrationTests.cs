@@ -421,7 +421,7 @@ public class RAGCoreComponentsIntegrationTests
     public async Task MMR_NullEmbeddingFunc_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new MaximalMarginalRelevanceReranker<double>(null!, lambda: 0.7));
+            new MaximalMarginalRelevanceReranker<double>(null, lambda: 0.7));
     }
 
     [Fact(Timeout = 120000)]
@@ -518,7 +518,7 @@ public class RAGCoreComponentsIntegrationTests
     public async Task RRF_FuseRankings_NullLists_Throws()
     {
         var rrf = new ReciprocalRankFusion<double>();
-        Assert.Throws<ArgumentException>(() => rrf.FuseRankings(null!, 5));
+        Assert.Throws<ArgumentException>(() => rrf.FuseRankings(null, 5));
         Assert.Throws<ArgumentException>(() =>
             rrf.FuseRankings(new List<List<Document<double>>>(), 5));
     }

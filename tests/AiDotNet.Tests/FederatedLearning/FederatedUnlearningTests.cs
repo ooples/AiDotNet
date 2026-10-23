@@ -26,7 +26,7 @@ public class FederatedUnlearningTests
         int clientCount, int roundCount, int modelSize)
     {
         var histories = new Dictionary<int, List<Tensor<double>>>();
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int c = 0; c < clientCount; c++)
         {

@@ -286,7 +286,7 @@ public class VectorRetrieverTests
 
     private static Vector<double> CreateRandomVector(int dimension, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var vector = new Vector<double>(dimension);
         for (int i = 0; i < dimension; i++)
         {
@@ -307,7 +307,7 @@ public class VectorRetrieverTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
-            new VectorRetriever<double>(null!, embeddingModel));
+            new VectorRetriever<double>(null, embeddingModel));
         Assert.Equal("documentStore", exception.ParamName);
     }
 
@@ -319,7 +319,7 @@ public class VectorRetrieverTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
-            new VectorRetriever<double>(documentStore, null!));
+            new VectorRetriever<double>(documentStore, null));
         Assert.Equal("embeddingModel", exception.ParamName);
     }
 
@@ -670,7 +670,7 @@ public class VectorRetrieverTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            retriever.Retrieve("query", 5, null!).ToList());
+            retriever.Retrieve("query", 5, null).ToList());
     }
 
     #endregion
@@ -687,7 +687,7 @@ public class VectorRetrieverTests
 
         // Act & Assert - RetrieverBase throws ArgumentException for null/empty queries
         Assert.Throws<ArgumentException>(() =>
-            retriever.Retrieve(null!).ToList());
+            retriever.Retrieve(null).ToList());
     }
 
     [Fact(Timeout = 60000)]

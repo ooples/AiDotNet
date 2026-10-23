@@ -60,7 +60,7 @@ public class ModelPayloadEncryptionTests
     public async Task EncryptDecrypt_LargePayload_RoundTrip()
     {
         var plaintext = new byte[1024 * 1024]; // 1 MB
-        new Random(42).NextBytes(plaintext);
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42).NextBytes(plaintext);
         var licenseKey = "large-payload-key-98765";
         var aad = ModelPayloadEncryption.BuildAad("LargeModel", new[] { 3, 224, 224 }, new[] { 1000 });
 
@@ -213,9 +213,9 @@ public class ModelPayloadEncryptionTests
         var fakeSalt = new byte[16];
         var fakeNonce = new byte[12];
         var fakeTag = new byte[16];
-        new Random(42).NextBytes(fakeSalt);
-        new Random(43).NextBytes(fakeNonce);
-        new Random(44).NextBytes(fakeTag);
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42).NextBytes(fakeSalt);
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(43).NextBytes(fakeNonce);
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(44).NextBytes(fakeTag);
 
         var fakeCiphertext = new byte[] { 0xAA, 0xBB };
 
@@ -624,7 +624,7 @@ public class ModelPayloadEncryptionTests
         try
         {
             var payload = new byte[1024];
-            new Random(99).NextBytes(payload);
+            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99).NextBytes(payload);
             var model = new StubModelSerializer
             {
                 Payload = payload,

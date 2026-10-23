@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.Training
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                ModelFactory<double, Matrix<double>, Vector<double>>.Create((ModelConfig)null));
+                ModelFactory<double, Matrix<double>, Vector<double>>.Create((ModelConfig?)null));
         }
 
         [Fact(Timeout = 60000)]

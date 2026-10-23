@@ -29,7 +29,7 @@ public class PNDMSchedulerTests
     public async Task Constructor_WithNullConfig_ThrowsArgumentNullException()
     {
         // Arrange & Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new PNDMScheduler<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new PNDMScheduler<double>(null));
     }
 
     #endregion
@@ -229,7 +229,7 @@ public class PNDMSchedulerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            scheduler.Step(null!, scheduler.Timesteps[0], sample, 0.0));
+            scheduler.Step(null, scheduler.Timesteps[0], sample, 0.0));
     }
 
     [Fact(Timeout = 120000)]
@@ -242,7 +242,7 @@ public class PNDMSchedulerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            scheduler.Step(modelOutput, scheduler.Timesteps[0], null!, 0.0));
+            scheduler.Step(modelOutput, scheduler.Timesteps[0], null, 0.0));
     }
 
     [Fact(Timeout = 120000)]
@@ -323,8 +323,8 @@ public class PNDMSchedulerTests
         // Assert
         Assert.True(state.TryGetValue("counter", out var counter));
         Assert.True(state.TryGetValue("ets_count", out var etsCount));
-        Assert.Equal(0, (int)counter!);
-        Assert.Equal(0, (int)etsCount!);
+        Assert.Equal(0, (int)counter);
+        Assert.Equal(0, (int)etsCount);
     }
 
     [Fact(Timeout = 120000)]

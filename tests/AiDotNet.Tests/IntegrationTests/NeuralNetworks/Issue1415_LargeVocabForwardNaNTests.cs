@@ -265,7 +265,7 @@ public class Issue1415_LargeVocabForwardNaNTests
         // pattern the consumer reported reproducing the bug. GCCollectionMode.Aggressive
         // is .NET 6+; fall back to Forced on net471 (both target Gen2 with
         // blocking:true, which is the property the consumer's claim depends on).
-        for (int i = 0; i < nTrain; i++) { trainXs[i] = null!; trainYs[i] = null!; }
+        for (int i = 0; i < nTrain; i++) { trainXs[i] = null; trainYs[i] = null; }
 #if NET6_0_OR_GREATER
         System.GC.Collect(2, System.GCCollectionMode.Aggressive, blocking: true);
         System.GC.WaitForPendingFinalizers();

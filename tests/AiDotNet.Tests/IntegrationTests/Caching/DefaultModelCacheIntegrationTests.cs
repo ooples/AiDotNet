@@ -152,7 +152,7 @@ public class DefaultModelCacheIntegrationTests
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.GetCachedStepData(null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.GetCachedStepData(null));
         Assert.Equal("key", ex.ParamName);
     }
 
@@ -164,7 +164,7 @@ public class DefaultModelCacheIntegrationTests
         var stepData = CreateStepData();
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData(null!, stepData));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData(null, stepData));
         Assert.Equal("key", ex.ParamName);
     }
 
@@ -175,7 +175,7 @@ public class DefaultModelCacheIntegrationTests
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData("key", null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData("key", null));
         Assert.Equal("stepData", ex.ParamName);
     }
 

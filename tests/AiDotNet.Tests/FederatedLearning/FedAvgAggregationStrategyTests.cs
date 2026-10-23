@@ -143,7 +143,7 @@ public class FedAvgAggregationStrategyTests
         var clientWeights = new Dictionary<int, double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => strategy.Aggregate(nullModels!, clientWeights));
+        Assert.Throws<ArgumentException>(() => strategy.Aggregate((nullModels ?? throw new InvalidOperationException("nullModels is null where it is required.")), clientWeights));
     }
 
     [Fact(Timeout = 60000)]

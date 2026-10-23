@@ -69,7 +69,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new ChainOfThoughtRetriever<double>(null!, mockRetriever));
+                new ChainOfThoughtRetriever<double>(null, mockRetriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -80,7 +80,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new ChainOfThoughtRetriever<double>(generator, null!));
+                new ChainOfThoughtRetriever<double>(generator, null));
         }
 
         [Fact(Timeout = 60000)]
@@ -129,7 +129,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                cotRetriever.Retrieve(null!, 10));
+                cotRetriever.Retrieve(null, 10));
         }
 
         [Fact(Timeout = 60000)]
@@ -203,7 +203,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                cotRetriever.RetrieveWithSelfConsistency(null!, 10));
+                cotRetriever.RetrieveWithSelfConsistency(null, 10));
         }
 
         [Fact(Timeout = 60000)]

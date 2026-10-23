@@ -63,7 +63,7 @@ public class FinancialAutoEvaluationBuildTests
         // The default financial metrics run for any forecasting model, with no configuration.
         foreach (var name in new[] { "DirectionalAccuracy", "StrategySharpe", "StrategySortino", "StrategyMaxDrawdown", "ProfitFactor", "InformationCoefficient" })
         {
-            Assert.True(result.FinancialEvaluation!.Metrics.ContainsKey(name), $"missing default financial metric {name}");
+            Assert.True(result.FinancialEvaluation.Metrics.ContainsKey(name), $"missing default financial metric {name}");
         }
 
         // Same values are mirrored, by name, into ConfiguredMetrics (finite ones).
@@ -83,7 +83,7 @@ public class FinancialAutoEvaluationBuildTests
 
         Assert.NotNull(result.FinancialEvaluation);
         // The configured custom metric appears alongside the defaults, not replacing them.
-        Assert.True(result.FinancialEvaluation!.Metrics.ContainsKey("TradeCount"), "custom metric missing from the evaluation");
+        Assert.True(result.FinancialEvaluation.Metrics.ContainsKey("TradeCount"), "custom metric missing from the evaluation");
         Assert.True(result.FinancialEvaluation.Metrics.ContainsKey("StrategySharpe"), "default metric was dropped");
     }
 

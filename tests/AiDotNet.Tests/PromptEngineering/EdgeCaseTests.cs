@@ -17,7 +17,7 @@ public class EdgeCaseTests
     [Fact(Timeout = 60000)]
     public async Task SimplePromptTemplate_NullTemplate_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new SimplePromptTemplate(null!));
+        Assert.Throws<ArgumentNullException>(() => new SimplePromptTemplate(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -36,13 +36,13 @@ public class EdgeCaseTests
     public async Task SimplePromptTemplate_Format_NullVariables_ThrowsArgumentNullException()
     {
         var template = new SimplePromptTemplate("Hello {name}");
-        Assert.Throws<ArgumentNullException>(() => template.Format(null!));
+        Assert.Throws<ArgumentNullException>(() => template.Format(null));
     }
 
     [Fact(Timeout = 60000)]
     public async Task ChainOfThoughtTemplate_NullTask_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new ChainOfThoughtTemplate(null!));
+        Assert.Throws<ArgumentNullException>(() => new ChainOfThoughtTemplate(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -54,7 +54,7 @@ public class EdgeCaseTests
     [Fact(Timeout = 60000)]
     public async Task StructuredOutputTemplate_NullTemplate_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new StructuredOutputTemplate(null!));
+        Assert.Throws<ArgumentNullException>(() => new StructuredOutputTemplate(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -66,7 +66,7 @@ public class EdgeCaseTests
     [Fact(Timeout = 60000)]
     public async Task RolePlayingTemplate_NullRole_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new RolePlayingTemplate(null!));
+        Assert.Throws<ArgumentNullException>(() => new RolePlayingTemplate(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -79,13 +79,13 @@ public class EdgeCaseTests
     [Fact(Timeout = 60000)]
     public async Task InstructionFollowingTemplate_NullTemplate_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new InstructionFollowingTemplate(null!));
+        Assert.Throws<ArgumentNullException>(() => new InstructionFollowingTemplate(null));
     }
 
     [Fact(Timeout = 60000)]
     public async Task ConditionalPromptTemplate_NullTemplate_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new ConditionalPromptTemplate(null!));
+        Assert.Throws<ArgumentNullException>(() => new ConditionalPromptTemplate(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -93,7 +93,7 @@ public class EdgeCaseTests
     {
         // CompositePromptTemplate handles null by creating empty list
         IPromptTemplate[]? templates = null;
-        var composite = new CompositePromptTemplate(templates!);
+        var composite = new CompositePromptTemplate((templates ?? throw new InvalidOperationException("templates is null where it is required.")));
         Assert.NotNull(composite);
     }
 
@@ -342,7 +342,7 @@ public class EdgeCaseTests
     {
         var template = new SimplePromptTemplate("Hello {name}");
 
-        var result = template.Validate(null!);
+        var result = template.Validate(null);
 
         Assert.False(result);
     }
@@ -363,7 +363,7 @@ public class EdgeCaseTests
         var template = new SimplePromptTemplate("Hello {name}");
         var variables = new Dictionary<string, string>
         {
-            { "name", null! }
+            { "name", null }
         };
 
         var result = template.Validate(variables);

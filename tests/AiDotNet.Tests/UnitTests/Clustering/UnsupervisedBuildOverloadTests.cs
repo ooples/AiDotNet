@@ -67,7 +67,7 @@ public class UnsupervisedBuildOverloadTests
 
         Assert.NotNull(a);
         Assert.NotNull(b);
-        Assert.Equal(b!.Length, a!.Length);
+        Assert.Equal(b.Length, a.Length);
         for (int i = 0; i < b.Length; i++)
         {
             Assert.Equal(b[i], a[i]);
@@ -90,7 +90,7 @@ public class UnsupervisedBuildOverloadTests
         var labels = result.GetClusterLabels();
 
         Assert.NotNull(labels);
-        Assert.Equal(data.Rows, labels!.Length);
+        Assert.Equal(data.Rows, labels.Length);
 
         // Rows 0-3 are one group and 4-7 the other; whichever index each got, they must not mix.
         Assert.Equal(labels[0], labels[1]);
@@ -170,6 +170,6 @@ public class UnsupervisedBuildOverloadTests
         var labels = result.GetClusterLabels();
 
         Assert.NotNull(labels);
-        Assert.Equal(data.Rows, labels!.Length);
+        Assert.Equal(data.Rows, labels.Length);
     }
 }

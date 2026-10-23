@@ -121,7 +121,7 @@ public class ExpectedModelChangeTests
         var pool = CreateTestPool(numSamples: 10, featureSize: 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(null!, pool, batchSize: 3));
+        Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(null, pool, batchSize: 3));
     }
 
     [Fact(Timeout = 60000)]
@@ -132,7 +132,7 @@ public class ExpectedModelChangeTests
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(model, null!, batchSize: 3));
+        Assert.Throws<ArgumentNullException>(() => emc.SelectSamples(model, null, batchSize: 3));
     }
 
     [Fact(Timeout = 60000)]
@@ -226,7 +226,7 @@ public class ExpectedModelChangeTests
         var pool = CreateTestPool(numSamples: 10, featureSize: 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(null!, pool));
+        Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(null, pool));
     }
 
     [Fact(Timeout = 60000)]
@@ -237,7 +237,7 @@ public class ExpectedModelChangeTests
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(model, null!));
+        Assert.Throws<ArgumentNullException>(() => emc.ComputeInformativenessScores(model, null));
     }
 
     [Fact(Timeout = 60000)]

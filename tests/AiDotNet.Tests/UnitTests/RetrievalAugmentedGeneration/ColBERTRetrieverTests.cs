@@ -180,7 +180,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Act & Assert
             var ex = Assert.Throws<ArgumentNullException>(() =>
                 new ColBERTRetriever<double>(
-                    null!,
+                    null,
                     modelPath: "model.onnx",
                     maxDocLength: 512,
                     maxQueryLength: 32));
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var ex = Assert.Throws<ArgumentNullException>(() =>
                 new ColBERTRetriever<double>(
                     store,
-                    modelPath: null!,
+                    modelPath: null,
                     maxDocLength: 512,
                     maxQueryLength: 32));
 
@@ -419,7 +419,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null!).ToList());
+                retriever.Retrieve(null).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -589,7 +589,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert - null metadata filters should throw
             Assert.Throws<ArgumentNullException>(() =>
-                retriever.Retrieve("fox", topK: 5, null!).ToList());
+                retriever.Retrieve("fox", topK: 5, null).ToList());
         }
 
         #endregion

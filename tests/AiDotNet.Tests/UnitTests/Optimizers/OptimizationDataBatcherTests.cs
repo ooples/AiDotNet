@@ -117,7 +117,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
             // Arrange, Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new OptimizationDataBatcher<double, Matrix<double>, Vector<double>>(
-                    null!, batchSize: 32));
+                    null, batchSize: 32));
         }
 
         [Fact(Timeout = 60000)]
@@ -451,7 +451,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
                 inputData, batchSize: 32);
 
             // Act
-            var newBatcher = batcher.WithSampler(null!);
+            var newBatcher = batcher.WithSampler(null);
 
             // Assert
             Assert.NotNull(newBatcher);

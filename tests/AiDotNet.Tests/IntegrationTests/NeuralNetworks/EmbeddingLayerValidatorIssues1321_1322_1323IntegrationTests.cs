@@ -75,7 +75,7 @@ public partial class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
             layers: layers);
 
         Assert.NotNull(arch);
-        Assert.Same(layers[0], arch.Layers![0]);
+        Assert.Same(layers[0], arch.Layers[0]);
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public partial class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
             layers: layers);
 
         Assert.NotNull(arch);
-        Assert.Same(layers[0], arch.Layers![0]);
+        Assert.Same(layers[0], arch.Layers[0]);
     }
 
     [Fact]
@@ -364,7 +364,7 @@ public partial class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
             layers: layers);
 
         Assert.NotNull(arch);
-        Assert.Same(firstLayer, arch.Layers![0]);
+        Assert.Same(firstLayer, arch.Layers[0]);
 
         // Also test with the LayerBase-derived version to ensure both paths work
         var layerBaseDerived = new NameOnlyEmbeddingLayer(VocabSize);
@@ -388,7 +388,7 @@ public partial class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
             layers: layers2);
 
         Assert.NotNull(arch2);
-        Assert.Same(layerBaseDerived, arch2.Layers![0]);
+        Assert.Same(layerBaseDerived, arch2.Layers[0]);
     }
 
     // ====================================================================

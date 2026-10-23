@@ -176,7 +176,7 @@ public class BayesianOptimizerTests
         searchSpace.AddContinuous("x", 0.0, 1.0);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null!, searchSpace, nTrials: 5));
+        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null, searchSpace, nTrials: 5));
     }
 
     [Fact(Timeout = 60000)]
@@ -187,7 +187,7 @@ public class BayesianOptimizerTests
         Func<Dictionary<string, object>, double> objective = _ => 0.0;
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(objective, null!, nTrials: 5));
+        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(objective, null, nTrials: 5));
     }
 
     [Fact(Timeout = 60000)]

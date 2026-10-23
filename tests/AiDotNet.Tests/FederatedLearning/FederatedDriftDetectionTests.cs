@@ -25,7 +25,7 @@ public class FederatedDriftDetectionTests
     private static Dictionary<int, Tensor<double>> CreateClientModels(int clientCount, int modelSize, double divergence = 0.1)
     {
         var models = new Dictionary<int, Tensor<double>>();
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int c = 0; c < clientCount; c++)
         {
@@ -183,7 +183,7 @@ public class FederatedDriftDetectionTests
             { 0, 0.33 }, { 1, 0.34 }, { 2, 0.33 }
         };
 
-        var adjusted = detector.GetAdaptiveWeights(originalWeights, report);
+        var adjusted = detector.GetAdaptiveWeights(originalWeights, (report ?? throw new InvalidOperationException("report is null where it is required.")));
 
         Assert.Equal(3, adjusted.Count);
 

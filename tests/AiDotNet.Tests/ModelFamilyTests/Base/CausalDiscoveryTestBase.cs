@@ -83,7 +83,7 @@ public abstract class CausalDiscoveryTestBase<T>
     /// </remarks>
     protected virtual Matrix<double> CreateKnownStructureData()
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var data = new Matrix<double>(NumSamples, NumVariables);
 
         if (CreateAlgorithm().SupportsTimeSeries)
@@ -135,7 +135,7 @@ public abstract class CausalDiscoveryTestBase<T>
         for (int j = 0; j < NumVariables; j++)
         {
             // Use different seeds per column to guarantee independence
-            var rng = new Random(1000 + j * 137);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1000 + j * 137);
             for (int i = 0; i < NumSamples; i++)
             {
                 data[i, j] = rng.NextDouble() * 2.0 - 1.0;
@@ -627,7 +627,7 @@ public abstract class CausalDiscoveryTestBase<T>
 
     private Matrix<double> CreateKnownStructureDataWithSize(int samples)
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var data = new Matrix<double>(samples, NumVariables);
 
         for (int i = 0; i < samples; i++)

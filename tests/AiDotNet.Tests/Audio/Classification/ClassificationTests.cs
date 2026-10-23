@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.Audio.Classification
         {
             int numSamples = (int)(sampleRate * durationSeconds);
             var audio = new Tensor<float>([numSamples]);
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
             for (int i = 0; i < numSamples; i++)
             {
@@ -43,7 +43,7 @@ namespace AiDotNet.Tests.Audio.Classification
         {
             int numSamples = (int)(sampleRate * durationSeconds);
             var audio = new Tensor<float>([numSamples]);
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
             // Create a more complex music-like signal with beat pattern
             double tempo = 120.0; // BPM

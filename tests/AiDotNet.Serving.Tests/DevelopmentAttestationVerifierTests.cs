@@ -16,8 +16,8 @@ public class DevelopmentAttestationVerifierTests
         var environment = new TestHostEnvironment();
         var options = Options.Create(new AttestationOptions());
 
-        Assert.Throws<ArgumentNullException>(() => new DevelopmentAttestationVerifier(environment: null!, options));
-        Assert.Throws<ArgumentNullException>(() => new DevelopmentAttestationVerifier(environment, options: null!));
+        Assert.Throws<ArgumentNullException>(() => new DevelopmentAttestationVerifier(environment: null, options));
+        Assert.Throws<ArgumentNullException>(() => new DevelopmentAttestationVerifier(environment, options: null));
     }
 
     [Fact(Timeout = 60000)]
@@ -27,7 +27,7 @@ public class DevelopmentAttestationVerifierTests
         var options = Options.Create(new AttestationOptions());
         var verifier = new DevelopmentAttestationVerifier(environment, options);
 
-        var result = await verifier.VerifyAsync(evidence: null!);
+        var result = await verifier.VerifyAsync(evidence: null);
 
         Assert.False(result.IsSuccess);
         Assert.False(string.IsNullOrWhiteSpace(result.FailureReason));

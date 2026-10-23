@@ -187,7 +187,7 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
         public async Task SubsetSampler_Constructor_WithNullIndices_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new SubsetSampler(null!));
+            Assert.Throws<ArgumentNullException>(() => new SubsetSampler(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -256,7 +256,7 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new CurriculumSampler<double>(null!, totalEpochs: 10));
+                new CurriculumSampler<double>(null, totalEpochs: 10));
         }
 
         [Fact(Timeout = 60000)]
@@ -511,7 +511,7 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
         {
             // Arrange, Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new WeightedSampler<double>(null!, numSamples: 100));
+                new WeightedSampler<double>(null, numSamples: 100));
         }
 
         [Fact(Timeout = 60000)]

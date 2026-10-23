@@ -490,7 +490,7 @@ public class OnnxIntegrationTests
     {
         var cacheDir = Path.Combine(Path.GetTempPath(), "aidotnet_test_cache_" + Guid.NewGuid().ToString("N"));
         using var downloader = new OnnxModelDownloader(cacheDir);
-        await Assert.ThrowsAsync<ArgumentNullException>(() => downloader.DownloadAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => downloader.DownloadAsync(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -506,7 +506,7 @@ public class OnnxIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OnnxModel_NullPath_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new OnnxModel<float>(modelPath: null!));
+        Assert.Throws<ArgumentNullException>(() => new OnnxModel<float>(modelPath: null));
     }
 
     [Fact(Timeout = 120000)]
@@ -524,7 +524,7 @@ public class OnnxIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task OnnxModel_NullBytes_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new OnnxModel<float>(modelBytes: null!));
+        Assert.Throws<ArgumentNullException>(() => new OnnxModel<float>(modelBytes: null));
     }
 
     #endregion

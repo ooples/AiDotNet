@@ -60,7 +60,7 @@ public class KnowledgeDistillationTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new KnowledgeDistillationTrainer<double>(null!, distillationLoss));
+            new KnowledgeDistillationTrainer<double>(null, distillationLoss));
     }
 
     [Fact(Timeout = 60000)]
@@ -71,7 +71,7 @@ public class KnowledgeDistillationTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new KnowledgeDistillationTrainer<double>(teacher, null!));
+            new KnowledgeDistillationTrainer<double>(teacher, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -124,7 +124,7 @@ public class KnowledgeDistillationTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            trainer.TrainBatch(studentForward, studentBackward, null!, null));
+            trainer.TrainBatch(studentForward, studentBackward, null, null));
     }
 
     [Fact(Timeout = 60000)]

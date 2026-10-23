@@ -111,7 +111,7 @@ public class DataVersionControlTests : IDisposable
         var dataPath = Path.Combine(_dataDirectory, "sample_data.csv");
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => _versionControl.CreateDatasetVersion(null!, dataPath));
+        Assert.Throws<ArgumentException>(() => _versionControl.CreateDatasetVersion(null, dataPath));
     }
 
     [Fact(Timeout = 60000)]

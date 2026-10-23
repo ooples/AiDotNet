@@ -79,7 +79,7 @@ public class HybridDistillationStrategyTests
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            new HybridDistillationStrategy<double>(null!));
+            new HybridDistillationStrategy<double>(null));
     }
 
     [Fact(Timeout = 60000)]

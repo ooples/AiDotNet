@@ -108,7 +108,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                strategy.Chunk(null!).ToList());
+                strategy.Chunk(null).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -234,7 +234,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                strategy.ChunkWithPositions(null!).ToList());
+                strategy.ChunkWithPositions(null).ToList());
         }
 
         [Fact(Timeout = 60000)]

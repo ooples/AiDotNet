@@ -1661,7 +1661,7 @@ public class ClassifierSerializationRoundTripTests
 
     private static void ShuffleData(Matrix<double> x, Vector<double> y, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int n = x.Rows;
         for (int i = n - 1; i > 0; i--)
         {
@@ -1678,7 +1678,7 @@ public class ClassifierSerializationRoundTripTests
     private static (Matrix<double> x, Vector<double> y) CreateBinaryData(
         int totalSamples, int features, double separation, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int samplesPerClass = totalSamples / 2;
         var x = new Matrix<double>(totalSamples, features);
         var y = new Vector<double>(totalSamples);
@@ -1699,7 +1699,7 @@ public class ClassifierSerializationRoundTripTests
     private static (Matrix<double> x, Vector<double> y) CreateImbalancedBinaryData(
         int totalSamples, int features, double majorityRatio, double separation, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int minoritySamples = (int)(totalSamples / (1 + majorityRatio));
         if (minoritySamples < 2) minoritySamples = 2;
         int majoritySamples = totalSamples - minoritySamples;
@@ -1730,7 +1730,7 @@ public class ClassifierSerializationRoundTripTests
     private static (Matrix<double> x, Vector<double> y) CreateNonNegativeBinaryData(
         int totalSamples, int features, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int samplesPerClass = totalSamples / 2;
         var x = new Matrix<double>(totalSamples, features);
         var y = new Vector<double>(totalSamples);
@@ -1753,7 +1753,7 @@ public class ClassifierSerializationRoundTripTests
     private static (Matrix<double> x, Vector<double> y) CreateBinaryFeatureBinaryData(
         int totalSamples, int features, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int samplesPerClass = totalSamples / 2;
         var x = new Matrix<double>(totalSamples, features);
         var y = new Vector<double>(totalSamples);
@@ -1774,7 +1774,7 @@ public class ClassifierSerializationRoundTripTests
 
     private static Matrix<double> CreateRandomMatrix(int rows, int cols, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
@@ -1784,7 +1784,7 @@ public class ClassifierSerializationRoundTripTests
 
     private static Matrix<double> CreateNonNegativeMatrix(int rows, int cols, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
@@ -1794,7 +1794,7 @@ public class ClassifierSerializationRoundTripTests
 
     private static Matrix<double> CreateBinaryFeatureMatrix(int rows, int cols, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
@@ -1805,7 +1805,7 @@ public class ClassifierSerializationRoundTripTests
     private static (Matrix<double> x, Vector<double> y) CreateCategoricalBinaryData(
         int totalSamples, int features, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int samplesPerClass = totalSamples / 2;
         var x = new Matrix<double>(totalSamples, features);
         var y = new Vector<double>(totalSamples);
@@ -1827,7 +1827,7 @@ public class ClassifierSerializationRoundTripTests
 
     private static Matrix<double> CreateCategoricalMatrix(int rows, int cols, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
@@ -1838,7 +1838,7 @@ public class ClassifierSerializationRoundTripTests
     private static (Matrix<double> x, Vector<double> y) CreateMultiClassData(
         int samplesPerClass, int features, int numClasses, double separation, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int totalSamples = samplesPerClass * numClasses;
         var x = new Matrix<double>(totalSamples, features);
         var y = new Vector<double>(totalSamples);

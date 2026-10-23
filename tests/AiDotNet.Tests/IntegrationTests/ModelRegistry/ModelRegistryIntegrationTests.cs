@@ -137,7 +137,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         var model = new MockModel();
         var metadata = CreateTestMetadata();
 
-        Assert.Throws<ArgumentException>(() => registry.RegisterModel(null!, model, metadata));
+        Assert.Throws<ArgumentException>(() => registry.RegisterModel(null, model, metadata));
     }
 
     [Fact(Timeout = 120000)]
@@ -158,7 +158,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         var registry = new ModelRegistry<double, double[], double>(registryDir);
         var metadata = CreateTestMetadata();
 
-        Assert.Throws<ArgumentNullException>(() => registry.RegisterModel<object>("test", null!, metadata));
+        Assert.Throws<ArgumentNullException>(() => registry.RegisterModel<object>("test", null, metadata));
     }
 
     [Fact(Timeout = 120000)]
@@ -571,7 +571,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         var registryDir = Path.Combine(_testDirectory, "registry_search_null");
         var registry = new ModelRegistry<double, double[], double>(registryDir);
 
-        Assert.Throws<ArgumentNullException>(() => registry.SearchModels(null!));
+        Assert.Throws<ArgumentNullException>(() => registry.SearchModels(null));
     }
 
     #endregion
@@ -612,7 +612,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         registry.RegisterModel("null_metadata", model, metadata);
 
         Assert.Throws<ArgumentNullException>(() =>
-            registry.UpdateModelMetadata("null_metadata", 1, null!));
+            registry.UpdateModelMetadata("null_metadata", 1, null));
     }
 
     #endregion
@@ -653,7 +653,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         registry.RegisterModel("null_tags", model, metadata);
 
         Assert.Throws<ArgumentNullException>(() =>
-            registry.UpdateModelTags("null_tags", 1, null!));
+            registry.UpdateModelTags("null_tags", 1, null));
     }
 
     #endregion
@@ -884,7 +884,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         registry.RegisterModel("null_card", model, metadata);
 
         Assert.Throws<ArgumentNullException>(() =>
-            registry.AttachModelCard("null_card", 1, null!));
+            registry.AttachModelCard("null_card", 1, null));
     }
 
     [Fact(Timeout = 120000)]

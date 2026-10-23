@@ -61,7 +61,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         await _fakeSupabase.StartAsync();
 
         var address = _fakeSupabase.Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()!.Addresses.First();
+            .Features.Get<IServerAddressesFeature>().Addresses.First();
 
         Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET", WebhookSecret);
         Environment.SetEnvironmentVariable("SUPABASE_URL", address.TrimEnd('/'));

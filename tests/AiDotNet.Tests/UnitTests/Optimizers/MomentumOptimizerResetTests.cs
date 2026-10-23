@@ -99,7 +99,7 @@ public class MomentumOptimizerResetTests
     private static MomentumOptimizer<double, Tensor<double>, Tensor<double>> CreateOptimizer()
     {
         return new MomentumOptimizer<double, Tensor<double>, Tensor<double>>(
-            null!,
+            null,
             new MomentumOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
                 InitialLearningRate = 0.1,

@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                optimizer.Optimize(null!, evaluator));
+                optimizer.Optimize(null, evaluator));
         }
 
         [Fact(Timeout = 60000)]
@@ -126,7 +126,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                optimizer.Optimize(weights, null!));
+                optimizer.Optimize(weights, null));
         }
 
         [Fact(Timeout = 60000)]

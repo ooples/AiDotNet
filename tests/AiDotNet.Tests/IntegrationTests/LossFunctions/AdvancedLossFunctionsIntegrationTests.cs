@@ -515,7 +515,7 @@ public class AdvancedLossFunctionsIntegrationTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new PerceptualLoss<double>(null!, new Vector<double>(1)));
+            new PerceptualLoss<double>(null, new Vector<double>(1)));
     }
 
     #endregion

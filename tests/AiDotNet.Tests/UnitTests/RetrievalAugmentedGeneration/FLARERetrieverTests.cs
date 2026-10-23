@@ -124,7 +124,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new FLARERetriever<double>(null!, retriever));
+                new FLARERetriever<double>(null, retriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -135,7 +135,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new FLARERetriever<double>(generator, null!));
+                new FLARERetriever<double>(generator, null));
         }
 
         [Fact(Timeout = 60000)]
@@ -199,7 +199,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                flare.GenerateWithActiveRetrieval(null!));
+                flare.GenerateWithActiveRetrieval(null));
         }
 
         [Fact(Timeout = 60000)]

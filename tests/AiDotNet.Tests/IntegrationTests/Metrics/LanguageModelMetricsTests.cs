@@ -106,8 +106,8 @@ public class LanguageModelMetricsTests
         Assert.Throws<ArgumentException>(() => LanguageModelMetrics<double>.Perplexity(logits, new[] { 9 }));    // target OOB
 
         // Null-argument paths (all three public methods guard predictions/targets).
-        Assert.Throws<ArgumentNullException>(() => LanguageModelMetrics<double>.Perplexity(null!, new[] { 0 }));
-        Assert.Throws<ArgumentNullException>(() => LanguageModelMetrics<double>.CrossEntropy(null!, new[] { 0 }));
-        Assert.Throws<ArgumentNullException>(() => LanguageModelMetrics<double>.TopKAccuracy(logits, null!, k: 1));
+        Assert.Throws<ArgumentNullException>(() => LanguageModelMetrics<double>.Perplexity(null, new[] { 0 }));
+        Assert.Throws<ArgumentNullException>(() => LanguageModelMetrics<double>.CrossEntropy(null, new[] { 0 }));
+        Assert.Throws<ArgumentNullException>(() => LanguageModelMetrics<double>.TopKAccuracy(logits, null, k: 1));
     }
 }

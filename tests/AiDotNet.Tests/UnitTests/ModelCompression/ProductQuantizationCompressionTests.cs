@@ -70,7 +70,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new ProductQuantizationCompression<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
+            Assert.Throws<ArgumentNullException>(() => compression.Compress(null));
         }
 
         [Fact(Timeout = 60000)]
@@ -133,7 +133,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                compression.Decompress(null!, metadata));
+                compression.Decompress(null, metadata));
         }
 
         [Fact(Timeout = 60000)]

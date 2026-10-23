@@ -38,7 +38,7 @@ public class LicenseValidatorTests
         Assert.False(LicenseValidator.IsSignedKeyFormat("AIDN-PROD-abc-123"));  // server format, not aidn.
         Assert.False(LicenseValidator.IsSignedKeyFormat("aidn..sig"));          // empty id
         Assert.False(LicenseValidator.IsSignedKeyFormat("aidn.id."));           // empty sig
-        Assert.False(LicenseValidator.IsSignedKeyFormat(null!));
+        Assert.False(LicenseValidator.IsSignedKeyFormat(null));
     }
 
     [Fact(Timeout = 60000)]

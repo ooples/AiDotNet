@@ -22,7 +22,7 @@ public sealed class LowPrecisionResidentTests
     {
         var layer = new DenseLayer<float>(64, (AiDotNet.Interfaces.IActivationFunction<float>)new IdentityActivation<float>());
 
-        var rng = new Random(1);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1);
         var input = new Tensor<float>(new[] { 4, 64 });
         var inSpan = input.AsWritableSpan();
         for (int i = 0; i < inSpan.Length; i++) inSpan[i] = (float)(rng.NextDouble() - 0.5);

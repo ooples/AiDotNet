@@ -205,7 +205,7 @@ public class DirectGpuCorrectnessTests
         {
             _output.WriteLine("DirectGpu not available - skipping test.");
             engine.Dispose();
-            backend = null!;
+            backend = null;
             return false;
         }
 

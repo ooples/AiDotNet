@@ -61,7 +61,7 @@ public sealed class ProgramFitnessEvaluatorTests
     public void DelegateEvaluatorValidatesItsArguments()
     {
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => new DelegateProgramFitnessEvaluator((Func<ProgramGenome, double>)null));
+        Assert.Throws<ArgumentNullException>(() => new DelegateProgramFitnessEvaluator((Func<ProgramGenome, double>?)null));
 #pragma warning restore CS8600, CS8625
         Assert.Throws<ArgumentException>(() => new DelegateProgramFitnessEvaluator(_ => 1.0, " "));
     }

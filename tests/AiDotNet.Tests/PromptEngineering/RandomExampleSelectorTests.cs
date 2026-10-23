@@ -72,7 +72,7 @@ public class RandomExampleSelectorTests
     {
         var selector = new RandomExampleSelector<double>();
 
-        Assert.Throws<ArgumentNullException>(() => selector.AddExample(null!));
+        Assert.Throws<ArgumentNullException>(() => selector.AddExample(null));
     }
 
     [Fact(Timeout = 60000)]

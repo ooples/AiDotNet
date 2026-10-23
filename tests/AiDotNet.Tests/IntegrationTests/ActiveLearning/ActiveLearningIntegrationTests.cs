@@ -113,7 +113,7 @@ public class ActiveLearningIntegrationTests
         var pool = CreateUnlabeledPool(10, 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(null!, pool, 5));
+        Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(null, pool, 5));
     }
 
     [Fact(Timeout = 120000)]
@@ -124,7 +124,7 @@ public class ActiveLearningIntegrationTests
         var model = CreateMockModel(3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(model, null!, 5));
+        Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(model, null, 5));
     }
 
     [Fact(Timeout = 120000)]

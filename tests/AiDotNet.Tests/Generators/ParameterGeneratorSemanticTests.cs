@@ -310,18 +310,18 @@ public class SecondGeneratedCoverageClone<T> : AiDotNet.NeuralNetworks.Layers.La
             .ToList();
 
         Assert.Equal(2, registrationMethods.Count);
-        Assert.DoesNotContain("new List<ClonePlanEntry>", dispatcher.Body!.ToFullString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("new List<ClonePlanEntry>", (dispatcher.Body ?? throw new InvalidOperationException("dispatcher.Body is null where it is required.")).ToFullString(), StringComparison.Ordinal);
         Assert.All(registrationMethods, method =>
-            Assert.Contains("new List<ClonePlanEntry>", method.Body!.ToFullString(), StringComparison.Ordinal));
+            Assert.Contains("new List<ClonePlanEntry>", (method.Body ?? throw new InvalidOperationException("method.Body is null where it is required.")).ToFullString(), StringComparison.Ordinal));
     }
 
     [Fact]
     public void ClonePlanGenerator_EmitsToolingSafeMethodBodies()
     {
-        Type registry = typeof(AiDotNet.Models.CloneRegistry).Assembly.GetType(
+        Type registry = (typeof(AiDotNet.Models.CloneRegistry).Assembly.GetType(
             "AiDotNet.Generated.CloneRegistrations",
-            throwOnError: true)!;
-        var generatedMethods = registry
+            throwOnError: true) ?? throw new InvalidOperationException("typeof(AiDotNet.Models.CloneRegistry).Assembly.GetType( \"AiDotNet.Generated.C... is null where it is required."));
+        var generatedMethods = (registry ?? throw new InvalidOperationException("registry is null where it is required."))
             .GetMethods(System.Reflection.BindingFlags.Static |
                         System.Reflection.BindingFlags.Public |
                         System.Reflection.BindingFlags.NonPublic |

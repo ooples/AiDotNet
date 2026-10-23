@@ -80,7 +80,7 @@ public class RealESRGANIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new RealESRGAN<double>(
-            null!,
+            null,
             discriminatorArch,
             InputType.ThreeDimensional));
     }
@@ -94,7 +94,7 @@ public class RealESRGANIntegrationTests
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new RealESRGAN<double>(
             generatorArch,
-            null!,
+            null,
             InputType.ThreeDimensional));
     }
 
@@ -271,7 +271,7 @@ public class RealESRGANIntegrationTests
         var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => model.Upscale(null!));
+        Assert.Throws<ArgumentNullException>(() => model.Upscale(null));
     }
 
     #endregion
@@ -359,7 +359,7 @@ public class RealESRGANIntegrationTests
         var model = new RealESRGAN<float>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         var inputData = new float[1 * 3 * 32 * 32];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < inputData.Length; i++)
             inputData[i] = (float)random.NextDouble();
         var inputTensor = new Tensor<float>(new[] { 1, 3, 32, 32 }, new Vector<float>(inputData));
@@ -393,7 +393,7 @@ public class RealESRGANIntegrationTests
     {
         int totalSize = shape.Aggregate(1, (a, b) => a * b);
         var data = new double[totalSize];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < totalSize; i++)
             data[i] = random.NextDouble();
         return new Tensor<double>(shape, new Vector<double>(data));

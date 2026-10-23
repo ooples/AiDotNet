@@ -26,7 +26,7 @@ public class LFTMechanismTests
 
     private static FeatureWiseTransformation<double> Make(
         double scale = 0.3, double bias = 0.5, int seed = 11, int channels = C)
-        => new(channels, scale, bias, new Random(seed));
+        => new(channels, scale, bias, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
 
     private static Vector<double> Ones(int n = C)
     {
@@ -153,8 +153,8 @@ public class LFTMechanismTests
     [Fact]
     public void Transformation_RejectsNonPositiveWidth()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new FeatureWiseTransformation<double>(0, 0.3, 0.5, new Random(1)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new FeatureWiseTransformation<double>(-4, 0.3, 0.5, new Random(1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FeatureWiseTransformation<double>(0, 0.3, 0.5, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FeatureWiseTransformation<double>(-4, 0.3, 0.5, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1)));
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public class LFTMechanismTests
 
     private static MetaLearningTask<double, Matrix<double>, Vector<double>> Task(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var sx = new Matrix<double>(4, 3);
         var qx = new Matrix<double>(4, 3);
         var sy = new Vector<double>(4);
@@ -282,7 +282,7 @@ public class LFTMechanismTests
     public void Constructor_RejectsInvalidConfiguration()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new LFTAlgorithm<double, Matrix<double>, Vector<double>>(null!));
+            new LFTAlgorithm<double, Matrix<double>, Vector<double>>(null));
 
         // ThrowsAny: MetaLearnerBase validates IMetaLearnerOptions before this class's own checks,
         // so the exact ArgumentException subtype is the base's choice. What matters is rejection.

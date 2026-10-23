@@ -75,7 +75,7 @@ public class ModelFileHeaderTests
     [Fact(Timeout = 60000)]
     public async Task HasHeader_ReturnsFalseForNull()
     {
-        Assert.False(ModelFileHeader.HasHeader((byte[])null));
+        Assert.False(ModelFileHeader.HasHeader((byte[]?)null));
     }
 
     [Fact(Timeout = 60000)]
@@ -159,7 +159,7 @@ public class ModelFileHeaderTests
     {
         // 1 MB payload
         var payload = new byte[1024 * 1024];
-        new Random(42).NextBytes(payload);
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42).NextBytes(payload);
         var model = new StubModelSerializer { Payload = payload };
 
         byte[] wrapped = ModelFileHeader.WrapWithHeader(

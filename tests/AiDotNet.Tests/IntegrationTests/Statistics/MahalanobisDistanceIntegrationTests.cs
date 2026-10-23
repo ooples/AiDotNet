@@ -441,7 +441,7 @@ public class MahalanobisDistanceIntegrationTests
     public async Task MahalanobisDistance_NullInverseCovariance_ThrowsException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new MahalanobisDistance<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new MahalanobisDistance<double>(null));
     }
 
     #endregion

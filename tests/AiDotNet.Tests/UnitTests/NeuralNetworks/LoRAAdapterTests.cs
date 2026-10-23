@@ -52,7 +52,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         public async Task Constructor_WithNullBaseLayer_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new DenseLoRAAdapter<double>(null!, rank: 3));
+            Assert.Throws<ArgumentNullException>(() => new DenseLoRAAdapter<double>(null, rank: 3));
         }
 
         [Fact(Timeout = 120000)]

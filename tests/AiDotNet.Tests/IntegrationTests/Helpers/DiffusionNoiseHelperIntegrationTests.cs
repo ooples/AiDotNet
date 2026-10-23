@@ -53,7 +53,7 @@ public class DiffusionNoiseHelperIntegrationTests
     public async Task SampleGaussian_NullShape_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
-            DiffusionNoiseHelper<double>.SampleGaussian(null!, seed: 42));
+            DiffusionNoiseHelper<double>.SampleGaussian(null, seed: 42));
     }
 
     [Fact(Timeout = 120000)]
@@ -176,7 +176,7 @@ public class DiffusionNoiseHelperIntegrationTests
     public async Task ComputeTimestepEmbeddings_NullTimesteps_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
-            DiffusionNoiseHelper<double>.ComputeTimestepEmbeddings(null!, 8));
+            DiffusionNoiseHelper<double>.ComputeTimestepEmbeddings(null, 8));
     }
 
     [Fact(Timeout = 120000)]

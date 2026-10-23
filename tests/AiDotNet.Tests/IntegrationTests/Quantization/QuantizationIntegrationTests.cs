@@ -31,7 +31,7 @@ public class QuantizationIntegrationTests
     /// </summary>
     private SimpleTestModel<double> CreateTestModel(int parameterCount = 1000)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var weights = new double[parameterCount];
         for (int i = 0; i < parameterCount; i++)
         {
@@ -46,7 +46,7 @@ public class QuantizationIntegrationTests
     /// </summary>
     private IEnumerable<double[]> CreateCalibrationData(int samples, int inputSize)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < samples; i++)
         {
             var sample = new double[inputSize];
@@ -1044,7 +1044,7 @@ public class QuantizationIntegrationTests
         // B: (inputSize x rank) = 16 x 4 = 64 params
         var loraAParams = new double[rank * outputSize];
         var loraBParams = new double[inputSize * rank];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < loraAParams.Length; i++)
             loraAParams[i] = random.NextDouble() * 2 - 1;
@@ -1336,7 +1336,7 @@ public class QuantizationIntegrationTests
         var calibrationData = CreateCalibrationData(50, 10).ToList();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => quantizer.Calibrate(null!, calibrationData));
+        Assert.Throws<ArgumentNullException>(() => quantizer.Calibrate(null, calibrationData));
     }
 
     [Fact(Timeout = 120000)]

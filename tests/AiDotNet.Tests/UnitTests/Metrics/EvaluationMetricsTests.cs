@@ -174,7 +174,7 @@ public class EvaluationMetricsTests
         // Arrange
         var stoi = new ShortTimeObjectiveIntelligibility<double>(sampleRate: 16000);
         var signal = new Tensor<double>(new[] { 1600 }); // 100ms at 16kHz
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < signal.Length; i++)
         {
             signal[i] = Math.Sin(2 * Math.PI * 440 * i / 16000.0) + random.NextDouble() * 0.1;
@@ -235,7 +235,7 @@ public class EvaluationMetricsTests
         var snr = new SignalToNoiseRatio<double>();
         var clean = new Tensor<double>(new[] { 1000 });
         var noisy = new Tensor<double>(new[] { 1000 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < clean.Length; i++)
         {
@@ -261,7 +261,7 @@ public class EvaluationMetricsTests
         // Arrange
         var psnr = new PeakSignalToNoiseRatio<double>();
         var image = new Tensor<double>(new[] { 64, 64, 3 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < image.Length; i++)
         {
             image[i] = random.NextDouble();
@@ -282,7 +282,7 @@ public class EvaluationMetricsTests
         var psnr = new PeakSignalToNoiseRatio<double>();
         var image1 = new Tensor<double>(new[] { 64, 64, 3 });
         var image2 = new Tensor<double>(new[] { 64, 64, 3 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < image1.Length; i++)
         {
@@ -304,7 +304,7 @@ public class EvaluationMetricsTests
         // Arrange
         var ssim = new StructuralSimilarity<double>();
         var image = new Tensor<double>(new[] { 64, 64, 3 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < image.Length; i++)
         {
             image[i] = random.NextDouble();
@@ -325,7 +325,7 @@ public class EvaluationMetricsTests
         var ssim = new StructuralSimilarity<double>();
         var image1 = new Tensor<double>(new[] { 64, 64, 3 });
         var image2 = new Tensor<double>(new[] { 64, 64, 3 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < image1.Length; i++)
         {
@@ -370,7 +370,7 @@ public class EvaluationMetricsTests
         var miou = new MeanIntersectionOverUnion<double>(numClasses: 3);
         var prediction = new Tensor<double>(new[] { 100 });
         var groundTruth = new Tensor<double>(new[] { 100 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < 100; i++)
         {
@@ -397,7 +397,7 @@ public class EvaluationMetricsTests
         var vpsnr = new VideoPSNR<double>();
         // Create a 10-frame video with 32x32 RGB
         var video = new Tensor<double>(new[] { 10, 32, 32, 3 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < video.Length; i++)
         {
             video[i] = random.NextDouble();
@@ -417,7 +417,7 @@ public class EvaluationMetricsTests
         // Arrange
         var vssim = new VideoSSIM<double>();
         var video = new Tensor<double>(new[] { 5, 32, 32, 3 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < video.Length; i++)
         {
             video[i] = random.NextDouble();
@@ -528,7 +528,7 @@ public class EvaluationMetricsTests
         var vqi = new VideoQualityIndex<double>();
         var video1 = new Tensor<double>(new[] { 5, 32, 32, 3 });
         var video2 = new Tensor<double>(new[] { 5, 32, 32, 3 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < video1.Length; i++)
         {

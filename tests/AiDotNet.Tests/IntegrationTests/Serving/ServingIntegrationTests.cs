@@ -203,7 +203,7 @@ public class ServingIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchScheduler_Creation_ThrowsOnNullConfig()
     {
-        Assert.Throws<ArgumentNullException>(() => new BatchScheduler<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new BatchScheduler<double>(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -223,7 +223,7 @@ public class ServingIntegrationTests
     {
         var scheduler = new BatchScheduler<double>();
 
-        Assert.Throws<ArgumentNullException>(() => scheduler.AddSequence(null!));
+        Assert.Throws<ArgumentNullException>(() => scheduler.AddSequence(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -354,7 +354,7 @@ public class ServingIntegrationTests
         var scheduler = new BatchScheduler<double>();
 
         // Should not throw
-        scheduler.CompleteSequence(null!);
+        scheduler.CompleteSequence(null);
     }
 
     [Fact(Timeout = 120000)]
@@ -484,7 +484,7 @@ public class ServingIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SequenceState_Creation_ThrowsOnNullRequest()
     {
-        Assert.Throws<ArgumentNullException>(() => new SequenceState<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new SequenceState<double>(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -729,7 +729,7 @@ public class ServingIntegrationTests
         Assert.Equal(10, request.Priority);
         Assert.Equal("custom context", request.UserContext);
         Assert.NotNull(request.OnTokenGenerated);
-        Assert.Single(request.StopTokenIds!);
+        Assert.Single(request.StopTokenIds);
     }
 
     #endregion

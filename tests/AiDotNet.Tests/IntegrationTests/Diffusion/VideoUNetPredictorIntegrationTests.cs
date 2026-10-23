@@ -26,7 +26,7 @@ public class VideoUNetPredictorIntegrationTests
         int length = 1;
         foreach (var d in shape) length *= d;
         var data = new float[length];
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < length; i++) data[i] = (float)(rng.NextDouble() * 2 - 1);
         return new Tensor<float>(data, shape);
     }
@@ -35,7 +35,7 @@ public class VideoUNetPredictorIntegrationTests
     {
         int length = rows * cols;
         var data = new float[length];
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < length; i++) data[i] = (float)(rng.NextDouble() * 2 - 1);
         return new Tensor<float>(data, new[] { rows, cols });
     }
@@ -71,9 +71,9 @@ public class VideoUNetPredictorIntegrationTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        var output = (Tensor<float>)method!.Invoke(predictor, new object[] { temporalLayer, video })!;
+        var output = (Tensor<float>)(method.Invoke(predictor, new object[] { temporalLayer, video }) ?? throw new InvalidOperationException("(Tensor<float>)method.Invoke(predictor, new object[] { temporalLayer, video }) is null where it is required."));
 
-        Assert.Equal(video.Shape.Length, output.Shape.Length);
+        Assert.Equal(video.Shape.Length, (output ?? throw new InvalidOperationException("output is null where it is required.")).Shape.Length);
         for (int i = 0; i < video.Shape.Length; i++)
             Assert.Equal(video.Shape[i], output.Shape[i]);
     }
@@ -123,11 +123,11 @@ public class VideoUNetPredictorIntegrationTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        var output = (Tensor<float>)method!.Invoke(predictor, new object[] { temporalLayer, video })!;
+        var output = (Tensor<float>)(method.Invoke(predictor, new object[] { temporalLayer, video }) ?? throw new InvalidOperationException("(Tensor<float>)method.Invoke(predictor, new object[] { temporalLayer, video }) is null where it is required."));
 
         // Verify the output shape is still [1, 1, 4, 2, 2] — the permute-then-reshape
         // round-trip preserves the layout.
-        Assert.Equal(5, output.Shape.Length);
+        Assert.Equal(5, (output ?? throw new InvalidOperationException("output is null where it is required.")).Shape.Length);
         Assert.Equal(B, output.Shape[0]);
         Assert.Equal(C, output.Shape[1]);
         Assert.Equal(F, output.Shape[2]);
@@ -195,10 +195,10 @@ public class VideoUNetPredictorIntegrationTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        var output = (Tensor<float>)method!.Invoke(predictor, new object[] { projection, x, timeEmbed, /*isVideo*/ false })!;
+        var output = (Tensor<float>)(method.Invoke(predictor, new object[] { projection, x, timeEmbed, /*isVideo*/ false }) ?? throw new InvalidOperationException("(Tensor<float>)method.Invoke(predictor, new object[] { projection, x, timeEmb... is null where it is required."));
 
         // Output shape must match input shape.
-        Assert.Equal(x.Shape.Length, output.Shape.Length);
+        Assert.Equal(x.Shape.Length, (output ?? throw new InvalidOperationException("output is null where it is required.")).Shape.Length);
         for (int i = 0; i < x.Shape.Length; i++) Assert.Equal(x.Shape[i], output.Shape[i]);
 
         // FiLM: x = x * (1 + scale) + shift. With x=1 everywhere, output must

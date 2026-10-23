@@ -194,7 +194,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new MultiVectorRetriever<double>(null!, vectorsPerDocument: 3, aggregationMethod: "max"));
+                new MultiVectorRetriever<double>(null, vectorsPerDocument: 3, aggregationMethod: "max"));
         }
 
         [Fact(Timeout = 60000)]
@@ -227,7 +227,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new MultiVectorRetriever<double>(store, vectorsPerDocument: 3, aggregationMethod: null!));
+                new MultiVectorRetriever<double>(store, vectorsPerDocument: 3, aggregationMethod: null));
         }
 
         [Fact(Timeout = 60000)]
@@ -322,7 +322,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null!).ToList());
+                retriever.Retrieve(null).ToList());
         }
 
         [Fact(Timeout = 60000)]

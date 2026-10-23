@@ -46,7 +46,7 @@ public class EncryptionOverheadBenchmarkTests
 
         // Create deterministic test payload
         var payload = new byte[payloadSize];
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         rng.NextBytes(payload);
 
         // Warmup
@@ -147,7 +147,7 @@ public class EncryptionOverheadBenchmarkTests
         const string licenseKey = "test-key";
         const string aadText = "test-aad";
         var payload = new byte[1_000_000]; // 1 MB
-        new Random(42).NextBytes(payload);
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42).NextBytes(payload);
 
         var encrypted = ModelPayloadEncryption.Encrypt(payload, licenseKey, aadText);
 

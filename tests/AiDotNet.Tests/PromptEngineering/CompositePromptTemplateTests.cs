@@ -169,7 +169,7 @@ public class CompositePromptTemplateTests
         var composite = new CompositePromptTemplate()
             .Add(new SimplePromptTemplate("{a}"));
 
-        var result = composite.Validate(null!);
+        var result = composite.Validate(null);
 
         Assert.False(result);
     }

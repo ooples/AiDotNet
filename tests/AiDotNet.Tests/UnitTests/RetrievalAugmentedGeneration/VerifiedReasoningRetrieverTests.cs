@@ -68,7 +68,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new VerifiedReasoningRetriever<double>(null!, mockRetriever));
+                new VerifiedReasoningRetriever<double>(null, mockRetriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new VerifiedReasoningRetriever<double>(generator, null!));
+                new VerifiedReasoningRetriever<double>(generator, null));
         }
 
         [Fact(Timeout = 60000)]
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                verifiedRetriever.RetrieveWithVerification(null!, 10));
+                verifiedRetriever.RetrieveWithVerification(null, 10));
         }
 
         [Fact(Timeout = 60000)]

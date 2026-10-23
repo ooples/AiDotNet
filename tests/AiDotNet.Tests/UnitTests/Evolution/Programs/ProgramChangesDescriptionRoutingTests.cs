@@ -73,11 +73,11 @@ public sealed class ProgramChangesDescriptionRoutingTests
     [Fact]
     public void RoutingRefusesArgumentsItCannotWorkWith()
     {
-        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(null!, Source, Description));
-        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), null!, Description));
-        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), Source, null!));
+        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(null, Source, Description));
+        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), null, Description));
+        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), Source, null));
         Assert.Throws<ArgumentNullException>(() =>
-            ProgramDiff.SplitByTarget(new ProgramDiffBlock[] { null! }, Source, Description));
+            ProgramDiff.SplitByTarget(new ProgramDiffBlock[] { null }, Source, Description));
 
         ProgramDiffTargetSplit empty = ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), Source, Description);
         Assert.True(empty.IsSuccess);

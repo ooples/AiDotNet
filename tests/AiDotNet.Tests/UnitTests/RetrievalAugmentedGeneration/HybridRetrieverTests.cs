@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new HybridRetriever<double>(null!, sparseRetriever));
+                new HybridRetriever<double>(null, sparseRetriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -209,7 +209,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new HybridRetriever<double>(denseRetriever, null!));
+                new HybridRetriever<double>(denseRetriever, null));
         }
 
         [Fact(Timeout = 60000)]
@@ -401,7 +401,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null!).ToList());
+                retriever.Retrieve(null).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -601,7 +601,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                retriever.Retrieve("fox", topK: 5, null!).ToList());
+                retriever.Retrieve("fox", topK: 5, null).ToList());
         }
 
         #endregion

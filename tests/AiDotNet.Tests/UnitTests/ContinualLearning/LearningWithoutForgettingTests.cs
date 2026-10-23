@@ -169,7 +169,7 @@ public class LearningWithoutForgettingTests
         var inputs = CreateTestTensor(batchSize: 5, featureSize: 10);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => lwf.PrepareDistillation(null!, inputs, taskId: 0));
+        Assert.Throws<ArgumentNullException>(() => lwf.PrepareDistillation(null, inputs, taskId: 0));
     }
 
     [Fact(Timeout = 60000)]
@@ -180,7 +180,7 @@ public class LearningWithoutForgettingTests
         var network = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => lwf.PrepareDistillation(network, null!, taskId: 0));
+        Assert.Throws<ArgumentNullException>(() => lwf.PrepareDistillation(network, null, taskId: 0));
     }
 
     [Fact(Timeout = 60000)]
@@ -248,7 +248,7 @@ public class LearningWithoutForgettingTests
         var lwf = new LearningWithoutForgetting<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => lwf.ComputeLoss(null!));
+        Assert.Throws<ArgumentNullException>(() => lwf.ComputeLoss(null));
     }
 
     [Fact(Timeout = 60000)]
@@ -345,7 +345,7 @@ public class LearningWithoutForgettingTests
         var oldPredictions = CreateTestTensor(batchSize: 3, featureSize: 4);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => lwf.ComputeDistillationLoss(null!, oldPredictions));
+        Assert.Throws<ArgumentNullException>(() => lwf.ComputeDistillationLoss(null, oldPredictions));
     }
 
     [Fact(Timeout = 60000)]
@@ -356,7 +356,7 @@ public class LearningWithoutForgettingTests
         var currentPredictions = CreateTestTensor(batchSize: 3, featureSize: 4);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => lwf.ComputeDistillationLoss(currentPredictions, null!));
+        Assert.Throws<ArgumentNullException>(() => lwf.ComputeDistillationLoss(currentPredictions, null));
     }
 
     #endregion
