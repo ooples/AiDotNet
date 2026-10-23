@@ -36,7 +36,9 @@ public class DenseLayerBiasModeTests
             {
                 double expected = 0;
                 for (int k = 0; k < 5; k++) expected += x[r * 5 + k] * w[k * 4 + c];
-                Assert.Equal(expected, y[r * 4 + c], precision: 12);
+                // A tolerance, not precision: 12, which rounds both values to 12 places and so fails two sums one ulp
+                // apart whenever they straddle a rounding boundary (the weights are unseeded, so that was a draw).
+                Assert.Equal(expected, y[r * 4 + c], 1e-12);
             }
         }
     }
