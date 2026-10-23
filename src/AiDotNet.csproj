@@ -381,8 +381,14 @@
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pen_homographs.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pen_homographs.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pen_model.f32.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pen_model.f32.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\perceptron_tagger_eng.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.perceptron_tagger_eng.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pypinyin050_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pypinyin050_chars.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pypinyin050_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pypinyin050_phrases.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_pos.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_pos.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_posseg.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_posseg.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\melo_chinese.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.melo_chinese.json.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-chinese-vocab.txt.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\bert-base-multilingual-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-multilingual-uncased-vocab.txt.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\nrl_rules.tsv" LogicalName="AiDotNet.TextToSpeech.FrontEnd.nrl_rules.tsv" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_dict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_dict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_hmm.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_hmm.json.gz" />
