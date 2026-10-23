@@ -122,7 +122,7 @@ public class AnswerCorrectnessMetric<T> : RAGMetricBase<T>
             "the reference answer? Reply with only a single number.\n\n" +
             $"Reference: {groundTruth}\n\nAnswer: {answerText}\n\nCorrectness (0-10):";
         var reply = _generator!.Generate(prompt);
-        var match = Regex.Match(reply ?? string.Empty, @"\d+(\.\d+)?");
+        var match = Regex.Match(reply ?? string.Empty, @"\d+(\.\d+)?", RegexOptions.None, RegexTimeout);
         if (match.Success && double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double raw))
             return Math.Min(1.0, Math.Max(0.0, raw / 10.0));
 
