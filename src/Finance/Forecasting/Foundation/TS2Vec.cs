@@ -206,7 +206,7 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTS2VecLayers(
-                Architecture, _contextLength, _forecastHorizon, _hiddenDimension,
+                _contextLength, _forecastHorizon, _hiddenDimension,
                 _outputDimension, _numLayers, _dropout));
             ExtractLayerReferences();
         }
@@ -281,7 +281,7 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
@@ -395,7 +395,7 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
+        var normalized = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         var current = normalized;
 
         bool addedBatchDim = false;

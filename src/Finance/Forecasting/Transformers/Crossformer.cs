@@ -362,7 +362,7 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultCrossformerLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                _sequenceLength, _predictionHorizon, _numFeatures,
                 _segmentLength, _modelDimension, _numHeads, _numLayers, _dropout));
 
             ExtractLayerReferences();
@@ -509,7 +509,7 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the Crossformer model, Forecast produces predictions from input data. This is the main inference step of the Crossformer architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (_useInstanceNormalization)
             historicalData = ApplyInstanceNormalization(historicalData);

@@ -31,6 +31,11 @@ namespace AiDotNet.Finance.Base;
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public abstract partial class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfolioOptimizer<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>An architecture may state the feature count, the asset count, or both together (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        NumFeatures > 0 && NumAssets > 0 ? new[] { NumFeatures, NumAssets, NumFeatures * NumAssets } : base.ArchitectureInputSizesFromOptions;
+
     /// <summary>
     /// The number of assets in the portfolio universe.
     /// </summary>

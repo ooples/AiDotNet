@@ -371,7 +371,7 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultLagLlamaLayers(
-                Architecture, _contextLength, _forecastHorizon, 1,
+                _contextLength, _forecastHorizon, 1,
                 _lagIndices.Length, _hiddenDimension, _numLayers, _numHeads,
                 _intermediateSize, _dropout));
 
@@ -618,7 +618,7 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the LagLlama model, Forecast produces predictions from input data. This is the main inference step of the LagLlama architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
 

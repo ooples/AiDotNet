@@ -342,7 +342,6 @@ public partial class S4<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultS4Layers(
-                Architecture,
                 _contextLength,
                 _forecastHorizon,
                 _modelDimension,
@@ -587,7 +586,7 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// using HiPPO-like dynamics and produces future predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 

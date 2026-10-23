@@ -45,7 +45,7 @@ public class CustomObjectiveFusedTrainingTests
         "CCDM" => Warm(BuildCcdm(), new Tensor<double>([1, 8, 1])),
         "TSDiff" => Warm(BuildTsDiff(), new Tensor<double>([1, 16, 1])),
         "TimeDiff" => Warm(BuildTimeDiff(), new Tensor<double>([1, 16, 1])),
-        "TFC" => Warm(BuildTfc(), new Tensor<double>([1, 16, 1])),
+        "TFC" => Warm(BuildTfc(), new Tensor<double>([2, 16, 1])),
         "NeRF" => WarmNerf(BuildNerf()),
         "InstantNGP" => WarmInstantNgp(BuildInstantNgp()),
         "BasicVSRPlusPlus" => Warm(BuildBasicVsr(), new Tensor<double>([2, 3, 16, 16])),
@@ -80,7 +80,11 @@ public class CustomObjectiveFusedTrainingTests
             case "CCDM": TrainOnChangingBatches(model, [1, 8, 1], [1, 4]); break;
             case "TSDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
             case "TimeDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
-            case "TFC": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
+            // Two series, not one: TFC's encoders batch-normalize, and a training batch of one has zero variance in
+            // every channel, so the gradient through each batch norm is rounding noise times 1/sqrt(eps) and the two
+            // arms compare noise (PyTorch's BatchNorm1d refuses the case). A batch of two also covers the gamma shape
+            // mismatch TFC threw there before its batch norms were given the encoder width.
+            case "TFC": TrainOnChangingBatches(model, [2, 16, 1], [2, 4]); break;
             case "NeRF": TrainNerf((AiDotNet.NeuralRadianceFields.Models.NeRF<double>)model); break;
             case "InstantNGP": TrainInstantNgp((AiDotNet.NeuralRadianceFields.Models.InstantNGP<double>)model); break;
             // A two-frame clip, so flow estimation and warping run between the frames.

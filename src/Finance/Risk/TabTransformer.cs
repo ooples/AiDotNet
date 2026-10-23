@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
@@ -83,7 +83,8 @@ public partial class TabTransformer<T> : RiskModelBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 10,
+            // The default options' 50 features (#2147).
+            inputSize: 50,
             outputSize: 1))
     {
     }

@@ -250,7 +250,7 @@ public partial class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultChronosBoltLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchLength,
+                _contextLength, _forecastHorizon, _patchLength,
                 _encoderHiddenDim, _decoderHiddenDim,
                 _numEncoderLayers, _numDecoderLayers, _numHeads,
                 _numQuantiles, _dropout));
@@ -446,7 +446,7 @@ public partial class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var rawOutput = _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
 

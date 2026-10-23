@@ -200,7 +200,6 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultRealizedVolatilityTransformerLayers(
-                Architecture,
                 _lookbackWindow,
                 _numAssets,
                 _hiddenSize,
