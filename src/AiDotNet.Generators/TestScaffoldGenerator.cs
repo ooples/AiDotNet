@@ -6674,7 +6674,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 // EmotiVoice's release is a 384-wide acoustic model over 2014 speakers, a 512-channel HiFi-GAN upsampling
                 // 256x, full-width discriminators and a 12-layer 768-wide SimBERT; keep every module at a tiny width: a
-                // 16-wide acoustic model with 2-block encoder and decoder over 10 mel bins, a 16-channel HiFi-GAN
+                // 16-wide acoustic model over the released 502 phoneme tokens with 2-block encoder and decoder over 10 mel bins, a 16-channel HiFi-GAN
                 // upsampling 4x4 (a 16-sample hop with a 64-point FFT) on 8-frame segments, discriminators at 1/16 width
                 // and a 1-layer 8-wide SimBERT.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
@@ -6682,7 +6682,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 1, outputSize: 1), " +
                     "new AiDotNet.TextToSpeech.StyleEmotion.EmotiVoiceOptions { HopSize = 16, FftSize = 64, WindowLength = 64, MelChannels = 10, " +
-                    "HiddenDim = 16, VocabSize = 64, SpeakerCount = 4, Heads = 2, EncoderLayers = 2, DecoderLayers = 2, VarianceChannels = 16, " +
+                    "HiddenDim = 16, SpeakerCount = 4, Heads = 2, EncoderLayers = 2, DecoderLayers = 2, VarianceChannels = 16, " +
                     "UpsampleRates = [4, 4], UpsampleKernels = [8, 8], UpsampleInitialChannels = 16, SegmentFrames = 8, " +
                     "DiscriminatorWidthDivisor = 16, StyleBertHidden = 8, StyleBertLayers = 1, StyleBertHeads = 2, StyleBertIntermediate = 16 })";
             }
