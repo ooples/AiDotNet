@@ -256,6 +256,39 @@ internal sealed class CosyVoiceFlow<T>
     }
 
     /// <summary>
+    /// The mel <c>[1, OutputSize, frames]</c> of speech tokens after a prompt (<c>MaskedDiffWithXvec.inference</c>): the
+    /// prompt's tokens and these encoded together, each part stretched to its frames (the prompt's to its mel's), the
+    /// prompt's mel <c>[promptFrames, OutputSize]</c> as the condition, sampling from <paramref name="noise"/>
+    /// <c>[1, OutputSize, promptFrames + frames]</c>, and the prompt's frames removed.
+    /// </summary>
+    public Tensor<T> Inference(IReadOnlyList<int> tokens, IReadOnlyList<int> promptTokens, Tensor<T>? promptMel, Tensor<T> xvector,
+        Tensor<T> noise)
+    {
+        var c = Configuration;
+        if (tokens.Count == 0) throw new ArgumentException("There are no speech tokens to decode.", nameof(tokens));
+        if (promptTokens.Count > 0 && promptMel is null)
+            throw new ArgumentException("A prompt's tokens need the prompt's mel.", nameof(promptMel));
+        int promptFrames = promptTokens.Count > 0 && promptMel is not null ? promptMel.Shape[0] : 0;
+        int textFrames = MelFrames(tokens.Count), total = promptFrames + textFrames;
+        if (noise.Length != c.OutputSize * total)
+            throw new ArgumentException($"The noise must be [1, {c.OutputSize}, {total}].", nameof(noise));
+
+        var encoded = Encode(promptTokens.Concat(tokens).ToList(), training: false, new Random(0));
+        int width = encoded.Shape[1];
+        var promptEncoded = promptTokens.Count > 0
+            ? _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { promptTokens.Count, width })
+            : new Tensor<T>(new[] { 0, width });
+        var textEncoded = _engine.TensorSlice(encoded, new[] { promptTokens.Count, 0 }, new[] { tokens.Count, width });
+        var mu = StretchForInference(promptEncoded, textEncoded, promptFrames, textFrames);
+        var condition = new Tensor<T>(new[] { 1, c.OutputSize, total });
+        if (promptMel is not null)
+            for (int f = 0; f < promptFrames; f++)
+                for (int m = 0; m < c.OutputSize; m++) condition[0, m, f] = promptMel[f, m];
+        var mel = Sample(mu, ProjectSpeaker(xvector), condition, _engine.Reshape(noise, new[] { 1, c.OutputSize, total }));
+        return _engine.TensorSlice(mel, new[] { 0, 0, promptFrames }, new[] { 1, c.OutputSize, textFrames });
+    }
+
+    /// <summary>
     /// Samples a mel <c>[1, OutputSize, frames]</c> (<c>ConditionalCFM.forward</c> with <c>solve_euler</c>): from
     /// <paramref name="noise"/>, Euler steps over the cosine schedule with classifier-free guidance.
     /// </summary>

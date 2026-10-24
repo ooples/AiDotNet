@@ -383,6 +383,7 @@
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\perceptron_tagger_eng.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.perceptron_tagger_eng.json.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-chinese-vocab.txt.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\whisper-multilingual.tiktoken.gz" LogicalName="AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\nrl_rules.tsv" LogicalName="AiDotNet.TextToSpeech.FrontEnd.nrl_rules.tsv" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_dict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_dict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_hmm.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_hmm.json.gz" />

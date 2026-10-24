@@ -167,16 +167,9 @@ public class CosyVoiceReferenceTests
         Tensor<double> output;
         using (new NoGradScope<double>())
         {
-            var encoded = flow.Encode(promptTokens.Concat(tokens).ToList(), training: false, new Random(0));
-            var promptEncoded = engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { promptTokens.Length, encoded.Shape[1] });
-            var textEncoded = engine.TensorSlice(encoded, new[] { promptTokens.Length, 0 }, new[] { tokens.Length, encoded.Shape[1] });
-            var mu = flow.StretchForInference(promptEncoded, textEncoded, promptFrames, textFrames);
-            var promptMel = Values(g.GetProperty("prompt_mel"));                                            // [promptFrames, mel]
-            var condition = new Tensor<double>(new[] { 1, mel, total });
-            for (int f = 0; f < promptFrames; f++)
-                for (int m = 0; m < mel; m++) condition[0, m, f] = promptMel[f * mel + m];
+            var promptMel = TensorOf(Values(g.GetProperty("prompt_mel")), promptFrames, mel);
             var xvector = TensorOf(Values(k.GetProperty("embedding")), c.GetProperty("spk").GetInt32());
-            output = flow.Sample(mu, flow.ProjectSpeaker(xvector), condition, TensorOf(Values(g.GetProperty("noise")), 1, mel, total));
+            output = flow.Inference(tokens, promptTokens, promptMel, xvector, TensorOf(Values(g.GetProperty("noise")), 1, mel, total));
         }
         var expected = Values(g.GetProperty("mel"));                                                          // [frames, mel]
         Assert.Equal(g.GetProperty("frames").GetInt32(), textFrames);
@@ -184,7 +177,7 @@ public class CosyVoiceReferenceTests
         for (int f = 0; f < textFrames; f++)
             for (int m = 0; m < mel; m++)
             {
-                double e = expected[f * mel + m], a = output[0, m, promptFrames + f];
+                double e = expected[f * mel + m], a = output[0, m, f];
                 Assert.True(Math.Abs(e - (float)a) <= 1.5e-7 * Math.Max(1.0, Math.Abs(e)), $"{name}: frame {f} bin {m}: {e} vs {a}");
             }
     }
