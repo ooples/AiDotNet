@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
 using AiDotNet.Agentic.Models;
@@ -268,7 +269,7 @@ Provide your critique:";
 
         // Try to extract a score
         var scoreMatch = Regex.Match(response, @"(?:score|rating)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase, RegexTimeout);
-        if (scoreMatch.Success && double.TryParse(scoreMatch.Groups[1].Value, out double score))
+        if (scoreMatch.Success && double.TryParse(scoreMatch.Groups[1].Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double score))
         {
             if (score > 1.0 && score <= 10.0) score /= 10.0;
             result.Score = _numOps.FromDouble(MathHelper.Clamp(score, 0.0, 1.0));

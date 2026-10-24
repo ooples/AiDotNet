@@ -39,7 +39,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
     /// </remarks>
     [ComponentType(ComponentType.DocumentStore)]
     [PipelineStage(PipelineStage.Indexing)]
-    public class MilvusDocumentStore<T> : DocumentStoreBase<T>
+    public class MilvusDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     {
         private const string IdField = "id";
         private const string VectorField = "vector";
@@ -48,6 +48,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         private const string MetaPrefix = "m_";
 
         private readonly HttpClient _httpClient;
+
+        // Disposed only when this store created it; a client the caller passed belongs to the caller.
+        private readonly bool _ownsHttpClient;
+
+        private bool _disposed;
         private readonly string _collectionName;
         private readonly string _metricType;
         private int _vectorDimension;
@@ -102,7 +107,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             _vectorDimension = vectorDimension;
             _documentCount = 0;
 
-            _httpClient = httpClient ?? (handler != null ? new HttpClient(handler) : new HttpClient());
+            _ownsHttpClient = httpClient is null;
+            // A caller's handler stays the caller's: the client this store creates around it does not dispose it.
+            _httpClient = httpClient ?? (handler != null ? new HttpClient(handler, disposeHandler: false) : new HttpClient());
             if (_httpClient.BaseAddress == null)
             {
                 if (string.IsNullOrWhiteSpace(url))
@@ -639,6 +646,24 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
             public HttpStatusCode Status { get; }
             public string Body { get; }
+        }
+
+        /// <summary>Releases the HTTP client when this store created it.</summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>Releases the HTTP client when this store created it.</summary>
+        /// <param name="disposing">Whether managed resources are being released.</param>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+            if (disposing && _ownsHttpClient)
+                _httpClient.Dispose();
+            _disposed = true;
         }
     }
 }

@@ -266,7 +266,8 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         // Simple prompt encoding: hash-based deterministic embedding
         var embedding = new Tensor<T>([_options.SemanticDim]);
-        int hash = prompt.GetHashCode();
+        // A stable hash: string.GetHashCode() changes per process, so the same prompt would encode differently each run (#2361).
+        int hash = AiDotNet.Helpers.StableHash.Seed(prompt);
         for (int i = 0; i < _options.SemanticDim; i++)
         {
             double val = Math.Sin((hash + i) * 0.1) * 0.5;

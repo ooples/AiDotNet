@@ -316,52 +316,52 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
         catch (TargetInvocationException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (invocation error): {ex.InnerException?.Message ?? ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (invocation error): {(ex.InnerException ?? ex)}");
             return false;
         }
         catch (TypeLoadException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (type load error): {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (type load error): {ex}");
             return false;
         }
         catch (InvalidOperationException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed: {ex}");
             return false;
         }
         catch (MissingMethodException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (API signature mismatch): {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (API signature mismatch): {ex}");
             return false;
         }
         catch (MemberAccessException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (access error): {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (access error): {ex}");
             return false;
         }
         catch (ArgumentException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (enum mismatch): {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (enum mismatch): {ex}");
             return false;
         }
         catch (SocketException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (transport error): {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (transport error): {ex}");
             return false;
         }
         catch (TimeoutException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (transport timeout): {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (transport timeout): {ex}");
             return false;
         }
         catch (IOException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (transport I/O error): {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (transport I/O error): {ex}");
             return false;
         }
         catch (NotSupportedException ex)
         {
-            Console.WriteLine($"GlooSharp detection failed (not supported): {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"GlooSharp detection failed (not supported): {ex}");
             return false;
         }
         finally
@@ -624,7 +624,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             }
             catch (InvalidOperationException ex)
             {
-                Console.WriteLine($"Warning: Error disposing native Gloo context: {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"Warning: Error disposing native Gloo context: {ex}");
             }
             _nativeGlooContext = null;
             _useNativeGloo = false;
@@ -646,7 +646,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                     }
                     catch (IOException ex)
                     {
-                        Console.WriteLine($"Warning: Error closing TCP connection: {ex.Message}");
+                        System.Diagnostics.Trace.TraceWarning($"Warning: Error closing TCP connection: {ex}");
                     }
                 }
                 _tcpConnections.Clear();
@@ -660,7 +660,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 }
                 catch (SocketException ex)
                 {
-                    Console.WriteLine($"Warning: Error stopping TCP listener: {ex.Message}");
+                    System.Diagnostics.Trace.TraceWarning($"Warning: Error stopping TCP listener: {ex}");
                 }
                 catch (ObjectDisposedException)
                 {

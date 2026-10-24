@@ -148,7 +148,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"NCCL initialization failed: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"NCCL initialization failed: {ex}");
             _ncclAvailable = false;
         }
 

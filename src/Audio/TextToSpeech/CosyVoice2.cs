@@ -288,8 +288,8 @@ public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         if (styleDim > 1) styled[encoded.Length + 1] = NumOps.FromDouble(pitch);
         if (emotion is not null && styleDim > 2)
         {
-            int emotionHash = emotion.GetHashCode() % (styleDim - 2);
-            if (emotionHash < 0) emotionHash += styleDim - 2;
+            // A stable hash, so an emotion keeps its style slot across processes (#2361).
+            int emotionHash = AiDotNet.Helpers.StableHash.Index(emotion, styleDim - 2);
             styled[encoded.Length + 2 + emotionHash] = NumOps.FromDouble(emotionIntensity);
         }
         return styled;

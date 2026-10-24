@@ -413,11 +413,11 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
             }
             catch (IOException ex)
             {
-                Console.WriteLine($"[CheckpointManager] Failed to read checkpoint file '{file}': {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[CheckpointManager] Failed to read checkpoint file '{file}': {ex}");
             }
             catch (JsonException ex)
             {
-                Console.WriteLine($"[CheckpointManager] Failed to deserialize checkpoint file '{file}': {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[CheckpointManager] Failed to deserialize checkpoint file '{file}': {ex}");
             }
         }
     }

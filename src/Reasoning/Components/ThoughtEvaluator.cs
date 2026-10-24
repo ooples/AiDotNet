@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
 using AiDotNet.Agentic.Models;
@@ -131,7 +132,7 @@ Evaluate the thought:";
 
         // Fallback: look for decimal numbers in the response
         var numberMatch = Regex.Match(response, @"(?:score|rating|evaluation)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase, RegexTimeout);
-        if (numberMatch.Success && double.TryParse(numberMatch.Groups[1].Value, out double fallbackScore))
+        if (numberMatch.Success && double.TryParse(numberMatch.Groups[1].Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double fallbackScore))
         {
             // Normalize if needed (might be out of 10, 5, etc.)
             if (fallbackScore > 1.0 && fallbackScore <= 10.0)
