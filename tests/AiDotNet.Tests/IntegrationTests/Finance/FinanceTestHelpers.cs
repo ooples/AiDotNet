@@ -15,7 +15,8 @@ internal static class FinanceTestHelpers
     internal static NeuralNetworkArchitecture<T> CreateArchitecture<T>(int inputSize, int outputSize)
     {
         int safeInputSize = Math.Max(1, inputSize);
-        int safeOutputSize = Math.Max(1, outputSize);
+        // Zero leaves the output size unstated: the model sizes its output from its options (#2147).
+        int safeOutputSize = Math.Max(0, outputSize);
 
         return new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,

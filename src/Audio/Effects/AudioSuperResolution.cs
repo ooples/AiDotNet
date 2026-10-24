@@ -66,7 +66,6 @@ public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudio
     #region Fields
 
     private readonly AudioSuperResolutionOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -106,6 +105,7 @@ public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudio
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new AudioSuperResolutionOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.OutputSampleRate;
         _options.ModelPath = modelPath;
@@ -119,6 +119,7 @@ public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudio
         : base(architecture)
     {
         _options = options ?? new AudioSuperResolutionOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,

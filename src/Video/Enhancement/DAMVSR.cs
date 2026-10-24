@@ -64,7 +64,6 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly DAMVSROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -78,6 +77,7 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new DAMVSROptions();
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         NumFrames = _options.NumFrames;
@@ -92,6 +92,7 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new DAMVSROptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

@@ -66,16 +66,6 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ViTAdapterOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this ViT-Adapter model.
-    /// </summary>
-    /// <returns>The <see cref="ViTAdapterOptions"/> used to configure this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
     protected override double DefaultLearningRate => _options.LearningRate;
     protected override double DefaultWeightDecay => _options.WeightDecay;
 

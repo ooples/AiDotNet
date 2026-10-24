@@ -56,8 +56,6 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
     }
     private LSPIOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private List<(Vector<T> state, int action, T reward, Vector<T> nextState, bool done)> _samples;
     private int _iterations;
@@ -79,6 +77,7 @@ public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
         _samples = new List<(Vector<T>, int, T, Vector<T>, bool)>();
         _iterations = 0;

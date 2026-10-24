@@ -62,9 +62,6 @@ public partial class FinBERTTone<T> : FinancialNLPModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private double _dropout;
 
-    /// <inheritdoc/>
-    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
-
     #endregion
 
     #region Interface Properties
@@ -162,7 +159,6 @@ public partial class FinBERTTone<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinBERTToneLayers(
-                Architecture,
                 vocabularySize: _options.VocabularySize,
                 maxSequenceLength: _options.MaxSequenceLength,
                 hiddenDimension: _options.HiddenDimension,

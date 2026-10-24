@@ -64,8 +64,6 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>, ITrainin
 
     public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SpatialStrideContract(inputRank, 1);
 
-    public override ModelOptions GetOptions() => _options;
-
     private Sam2Runtime<T> Runtime => _runtime ?? throw new InvalidOperationException("The network is not initialized.");
 
     /// <summary>The network.</summary>

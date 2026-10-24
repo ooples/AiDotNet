@@ -61,9 +61,6 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
     private Random? _trainingRandom;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options!;
-
     /// <summary>
     /// Creates a Chronos-T5, randomly initialized as the official training does.
     /// </summary>
@@ -206,7 +203,7 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
     /// sampled paths, or, given <paramref name="quantiles"/>, those quantiles of them (torch.quantile's linear
     /// interpolation), quantile-major.
     /// </summary>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (historicalData is null) throw new ArgumentNullException(nameof(historicalData));
         var contexts = Rows(historicalData, nameof(historicalData));

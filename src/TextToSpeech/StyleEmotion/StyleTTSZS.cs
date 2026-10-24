@@ -94,14 +94,12 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return list;
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed StyleTTS-ZS for inference.</summary>
     public StyleTTSZS(NeuralNetworkArchitecture<T> architecture, string modelPath, StyleTTSZSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new StyleTTSZSOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();
@@ -119,6 +117,7 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new StyleTTSZSOptions();
+        Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();

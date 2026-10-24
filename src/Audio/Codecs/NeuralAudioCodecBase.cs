@@ -125,9 +125,6 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
         InitializeLayers();
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _codec;
-
     /// <summary>The codec options.</summary>
     protected NeuralAudioCodecOptions CodecSettings => _codec;
 

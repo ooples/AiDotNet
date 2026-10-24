@@ -85,14 +85,12 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private readonly List<LayerBase<T>> _encoderLayers = new();
     private AudioCodecLayer<T>? _codec;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed Parler-TTS for inference.</summary>
     public ParlerTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, ParlerTTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new ParlerTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();
@@ -111,6 +109,7 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new ParlerTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);

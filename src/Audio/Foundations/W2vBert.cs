@@ -97,9 +97,6 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     internal (double Contrastive, double Diversity, double MaskedPrediction) LastPretrainingLosses { get; private set; }
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
-    /// <inheritdoc />
     protected override int OutputFeatureWidth => _options.ModelDim;
 
     /// <inheritdoc />
@@ -113,6 +110,7 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
         : base(architecture)
     {
         _options = options ?? new W2vBertOptions();
+        Options = _options;
         _useNativeMode = false;
         _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         base.SampleRate = _options.SampleRate;
@@ -128,6 +126,7 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
         : base(architecture)
     {
         _options = options ?? new W2vBertOptions();
+        Options = _options;
         _useNativeMode = true;
         _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         base.SampleRate = _options.SampleRate;

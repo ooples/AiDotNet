@@ -72,9 +72,6 @@ public partial class SAM2<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<
     private Sam2Runtime<T>? _runtime;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
-    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>SAM 2's masks are probabilities.</summary>

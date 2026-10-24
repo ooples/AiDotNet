@@ -112,14 +112,12 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private T5DecoderOnly<T>? _speaking;
     private AudioCodecLayer<T>? _codec;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed SPEAR-TTS for inference.</summary>
     public SPEARTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, SPEARTTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new SPEARTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();
@@ -143,6 +141,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new SPEARTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         _semanticTokenizer = semanticTokenizer;
         _suppliedOptimizer = optimizer;

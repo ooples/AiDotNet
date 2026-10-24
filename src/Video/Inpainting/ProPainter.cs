@@ -67,9 +67,6 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
 {
     private readonly ProPainterOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly int _height;

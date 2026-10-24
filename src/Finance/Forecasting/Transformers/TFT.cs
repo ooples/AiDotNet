@@ -154,9 +154,6 @@ public partial class TFT<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly TemporalFusionTransformerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The input sequence length (lookback window).
     /// </summary>
@@ -298,7 +295,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.LookbackWindow;
         _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _hiddenSize = options.HiddenSize;
         _numHeads = options.NumAttentionHeads;
         _numLayers = options.NumLayers;
@@ -350,7 +347,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
 
         _sequenceLength = options.LookbackWindow;
         _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _hiddenSize = options.HiddenSize;
         _numHeads = options.NumAttentionHeads;
         _numLayers = options.NumLayers;
@@ -394,7 +391,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTFTLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                _sequenceLength, _predictionHorizon, _numFeatures,
                 _hiddenSize, _numHeads, _numLayers, _dropout));
 
             ExtractLayerReferences();
@@ -551,7 +548,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TFT model, Forecast produces predictions from input data. This is the main inference step of the TFT architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (_useInstanceNormalization)
             historicalData = ApplyInstanceNormalization(historicalData);

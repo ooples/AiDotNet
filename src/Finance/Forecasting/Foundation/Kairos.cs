@@ -79,9 +79,6 @@ public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly KairosOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int[] _patchSizes = [8, 16, 32, 64];
@@ -248,7 +245,7 @@ public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultKairosLayers(
-                Architecture, _contextLength, _forecastHorizon, _patchSizes,
+                _contextLength, _forecastHorizon, _patchSizes,
                 _hiddenDimension, _numLayers, _numHeads, _intermediateSize, _dropout));
         }
     }
@@ -310,7 +307,7 @@ public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
             throw new NotSupportedException("Kairos does not support quantile forecasting. Pass null for point forecasts.");

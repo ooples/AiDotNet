@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace AiDotNet.Genetics;
 
 public class NSGAII<T, TInput, TOutput> :
@@ -351,7 +353,7 @@ public class NSGAII<T, TInput, TOutput> :
         {
             if (objValue is string fitnessStr)
             {
-                return MathHelper.GetNumericOperations<T>().FromDouble(double.Parse(fitnessStr));
+                return MathHelper.GetNumericOperations<T>().FromDouble(double.Parse(fitnessStr, NumberStyles.Float, CultureInfo.InvariantCulture));
             }
         }
 

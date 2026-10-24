@@ -276,7 +276,9 @@ function Test-ToolDirectoryReferenced {
     $directory = $segments[0]
     if ($script:ToolReferenceCache.ContainsKey($directory)) { return $script:ToolReferenceCache[$directory] }
     $name = [regex]::Escape($directory)
-    $asPath = '(^|["''\s=;(,>]|\.\.[/\\])' + $name + '[/\\]'
+    # POSIX ERE (git grep -E): inside brackets \s is a backslash or an 's', which under -i let base64 fixture text
+    # such as "SapI/" count as a reference to api/. [:space:] is the whitespace class.
+    $asPath = '(^|["''[:space:]=;(,>]|\.\.[/\\])' + $name + '[/\\]'
     $null = & git grep -q -i -E $asPath HEAD -- '*.csproj' '*.props' '*.targets' '*.sln' '*.slnx' '.github/workflows/sonarcloud.yml' 2>$null
     $referenced = $LASTEXITCODE -ne 1
     if (-not $referenced) {

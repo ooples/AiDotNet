@@ -92,9 +92,6 @@ public partial class VALLE<T> : VallEModelBase<T>
     }
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => Settings;
-
-    /// <inheritdoc />
     /// <remarks>The espeak table of lifeiteng/vall-e's LibriTTS recipe (<see cref="LibriTtsPhonemeTable"/>).</remarks>
     protected override IReadOnlyList<string> PhonemeTable => LibriTtsPhonemeTable.Symbols;
 

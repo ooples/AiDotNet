@@ -7,60 +7,34 @@ using AiDotNet.LossFunctions;
 namespace AiDotNet.Diffusion.VAE;
 
 /// <summary>
-/// KL-regularized Variational Autoencoder for latent diffusion models.
+/// The KL-regularized autoencoder of latent diffusion (Rombach et al., 2022), the VAE of Stable Diffusion.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "High-Resolution Image Synthesis with Latent Diffusion Models" (Rombach et al., CVPR 2022), Sec. 3.1
+/// and Appendix G</item>
+/// <item>Implementation: diffusers <c>AutoencoderKL</c> (the <c>runwayml/stable-diffusion-v1-5</c> <c>vae</c> folder),
+/// which this reproduces (<c>tools/reference-data/autoencoder_kl_reference.py</c>); <see cref="LoadDiffusersWeights"/>
+/// loads its state dict.</item>
+/// </list></para>
+/// <para><b>For Beginners:</b> AutoencoderKL is the "image compressor" Stable Diffusion works through. It squeezes a
+/// 512x512 RGB image into a 64x64 grid of 4 latent channels; the diffusion model works there, and the decoder turns
+/// its result back into an image. The "KL" is the Kullback-Leibler penalty that keeps the latent close to a standard
+/// normal, so the latent space stays smooth.</para>
 /// <para>
-/// AutoencoderKL is the standard VAE architecture used in Stable Diffusion and other
-/// latent diffusion models. It compresses high-resolution images to a compact latent
-/// representation while maintaining perceptual quality through KL-regularization.
-/// </para>
-/// <para>
-/// <b>For Beginners:</b> AutoencoderKL is the "image compressor" used by Stable Diffusion.
-///
-/// Why use KL-regularized VAE?
-/// 1. Compression: 512x512x3 image -> 64x64x4 latent (48x smaller!)
-/// 2. KL-regularization: Keeps the latent space well-organized (Gaussian distribution)
-/// 3. This organization makes diffusion work better in latent space
-///
-/// The "KL" in AutoencoderKL refers to Kullback-Leibler divergence, which measures
-/// how different the encoder's output distribution is from a standard normal.
-/// By minimizing KL divergence, we ensure the latent space is smooth and continuous.
-///
-/// Architecture:
-/// ```
-///     Image (512x512x3)
-///           │
-///           ├─→ VAEEncoder ─→ [mean, logvar] (64x64x8)
-///           │                        │
-///           │               Sample using reparameterization
-///           │                        │
-///           │                        ↓
-///           │              Latent z (64x64x4)
-///           │                        │
-///           │                 [Scale by 0.18215]
-///           │                        │
-///           │                        ↓
-///           │              Scaled latent (for diffusion)
-///           │                        │
-///           │                 [Unscale by 1/0.18215]
-///           │                        │
-///           │                        ↓
-///           │              Latent z (64x64x4)
-///           │                        │
-///           └────────────────→ VAEDecoder
-///                                    │
-///                                    ↓
-///                          Reconstructed Image (512x512x3)
-/// ```
+/// Architecture: a 3x3 conv in; one stage of residual blocks per width, each stage but the last halving both axes with a
+/// stride-2 conv; a middle block of residual block, single-head self-attention and residual block; GroupNorm, SiLU and a
+/// 3x3 conv to the posterior's mean and log-variance; a 1x1 quant conv. The decoder mirrors it (a 1x1 post-quant conv
+/// first, one more residual block per stage, nearest 2x upsampling then a conv). The widths are
+/// <c>baseChannels</c> times each of <c>channelMults</c>.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// var vae = new AutoencoderKL&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 128);
-/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 512, 512 });
-/// var latent = vae.Encode(image);
+/// var vae = AutoencoderKL&lt;float&gt;.StableDiffusionV1();
+/// var latent = vae.Encode(image, sampleMode: false); // [1, 4, 64, 64] for a [1, 3, 512, 512] image
 /// var decoded = vae.Decode(latent);
 /// </code>
 /// </example>
@@ -70,98 +44,44 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("High-Resolution Image Synthesis with Latent Diffusion Models", "https://arxiv.org/abs/2112.10752", Year = 2022, Authors = "Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, Bjorn Ommer")]
 [ResearchPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2013, Authors = "Kingma & Welling")]
 public partial class AutoencoderKL<T> : VAEModelBase<T>
 {
+    /// <summary>The scaling factor of Stable Diffusion 1.x and 2.x's VAE.</summary>
+    public const double StableDiffusionLatentScale = 0.18215;
+
+    /// <summary>The scaling factor of SDXL's VAE.</summary>
+    public const double SdxlLatentScale = 0.13025;
+
+    // diffusers' DiagonalGaussianDistribution clamps the log-variance to this range.
+    private const double MinLogVariance = -30.0;
+    private const double MaxLogVariance = 20.0;
+
     /// <inheritdoc />
-    /// <remarks>Registration order is serialization order, and matches the
-    /// concatenation the previous hand-written GetParameters performed.</remarks>
     protected override void RegisterComponents()
     {
         RegisterParameterComponent(_encoder);
+        RegisterParameterComponent(_quantConv);
+        RegisterParameterComponent(_postQuantConv);
         RegisterParameterComponent(_decoder);
     }
 
-    /// <summary>
-    /// Standard Stable Diffusion latent scale factor.
-    /// This normalizes the latent distribution for better diffusion performance.
-    /// </summary>
-    private const double SD_LATENT_SCALE = 0.18215;
-
-    /// <summary>
-    /// The encoder component.
-    /// </summary>
-    private readonly VAEEncoder<T> _encoder;
-
-    /// <summary>
-    /// The decoder component.
-    /// </summary>
-    private readonly VAEDecoder<T> _decoder;
-
-    /// <summary>
-    /// Number of input/output image channels.
-    /// </summary>
     private readonly int _inputChannels;
-
-    /// <summary>
-    /// Number of latent channels.
-    /// </summary>
     private readonly int _latentChannels;
-
-    /// <summary>
-    /// Base channel count for encoder/decoder.
-    /// </summary>
-    private readonly int _baseChannels;
-
-    /// <summary>
-    /// Channel multipliers for each level.
-    /// </summary>
-    private readonly int[] _channelMults;
-
-    /// <summary>
-    /// Latent scale factor.
-    /// </summary>
+    private readonly int[] _blockOutChannels;
     private readonly double _latentScaleFactor;
 
-    /// <summary>
-    /// Cached mean from last encoding.
-    /// </summary>
+    private readonly KlEncoder<T> _encoder;
+    private readonly KlConv2d<T> _quantConv;
+    private readonly KlConv2d<T> _postQuantConv;
+    private readonly KlDecoder<T> _decoder;
+
     [Scratch]
     private Tensor<T>? _cachedMean;
 
-    /// <summary>
-    /// Cached log variance from last encoding.
-    /// </summary>
     [Scratch]
     private Tensor<T>? _cachedLogVar;
-
-    /// <summary>
-    /// Per-direction compiled-plan host. Each direction (encode, decode)
-    /// gets its own plan cache because their input shapes evolve
-    /// independently — encode runs on full-resolution images
-    /// (e.g. [B, 3, 512, 512]) while decode runs on the latent grid
-    /// (e.g. [B, 4, 64, 64]). A single host keyed by encode-input shape
-    /// would force decode to fall through to eager re-trace every call;
-    /// splitting them keeps both directions hot. The chained-host
-    /// equivalent (<see cref="ChainedCompiledModelHost{T}"/>) chains
-    /// stages sequentially, but encode and decode here are PARALLEL
-    /// surfaces (callers invoke either, not both per call), so two
-    /// independent hosts is the right fit. Closes #1272 W1's
-    /// compile-aware-VAE goal without disturbing the existing
-    /// VAEEncoder / VAEDecoder LayerBase&lt;T&gt; surface.
-    /// </summary>
-    private readonly CompiledModelHost<T> _encoderHost;
-    private readonly CompiledModelHost<T> _decoderHost;
-
-    /// <summary>
-    /// Structure version bumped when the encoder / decoder layer graph
-    /// mutates (e.g. external weight load, hot-swap). Both directions
-    /// share the same counter — callers don't typically hot-swap one
-    /// direction independently of the other, and a stale plan in either
-    /// direction would silently miscompute, so unifying the version
-    /// keeps both caches consistent.
-    /// </summary>
-    private int _structureVersion;
 
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
@@ -170,12 +90,10 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
     public override int LatentChannels => _latentChannels;
 
     /// <inheritdoc />
-    public override int DownsampleFactor => _encoder.DownsampleFactor;
+    public override int DownsampleFactor => 1 << (_blockOutChannels.Length - 1);
 
     /// <inheritdoc />
     public override double LatentScaleFactor => _latentScaleFactor;
-
-    /// <inheritdoc />
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -183,35 +101,29 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override bool SupportsSlicing => true;
 
+    /// <inheritdoc />
+    /// <remarks>Revision 2: latent diffusion's autoencoder replaced a network without the middle block's attention,
+    /// with separate mean and log-variance convolutions and transposed-convolution upsampling.</remarks>
+    protected override int ArchitectureRevision => 2;
+
+    /// <inheritdoc />
+    protected override string ArchitectureRevisionNote =>
+        "Revision 2 is latent diffusion's KL autoencoder (diffusers AutoencoderKL); revision 1 had no middle-block attention, separate mean and log-variance convolutions and transposed-convolution upsampling.";
+
     /// <summary>
-    /// Initializes a new instance of the AutoencoderKL class with default Stable Diffusion configuration.
+    /// Initializes an AutoencoderKL; the defaults are Stable Diffusion v1.5's (diffusers <c>AutoencoderKL</c>,
+    /// <c>runwayml/stable-diffusion-v1-5</c>).
     /// </summary>
-    /// <param name="inputChannels">Number of input image channels (default: 3 for RGB).</param>
-    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
-    /// <param name="baseChannels">Base channel count (default: 128).</param>
-    /// <param name="channelMults">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
-    /// <param name="numResBlocks">Number of residual blocks per level (default: 2).</param>
-    /// <param name="numGroups">Number of groups for GroupNorm (default: 32).</param>
-    /// <param name="latentScaleFactor">Scale factor for latents (default: 0.18215).</param>
-    /// <param name="inputSpatialSize">Spatial size of input images (default: 512).</param>
-    /// <param name="lossFunction">Optional loss function (default: MSE).</param>
-    /// <param name="seed">Optional random seed for reproducibility.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Create an AutoencoderKL with sensible defaults for most use cases.
-    ///
-    /// Default configuration matches Stable Diffusion v1.5/v2.1 VAE:
-    /// - 3 RGB channels in/out
-    /// - 4 latent channels
-    /// - 8x spatial downsampling (512x512 -> 64x64)
-    /// - Channel progression: 128 -> 256 -> 512 -> 512
-    ///
-    /// For custom configurations:
-    /// - Smaller latentChannels = more compression, potentially lower quality
-    /// - Larger baseChannels = more capacity, but slower and more memory
-    /// - More channelMults levels = more downsampling, smaller latents
-    /// </para>
-    /// </remarks>
+    /// <param name="inputChannels">Image channels (3).</param>
+    /// <param name="latentChannels">Latent channels (4).</param>
+    /// <param name="baseChannels">Width of the first stage (128).</param>
+    /// <param name="channelMults">Each stage's width as a multiple of <paramref name="baseChannels"/> (1, 2, 4, 4); each
+    /// stage but the last halves both axes, so four stages compress 8x.</param>
+    /// <param name="numResBlocks">Residual blocks per encoder stage (2); the decoder's stages have one more.</param>
+    /// <param name="numGroups">GroupNorm groups (32); every width must divide by it.</param>
+    /// <param name="latentScaleFactor">The latent's scale for diffusion (<see cref="StableDiffusionLatentScale"/>).</param>
+    /// <param name="lossFunction">Reconstruction loss for training (mean squared error by default).</param>
+    /// <param name="seed">Seed for the weight initialization and the posterior sampling.</param>
     public AutoencoderKL(
         int inputChannels = 3,
         int latentChannels = 4,
@@ -220,65 +132,56 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
         int numResBlocks = 2,
         int numGroups = 32,
         double? latentScaleFactor = null,
-        int inputSpatialSize = 512,
         ILossFunction<T>? lossFunction = null,
         int? seed = null)
-        : base(lossFunction, seed)
+        : base(lossFunction ?? new MeanSquaredErrorLoss<T>(), seed)
     {
+        if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
+        if (latentChannels <= 0) throw new ArgumentOutOfRangeException(nameof(latentChannels));
+        if (baseChannels <= 0) throw new ArgumentOutOfRangeException(nameof(baseChannels));
+        if (numResBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numResBlocks));
+        double scale = latentScaleFactor ?? StableDiffusionLatentScale;
+        if (scale <= 0) throw new ArgumentOutOfRangeException(nameof(latentScaleFactor));
+        var mults = channelMults ?? new[] { 1, 2, 4, 4 };
+        if (mults.Length == 0) throw new ArgumentException("At least one stage is required.", nameof(channelMults));
+        var widths = new int[mults.Length];
+        for (int i = 0; i < mults.Length; i++)
+        {
+            if (mults[i] <= 0) throw new ArgumentOutOfRangeException(nameof(channelMults), "Every multiplier must be positive.");
+            widths[i] = baseChannels * mults[i];
+            if (numGroups <= 0 || widths[i] % numGroups != 0)
+                throw new ArgumentException($"Stage width {widths[i]} does not divide into {numGroups} groups.", nameof(numGroups));
+        }
+
         _inputChannels = inputChannels;
         _latentChannels = latentChannels;
-        _baseChannels = baseChannels;
-        _channelMults = channelMults ?? new[] { 1, 2, 4, 4 };
-        _latentScaleFactor = latentScaleFactor ?? SD_LATENT_SCALE;
+        _blockOutChannels = widths;
+        _latentScaleFactor = scale;
 
-        // Create encoder
-        _encoder = new VAEEncoder<T>(
-            inputChannels: inputChannels,
-            latentChannels: latentChannels,
-            baseChannels: baseChannels,
-            channelMults: _channelMults,
-            numResBlocks: numResBlocks,
-            numGroups: numGroups,
-            inputSpatialSize: inputSpatialSize);
-
-        // Create decoder
-        _decoder = new VAEDecoder<T>(
-            outputChannels: inputChannels,
-            latentChannels: latentChannels,
-            baseChannels: baseChannels,
-            channelMults: _channelMults,
-            numResBlocks: numResBlocks,
-            numGroups: numGroups,
-            outputSpatialSize: inputSpatialSize);
-
-        // Initialize the per-direction compiled-plan hosts. Disk-cached
-        // plans get a stable identity so they don't collide between
-        // encoder and decoder, and don't collide between AutoencoderKL
-        // instances built for different spatial sizes / channel mults
-        // (the host's internal cache already keys by input shape, but
-        // the disk filename needs an extra discriminator).
-        string identityPrefix = $"AutoencoderKL.{inputChannels}c.{latentChannels}l.{baseChannels}b.{inputSpatialSize}s";
-        _encoderHost = new CompiledModelHost<T>(modelIdentity: $"{identityPrefix}.encoder");
-        _decoderHost = new CompiledModelHost<T>(modelIdentity: $"{identityPrefix}.decoder");
+        _encoder = new KlEncoder<T>(inputChannels, latentChannels, widths, numResBlocks, numGroups);
+        _quantConv = new KlConv2d<T>(2 * latentChannels, 2 * latentChannels, 1);
+        _postQuantConv = new KlConv2d<T>(latentChannels, latentChannels, 1);
+        _decoder = new KlDecoder<T>(latentChannels, inputChannels, widths, numResBlocks, numGroups);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Encode(Tensor<T> image, bool sampleMode = true)
     {
         var (mean, logVar) = EncodeWithDistribution(image);
-
-        if (sampleMode)
-        {
-            return Sample(mean, logVar);
-        }
-
-        return mean;
+        return sampleMode ? Sample(mean, logVar) : mean;
     }
 
     /// <inheritdoc />
+    /// <param name="image">An image, [batch, channels, height, width].</param>
     public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> image)
     {
-        var (mean, logVar) = _encoder.EncodeWithDistribution(image);
+        RequireImage(image, _inputChannels, nameof(image));
+        var moments = _quantConv.Forward(_encoder.Forward(image));
+        var s = moments.Shape;
+        var mean = Engine.TensorSlice(moments, new[] { 0, 0, 0, 0 }, new[] { s[0], _latentChannels, s[2], s[3] });
+        var logVar = Engine.TensorClamp(
+            Engine.TensorSlice(moments, new[] { 0, _latentChannels, 0, 0 }, new[] { s[0], _latentChannels, s[2], s[3] }),
+            NumOps.FromDouble(MinLogVariance), NumOps.FromDouble(MaxLogVariance));
         _cachedMean = mean;
         _cachedLogVar = logVar;
         return (mean, logVar);
@@ -287,313 +190,99 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> Decode(Tensor<T> latent)
     {
-        // Route the decoder forward through the per-direction CompiledModelHost
-        // so the second + Nth call at the same latent shape (the common case
-        // during diffusion sampling, where every denoising step decodes at
-        // the same [B, latentChannels, H/8, W/8]) replays a cached compiled
-        // plan instead of re-tracing the entire ResBlock + Conv stack
-        // every step. Closes #1272 W1's compile-aware-VAE goal for the
-        // decode direction; encode's two-output return signature
-        // (mean + logVar) doesn't fit the host's single-tensor Predict
-        // surface so it stays direct for now.
-        return _decoderHost.Predict(latent, _structureVersion, () => _decoder.Forward(latent));
+        RequireImage(latent, _latentChannels, nameof(latent));
+        // Every denoising step decodes at the same latent shape, so later calls replay a compiled plan (#1272).
+        return DecodeCompiled(latent, () => _decoder.Forward(_postQuantConv.Forward(latent)));
     }
 
     /// <summary>
-    /// Encodes an image and applies latent scaling for use in diffusion.
+    /// Loads a diffusers <c>AutoencoderKL</c> state dict of this configuration (a Stable Diffusion <c>vae</c> folder).
     /// </summary>
-    /// <param name="image">The input image tensor.</param>
-    /// <param name="sampleMode">Whether to sample from the distribution (default: true).</param>
-    /// <returns>Scaled latent representation ready for diffusion.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this method when preparing images for diffusion.
-    ///
-    /// The latent scaling is important because:
-    /// 1. It normalizes the latent distribution to unit variance
-    /// 2. This helps the diffusion model work with consistent noise levels
-    /// 3. The scale factor (0.18215) was empirically determined for SD VAE
-    /// </para>
-    /// </remarks>
-    public Tensor<T> EncodeForDiffusion(Tensor<T> image, bool sampleMode = true)
+    /// <param name="read">Returns the values of the named tensor, row-major, given its name and this model's shape.</param>
+    /// <returns>The names read: every weight of the model.</returns>
+    public IReadOnlyCollection<string> LoadDiffusersWeights(Func<string, int[], double[]> read)
     {
-        var latent = Encode(image, sampleMode);
-        return ScaleLatent(latent);
+        var names = KlModule<T>.Load(
+            _encoder.NamedTensors("encoder")
+                .Concat(_quantConv.NamedTensors("quant_conv"))
+                .Concat(_postQuantConv.NamedTensors("post_quant_conv"))
+                .Concat(_decoder.NamedTensors("decoder")),
+            read);
+        InvalidateCompiledHosts();
+        return names;
+    }
+
+    private static void RequireImage(Tensor<T> x, int channels, string name)
+    {
+        if (x is null) throw new ArgumentNullException(name);
+        if (x.Rank != 4)
+            throw new ArgumentException($"Expected [batch, channels, height, width]; got rank {x.Rank}.", name);
+        if (x.Shape[1] != channels)
+            throw new ArgumentException($"Expected {channels} channel(s); got {x.Shape[1]}.", name);
     }
 
     /// <summary>
-    /// Decodes a diffusion latent back to image space.
+    /// Encodes an image and scales the latent for diffusion.
     /// </summary>
-    /// <param name="latent">The scaled latent from diffusion.</param>
+    /// <param name="image">The image, [batch, channels, height, width], in [-1, 1].</param>
+    /// <param name="sampleMode">Whether to sample the posterior (true) or take its mean.</param>
+    /// <returns>The latent times <see cref="LatentScaleFactor"/>.</returns>
+    public Tensor<T> EncodeForDiffusion(Tensor<T> image, bool sampleMode = true) => ScaleLatent(Encode(image, sampleMode));
+
+    /// <summary>
+    /// Decodes a diffusion latent (divided by <see cref="LatentScaleFactor"/> first) back to an image in [-1, 1].
+    /// </summary>
+    /// <param name="latent">The scaled latent.</param>
     /// <returns>The decoded image.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this method to convert diffusion output to images.
-    ///
-    /// Steps:
-    /// 1. Unscale the latent (divide by scale factor)
-    /// 2. Decode through the VAE decoder
-    /// 3. Result is an image in [-1, 1] range
-    ///
-    /// To display/save, convert from [-1, 1] to [0, 255]:
-    /// pixel = (value + 1) * 127.5
-    /// </para>
-    /// </remarks>
-    public Tensor<T> DecodeFromDiffusion(Tensor<T> latent)
-    {
-        var unscaled = UnscaleLatent(latent);
-        return Decode(unscaled);
-    }
+    public Tensor<T> DecodeFromDiffusion(Tensor<T> latent) => Decode(UnscaleLatent(latent));
 
     /// <summary>
-    /// Performs a full forward pass: encode -> sample -> decode.
+    /// Encodes, samples the posterior and decodes.
     /// </summary>
-    /// <param name="image">Input image.</param>
-    /// <returns>Reconstructed image.</returns>
-    public Tensor<T> Forward(Tensor<T> image)
-    {
-        var latent = Encode(image, sampleMode: true);
-        return Decode(latent);
-    }
+    /// <param name="image">The image.</param>
+    /// <returns>The reconstruction.</returns>
+    public Tensor<T> Forward(Tensor<T> image) => Decode(Encode(image, sampleMode: true));
 
     /// <summary>
-    /// Computes the VAE loss (reconstruction + KL divergence).
+    /// The VAE loss: reconstruction plus the KL divergence of the last encoding's posterior, weighted.
     /// </summary>
-    /// <param name="image">Original input image.</param>
-    /// <param name="reconstruction">Reconstructed image from Forward().</param>
-    /// <param name="klWeight">Weight for KL divergence term (default: 1e-6).</param>
-    /// <returns>Combined loss value.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The VAE loss has two parts:
-    ///
-    /// 1. Reconstruction loss: How different is the output from the input?
-    ///    - Uses MSE (mean squared error) by default
-    ///    - Lower = better reconstruction
-    ///
-    /// 2. KL divergence loss: How different is the latent distribution from N(0,1)?
-    ///    - Regularizes the latent space to be smooth
-    ///    - Lower = more organized latent space
-    ///
-    /// The klWeight controls the trade-off:
-    /// - Higher klWeight = more regularized latent space, potentially blurrier reconstructions
-    /// - Lower klWeight = sharper reconstructions, but less organized latent space
-    ///
-    /// Default 1e-6 is very small because we prioritize reconstruction quality
-    /// for diffusion applications.
-    /// </para>
-    /// </remarks>
+    /// <param name="image">The original image.</param>
+    /// <param name="reconstruction">The reconstruction from <see cref="Forward"/>.</param>
+    /// <param name="klWeight">Weight of the KL term (1e-6, latent diffusion's).</param>
+    /// <returns>The combined loss.</returns>
     public T ComputeVAELoss(Tensor<T> image, Tensor<T> reconstruction, double klWeight = 1e-6)
     {
-        // Reconstruction loss
         var reconLoss = LossFunction.CalculateLoss(reconstruction.ToVector(), image.ToVector());
-
-        // KL divergence loss (if we have cached distribution)
-        if (_cachedMean != null && _cachedLogVar != null)
-        {
-            var klLoss = ComputeKLDivergence(_cachedMean, _cachedLogVar);
-            var weightedKL = NumOps.Multiply(klLoss, NumOps.FromDouble(klWeight));
-            return NumOps.Add(reconLoss, weightedKL);
-        }
-
-        return reconLoss;
+        if (_cachedMean is null || _cachedLogVar is null) return reconLoss;
+        var klLoss = ComputeKLDivergence(_cachedMean, _cachedLogVar);
+        return NumOps.Add(reconLoss, NumOps.Multiply(klLoss, NumOps.FromDouble(klWeight)));
     }
 
-    #region Parameter Management
-
-
-
-    #endregion
-
-    #region State Management
-
-    /// <summary>
-    /// Resets the internal state of encoder and decoder.
-    /// </summary>
+    /// <summary>Forgets the last encoding's posterior.</summary>
     public void ResetState()
     {
         _cachedMean = null;
         _cachedLogVar = null;
-        _encoder.ResetState();
-        _decoder.ResetState();
-    }
-
-    /// <inheritdoc />
-    public override void SaveState(Stream stream)
-    {
-        if (stream == null)
-            throw new ArgumentNullException(nameof(stream));
-        if (!stream.CanWrite)
-            throw new ArgumentException("Stream must be writable.", nameof(stream));
-
-        using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
-
-        // Save version
-        writer.Write(2); // Version 2 for AutoencoderKL
-
-        // Save configuration
-        writer.Write(_inputChannels);
-        writer.Write(_latentChannels);
-        writer.Write(_baseChannels);
-        writer.Write(_channelMults.Length);
-        foreach (var mult in _channelMults)
-        {
-            writer.Write(mult);
-        }
-        writer.Write(_latentScaleFactor);
-
-        // Save encoder and decoder
-        _encoder.Serialize(writer);
-        _decoder.Serialize(writer);
-
-        stream.Flush();
-    }
-
-    /// <inheritdoc />
-    public override void LoadState(Stream stream)
-    {
-        if (stream == null)
-            throw new ArgumentNullException(nameof(stream));
-        if (!stream.CanRead)
-            throw new ArgumentException("Stream must be readable.", nameof(stream));
-
-        using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
-
-        // Read version
-        var version = reader.ReadInt32();
-        if (version != 2)
-            throw new InvalidOperationException($"Unsupported model version: {version}");
-
-        // Read and validate configuration
-        var inputChannels = reader.ReadInt32();
-        var latentChannels = reader.ReadInt32();
-        var baseChannels = reader.ReadInt32();
-        var numMults = reader.ReadInt32();
-        var channelMults = new int[numMults];
-        for (int i = 0; i < numMults; i++)
-        {
-            channelMults[i] = reader.ReadInt32();
-        }
-        _ = reader.ReadDouble(); // latentScaleFactor
-
-        if (inputChannels != _inputChannels || latentChannels != _latentChannels ||
-            baseChannels != _baseChannels || !channelMults.SequenceEqual(_channelMults))
-        {
-            throw new InvalidOperationException("Architecture mismatch in AutoencoderKL deserialization.");
-        }
-
-        // Load encoder and decoder
-        _encoder.Deserialize(reader);
-        _decoder.Deserialize(reader);
-    }
-
-    #endregion
-
-    #region Cloning
-
-    #endregion
-
-    /// <summary>
-    /// Gets the encoder component for direct access.
-    /// </summary>
-    public VAEEncoder<T> Encoder => _encoder;
-
-    /// <summary>
-    /// Gets the decoder component for direct access.
-    /// </summary>
-    public VAEDecoder<T> Decoder => _decoder;
-
-    /// <summary>
-    /// Bumps the structure version on both per-direction
-    /// <see cref="CompiledModelHost{T}"/>s so the next Encode / Decode call
-    /// drops the cached compiled plan and re-traces. Call after any
-    /// out-of-band weight mutation that <see cref="LoadParameters"/> /
-    /// <see cref="SetParameters"/> doesn't already cover (e.g. external
-    /// LoRA hot-swap, hand-edited tensor in <see cref="Encoder"/> /
-    /// <see cref="Decoder"/>). Matches the
-    /// <c>NeuralNetworkBase&lt;T&gt;.BumpLayerStructureVersion</c> contract
-    /// the rest of the codebase uses.
-    /// </summary>
-    public void InvalidateCompiledHosts()
-    {
-        unchecked { _structureVersion++; }
-    }
-
-    /// <inheritdoc/>
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            // Release the per-direction compiled-plan caches; the
-            // VAEEncoder / VAEDecoder LayerBase&lt;T&gt; objects clean up
-            // their own state via the base class's layer-disposal cascade.
-            _encoderHost.Dispose();
-            _decoderHost.Dispose();
-        }
-        base.Dispose(disposing);
     }
 
     /// <summary>
-    /// Creates a default AutoencoderKL matching Stable Diffusion v1.5 configuration.
+    /// Drops the decoder's cached compiled plans, so the next <see cref="Decode"/> re-traces. Call after changing the
+    /// weights outside <see cref="LoadDiffusersWeights"/> and the parameter registry.
     /// </summary>
-    public static AutoencoderKL<T> StableDiffusionV1() => new(
-        inputChannels: 3,
-        latentChannels: 4,
-        baseChannels: 128,
-        channelMults: new[] { 1, 2, 4, 4 },
-        numResBlocks: 2,
-        numGroups: 32,
-        latentScaleFactor: 0.18215,
-        inputSpatialSize: 512);
+    public void InvalidateCompiledHosts() => InvalidateVAECompiledPlans();
 
-    /// <summary>
-    /// Creates an AutoencoderKL matching SDXL configuration.
-    /// </summary>
-    public static AutoencoderKL<T> SDXL() => new(
-        inputChannels: 3,
-        latentChannels: 4,
-        baseChannels: 128,
-        channelMults: new[] { 1, 2, 4, 4 },
-        numResBlocks: 2,
-        numGroups: 32,
-        latentScaleFactor: 0.13025, // SDXL uses different scale
-        inputSpatialSize: 1024);
+    /// <summary>Stable Diffusion v1.5's VAE.</summary>
+    public static AutoencoderKL<T> StableDiffusionV1() => new(latentScaleFactor: StableDiffusionLatentScale);
 
-    /// <summary>
-    /// Creates a lightweight AutoencoderKL for testing/experimentation.
-    /// </summary>
+    /// <summary>SDXL's VAE: the same architecture with its own latent scale.</summary>
+    public static AutoencoderKL<T> SDXL() => new(latentScaleFactor: SdxlLatentScale);
+
+    /// <summary>A smaller VAE of the same architecture, for experiments.</summary>
     public static AutoencoderKL<T> Lightweight() => new(
-        inputChannels: 3,
-        latentChannels: 4,
-        baseChannels: 64,
-        channelMults: new[] { 1, 2, 4 },
-        numResBlocks: 1,
-        numGroups: 16,
-        latentScaleFactor: 0.18215,
-        inputSpatialSize: 256);
+        baseChannels: 64, channelMults: new[] { 1, 2, 4 }, numResBlocks: 1, numGroups: 16);
 
-    protected override Vector<T> GetParameterGradients()
-    {
-        var encoderGrads = _encoder.GetParameterGradients();
-        var decoderGrads = _decoder.GetParameterGradients();
-        var combined = new T[encoderGrads.Length + decoderGrads.Length];
-        for (int i = 0; i < encoderGrads.Length; i++)
-            combined[i] = encoderGrads[i];
-        for (int i = 0; i < decoderGrads.Length; i++)
-            combined[encoderGrads.Length + i] = decoderGrads[i];
-        return new Vector<T>(combined);
-    }
     /// <inheritdoc />
-    /// <remarks>
-    /// This concrete VAE does not implement layer-level backprop yet, so the
-    /// exact-gradient path is unsupported. The base class catches this and falls
-    /// through to SPSA in ComputeGradients.
-    /// </remarks>
-    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
-            "implemented. ComputeGradients will fall through to SPSA.");
-    }
-
+    /// <remarks>The gradient tape differentiates this VAE; it keeps no per-layer gradient buffers.</remarks>
+    protected override Vector<T> GetParameterGradients() =>
+        throw new NotSupportedException($"{GetType().Name} computes its gradients on the tape; it keeps no per-layer gradients.");
 }

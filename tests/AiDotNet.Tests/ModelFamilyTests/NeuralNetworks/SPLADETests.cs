@@ -29,7 +29,8 @@ public class SPLADETests : NeuralNetworkModelTestBase<float>
                 inputType: InputType.OneDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
                 inputSize: Width,
-                outputSize: Width),
+                // SPLADE's output is vocabulary-sized; #2147 refuses an architecture stating otherwise.
+                outputSize: new SPLADEOptions().VocabSize),
             new SPLADEOptions
             {
                 EmbeddingDimension = Width,

@@ -72,12 +72,11 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
     private readonly List<GatedConvolutionBlockLayer<T>> _converterBlocks = new();
     private WeightNormConv1DLayer<T>? _linearProjection;
 
-    public override ModelOptions GetOptions() => _options;
-
     public DeepVoice3(NeuralNetworkArchitecture<T> architecture, string modelPath, DeepVoice3Options? options = null)
         : base(architecture)
     {
         _options = options ?? new DeepVoice3Options();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -99,6 +98,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new DeepVoice3Options();
+        Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

@@ -58,6 +58,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         (_tokens, _wordSeparator) = BuildVocabulary(_tokenIds);
@@ -77,6 +78,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        Options = _options;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);

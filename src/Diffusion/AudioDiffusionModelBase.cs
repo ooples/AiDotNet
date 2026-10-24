@@ -169,7 +169,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         var numSamples = (int)(effectiveDuration * SampleRate);
         var numFrames = numSamples / HopLength + 1;
         var latentTimeFrames = numFrames / VAE.DownsampleFactor;
-        var latentShape = new[] { 1, LatentChannels, MelChannels / VAE.DownsampleFactor, latentTimeFrames };
+        var latentShape = new[] { 1, LatentChannels, latentTimeFrames, MelChannels / VAE.DownsampleFactor };
 
         // Generate initial noise
         var rng = CreateInferenceRng(seed);
@@ -254,7 +254,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         var numSamples = (int)(estimatedDuration * SampleRate);
         var numFrames = numSamples / HopLength + 1;
         var latentTimeFrames = numFrames / VAE.DownsampleFactor;
-        var latentShape = new[] { 1, LatentChannels, MelChannels / VAE.DownsampleFactor, latentTimeFrames };
+        var latentShape = new[] { 1, LatentChannels, latentTimeFrames, MelChannels / VAE.DownsampleFactor };
 
         // Generate initial noise
         var rng = CreateInferenceRng(seed);
@@ -385,7 +385,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         var extensionFrames = extensionSamples / HopLength + 1;
         var extensionLatentFrames = extensionFrames / VAE.DownsampleFactor;
 
-        var extensionShape = new[] { inputShape[0], inputShape[1], inputShape[2], extensionLatentFrames };
+        var extensionShape = new[] { inputShape[0], inputShape[1], extensionLatentFrames, inputShape[3] };
 
         // Generate noise for extension
         var rng = CreateInferenceRng(seed);
@@ -431,37 +431,28 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
     /// <inheritdoc />
     public virtual Tensor<T> WaveformToMelSpectrogram(Tensor<T> waveform)
     {
-        // Ensure the mel spectrogram processor is initialized
+        if (waveform is null) throw new ArgumentNullException(nameof(waveform));
         EnsureMelSpectrogramProcessorInitialized();
-
+        var processor = _melSpectrogramProcessor ?? throw new InvalidOperationException("Mel spectrogram processor not initialized.");
         var waveformShape = waveform._shape;
-        var batchSize = waveformShape[0];
-        var numSamples = waveformShape[^1];
+        int batchSize = waveformShape.Length == 1 ? 1 : waveformShape[0];
+        int numSamples = waveformShape[^1];
 
-        // Process each batch item using the GPU-accelerated mel spectrogram
-        var numFrames = numSamples / HopLength + 1;
-        var melShape = new[] { batchSize, 1, MelChannels, numFrames };
-        var melSpectrogram = new Tensor<T>(melShape);
-        var melSpan = melSpectrogram.AsWritableSpan();
-
+        // The processor returns [time frames, mel bins], which is the spectrogram's layout: [batch, 1, frames, mel bins].
+        Tensor<T>? melSpectrogram = null;
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract single waveform from batch
-            var singleWaveform = ExtractBatchWaveform(waveform, b, numSamples);
-
-            // Compute mel spectrogram using GPU-accelerated processor
-            var singleMel = (_melSpectrogramProcessor ?? throw new InvalidOperationException("Mel spectrogram processor not initialized.")).Forward(singleWaveform);
-
-            // Copy result to batch output
-            CopyMelToBatch(melSpan, singleMel, b, MelChannels, numFrames);
+            var singleMel = processor.Forward(ExtractBatchWaveform(waveform, b, numSamples));
+            int numFrames = singleMel.Shape[0];
+            melSpectrogram ??= new Tensor<T>(new[] { batchSize, 1, numFrames, MelChannels });
+            var source = singleMel.AsSpan();
+            var target = melSpectrogram.AsWritableSpan();
+            int offset = b * numFrames * MelChannels;
+            for (int i = 0; i < numFrames * MelChannels && i < source.Length; i++) target[offset + i] = source[i];
         }
-
-        return melSpectrogram;
+        return melSpectrogram ?? new Tensor<T>(new[] { 0, 1, 0, MelChannels });
     }
 
-    /// <summary>
-    /// Ensures the mel spectrogram processor is initialized.
-    /// </summary>
     private void EnsureMelSpectrogramProcessorInitialized()
     {
         if (_melSpectrogramProcessor == null)
@@ -498,19 +489,6 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
     /// <summary>
     /// Copies a mel spectrogram to a specific batch position.
     /// </summary>
-    private void CopyMelToBatch(Span<T> batchSpan, Tensor<T> singleMel, int batchIndex, int melChannels, int numFrames)
-    {
-        var srcSpan = singleMel.AsSpan();
-        var batchOffset = batchIndex * melChannels * numFrames;
-        var srcLen = Math.Min(srcSpan.Length, melChannels * numFrames);
-
-        for (int i = 0; i < srcLen; i++)
-        {
-            batchSpan[batchOffset + i] = srcSpan[i];
-        }
-    }
-
-    /// <inheritdoc />
     public virtual Tensor<T> MelSpectrogramToWaveform(Tensor<T> melSpectrogram)
     {
         // Ensure processors are initialized
@@ -518,8 +496,10 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         EnsureGriffinLimProcessorInitialized();
 
         var melShape = melSpectrogram._shape;
+        if (melShape.Length != 4 || melShape[1] != 1)
+            throw new ArgumentException("Expected a spectrogram of [batch, 1, time frames, mel bins].", nameof(melSpectrogram));
         var batchSize = melShape[0];
-        var numFrames = melShape[^1];
+        var numFrames = melShape[2];
         var numSamples = (numFrames - 1) * HopLength;
 
         // Output shape: [batch, numSamples]
@@ -531,7 +511,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         for (int b = 0; b < batchSize; b++)
         {
             // Extract single mel spectrogram from batch
-            var singleMel = ExtractBatchMel(melSpectrogram, b, MelChannels, numFrames);
+            var singleMel = ExtractBatchMel(melSpectrogram, b, numFrames, melShape[3]);
 
             // Invert mel spectrogram to linear magnitude using the filterbank
             var magnitude = (_melSpectrogramProcessor ?? throw new InvalidOperationException("Mel spectrogram processor not initialized.")).InvertMelToMagnitude(singleMel);
@@ -564,9 +544,10 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
     /// <summary>
     /// Extracts a single mel spectrogram from a batch tensor.
     /// </summary>
-    private Tensor<T> ExtractBatchMel(Tensor<T> melSpectrogram, int batchIndex, int melChannels, int numFrames)
+    // One item's [time frames, mel bins], the layout InvertMelToMagnitude reads.
+    private Tensor<T> ExtractBatchMel(Tensor<T> melSpectrogram, int batchIndex, int numFrames, int melChannels)
     {
-        var singleMel = new Tensor<T>(new[] { melChannels, numFrames });
+        var singleMel = new Tensor<T>(new[] { numFrames, melChannels });
         var srcSpan = melSpectrogram.AsSpan();
         var dstSpan = singleMel.AsWritableSpan();
         var offset = batchIndex * melChannels * numFrames;
@@ -626,8 +607,9 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         var embedding = new Tensor<T>(new[] { 1, embeddingDim });
         var embSpan = embedding.AsWritableSpan();
 
-        var melChannels = melSpectrogram.Shape[0];
-        var melFrames = melSpectrogram.Shape[^1];
+        // The processor returns [time frames, mel bins].
+        var melFrames = melSpectrogram.Shape[0];
+        var melChannels = melSpectrogram.Shape[1];
 
         // Compute per-channel statistics (mean, variance, delta mean, delta variance)
         var statsPerChannel = Math.Min(4, embeddingDim / melChannels);
@@ -639,7 +621,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
             double channelSum = 0;
             for (int frame = 0; frame < melFrames; frame++)
             {
-                channelSum += NumOps.ToDouble(melSpan[mel * melFrames + frame]);
+                channelSum += NumOps.ToDouble(melSpan[frame * melChannels + mel]);
             }
             var channelMean = channelSum / melFrames;
 
@@ -647,7 +629,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
             double channelVarSum = 0;
             for (int frame = 0; frame < melFrames; frame++)
             {
-                var diff = NumOps.ToDouble(melSpan[mel * melFrames + frame]) - channelMean;
+                var diff = NumOps.ToDouble(melSpan[frame * melChannels + mel]) - channelMean;
                 channelVarSum += diff * diff;
             }
             var channelVar = channelVarSum / melFrames;
@@ -656,8 +638,8 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
             double deltaSum = 0, deltaVarSum = 0;
             for (int frame = 1; frame < melFrames; frame++)
             {
-                var delta = NumOps.ToDouble(melSpan[mel * melFrames + frame]) -
-                            NumOps.ToDouble(melSpan[mel * melFrames + frame - 1]);
+                var delta = NumOps.ToDouble(melSpan[frame * melChannels + mel]) -
+                            NumOps.ToDouble(melSpan[(frame - 1) * melChannels + mel]);
                 deltaSum += delta;
                 deltaVarSum += delta * delta;
             }
@@ -727,37 +709,11 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
     /// </summary>
     protected virtual Tensor<T> ExtractLatentContext(Tensor<T> latents)
     {
+        // The last (at most 16) latent frames along the time axis of [batch, channels, frames, mel bins].
         var shape = latents._shape;
-        var contextFrames = Math.Min(shape[^1], 16); // Use last 16 frames as context
-
-        var contextShape = new int[shape.Length];
-        Array.Copy(shape, contextShape, shape.Length);
-        contextShape[^1] = contextFrames;
-
-        var context = new Tensor<T>(contextShape);
-        var contextSpan = context.AsWritableSpan();
-        var latentSpan = latents.AsSpan();
-
-        var startFrame = shape[^1] - contextFrames;
-        var framesPerBatch = shape[1] * shape[2] * shape[3];
-
-        for (int b = 0; b < shape[0]; b++)
-        {
-            for (int c = 0; c < shape[1]; c++)
-            {
-                for (int h = 0; h < shape[2]; h++)
-                {
-                    for (int f = 0; f < contextFrames; f++)
-                    {
-                        var srcIdx = b * framesPerBatch + c * shape[2] * shape[3] + h * shape[3] + startFrame + f;
-                        var dstIdx = b * (shape[1] * shape[2] * contextFrames) + c * shape[2] * contextFrames + h * contextFrames + f;
-                        contextSpan[dstIdx] = latentSpan[srcIdx];
-                    }
-                }
-            }
-        }
-
-        return context;
+        int contextFrames = Math.Min(shape[2], 16);
+        return Engine.TensorSlice(latents, new[] { 0, 0, shape[2] - contextFrames, 0 },
+            new[] { shape[0], shape[1], contextFrames, shape[3] });
     }
 
     /// <summary>
@@ -779,7 +735,8 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
     /// </summary>
     protected virtual Tensor<T> ConcatenateLatents(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: a._shape.Length - 1);
+        // Latents are [batch, channels, time frames, mel bins]: time is axis 2.
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: 2);
     }
 
     /// <summary>

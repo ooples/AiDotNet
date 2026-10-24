@@ -68,12 +68,11 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     // Decoder: the U-Net score network s_theta(X_t, mu, t).
     private GradTtsScoreEstimator<T>? _scoreNetwork;
 
-    public override ModelOptions GetOptions() => _options;
-
     public GradTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, GradTTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new GradTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
@@ -96,6 +95,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         : base(architecture)
     {
         _options = options ?? new GradTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace AiDotNet.Postprocessing.Document;
@@ -260,7 +261,7 @@ public class StructuredOutputParser<T> : PostprocessorBase<T, string, Dictionary
         var totalMatch = RegexHelper.Match(text, @"(?:Total:?\s*|Grand\s+Total:?\s*)[$€£]?\s*([\d,]+\.?\d*)", RegexOptions.IgnoreCase);
         if (totalMatch.Success)
         {
-            if (decimal.TryParse(totalMatch.Groups[1].Value.Replace(",", ""), out var total))
+            if (decimal.TryParse(totalMatch.Groups[1].Value.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out var total))
                 invoice.Total = total;
         }
 
@@ -279,8 +280,8 @@ public class StructuredOutputParser<T> : PostprocessorBase<T, string, Dictionary
             {
                 Quantity = int.TryParse(match.Groups[1].Value, out var qty) ? qty : 1,
                 Description = match.Groups[2].Value.Trim(),
-                UnitPrice = decimal.TryParse(match.Groups[3].Value.Replace(",", ""), out var price) ? price : 0,
-                Amount = decimal.TryParse(match.Groups[4].Value.Replace(",", ""), out var amount) ? amount : 0
+                UnitPrice = decimal.TryParse(match.Groups[3].Value.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out var price) ? price : 0,
+                Amount = decimal.TryParse(match.Groups[4].Value.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) ? amount : 0
             });
         }
 
@@ -306,12 +307,12 @@ public class StructuredOutputParser<T> : PostprocessorBase<T, string, Dictionary
 
         // Extract total
         var totalMatch = RegexHelper.Match(text, @"(?:Total|Amount|Due):?\s*[$€£]?\s*([\d,]+\.?\d*)", RegexOptions.IgnoreCase);
-        if (totalMatch.Success && decimal.TryParse(totalMatch.Groups[1].Value.Replace(",", ""), out var total))
+        if (totalMatch.Success && decimal.TryParse(totalMatch.Groups[1].Value.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out var total))
             receipt.Total = total;
 
         // Extract tax
         var taxMatch = RegexHelper.Match(text, @"(?:Tax|VAT):?\s*[$€£]?\s*([\d,]+\.?\d*)", RegexOptions.IgnoreCase);
-        if (taxMatch.Success && decimal.TryParse(taxMatch.Groups[1].Value.Replace(",", ""), out var tax))
+        if (taxMatch.Success && decimal.TryParse(taxMatch.Groups[1].Value.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out var tax))
             receipt.Tax = tax;
 
         // Extract items (pattern: item name followed by price)
@@ -325,7 +326,7 @@ public class StructuredOutputParser<T> : PostprocessorBase<T, string, Dictionary
             if (RegexHelper.IsMatch(description, @"(?:total|tax|subtotal|discount)", RegexOptions.IgnoreCase))
                 continue;
 
-            if (decimal.TryParse(match.Groups[2].Value.Replace(",", ""), out var price))
+            if (decimal.TryParse(match.Groups[2].Value.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out var price))
             {
                 receipt.Items.Add(new ReceiptItem
                 {
@@ -433,7 +434,7 @@ public class StructuredOutputParser<T> : PostprocessorBase<T, string, Dictionary
         {
             DataType.String => value,
             DataType.Integer => int.TryParse(value, out var i) ? i : null,
-            DataType.Decimal => decimal.TryParse(value.Replace(",", ""), out var d) ? d : null,
+            DataType.Decimal => decimal.TryParse(value.Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out var d) ? d : null,
             DataType.Boolean => bool.TryParse(value, out var b) ? b : null,
             DataType.DateTime => DateTime.TryParse(value, out var dt) ? dt : null,
             _ => value

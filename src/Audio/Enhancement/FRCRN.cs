@@ -56,7 +56,6 @@ public partial class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     #region Fields
 
     private readonly FRCRNOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private ShortTimeFourierTransform<T> _stft;
     [Scratch]
@@ -74,6 +73,7 @@ public partial class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         : base(architecture)
     {
         _options = options ?? new FRCRNOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -89,6 +89,7 @@ public partial class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         : base(architecture)
     {
         _options = options ?? new FRCRNOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

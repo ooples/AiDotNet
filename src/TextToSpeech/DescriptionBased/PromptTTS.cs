@@ -81,14 +81,12 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     private DenseLayer<T>? _styleProjection;
     private bool _styleStep;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed PromptTTS for inference.</summary>
     public PromptTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, PromptTTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new PromptTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();
@@ -107,6 +105,7 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
         : base(architecture)
     {
         _options = options ?? new PromptTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();

@@ -79,9 +79,6 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
         base.HopSize = _vocoder.HopSize;
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _vocoder;
-
     /// <summary>The options, available to the hooks the base constructor calls before a derived constructor runs.</summary>
     protected VocoderOptions VocoderSettings => _vocoder;
 

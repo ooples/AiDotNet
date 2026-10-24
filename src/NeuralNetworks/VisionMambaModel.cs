@@ -54,8 +54,6 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
 
     public override bool SupportsTraining => true;
 
-    public override ModelOptions GetOptions() => _options;
-
     public int ImageHeight => _configuration.ImageHeight;
     public int ImageWidth => _configuration.ImageWidth;
     public int PatchSize => _configuration.PatchSize;

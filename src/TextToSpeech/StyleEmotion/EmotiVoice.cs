@@ -86,14 +86,12 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     private readonly List<LayerBase<T>> _discriminatorLayers = new();
     private readonly List<LayerBase<T>> _styleLayers = new();
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed EmotiVoice for inference.</summary>
     public EmotiVoice(NeuralNetworkArchitecture<T> architecture, string modelPath, EmotiVoiceOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new EmotiVoiceOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();
@@ -111,6 +109,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new EmotiVoiceOptions();
+        Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();

@@ -122,9 +122,6 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// </summary>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Declares the cross-sectional geometry a factor model accepts.
     /// </summary>
@@ -391,7 +388,6 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFactorVAELayers(
-                Architecture,
                 _numFeatures,
                 _hiddenDimension,
                 _latentDimension,
@@ -1048,7 +1044,7 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// predict the next returns or reconstructed outputs.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         return Predict(input);
     }

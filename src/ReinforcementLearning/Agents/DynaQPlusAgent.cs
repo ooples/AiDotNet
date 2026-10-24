@@ -44,8 +44,6 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQPlusOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
     private Dictionary<string, Dictionary<int, int>> _timeSteps;  // Track last visit time
@@ -66,6 +64,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _model = new Dictionary<string, Dictionary<int, (string, T)>>();
         _timeSteps = new Dictionary<string, Dictionary<int, int>>();
@@ -89,7 +88,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         // exact value still varies with state) while every other slot stays
         // exactly zero, satisfying one-hot.
         var result = new Vector<T>(_options.ActionSize);
-        var seedRng = new System.Random(stateKey.GetHashCode());
+        var seedRng = RandomHelper.CreateSeededRandom(AiDotNet.Helpers.StableHash.Seed(stateKey)) /* stable across processes (#2361) */;
         result[selectedAction] = NumOps.Add(NumOps.One, NumOps.FromDouble(seedRng.NextDouble() * 1e-9));
         return result;
     }
@@ -175,7 +174,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
             // pairs so different states reliably produce different
             // argmaxes pre-training. Amplitude (1e-6) is well below any
             // real reward — first real Q-update overwrites this jitter.
-            var seedRng = new System.Random(stateKey.GetHashCode());
+            var seedRng = RandomHelper.CreateSeededRandom(AiDotNet.Helpers.StableHash.Seed(stateKey)) /* stable across processes (#2361) */;
             for (int a = 0; a < _options.ActionSize; a++)
             {
                 double jitter = seedRng.NextDouble() * 1e-6;

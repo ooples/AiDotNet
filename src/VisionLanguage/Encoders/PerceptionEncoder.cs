@@ -72,8 +72,6 @@ public partial class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualE
 {
     private readonly PerceptionEncoderOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -86,6 +84,7 @@ public partial class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualE
         : base(architecture)
     {
         _options = options ?? new PerceptionEncoderOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -107,12 +106,14 @@ public partial class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualE
         : base(architecture)
     {
         _options = options ?? new PerceptionEncoderOptions();
+        Options = _options;
         if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0)
         {
             _options = new PerceptionEncoderOptions(_options)
             {
                 ImageSize = architecture.InputHeight,
             };
+            Options = _options;
         }
         _useNativeMode = true;
         _optimizer = optimizer

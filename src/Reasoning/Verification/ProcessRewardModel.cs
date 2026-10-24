@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
@@ -224,7 +225,7 @@ Evaluate the step:";
 
         // Fallback: look for numbers
         var numberMatch = Regex.Match(response, @"(?:reward|score)[\s:]*([0-9]*\.?[0-9]+)", RegexOptions.IgnoreCase, RegexTimeout);
-        if (numberMatch.Success && double.TryParse(numberMatch.Groups[1].Value, out double reward))
+        if (numberMatch.Success && double.TryParse(numberMatch.Groups[1].Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double reward))
         {
             // Normalize if needed
             if (reward > 1.0 && reward <= 10.0)

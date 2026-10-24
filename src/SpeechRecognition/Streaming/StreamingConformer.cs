@@ -52,14 +52,14 @@ namespace AiDotNet.SpeechRecognition.Streaming;
                         + "dimension, so the schedule is declared rather than a fixed rate.")]
 public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly StreamingConformerOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly StreamingConformerOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
     public bool SupportsWordTimestamps => false;
 
-    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, StreamingConformerOptions? options = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
-    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, StreamingConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = true; _optimizer = optimizer
+    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, StreamingConformerOptions? options = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
+    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, StreamingConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
 

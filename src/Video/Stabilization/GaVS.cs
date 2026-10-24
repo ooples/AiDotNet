@@ -55,9 +55,6 @@ public partial class GaVS<T> : VideoStabilizationBase<T>
 {
     private readonly GaVSOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -72,6 +69,7 @@ public partial class GaVS<T> : VideoStabilizationBase<T>
         : base(architecture)
     {
         _options = options ?? new GaVSOptions();
+        Options = _options;
         _useNativeMode = false;
         SmoothingWindowSize = _options.SmoothingWindow;
         _options.ModelPath = modelPath;
@@ -89,6 +87,7 @@ public partial class GaVS<T> : VideoStabilizationBase<T>
         : base(architecture)
     {
         _options = options ?? new GaVSOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>

@@ -57,9 +57,6 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
 
     private readonly GenreClassifierOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly SpectralFeatureExtractor<T> _spectralExtractor;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -133,6 +130,7 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         }
 
         _options = options ?? new GenreClassifierOptions();
+        Options = _options;
         _useNativeMode = false;
 
         // Load ONNX model
@@ -164,6 +162,7 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         : base(architecture)
     {
         _options = options ?? new GenreClassifierOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
