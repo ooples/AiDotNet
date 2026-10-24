@@ -217,7 +217,7 @@ internal sealed class CosyVoiceFlow<T>
         // Σ |·| or Σ (·)² over the frames, divided by (Σ mask · channels), as compute_loss normalizes.
         var pointwise = c.Loss == CosyVoiceFlowLoss.SquaredError ? _engine.TensorMultiply(difference, difference) : _engine.TensorAbs(difference);
         return _engine.TensorMultiplyScalar(_engine.ReduceSum(pointwise, new[] { 0, 1, 2 }, false),
-            NumOps.FromDouble(1.0 / (frames * c.OutputSize)));
+            NumOps.FromDouble(1.0 / ((double)frames * c.OutputSize)));
     }
 
     /// <summary>
