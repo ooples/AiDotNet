@@ -23,7 +23,7 @@ public class AesGcmModelArtifactProtectorTests
         var protector = new AesGcmModelArtifactProtector();
 
         var ex = Assert.Throws<ArgumentException>(() =>
-            protector.ProtectToFile((modelName ?? throw new InvalidOperationException("modelName is null where it is required.")), (sourcePath ?? throw new InvalidOperationException("sourcePath is null where it is required.")), (outputDirectory ?? throw new InvalidOperationException("outputDirectory is null where it is required."))));
+            protector.ProtectToFile(TestNull.Pass(modelName), TestNull.Pass(sourcePath), TestNull.Pass(outputDirectory)));
 
         Assert.Equal(expectedParamName, ex.ParamName);
     }

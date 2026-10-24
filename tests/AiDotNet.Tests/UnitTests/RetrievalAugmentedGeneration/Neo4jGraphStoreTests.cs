@@ -1,10 +1,11 @@
-﻿#if NET10_0_OR_GREATER
+#if NET10_0_OR_GREATER
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Graph;
+using AiDotNet.Tests;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
@@ -42,7 +43,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         [InlineData("   ")]
         public void EscapeIdentifier_Throws_OnNullOrWhitespace(string? identifier)
         {
-            Assert.Throws<ArgumentException>(() => Neo4jCypher.EscapeIdentifier((identifier ?? throw new InvalidOperationException("identifier is null where it is required."))));
+            Assert.Throws<ArgumentException>(() => Neo4jCypher.EscapeIdentifier(TestNull.Pass(identifier)));
         }
 
         [Fact]

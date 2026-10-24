@@ -92,8 +92,8 @@ public class EdgeCaseTests
     public async Task CompositePromptTemplate_NullTemplates_CreatesEmptyComposite()
     {
         // CompositePromptTemplate handles null by creating empty list
-        IPromptTemplate[]? templates = null;
-        var composite = new CompositePromptTemplate((templates ?? throw new InvalidOperationException("templates is null where it is required.")));
+        IPromptTemplate[] templates = TestNull.Of<IPromptTemplate[]>();
+        var composite = new CompositePromptTemplate(templates);
         Assert.NotNull(composite);
     }
 

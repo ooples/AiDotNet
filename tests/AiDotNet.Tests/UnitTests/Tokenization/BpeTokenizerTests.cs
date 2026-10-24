@@ -75,10 +75,10 @@ public class BpeTokenizerTests
     public async Task Tokenize_NullText_ReturnsEmptyList()
     {
         // Arrange
-        string? text = null;
+        string text = TestNull.Of<string>();
 
         // Act
-        var tokens = _tokenizer.Tokenize((text ?? throw new InvalidOperationException("text is null where it is required.")));
+        var tokens = _tokenizer.Tokenize(text);
 
         // Assert
         Assert.NotNull(tokens);

@@ -29,15 +29,19 @@ internal sealed class AiModelResultContractResolver : DefaultContractResolver
 
     private static bool IsOrDerivesFromRawGeneric(Type type, Type rawGeneric)
     {
-        while (type != null && type != typeof(object))
+        // BaseType is null once the walk reaches the top of the chain, which is what the loop's null
+        // check has always been for: object and every interface end it. Treating that as an error turns
+        // a normal termination into a serialization failure.
+        Type? candidate = type;
+        while (candidate is not null && candidate != typeof(object))
         {
-            var current = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
+            var current = candidate.IsGenericType ? candidate.GetGenericTypeDefinition() : candidate;
             if (current == rawGeneric)
             {
                 return true;
             }
 
-            type = (type.BaseType ?? throw new InvalidOperationException("type.BaseType is null where it is required."));
+            candidate = candidate.BaseType;
         }
 
         return false;

@@ -61,7 +61,7 @@ public class GeneratedTestFloatifyTests
     [InlineData("no generics here at all")]
     [InlineData("double plain = 1.0;")]
     public void Floatify_NoGenericDouble_ReturnsInputUnchanged(string? input)
-        => Assert.Equal(input, GeneratedTestFloatify.Floatify((input ?? throw new InvalidOperationException("input is null where it is required."))));
+        => Assert.Equal(input, GeneratedTestFloatify.Floatify(TestNull.Pass(input)));
 
     [Theory]
     [InlineData("IFullModel<double>", true)]
@@ -72,5 +72,5 @@ public class GeneratedTestFloatifyTests
     [InlineData("", false)]
     [InlineData(null, false)]
     public void ContainsGenericDoubleArg_DetectsRewritableFragments(string? input, bool expected)
-        => Assert.Equal(expected, GeneratedTestFloatify.ContainsGenericDoubleArg((input ?? throw new InvalidOperationException("input is null where it is required."))));
+        => Assert.Equal(expected, GeneratedTestFloatify.ContainsGenericDoubleArg(TestNull.Pass(input)));
 }

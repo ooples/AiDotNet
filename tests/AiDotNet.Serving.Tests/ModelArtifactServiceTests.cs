@@ -47,7 +47,7 @@ public class ModelArtifactServiceTests
     {
         var service = CreateService(modelDirectory: "models");
 
-        var ex = Assert.Throws<ArgumentException>(() => service.GetPlainArtifactPath((modelName ?? throw new InvalidOperationException("modelName is null where it is required."))));
+        var ex = Assert.Throws<ArgumentException>(() => service.GetPlainArtifactPath(TestNull.Pass(modelName)));
 
         Assert.Equal("modelName", ex.ParamName);
     }

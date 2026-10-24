@@ -117,7 +117,7 @@ public class ModelRegistry : IModelRegistry
         if (!string.IsNullOrEmpty(filterValue))
         {
             // Simple filter: "name LIKE 'pattern'"
-            if ((filterValue ?? throw new InvalidOperationException("filterValue is null where it is required.")).StartsWith("name LIKE", StringComparison.OrdinalIgnoreCase))
+            if (filterValue.StartsWith("name LIKE", StringComparison.OrdinalIgnoreCase))
             {
                 var pattern = filterValue.Substring(10).Trim().Trim('\'', '"').Replace("%", "");
                 query = query.Where(m => m.Name.Contains(pattern, StringComparison.OrdinalIgnoreCase));
@@ -127,7 +127,7 @@ public class ModelRegistry : IModelRegistry
         var orderByValue = orderBy;
         if (!string.IsNullOrEmpty(orderByValue))
         {
-            query = (orderByValue ?? throw new InvalidOperationException("orderByValue is null where it is required.")).ToLowerInvariant() switch
+            query = orderByValue.ToLowerInvariant() switch
             {
                 "name" => query.OrderBy(m => m.Name),
                 "name desc" => query.OrderByDescending(m => m.Name),
@@ -489,7 +489,7 @@ public class ModelRegistry : IModelRegistry
         if (!string.IsNullOrEmpty(filterValue))
         {
             // Parse simple filters like "run_id = 'xxx'" or "tags.key = 'value'"
-            var parts = (filterValue ?? throw new InvalidOperationException("filterValue is null where it is required.")).Split(new[] { ' ' }, 3);
+            var parts = filterValue.Split(new[] { ' ' }, 3);
             if (parts.Length >= 3)
             {
                 var field = parts[0];

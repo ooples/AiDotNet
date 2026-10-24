@@ -103,11 +103,11 @@ public class AiModelResultRadianceFieldExtensionsTests
     [Fact]
     public void RenderImage_NullResult_ThrowsArgumentNullException()
     {
-        AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
+        AiModelResult<float, Tensor<float>, Tensor<float>> result = TestNull.Of<AiModelResult<float, Tensor<float>, Tensor<float>>>();
         var pos = new Vector<float>(3);
         var rot = new Matrix<float>(3, 3);
         Assert.Throws<ArgumentNullException>(
-            () => (result ?? throw new InvalidOperationException("result is null where it is required.")).RenderImage(pos, rot, 8, 8, 100f));
+            () => result.RenderImage(pos, rot, 8, 8, 100f));
     }
 
     [Fact]

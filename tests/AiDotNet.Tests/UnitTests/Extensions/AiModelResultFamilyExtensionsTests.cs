@@ -51,8 +51,8 @@ public class AiModelResultFamilyExtensionsTests
     [Fact]
     public void Diffusion_Generate_NullResult_ThrowsArgumentNullException()
     {
-        AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
-        Assert.Throws<ArgumentNullException>(() => (result ?? throw new InvalidOperationException("result is null where it is required.")).Generate(new[] { 1, 3, 8, 8 }));
+        AiModelResult<float, Tensor<float>, Tensor<float>> result = TestNull.Of<AiModelResult<float, Tensor<float>, Tensor<float>>>();
+        Assert.Throws<ArgumentNullException>(() => result.Generate(new[] { 1, 3, 8, 8 }));
     }
 
     // ---------------- Transformer ----------------

@@ -55,9 +55,9 @@ public class TokenizationDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Vocabulary_FromDictionary_NullThrows()
     {
-        Dictionary<string, int>? nullDict = null;
+        Dictionary<string, int> nullDict = TestNull.Of<Dictionary<string, int>>();
         Assert.Throws<ArgumentNullException>(() =>
-            new Vocabulary((nullDict ?? throw new InvalidOperationException("nullDict is null where it is required."))));
+            new Vocabulary(nullDict));
     }
 
     // ============================

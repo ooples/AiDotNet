@@ -230,7 +230,7 @@ unknownSection:
     [Fact(Timeout = 120000)]
     public async Task LoadFromString_WithNullContent_ThrowsArgumentException()
     {
-        Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromString((null as string ?? throw new InvalidOperationException("null as string is null where it is required."))));
+        Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromString(TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -248,7 +248,7 @@ unknownSection:
     [Fact(Timeout = 120000)]
     public async Task LoadFromFile_WithNullPath_ThrowsArgumentException()
     {
-        Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromFile((null as string ?? throw new InvalidOperationException("null as string is null where it is required."))));
+        Assert.Throws<ArgumentException>(() => YamlConfigLoader.LoadFromFile(TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -271,7 +271,7 @@ unknownSection:
     public async Task Constructor_WithNullPath_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
-            new AiModelBuilder<double, Matrix<double>, Vector<double>>((null as string ?? throw new InvalidOperationException("null as string is null where it is required."))));
+            new AiModelBuilder<double, Matrix<double>, Vector<double>>(TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]

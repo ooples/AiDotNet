@@ -73,9 +73,9 @@ public class NullableReferenceTypeTests
     public async Task CastingThroughObject_ErasesNullability()
     {
 #pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
-        object? boxed = null;
+        object boxed = TestNull.Of<object>();
         // This cast succeeds at runtime even though the target type is "non-nullable".
-        string value = (string)(boxed ?? throw new InvalidOperationException("(string)boxed is null where it is required."));
+        string value = (string)boxed;
 #pragma warning restore CS8600
         Assert.Null(value);
     }

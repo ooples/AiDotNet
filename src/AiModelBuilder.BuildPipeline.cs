@@ -4592,7 +4592,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     {
                         trialResult = finalOptimizer.Optimize(
                             OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                                XTrain, yTrain, (XVal ?? throw new InvalidOperationException("XVal is null where it is required.")), (yVal ?? throw new InvalidOperationException("yVal is null where it is required.")), (XTest ?? throw new InvalidOperationException("XTest is null where it is required.")), (yTest ?? throw new InvalidOperationException("yTest is null where it is required."))));
+                                XTrain, yTrain, XVal, yVal, XTest, yTest));
                     }
 #pragma warning restore CS8604
 
@@ -4669,7 +4669,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         OptimizationResult<T, TInput, TOutput> optimizationResult;
         FederatedLearningMetadata? federatedLearningMetadata = null;
 #pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
-        var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, (XVal ?? throw new InvalidOperationException("XVal is null where it is required.")), (yVal ?? throw new InvalidOperationException("yVal is null where it is required.")), (XTest ?? throw new InvalidOperationException("XTest is null where it is required.")), (yTest ?? throw new InvalidOperationException("yTest is null where it is required.")));
+        var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
 #pragma warning restore CS8604
 
         // ============================================================================

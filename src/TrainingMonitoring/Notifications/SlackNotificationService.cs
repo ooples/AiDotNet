@@ -293,7 +293,7 @@ public class SlackNotificationService : INotificationService
         var channel = _config.Channel;
         if (!string.IsNullOrWhiteSpace(channel))
         {
-            payload["channel"] = (channel ?? throw new InvalidOperationException("channel is null where it is required."));
+            payload["channel"] = channel;
         }
 
         return payload;

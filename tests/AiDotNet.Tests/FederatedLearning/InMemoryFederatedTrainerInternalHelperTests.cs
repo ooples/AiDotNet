@@ -452,7 +452,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
 
     private static T InvokePrivateStatic<T>(string methodName, params object?[] args)
     {
-        return (T)(InvokePrivateStatic(methodName, args) ?? throw new InvalidOperationException("(T)InvokePrivateStatic(methodName, args) is null where it is required."));
+        return TestNull.Cast<T>(InvokePrivateStatic(methodName, args));
     }
 
     private static object? InvokePrivateStatic(string methodName, params object?[] args)
@@ -464,7 +464,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
 
     private static T InvokePrivateInstance<T>(object instance, string methodName, params object?[] args)
     {
-        return (T)(InvokePrivateInstance(instance, methodName, args) ?? throw new InvalidOperationException("(T)InvokePrivateInstance(instance, methodName, args) is null where it is required."));
+        return TestNull.Cast<T>(InvokePrivateInstance(instance, methodName, args));
     }
 
     private static object? InvokePrivateInstance(object instance, string methodName, params object?[] args)

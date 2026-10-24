@@ -211,7 +211,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var probsOutput = result.Predict(xCalibration);
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>((probsOutput ?? throw new InvalidOperationException("probsOutput is null where it is required."))).Clone();
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(probsOutput).Clone();
         if (probsTensor.Rank < 1)
         {
             return;
@@ -507,7 +507,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     p = eps;
                 }
                 var logit = numOps.Divide(numOps.Log(p), temperature);
-                if (c == 0 || numOps.GreaterThan(logit, (maxLogit ?? throw new InvalidOperationException("maxLogit is null where it is required."))))
+                if (c == 0 || numOps.GreaterThan(logit, maxLogit))
                 {
                     maxLogit = logit;
                 }
@@ -522,7 +522,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     p = eps;
                 }
                 var logit = numOps.Divide(numOps.Log(p), temperature);
-                var exp = numOps.Exp(numOps.Subtract(logit, (maxLogit ?? throw new InvalidOperationException("maxLogit is null where it is required."))));
+                var exp = numOps.Exp(numOps.Subtract(logit, maxLogit));
                 scaled[i * classes + c] = exp;
                 sumExp = numOps.Add(sumExp, exp);
             }
@@ -1213,7 +1213,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var predicted = result.Predict(xCalibration);
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>((predicted ?? throw new InvalidOperationException("predicted is null where it is required."))).Clone();
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(predicted).Clone();
         var classes = probsTensor.Shape[probsTensor.Shape.Length - 1];
         if (classes <= 1)
         {

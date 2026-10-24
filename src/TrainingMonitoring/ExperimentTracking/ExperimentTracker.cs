@@ -180,7 +180,7 @@ public class ExperimentTracker : IExperimentTracker
         }
 
         var runId = GenerateRunId();
-        var experiment = _experiments[(_activeExperiment ?? throw new InvalidOperationException("_activeExperiment is null where it is required."))];
+        var experiment = _experiments[_activeExperiment];
 
         var run = new RunInfo
         {
@@ -216,7 +216,7 @@ public class ExperimentTracker : IExperimentTracker
         if (string.IsNullOrEmpty(runId))
             return;
 
-        if (_runs.TryGetValue((runId ?? throw new InvalidOperationException("runId is null where it is required.")), out var run))
+        if (_runs.TryGetValue(runId, out var run))
         {
             run.Status = status;
             run.EndTime = DateTime.UtcNow;
@@ -248,14 +248,14 @@ public class ExperimentTracker : IExperimentTracker
         var filterValue = filter;
         if (!string.IsNullOrEmpty(filterValue))
         {
-            query = ApplyFilter(query, (filterValue ?? throw new InvalidOperationException("filterValue is null where it is required.")));
+            query = ApplyFilter(query, filterValue);
         }
 
         // Apply ordering
         var orderByValue = orderBy;
         if (!string.IsNullOrEmpty(orderByValue))
         {
-            query = ApplyOrdering(query, (orderByValue ?? throw new InvalidOperationException("orderByValue is null where it is required.")));
+            query = ApplyOrdering(query, orderByValue);
         }
         else
         {
@@ -272,7 +272,7 @@ public class ExperimentTracker : IExperimentTracker
         if (string.IsNullOrEmpty(runId))
             throw new InvalidOperationException("No active run. Call StartRun() first.");
 
-        var run = _runs[(runId ?? throw new InvalidOperationException("runId is null where it is required."))];
+        var run = _runs[runId];
         run.Parameters[key] = value;
         SaveRunParameters(run);
     }
@@ -284,7 +284,7 @@ public class ExperimentTracker : IExperimentTracker
         if (string.IsNullOrEmpty(runId))
             throw new InvalidOperationException("No active run. Call StartRun() first.");
 
-        var run = _runs[(runId ?? throw new InvalidOperationException("runId is null where it is required."))];
+        var run = _runs[runId];
         foreach (var kvp in parameters)
         {
             run.Parameters[kvp.Key] = kvp.Value;
@@ -300,7 +300,7 @@ public class ExperimentTracker : IExperimentTracker
             throw new InvalidOperationException("No active run. Call StartRun() first.");
 
         var actualStep = step ?? _currentStep++;
-        var run = _runs[(runId ?? throw new InvalidOperationException("runId is null where it is required."))];
+        var run = _runs[runId];
         var metricValue = new MetricValue
         {
             Key = key,
@@ -341,7 +341,7 @@ public class ExperimentTracker : IExperimentTracker
         if (string.IsNullOrEmpty(runId))
             throw new InvalidOperationException("No active run. Call StartRun() first.");
 
-        var run = _runs[(runId ?? throw new InvalidOperationException("runId is null where it is required."))];
+        var run = _runs[runId];
         run.Tags[key] = value;
         SaveRunInfo(run);
     }
@@ -353,7 +353,7 @@ public class ExperimentTracker : IExperimentTracker
         if (string.IsNullOrEmpty(runId))
             throw new InvalidOperationException("No active run. Call StartRun() first.");
 
-        var run = _runs[(runId ?? throw new InvalidOperationException("runId is null where it is required."))];
+        var run = _runs[runId];
         foreach (var kvp in tags)
         {
             run.Tags[kvp.Key] = kvp.Value;
@@ -368,7 +368,7 @@ public class ExperimentTracker : IExperimentTracker
         if (string.IsNullOrEmpty(runId))
             throw new InvalidOperationException("No active run. Call StartRun() first.");
 
-        var run = _runs[(runId ?? throw new InvalidOperationException("runId is null where it is required."))];
+        var run = _runs[runId];
         var artifactDir = GetArtifactDir(run.RunId);
         var targetDir = string.IsNullOrEmpty(artifactPath) ? artifactDir : Path.Combine(artifactDir, artifactPath);
         Directory.CreateDirectory(targetDir);
@@ -417,7 +417,7 @@ public class ExperimentTracker : IExperimentTracker
         if (string.IsNullOrEmpty(runId))
             throw new InvalidOperationException("No active run. Call StartRun() first.");
 
-        var artifactDir = GetArtifactDir((runId ?? throw new InvalidOperationException("runId is null where it is required.")));
+        var artifactDir = GetArtifactDir(runId);
         var modelDir = Path.Combine(artifactDir, "models", modelName);
         Directory.CreateDirectory(modelDir);
 
@@ -547,13 +547,13 @@ public class ExperimentTracker : IExperimentTracker
         var filterValue = filter;
         if (!string.IsNullOrEmpty(filterValue))
         {
-            query = ApplyFilter(query, (filterValue ?? throw new InvalidOperationException("filterValue is null where it is required.")));
+            query = ApplyFilter(query, filterValue);
         }
 
         var orderByValue = orderBy;
         if (!string.IsNullOrEmpty(orderByValue))
         {
-            query = ApplyOrdering(query, (orderByValue ?? throw new InvalidOperationException("orderByValue is null where it is required.")));
+            query = ApplyOrdering(query, orderByValue);
         }
         else
         {

@@ -1213,11 +1213,11 @@ public class MergedPRBugFixTests
     public async Task InterpretabilityMetricsHelper_GetUniqueGroups_ThrowsForNullSensitiveFeature()
     {
         // ARRANGE: The old code would throw NullReferenceException
-        Vector<double>? nullVector = null;
+        Vector<double> nullVector = TestNull.Of<Vector<double>>();
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetUniqueGroups((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required."))));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetUniqueGroups(nullVector));
         Assert.Equal("sensitiveFeature", ex.ParamName);
     }
 
@@ -1225,11 +1225,11 @@ public class MergedPRBugFixTests
     public async Task InterpretabilityMetricsHelper_GetGroupIndices_ThrowsForNullSensitiveFeature()
     {
         // ARRANGE
-        Vector<double>? nullVector = null;
+        Vector<double> nullVector = TestNull.Of<Vector<double>>();
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetGroupIndices((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required.")), 1.0));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetGroupIndices(nullVector, 1.0));
         Assert.Equal("sensitiveFeature", ex.ParamName);
     }
 
@@ -1237,12 +1237,12 @@ public class MergedPRBugFixTests
     public async Task InterpretabilityMetricsHelper_GetSubset_ThrowsForNullVector()
     {
         // ARRANGE
-        Vector<double>? nullVector = null;
+        Vector<double> nullVector = TestNull.Of<Vector<double>>();
         var indices = new List<int> { 0, 1 };
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required.")), indices));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset(nullVector, indices));
         Assert.Equal("vector", ex.ParamName);
     }
 
@@ -1251,11 +1251,11 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
-        List<int>? nullIndices = null;
+        List<int> nullIndices = TestNull.Of<List<int>>();
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset(vector, (nullIndices ?? throw new InvalidOperationException("nullIndices is null where it is required."))));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset(vector, nullIndices));
         Assert.Equal("indices", ex.ParamName);
     }
 
@@ -1263,11 +1263,11 @@ public class MergedPRBugFixTests
     public async Task InterpretabilityMetricsHelper_ComputePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
-        Vector<double>? nullVector = null;
+        Vector<double> nullVector = TestNull.Of<Vector<double>>();
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePositiveRate((nullVector ?? throw new InvalidOperationException("nullVector is null where it is required."))));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePositiveRate(nullVector));
         Assert.Equal("predictions", ex.ParamName);
     }
 
@@ -1275,12 +1275,12 @@ public class MergedPRBugFixTests
     public async Task InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
-        Vector<double>? nullPredictions = null;
+        Vector<double> nullPredictions = TestNull.Of<Vector<double>>();
         var actualLabels = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate((nullPredictions ?? throw new InvalidOperationException("nullPredictions is null where it is required.")), actualLabels));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(nullPredictions, actualLabels));
         Assert.Equal("predictions", ex.ParamName);
     }
 
@@ -1289,11 +1289,11 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var predictions = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
-        Vector<double>? nullLabels = null;
+        Vector<double> nullLabels = TestNull.Of<Vector<double>>();
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(predictions, (nullLabels ?? throw new InvalidOperationException("nullLabels is null where it is required."))));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(predictions, nullLabels));
         Assert.Equal("actualLabels", ex.ParamName);
     }
 
@@ -1301,12 +1301,12 @@ public class MergedPRBugFixTests
     public async Task InterpretabilityMetricsHelper_ComputeFalsePositiveRate_ThrowsForNullPredictions()
     {
         // ARRANGE
-        Vector<double>? nullPredictions = null;
+        Vector<double> nullPredictions = TestNull.Of<Vector<double>>();
         var actualLabels = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeFalsePositiveRate((nullPredictions ?? throw new InvalidOperationException("nullPredictions is null where it is required.")), actualLabels));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeFalsePositiveRate(nullPredictions, actualLabels));
         Assert.Equal("predictions", ex.ParamName);
     }
 
@@ -1314,12 +1314,12 @@ public class MergedPRBugFixTests
     public async Task InterpretabilityMetricsHelper_ComputePrecision_ThrowsForNullPredictions()
     {
         // ARRANGE
-        Vector<double>? nullPredictions = null;
+        Vector<double> nullPredictions = TestNull.Of<Vector<double>>();
         var actualLabels = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
 
         // ACT & ASSERT
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePrecision((nullPredictions ?? throw new InvalidOperationException("nullPredictions is null where it is required.")), actualLabels));
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePrecision(nullPredictions, actualLabels));
         Assert.Equal("predictions", ex.ParamName);
     }
 
@@ -1359,10 +1359,10 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
-        AiDotNet.Models.HyperparameterTrial<double>? nullTrial = null;
+        AiDotNet.Models.HyperparameterTrial<double> nullTrial = TestNull.Of<AiDotNet.Models.HyperparameterTrial<double>>();
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune((nullTrial ?? throw new InvalidOperationException("nullTrial is null where it is required.")), 1, 0.5));
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune(nullTrial, 1, 0.5));
         Assert.Equal("trial", ex.ParamName);
     }
 
@@ -1371,10 +1371,10 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
-        string? nullTrialId = null;
+        string nullTrialId = TestNull.Of<string>();
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune((nullTrialId ?? throw new InvalidOperationException("nullTrialId is null where it is required.")), 1, 0.5));
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune(nullTrialId, 1, 0.5));
         Assert.Equal("trialId", ex.ParamName);
     }
 
@@ -1383,10 +1383,10 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
-        string? nullTrialId = null;
+        string nullTrialId = TestNull.Of<string>();
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => pruner.MarkComplete((nullTrialId ?? throw new InvalidOperationException("nullTrialId is null where it is required."))));
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.MarkComplete(nullTrialId));
         Assert.Equal("trialId", ex.ParamName);
     }
 
@@ -1395,10 +1395,10 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var dist = new AiDotNet.Models.ContinuousDistribution { Min = 0.0, Max = 1.0 };
-        Random? nullRandom = null;
+        Random nullRandom = TestNull.Of<Random>();
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample((nullRandom ?? throw new InvalidOperationException("nullRandom is null where it is required."))));
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom));
         Assert.Equal("random", ex.ParamName);
     }
 
@@ -1407,10 +1407,10 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var dist = new AiDotNet.Models.IntegerDistribution { Min = 0, Max = 10, Step = 1 };
-        Random? nullRandom = null;
+        Random nullRandom = TestNull.Of<Random>();
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample((nullRandom ?? throw new InvalidOperationException("nullRandom is null where it is required."))));
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom));
         Assert.Equal("random", ex.ParamName);
     }
 
@@ -1419,10 +1419,10 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var dist = new AiDotNet.Models.CategoricalDistribution { Choices = new List<object> { "a", "b", "c" } };
-        Random? nullRandom = null;
+        Random nullRandom = TestNull.Of<Random>();
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample((nullRandom ?? throw new InvalidOperationException("nullRandom is null where it is required."))));
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom));
         Assert.Equal("random", ex.ParamName);
     }
 
@@ -1574,12 +1574,12 @@ public class MergedPRBugFixTests
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
-        string? nullId = null;
+        string nullId = TestNull.Of<string>();
 
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetExperiment((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetExperiment(nullId));
             Assert.Equal("experimentId", ex.ParamName);
         }
         finally
@@ -1594,12 +1594,12 @@ public class MergedPRBugFixTests
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
-        string? nullId = null;
+        string nullId = TestNull.Of<string>();
 
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetRun((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetRun(nullId));
             Assert.Equal("runId", ex.ParamName);
         }
         finally
@@ -1684,10 +1684,10 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var run = new AiDotNet.Models.ExperimentRun<double>("test-experiment");
-        string? nullName = null;
+        string nullName = TestNull.Of<string>();
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => run.GetLatestMetric((nullName ?? throw new InvalidOperationException("nullName is null where it is required."))));
+        var ex = Assert.Throws<ArgumentNullException>(() => run.GetLatestMetric(nullName));
         Assert.Equal("metricName", ex.ParamName);
     }
 
@@ -1762,12 +1762,12 @@ public class MergedPRBugFixTests
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
-        string? nullId = null;
+        string nullId = TestNull.Of<string>();
 
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.ListRuns((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.ListRuns(nullId));
             Assert.Equal("experimentId", ex.ParamName);
         }
         finally
@@ -1782,12 +1782,12 @@ public class MergedPRBugFixTests
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
-        string? nullId = null;
+        string nullId = TestNull.Of<string>();
 
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteExperiment((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteExperiment(nullId));
             Assert.Equal("experimentId", ex.ParamName);
         }
         finally
@@ -1802,12 +1802,12 @@ public class MergedPRBugFixTests
         // ARRANGE
         var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
-        string? nullId = null;
+        string nullId = TestNull.Of<string>();
 
         try
         {
             // ACT & ASSERT
-            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteRun((nullId ?? throw new InvalidOperationException("nullId is null where it is required."))));
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteRun(nullId));
             Assert.Equal("runId", ex.ParamName);
         }
         finally
@@ -1872,9 +1872,9 @@ public class MergedPRBugFixTests
         try
         {
             // ACT & ASSERT
-            Vector<double>? nullData = null;
+            Vector<double> nullData = TestNull.Of<Vector<double>>();
             var ex = Assert.Throws<ArgumentNullException>(() =>
-                AiDotNet.DistributedTraining.CommunicationManager.ReduceScatter<double>((nullData ?? throw new InvalidOperationException("nullData is null where it is required.")), AiDotNet.DistributedTraining.ReductionOperation.Sum));
+                AiDotNet.DistributedTraining.CommunicationManager.ReduceScatter<double>(nullData, AiDotNet.DistributedTraining.ReductionOperation.Sum));
             Assert.Equal("data", ex.ParamName);
         }
         finally
@@ -1913,9 +1913,9 @@ public class MergedPRBugFixTests
     public async Task ShardingConfiguration_CreateDefault_ThrowsForNullBackend()
     {
         // ACT & ASSERT
-        AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
+        AiDotNet.DistributedTraining.ICommunicationBackend<double> nullBackend = TestNull.Of<AiDotNet.DistributedTraining.ICommunicationBackend<double>>();
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateDefault((nullBackend ?? throw new InvalidOperationException("nullBackend is null where it is required."))));
+            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateDefault(nullBackend));
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
@@ -1923,9 +1923,9 @@ public class MergedPRBugFixTests
     public async Task ShardingConfiguration_CreateForHighBandwidth_ThrowsForNullBackend()
     {
         // ACT & ASSERT
-        AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
+        AiDotNet.DistributedTraining.ICommunicationBackend<double> nullBackend = TestNull.Of<AiDotNet.DistributedTraining.ICommunicationBackend<double>>();
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateForHighBandwidth((nullBackend ?? throw new InvalidOperationException("nullBackend is null where it is required."))));
+            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateForHighBandwidth(nullBackend));
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
@@ -1933,9 +1933,9 @@ public class MergedPRBugFixTests
     public async Task ShardingConfiguration_CreateForLowBandwidth_ThrowsForNullBackend()
     {
         // ACT & ASSERT
-        AiDotNet.DistributedTraining.ICommunicationBackend<double>? nullBackend = null;
+        AiDotNet.DistributedTraining.ICommunicationBackend<double> nullBackend = TestNull.Of<AiDotNet.DistributedTraining.ICommunicationBackend<double>>();
         var ex = Assert.Throws<ArgumentNullException>(() =>
-            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateForLowBandwidth((nullBackend ?? throw new InvalidOperationException("nullBackend is null where it is required."))));
+            AiDotNet.DistributedTraining.ShardingConfiguration<double>.CreateForLowBandwidth(nullBackend));
         Assert.Equal("communicationBackend", ex.ParamName);
     }
 
@@ -2009,10 +2009,10 @@ public class MergedPRBugFixTests
     {
         // ARRANGE
         var chain = new AiDotNet.Reasoning.Models.ReasoningChain<double>();
-        AiDotNet.Reasoning.Models.ReasoningStep<double>? nullStep = null;
+        AiDotNet.Reasoning.Models.ReasoningStep<double> nullStep = TestNull.Of<AiDotNet.Reasoning.Models.ReasoningStep<double>>();
 
         // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => chain.AddStep((nullStep ?? throw new InvalidOperationException("nullStep is null where it is required."))));
+        var ex = Assert.Throws<ArgumentNullException>(() => chain.AddStep(nullStep));
         Assert.Equal("step", ex.ParamName);
     }
 

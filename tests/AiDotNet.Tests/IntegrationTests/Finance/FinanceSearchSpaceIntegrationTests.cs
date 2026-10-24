@@ -1729,11 +1729,11 @@ public class FinanceSearchSpaceIntegrationTests
     public async Task TradingEnvironmentFactory_NullProvider_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
-        MarketDataProvider<double> nullProvider = null;
+        MarketDataProvider<double> nullProvider = TestNull.Of<MarketDataProvider<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
             TradingEnvironmentFactory.CreateStockTradingEnvironment(
-                (nullProvider ?? throw new InvalidOperationException("nullProvider is null where it is required.")), windowSize: 5, initialCapital: numOps.FromDouble(1000),
+                nullProvider, windowSize: 5, initialCapital: numOps.FromDouble(1000),
                 tradeSize: numOps.One));
     }
 
@@ -1741,22 +1741,22 @@ public class FinanceSearchSpaceIntegrationTests
     public async Task TradingEnvironmentFactory_NullPortfolioProviders_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
-        IReadOnlyList<MarketDataProvider<double>> nullProviders = null;
+        IReadOnlyList<MarketDataProvider<double>> nullProviders = TestNull.Of<IReadOnlyList<MarketDataProvider<double>>>();
 
         Assert.Throws<ArgumentNullException>(() =>
             TradingEnvironmentFactory.CreatePortfolioTradingEnvironment(
-                (nullProviders ?? throw new InvalidOperationException("nullProviders is null where it is required.")), windowSize: 5, initialCapital: numOps.FromDouble(1000)));
+                nullProviders, windowSize: 5, initialCapital: numOps.FromDouble(1000)));
     }
 
     [Fact(Timeout = 120000)]
     public async Task TradingEnvironmentFactory_NullMarketMakingProvider_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
-        MarketDataProvider<double> nullProvider = null;
+        MarketDataProvider<double> nullProvider = TestNull.Of<MarketDataProvider<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
             TradingEnvironmentFactory.CreateMarketMakingEnvironment(
-                (nullProvider ?? throw new InvalidOperationException("nullProvider is null where it is required.")), windowSize: 5, initialCapital: numOps.FromDouble(1000),
+                nullProvider, windowSize: 5, initialCapital: numOps.FromDouble(1000),
                 tradeSize: numOps.One));
     }
 
