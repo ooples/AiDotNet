@@ -18,12 +18,16 @@ public enum CosyVoiceFlowLoss
 }
 
 /// <summary>The sizes of CosyVoice 1's flow model (<c>MaskedDiffWithXvec</c> with its encoder, length regulator and
-/// conditional flow matching).</summary>
+/// conditional flow matching), or with <c>Causal</c> CosyVoice 2's <c>CausalMaskedDiffWithXvec</c>: an
+/// <see cref="UpsampleConformerEncoder{T}"/> giving each token <c>TokenMelRatio</c> mel frames (no length regulator) and the
+/// causal estimator, both chunked in streaming by the encoder's <c>StaticChunkSize</c> (the estimator by that times the
+/// ratio).</summary>
 internal sealed record CosyVoiceFlowConfiguration(
     int VocabSize, int InputSize, int OutputSize, int SpeakerDim, int InputFrameRate, int SampleRate, int HopSize,
     WenetEncoderConfiguration Encoder, int RegulatorStages, int[] DecoderChannels, int DecoderHeads, int DecoderHeadDim,
     int DecoderBlocksPerLevel, int DecoderMidBlocks, double SigmaMin, double TrainingCfgRate, double InferenceCfgRate,
-    int Timesteps, CosyVoiceFlowLoss Loss = CosyVoiceFlowLoss.AbsoluteError);
+    int Timesteps, CosyVoiceFlowLoss Loss = CosyVoiceFlowLoss.AbsoluteError, bool Causal = false, int TokenMelRatio = 1,
+    int Lookahead = 3);
 
 /// <summary>
 /// CosyVoice 1's flow model (FunAudioLLM/CosyVoice <c>cosyvoice/flow</c>: <c>MaskedDiffWithXvec</c>,
@@ -65,36 +69,49 @@ internal sealed class CosyVoiceFlow<T>
         InputEmbedding = Add(new TiedEmbeddingLayer<T>(c.VocabSize, c.InputSize));
         InputEmbedding.Reinitialize(() => Math.Sqrt(-2.0 * Math.Log(1.0 - initialization.NextDouble())) * Math.Cos(2.0 * Math.PI * initialization.NextDouble()));
         SpeakerProjection = Linear(c.SpeakerDim, c.OutputSize);
-        Encoder = new WenetEncoder<T>(engine, layers, c.Encoder, initialization);
+        if (c.Causal)
+            UpsampleEncoder = new UpsampleConformerEncoder<T>(engine, layers, c.Encoder, c.Lookahead, initialization);
+        else
+            Encoder = new WenetEncoder<T>(engine, layers, c.Encoder, initialization);
         EncoderProjection = Linear(c.Encoder.OutputSize, c.OutputSize);
-        for (int i = 0; i < c.RegulatorStages; i++)
+        for (int i = 0; i < (c.Causal ? 0 : c.RegulatorStages); i++)
         {
             var conv = Add(new NormedConv1DLayer<T>(c.OutputSize, c.OutputSize, 3, 1, 1, 1, 1, false, ConvolutionNormalization.None));
             conv.Reinitialize(() => Uniform(c.OutputSize * 3), bias: 0.0);
             RegulatorConvs.Add(conv);
             RegulatorNorms.Add(Add(new GroupNormalizationLayer<T>(1, c.OutputSize, 1e-5)));
         }
-        RegulatorOut = Add(new NormedConv1DLayer<T>(c.OutputSize, c.OutputSize, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None));
-        RegulatorOut.Reinitialize(() => Uniform(c.OutputSize), bias: 0.0);
+        if (!c.Causal)
+        {
+            RegulatorOut = Add(new NormedConv1DLayer<T>(c.OutputSize, c.OutputSize, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None));
+            RegulatorOut.Reinitialize(() => Uniform(c.OutputSize), bias: 0.0);
+        }
         // in_channels: x, μ, the x-vector repeated over frames and the prompt condition, each OutputSize wide.
         Decoder = new MatchaDecoder<T>(engine, 4 * c.OutputSize, c.OutputSize, c.DecoderChannels, 0.0, c.DecoderHeadDim, c.DecoderHeads,
-            c.DecoderMidBlocks, c.DecoderBlocksPerLevel, MatchaFeedForward.Gelu, biasMask: true);
+            c.DecoderMidBlocks, c.DecoderBlocksPerLevel, MatchaFeedForward.Gelu, biasMask: true, causal: c.Causal);
         layers.AddRange(Decoder.Layers);
     }
 
     public CosyVoiceFlowConfiguration Configuration { get; }
     public TiedEmbeddingLayer<T> InputEmbedding { get; }
     public DenseLayer<T> SpeakerProjection { get; }
-    public WenetEncoder<T> Encoder { get; }
+    /// <summary>CosyVoice 1's Conformer encoder; null for the causal flow.</summary>
+    public WenetEncoder<T>? Encoder { get; }
+
+    /// <summary>CosyVoice 2's upsampling encoder; null for CosyVoice 1's flow.</summary>
+    public UpsampleConformerEncoder<T>? UpsampleEncoder { get; }
     public DenseLayer<T> EncoderProjection { get; }
     public List<NormedConv1DLayer<T>> RegulatorConvs { get; } = new();
     public List<GroupNormalizationLayer<T>> RegulatorNorms { get; } = new();
-    public NormedConv1DLayer<T> RegulatorOut { get; }
+    /// <summary>The regulator's output convolution; null for the causal flow, which has no regulator.</summary>
+    public NormedConv1DLayer<T>? RegulatorOut { get; }
     public MatchaDecoder<T> Decoder { get; }
 
-    /// <summary>Mel frames for a number of speech tokens: <c>int(tokens / frame rate · sample rate / hop)</c>.</summary>
-    public int MelFrames(int tokens) =>
-        (int)(tokens / (double)Configuration.InputFrameRate * Configuration.SampleRate / Configuration.HopSize);
+    /// <summary>Mel frames for a number of speech tokens: <c>int(tokens / frame rate · sample rate / hop)</c>, or
+    /// <c>tokens · TokenMelRatio</c> for the causal flow.</summary>
+    public int MelFrames(int tokens) => Configuration.Causal
+        ? tokens * Configuration.TokenMelRatio
+        : (int)(tokens / (double)Configuration.InputFrameRate * Configuration.SampleRate / Configuration.HopSize);
 
     /// <summary>The projected x-vector <c>[OutputSize]</c>: L2-normalized, then the affine layer.</summary>
     public Tensor<T> ProjectSpeaker(Tensor<T> xvector)
@@ -106,13 +123,21 @@ internal sealed class CosyVoiceFlow<T>
         return _engine.Reshape(SpeakerProjection.Forward(normalized), new[] { Configuration.OutputSize });
     }
 
-    /// <summary>The encoded, projected tokens <c>[tokens, OutputSize]</c>.</summary>
-    public Tensor<T> Encode(IReadOnlyList<int> tokens, bool training, Random random)
+    /// <summary>The encoded, projected tokens <c>[tokens, OutputSize]</c> (the causal flow's <c>[2·tokens, OutputSize]</c>,
+    /// chunked when <paramref name="streaming"/>).</summary>
+    public Tensor<T> Encode(IReadOnlyList<int> tokens, bool training, Random random, bool streaming = false)
     {
         var ids = new Tensor<T>(new[] { tokens.Count });
         for (int i = 0; i < tokens.Count; i++) ids[i] = NumOps.FromDouble(Math.Max(0, tokens[i]));
-        return EncoderProjection.Forward(Encoder.Forward(InputEmbedding.Forward(ids), training, random));
+        var embedded = InputEmbedding.Forward(ids);
+        var encoded = UpsampleEncoder is not null
+            ? UpsampleEncoder.Forward(embedded, streaming, training, random)
+            : (Encoder ?? throw new InvalidOperationException("The flow has an encoder.")).Forward(embedded, training, random);
+        return EncoderProjection.Forward(encoded);
     }
+
+    // The estimator's attention chunk: the encoder's chunk times the token-to-mel ratio when streaming, else none.
+    private int Chunk(bool streaming) => streaming ? Configuration.Encoder.StaticChunkSize * Configuration.TokenMelRatio : 0;
 
     /// <summary>
     /// PyTorch's <c>F.interpolate(x, size, mode="linear", align_corners=False)</c> over the frames of <c>[1, C, T]</c>:
@@ -144,7 +169,7 @@ internal sealed class CosyVoiceFlow<T>
             h = _engine.Reshape(RegulatorNorms[i].Forward(_engine.Reshape(h, new[] { 1, c, 1, t })), new[] { 1, c, t });
             x = _engine.Mish(h);
         }
-        return RegulatorOut.Forward(x);
+        return (RegulatorOut ?? throw new InvalidOperationException("The causal flow has no length regulator.")).Forward(x);
     }
 
     /// <summary>μ <c>[1, OutputSize, frames]</c> of encoded tokens <c>[tokens, OutputSize]</c> stretched to
@@ -157,12 +182,13 @@ internal sealed class CosyVoiceFlow<T>
 
     /// <summary>The estimator on <c>[1, OutputSize, frames]</c> inputs: x, μ, the projected x-vector repeated over the
     /// frames, and the condition, stacked on the channels; returns <c>[1, OutputSize, frames]</c>.</summary>
-    public Tensor<T> Field(Tensor<T> x, Tensor<T> mu, Tensor<T> speaker, Tensor<T> condition, double t, Tensor<T> mask)
+    public Tensor<T> Field(Tensor<T> x, Tensor<T> mu, Tensor<T> speaker, Tensor<T> condition, double t, Tensor<T> mask,
+        bool streaming = false)
     {
         int c = Configuration.OutputSize, frames = x.Shape[2];
         var repeated = _engine.TensorBroadcastTo(_engine.Reshape(speaker, new[] { 1, c, 1 }), new[] { 1, c, frames });
         var stacked = _engine.TensorConcatenate(new[] { x, mu, repeated, condition }, 1);
-        var field = Decoder.EstimateChannels(stacked, t, mask);                                           // [frames, C]
+        var field = Decoder.EstimateChannels(stacked, t, mask, Chunk(streaming));                         // [frames, C]
         return _engine.Reshape(_engine.TensorTranspose(field), new[] { 1, c, frames });
     }
 
@@ -172,7 +198,7 @@ internal sealed class CosyVoiceFlow<T>
     /// <paramref name="dropConditions"/> zeroes μ, the x-vector and the condition (classifier-free guidance training).
     /// </summary>
     public Tensor<T> Loss(Tensor<T> target, Tensor<T> mu, Tensor<T> speaker, Tensor<T> condition, double t, Tensor<T> noise,
-        bool dropConditions)
+        bool dropConditions, bool streaming = false)
     {
         var c = Configuration;
         int frames = target.Shape[2];
@@ -187,7 +213,7 @@ internal sealed class CosyVoiceFlow<T>
             condition = _engine.TensorMultiplyScalar(condition, NumOps.Zero);
         }
         var mask = Ones(frames);
-        var difference = _engine.TensorSubtract(Field(y, mu, speaker, condition, t, mask), u);
+        var difference = _engine.TensorSubtract(Field(y, mu, speaker, condition, t, mask, streaming), u);
         // Σ |·| or Σ (·)² over the frames, divided by (Σ mask · channels), as compute_loss normalizes.
         var pointwise = c.Loss == CosyVoiceFlowLoss.SquaredError ? _engine.TensorMultiply(difference, difference) : _engine.TensorAbs(difference);
         return _engine.TensorMultiplyScalar(_engine.ReduceSum(pointwise, new[] { 0, 1, 2 }, false),
@@ -208,7 +234,20 @@ internal sealed class CosyVoiceFlow<T>
     {
         var c = Configuration;
         int frames = mel.Shape[2];
-        var mu = Stretch(Encode(tokens, training, random), frames);
+        // CausalMaskedDiffWithXvec draws streaming first (unified training: half the steps chunked).
+        bool streaming = c.Causal && random.NextDouble() < 0.5;
+        Tensor<T> mu;
+        if (c.Causal)
+        {
+            if (frames != MelFrames(tokens.Count))
+                throw new ArgumentException($"The causal flow gives {MelFrames(tokens.Count)} mel frames for {tokens.Count} tokens; the mel has {frames}.", nameof(mel));
+            var encoded = Encode(tokens, training, random, streaming);
+            mu = _engine.Reshape(_engine.TensorTranspose(encoded), new[] { 1, c.OutputSize, frames });
+        }
+        else
+        {
+            mu = Stretch(Encode(tokens, training, random), frames);
+        }
         int prompt = random.NextDouble() < 0.5 ? 0 : random.Next((int)(0.3 * frames) + 1);
         var condition = new Tensor<T>(new[] { 1, c.OutputSize, frames });
         for (int m = 0; m < c.OutputSize; m++)
@@ -218,7 +257,7 @@ internal sealed class CosyVoiceFlow<T>
         for (int i = 0; i < noise.Length; i++)
             noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
         bool drop = !(random.NextDouble() > c.TrainingCfgRate);
-        return Loss(mel, mu, ProjectSpeaker(xvector), condition, t, noise, drop);
+        return Loss(mel, mu, ProjectSpeaker(xvector), condition, t, noise, drop, streaming);
     }
 
     /// <summary>
@@ -262,7 +301,7 @@ internal sealed class CosyVoiceFlow<T>
     /// <c>[1, OutputSize, promptFrames + frames]</c>, and the prompt's frames removed.
     /// </summary>
     public Tensor<T> Inference(IReadOnlyList<int> tokens, IReadOnlyList<int> promptTokens, Tensor<T>? promptMel, Tensor<T> xvector,
-        Tensor<T> noise)
+        Tensor<T> noise, bool streaming = false)
     {
         var c = Configuration;
         if (tokens.Count == 0) throw new ArgumentException("There are no speech tokens to decode.", nameof(tokens));
@@ -273,8 +312,22 @@ internal sealed class CosyVoiceFlow<T>
         if (noise.Length != c.OutputSize * total)
             throw new ArgumentException($"The noise must be [1, {c.OutputSize}, {total}].", nameof(noise));
 
-        var encoded = Encode(promptTokens.Concat(tokens).ToList(), training: false, new Random(0));
+        var encoded = Encode(promptTokens.Concat(tokens).ToList(), training: false, new Random(0), streaming);
         int width = encoded.Shape[1];
+        if (c.Causal)
+        {
+            // The upsampled states are the mel frames: the prompt's first, as many as its mel (the front end trims the
+            // prompt to two frames per token), the text's after.
+            if (encoded.Shape[0] != total)
+                throw new ArgumentException($"The prompt's mel has {promptFrames} frames; its {promptTokens.Count} tokens give {MelFrames(promptTokens.Count)}.", nameof(promptMel));
+            var causalCondition = new Tensor<T>(new[] { 1, c.OutputSize, total });
+            if (promptMel is not null)
+                for (int f = 0; f < promptFrames; f++)
+                    for (int m = 0; m < c.OutputSize; m++) causalCondition[0, m, f] = promptMel[f, m];
+            var causalMu = _engine.Reshape(_engine.TensorTranspose(encoded), new[] { 1, c.OutputSize, total });
+            var causalMel = Sample(causalMu, ProjectSpeaker(xvector), causalCondition, _engine.Reshape(noise, new[] { 1, c.OutputSize, total }), streaming);
+            return _engine.TensorSlice(causalMel, new[] { 0, 0, promptFrames }, new[] { 1, c.OutputSize, textFrames });
+        }
         var promptEncoded = promptTokens.Count > 0
             ? _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { promptTokens.Count, width })
             : new Tensor<T>(new[] { 0, width });
@@ -292,7 +345,7 @@ internal sealed class CosyVoiceFlow<T>
     /// Samples a mel <c>[1, OutputSize, frames]</c> (<c>ConditionalCFM.forward</c> with <c>solve_euler</c>): from
     /// <paramref name="noise"/>, Euler steps over the cosine schedule with classifier-free guidance.
     /// </summary>
-    public Tensor<T> Sample(Tensor<T> mu, Tensor<T> speaker, Tensor<T> condition, Tensor<T> noise)
+    public Tensor<T> Sample(Tensor<T> mu, Tensor<T> speaker, Tensor<T> condition, Tensor<T> noise, bool streaming = false)
     {
         var c = Configuration;
         int frames = mu.Shape[2], steps = c.Timesteps;
@@ -305,8 +358,8 @@ internal sealed class CosyVoiceFlow<T>
         double t = span[0], dt = span[1] - span[0];
         for (int step = 1; step <= steps; step++)
         {
-            var guided = Field(x, mu, speaker, condition, t, mask);
-            var free = Field(x, zeroMu, zeroSpeaker, zeroCondition, t, mask);
+            var guided = Field(x, mu, speaker, condition, t, mask, streaming);
+            var free = Field(x, zeroMu, zeroSpeaker, zeroCondition, t, mask, streaming);
             var field = _engine.TensorSubtract(_engine.TensorMultiplyScalar(guided, NumOps.FromDouble(1 + c.InferenceCfgRate)),
                 _engine.TensorMultiplyScalar(free, NumOps.FromDouble(c.InferenceCfgRate)));
             x = _engine.TensorAdd(x, _engine.TensorMultiplyScalar(field, NumOps.FromDouble(dt)));
@@ -331,7 +384,8 @@ internal sealed class CosyVoiceFlow<T>
         InputEmbedding.LoadTable(read(prefix + "input_embedding.weight", new[] { c.VocabSize, c.InputSize }));
         TorchParameters.Linear(_engine, SpeakerProjection, c.SpeakerDim, c.OutputSize,
             read(prefix + "spk_embed_affine_layer.weight", new[] { c.OutputSize, c.SpeakerDim }), read(prefix + "spk_embed_affine_layer.bias", new[] { c.OutputSize }));
-        Encoder.LoadTorchWeights(read, prefix + "encoder.");
+        if (UpsampleEncoder is not null) UpsampleEncoder.LoadTorchWeights(read, prefix + "encoder.");
+        else (Encoder ?? throw new InvalidOperationException("The flow has an encoder.")).LoadTorchWeights(read, prefix + "encoder.");
         TorchParameters.Linear(_engine, EncoderProjection, c.Encoder.OutputSize, c.OutputSize,
             read(prefix + "encoder_proj.weight", new[] { c.OutputSize, c.Encoder.OutputSize }), read(prefix + "encoder_proj.bias", new[] { c.OutputSize }));
         for (int i = 0; i < RegulatorConvs.Count; i++)
@@ -341,8 +395,11 @@ internal sealed class CosyVoiceFlow<T>
             string n = $"{prefix}length_regulator.model.{3 * i + 1}";
             RegulatorNorms[i].LoadAffine(read(n + ".weight", new[] { c.OutputSize }), read(n + ".bias", new[] { c.OutputSize }));
         }
-        string o = $"{prefix}length_regulator.model.{3 * RegulatorConvs.Count}";
-        RegulatorOut.LoadTorchWeights(read(o + ".weight", new[] { c.OutputSize, c.OutputSize, 1 }), null, read(o + ".bias", new[] { c.OutputSize }));
+        if (RegulatorOut is not null)
+        {
+            string o = $"{prefix}length_regulator.model.{3 * RegulatorConvs.Count}";
+            RegulatorOut.LoadTorchWeights(read(o + ".weight", new[] { c.OutputSize, c.OutputSize, 1 }), null, read(o + ".bias", new[] { c.OutputSize }));
+        }
         Decoder.LoadTorchWeights(read, prefix + "decoder.estimator.");
     }
 }
