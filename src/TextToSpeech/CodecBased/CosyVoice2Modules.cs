@@ -4,6 +4,114 @@ using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
+/// <summary>
+/// CosyVoice 2's flow encoder (FunAudioLLM/CosyVoice <c>cosyvoice/transformer/upsample_encoder.py</c>
+/// <c>UpsampleConformerEncoder</c>): a Conformer stack (<c>embed</c>, <c>encoders</c>) after a look-ahead convolution, a
+/// 2× nearest-neighbour upsampling with a causal 5-tap convolution, and a second Conformer stack (<c>up_embed</c>, four
+/// <c>up_encoders</c>) with the final LayerNorm. In streaming the stacks attend within chunks of
+/// <c>StaticChunkSize</c> and twice that after the upsampling.
+/// </summary>
+/// <remarks>The reference fixes the look-ahead and upsampling convolutions at 512 channels; here they take the
+/// encoder's width, which is 512 in every released configuration.</remarks>
+internal sealed class UpsampleConformerEncoder<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IEngine _engine;
+
+    /// <param name="configuration">The lower stack (its blocks, chunk size and dropout); the upper stack has four blocks.</param>
+    /// <param name="lookahead">Frames the look-ahead convolution reads ahead (<c>pre_lookahead_len</c>, 3).</param>
+    public UpsampleConformerEncoder(IEngine engine, List<LayerBase<T>> layers, WenetEncoderConfiguration configuration, int lookahead,
+        Random initialization)
+    {
+        _engine = engine;
+        Configuration = configuration;
+        Lookahead = lookahead;
+        int d = configuration.OutputSize;
+        NormedConv1DLayer<T> Conv(int inputs, int outputs, int kernel)
+        {
+            var conv = new NormedConv1DLayer<T>(inputs, outputs, kernel, 1, 1, 1, 0, false, ConvolutionNormalization.None, useBias: true);
+            layers.Add(conv);
+            // nn.Conv1d's default initialization: weights and bias from U(±1/√(in·k)).
+            double bound = 1.0 / Math.Sqrt(inputs * kernel);
+            conv.LoadTorchWeights(Enumerable.Range(0, outputs * inputs * kernel).Select(_ => bound * (2 * initialization.NextDouble() - 1)).ToArray(),
+                null, Enumerable.Range(0, outputs).Select(_ => bound * (2 * initialization.NextDouble() - 1)).ToArray());
+            return conv;
+        }
+        Lower = new WenetEncoder<T>(engine, layers, configuration with { AfterNorm = false }, initialization);
+        LookaheadConv1 = Conv(d, d, lookahead + 1);
+        LookaheadConv2 = Conv(d, d, 3);
+        UpConv = Conv(d, d, 5);
+        Upper = new WenetEncoder<T>(engine, layers, configuration with { InputSize = d, Blocks = 4, AfterNorm = true }, initialization);
+    }
+
+    public WenetEncoderConfiguration Configuration { get; }
+    public int Lookahead { get; }
+    public WenetEncoder<T> Lower { get; }
+    public NormedConv1DLayer<T> LookaheadConv1 { get; }
+    public NormedConv1DLayer<T> LookaheadConv2 { get; }
+    public NormedConv1DLayer<T> UpConv { get; }
+    public WenetEncoder<T> Upper { get; }
+
+    private Tensor<T> Pad(Tensor<T> x, int left, int right)
+    {
+        var parts = new List<Tensor<T>>();
+        if (left > 0) parts.Add(new Tensor<T>(new[] { x.Shape[0], x.Shape[1], left }));
+        parts.Add(x);
+        if (right > 0) parts.Add(new Tensor<T>(new[] { x.Shape[0], x.Shape[1], right }));
+        return parts.Count == 1 ? x : _engine.TensorConcatenate(parts.ToArray(), 2);
+    }
+
+    private Tensor<T> Channels(Tensor<T> x) => _engine.Reshape(_engine.TensorTranspose(x), new[] { 1, x.Shape[1], x.Shape[0] });
+
+    private Tensor<T> Rows(Tensor<T> x) => _engine.TensorTranspose(_engine.Reshape(x, new[] { x.Shape[1], x.Shape[2] }));
+
+    /// <summary>PreLookaheadLayer: the states padded by <see cref="Lookahead"/> frames on the right, a convolution reading
+    /// them ahead, leaky ReLU, a causal 3-tap convolution, and the residual.</summary>
+    internal Tensor<T> PreLookahead(Tensor<T> x)
+    {
+        var h = LookaheadConv1.Forward(Pad(Channels(x), 0, Lookahead));
+        h = _engine.LeakyReLU(h, NumOps.FromDouble(0.01));
+        h = LookaheadConv2.Forward(Pad(h, 2, 0));
+        return _engine.TensorAdd(Rows(h), x);
+    }
+
+    /// <summary>Upsample1D: each frame repeated twice, padded by 4 frames on the left, a 5-tap convolution.</summary>
+    internal Tensor<T> Upsample(Tensor<T> x)
+    {
+        int length = x.Shape[0], d = x.Shape[1];
+        var index = new Tensor<int>(new[] { 2 * length });
+        for (int i = 0; i < 2 * length; i++) index[i] = i / 2;
+        var repeated = _engine.TensorIndexSelect(x, index, 0);
+        return Rows(UpConv.Forward(Pad(Channels(repeated), 4, 0)));
+    }
+
+    /// <summary>The encoded states <c>[2L, OutputSize]</c> of inputs <c>[L, InputSize]</c>.</summary>
+    public Tensor<T> Forward(Tensor<T> input, bool streaming, bool training, Random random)
+    {
+        int chunk = streaming ? Configuration.StaticChunkSize : 0;
+        var (x, positions) = Lower.Embed(input, training, random);
+        x = PreLookahead(x);
+        x = Lower.RunBlocks(x, positions, chunk, training, random);
+        var (y, upPositions) = Upper.Embed(Upsample(x), training, random);
+        y = Upper.RunBlocks(y, upPositions, 2 * chunk, training, random);
+        return (Upper.AfterNorm ?? throw new InvalidOperationException("The upper stack ends in its LayerNorm.")).Forward(y);
+    }
+
+    /// <summary>Loads an <c>UpsampleConformerEncoder</c> state: <c>embed</c>, <c>pre_lookahead_layer.conv1/2</c>,
+    /// <c>encoders</c>, <c>up_layer.conv</c>, <c>up_embed</c>, <c>up_encoders</c> and <c>after_norm</c>.</summary>
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    {
+        int d = Configuration.OutputSize;
+        void Conv(NormedConv1DLayer<T> conv, string name, int kernel) =>
+            conv.LoadTorchWeights(read(name + ".weight", new[] { d, d, kernel }), null, read(name + ".bias", new[] { d }));
+        Lower.LoadTorchWeights(read, prefix);
+        Conv(LookaheadConv1, prefix + "pre_lookahead_layer.conv1", Lookahead + 1);
+        Conv(LookaheadConv2, prefix + "pre_lookahead_layer.conv2", 3);
+        Conv(UpConv, prefix + "up_layer.conv", 5);
+        Upper.LoadTorchWeights(read, prefix, "up_embed", "up_encoders");
+    }
+}
+
 /// <summary>The sizes of CosyVoice 2's language model (<c>Qwen2LM</c> over Qwen2.5-0.5B).</summary>
 /// <param name="Qwen">The Qwen2 decoder (its token table reads the text; it has no head here).</param>
 /// <param name="SpeechVocabulary">S3 speech tokens (6,561); the head adds end, a reserved id and fill.</param>
