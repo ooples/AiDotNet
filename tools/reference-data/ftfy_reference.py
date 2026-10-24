@@ -87,6 +87,10 @@ def tables():
         "invalid_charrefs": {str(k): v for k, v in html._invalid_charrefs.items()},
         "invalid_codepoints": sorted(html._invalid_codepoints),
         "width_map": {str(k): v for k, v in chardata.WIDTH_MAP.items()},
+        # Python's own \w and \s classes, for the other Python regular expressions ported alongside (OuteTTS's prompt
+        # normalization).
+        "python_word": word,
+        "python_space": space,
         "badness": dotnet(badness.BADNESS_RE.pattern),
         "utf8_detector": dotnet(chardata.UTF8_DETECTOR_RE.pattern),
     }
