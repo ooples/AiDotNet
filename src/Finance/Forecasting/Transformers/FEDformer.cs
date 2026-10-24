@@ -79,44 +79,8 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     
     #region Native Mode Fields
 
-    /// <summary>
-    /// Input embedding layer.
-    /// </summary>
-    private ILayer<T>? _inputEmbedding;
-
-    /// <summary>
-    /// Encoder layers for frequency-enhanced attention.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Encoder layers process the input time series to extract patterns.
-    /// In FEDformer, each encoder layer applies frequency-domain attention which is much faster
-    /// than standard attention while still capturing important dependencies.
-    /// </para>
-    /// </remarks>
-    private readonly List<ILayer<T>> _encoderLayers = [];
-
-    /// <summary>
-    /// Decoder layers for generating predictions.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Decoder layers generate the actual forecast. They receive information
-    /// from the encoder and use it to predict future values. FEDformer's decoder also uses
-    /// frequency-domain operations for efficiency.
-    /// </para>
-    /// </remarks>
-    private readonly List<ILayer<T>> _decoderLayers = [];
-
-    /// <summary>
-    /// Final layer normalization.
-    /// </summary>
-    private ILayer<T>? _finalNorm;
-
-    /// <summary>
-    /// Output projection layer.
-    /// </summary>
-    private ILayer<T>? _outputProjection;
+    // The paper's network (null when the architecture supplies its own layers).
+    private FedformerNetwork<T>? _network;
 
     /// <summary>
     /// Instance normalization mean (for RevIN).
@@ -145,9 +109,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly FEDformerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The input sequence length.
     /// </summary>
@@ -157,6 +118,11 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// The prediction horizon.
     /// </summary>
     private int _predictionHorizon;
+
+    /// <summary>
+    /// The decoder's start token: how many of the last input steps it receives ahead of the horizon.
+    /// </summary>
+    private readonly int _labelLength;
 
     /// <summary>
     /// The number of input features.
@@ -292,6 +258,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         // when handed the same options object. Both now read the options.
         _sequenceLength = options.SequenceLength;
         _predictionHorizon = options.PredictionHorizon;
+        _labelLength = options.LabelLength;
         _numFeatures = options.NumFeatures;
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
@@ -364,6 +331,17 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         // that xUnit's Assert.Throws matches exactly.
         ValidateParameters(options.SequenceLength, options.PredictionHorizon, options.NumFeatures,
             options.NumEncoderLayers, options.NumDecoderLayers, options.NumHeads, options.ModelDimension);
+        if (options.LabelLength < 0 || options.LabelLength > options.SequenceLength)
+            throw new ArgumentOutOfRangeException(nameof(options), options.LabelLength,
+                "LabelLength must lie between 0 and SequenceLength: the decoder starts from the last LabelLength inputs.");
+        if (options.NumModes < 1)
+            throw new ArgumentOutOfRangeException(nameof(options), options.NumModes, "NumModes must be at least 1, as FEDformerOptions.Validate requires.");
+        if (options.MovingAverageKernel < 1)
+            throw new ArgumentOutOfRangeException(nameof(options), options.MovingAverageKernel, "MovingAverageKernel must be at least 1.");
+        if ((Architecture.Layers is null || Architecture.Layers.Count == 0)
+            && options.AttentionType != FrequencyAttentionType.Fourier)
+            throw new NotSupportedException(
+                "FEDformer's wavelet variant (FEDformer-w) is not implemented; use FrequencyAttentionType.Fourier (FEDformer-f).");
 
         _options = options;
         Options = _options;
@@ -371,6 +349,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         _useNativeMode = true;
         _sequenceLength = options.SequenceLength;
         _predictionHorizon = options.PredictionHorizon;
+        _labelLength = options.LabelLength;
         _numFeatures = options.NumFeatures;
         _numEncoderLayers = options.NumEncoderLayers;
         _numDecoderLayers = options.NumDecoderLayers;
@@ -449,44 +428,45 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         }
         else if (_useNativeMode)
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultFEDformerLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
-                _numEncoderLayers, _numDecoderLayers, _numHeads, _modelDimension, _feedForwardDimension));
-
-            ExtractLayerReferences();
+            BuildPaperNetwork();
         }
     }
 
+
     /// <summary>
-    /// Extracts references to specific layers for direct access.
+    /// Builds FEDformer-f as the official code does (Zhou et al. 2022; MAZiqing/FEDformer); see
+    /// <see cref="FedformerNetwork{T}"/>.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This organizes the layers so we can access encoder and decoder
-    /// layers separately during the forward pass.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
+    private void BuildPaperNetwork()
     {
-        int idx = 0;
-        if (Layers.Count > idx)
-            _inputEmbedding = Layers[idx++];
+        _network = new FedformerNetwork<T>(_sequenceLength, _labelLength, _predictionHorizon, _numFeatures, _modelDimension,
+            _numHeads, _feedForwardDimension, _numEncoderLayers, _numDecoderLayers, _numModes, _options.ModeSelection,
+            _options.ModeSelectionSeed, _movingAverageKernel, _dropout);
+        Layers.Add(_network);
+    }
 
-        for (int i = 0; i < _numEncoderLayers && idx < Layers.Count; i++)
+    /// <summary>
+    /// Loads a state dict of the official FEDformer (MAZiqing/FEDformer, version 'Fourier') of this configuration.
+    /// </summary>
+    /// <param name="read">Returns the values of the named tensor, row-major, given its reference name and this model's
+    /// shape for it. Complex weights are read as '&lt;name&gt;.real' and '&lt;name&gt;.imag'.</param>
+    /// <returns>The names read. The reference's calendar ('timeF') embeddings and positional buffers have no
+    /// counterpart: this FEDformer reads the values alone.</returns>
+    public IReadOnlyCollection<string> LoadReferenceWeights(Func<string, int[], double[]> read)
+    {
+        if (read is null) throw new ArgumentNullException(nameof(read));
+        var network = _network ?? throw new InvalidOperationException(
+            "Only FEDformer's own network loads reference weights; this one was built from custom layers.");
+        var names = new List<string>();
+        foreach (var (name, tensor) in network.NamedTensors)
         {
-            _encoderLayers.Add(Layers[idx++]);
+            var values = read(name, tensor.Shape.ToArray());
+            if (values is null || values.Length != tensor.Length)
+                throw new ArgumentException($"'{name}' needs {tensor.Length} values; {values?.Length ?? 0} were given.", nameof(read));
+            for (int i = 0; i < values.Length; i++) tensor[i] = NumOps.FromDouble(values[i]);
+            names.Add(name);
         }
-
-        for (int i = 0; i < _numDecoderLayers && idx < Layers.Count; i++)
-        {
-            _decoderLayers.Add(Layers[idx++]);
-        }
-
-        if (Layers.Count > idx)
-            _finalNorm = Layers[idx++];
-
-        if (Layers.Count > idx)
-            _outputProjection = Layers[idx];
+        return names;
     }
 
     /// <summary>
@@ -604,7 +584,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the FEDformer model, Forecast produces predictions from input data. This is the main inference step of the FEDformer architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -745,10 +725,19 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     {
         var processed = _useInstanceNormalization ? ApplyRevIN(input, normalize: true) : input;
 
-        var output = processed;
-        foreach (var layer in Layers)
+        Tensor<T> output;
+        if (_network is null)
         {
-            output = layer.Forward(output);
+            // A network built from the architecture's own layers runs them in order.
+            output = processed;
+            foreach (var layer in Layers)
+            {
+                output = layer.Forward(output);
+            }
+        }
+        else
+        {
+            output = PaperForward(processed);
         }
 
         if (_useInstanceNormalization)
@@ -757,6 +746,21 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// FEDformer's forward (the reference's Model.forward): the input is decomposed; the decoder starts from the last
+    /// LabelLength seasonal steps followed by zeros, and the trend from the last LabelLength trend steps followed by the
+    /// input's mean; the decoder's seasonal output, projected, is added to the accumulated trend, and the last
+    /// PredictionHorizon steps are the forecast.
+    /// </summary>
+    private Tensor<T> PaperForward(Tensor<T> input)
+    {
+        var network = _network ?? throw new InvalidOperationException("FEDformer's network is not built.");
+        bool unbatched = input.Rank == 2;
+        var x = unbatched ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] }) : input;
+        var forecast = network.Forward(x);
+        return unbatched ? Engine.Reshape(forecast, new[] { _predictionHorizon, _numFeatures }) : forecast;
     }
 
     /// <summary>

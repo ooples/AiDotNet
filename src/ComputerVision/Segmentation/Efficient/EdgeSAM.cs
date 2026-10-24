@@ -61,7 +61,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly EdgeSAMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only EdgeSAM's OWN configuration lives here. _height, _width, _channels, _numClasses,

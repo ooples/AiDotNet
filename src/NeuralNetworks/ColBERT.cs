@@ -56,10 +56,11 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", "https://arxiv.org/abs/2004.12832", Year = 2020, Authors = "Omar Khattab, Matei Zaharia")]
     public partial class ColBERT<T> : TransformerEmbeddingNetwork<T>
     {
-        private readonly ColBERTOptions _options;
-
         /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
+        private readonly ColBERTOptions _options;
 
         #region Fields
 
@@ -91,7 +92,8 @@ namespace AiDotNet.NeuralNetworks
                 inputType: Enums.InputType.OneDimensional,
                 taskType: Enums.NeuralNetworkTaskType.Regression,
                 inputSize: 768,
-                outputSize: 768))
+                // The output is each token's OutputDimension-wide (128) late-interaction vector (#2147).
+                outputSize: new ColBERTOptions().OutputDimension))
         {
         }
 
@@ -153,7 +155,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultColBERTLayers(
-                    Architecture,
                     _vocabSize,
                     _outputDim,
                     MaxTokens,

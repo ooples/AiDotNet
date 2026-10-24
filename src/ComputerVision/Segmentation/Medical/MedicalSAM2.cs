@@ -63,8 +63,6 @@ public partial class MedicalSAM2<T> : Common.MedicalSegmentationBase<T>, ITraini
 
     private static readonly string[] Modalities = ["CT", "MRI", "Ultrasound", "Fundus", "Dermoscopy", "Microscopy", "X-ray"];
 
-    public override ModelOptions GetOptions() => _options;
-
     private Sam2Runtime<T> Runtime => _runtime ?? throw new InvalidOperationException("The network is not initialized.");
 
     /// <summary>The network.</summary>

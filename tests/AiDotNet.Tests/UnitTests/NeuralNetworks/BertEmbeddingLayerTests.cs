@@ -130,7 +130,6 @@ public class BertEmbeddingLayerTests
             inputSize: 4,
             outputSize: 3);
         var layers = LayerHelper<double>.CreateDefaultSECBERTLayers(
-            architecture,
             vocabularySize: 32,
             maxSequenceLength: 16,
             hiddenDimension: 8,
@@ -159,7 +158,6 @@ public class BertEmbeddingLayerTests
             inputSize: 4,
             outputSize: 3);
         var layers = LayerHelper<double>.CreateDefaultFinancialBERTLayers(
-            architecture,
             vocabularySize: 32,
             maxSequenceLength: 16,
             hiddenDimension: 8,
@@ -188,7 +186,6 @@ public class BertEmbeddingLayerTests
             inputSize: 4,
             outputSize: 3);
         var layers = LayerHelper<double>.CreateDefaultFinBERTToneLayers(
-            architecture,
             vocabularySize: 32,
             maxSequenceLength: 16,
             hiddenDimension: 8,

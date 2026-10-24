@@ -55,8 +55,6 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
     }
     private ThompsonSamplingOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<int> _successCounts;
     private Vector<int> _failureCounts;
@@ -73,6 +71,7 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _random = RandomHelper.CreateSecureRandom();
         _successCounts = new Vector<int>(_options.NumArms);
         _failureCounts = new Vector<int>(_options.NumArms);

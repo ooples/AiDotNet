@@ -71,9 +71,6 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
 {
     private readonly Gpt4VisionOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>

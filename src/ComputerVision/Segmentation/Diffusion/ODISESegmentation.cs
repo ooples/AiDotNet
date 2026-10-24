@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 public partial class ODISESegmentation<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly ODISESegmentationOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only ODISE's OWN configuration lives here. _height, _width, _channels, _numClasses,

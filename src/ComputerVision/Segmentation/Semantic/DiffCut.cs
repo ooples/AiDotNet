@@ -67,7 +67,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 public partial class DiffCut<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly DiffCutOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
 

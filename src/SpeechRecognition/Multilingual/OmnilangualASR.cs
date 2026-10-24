@@ -51,14 +51,14 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
                 Source = "Pratap et al. 2023: Adam with beta1 0.9 and beta2 0.98 under a tri-stage schedule -- warmed up over the first 10% of updates, held for the next 40%, then decayed over the final 50%. A separate fine-tuning run warms up over 32K steps and then decays polynomially to zero.")]
 public partial class OmnilangualASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly OmnilangualASROptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly OmnilangualASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public OmnilangualASR(NeuralNetworkArchitecture<T> architecture, string modelPath, OmnilangualASROptions? options = null) : base(architecture) { _options = options ?? new OmnilangualASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
-    public OmnilangualASR(NeuralNetworkArchitecture<T> architecture, OmnilangualASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OmnilangualASROptions(); _useNativeMode = true; _optimizer = optimizer
+    public OmnilangualASR(NeuralNetworkArchitecture<T> architecture, string modelPath, OmnilangualASROptions? options = null) : base(architecture) { _options = options ?? new OmnilangualASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
+    public OmnilangualASR(NeuralNetworkArchitecture<T> architecture, OmnilangualASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OmnilangualASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
 

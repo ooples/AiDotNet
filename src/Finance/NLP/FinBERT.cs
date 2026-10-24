@@ -121,9 +121,6 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly FinBERTOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _maxSequenceLength;
     private int _vocabularySize;
     private int _hiddenDimension;
@@ -301,7 +298,6 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinBERTLayers(
-                Architecture,
                 _vocabularySize,
                 _maxSequenceLength,
                 _hiddenDimension,

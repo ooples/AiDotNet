@@ -156,9 +156,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
 {
     private readonly InstantNGPOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly int _hashTableSize;
     private readonly int _numLevels;
     private readonly int _featuresPerLevel;

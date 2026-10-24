@@ -62,9 +62,6 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly LSTMOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The activation function to apply to cell state outputs. Default is tanh.
     /// </summary>

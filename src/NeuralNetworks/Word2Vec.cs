@@ -69,9 +69,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly Word2VecOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         /// <summary>

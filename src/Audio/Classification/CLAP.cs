@@ -78,7 +78,6 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Fields
 
     private readonly CLAPOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -106,6 +105,7 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new CLAPOptions();
+        Options = _options;
         _options.Network.Validate();
         _useNativeMode = false;
         base.SampleRate = _options.Network.SampleRate;
@@ -138,6 +138,7 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new CLAPOptions();
+        Options = _options;
         _options.Network.Validate();
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer

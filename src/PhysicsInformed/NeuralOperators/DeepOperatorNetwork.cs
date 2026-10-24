@@ -151,9 +151,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         // InitializeLayers already does Layers.AddRange(_branchNet.Layers) followed by Layers.AddRange(_trunkNet.Layers), so the base walk over Layers ALREADY produces the branch-then-trunk parameters the hand-written surfaces rebuilt by hand, in the same order.
         private readonly DeepOperatorNetworkOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly NeuralNetworkBase<T> _branchNet;
         private readonly NeuralNetworkBase<T> _trunkNet;
         private readonly int _latentDimension; // Dimension of the latent space (number of basis functions)

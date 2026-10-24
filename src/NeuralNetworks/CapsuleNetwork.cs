@@ -74,9 +74,6 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
     /// </remarks>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private ILossFunction<T> _lossFunction { get; set; }
 
     /// <summary>

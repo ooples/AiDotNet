@@ -90,9 +90,6 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new SAINTOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -164,6 +161,7 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new SAINTOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

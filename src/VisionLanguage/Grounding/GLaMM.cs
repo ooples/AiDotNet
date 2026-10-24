@@ -98,8 +98,6 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
     private GlammTokenizer? _tokenizer;
     private HashSet<Tensor<T>>? _trainable;
 
-    public override ModelOptions GetOptions() => _options;
-
     internal GlammNetwork<T> Network => _network ?? throw new InvalidOperationException("The network is not initialized.");
 
     /// <summary>The tokenizer, read from the options on first use when the network was built without it.</summary>
@@ -129,6 +127,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
     {
         // The defaults describe the released model; its tokenizer must still be supplied (TokenizerPath or TokenizerModel).
         _options = options ?? new GLaMMOptions();
+        Options = _options;
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? throw new InvalidOperationException("GLaMM declares its paper recipe.");

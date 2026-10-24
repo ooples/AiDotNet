@@ -67,7 +67,6 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #region Fields
 
     private readonly PANNsOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -85,7 +84,7 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options = options ?? new PANNsOptions(); _useNativeMode = false;
+        _options = options ?? new PANNsOptions(); Options = _options; _useNativeMode = false;
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
         _options.ModelPath = modelPath;
@@ -101,7 +100,7 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new PANNsOptions(); _useNativeMode = true;
+        _options = options ?? new PANNsOptions(); Options = _options; _useNativeMode = true;
         if (_options.LearningRate <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(options), "PANNs learning rate must be positive.");
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,

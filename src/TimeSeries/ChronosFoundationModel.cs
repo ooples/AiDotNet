@@ -55,9 +55,6 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     [Buffer]
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new Chronos-T5 model, randomly initialized as the official training does.
     /// </summary>

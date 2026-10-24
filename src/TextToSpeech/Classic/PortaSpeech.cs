@@ -103,8 +103,6 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     private PortaSpeechVariationalGenerator<T>? _generator;
     private PortaSpeechPostNet<T>? _postNet;
 
-    public override ModelOptions GetOptions() => _options;
-
     public PortaSpeech(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -113,6 +111,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new PortaSpeechOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
@@ -136,6 +135,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new PortaSpeechOptions();
+        Options = _options;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);

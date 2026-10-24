@@ -68,7 +68,6 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
     #region Fields
 
     private readonly HTDemucsOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
     [Scratch]
@@ -83,7 +82,7 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
     public HTDemucs(NeuralNetworkArchitecture<T> architecture, string modelPath, HTDemucsOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new HTDemucsOptions(); _useNativeMode = false;
+        _options = options ?? new HTDemucsOptions(); Options = _options; _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
@@ -97,7 +96,7 @@ public partial class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepara
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new HTDemucsOptions(); _useNativeMode = true;
+        _options = options ?? new HTDemucsOptions(); Options = _options; _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.

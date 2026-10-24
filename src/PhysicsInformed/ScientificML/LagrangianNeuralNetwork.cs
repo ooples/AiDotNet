@@ -84,9 +84,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     {
         private readonly LagrangianNeuralNetworkOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly int _configurationDim; // Dimension of configuration space (q)
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 

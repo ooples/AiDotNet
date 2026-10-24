@@ -77,9 +77,6 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
 {
     private readonly RIFEOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private int _height;

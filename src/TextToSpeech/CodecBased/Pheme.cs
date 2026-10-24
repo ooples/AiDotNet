@@ -138,14 +138,12 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     private PyannoteXVector<T>? _speakerEncoder;
     private AudioCodecLayer<T>? _codec;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed Pheme for inference.</summary>
     public Pheme(NeuralNetworkArchitecture<T> architecture, string modelPath, PhemeOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new PhemeOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         (_tokens, _semanticIds) = BuildVocabulary(_tokenIds, _options.SemanticCodes);
@@ -165,6 +163,7 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
         : base(architecture)
     {
         _options = options ?? new PhemeOptions();
+        Options = _options;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);

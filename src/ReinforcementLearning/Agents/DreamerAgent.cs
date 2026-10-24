@@ -83,8 +83,6 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
     private DreamerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // World model components
@@ -123,6 +121,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
 
         // Use the rate the BASE class already resolved, not the raw option. `options.LearningRate`
         // is declared `T?`, but for a value-type T — float and double, i.e. every real use — that

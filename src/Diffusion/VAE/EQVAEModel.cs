@@ -81,6 +81,13 @@ public partial class EQVAEModel<T> : VAEModelBase<T>
     public override double LatentScaleFactor => EQVAE_LATENT_SCALE;
 
     /// <inheritdoc />
+    /// <remarks>Revision 2: the deepest encoder and decoder blocks keep the resolution (8x, not 16x).</remarks>
+    protected override int ArchitectureRevision => 2;
+
+    /// <inheritdoc />
+    protected override string ArchitectureRevisionNote =>
+        "Revision 2 keeps the resolution in the deepest encoder and decoder blocks, so the VAE compresses 8x as it reports.";
+
     /// <inheritdoc />
     public override bool SupportsTiling => true;
 

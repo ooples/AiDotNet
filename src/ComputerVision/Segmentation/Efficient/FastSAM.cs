@@ -58,7 +58,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 public partial class FastSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly FastSAMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only FastSAM's OWN configuration lives here. _height, _width, _channels, _numClasses,

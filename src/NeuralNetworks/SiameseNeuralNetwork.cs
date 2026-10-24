@@ -73,10 +73,15 @@ namespace AiDotNet.NeuralNetworks
                             + "data. The paper states no decay after the warm-up, so none is declared.")]
     public partial class SiameseNeuralNetwork<T> : VectorModelLayoutBase<T>, IEmbeddingModel<T>
     {
-        private readonly SiameseNeuralNetworkOptions _options;
+        /// <inheritdoc/>
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
 
         /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
+        /// <remarks>An architecture may state the embedding width or the maximum token count (#2147).</remarks>
+        protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions => new[] { EmbeddingDimension, MaxTokens };
+
+        private readonly SiameseNeuralNetworkOptions _options;
 
         #region Fields
 
@@ -212,7 +217,6 @@ namespace AiDotNet.NeuralNetworks
             {
                 // Default Siamese architecture: Transformer-based encoder from LayerHelper
                 Layers.AddRange(LayerHelper<T>.CreateDefaultSiameseLayers(
-                    Architecture,
                     _vocabSize,
                     _embeddingDimension,
                     _maxSequenceLength));

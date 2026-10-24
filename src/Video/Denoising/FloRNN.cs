@@ -58,9 +58,6 @@ public partial class FloRNN<T> : VideoDenoisingBase<T>
 {
     private readonly FloRNNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -83,6 +80,7 @@ public partial class FloRNN<T> : VideoDenoisingBase<T>
         : base(architecture)
     {
         _options = options ?? new FloRNNOptions();
+        Options = _options;
         _useNativeMode = false;
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
@@ -99,6 +97,7 @@ public partial class FloRNN<T> : VideoDenoisingBase<T>
         : base(architecture)
     {
         _options = options ?? new FloRNNOptions();
+        Options = _options;
         _useNativeMode = true;
         // The released FloRNN training script uses torch.optim.Adam at 1e-4
         // with Adam's standard fixed moments (train_models/sRGB_train.py).

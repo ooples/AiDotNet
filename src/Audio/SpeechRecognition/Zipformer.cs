@@ -65,7 +65,6 @@ public partial class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     #region Fields
 
     private readonly ZipformerOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -92,6 +91,7 @@ public partial class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         : base(architecture)
     {
         _options = options ?? new ZipformerOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -106,6 +106,7 @@ public partial class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         : base(architecture)
     {
         _options = options ?? new ZipformerOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

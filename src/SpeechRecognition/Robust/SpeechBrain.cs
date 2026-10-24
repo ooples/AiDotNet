@@ -43,14 +43,14 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ResearchPaper("SpeechBrain: A General-Purpose Speech Toolkit", "https://arxiv.org/abs/2106.04624", Year = 2021, Authors = "Ravanelli et al.")]
 public partial class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly SpeechBrainOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly SpeechBrainOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public SpeechBrain(NeuralNetworkArchitecture<T> architecture, string modelPath, SpeechBrainOptions? options = null) : base(architecture) { _options = options ?? new SpeechBrainOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public SpeechBrain(NeuralNetworkArchitecture<T> architecture, SpeechBrainOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SpeechBrainOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public SpeechBrain(NeuralNetworkArchitecture<T> architecture, string modelPath, SpeechBrainOptions? options = null) : base(architecture) { _options = options ?? new SpeechBrainOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public SpeechBrain(NeuralNetworkArchitecture<T> architecture, SpeechBrainOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SpeechBrainOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using SpeechBrain's Conformer encoder with CTC decoding.

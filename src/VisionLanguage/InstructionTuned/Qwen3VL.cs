@@ -62,8 +62,6 @@ public partial class Qwen3VL<T> : VisionLanguageModelBase<T>, IInstructionTunedV
 {
     private readonly Qwen3VLOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -80,6 +78,7 @@ public partial class Qwen3VL<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         : base(architecture)
     {
         _options = options ?? new Qwen3VLOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
@@ -104,6 +103,7 @@ public partial class Qwen3VL<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         : base(architecture)
     {
         _options = options ?? new Qwen3VLOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;

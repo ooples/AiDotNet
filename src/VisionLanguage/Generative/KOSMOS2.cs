@@ -68,9 +68,6 @@ public partial class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
 {
     private readonly KOSMOS2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private readonly bool _useNativeMode;
@@ -86,6 +83,7 @@ public partial class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         : base(architecture)
     {
         _options = options ?? new KOSMOS2Options();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -110,6 +108,7 @@ public partial class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         : base(architecture)
     {
         _options = options ?? new KOSMOS2Options();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer

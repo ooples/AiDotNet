@@ -68,9 +68,6 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly ResNetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>

@@ -1,86 +1,77 @@
-using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.VAE;
 
 /// <summary>
-/// Temporal interpolation VAE that generates intermediate frames in latent space.
+/// Stable Video Diffusion's VAE: the latent-diffusion KL encoder applied to each frame, and a decoder that mixes
+/// information across frames so the decoded clip is temporally consistent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet">
-/// <item>Paper: "FILM: Frame Interpolation for Large Motion" (Reda et al., 2022)</item>
-/// <item>Paper: "Stable Video Diffusion" (Blattmann et al., 2023)</item>
+/// <item>Paper: "Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets" (Blattmann et al.,
+/// 2023), Sec. 3 and Appendix D (the temporal decoder)</item>
+/// <item>Implementation: diffusers <c>AutoencoderKLTemporalDecoder</c> (the
+/// <c>stabilityai/stable-video-diffusion-img2vid</c> <c>vae</c> folder), which this reproduces
+/// (<c>tools/reference-data/svd_vae_reference.py</c>); <see cref="LoadDiffusersWeights"/> loads its state dict.</item>
 /// </list></para>
-/// <para><b>For Beginners:</b> The Temporal Interpolation VAE supports variable frame rate encoding and decoding. It can compress videos at different temporal resolutions, enabling efficient processing of both fast-action and slow-motion content.</para>
+/// <para><b>For Beginners:</b> A video VAE compresses each frame to a small latent and back. Decoding every frame on
+/// its own makes the result flicker, so this VAE's decoder also looks across neighbouring frames: each block blends a
+/// per-frame result with one that mixes the frames, and a final convolution over time smooths the clip.</para>
 /// <para>
-/// The Temporal Interpolation VAE extends standard video VAE with the ability to generate
-/// intermediate frames between keyframes. This enables:
-/// - Frame rate upsampling (e.g., 8fps to 24fps) in latent space
-/// - Smoother video generation by interpolating between diffusion outputs
-/// - Multi-scale temporal generation (coarse keyframes then fine interpolation)
-/// </para>
-/// <para>
-/// Architecture:
-/// - Inherits spatial encoding/decoding from TemporalVAE
-/// - Adds temporal interpolation network that operates in latent space
-/// - Interpolation uses bidirectional temporal attention and flow estimation
+/// Architecture (diffusers' <c>AutoencoderKLTemporalDecoder</c>): the encoder and its 1x1 quant conv are the KL
+/// autoencoder's, run on every frame. The decoder is a 3x3 conv in; a middle block of spatio-temporal residual blocks
+/// around single-head self-attention; one stage per width from the deepest, of <c>layersPerBlock + 1</c>
+/// spatio-temporal residual blocks and, but the last, a nearest 2x upsample; GroupNorm, SiLU and a 3x3 conv out; and a
+/// (3, 1, 1) convolution over time. Each spatio-temporal block is a 2D residual block on every frame, a residual block
+/// of (3, 1, 1) convolutions across the frames, and a learned blend of the two. There is no post-quant conv. A clip is
+/// [batch, channels, frames, height, width]; an image, [batch, channels, height, width], is a one-frame clip.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// var vae = new TemporalInterpolationVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4);
-/// var video = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 8, 256, 256 });
-/// var latent = vae.Encode(video);
+/// var vae = new TemporalInterpolationVAE&lt;float&gt;();
+/// var latent = vae.Encode(clip, sampleMode: false); // [1, 4, 14, 72, 128] for a [1, 3, 14, 576, 1024] clip
+/// var decoded = vae.Decode(latent);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelTask(ModelTask.Compression)]
-[ModelTask(ModelTask.FrameInterpolation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("FILM: Frame Interpolation for Large Motion", "https://arxiv.org/abs/2202.04901")]
-public partial class TemporalInterpolationVAE<T> : VAEModelBase<T>
+[ResearchPaper("Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets", "https://arxiv.org/abs/2311.15127", Year = 2023, Authors = "Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, Varun Jampani, Robin Rombach")]
+public partial class TemporalInterpolationVAE<T> : VAEModelBase<T>, IVideoVAEModel<T>
 {
+    /// <summary>The scaling factor of Stable Video Diffusion's VAE.</summary>
+    public const double SvdLatentScale = 0.18215;
+
+    // diffusers' DiagonalGaussianDistribution clamps the log-variance to this range.
+    private const double MinLogVariance = -30.0;
+    private const double MaxLogVariance = 20.0;
+
     /// <inheritdoc />
-    /// <remarks>The order the previous getter concatenated and the previous setter redistributed
-    /// in -- it built a local array of these eight layers, which is why the automated
-    /// converter could not confirm the order and skipped this model.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(_encoderIn);
-        RegisterParameterComponent(_encoderOut);
-        RegisterParameterComponent(_decoderIn);
-        RegisterParameterComponent(_decoderOut);
-        RegisterParameterComponent(_interpIn);
-        RegisterParameterComponent(_interpOut);
-        RegisterParameterComponent(_encoderNorm);
-        RegisterParameterComponent(_decoderNorm);
+        RegisterParameterComponent(_encoder);
+        RegisterParameterComponent(_quantConv);
+        RegisterParameterComponent(_decoder);
     }
 
     private readonly int _inputChannels;
     private readonly int _latentChannels;
-    private readonly int _baseChannels;
-    private readonly int _interpolationFactor;
+    private readonly int[] _blockOutChannels;
     private readonly double _latentScaleFactor;
 
-    private readonly DenseLayer<T> _encoderIn;
-    private readonly DenseLayer<T> _encoderOut;
-    private readonly DenseLayer<T> _decoderIn;
-    private readonly DenseLayer<T> _decoderOut;
-    private readonly DenseLayer<T> _interpIn;
-    private readonly DenseLayer<T> _interpOut;
-    private readonly LayerNormalizationLayer<T> _encoderNorm;
-    private readonly LayerNormalizationLayer<T> _decoderNorm;
+    private readonly KlEncoder<T> _encoder;
+    private readonly KlConv2d<T> _quantConv;
+    private readonly KlTemporalDecoder<T> _decoder;
 
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
@@ -89,196 +80,149 @@ public partial class TemporalInterpolationVAE<T> : VAEModelBase<T>
     public override int LatentChannels => _latentChannels;
 
     /// <inheritdoc />
-    public override int DownsampleFactor => 8;
+    public override int DownsampleFactor => 1 << (_blockOutChannels.Length - 1);
 
     /// <inheritdoc />
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    /// <summary>
-    /// Gets the temporal interpolation factor.
-    /// </summary>
-    public int InterpolationFactor => _interpolationFactor;
+    /// <remarks>The encoder works on each frame, so the latent has as many frames as the clip.</remarks>
+    public int TemporalCompression => 1;
+
+    /// <inheritdoc />
+    public int GetLatentFrameCount(int frames)
+    {
+        if (frames <= 0) throw new ArgumentOutOfRangeException(nameof(frames));
+        return frames;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Revision 2: Stable Video Diffusion's temporal-decoder VAE replaced the dense placeholder.</remarks>
+    protected override int ArchitectureRevision => 2;
+
+    /// <inheritdoc />
+    protected override string ArchitectureRevisionNote =>
+        "Revision 2 is Stable Video Diffusion's VAE (diffusers AutoencoderKLTemporalDecoder); revision 1 was dense layers over the channel axis.";
 
     /// <summary>
-    /// Initializes a new Temporal Interpolation VAE.
+    /// Initializes the VAE; the defaults are Stable Video Diffusion's (diffusers <c>AutoencoderKLTemporalDecoder</c>,
+    /// <c>stabilityai/stable-video-diffusion-img2vid</c>).
     /// </summary>
-    /// <param name="inputChannels">Number of input channels (3 for RGB).</param>
-    /// <param name="latentChannels">Number of latent channels.</param>
-    /// <param name="baseChannels">Base channel count.</param>
-    /// <param name="interpolationFactor">Number of intermediate frames to generate between keyframes.</param>
-    /// <param name="latentScaleFactor">Scale factor for latent space normalization.</param>
+    /// <param name="inputChannels">Frame channels (3).</param>
+    /// <param name="latentChannels">Latent channels (4).</param>
+    /// <param name="blockOutChannels">Width of each encoder stage, shallowest first (128, 256, 512, 512); each but the
+    /// last halves height and width.</param>
+    /// <param name="layersPerBlock">Residual blocks per encoder stage (2); the decoder's stages have one more.</param>
+    /// <param name="normGroups">GroupNorm groups (32, which diffusers fixes); every width must divide by it.</param>
+    /// <param name="latentScaleFactor">The latent's scale for diffusion (<see cref="SvdLatentScale"/>).</param>
+    /// <param name="lossFunction">Reconstruction loss for training (mean squared error by default).</param>
+    /// <param name="seed">Seed for the weight initialization and the posterior sampling.</param>
     public TemporalInterpolationVAE(
         int inputChannels = 3,
         int latentChannels = 4,
-        int baseChannels = 128,
-        int interpolationFactor = 3,
-        double latentScaleFactor = 0.18215)
-        : base(new MeanSquaredErrorLoss<T>())
+        int[]? blockOutChannels = null,
+        int layersPerBlock = 2,
+        int normGroups = 32,
+        double latentScaleFactor = SvdLatentScale,
+        ILossFunction<T>? lossFunction = null,
+        int? seed = null)
+        : base(lossFunction ?? new MeanSquaredErrorLoss<T>(), seed)
     {
-        Guard.Positive(inputChannels, nameof(inputChannels));
-        Guard.Positive(latentChannels, nameof(latentChannels));
-        Guard.Positive(baseChannels, nameof(baseChannels));
-        Guard.Positive(interpolationFactor, nameof(interpolationFactor));
+        if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
+        if (latentChannels <= 0) throw new ArgumentOutOfRangeException(nameof(latentChannels));
+        if (layersPerBlock <= 0) throw new ArgumentOutOfRangeException(nameof(layersPerBlock));
+        if (latentScaleFactor <= 0) throw new ArgumentOutOfRangeException(nameof(latentScaleFactor));
+        var widths = blockOutChannels ?? new[] { 128, 256, 512, 512 };
+        if (widths.Length == 0) throw new ArgumentException("At least one stage is required.", nameof(blockOutChannels));
+        foreach (int width in widths)
+        {
+            if (width <= 0 || normGroups <= 0 || width % normGroups != 0)
+                throw new ArgumentException($"Stage width {width} does not divide into {normGroups} groups.", nameof(blockOutChannels));
+        }
 
         _inputChannels = inputChannels;
         _latentChannels = latentChannels;
-        _baseChannels = baseChannels;
-        _interpolationFactor = interpolationFactor;
+        _blockOutChannels = (int[])widths.Clone();
         _latentScaleFactor = latentScaleFactor;
 
-        int hiddenChannels = baseChannels * 4;
-
-        // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
-        _encoderIn = new DenseLayer<T>(baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _encoderOut = new DenseLayer<T>(latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
-        // Decoder: latentChannels -> hiddenChannels -> (norm at hiddenChannels) -> inputChannels
-        _decoderIn = new DenseLayer<T>(hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _decoderOut = new DenseLayer<T>(inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
-
-        // Interpolation network: takes concatenated [..., 2*latentChannels] frames and
-        // produces an intermediate frame of [..., latentChannels].
-        _interpIn = new DenseLayer<T>(hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _interpOut = new DenseLayer<T>(latentChannels, (IActivationFunction<T>)new IdentityActivation<T>());
-
-        _encoderNorm = new LayerNormalizationLayer<T>();
-        _decoderNorm = new LayerNormalizationLayer<T>();
-
-        // Pre-resolve every sublayer from the ctor-known channel topology so that
-        // ParameterCount, GetParameters, SetParameters, Clone, and DeepCopy work
-        // correctly on a freshly constructed VAE — without waiting for the first
-        // Encode/Decode/Interpolate call.
-        _encoderIn.ResolveFromShape(new[] { 1, inputChannels });
-        _encoderNorm.ResolveFromShape(new[] { 1, baseChannels });
-        _encoderOut.ResolveFromShape(new[] { 1, baseChannels });
-        _decoderIn.ResolveFromShape(new[] { 1, latentChannels });
-        _decoderNorm.ResolveFromShape(new[] { 1, hiddenChannels });
-        _decoderOut.ResolveFromShape(new[] { 1, hiddenChannels });
-        _interpIn.ResolveFromShape(new[] { 1, latentChannels * 2 });
-        _interpOut.ResolveFromShape(new[] { 1, hiddenChannels });
+        _encoder = new KlEncoder<T>(inputChannels, latentChannels, _blockOutChannels, layersPerBlock, normGroups);
+        _quantConv = new KlConv2d<T>(2 * latentChannels, 2 * latentChannels, 1);
+        _decoder = new KlTemporalDecoder<T>(latentChannels, inputChannels, _blockOutChannels, layersPerBlock, normGroups);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Encode(Tensor<T> input, bool sampleMode = true)
     {
-        Guard.NotNull(input, nameof(input));
         var (mean, logVar) = EncodeWithDistribution(input);
         return sampleMode ? Sample(mean, logVar) : mean;
     }
 
     /// <inheritdoc />
+    /// <param name="input">A clip, [batch, channels, frames, height, width], or an image, [batch, channels, height,
+    /// width].</param>
     public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> input)
     {
-        var x = _encoderIn.Forward(input);
-        x = _encoderNorm.Forward(x);
-        x = _encoderOut.Forward(x);
-
-        int halfLen = x.Shape[^1] / 2;
-        var meanShape = GetReducedShape(x._shape, halfLen);
-        var mean = new Tensor<T>(meanShape);
-        var logVar = new Tensor<T>(meanShape);
-        int elements = mean.Length;
-        for (int i = 0; i < elements; i++)
-        {
-            mean[i] = x[i];
-            logVar[i] = x[elements + i];
-        }
-
-        return (ScaleLatent(mean), logVar);
+        bool image = RequireVideoOrImage(input, _inputChannels, nameof(input));
+        int frames = image ? 1 : input.Shape[2];
+        var moments = _quantConv.Forward(_encoder.Forward(image ? input : FramesToBatch(input)));
+        var s = moments.Shape;
+        var mean = Engine.TensorSlice(moments, new[] { 0, 0, 0, 0 }, new[] { s[0], _latentChannels, s[2], s[3] });
+        var logVar = Engine.TensorClamp(
+            Engine.TensorSlice(moments, new[] { 0, _latentChannels, 0, 0 }, new[] { s[0], _latentChannels, s[2], s[3] }),
+            NumOps.FromDouble(MinLogVariance), NumOps.FromDouble(MaxLogVariance));
+        return image ? (mean, logVar) : (BatchToFrames(mean, frames), BatchToFrames(logVar, frames));
     }
 
     /// <inheritdoc />
+    /// <param name="latent">A clip latent, [batch, latent channels, frames, height, width], or an image latent, [batch,
+    /// latent channels, height, width].</param>
     public override Tensor<T> Decode(Tensor<T> latent)
     {
-        Guard.NotNull(latent, nameof(latent));
-        var unscaled = UnscaleLatent(latent);
-        var x = _decoderIn.Forward(unscaled);
-        x = _decoderNorm.Forward(x);
-        x = _decoderOut.Forward(x);
-        return x;
+        bool image = RequireVideoOrImage(latent, _latentChannels, nameof(latent));
+        int frames = image ? 1 : latent.Shape[2];
+        var decoded = _decoder.Forward(image ? latent : FramesToBatch(latent), frames);
+        return image ? decoded : BatchToFrames(decoded, frames);
     }
 
     /// <summary>
-    /// Interpolates between two latent frames to generate an intermediate frame.
+    /// Loads a diffusers <c>AutoencoderKLTemporalDecoder</c> state dict of this configuration (a Stable Video Diffusion
+    /// <c>vae</c> folder).
     /// </summary>
-    /// <param name="latentA">Latent representation of the first frame.</param>
-    /// <param name="latentB">Latent representation of the second frame.</param>
-    /// <returns>Interpolated latent frame.</returns>
-    public Tensor<T>[] InterpolateLatent(Tensor<T> latentA, Tensor<T> latentB)
+    /// <param name="read">Returns the values of the named tensor, row-major, given its name and this model's shape.</param>
+    /// <returns>The names read: every weight of the model.</returns>
+    public IReadOnlyCollection<string> LoadDiffusersWeights(Func<string, int[], double[]> read) =>
+        KlModule<T>.Load(
+            _encoder.NamedTensors("encoder")
+                .Concat(_quantConv.NamedTensors("quant_conv"))
+                .Concat(_decoder.NamedTensors("decoder")),
+            read);
+
+    private static bool RequireVideoOrImage(Tensor<T> x, int channels, string name)
     {
-        Guard.NotNull(latentA);
-        Guard.NotNull(latentB);
-
-        if (latentA.Shape.Length != latentB.Shape.Length)
-        {
-            throw new ArgumentException(
-                $"Latent shapes must have the same rank: latentA has {latentA.Shape.Length} dims, latentB has {latentB.Shape.Length} dims.");
-        }
-
-        for (int d = 0; d < latentA.Shape.Length; d++)
-        {
-            if (latentA.Shape[d] != latentB.Shape[d])
-            {
-                throw new ArgumentException(
-                    $"Latent shape mismatch at dimension {d}: latentA={latentA.Shape[d]}, latentB={latentB.Shape[d]}.");
-            }
-        }
-
-        var results = new Tensor<T>[_interpolationFactor];
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        for (int i = 0; i < _interpolationFactor; i++)
-        {
-            double t = (double)(i + 1) / (_interpolationFactor + 1);
-            // Blend input pair weighted by interpolation position
-            var blendedA = latentA.Transform((v, _) => numOps.Multiply(v, numOps.FromDouble(1.0 - t)));
-            var blendedB = latentB.Transform((v, _) => numOps.Multiply(v, numOps.FromDouble(t)));
-            var combined = blendedA.ConcatenateTensors(blendedB);
-            var hidden = _interpIn.Forward(combined);
-            results[i] = _interpOut.Forward(hidden);
-        }
-
-        return results;
+        if (x is null) throw new ArgumentNullException(name);
+        if (x.Rank != 4 && x.Rank != 5)
+            throw new ArgumentException($"Expected [batch, channels, frames, height, width] or [batch, channels, height, width]; got rank {x.Rank}.", name);
+        if (x.Shape[1] != channels)
+            throw new ArgumentException($"Expected {channels} channels; got {x.Shape[1]}.", name);
+        return x.Rank == 4;
     }
 
-    private static int[] GetReducedShape(int[] shape, int lastDim)
+    // [B, C, F, H, W] -> [B * F, C, H, W], frames of one clip adjacent, as diffusers lays a clip out.
+    private Tensor<T> FramesToBatch(Tensor<T> x)
     {
-        var result = (int[])shape.Clone();
-        result[^1] = lastDim;
-        return result;
+        var s = x.Shape;
+        return Engine.Reshape(Engine.TensorPermute(x, new[] { 0, 2, 1, 3, 4 }), new[] { s[0] * s[2], s[1], s[3], s[4] });
     }
 
-    protected override Vector<T> GetParameterGradients()
+    // [B * F, C, H, W] -> [B, C, F, H, W].
+    private Tensor<T> BatchToFrames(Tensor<T> x, int frames)
     {
-        var parts = new[]
-        {
-            _encoderIn.GetParameterGradients(), _encoderOut.GetParameterGradients(),
-            _decoderIn.GetParameterGradients(), _decoderOut.GetParameterGradients(),
-            _interpIn.GetParameterGradients(), _interpOut.GetParameterGradients(),
-            _encoderNorm.GetParameterGradients(), _decoderNorm.GetParameterGradients()
-        };
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-        var combined = new Vector<T>(total);
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            for (int i = 0; i < p.Length; i++) combined[offset + i] = p[i];
-            offset += p.Length;
-        }
-        return combined;
+        var s = x.Shape;
+        return Engine.TensorPermute(Engine.Reshape(x, new[] { s[0] / frames, frames, s[1], s[2], s[3] }), new[] { 0, 2, 1, 3, 4 });
     }
+
     /// <inheritdoc />
-    /// <remarks>
-    /// This concrete VAE does not implement layer-level backprop yet, so the
-    /// exact-gradient path is unsupported. The base class catches this and falls
-    /// through to SPSA in ComputeGradients.
-    /// </remarks>
-    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
-            "implemented. ComputeGradients will fall through to SPSA.");
-    }
-
+    /// <remarks>The gradient tape differentiates this VAE; it keeps no per-layer gradient buffers.</remarks>
+    protected override Vector<T> GetParameterGradients() =>
+        throw new NotSupportedException($"{GetType().Name} computes its gradients on the tape; it keeps no per-layer gradients.");
 }

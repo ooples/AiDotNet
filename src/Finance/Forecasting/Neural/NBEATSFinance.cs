@@ -132,9 +132,6 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly NBEATSModelOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The lookback window size.
     /// </summary>
@@ -337,7 +334,7 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultNBEATSLayers(
-                Architecture, _lookbackWindow, _forecastHorizon, _numStacks,
+                _lookbackWindow, _forecastHorizon, _numStacks,
                 _numBlocksPerStack, _hiddenSize, _numHiddenLayers));
 
             ExtractLayerReferences();
@@ -626,7 +623,7 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the NBEATSFinance model, Forecast produces predictions from input data. This is the main inference step of the NBEATSFinance architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }
