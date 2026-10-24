@@ -21,3 +21,8 @@ pybase16384==0.3.9
 diffusers==0.30.3
 conformer==0.3.2
 omegaconf==2.3.0
+# Whisper's multilingual text tokenizer (whisper_tiktoken_reference.py), CosyVoice's text front end; installed --no-deps.
+openai-whisper==20250625
+tiktoken==0.9.0
+# CosyVoice's text front end (cosyvoice_frontend_reference.py): CosyVoice's pin.
+inflect==7.3.1
