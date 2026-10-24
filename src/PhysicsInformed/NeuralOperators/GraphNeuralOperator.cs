@@ -82,9 +82,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     {
         private readonly GraphNeuralOperatorOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly int _numMessagePassingLayers;
         private readonly int _hiddenDim;
         private readonly int _inputDim;

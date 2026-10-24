@@ -62,8 +62,6 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
 {
     private readonly SlowFastLLaVAOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -78,6 +76,7 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
         : base(architecture)
     {
         _options = options ?? new SlowFastLLaVAOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -100,6 +99,7 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
         : base(architecture)
     {
         _options = options ?? new SlowFastLLaVAOptions();
+        Options = _options;
         if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0)
         {
             if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
@@ -113,6 +113,7 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
                     nameof(architecture)
                 );
             _options = new SlowFastLLaVAOptions(_options) { ImageSize = architecture.InputHeight };
+            Options = _options;
         }
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

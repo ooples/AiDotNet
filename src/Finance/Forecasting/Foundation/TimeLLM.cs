@@ -144,9 +144,6 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly TimeLLMOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
@@ -537,7 +534,7 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TimeLLM model, Forecast produces predictions from input data. This is the main inference step of the TimeLLM architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 

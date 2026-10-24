@@ -60,9 +60,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly FastTextOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         /// <summary>

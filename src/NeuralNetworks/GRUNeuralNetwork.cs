@@ -68,9 +68,6 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="GRUNeuralNetwork{T}"/> class with the specified architecture.
     /// </summary>

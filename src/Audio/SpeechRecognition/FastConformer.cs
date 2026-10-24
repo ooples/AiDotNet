@@ -62,7 +62,6 @@ public partial class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     #region Fields
 
     private readonly FastConformerOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -89,6 +88,7 @@ public partial class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         : base(architecture)
     {
         _options = options ?? new FastConformerOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -103,6 +103,7 @@ public partial class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         : base(architecture)
     {
         _options = options ?? new FastConformerOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

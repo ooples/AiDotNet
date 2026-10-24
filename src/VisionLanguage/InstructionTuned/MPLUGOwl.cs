@@ -68,8 +68,6 @@ public partial class MPLUGOwl<T> : VisionLanguageModelBase<T>, IInstructionTuned
 {
     private readonly MPLUGOwlOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -86,6 +84,7 @@ public partial class MPLUGOwl<T> : VisionLanguageModelBase<T>, IInstructionTuned
         : base(architecture)
     {
         _options = options ?? new MPLUGOwlOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
@@ -110,6 +109,7 @@ public partial class MPLUGOwl<T> : VisionLanguageModelBase<T>, IInstructionTuned
         : base(architecture)
     {
         _options = options ?? new MPLUGOwlOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;

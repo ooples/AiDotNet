@@ -50,13 +50,12 @@ public partial class HuBERTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     private bool _useNativeMode;
     private bool _disposed;
 
-    public override ModelOptions GetOptions() => _options;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public HuBERTASR(NeuralNetworkArchitecture<T> architecture, string modelPath, HuBERTASROptions? options = null) : base(architecture) { _options = options ?? new HuBERTASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public HuBERTASR(NeuralNetworkArchitecture<T> architecture, HuBERTASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new HuBERTASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public HuBERTASR(NeuralNetworkArchitecture<T> architecture, string modelPath, HuBERTASROptions? options = null) : base(architecture) { _options = options ?? new HuBERTASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public HuBERTASR(NeuralNetworkArchitecture<T> architecture, HuBERTASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new HuBERTASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using HuBERT's masked prediction encoder with CTC decoding.

@@ -92,9 +92,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
     {
         private readonly MultiScalePINNOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly IMultiScalePDE<T> _multiScalePDE;
         private readonly List<NeuralNetworkBase<T>> _scaleNetworks;
         private readonly IBoundaryCondition<T>[] _boundaryConditions;

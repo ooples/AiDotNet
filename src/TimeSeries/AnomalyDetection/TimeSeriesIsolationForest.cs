@@ -71,8 +71,6 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
 {
     private readonly TimeSeriesIsolationForestOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly Random _random;
 
@@ -93,6 +91,7 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         : base(options ??= new TimeSeriesIsolationForestOptions<T>())
     {
         _options = options;
+        Options = _options;
         _random = RandomHelper.CreateSeededRandom(_options.Seed ?? 42);
         _featureMean = _numOps.Zero;
         _featureStd = _numOps.One;

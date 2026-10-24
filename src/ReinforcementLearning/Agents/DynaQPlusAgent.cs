@@ -44,8 +44,6 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQPlusOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
     private Dictionary<string, Dictionary<int, int>> _timeSteps;  // Track last visit time
@@ -66,6 +64,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _model = new Dictionary<string, Dictionary<int, (string, T)>>();
         _timeSteps = new Dictionary<string, Dictionary<int, int>>();

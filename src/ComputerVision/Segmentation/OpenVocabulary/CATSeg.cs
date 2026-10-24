@@ -67,7 +67,6 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 public partial class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly CATSegOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only CATSeg's OWN configuration lives here. _height, _width, _channels, _numClasses,

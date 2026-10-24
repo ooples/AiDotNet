@@ -65,8 +65,6 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
 {
     private readonly PaLMEOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -92,6 +90,7 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         : base(architecture)
     {
         _options = options ?? new PaLMEOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -114,6 +113,7 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         : base(architecture)
     {
         _options = options ?? new PaLMEOptions();
+        Options = _options;
         _useNativeMode = true;
         // Honor the optimizer configuration exposed by PaLMEOptions. The bare AdamW
         // constructor uses its framework defaults, which previously made both

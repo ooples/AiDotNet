@@ -65,9 +65,6 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
 {
     private readonly DiTOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

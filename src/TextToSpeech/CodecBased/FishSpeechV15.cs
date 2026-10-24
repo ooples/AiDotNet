@@ -44,8 +44,6 @@ public partial class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FishSpeechV15Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -59,6 +57,7 @@ public partial class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new FishSpeechV15Options();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -81,6 +80,7 @@ public partial class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new FishSpeechV15Options();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;

@@ -119,8 +119,10 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 double alpha = Softplus(alphaRaw) + 1.0;  // Add 1 to ensure alpha > 1 for well-behaved Beta
                 double beta = Softplus(betaRaw) + 1.0;
 
-                // Sample from Beta distribution using transformation method
-                double sample = SampleBeta(alpha, beta);
+                // Training samples the Beta distribution; inference takes its mode, (alpha - 1) / (alpha + beta - 2).
+                // A softplus that underflows leaves both parameters at 1, the uniform distribution, whose every point
+                // is a mode: the midpoint is taken rather than 0 / 0.
+                double sample = training ? SampleBeta(alpha, beta) : BetaMode(alpha, beta);
 
                 // Scale from [0, 1] to [actionMin, actionMax]
                 double scaledAction = _actionMin + sample * (_actionMax - _actionMin);
@@ -133,6 +135,13 @@ namespace AiDotNet.ReinforcementLearning.Policies
             }
 
             return action;
+        }
+
+        // The mode of Beta(alpha, beta) for alpha, beta >= 1; 0.5 when both are 1 (uniform).
+        internal static double BetaMode(double alpha, double beta)
+        {
+            double denominator = alpha + beta - 2.0;
+            return denominator > 0.0 ? (alpha - 1.0) / denominator : 0.5;
         }
 
         /// <summary>

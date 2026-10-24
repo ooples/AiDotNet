@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 public partial class UMamba<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly UMambaOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only UMamba's OWN configuration lives here. _height, _width, _channels, _numClasses,

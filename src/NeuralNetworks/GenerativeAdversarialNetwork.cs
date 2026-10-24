@@ -70,9 +70,6 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
     private readonly GenerativeAdversarialNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the list of recent generator loss values for monitoring training progress.
     /// </summary>

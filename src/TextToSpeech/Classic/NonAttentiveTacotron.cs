@@ -76,12 +76,11 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
     private DenseLayer<T>? _frameProjection;
     private ConvBatchNormStackLayer<T>? _postnet;
 
-    public override ModelOptions GetOptions() => _options;
-
     public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, string modelPath, NonAttentiveTacotronOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new NonAttentiveTacotronOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -103,6 +102,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
         : base(architecture)
     {
         _options = options ?? new NonAttentiveTacotronOptions();
+        Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

@@ -70,8 +70,6 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
 {
     private readonly OscarOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -91,6 +89,7 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         : base(architecture)
     {
         _options = options ?? new OscarOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -113,6 +112,7 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         : base(architecture)
     {
         _options = options ?? new OscarOptions();
+        Options = _options;
         if (_options.LearningRate <= 0.0 || double.IsNaN(_options.LearningRate) || double.IsInfinity(_options.LearningRate))
             throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be finite and greater than zero.");
         if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))

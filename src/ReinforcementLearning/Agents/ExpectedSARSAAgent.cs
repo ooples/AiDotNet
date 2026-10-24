@@ -66,8 +66,6 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
     }
     private ExpectedSARSAOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private double _epsilon;
     private Random _random;
@@ -89,6 +87,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         }
 
         _options = options;
+        Options = _options;
 
         // Defensive validation - properties may bypass init accessors if left at default zero
         if (_options.StateSize <= 0)

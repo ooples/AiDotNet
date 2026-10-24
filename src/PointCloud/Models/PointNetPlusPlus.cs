@@ -93,9 +93,6 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
 {
     private readonly PointNetPlusPlusModelOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _numClasses;
     private int _inputFeatureDim;
     private int[] _samplingRates; // Number of points at each hierarchy level

@@ -75,8 +75,6 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     private SamNetwork<T>? _network;
     private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>The network, the same one the promptable segmentation SAM runs.</summary>
     internal SamNetwork<T> Network => _network ?? throw new InvalidOperationException("The native network is not initialized.");
 
@@ -88,6 +86,7 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         : base(architecture)
     {
         _options = options ?? new SAMOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -108,12 +107,14 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         : base(architecture)
     {
         _options = options ?? new SAMOptions();
+        Options = _options;
         if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0)
         {
             // The encoder square holds the architecture's longer side, rounded up to the patch: an image of any size up
             // to it is zero-padded to the square (SamNetwork.Preprocess, the official Sam.preprocess).
             int longer = Math.Max(architecture.InputHeight, architecture.InputWidth), patch = _options.PatchSize;
             _options = new SAMOptions(_options) { ImageSize = (longer + patch - 1) / patch * patch };
+            Options = _options;
         }
         _useNativeMode = true;
         _optimizer = optimizer

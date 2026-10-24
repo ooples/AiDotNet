@@ -65,7 +65,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly OMGLLaVAOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only OMGLLaVA's OWN configuration lives here. _height, _width, _channels, _numClasses,

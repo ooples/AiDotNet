@@ -72,9 +72,6 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
     /// </summary>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #endregion
 
     #region Constructors
@@ -173,6 +170,8 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         }
         else if (UseNativeMode)
         {
+            // This overload reads the architecture's input width; without it the call binds to the unrelated
+            // (numFeatures, hiddenDimension, sequenceLength) recurrent factory.
             Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralVaRLayers(
                 Architecture,
                 NumFeatures,

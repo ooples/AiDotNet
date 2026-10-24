@@ -115,9 +115,6 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
         IReadOnlyList<(double X, double Y)> ControlPoints,
         IReadOnlyList<int> CharacterIndices);
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates the model with the paper's defaults.</summary>
     public ABCNet()
         : this(new ABCNetOptions<T>())
@@ -148,6 +145,7 @@ public partial class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
         : base(ResolveArchitecture(options, architecture), lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options;
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         // THE OPTIMIZER NOW MATCHES THE RATE. ABCNetOptions.LearningRate defaults to the paper's
         // 0.01, which is an SGD-WITH-MOMENTUM rate; the default optimizer here was Adam, whose step

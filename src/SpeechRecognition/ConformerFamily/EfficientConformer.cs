@@ -45,9 +45,6 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed EfficientConformer.</summary>
     public EfficientConformer(
         NeuralNetworkArchitecture<T> architecture,
@@ -56,6 +53,7 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
         : base(architecture)
     {
         _options = options ?? new EfficientConformerOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -80,6 +78,7 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
         : base(architecture)
     {
         _options = options ?? new EfficientConformerOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateTransformerScheduleAdamOptimizer(
             ResolveFinalEncoderDimension(_options),

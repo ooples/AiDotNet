@@ -69,8 +69,6 @@ public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnde
 {
     private readonly MPLUGDocOwl2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -85,6 +83,7 @@ public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnde
         : base(architecture)
     {
         _options = options ?? new MPLUGDocOwl2Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -107,6 +106,7 @@ public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnde
         : base(architecture)
     {
         _options = options ?? new MPLUGDocOwl2Options();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

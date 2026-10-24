@@ -80,12 +80,11 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
     private readonly List<LayerBase<T>> _durationPredictor = new();
     private readonly List<LayerBase<T>> _mixDensityNetwork = new();
 
-    public override ModelOptions GetOptions() => _options;
-
     public AlignTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, AlignTTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new AlignTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -107,6 +106,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         : base(architecture)
     {
         _options = options ?? new AlignTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

@@ -84,9 +84,6 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
 {
     private readonly VideoMAEOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private int _height;

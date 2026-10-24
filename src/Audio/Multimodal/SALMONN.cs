@@ -62,7 +62,6 @@ public partial class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel
     #region Fields
 
     private readonly SALMONNOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
@@ -92,6 +91,7 @@ public partial class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel
         : base(architecture)
     {
         _options = options ?? new SALMONNOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -113,6 +113,7 @@ public partial class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel
         : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SALMONNOptions();
+        Options = _options;
         _useNativeMode = true;
         // READS THE CONFIGURED RATE. The bare AdamWOptimizer(this) ran at Adam's own 1e-3 default while
         // SALMONNOptions.LearningRate sat at 1e-5 -- the property existed and was documented, and setting

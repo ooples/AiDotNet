@@ -90,14 +90,14 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         }
     }
 
-    private readonly SeACoOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly SeACoOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     private static readonly AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> BiasStageLoss = new();
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public SeACo(NeuralNetworkArchitecture<T> architecture, string modelPath, SeACoOptions? options = null) : base(architecture) { _options = options ?? new SeACoOptions(); _useNativeMode = false; _hotwordRng = RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
+    public SeACo(NeuralNetworkArchitecture<T> architecture, string modelPath, SeACoOptions? options = null) : base(architecture) { _options = options ?? new SeACoOptions(); Options = _options; _useNativeMode = false; _hotwordRng = RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
     // Paraformer / SeACo-Paraformer (Gao et al., arXiv 2206.08317; Shi et al., arXiv 2308.03266) train
     // the token head with CROSS-ENTROPY over the vocabulary (alongside CTC and the predictor's MAE),
     // never a regression loss. AudioNeuralNetworkBase defaults to MeanSquaredErrorLoss, so this model
@@ -105,7 +105,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     // paper never uses and one that cannot be fitted, which is why extra training made the measured
     // loss RISE (0.99 -> 44.38) while parameters barely moved (L2 195.796 -> 195.852). The head emits
     // raw logits, so use the fused log-softmax/NLL form, matching the other logit-head models here.
-    public SeACo(NeuralNetworkArchitecture<T> architecture, SeACoOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SeACoOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateParaformerOptimizer(); _hotwordRng = RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); InstallParaformerObjective(); }
+    public SeACo(NeuralNetworkArchitecture<T> architecture, SeACoOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SeACoOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? CreateParaformerOptimizer(); _hotwordRng = RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); InstallParaformerObjective(); }
 
     /// <summary>
     /// Builds the optimizer Paraformer / SeACo-Paraformer specify.

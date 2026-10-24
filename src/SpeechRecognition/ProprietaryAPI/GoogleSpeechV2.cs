@@ -43,14 +43,14 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ResearchPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
 public partial class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly GoogleSpeechV2Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly GoogleSpeechV2Options _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public GoogleSpeechV2(NeuralNetworkArchitecture<T> architecture, string modelPath, GoogleSpeechV2Options? options = null) : base(architecture) { _options = options ?? new GoogleSpeechV2Options(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
-    public GoogleSpeechV2(NeuralNetworkArchitecture<T> architecture, GoogleSpeechV2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GoogleSpeechV2Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
+    public GoogleSpeechV2(NeuralNetworkArchitecture<T> architecture, string modelPath, GoogleSpeechV2Options? options = null) : base(architecture) { _options = options ?? new GoogleSpeechV2Options(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
+    public GoogleSpeechV2(NeuralNetworkArchitecture<T> architecture, GoogleSpeechV2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GoogleSpeechV2Options(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Google Cloud Speech-to-Text V2 architecture.

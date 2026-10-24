@@ -1,19 +1,29 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.Video;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// HeavyTimeout: foundation-scale diffusion (video / paper-scale). Correct, but a single forward x
-// N-step Generate (and/or the full-scale Training peak: weights + grads + Adam + activations) exceeds
-// the 120 s / 16 GB PR-gate envelope, so it runs in the HeavyTimeout nightly lane (#1706/#1305/#1622).
-[Xunit.Trait("Category", "HeavyTimeout")]
-[Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
+[Xunit.Collection("FoundationScaleSerial")]
+// #2087: out of the HeavyTimeout lane. At its default config (a 2048-wide, 28-layer DiT and a
+// 128-base temporal VAE) the model ran out of memory on the nightly runner (run 39554054058). Per
+// the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects a small
+// same-architecture DiT and temporal VAE: the latent channels (4), text context width (4096), patch
+// size (2) and latent scale factor stay paper-correct, and only width and depth shrink.
 public class AllegroModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 4, 32, 32];
-    protected override int[] OutputShape => [1, 4, 32, 32];
+    protected override int[] InputShape => [1, 4, 16, 16];
+    protected override int[] OutputShape => [1, 4, 16, 16];
 
     protected override IDiffusionModel<float> CreateModel()
-        => new AllegroModel<float>();
+        => new AllegroModel<float>(
+            predictor: new DiTNoisePredictor<float>(
+                inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 2,
+                patchSize: 2, contextDim: 4096, latentSpatialSize: 16, seed: 42),
+            temporalVAE: new TemporalVAE<float>(
+                inputChannels: 3, latentChannels: 4, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numTemporalLayers: 1,
+                temporalKernelSize: 3, latentScaleFactor: 0.13025, seed: 42));
 }

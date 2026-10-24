@@ -62,8 +62,6 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly KimiVLOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -78,6 +76,7 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         : base(architecture)
     {
         _options = options ?? new KimiVLOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -100,6 +99,7 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         : base(architecture)
     {
         _options = options ?? new KimiVLOptions();
+        Options = _options;
         // Fail-fast input validation BEFORE any layer is allocated, so an invalid options bag
         // can't waste the call stack down to a deep multi-MB weight allocation and surface as
         // an obscure shape exception. Delegates to the shared InstructionTunedVLMOptions check

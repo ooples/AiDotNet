@@ -124,6 +124,9 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
+        // Sharding initializes lazily; without this the first call read an empty LocalShard.
+        EnsureShardingInitialized();
+
         // ZeRO-1 workflow with explicit gradient computation:
         //   1. ComputeGradients: Forward + backward pass to compute TRUE gradients
         //   2. AllReduce gradients (average across all processes - same as DDP)
@@ -149,9 +152,9 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
             SynchronizeGradients();
 
             // Apply the averaged gradients to update parameters
-            // Note: We use a fixed learning rate here. For adaptive optimizers,
-            // use ZeRO1Optimizer which properly handles optimizer state sharding.
-            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            // The configured learning rate, as DDP and FSDP use (this was a hard-coded 0.01). For adaptive
+            // optimizers, use ZeRO1Optimizer, which shards the optimizer state.
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated parameters back to LocalShard
             LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
@@ -161,7 +164,7 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
         else
         {
             // Without gradient synchronization, apply gradients locally
-            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            InterfaceGuard.GradientComputable(WrappedModel).ApplyGradients(_computedGradients, Config.LearningRate);
             LocalShard = InterfaceGuard.Parameterizable(WrappedModel).GetParameters();
         }
         // Note: Cache not invalidated if AutoSyncGradients is false,
@@ -176,6 +179,9 @@ public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override TOutput Predict(TInput input)
     {
+        // Sharding initializes lazily; without this the first call read an empty LocalShard.
+        EnsureShardingInitialized();
+
         InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
         return WrappedModel.Predict(input);
     }

@@ -71,8 +71,6 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
 {
     private readonly VideoLLaMA3Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -87,6 +85,7 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
         : base(architecture)
     {
         _options = options ?? new VideoLLaMA3Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -109,9 +108,11 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
         : base(architecture)
     {
         _options = options ?? new VideoLLaMA3Options();
+        Options = _options;
         if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0)
         {
             _options = new VideoLLaMA3Options(_options) { ImageSize = architecture.InputHeight };
+            Options = _options;
         }
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,

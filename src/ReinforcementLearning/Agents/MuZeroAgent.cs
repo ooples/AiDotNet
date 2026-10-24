@@ -72,9 +72,6 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
     private MuZeroOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     // Three core networks
     private INeuralNetwork<T> _representationNetwork;  // h = f(observation)
     private INeuralNetwork<T> _dynamicsNetwork;  // (h', r) = g(h, action)
@@ -111,6 +108,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     })
     {
         _options = options;
+        Options = _options;
         _updateCount = 0;
 
         // Initialize networks directly in constructor

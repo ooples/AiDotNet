@@ -54,10 +54,11 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("One Embedder, Any Task: Instruction-Finetuned Text Embeddings", "https://arxiv.org/abs/2212.09741", Year = 2023, Authors = "Hongjin Su, Weijia Shi, Jungo Kasai, Yizhong Wang, Yushi Hu, Mari Ostendorf, Wen-tau Yih, Noah A. Smith, Luke Zettlemoyer, Tao Yu")]
     public partial class InstructorEmbedding<T> : TransformerEmbeddingNetwork<T>
     {
-        private readonly InstructorEmbeddingOptions _options;
-
         /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
+        private readonly InstructorEmbeddingOptions _options;
 
         #region Fields
 
@@ -140,7 +141,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultInstructorLayers(
-                    Architecture,
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,

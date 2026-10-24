@@ -124,8 +124,6 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
     private int _encoderLayerEnd;
     private int _system2EndLayerIndex;
 
-    public override ModelOptions GetOptions() => _options;
-
     public GR00TN1(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -134,6 +132,7 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
         : base(architecture)
     {
         _options = options ?? new GR00TN1Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -158,6 +157,7 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
         : base(architecture)
     {
         _options = options ?? new GR00TN1Options();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

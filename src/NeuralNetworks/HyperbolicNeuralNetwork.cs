@@ -64,9 +64,6 @@ public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HyperbolicNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The optimization algorithm used to update the network's parameters during training.
     /// </summary>

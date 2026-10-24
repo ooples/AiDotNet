@@ -59,10 +59,11 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking", "https://arxiv.org/abs/2107.05720", Year = 2021, Authors = "Thibault Formal, Benjamin Piwowarski, Stephane Clinchant")]
     public partial class SPLADE<T> : TransformerEmbeddingNetwork<T>
     {
-        private readonly SPLADEOptions _options;
-
         /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
+        private readonly SPLADEOptions _options;
 
         #region Fields
 
@@ -86,8 +87,9 @@ namespace AiDotNet.NeuralNetworks
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 768,
-            outputSize: 768))
+            inputSize: new SPLADEOptions().EmbeddingDimension,
+            // The output is the sparse vocabulary-sized term-weight vector, not an embedding (#2147).
+            outputSize: new SPLADEOptions().VocabSize))
     {
     }
 
@@ -145,7 +147,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultSPLADELayers(
-                    Architecture,
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,

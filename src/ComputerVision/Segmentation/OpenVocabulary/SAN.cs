@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 public partial class SAN<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly SANOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only SAN's OWN configuration lives here. _height, _width, _channels, _numClasses,

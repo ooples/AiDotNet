@@ -1,44 +1,46 @@
-using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
-using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.VAE;
 
 /// <summary>
-/// Causal 3D VAE for video with temporal causal convolutions.
+/// CogVideoX's causal 3D VAE: video compressed 8x in height and width and 4x in time, every convolution causal in time.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet">
-/// <item>Paper: "CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer" (2024)</item>
-/// <item>Paper: "Open-Sora Plan" (2024)</item>
+/// <item>Paper: "CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer" (Yang et al., 2024), section 2.1</item>
+/// <item>Implementation: diffusers <c>AutoencoderKLCogVideoX</c>, which this reproduces (see
+/// <c>tools/reference-data/cogvideox_vae_reference.py</c>); <see cref="LoadCogVideoXWeights"/> loads its state dict.</item>
 /// </list></para>
-/// <para><b>For Beginners:</b> The Causal 3D VAE compresses video into a much smaller latent space while preserving temporal information. Causal means it only uses past frames to encode each frame, enabling streaming video compression.</para>
+/// <para><b>For Beginners:</b> The Causal 3D VAE compresses video into a much smaller latent space while preserving
+/// temporal information. Causal means every convolution reads only the current and earlier frames, so the first frame
+/// keeps its own latent frame and a still image is simply a one-frame clip. (The group normalizations take their
+/// statistics over the whole clip, as the reference does, so a later frame still shifts earlier latents slightly.)</para>
 /// <para>
-/// The Causal 3D VAE uses causal 3D convolutions to encode and decode video. Causal convolutions
-/// ensure that each frame's encoding depends only on the current and previous frames, enabling:
-/// - Streaming video generation (encode/decode frame by frame)
-/// - Autoregressive generation without future frame leakage
-/// - Temporal compression (e.g., 4x in time dimension)
+/// Architecture (the paper's figure 3, diffusers' layout):
+/// - Encoder: a causal 3x3x3 conv, one stage of residual blocks per width in <c>blockOutChannels</c>, each stage but
+///   the last halving height and width (a stride-2 conv) and the first log2(temporalCompression) also averaging frame
+///   pairs; two residual blocks; GroupNorm, SiLU, and a causal conv to the posterior's mean and log-variance.
+/// - Decoder: the mirror, with one more residual block per stage, nearest-neighbour upsampling, and every
+///   normalization a spatial norm modulated by the latent (MoVQ's SpatialNorm).
+/// - Causal padding repeats the first frame in front, so a clip of 1 + 4k frames encodes to 1 + k latent frames.
 /// </para>
 /// <para>
-/// Architecture:
-/// - Encoder: Causal 3D Conv blocks with temporal stride for temporal compression
-/// - Decoder: Causal 3D TransposeConv blocks for temporal upsampling
-/// - Both spatial and temporal compression in latent space
-/// - Typical compression: 8x spatial, 4x temporal
+/// An image, [batch, channels, height, width], is encoded as a one-frame clip and its latent is returned without the
+/// frame axis. diffusers encodes long clips in 8-frame batches carrying a convolution cache to bound memory; this
+/// model encodes the clip whole, which is the network both describe.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// var vae = new Causal3DVAE&lt;float&gt;(inputChannels: 3, latentChannels: 16, baseChannels: 128);
-/// var video = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 16, 256, 256 });
-/// var latent = vae.Encode(video);
+/// var vae = new Causal3DVAE&lt;float&gt;();
+/// var video = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 9, 64, 64 });
+/// var latent = vae.Encode(video, sampleMode: false); // [1, 16, 3, 8, 8]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
@@ -48,33 +50,28 @@ namespace AiDotNet.Diffusion.VAE;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072", Year = 2024, Authors = "Yang et al.")]
-public partial class Causal3DVAE<T> : VAEModelBase<T>
+public partial class Causal3DVAE<T> : VAEModelBase<T>, IVideoVAEModel<T>
 {
     /// <inheritdoc />
-    /// <remarks>The order the previous GetParameters built its parts array in.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(_encoderIn);
-        RegisterParameterComponent(_encoderOut);
-        RegisterParameterComponent(_decoderIn);
-        RegisterParameterComponent(_decoderOut);
-        RegisterParameterComponent(_encoderNorm);
-        RegisterParameterComponent(_decoderNorm);
+        RegisterParameterComponent(_encoder);
+        RegisterParameterComponent(_decoder);
     }
+
+    // diffusers' DiagonalGaussianDistribution clamps the log-variance to this range.
+    private const double MinLogVariance = -30.0;
+    private const double MaxLogVariance = 20.0;
 
     private readonly int _inputChannels;
     private readonly int _latentChannels;
-    private readonly int _baseChannels;
-    private readonly int[] _channelMultipliers;
+    private readonly int[] _blockOutChannels;
     private readonly int _temporalCompression;
+    private readonly int _temporalCompressLevel;
     private readonly double _latentScaleFactor;
 
-    private readonly DenseLayer<T> _encoderIn;
-    private readonly DenseLayer<T> _encoderOut;
-    private readonly DenseLayer<T> _decoderIn;
-    private readonly DenseLayer<T> _decoderOut;
-    private readonly LayerNormalizationLayer<T> _encoderNorm;
-    private readonly LayerNormalizationLayer<T> _decoderNorm;
+    private readonly CausalVideoEncoder<T> _encoder;
+    private readonly CausalVideoDecoder<T> _decoder;
 
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
@@ -83,63 +80,84 @@ public partial class Causal3DVAE<T> : VAEModelBase<T>
     public override int LatentChannels => _latentChannels;
 
     /// <inheritdoc />
-    public override int DownsampleFactor => 8;
+    public override int DownsampleFactor => 1 << (_blockOutChannels.Length - 1);
 
     /// <inheritdoc />
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    /// <summary>
-    /// Gets the temporal compression factor.
-    /// </summary>
     public int TemporalCompression => _temporalCompression;
 
+    /// <inheritdoc />
+    /// <remarks>Revision 2: CogVideoX's causal 3D convolutional VAE replaced the dense placeholder.</remarks>
+    protected override int ArchitectureRevision => 2;
+
+    /// <inheritdoc />
+    protected override string ArchitectureRevisionNote =>
+        "Revision 2 is CogVideoX's causal 3D convolutional VAE; revision 1 was a stack of dense layers.";
+
     /// <summary>
-    /// Initializes a new Causal 3D VAE.
+    /// Initializes a new Causal 3D VAE. The defaults are CogVideoX's (diffusers' <c>AutoencoderKLCogVideoX</c> config).
     /// </summary>
-    /// <param name="inputChannels">Number of input channels (3 for RGB).</param>
-    /// <param name="latentChannels">Number of latent channels.</param>
-    /// <param name="baseChannels">Base channel count for encoder/decoder.</param>
-    /// <param name="channelMultipliers">Channel multipliers for each level.</param>
-    /// <param name="temporalCompression">Temporal compression factor (e.g., 4).</param>
-    /// <param name="latentScaleFactor">Scale factor for latent space normalization.</param>
+    /// <param name="inputChannels">Channels per frame (3 for RGB).</param>
+    /// <param name="latentChannels">Latent channels (16 in CogVideoX).</param>
+    /// <param name="blockOutChannels">Width of each encoder stage, shallowest first (128, 256, 256, 512); each stage
+    /// but the last halves height and width.</param>
+    /// <param name="layersPerBlock">Residual blocks per encoder stage (3); the decoder's stages have one more.</param>
+    /// <param name="normGroups">GroupNorm groups (32); every width must divide by it.</param>
+    /// <param name="temporalCompression">Time compression, a power of two up to 2^(stages - 1) (4).</param>
+    /// <param name="latentScaleFactor">The latent's scale for diffusion (1.15258426, CogVideoX-2b's).</param>
+    /// <param name="lossFunction">Reconstruction loss for training (mean squared error by default).</param>
+    /// <param name="seed">Seed for the weight initialization and the posterior sampling.</param>
     public Causal3DVAE(
         int inputChannels = 3,
         int latentChannels = 16,
-        int baseChannels = 128,
-        int[]? channelMultipliers = null,
+        int[]? blockOutChannels = null,
+        int layersPerBlock = 3,
+        int normGroups = 32,
         int temporalCompression = 4,
-        double latentScaleFactor = 0.13025)
-        : base(new MeanSquaredErrorLoss<T>())
+        double latentScaleFactor = 1.15258426,
+        ILossFunction<T>? lossFunction = null,
+        int? seed = null)
+        : base(lossFunction ?? new MeanSquaredErrorLoss<T>(), seed)
     {
+        if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
+        if (latentChannels <= 0) throw new ArgumentOutOfRangeException(nameof(latentChannels));
+        if (layersPerBlock <= 0) throw new ArgumentOutOfRangeException(nameof(layersPerBlock));
+        if (latentScaleFactor <= 0) throw new ArgumentOutOfRangeException(nameof(latentScaleFactor));
+        var widths = blockOutChannels ?? new[] { 128, 256, 256, 512 };
+        if (widths.Length == 0) throw new ArgumentException("At least one stage is required.", nameof(blockOutChannels));
+        foreach (int width in widths)
+        {
+            if (width <= 0 || normGroups <= 0 || width % normGroups != 0)
+                throw new ArgumentException($"Stage width {width} does not divide into {normGroups} groups.", nameof(blockOutChannels));
+        }
+        if (temporalCompression <= 0 || (temporalCompression & (temporalCompression - 1)) != 0)
+            throw new ArgumentOutOfRangeException(nameof(temporalCompression), "The temporal compression must be a power of two.");
+        int level = 0;
+        while ((1 << level) < temporalCompression) level++;
+        if (level > widths.Length - 1)
+            throw new ArgumentOutOfRangeException(nameof(temporalCompression),
+                $"{widths.Length} stages compress time at most {1 << (widths.Length - 1)}x.");
+
         _inputChannels = inputChannels;
         _latentChannels = latentChannels;
-        _baseChannels = baseChannels;
-        _channelMultipliers = channelMultipliers ?? new[] { 1, 2, 4, 4 };
+        _blockOutChannels = (int[])widths.Clone();
         _temporalCompression = temporalCompression;
+        _temporalCompressLevel = level;
         _latentScaleFactor = latentScaleFactor;
 
-        int maxChannels = baseChannels * _channelMultipliers[^1];
+        _encoder = new CausalVideoEncoder<T>(inputChannels, latentChannels, _blockOutChannels, layersPerBlock, normGroups, 1e-6, level);
+        _decoder = new CausalVideoDecoder<T>(latentChannels, inputChannels, _blockOutChannels, layersPerBlock, normGroups, 1e-6, level);
+    }
 
-        // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
-        _encoderIn = new DenseLayer<T>(baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _encoderNorm = new LayerNormalizationLayer<T>();
-        _encoderOut = new DenseLayer<T>(latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
-        // Decoder: latentChannels -> maxChannels -> (norm at maxChannels) -> inputChannels
-        _decoderIn = new DenseLayer<T>(maxChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _decoderNorm = new LayerNormalizationLayer<T>();
-        _decoderOut = new DenseLayer<T>(inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
-
-        // Pre-resolve every encoder/decoder sublayer from the ctor-known channel topology
-        // so ParameterCount, GetParameters, SetParameters, Clone, and the base save/load
-        // path all see consistent layouts on a freshly constructed VAE — without waiting
-        // for the first Encode/Decode call.
-        _encoderIn.ResolveFromShape(new[] { 1, inputChannels });
-        _encoderNorm.ResolveFromShape(new[] { 1, baseChannels });
-        _encoderOut.ResolveFromShape(new[] { 1, baseChannels });
-        _decoderIn.ResolveFromShape(new[] { 1, latentChannels });
-        _decoderNorm.ResolveFromShape(new[] { 1, maxChannels });
-        _decoderOut.ResolveFromShape(new[] { 1, maxChannels });
+    /// <inheritdoc />
+    public int GetLatentFrameCount(int frames)
+    {
+        if (frames <= 0) throw new ArgumentOutOfRangeException(nameof(frames));
+        // Each time-compressing stage keeps the first frame of an odd count and averages the rest in pairs.
+        for (int i = 0; i < _temporalCompressLevel; i++) frames = frames % 2 == 1 ? 1 + (frames - 1) / 2 : frames / 2;
+        return frames;
     }
 
     /// <inheritdoc />
@@ -152,72 +170,69 @@ public partial class Causal3DVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> input)
     {
-        var x = _encoderIn.Forward(input);
-        x = _encoderNorm.Forward(x);
-        x = _encoderOut.Forward(x);
-
-        // Split into mean and log variance
-        int halfLen = x.Shape[^1] / 2;
-        var meanShape = GetReducedShape(x._shape, halfLen);
-        var mean = new Tensor<T>(meanShape);
-        var logVar = new Tensor<T>(meanShape);
-        int elements = mean.Length;
-        for (int i = 0; i < elements; i++)
-        {
-            mean[i] = x[i];
-            logVar[i] = x[elements + i];
-        }
-
-        return (ScaleLatent(mean), logVar);
+        bool image = RequireVideoOrImage(input, _inputChannels, nameof(input));
+        var moments = _encoder.Forward(image ? AddFrameAxis(input) : input);
+        var s = moments.Shape;
+        var mean = Engine.TensorSlice(moments, new[] { 0, 0, 0, 0, 0 }, new[] { s[0], _latentChannels, s[2], s[3], s[4] });
+        var logVar = Engine.TensorSlice(moments, new[] { 0, _latentChannels, 0, 0, 0 }, new[] { s[0], _latentChannels, s[2], s[3], s[4] });
+        logVar = Engine.TensorClamp(logVar, NumOps.FromDouble(MinLogVariance), NumOps.FromDouble(MaxLogVariance));
+        return image ? (DropFrameAxis(mean), DropFrameAxis(logVar)) : (mean, logVar);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Decode(Tensor<T> latent)
     {
-        var unscaled = UnscaleLatent(latent);
-        var x = _decoderIn.Forward(unscaled);
-        x = _decoderNorm.Forward(x);
-        x = _decoderOut.Forward(x);
-        return x;
+        bool image = RequireVideoOrImage(latent, _latentChannels, nameof(latent));
+        var output = _decoder.Forward(image ? AddFrameAxis(latent) : latent);
+        return image ? DropFrameAxis(output) : output;
     }
 
-    private static int[] GetReducedShape(int[] shape, int lastDim)
+    /// <summary>
+    /// Loads a diffusers <c>AutoencoderKLCogVideoX</c> state dict of this configuration.
+    /// </summary>
+    /// <param name="read">Returns the values of the named tensor, row-major, given its name and this model's shape for
+    /// it.</param>
+    /// <returns>The names read: every weight of the model, so a state dict with names left over did not fit.</returns>
+    public IReadOnlyCollection<string> LoadCogVideoXWeights(Func<string, int[], double[]> read)
     {
-        var result = (int[])shape.Clone();
-        result[^1] = lastDim;
-        return result;
-    }
-
-    protected override Vector<T> GetParameterGradients()
-    {
-        var parts = new[]
+        if (read is null) throw new ArgumentNullException(nameof(read));
+        var names = new List<string>();
+        foreach (var (name, tensor) in _encoder.NamedTensors("encoder").Concat(_decoder.NamedTensors("decoder")))
         {
-            _encoderIn.GetParameterGradients(), _encoderOut.GetParameterGradients(),
-            _decoderIn.GetParameterGradients(), _decoderOut.GetParameterGradients(),
-            _encoderNorm.GetParameterGradients(), _decoderNorm.GetParameterGradients()
-        };
-        int total = 0;
-        foreach (var p in parts) total += p.Length;
-        var combined = new Vector<T>(total);
-        int offset = 0;
-        foreach (var p in parts)
-        {
-            for (int i = 0; i < p.Length; i++) combined[offset + i] = p[i];
-            offset += p.Length;
+            var values = read(name, tensor.Shape.ToArray());
+            if (values is null || values.Length != tensor.Length)
+                throw new ArgumentException($"'{name}' needs {tensor.Length} values; {values?.Length ?? 0} were given.", nameof(read));
+            for (int i = 0; i < values.Length; i++) tensor[i] = NumOps.FromDouble(values[i]);
+            names.Add(name);
         }
-        return combined;
-    }
-    /// <inheritdoc />
-    /// <remarks>
-    /// This concrete VAE does not implement layer-level backprop yet, so the
-    /// exact-gradient path is unsupported. The base class catches this and falls
-    /// through to SPSA in ComputeGradients.
-    /// </remarks>
-    protected override void BackpropagateLossGradient(Tensor<T> lossGradient)
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name}: layer-level BackpropagateLossGradient is not " +
-            "implemented. ComputeGradients will fall through to SPSA.");
+        return names;
     }
 
+    private static bool RequireVideoOrImage(Tensor<T> x, int channels, string name)
+    {
+        if (x is null) throw new ArgumentNullException(name);
+        if (x.Rank != 4 && x.Rank != 5)
+            throw new ArgumentException($"Expected [batch, channels, frames, height, width] or [batch, channels, height, width]; got rank {x.Rank}.", name);
+        if (x.Shape[1] != channels)
+            throw new ArgumentException($"Expected {channels} channels; got {x.Shape[1]}.", name);
+        return x.Rank == 4;
+    }
+
+    private Tensor<T> AddFrameAxis(Tensor<T> x)
+    {
+        var s = x.Shape;
+        return Engine.Reshape(x, new[] { s[0], s[1], 1, s[2], s[3] });
+    }
+
+    private Tensor<T> DropFrameAxis(Tensor<T> x)
+    {
+        var s = x.Shape;
+        return Engine.Reshape(x, new[] { s[0], s[1], s[3], s[4] });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The gradient tape differentiates this VAE (<see cref="VAEModelBase{T}.ComputeGradients"/>); it keeps no
+    /// per-layer gradient buffers.</remarks>
+    protected override Vector<T> GetParameterGradients() =>
+        throw new NotSupportedException($"{GetType().Name} computes its gradients on the tape; it keeps no per-layer gradients.");
 }

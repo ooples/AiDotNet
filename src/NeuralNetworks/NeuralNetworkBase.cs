@@ -6795,6 +6795,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
+        RequireArchitectureAgreesWithInput();
+
         // Inference semantics belong in the NON-VIRTUAL funnel. Keeping this transition inside the
         // default PredictCore meant every model that correctly overrode PredictCore (diffusion,
         // multimodal, structured-output models) bypassed eval/no-grad mode entirely. Besides making
@@ -6821,7 +6823,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         using var noGrad = new NoGradScope<T>();
         try
         {
-            return PredictInInferenceMode(input);
+            var output = PredictInInferenceMode(input);
+            RequireArchitectureAgreesWithOutput(output);
+            return output;
         }
         finally
         {
@@ -6835,6 +6839,62 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 _deferLazyShapeResolutionToForward = priorDefer;
             }
         }
+    }
+
+    /// <summary>
+    /// Whether this model sizes its layers from its options rather than from its architecture, so an architecture
+    /// stating other sizes must be refused rather than ignored (#2147).
+    /// </summary>
+    /// <remarks>
+    /// When true, the architecture's <c>InputSize</c> is checked once against
+    /// <see cref="ArchitectureInputSizesFromOptions"/>, and its <c>OutputSize</c> once against the first output the
+    /// model produces (see <see cref="ArchitectureAgreement.RequireStatedSizeObserved"/>). A model whose layers are
+    /// sized from the architecture leaves this false: the two cannot disagree.
+    /// </remarks>
+    protected virtual bool SizesLayersFromOptions => false;
+
+    /// <summary>
+    /// The sizes an architecture's <c>InputSize</c> may state for this model, each one of its options (#2147); null when
+    /// the model's input has no size fixed by its options.
+    /// </summary>
+    /// <remarks>
+    /// The input a model takes cannot stand in for these: a text model takes token ids of any length, so an
+    /// architecture stating its embedding width describes it correctly although no input tensor has that width. Each
+    /// model names the option values a caller may mean - a text encoder its embedding width and its maximum sequence
+    /// length, a portfolio model its asset count. A model that names none is never refused on its input.
+    /// </remarks>
+    protected virtual IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions => null;
+
+    // 0 until the architecture has been checked against an input (or an output); each check runs once.
+    private int _architectureInputChecked;
+    private int _architectureOutputChecked;
+
+    /// <summary>
+    /// Throws when this model sizes its layers from its options and the architecture states an <c>InputSize</c> that is
+    /// none of <see cref="ArchitectureInputSizesFromOptions"/> (#2147). Runs once, on the first
+    /// <see cref="Predict(Tensor{T})"/> or Train.
+    /// </summary>
+    protected virtual void RequireArchitectureAgreesWithInput()
+    {
+        if (!SizesLayersFromOptions || Architecture is null) return;
+        if (System.Threading.Volatile.Read(ref _architectureInputChecked) != 0) return;
+        if (ArchitectureInputSizesFromOptions is { Count: > 0 } sizes)
+            ArchitectureAgreement.RequireStatedSizeDeclared(GetType().Name, Architecture.InputSize, sizes);
+        System.Threading.Volatile.Write(ref _architectureInputChecked, 1);
+    }
+
+    /// <summary>
+    /// Throws when this model sizes its layers from its options and the architecture states an <c>OutputSize</c> the
+    /// model does not produce (#2147). Runs once, on the first output.
+    /// </summary>
+    /// <param name="output">An output the model produced.</param>
+    protected void RequireArchitectureAgreesWithOutput(Tensor<T> output)
+    {
+        if (!SizesLayersFromOptions || Architecture is null || output is null) return;
+        if (System.Threading.Volatile.Read(ref _architectureOutputChecked) != 0) return;
+        ArchitectureAgreement.RequireStatedSizeObserved(GetType().Name, nameof(Architecture.OutputSize),
+            Architecture.OutputSize, output._shape);
+        System.Threading.Volatile.Write(ref _architectureOutputChecked, 1);
     }
 
     /// <summary>
@@ -10629,6 +10689,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // SpecAugment and fusion draws came from an unseeded generator and the same model trained differently in
         // every process: CLAP's first contrastive loss measured 1.15, 0.75 and 0.62 in three identical runs.
         EnsureLayerRandomSeedsWired();
+        RequireArchitectureAgreesWithInput();
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
         _hasBeenTrained = true;

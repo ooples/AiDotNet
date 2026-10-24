@@ -75,9 +75,6 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
 {
     private readonly PICKOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

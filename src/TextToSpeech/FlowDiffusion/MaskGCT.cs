@@ -51,8 +51,6 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MaskGCTOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     private bool _useNativeMode;
@@ -66,6 +64,7 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new MaskGCTOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -88,6 +87,7 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new MaskGCTOptions();
+        Options = _options;
         // PaperOptimizerFactory ignores a non-positive override and would silently train on the
         // paper warmup instead of the value the caller set.
         if (_options.WarmupSteps <= 0)

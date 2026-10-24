@@ -69,8 +69,6 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>, ITrainingO
     private int _originalHeight, _originalWidth;
     private (Tensor<T> Embedding, Tensor<T>? HighRes0, Tensor<T>? HighRes1)? _features;
 
-    public override ModelOptions GetOptions() => _options;
-
     internal SAM21ModelSize ModelSize => _options.ModelSize;
 
     private Sam2Runtime<T> Runtime => _runtime ?? throw new InvalidOperationException("The network is not initialized.");

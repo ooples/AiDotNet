@@ -43,14 +43,14 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ResearchPaper("Relaxing the Conditional Independence Assumption of CTC-based ASR by Conditioning on Intermediate Predictions", "https://arxiv.org/abs/2104.02724", Year = 2021, Authors = "Nozaki and Komatsu")]
 public partial class SelfConditionedCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly SelfConditionedCTCOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly SelfConditionedCTCOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public SelfConditionedCTC(NeuralNetworkArchitecture<T> architecture, string modelPath, SelfConditionedCTCOptions? options = null) : base(architecture) { _options = options ?? new SelfConditionedCTCOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public SelfConditionedCTC(NeuralNetworkArchitecture<T> architecture, SelfConditionedCTCOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SelfConditionedCTCOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public SelfConditionedCTC(NeuralNetworkArchitecture<T> architecture, string modelPath, SelfConditionedCTCOptions? options = null) : base(architecture) { _options = options ?? new SelfConditionedCTCOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public SelfConditionedCTC(NeuralNetworkArchitecture<T> architecture, SelfConditionedCTCOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SelfConditionedCTCOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using self-conditioned CTC iterative refinement.

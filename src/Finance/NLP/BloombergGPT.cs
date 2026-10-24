@@ -76,9 +76,6 @@ public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private double _dropout;
 
-    /// <inheritdoc/>
-    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
-
     #endregion
 
     #region Interface Properties
@@ -175,7 +172,7 @@ public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultBloombergGPTLayers(
-                Architecture, MaxSequenceLength, VocabularySize, 
+                MaxSequenceLength, VocabularySize, 
                 HiddenDimension, _options.NumAttentionHeads, _options.NumLayers, _dropout));
 
             ExtractLayerReferences();

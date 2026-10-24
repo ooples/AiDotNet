@@ -63,7 +63,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly TransUNetOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only TransUNet's OWN configuration lives here. _height, _width, _channels, _numClasses,

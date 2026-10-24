@@ -77,9 +77,6 @@ public partial class XVFI<T> : FrameInterpolationBase<T>
 {
     private readonly XVFIOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -97,6 +94,7 @@ public partial class XVFI<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new XVFIOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
         _options.ModelPath = modelPath;
@@ -117,6 +115,7 @@ public partial class XVFI<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new XVFIOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,

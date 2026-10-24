@@ -72,9 +72,6 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
     private readonly WGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private static RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateWganRmsPropOptions()
         => new()
         {

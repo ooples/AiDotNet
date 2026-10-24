@@ -64,7 +64,6 @@ public partial class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
     #region Fields
 
     private readonly ConformerFPOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private MelSpectrogram<T>? _melSpectrogram;
     private bool _useNativeMode;
@@ -95,6 +94,7 @@ public partial class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new ConformerFPOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -112,6 +112,7 @@ public partial class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         : base(architecture)
     {
         _options = options ?? new ConformerFPOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

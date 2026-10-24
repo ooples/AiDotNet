@@ -71,9 +71,6 @@ public partial class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly LLMTimeOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _hiddenDimension;
@@ -293,7 +290,7 @@ public partial class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }

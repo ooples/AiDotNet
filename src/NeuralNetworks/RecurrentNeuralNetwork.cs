@@ -61,9 +61,6 @@ public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly RecurrentNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The learning rate used for updating the network parameters during training.
     /// </summary>

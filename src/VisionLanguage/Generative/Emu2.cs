@@ -68,8 +68,6 @@ public partial class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
 {
     private readonly Emu2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -86,6 +84,7 @@ public partial class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         : base(architecture)
     {
         _options = options ?? new Emu2Options();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -109,6 +108,7 @@ public partial class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         : base(architecture)
     {
         _options = options ?? new Emu2Options();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer

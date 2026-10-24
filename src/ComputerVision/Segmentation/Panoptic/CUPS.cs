@@ -73,7 +73,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly CUPSOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only CUPS's OWN configuration lives here. _height, _width, _channels, _numClasses,

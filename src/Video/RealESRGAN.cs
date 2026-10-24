@@ -79,9 +79,6 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
 {
     private readonly RealESRGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

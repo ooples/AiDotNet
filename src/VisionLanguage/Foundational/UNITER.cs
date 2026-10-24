@@ -66,8 +66,6 @@ public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
 {
     private readonly UNITEROptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     // The configured warmup start, or LearningRate / WarmupSteps when none is set.
     private static double WarmupInitialLearningRateOrDefault(UNITEROptions options)
     {
@@ -98,6 +96,7 @@ public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
         : base(architecture)
     {
         _options = options ?? new UNITEROptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -120,6 +119,7 @@ public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
         : base(architecture)
     {
         _options = options ?? new UNITEROptions();
+        Options = _options;
         _options.Validate();
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,

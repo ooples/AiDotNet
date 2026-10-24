@@ -67,7 +67,6 @@ public partial class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly VideoGigaGANOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -85,6 +84,7 @@ public partial class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new VideoGigaGANOptions();
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -98,6 +98,7 @@ public partial class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new VideoGigaGANOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

@@ -48,14 +48,14 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
         ? Architecture.OutputSize
         : (_options.Vocabulary.Length > 0 ? _options.Vocabulary.Length : _options.VocabSize);
 
-    private readonly KeywordSpottingOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly KeywordSpottingOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
     public bool SupportsWordTimestamps => false;
 
-    public KeywordSpotting(NeuralNetworkArchitecture<T> architecture, string modelPath, KeywordSpottingOptions? options = null) : base(architecture) { _options = options ?? new KeywordSpottingOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public KeywordSpotting(NeuralNetworkArchitecture<T> architecture, KeywordSpottingOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KeywordSpottingOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateExponentialSgdOptimizer(_options.LearningRate, _options.LearningRateDecay); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public KeywordSpotting(NeuralNetworkArchitecture<T> architecture, string modelPath, KeywordSpottingOptions? options = null) : base(architecture) { _options = options ?? new KeywordSpottingOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public KeywordSpotting(NeuralNetworkArchitecture<T> architecture, KeywordSpottingOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KeywordSpottingOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? CreateExponentialSgdOptimizer(_options.LearningRate, _options.LearningRateDecay); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Detects keywords using the paper's compact feed-forward Deep KWS network.

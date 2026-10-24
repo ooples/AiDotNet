@@ -78,8 +78,6 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly MGTSDOptions<T> _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _hiddenDimension;
@@ -272,7 +270,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); ExtractLayerReferences(); }
-        else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultMGTSDLayers(Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _numGranularities, _dropout)); ExtractLayerReferences(); }
+        else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultMGTSDLayers(_contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _numGranularities, _dropout)); ExtractLayerReferences(); }
 
         // Manually resolve each sub-stage's lazy layers from its OWN known
         // input shape so ParameterCount reports correctly before any forward
@@ -603,7 +601,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     #region IForecastingModel Implementation
 
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null) { if (quantiles is not null && quantiles.Length > 0) throw new NotSupportedException("MGTSD does not support quantile forecasting. Pass null for point forecasts."); return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData); }
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles) { if (quantiles is not null && quantiles.Length > 0) throw new NotSupportedException("MGTSD does not support quantile forecasting. Pass null for point forecasts."); return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData); }
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps) { var predictions = new List<Tensor<T>>(); var currentInput = input; int stepsRemaining = steps; while (stepsRemaining > 0) { var prediction = Forecast(currentInput, null); predictions.Add(prediction); int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining); stepsRemaining -= stepsUsed; if (stepsRemaining > 0) currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed); } return ConcatenatePredictions(predictions, steps); }
 
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }

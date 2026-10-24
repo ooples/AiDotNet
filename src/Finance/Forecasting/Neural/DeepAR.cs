@@ -83,8 +83,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     private readonly Random _random;
     private DeepARNetwork<T>? _network;
 
-    public override ModelOptions GetOptions() => _options;
-
     public override int PatchSize => 1;
 
     public override int Stride => 1;
@@ -118,7 +116,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         : base(architecture, onnxModelPath,
                OptionsOrDefault(options).LookbackWindow,
                OptionsOrDefault(options).ForecastHorizon,
-               architecture.InputSize)
+               ArchitectureAgreement.SequenceFeatureCount(architecture))
     {
         _options = OptionsOrDefault(options);
         Options = _options;
@@ -147,7 +145,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         : base(architecture,
                OptionsOrDefault(options).LookbackWindow,
                OptionsOrDefault(options).ForecastHorizon,
-               architecture.InputSize,
+               ArchitectureAgreement.SequenceFeatureCount(architecture),
                lossFunction)
     {
         _options = OptionsOrDefault(options);
@@ -265,7 +263,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     /// NumSamples ancestral sample paths <c>[B, H, S]</c>, or with <paramref name="quantiles"/> the quantiles laid out
     /// as <c>[B, H, S·Q]</c> (series-major).
     /// </summary>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (historicalData is null) throw new ArgumentNullException(nameof(historicalData));
         return UseNativeMode ? ForecastNative(historicalData, quantiles) : ForecastOnnx(historicalData);

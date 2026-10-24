@@ -44,14 +44,19 @@ $script:EnvelopePatterns = @(
 # an assertion whose Actual value is the exception: SegmentationTrainingRobustnessTests.OpenVocabSAM_MultiStepTrain
 # failed the 2026-10-19 lane that way. Only that exact shape counts, with the exception as the WHOLE Actual value;
 # any other exception recorded the same way is still a failure.
-$script:RecordedEnvelopePattern = '(?m)^\s*Actual:\s+System\.OutOfMemoryException: '
+# The assertion's own lines, in order: 'Expected: null' and then an Actual value that IS the exception, so an OOM
+# named inside some other exception's message does not count.
+$script:RecordedExpectedPattern = '^\s*Expected:\s+null\s*$'
+$script:RecordedActualPattern = '^\s*Actual:\s+System\.OutOfMemoryException: '
 
 function Test-EnvelopeMessage([string] $Message) {
     $first = ($Message -split "`r?`n")[0].Trim()
     foreach ($pattern in $script:EnvelopePatterns) {
         if ($first -match $pattern) { return $true }
     }
-    if ($first -eq 'Assert.Null() Failure: Value is not null' -and $Message -match $script:RecordedEnvelopePattern) {
+    $lines = $Message -split "`r?`n"
+    if ($first -eq 'Assert.Null() Failure: Value is not null' -and $lines.Count -ge 3 -and
+        $lines[1] -match $script:RecordedExpectedPattern -and $lines[2] -match $script:RecordedActualPattern) {
         return $true
     }
     return $false
@@ -162,6 +167,8 @@ function Invoke-SelfTest {
     $aggOom = "System.AggregateException : One or more errors occurred. (Exception of type 'System.OutOfMemoryException' was thrown.) (Exception of type 'System.OutOfMemoryException' was thrown.)"
     $disk = "System.IO.IOException : No space left on device : '/tmp/aidotnet-streaming-pool/backing.bin'"
     $recordedOom = "Assert.Null() Failure: Value is not null`nExpected: null`nActual:   System.OutOfMemoryException: Exception of type 'System.OutOfMemoryException' was thrown."
+    # A non-OOM Actual whose message carries a diagnostic line shaped like a recorded OOM.
+    $recordedOtherWithOomLine = "Assert.Null() Failure: Value is not null`nExpected: null`nActual:   System.ArgumentException: Shapes do not match.`nActual: System.OutOfMemoryException: pool exhausted earlier"
     $recordedOther = "Assert.Null() Failure: Value is not null`nExpected: null`nActual:   System.ArgumentException: Shapes do not match."
     try {
         Assert-Outcome 'exit_zero' Passed '' '0'
@@ -189,6 +196,8 @@ function Invoke-SelfTest {
                 @{ Name = 'A'; Outcome = 'Failed'; Message = $recordedOom })) '1'
         Assert-Outcome 'recorded_other_exception' Failed (New-Trx 'recorded-other' 'Failed' @(
                 @{ Name = 'A'; Outcome = 'Failed'; Message = $recordedOther })) '1'
+        Assert-Outcome 'recorded_other_exception_with_oom_line' Failed (New-Trx 'recorded-other-oom-line' 'Failed' @(
+                @{ Name = 'A'; Outcome = 'Failed'; Message = $recordedOtherWithOomLine })) '1'
         Assert-Outcome 'aborted_run' Failed (New-Trx 'aborted' 'Aborted' @(
                 @{ Name = 'A'; Outcome = 'Failed'; Message = $oom })) '1'
         Assert-Outcome 'no_failed_test' Failed (New-Trx 'none' 'Failed' @(

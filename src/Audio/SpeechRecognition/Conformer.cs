@@ -67,7 +67,6 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     #region Fields
 
     private readonly ConformerOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -94,6 +93,7 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         : base(architecture)
     {
         _options = options ?? new ConformerOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -108,6 +108,7 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         : base(architecture)
     {
         _options = options ?? new ConformerOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

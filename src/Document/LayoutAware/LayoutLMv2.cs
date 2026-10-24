@@ -68,9 +68,6 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
 {
     private readonly LayoutLMv2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

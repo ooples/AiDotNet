@@ -78,17 +78,6 @@ public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly InternImageOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this InternImage model.
-    /// </summary>
-    /// <returns>The <see cref="InternImageOptions"/> used to configure this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only InternImage's OWN configuration lives here. _height, _width, _channels, _numClasses,

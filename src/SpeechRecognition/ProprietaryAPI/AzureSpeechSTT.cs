@@ -43,14 +43,14 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ResearchPaper("Microsoft Azure Speech-to-Text", "https://azure.microsoft.com/en-us/products/ai-services/speech-to-text")]
 public partial class AzureSpeechSTT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly AzureSpeechSTTOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly AzureSpeechSTTOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public AzureSpeechSTT(NeuralNetworkArchitecture<T> architecture, string modelPath, AzureSpeechSTTOptions? options = null) : base(architecture) { _options = options ?? new AzureSpeechSTTOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
-    public AzureSpeechSTT(NeuralNetworkArchitecture<T> architecture, AzureSpeechSTTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AzureSpeechSTTOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
+    public AzureSpeechSTT(NeuralNetworkArchitecture<T> architecture, string modelPath, AzureSpeechSTTOptions? options = null) : base(architecture) { _options = options ?? new AzureSpeechSTTOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
+    public AzureSpeechSTT(NeuralNetworkArchitecture<T> architecture, AzureSpeechSTTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AzureSpeechSTTOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Azure Speech Service architecture.

@@ -86,14 +86,12 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     private readonly List<LayerBase<T>> _pitchLayers = new();
     private StyleTtsFrontEnd<T>? _frontEnd;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed StyleTTS 2 for inference.</summary>
     public StyleTTS2(NeuralNetworkArchitecture<T> architecture, string modelPath, StyleTTS2Options? options = null)
         : base(architecture)
     {
         _options = options ?? new StyleTTS2Options();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();
@@ -111,6 +109,7 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new StyleTTS2Options();
+        Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();

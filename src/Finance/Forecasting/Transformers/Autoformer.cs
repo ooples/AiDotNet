@@ -88,8 +88,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     private readonly Random _random;
     private AutoformerNetwork<T>? _network;
 
-    public override ModelOptions GetOptions() => _options;
-
     #region IForecastingModel Properties
 
     public override int SequenceLength => _options.LookbackWindow;
@@ -147,7 +145,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _random = RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -176,7 +174,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         _useNativeMode = true;
         OnnxSession = null;
         OnnxModelPath = null;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _random = RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -254,7 +252,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region IForecastingModel Implementation
 
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));

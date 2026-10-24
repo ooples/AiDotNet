@@ -99,7 +99,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 double meanValue = NumOps.ToDouble(mean[i]);
                 double stdValue = Math.Exp(NumOps.ToDouble(logStd[i]));
 
-                double sampledValue = meanValue + stdValue * _random.NextGaussian();
+                // Inference takes the distribution's mode (its mean), as DiscretePolicy takes the argmax and
+                // Stable-Baselines3 evaluates with deterministic=True; training samples.
+                double sampledValue = training ? meanValue + stdValue * _random.NextGaussian() : meanValue;
 
                 if (_useTanhSquashing)
                 {

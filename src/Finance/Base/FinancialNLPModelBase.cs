@@ -21,6 +21,11 @@ namespace AiDotNet.Finance.Base;
     Direction = TensorLayoutDirection.Output)]
 public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinancialNLPModel<T>, IShapeContract
 {
+    /// <inheritdoc/>
+    /// <remarks>An architecture may state the maximum sequence length or the hidden width (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        new[] { MaxSequenceLength, HiddenDimension };
+
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
         => inputRank switch

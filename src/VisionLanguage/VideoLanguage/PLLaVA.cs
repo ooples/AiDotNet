@@ -70,8 +70,6 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
 {
     private readonly PLLaVAOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -86,6 +84,7 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         : base(architecture)
     {
         _options = options ?? new PLLaVAOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -108,6 +107,7 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         : base(architecture)
     {
         _options = options ?? new PLLaVAOptions();
+        Options = _options;
         if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0)
         {
             if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
@@ -121,6 +121,7 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
                     nameof(architecture)
                 );
             _options = new PLLaVAOptions(_options) { ImageSize = architecture.InputHeight };
+            Options = _options;
         }
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

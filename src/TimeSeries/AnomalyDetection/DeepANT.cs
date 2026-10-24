@@ -66,9 +66,6 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
     private double _scaleMin;
     private double _scaleRange = 1.0;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new instance of the DeepAnT model.
     /// </summary>
@@ -76,6 +73,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         : base(options ?? new DeepANTOptions<T>())
     {
         _options = (DeepANTOptions<T>)Options;
+        Options = _options;
         var o = _options;
         if (o.Epochs <= 0 || o.BatchSize <= 0 || o.LearningRate <= 0)
             throw new ArgumentException("Epochs, BatchSize and LearningRate must be positive.", nameof(options));

@@ -51,7 +51,6 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EBranchformerOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode; private bool _disposed;
 
@@ -63,6 +62,7 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         : base(architecture)
     {
         _options = options ?? new EBranchformerOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
@@ -78,6 +78,7 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         : base(architecture)
     {
         _options = options ?? new EBranchformerOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

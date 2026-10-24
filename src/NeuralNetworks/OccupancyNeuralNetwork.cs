@@ -47,9 +47,6 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets a value indicating whether this network processes temporal data.
     /// </summary>

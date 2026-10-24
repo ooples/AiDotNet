@@ -69,9 +69,6 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly NougatOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private bool _useNativeMode;

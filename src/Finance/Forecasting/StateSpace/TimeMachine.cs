@@ -98,9 +98,6 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _modelDimension;
@@ -320,7 +317,6 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTimeMachineLayers(
-                Architecture,
                 _contextLength,
                 _forecastHorizon,
                 _modelDimension,
@@ -501,7 +497,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// and produces future predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 

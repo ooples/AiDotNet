@@ -109,9 +109,6 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
 
     private readonly NodeClassificationOptions _options;
 
-    /// <inheritdoc/>
-    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the number of input features per node.
     /// </summary>

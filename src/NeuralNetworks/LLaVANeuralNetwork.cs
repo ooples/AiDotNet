@@ -77,9 +77,6 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 {
     private readonly LLaVAOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     private readonly bool _useNativeMode;

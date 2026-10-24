@@ -74,8 +74,6 @@ public partial class CosyVoice2<T> : CosyVoiceBase<T>
     private CosyVoice2Lm<T>? _lm;
     private CosyVoiceFlowConfiguration? _flowConfiguration;
 
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="CosyVoice2{T}"/> class in ONNX inference mode.
     /// </summary>
@@ -90,6 +88,7 @@ public partial class CosyVoice2<T> : CosyVoiceBase<T>
         : base(architecture, (options ?? new CosyVoice2Options()).SamplingSeed, modelPath, (options ?? new CosyVoice2Options()).OnnxOptions)
     {
         _options = options ?? new CosyVoice2Options();
+        Options = _options;
         _options.ModelPath = modelPath;
         Validate();
         Initialize();
@@ -109,6 +108,7 @@ public partial class CosyVoice2<T> : CosyVoiceBase<T>
         : base(architecture, (options ?? new CosyVoice2Options()).SamplingSeed, optimizer)
     {
         _options = options ?? new CosyVoice2Options();
+        Options = _options;
         Validate();
         Initialize();
     }

@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 public partial class NnUNet<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly NnUNetOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only NnUNet's OWN configuration lives here. _height, _width, _channels, _numClasses,

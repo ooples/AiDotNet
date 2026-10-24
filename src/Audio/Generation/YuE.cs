@@ -62,7 +62,6 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Fields
 
     private readonly YuEOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -100,6 +99,7 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture)
     {
         _options = options ?? new YuEOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -115,6 +115,7 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture)
     {
         _options = options ?? new YuEOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
             optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(

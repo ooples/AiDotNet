@@ -201,9 +201,6 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly NonStationaryTransformerOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The input sequence length (lookback window).
     /// </summary>
@@ -471,7 +468,6 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultNonStationaryTransformerLayers(
-                Architecture,
                 _sequenceLength,
                 _predictionHorizon,
                 _numFeatures,
@@ -718,7 +714,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// Quantiles can be specified for uncertainty estimation.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         // Apply Series Stationarization if enabled
         if (_useSeriesStationarization)

@@ -53,9 +53,6 @@ public partial class RPKNet<T> : OpticalFlowBase<T>
 {
     private readonly RPKNetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _numFeatures;
     private int _numLayers;
     private ConvolutionalLayer<T>? _featureExtract;

@@ -69,23 +69,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // MetaLearnerBase and NeuralProcessBase are no longer excluded: MetaLearnerTestBase supplies the inner
         // model a meta-learner wraps, so the fixture only names the algorithm and its options type (#2139).
         "MetaLearningModelBase",     // The adapted models Adapt returns: results of a meta-learner, not learners
-        "ShardedModelBase",          // Distributed training: wraps a model for tensor/data parallelism
-        "NoisePredictorBase",        // Noise predictors: internal diffusion components, not standalone
-        "PolicyBase",                // RL policies: the state->action half of an agent, not an agent.
-                                     // Routing these to the RL family was TRIED and measured: 28 of
-                                     // the 33 emitted tests failed, and none of the failures was a
-                                     // model defect. PolicyBase.Train is an intentional no-op whose
-                                     // own doc says "Training is handled by RL algorithms, not
-                                     // directly on the policy", so Training_ShouldChangeParameters
-                                     // can never pass; and ContinuousPolicy/BetaPolicy sample from a
-                                     // Gaussian by design, so Policy_ShouldBeDeterministic and
-                                     // Clone_ShouldProduceSamePolicy compare two draws from a
-                                     // distribution. The family asserts AGENT semantics a policy is
-                                     // specified not to have. Covering these needs a policy-specific
-                                     // base, not a different existing family.
-        "SelfSupervisedLearningMethodBase",             // Self-supervised learning: wraps encoder + projector
-        "AudioSafetyModuleBase",     // Audio safety: wraps another model for content moderation
-        "TextSafetyModuleBase",      // Text safety: wraps another model for content moderation
+        // NoisePredictorBase is no longer excluded: NoisePredictorTestBase drives PredictNoise directly, and each
+        // predictor is built at a reduced size from NoisePredictorFixtureArgs (#2139).
+        // ShardedModelBase is no longer excluded: ShardedModelTestBase wraps a seeded network at world size 1, where
+        // every wrapper must equal the model it wraps (#2139).
+        // AudioSafetyModuleBase and TextSafetyModuleBase are no longer excluded: almost every module under them is
+        // built from defaults alone (the "wraps another model" note was wrong for all but the composite detectors),
+        // and their own family bases feed them text or waveforms instead of a content vector (#2139).
+        // SelfSupervisedLearningMethodBase is no longer excluded: SelfSupervisedLearningMethodTestBase builds each
+        // method from small real parts (SslFixtureArgs) and drives TrainStep (#2139).
+        // PolicyBase is no longer excluded: the RL agent family asserted agent semantics a policy does not have
+        // (Train is a no-op, sampling is stochastic), so policies have their own family, PolicyTestBase (#2139).
         "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
         // VAEModelBase is no longer excluded: VAEs implement IVAEModel, not IDiffusionModel, so they now have their
@@ -185,14 +179,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     private static readonly string[] ExcludedClassNames = new[]
     {
-        // Placeholder networks that do not implement the VAE contract they declare, found by VAEModelTestBase
-        // (#2139). Causal3DVAE and TemporalInterpolationVAE are dense layers over the channel axis: no
-        // convolution, no spatial or temporal compression, although both report DownsampleFactor 8. AudioVAE
-        // reports a time downsample its hand-written loops do not learn. Each is being rebuilt from its paper
-        // (CogVideoX's causal 3D VAE, FILM, AudioLDM's VAE); they leave this list when that lands.
-        "Causal3DVAE",
-        "TemporalInterpolationVAE",
-        "AudioVAE",
 
         // A memory buffer for continual learning, not a model: its Predict throws
         // NotSupportedException("ExperienceReplayBuffer is a memory buffer, not a predictor.") by
@@ -509,10 +495,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A withheld model stays in <c>DefectBaselines.UntestedModels</c>, so AIDN040 keeps reporting
-    /// it as needing coverage, and the reason is recorded rather than silent - which was the actual
-    /// gap in #2138. Withholding a fixture that cannot pass is not the same as the old bare
-    /// <c>continue</c>: nothing here is hidden from the residual.
+    /// A withheld model stays in <c>DefectBaselines.UntestedModels</c>, so AIDN040 keeps reporting it as
+    /// needing coverage, and the reason is recorded rather than silent - which was the actual gap in
+    /// #2138. Withholding a fixture that cannot pass is not the same as the old bare <c>continue</c>:
+    /// nothing here is hidden from the residual.
+    /// </para>
+    /// <para>
+    /// Empty now: the two entries it held, the probabilistic CSDI and TSDiff, drew their samples from
+    /// a generator that never read <c>ModelOptions.Seed</c>, so two predictions from one model
+    /// disagreed. Both now restart their sampling stream at the seed on every forecast (#2091).
     /// </para>
     /// <para>
     /// Empty: its two entries were <c>AiDotNet.Finance.Probabilistic.CSDI</c> and <c>TSDiff</c>,
@@ -522,7 +513,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// </para>
     /// </remarks>
     private static readonly System.Collections.Generic.Dictionary<string, string> NamesakeFixtureWithheld =
-        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal);
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+        };
 
     /// <summary>
     /// Raised when two discovered models share a simple name and no owner is registered.
@@ -717,10 +710,106 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateDetector", "TargetArtifact" };
 
+    /// <summary>Overridable surface of <c>TextSafetyModuleTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> TextSafetyModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateModule", "Samples" };
+
+    /// <summary>Overridable surface of <c>AudioSafetyModuleTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> AudioSafetyModuleTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateModule", "SampleRate", "Seconds" };
     /// <summary>Overridable surface of <c>VAEModelTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VAEModelTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateVAE", "ImageSize" };
+    /// <summary>Overridable surface of <c>NoisePredictorTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> NoisePredictorTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreatePredictor", "SampleShape" };
+
+    /// <summary>
+    /// Reduced-size constructor arguments for each noise predictor's generated fixture. Their defaults are paper scale
+    /// (DiT-XL, Flux, SD3: hundreds of millions to billions of parameters), which no invariant needs: these keep each
+    /// architecture and shrink only its widths and depths. A predictor missing here gets no fixture-sized constructor.
+    /// </summary>
+    /// <summary>
+    /// VAEs whose paper-scale default is too large for a fixture, built at a reduced size of the same architecture
+    /// (#2139).
+    /// </summary>
+    private static readonly System.Collections.Generic.Dictionary<string, string> VAEFixtureArgs =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["Causal3DVAE"] = "inputChannels: 3, latentChannels: 4, blockOutChannels: new[] { 8, 8, 16 }, layersPerBlock: 1, normGroups: 4, temporalCompression: 4, seed: 1",
+            ["AudioVAE"] = "inputChannels: 1, latentChannels: 8, blockOutChannels: new[] { 8, 16, 16 }, layersPerBlock: 1, normGroups: 4, seed: 1",
+            ["TemporalInterpolationVAE"] = "inputChannels: 3, latentChannels: 4, blockOutChannels: new[] { 8, 16 }, layersPerBlock: 2, normGroups: 4, seed: 1",
+            ["AutoencoderKL"] = "inputChannels: 3, latentChannels: 4, baseChannels: 8, channelMults: new[] { 1, 2, 4, 4 }, numResBlocks: 1, numGroups: 4, seed: 1",
+        };
+
+    private static readonly System.Collections.Generic.Dictionary<string, string> NoisePredictorFixtureArgs =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["DiTNoisePredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, patchSize: 2, contextDim: 32, latentSpatialSize: 8, seed: 1",
+            ["SiTPredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, seed: 1",
+            ["FlagDiTPredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, numKVHeads: 2, contextDim: 32, latentSize: 8, seed: 1",
+            ["MMDiTNoisePredictor"] = "inputChannels: 4, hiddenSize: 64, numJointLayers: 2, numSingleLayers: 1, numHeads: 4, patchSize: 2, contextDim: 32, seed: 1",
+            ["AsymmDiTPredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, contextDim: 32, seed: 1",
+            ["EMMDiTPredictor"] = "inputChannels: 4, contextDim: 32, seed: 1, hiddenSizeOverride: 64, numLayersOverride: 2, numHeadsOverride: 4",
+            ["FluxDoubleStreamPredictor"] = "inputChannels: 4, hiddenSize: 64, numJointLayers: 1, numSingleLayers: 1, numHeads: 4, patchSize: 2, contextDim: 32, seed: 1",
+            ["MMDiTXNoisePredictor"] = "inputChannels: 4, patchSize: 2, contextDim: 32, seed: 1, hiddenSizeOverride: 64, numLayersOverride: 2, numHeadsOverride: 4",
+            ["UViTNoisePredictor"] = "inputChannels: 4, hiddenSize: 64, numLayers: 2, numHeads: 4, patchSize: 2, contextDim: 32, latentSpatialSize: 8, seed: 1",
+            ["UNetNoisePredictor"] = "inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, contextDim: 32, numHeads: 4, inputHeight: 8, seed: 1",
+            ["VideoUNetPredictor"] = "inputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, contextDim: 32, numHeads: 4, inputHeight: 8, inputWidth: 8, numFrames: 2, seed: 1",
+        };
+
+    /// <summary>Overridable surface of <c>SelfSupervisedLearningMethodTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> SelfSupervisedTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateMethod", "BatchShape" };
+
+    private const string SslParts = "global::AiDotNet.Tests.ModelFamilyTests.Base.SslFixtureParts";
+
+    /// <summary>
+    /// Constructor arguments for each self-supervised method's fixture. The methods wrap an encoder and heads the caller
+    /// supplies; SslFixtureParts builds small real ones, so each method is tested with its own composition.
+    /// </summary>
+    private static readonly System.Collections.Generic.Dictionary<string, string> SslFixtureArgs =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["SimCLR"] = $"encoder: {SslParts}.Encoder(), projector: {SslParts}.Mlp(1), config: {SslParts}.Config()",
+            ["BarlowTwins"] = $"encoder: {SslParts}.Encoder(), projector: {SslParts}.Mlp(1), config: {SslParts}.Config()",
+            ["SimSiam"] = $"encoder: {SslParts}.Encoder(), projector: {SslParts}.Symmetric(1, true), config: {SslParts}.Config()",
+            ["BYOL"] = $"encoder: {SslParts}.Encoder(), targetEncoder: {SslParts}.Momentum(), onlineProjector: {SslParts}.Symmetric(1, true), targetProjector: {SslParts}.Symmetric(2, false), config: {SslParts}.Config()",
+            ["MoCo"] = $"encoder: {SslParts}.Encoder(), momentumEncoder: {SslParts}.Momentum(), projector: {SslParts}.Mlp(1), momentumProjector: {SslParts}.Mlp(2), embeddingDim: 8, config: {SslParts}.Config()",
+            ["MoCoV2"] = $"encoder: {SslParts}.Encoder(), momentumEncoder: {SslParts}.Momentum(), projector: {SslParts}.Mlp(1), momentumProjector: {SslParts}.Mlp(2), embeddingDim: 8, config: {SslParts}.Config()",
+            ["MoCoV3"] = $"encoder: {SslParts}.Encoder(), momentumEncoder: {SslParts}.Momentum(), projector: {SslParts}.Mlp(1), momentumProjector: {SslParts}.Mlp(2), predictor: {SslParts}.Mlp(3), config: {SslParts}.Config()",
+            ["DINO"] = $"studentEncoder: {SslParts}.Encoder(), teacherEncoder: {SslParts}.Momentum(), studentProjector: {SslParts}.Mlp(1), teacherProjector: {SslParts}.Mlp(2), outputDim: 8, config: {SslParts}.Config()",
+            ["iBOT"] = $"studentEncoder: {SslParts}.Encoder(), teacherEncoder: {SslParts}.Momentum(), studentProjector: {SslParts}.Mlp(1), teacherProjector: {SslParts}.Mlp(2), outputDim: 8, config: {SslParts}.Config()",
+            ["MAE"] = $"encoder: {SslParts}.Encoder(4, 4), decoder: null, patchSize: 2, imageSize: 4, maskRatio: 0.75, config: {SslParts}.Config()",
+        };
+    /// <summary>Overridable surface of <c>ShardedModelTestBase</c>; its factory is emitted per family, never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> ShardedModelTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateWrapper" };
+    /// <summary>Overridable surface of <c>PolicyTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> PolicyTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreatePolicy" };
+
+    private const string PolicyParts = "global::AiDotNet.Tests.ModelFamilyTests.Base.PolicyFixtureParts";
+    private const string NoExplorationExpr = "new global::AiDotNet.ReinforcementLearning.Policies.Exploration.NoExploration<double>()";
+
+    /// <summary>Constructor arguments for each policy's fixture, from small seeded parts.</summary>
+    private static readonly System.Collections.Generic.Dictionary<string, string> PolicyFixtureArgs =
+        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
+        {
+            ["DiscretePolicy"] = $"policyNetwork: {PolicyParts}.Network(3), actionSize: 3, explorationStrategy: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+            ["ContinuousPolicy"] = $"policyNetwork: {PolicyParts}.Network(4), actionSize: 2, explorationStrategy: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+            ["DeterministicPolicy"] = $"policyNetwork: {PolicyParts}.Network(2), actionSize: 2, explorationStrategy: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+            ["BetaPolicy"] = $"policyNetwork: {PolicyParts}.Network(4), actionSize: 2, explorationStrategy: {NoExplorationExpr}, actionMin: -1.0, actionMax: 3.0, random: {PolicyParts}.Random()",
+            ["MultiModalPolicy"] = $"policyNetwork: {PolicyParts}.Network(15), actionSize: 2, numComponents: 3, explorationStrategy: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+            ["MixedPolicy"] = $"discreteNetwork: {PolicyParts}.Network(3), continuousNetwork: {PolicyParts}.Network(4), discreteActionSize: 3, continuousActionSize: 2, discreteExploration: {NoExplorationExpr}, continuousExploration: {NoExplorationExpr}, random: {PolicyParts}.Random()",
+        };
 
     /// <summary>Overridable surface of <c>VideoSafetyModuleTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VideoSafetyModuleTestBaseMembers =
@@ -3661,8 +3750,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                     || (model.HasLeadingIntConstructor
                                         && model.UsesMatrixInput && model.UsesVectorOutput)
                                     || family.Value is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation or TestFamily.MetaLearning
+                                        or TestFamily.Sharded
                                         or TestFamily.ClassificationMetaLearning
-                                    || ExplicitlyConstructedClassNames.Contains(model.ClassName)) &&
+                                    || ExplicitlyConstructedClassNames.Contains(model.ClassName)
+                                    // A self-supervised method wraps parts the caller supplies; its fixture builds them.
+                                    || (family.Value == TestFamily.SelfSupervised && SslFixtureArgs.ContainsKey(model.ClassName))
+                                    // A policy is built from a network and an exploration strategy its fixture supplies.
+                                    || (family.Value == TestFamily.Policy && PolicyFixtureArgs.ContainsKey(model.ClassName))) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -3972,7 +4066,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsNeck = false;
         bool extendsInstanceSegmenter = false;
         bool extendsVideoSafety = false;
+        bool extendsTextSafety = false, extendsAudioSafety = false;
         bool extendsVae = false;
+        bool extendsNoisePredictor = false;
+        bool extendsSsl = false;
+        bool extendsSharded = false;
+        bool extendsPolicy = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
         bool extendsClassicalVolatility = false;
@@ -4056,6 +4155,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // rather than NeuralNetworkBase, so without their own families they fell through to
         // NeuralNetwork and were rejected for not implementing INeuralNetworkModel.
         bool extendsObjectDetector = false, extendsTextDetector = false, extendsOcr = false;
+
+        // #2147: a model that sizes its layers from its options declares SizesLayersFromOptions (itself or through a base
+        // such as FinancialModelBase); NeuralNetworkBase's own declaration is the default, not a declaration.
+        bool sizesLayersFromOptions = false;
+        for (INamedTypeSymbol? declaring = modelClass; declaring is not null; declaring = declaring.BaseType)
+        {
+            if (declaring.Name != "NeuralNetworkBase" && declaring.GetMembers("SizesLayersFromOptions").Length > 0)
+            {
+                sizesLayersFromOptions = true;
+                break;
+            }
+        }
 
         var baseType = modelClass.BaseType;
         while (baseType is not null)
@@ -4167,8 +4278,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsInstanceSegmenter = true;
             else if (baseName.StartsWith("VideoSafetyModuleBase", System.StringComparison.Ordinal))
                 extendsVideoSafety = true;
+            else if (baseName.StartsWith("TextSafetyModuleBase", System.StringComparison.Ordinal))
+                extendsTextSafety = true;
+            else if (baseName.StartsWith("AudioSafetyModuleBase", System.StringComparison.Ordinal))
+                extendsAudioSafety = true;
             else if (baseName.StartsWith("VAEModelBase", System.StringComparison.Ordinal))
                 extendsVae = true;
+            else if (baseName.StartsWith("NoisePredictorBase", System.StringComparison.Ordinal))
+                extendsNoisePredictor = true;
+            else if (baseName.StartsWith("SelfSupervisedLearningMethodBase", System.StringComparison.Ordinal))
+                extendsSsl = true;
+            else if (baseName.StartsWith("ShardedModelBase", System.StringComparison.Ordinal))
+                extendsSharded = true;
+            else if (baseName.StartsWith("PolicyBase", System.StringComparison.Ordinal))
+                extendsPolicy = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
                 extendsDeepfakeDetector = true;
             else if (baseName.StartsWith("MetaLearnerBase", System.StringComparison.Ordinal))
@@ -4370,7 +4493,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsNeckBase = extendsNeck,
             ExtendsInstanceSegmenterBase = extendsInstanceSegmenter,
             ExtendsVideoSafetyModuleBase = extendsVideoSafety,
+            ExtendsTextSafetyModuleBase = extendsTextSafety,
+            ExtendsAudioSafetyModuleBase = extendsAudioSafety,
             ExtendsVAEModelBase = extendsVae,
+            ExtendsNoisePredictorBase = extendsNoisePredictor,
+            ExtendsSelfSupervisedLearningMethodBase = extendsSsl,
+            ExtendsShardedModelBase = extendsSharded,
+            ExtendsPolicyBase = extendsPolicy,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
             MetaLearnerOptionsType = metaLearnerOptionsType,
@@ -4412,6 +4541,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsVideoNeuralNetworkBase = extendsVideoNN,
             ExtendsTtsModelBase = extendsTts,
             ExtendsFinancialModelBase = extendsFinancial,
+            SizesLayersFromOptions = sizesLayersFromOptions,
             ExtendsNERNeuralNetworkBase = extendsNER,
             ExtendsCodeModelBase = extendsCode,
             ExtendsVideoDiffusionModelBase = extendsVideoDiffusion,
@@ -4963,6 +5093,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return null;
     }
 
+    private static readonly System.Text.RegularExpressions.Regex StatedOutputSize =
+        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*\d+|outputSize:\s*\d+,\s*",
+            System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
+
+    /// <summary>Removes every <c>outputSize: n</c> argument from a generated constructor expression (#2147).</summary>
+    private static string OmitStatedOutputSize(string expression) => StatedOutputSize.Replace(expression, string.Empty);
+
     private static bool InheritsFromAnyExcludedBase(INamedTypeSymbol type)
     {
         string selfName = type.Name;
@@ -5062,10 +5199,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsVideoSafetyModuleBase)
             return TestFamily.VideoSafetyModule;
 
+        // Text and audio safety modules judge text and waveforms, which the vector fixture cannot give them (#2139).
+        if (model.ExtendsTextSafetyModuleBase)
+            return TestFamily.TextSafetyModule;
+        if (model.ExtendsAudioSafetyModuleBase)
+            return TestFamily.AudioSafetyModule;
         // A VAE implements IVAEModel, not IDiffusionModel or INeuralNetworkModel: it is judged on encode, decode and
         // its latent contract (#2139).
         if (model.ExtendsVAEModelBase)
             return TestFamily.VAE;
+        // A noise predictor is the denoiser inside a diffusion model, judged on PredictNoise directly (#2139).
+        if (model.ExtendsNoisePredictorBase)
+            return TestFamily.NoisePredictor;
+        // A self-supervised method is judged on TrainStep and Encode, built from small real parts (#2139).
+        if (model.ExtendsSelfSupervisedLearningMethodBase)
+            return TestFamily.SelfSupervised;
+        // A sharded training wrapper is judged against the model it wraps, at world size 1 (#2139).
+        if (model.ExtendsShardedModelBase)
+            return TestFamily.Sharded;
+        // An RL policy is the state-to-action half of an agent, judged on its own contract (#2139).
+        if (model.ExtendsPolicyBase)
+            return TestFamily.Policy;
 
         // Deepfake detectors report a finding only above their threshold, and nothing a generic content vector
         // holds is a deepfake, so the vector fixture could only watch them stay quiet. Their base gives each one
@@ -5654,7 +5808,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // finding only when its score clears the threshold, so on random content they correctly
             // report nothing and the confidence invariants would examine no findings at all. A zero
             // threshold makes every score report, so those invariants run over the real scores.
-            if (model.ClassName is "ViTImageSafetyClassifier" or "EnsembleImageSafetyClassifier")
+            if (model.ExtendsNoisePredictorBase && NoisePredictorFixtureArgs.TryGetValue(model.ClassName, out var noisePredictorArgs))
+            {
+                constructorExpr = $"new {typeName}<double>({noisePredictorArgs})";
+            }
+            else if (model.ExtendsVAEModelBase && VAEFixtureArgs.TryGetValue(model.ClassName, out var vaeArgs))
+            {
+                constructorExpr = $"new {typeName}<double>({vaeArgs})";
+            }
+            else if (model.ExtendsSelfSupervisedLearningMethodBase && SslFixtureArgs.TryGetValue(model.ClassName, out var sslArgs))
+            {
+                constructorExpr = $"new {typeName}<double>({sslArgs})";
+            }
+            else if (model.ExtendsPolicyBase && PolicyFixtureArgs.TryGetValue(model.ClassName, out var policyArgs))
+            {
+                constructorExpr = $"new {typeName}<double>({policyArgs})";
+            }
+            else if (model.ClassName is "ViTImageSafetyClassifier" or "EnsembleImageSafetyClassifier")
             {
                 constructorExpr = $"new {typeName}<double>(threshold: 0.0)";
             }
@@ -6999,7 +7169,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputSize: 4, outputSize: 3), " +
+                    // #2147: the stated input is the options' 16-token sequence length.
+                    "inputSize: 16, outputSize: 3), " +
                     "new AiDotNet.Models.Options.FinMAOptions<double> { MaxSequenceLength = 16, " +
                     "VocabularySize = 64, HiddenDimension = 32, NumAttentionHeads = 4, " +
                     "IntermediateDimension = 64, NumLayers = 2, NumClasses = 3, NumAgents = 1, " +
@@ -10281,7 +10452,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 128, outputSize: 4), " +
+                    // #2147: the stated input is the default options' 512-token sequence length.
+                    "inputSize: 512, outputSize: 4), " +
                     "new AiDotNet.Models.Options.SECBERTOptions<double> { DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "SpeakerLM" && model.TypeParameterCount == 1)
@@ -13892,6 +14064,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         inputSize1D = GetForecastingPaperContextLength(model.ClassName);
                     }
 
+                    // The volatility models take their whole input geometry from their options (a lookback window of
+                    // NumAssets series, NumAssets = 1 by default) and read nothing from the architecture, so the
+                    // finance agreement check refuses the generic 16 as an architecture describing another model.
+                    // State the one series they are built for.
+                    if (model.ClassName is "NeuralGARCH" or "RealizedVolatilityTransformer")
+                    {
+                        inputSize1D = 1;
+                    }
+
+                    // The factor models size their input layer from their options' NumFeatures (50 by default),
+                    // so the generic 16 states an input the model was not built for (#2147).
+                    if (model.ClassName is "AlphaFactorModel" or "FactorVAE")
+                    {
+                        inputSize1D = 50;
+                    }
+
+                    // Likewise NeuralVaR (10 features by default) and TSMixer, whose flat input size is its feature
+                    // count (7 by default), not a context length (#2147).
+                    if (model.ClassName == "NeuralVaR")
+                    {
+                        inputSize1D = 10;
+                    }
+                    if (model.ClassName == "TSMixer")
+                    {
+                        inputSize1D = 7;
+                    }
+
                     // Sequence-labeling NER models (LSTM-CRF family) are language-domain, so the
                     // generic branch above picks inputSize1D=128 — but the NER InputShape override
                     // below feeds [seqLen, EmbeddingDimension] with EmbeddingDimension=100. The
@@ -14005,6 +14204,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             factoryBody = $"        => {constructorExpr};";
         }
 
+        // #2147: a model sized from its options refuses an architecture stating an OutputSize it does not produce, and
+        // the generic fixture states 4 (or a per-model guess) for every model. The output is the options', so the
+        // fixture leaves it unset, which is never refused. The input size stays: a one-dimensional architecture
+        // requires one, and the per-model input sizes above are the options' own.
+        if (model.SizesLayersFromOptions)
+        {
+            constructorExpr = OmitStatedOutputSize(constructorExpr);
+            factoryBody = OmitStatedOutputSize(factoryBody);
+        }
+
         if (family == TestFamily.GraphNN)
         {
             // Graph models require explicit structure (strict PyTorch-Geometric contract); the scaffold
@@ -14092,7 +14301,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "NeckTestBase"
             || baseClassName == "InstanceSegmenterTestBase"
             || baseClassName == "VideoSafetyModuleTestBase"
+            || baseClassName == "TextSafetyModuleTestBase"
+            || baseClassName == "AudioSafetyModuleTestBase"
             || baseClassName == "VAEModelTestBase"
+            || baseClassName == "NoisePredictorTestBase"
+            || baseClassName == "SelfSupervisedLearningMethodTestBase"
+            || baseClassName == "ShardedModelTestBase"
+            || baseClassName == "PolicyTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
             || baseClassName == "ClassificationMetaLearnerTestBase"
@@ -18233,7 +18448,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // second copy of a number the base already holds - the pattern behind every architecture /
         // fixture disagreement this generator has produced.
         bool parameterizedFactory = family is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation
-            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning;
+            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning or TestFamily.Sharded;
         if (family == TestFamily.TensorModule)
         {
             sb.AppendLine($"    protected override {returnTypeCode} CreateModel(int width)");
@@ -18263,6 +18478,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override bool MetaModelFrozenByDesign => true;");
             }
+        }
+        else if (family == TestFamily.Sharded)
+        {
+            // The base compares against an identical twin of the wrapped network, so the wrapper is built from the
+            // same shared parts the base uses.
+            const string tensor = "AiDotNet.Tensors.LinearAlgebra.Tensor<double>";
+            const string parts = "global::AiDotNet.Tests.ModelFamilyTests.Base.ShardedFixtureParts";
+            sb.AppendLine($"    protected override {returnTypeCode} CreateWrapper()");
+            sb.AppendLine($"        => new {typeName}<double, {tensor}, {tensor}>({parts}.Network(), {parts}.Config());");
         }
         else if (family == TestFamily.ClassificationMetaLearning)
         {
@@ -18521,7 +18745,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.Neck => NeckTestBaseMembers,
             TestFamily.InstanceSegmentation => InstanceSegmenterTestBaseMembers,
             TestFamily.VideoSafetyModule => VideoSafetyModuleTestBaseMembers,
+            TestFamily.TextSafetyModule => TextSafetyModuleTestBaseMembers,
+            TestFamily.AudioSafetyModule => AudioSafetyModuleTestBaseMembers,
             TestFamily.VAE => VAEModelTestBaseMembers,
+            TestFamily.NoisePredictor => NoisePredictorTestBaseMembers,
+            TestFamily.SelfSupervised => SelfSupervisedTestBaseMembers,
+            TestFamily.Sharded => ShardedModelTestBaseMembers,
+            TestFamily.Policy => PolicyTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
             TestFamily.ClassificationMetaLearning => ClassificationMetaLearnerTestBaseMembers,
@@ -18680,8 +18910,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsInstanceSegmenterBase;
             case TestFamily.VideoSafetyModule:
                 return model.ExtendsVideoSafetyModuleBase;
+            case TestFamily.TextSafetyModule:
+                return model.ExtendsTextSafetyModuleBase;
+            case TestFamily.AudioSafetyModule:
+                return model.ExtendsAudioSafetyModuleBase;
             case TestFamily.VAE:
                 return model.ExtendsVAEModelBase;
+            case TestFamily.NoisePredictor:
+                return model.ExtendsNoisePredictorBase;
+            case TestFamily.SelfSupervised:
+                return model.ExtendsSelfSupervisedLearningMethodBase;
+            case TestFamily.Sharded:
+                return model.ExtendsShardedModelBase && model.TypeParameterCount == 3;
+            case TestFamily.Policy:
+                return model.ExtendsPolicyBase;
             case TestFamily.DeepfakeDetector:
                 return model.ExtendsDeepfakeDetectorBase;
             case TestFamily.MetaLearning:
@@ -21087,8 +21329,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// <summary>True for a video safety module, which is judged on clips through EvaluateVideo.</summary>
         public bool ExtendsVideoSafetyModuleBase { get; set; }
 
+        /// <summary>True for a text safety module, which is judged on text through EvaluateText.</summary>
+        public bool ExtendsTextSafetyModuleBase { get; set; }
+
+        /// <summary>True for an audio safety module, which is judged on waveforms through EvaluateAudio.</summary>
+        public bool ExtendsAudioSafetyModuleBase { get; set; }
         /// <summary>True for a latent-diffusion VAE, which is judged on encode, decode and its latent contract.</summary>
         public bool ExtendsVAEModelBase { get; set; }
+        /// <summary>True for a diffusion noise predictor, which is judged on PredictNoise.</summary>
+        public bool ExtendsNoisePredictorBase { get; set; }
+        /// <summary>True for a self-supervised learning method, judged on TrainStep and Encode.</summary>
+        public bool ExtendsSelfSupervisedLearningMethodBase { get; set; }
+        /// <summary>True for a sharded training wrapper, judged against the model it wraps.</summary>
+        public bool ExtendsShardedModelBase { get; set; }
+        /// <summary>True for an RL policy, judged on its own contract rather than an agent's.</summary>
+        public bool ExtendsPolicyBase { get; set; }
 
         /// <summary>True for an image deepfake detector, which is judged on images through GetDeepfakeScore.</summary>
         public bool ExtendsDeepfakeDetectorBase { get; set; }
@@ -21219,6 +21474,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsLatentDiffusionModelBase { get; set; }
         public bool ExtendsTtsModelBase { get; set; }
         public bool ExtendsFinancialModelBase { get; set; }
+        /// <summary>The model sizes its layers from its options and refuses an architecture stating other sizes (#2147).</summary>
+        public bool SizesLayersFromOptions { get; set; }
         public bool ExtendsNERNeuralNetworkBase { get; set; }
         public bool ExtendsCodeModelBase { get; set; }
         // Phase B: Leaf-level hierarchy
@@ -21318,7 +21575,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Neck,
         InstanceSegmentation,
         VideoSafetyModule,
+        TextSafetyModule,
+        AudioSafetyModule,
         VAE,
+        NoisePredictor,
+        SelfSupervised,
+        Sharded,
+        Policy,
         DeepfakeDetector,
         MetaLearning,
         ClassificationMetaLearning,
@@ -21826,6 +22089,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // scale was measured insufficient (3m32s for the generated class), so this generated
             // CI factory uses ContextLength=64 while retaining the same recurrent architecture.
             "Hippo" => 64,
+            // #2147: these models size themselves from their options' sequence length and used to ignore the
+            // architecture, so the family default of 512 below was stated for models built for 96, 12 or 168 steps
+            // without anyone noticing. FinancialModelBase now refuses an architecture that disagrees, so each states
+            // its own options' default sequence length here.
+            "Crossformer" or "FEDformer" or "ITransformer" or "NonStationaryTransformer" or "PatchTST" => 96,
+            "DCRNN" or "GraphWaveNet" or "MTGNN" or "RelationalGCN" or "STGNN" or "TemporalGCN" => 12,
+            "CSDI" => 100,
+            "CCDM" or "ScoreGrad" or "TimeDiff" => 168,
+            "TSDiff" => 192,
+            "TS2Vec" => 200,
+            "S4" => 1024,
+            "FlowState" => 2048,
             // 512 is the modal paper default across the family.
             _ => 512,
         };
@@ -22142,7 +22417,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.Neck:                  return "NeckTestBase";
             case TestFamily.InstanceSegmentation:  return "InstanceSegmenterTestBase";
             case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
+            case TestFamily.TextSafetyModule:      return "TextSafetyModuleTestBase";
+            case TestFamily.AudioSafetyModule:     return "AudioSafetyModuleTestBase";
             case TestFamily.VAE:                   return "VAEModelTestBase";
+            case TestFamily.NoisePredictor:        return "NoisePredictorTestBase";
+            case TestFamily.SelfSupervised:        return "SelfSupervisedLearningMethodTestBase";
+            case TestFamily.Sharded:               return "ShardedModelTestBase";
+            case TestFamily.Policy:                return "PolicyTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
@@ -22194,11 +22475,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // SafetyModuleTestBase asks for CreateModule, not CreateModel.
             case TestFamily.SafetyModule:
             case TestFamily.VideoSafetyModule:
+            case TestFamily.TextSafetyModule:
+            case TestFamily.AudioSafetyModule:
                 return "CreateModule";
             case TestFamily.DeepfakeDetector:
                 return "CreateDetector";
             case TestFamily.VAE:
                 return "CreateVAE";
+            case TestFamily.NoisePredictor:
+                return "CreatePredictor";
+            case TestFamily.SelfSupervised:
+                return "CreateMethod";
+            case TestFamily.Sharded:
+                return "CreateWrapper";
+            case TestFamily.Policy:
+                return "CreatePolicy";
             case TestFamily.Neck:
                 return "CreateNeck";
             case TestFamily.InstanceSegmentation:
@@ -22265,8 +22556,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase<double>";
             case TestFamily.VideoSafetyModule:
                 return "AiDotNet.Interfaces.IVideoSafetyModule<double>";
+            case TestFamily.TextSafetyModule:
+                return "AiDotNet.Interfaces.ITextSafetyModule<double>";
+            case TestFamily.AudioSafetyModule:
+                return "AiDotNet.Interfaces.IAudioSafetyModule<double>";
             case TestFamily.VAE:
                 return "AiDotNet.Interfaces.IVAEModel<double>";
+            case TestFamily.NoisePredictor:
+                return "AiDotNet.Interfaces.INoisePredictor<double>";
+            case TestFamily.SelfSupervised:
+                return "AiDotNet.SelfSupervisedLearning.ISelfSupervisedLearningMethod<double>";
+            case TestFamily.Sharded:
+                return "AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
+            case TestFamily.Policy:
+                return "AiDotNet.ReinforcementLearning.Policies.PolicyBase<double>";
             case TestFamily.DeepfakeDetector:
                 return "AiDotNet.Safety.Image.IDeepfakeDetector<double>";
             case TestFamily.MetaLearning:

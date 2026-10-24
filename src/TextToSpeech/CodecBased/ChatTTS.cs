@@ -110,14 +110,12 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private VocosGenerator<T>? _vocos;
     private double[]? _speakerStd, _speakerMean;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed ChatTTS for inference.</summary>
     public ChatTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, ChatTTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new ChatTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         _tokenizer = WordPieceTokenizer.BertBaseChinese(ControlTokens);
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
@@ -137,6 +135,7 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new ChatTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
         _tokenizer = WordPieceTokenizer.BertBaseChinese(ControlTokens);

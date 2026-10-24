@@ -55,14 +55,14 @@ public partial class SeedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     /// </remarks>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
-    private readonly SeedASROptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly SeedASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public SeedASR(NeuralNetworkArchitecture<T> architecture, string modelPath, SeedASROptions? options = null) : base(architecture) { _options = options ?? new SeedASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
-    public SeedASR(NeuralNetworkArchitecture<T> architecture, SeedASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SeedASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, WeightDecay = _options.WeightDecay }); SetBaseTrainOptimizer(_optimizer); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
+    public SeedASR(NeuralNetworkArchitecture<T> architecture, string modelPath, SeedASROptions? options = null) : base(architecture) { _options = options ?? new SeedASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
+    public SeedASR(NeuralNetworkArchitecture<T> architecture, SeedASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SeedASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, WeightDecay = _options.WeightDecay }); SetBaseTrainOptimizer(_optimizer); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Seed-ASR's encoder + LLM decoder architecture.

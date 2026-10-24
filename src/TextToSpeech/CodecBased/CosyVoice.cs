@@ -79,8 +79,6 @@ public partial class CosyVoice<T> : CosyVoiceBase<T>
     private CosyVoiceLm<T>? _lm;
     private CosyVoiceFlowConfiguration? _flowConfiguration;
 
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="CosyVoice{T}"/> class in ONNX inference mode.
     /// </summary>
@@ -95,6 +93,7 @@ public partial class CosyVoice<T> : CosyVoiceBase<T>
         : base(architecture, (options ?? new CosyVoiceOptions()).SamplingSeed, modelPath, (options ?? new CosyVoiceOptions()).OnnxOptions)
     {
         _options = options ?? new CosyVoiceOptions();
+        Options = _options;
         _options.ModelPath = modelPath;
         _text = WhisperTiktoken.Multilingual(_options.TextLanguages);
         // The text vocabulary is the tokenizer's, as text_token_size is.
@@ -116,6 +115,7 @@ public partial class CosyVoice<T> : CosyVoiceBase<T>
         : base(architecture, (options ?? new CosyVoiceOptions()).SamplingSeed, optimizer)
     {
         _options = options ?? new CosyVoiceOptions();
+        Options = _options;
         _text = WhisperTiktoken.Multilingual(_options.TextLanguages);
         _options.VocabSize = _text.VocabularySize;
         Initialize();

@@ -68,8 +68,6 @@ public partial class PixtralLarge<T> : VisionLanguageModelBase<T>, IInstructionT
 {
     private readonly PixtralLargeOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -84,6 +82,7 @@ public partial class PixtralLarge<T> : VisionLanguageModelBase<T>, IInstructionT
         : base(architecture)
     {
         _options = options ?? new PixtralLargeOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -106,6 +105,7 @@ public partial class PixtralLarge<T> : VisionLanguageModelBase<T>, IInstructionT
         : base(architecture)
     {
         _options = options ?? new PixtralLargeOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

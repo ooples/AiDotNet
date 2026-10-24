@@ -76,9 +76,6 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _nmfBases;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     internal bool UseNativeMode => _useNativeMode;
     internal SegNeXtModelSize ModelSize => _options.ModelSize;
     internal SegNeXtNetwork<T> Network => _network ?? throw new InvalidOperationException("The native network is not initialized.");

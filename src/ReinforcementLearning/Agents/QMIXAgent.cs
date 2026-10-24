@@ -74,9 +74,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     private readonly QMIXOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     // The agent network every agent shares, and the mixing network.
@@ -144,6 +141,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         if (options.EpsilonAnnealSteps < 0) throw new ArgumentOutOfRangeException(nameof(options), options.EpsilonAnnealSteps, "EpsilonAnnealSteps cannot be negative.");
         if (!(options.MaxGradientNorm >= 0)) throw new ArgumentOutOfRangeException(nameof(options), options.MaxGradientNorm, "MaxGradientNorm cannot be negative (0 = no clipping).");
         _options = options;
+        Options = _options;
 
         // The paper's learning rate when none is given (the base's generic default is 1e-3).
         if (options.LearningRate is null || NumOps.Equals(options.LearningRate, NumOps.Zero))

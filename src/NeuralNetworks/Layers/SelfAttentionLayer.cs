@@ -1095,10 +1095,11 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // 1. Compute negative entropy (to encourage low entropy/focused attention)
         // H = -Σ(p * log(p))
         T totalNegativeEntropy = NumOps.Zero;
-        int numHeads = _headCount;
-        int seqLen = _sequenceLength;
-
-        // _lastAttentionScores has shape [batchSize, headCount, seqLen, seqLen]
+        // _lastAttentionScores has shape [batchSize, headCount, seqLen, seqLen]. The length is the last input's, read
+        // from the scores: a model that prepends tokens (U-ViT's time and context tokens) or runs a shorter sequence
+        // than the constructor's would otherwise leave tokens out of the loss or index past the scores.
+        int numHeads = _lastAttentionScores.Shape[1];
+        int seqLen = _lastAttentionScores.Shape[2];
         int batchSize = _lastAttentionScores.Shape[0];
 
         for (int b = 0; b < batchSize; b++)

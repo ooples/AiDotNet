@@ -70,17 +70,6 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
 
     private readonly EoMTOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this EoMT model.
-    /// </summary>
-    /// <returns>The <see cref="EoMTOptions"/> for this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only EoMT's OWN configuration lives here. _height, _width, _channels, _numClasses,

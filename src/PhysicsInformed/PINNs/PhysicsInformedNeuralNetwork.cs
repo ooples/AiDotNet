@@ -99,9 +99,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
     {
         private readonly PhysicsInformedNeuralNetworkOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         /// <summary>
         /// The PDE specification that defines the physics constraints.
         /// Protected to allow derived classes (e.g., MultiFidelityPINN) to evaluate residuals on custom solutions.
