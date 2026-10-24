@@ -57,10 +57,11 @@ namespace AiDotNet.NeuralNetworks
     [ResearchPaper("SGPT: GPT Sentence Embeddings for Semantic Search", "https://arxiv.org/abs/2202.08904", Year = 2022, Authors = "Niklas Muennighoff")]
     public partial class SGPT<T> : TransformerEmbeddingNetwork<T>
     {
-        private readonly SGPTOptions _options;
-
         /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
+        /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+        protected override bool SizesLayersFromOptions => true;
+
+        private readonly SGPTOptions _options;
 
         #region Fields
 
@@ -159,7 +160,6 @@ namespace AiDotNet.NeuralNetworks
             else
             {
                 Layers.AddRange(LayerHelper<T>.CreateDefaultSGPTLayers(
-                    Architecture,
                     _vocabSize,
                     EmbeddingDimension,
                     MaxTokens,

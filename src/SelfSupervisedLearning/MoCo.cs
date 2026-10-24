@@ -56,6 +56,11 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
     private readonly InfoNCELoss<T> _loss;
     private readonly SelfSupervisedLearningAugmentationPolicies<T> _augmentation;
     private readonly double _baseMomentum;
+    private readonly double _temperature;
+
+    // The keys of the step in flight, enqueued once the optimizer has stepped.
+    [Scratch]
+    private Tensor<T>? _pendingKeys;
 
     /// <inheritdoc />
     public override string Name => "MoCo";
@@ -95,6 +100,11 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
         Guard.NotNull(momentumEncoder);
         _momentumEncoder = momentumEncoder;
         _momentumProjector = momentumProjector;
+        // The momentum projector tracks the online one by EMA, element for element, so the two must match in size.
+        if (projector is not null && momentumProjector is not null && projector.ParameterCount != momentumProjector.ParameterCount)
+            throw new ArgumentException(
+                $"The momentum projector has {momentumProjector.ParameterCount} parameters; the projector it tracks has {projector.ParameterCount}.",
+                nameof(momentumProjector));
 
         var mocoConfig = _config.MoCo ?? new MoCoConfig();
         var queueSize = mocoConfig.QueueSize ?? 65536;
@@ -103,6 +113,7 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
         _memoryBank = new MemoryBank<T>(queueSize, embeddingDim, _config.Seed);
 
         var temperature = _config.Temperature ?? 0.07;
+        _temperature = temperature;
         _loss = new InfoNCELoss<T>(temperature);
         _augmentation = new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
     }
@@ -141,19 +152,75 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
         return new MoCo<T>(encoder, momentumEncoder, projector, momentumProjector, projectionDim, config);
     }
 
-    private void UpdateEncoderParameters(T learningRate)
+    /// <inheritdoc />
+    /// <remarks>
+    /// He et al. 2020, Eq. 1: a query from the online encoder is classified against its key (the momentum encoder's
+    /// view of the same image) among the queue's keys, l = -log exp(q.k+/t) / (exp(q.k+/t) + sum exp(q.k-/t)), with
+    /// both L2-normalized. Keys carry no gradient: the momentum branch follows the online one by EMA. Until the queue
+    /// holds keys, the batch's other keys are the negatives.
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2)
     {
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
+        var queries = ObjectiveOps.L2NormalizeRows(ProjectOnline(EncodeForTraining(view1)));
+        var keys = Engine.StopGradient(ObjectiveOps.L2NormalizeRows(EncodeKeys(view2)));
+        _pendingKeys = keys;
 
-        if (_projector is not null)
+        if (_memoryBank.CurrentSize == 0)
+            return _loss.ComputeLoss(queries, keys);
+
+        int n = queries.Shape[0];
+        var positive = Engine.ReduceSum(Engine.TensorMultiply(queries, keys), new[] { 1 }, keepDims: true); // [N, 1]
+        var negatives = Engine.TensorMatMul(queries, _memoryBank.GetAll().Transpose(new[] { 1, 0 }));     // [N, K]
+        var logits = Engine.TensorDivideScalar(Engine.Concat(new[] { positive, negatives }, 1), NumOps.FromDouble(_temperature));
+        var logProbs = ObjectiveOps.LogSoftmax(logits, axis: 1);
+        var positiveLogProb = Engine.TensorSlice(logProbs, new[] { 0, 0 }, new[] { n, 1 });
+        return Engine.TensorNegate(Engine.TensorDivideScalar(
+            Engine.ReduceSum(positiveLogProb, null, keepDims: false), NumOps.FromDouble(n)));
+    }
+
+    private Tensor<T> ProjectOnline(Tensor<T> features) => _projector is null ? features : _projector.Project(features);
+
+    /// <summary>The momentum branch's keys for a view: its encoder, then its projector when it has one.</summary>
+    protected Tensor<T> EncodeKeys(Tensor<T> view)
+    {
+        var features = _momentumEncoder.Encode(view);
+        return _momentumProjector is null ? features : _momentumProjector.Project(features);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The momentum encoder and projector follow the online ones by EMA; the step's keys join the queue.</remarks>
+    protected override void AfterOptimizerStep()
+    {
+        _momentumEncoder.UpdateFromMainEncoder(_encoder);
+        if (_projector is not null && _momentumProjector is not null)
         {
-            var projGrads = new Vector<T>(_projector.GetParameterGradients());
-            var projParams = _projector.GetParameters();
-            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
+            double m = _momentumEncoder.Momentum;
+            var online = _projector.GetParameters();
+            var target = _momentumProjector.GetParameters();
+            var updated = new Vector<T>(target.Length);
+            for (int i = 0; i < target.Length; i++)
+                updated[i] = NumOps.Add(NumOps.Multiply(target[i], NumOps.FromDouble(m)),
+                    NumOps.Multiply(online[i], NumOps.FromDouble(1.0 - m)));
+            _momentumProjector.SetParameters(updated);
+        }
+
+        if (_pendingKeys is { } keys)
+        {
+            _memoryBank.Enqueue(keys);
+            _pendingKeys = null;
         }
     }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => _augmentation.ApplyMoCoV2(batch);
+
+    /// <inheritdoc />
+    /// <remarks>The paper trains with SGD (momentum 0.9, learning rate 0.03, Sec. 4).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.SGD;
+
+    /// <inheritdoc />
+    protected override double DefaultLearningRate => 0.03;
 
     /// <inheritdoc />
     public override void Reset()

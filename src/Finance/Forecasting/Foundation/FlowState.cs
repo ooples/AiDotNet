@@ -82,9 +82,6 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly FlowStateOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _stateDimension;
@@ -217,7 +214,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFlowStateLayers(
-                Architecture, _contextLength, _forecastHorizon,
+                _contextLength, _forecastHorizon,
                 _stateDimension, _hiddenDimension, _numLayers, _dropout,
                 _ssmRank, _useDiscretization));
             ExtractLayerReferences();
@@ -289,7 +286,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
             throw new NotSupportedException("FlowState does not support quantile forecasting. Pass null for point forecasts.");
@@ -386,7 +383,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var current = ApplyInstanceNormalization(input);
+        var current = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         bool addedBatchDim = false;
         if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
 
@@ -430,7 +427,7 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
             return base.GetNamedLayerActivations(input);
 
         var activations = new Dictionary<string, Tensor<T>>();
-        var current = ApplyInstanceNormalization(input);
+        var current = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         if (current.Rank == 1)
             current = current.Reshape(new[] { 1, current.Length });
         for (int i = 0; i < Layers.Count; i++)

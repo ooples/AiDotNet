@@ -73,9 +73,6 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
 {
     private readonly GOTOCR2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private const string SystemTurn = "system\nYou should follow the instructions carefully and explain your answers in detail.";
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -96,6 +93,7 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
         : base(architecture)
     {
         _options = options ?? new GOTOCR2Options();
+        Options = _options;
         _options.Validate();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -125,6 +123,7 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
         : base(architecture)
     {
         _options = options ?? new GOTOCR2Options();
+        Options = _options;
         if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0
             && architecture.InputHeight == architecture.InputWidth)
             _options.ImageSize = architecture.InputHeight;

@@ -77,10 +77,16 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Tan and Le 2019, Sec. 5.2: RMSProp with decay 0.9 and momentum 0.9, weight decay 1e-5, and an initial learning rate of 0.256 decaying by 0.97 every 2.4 epochs. The batch size (4096) and the epsilon (1e-3) are the official TPU code's (tpu/models/official/efficientnet, after MnasNet), which scales the rate linearly with the batch. The decay is applied per epoch at 0.97^(1/2.4), the same decay over every 2.4 epochs without the official staircase.")]
 public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
-    private readonly EfficientNetOptions _options;
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
+    /// <remarks>An architecture may state the image it is configured for, height x width x channels (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        new[] { _configuration.GetInputHeight() * _configuration.GetInputWidth() * _configuration.InputChannels };
+
+    private readonly EfficientNetOptions _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly EfficientNetConfiguration _configuration;

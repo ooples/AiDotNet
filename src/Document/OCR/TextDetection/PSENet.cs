@@ -71,9 +71,6 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly PSENetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

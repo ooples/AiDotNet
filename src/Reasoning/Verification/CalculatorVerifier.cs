@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Data;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
@@ -157,9 +158,11 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
         var percentMatches = Regex.Matches(text, @"([0-9\.]+)%\s+of\s+([0-9\.]+)", RegexOptions.None, RegexTimeout);
         foreach (Match match in percentMatches)
         {
-            double percent = double.Parse(match.Groups[1].Value);
-            double number = double.Parse(match.Groups[2].Value);
-            string expr = $"{percent / 100} * {number}";
+            // The operands match [0-9.]+, so they carry no thousands separator; the expression is written, and later
+            // read back, in the invariant culture so a comma-decimal culture cannot turn 0.25 into 25 (#2359).
+            double percent = double.Parse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
+            double number = double.Parse(match.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
+            string expr = FormattableString.Invariant($"{percent / 100} * {number}");
 
             // Try to find the claimed result nearby
             var resultMatch = Regex.Match(text, $@"{Regex.Escape(match.Value)}[^\d]*([0-9\.]+)", RegexOptions.None, RegexTimeout);
@@ -201,11 +204,11 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
             // Round to reasonable precision
             if (Math.Abs(value - Math.Round(value)) < 0.0001)
             {
-                return Math.Round(value).ToString();
+                return Math.Round(value).ToString(CultureInfo.InvariantCulture);
             }
             else
             {
-                return Math.Round(value, 4).ToString();
+                return Math.Round(value, 4).ToString(CultureInfo.InvariantCulture);
             }
         }
         catch
@@ -224,11 +227,12 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
             var match = Regex.Match(expression, @"([0-9\.]+)\s*\*\*\s*([0-9\.]+)", RegexOptions.None, RegexTimeout);
             if (!match.Success) break;
 
-            double baseNum = double.Parse(match.Groups[1].Value);
-            double exponent = double.Parse(match.Groups[2].Value);
+            double baseNum = double.Parse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
+            double exponent = double.Parse(match.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
             double result = Math.Pow(baseNum, exponent);
 
-            expression = expression.Replace(match.Value, result.ToString());
+            // "R" round-trips the value, and the invariant culture keeps the "." the next parse expects (#2359).
+            expression = expression.Replace(match.Value, result.ToString("R", CultureInfo.InvariantCulture));
         }
 
         return expression;
@@ -239,10 +243,10 @@ internal class CalculatorVerifier<T> : IExternalToolVerifier<T>
     /// </summary>
     private bool CompareResults(string expected, string actual)
     {
-        if (!double.TryParse(expected, out double expectedValue))
+        if (!double.TryParse(expected, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double expectedValue))
             return false;
 
-        if (!double.TryParse(actual, out double actualValue))
+        if (!double.TryParse(actual, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double actualValue))
             return false;
 
         // Allow small floating point differences

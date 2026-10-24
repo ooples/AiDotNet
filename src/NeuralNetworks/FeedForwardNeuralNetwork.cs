@@ -51,9 +51,6 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
 {
     private readonly FeedForwardNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>

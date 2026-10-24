@@ -60,9 +60,6 @@ public partial class BSVD<T> : VideoDenoisingBase<T>
 {
     private readonly BSVDOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -77,6 +74,7 @@ public partial class BSVD<T> : VideoDenoisingBase<T>
         : base(architecture)
     {
         _options = options ?? new BSVDOptions();
+        Options = _options;
         _useNativeMode = false;
         IsBlindDenoising = true;
         _options.ModelPath = modelPath;
@@ -94,6 +92,7 @@ public partial class BSVD<T> : VideoDenoisingBase<T>
         : base(architecture)
     {
         _options = options ?? new BSVDOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamOptimizer<T, Tensor<T>, Tensor<T>>(

@@ -80,8 +80,6 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     private readonly ILossFunction<T> _lossFunction;
     private readonly CCDMOptions<T> _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _numFeatures;
@@ -297,7 +295,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             Layers.AddRange(Architecture.Layers);
         else
             Layers.AddRange(LayerHelper<T>.CreateDefaultCCDMLayers(
-                Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads,
+                _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads,
                 _dropout, _embeddingLayers, _mlpRatio, _attentionDropout));
         _ = Parts();
     }
@@ -454,7 +452,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// with quantiles it is the requested empirical quantiles of the same paths, shaped
     /// [batch, horizon, quantiles] (or [batch, horizon, variables, quantiles] with several variables).
     /// </summary>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null)
         {

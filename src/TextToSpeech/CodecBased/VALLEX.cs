@@ -108,9 +108,6 @@ public partial class VALLEX<T> : VallEModelBase<T>
     private VALLEXOptions XOptions => (VALLEXOptions)Settings;
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => Settings;
-
-    /// <inheritdoc />
     /// <remarks>The English espeak table and <see cref="MandarinG2P.Symbols"/>, in one table (symbols both languages use,
     /// such as punctuation and the word separator, once).</remarks>
     protected override IReadOnlyList<string> PhonemeTable => Table.Value;

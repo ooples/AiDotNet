@@ -181,9 +181,6 @@ public partial class BarkModel<T> : TtsModelBase<T>
         StreamingTraining = StreamingTrainingMode.Auto;
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>The validated Bark configuration.</summary>
     public BarkOptions BarkConfiguration => new(_options);
 

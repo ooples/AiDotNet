@@ -65,9 +65,6 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
 {
     private readonly AttentionNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The maximum length of sequences this network can process.
     /// </summary>

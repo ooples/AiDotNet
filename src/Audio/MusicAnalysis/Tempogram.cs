@@ -53,7 +53,6 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
     #region Fields
 
     private readonly TempogramOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -79,6 +78,7 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         : base(architecture)
     {
         _options = options ?? new TempogramOptions();
+        Options = _options;
 
         // Onset detection needs a SPECTRAL front-end. SampleRate, FftSize and HopLength were all
         // declared in the options and then never used for preprocessing: PreprocessAudio returned the
@@ -104,6 +104,7 @@ public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         : base(architecture)
     {
         _options = options ?? new TempogramOptions();
+        Options = _options;
 
         // Onset detection needs a SPECTRAL front-end. SampleRate, FftSize and HopLength were all
         // declared in the options and then never used for preprocessing: PreprocessAudio returned the

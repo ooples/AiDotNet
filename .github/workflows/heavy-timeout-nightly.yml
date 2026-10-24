@@ -356,3 +356,41 @@ jobs:
           name: heavy-timeout-results-${{ matrix.slice }}
           path: artifacts/heavy-timeout
           if-no-files-found: ignore
+
+  # #2087: the lane failed five nights running before anyone noticed, because nothing reported it. A failed
+  # scheduled run now opens a tracking issue, or comments on the one already open, linking the run; a green
+  # scheduled run closes it. A manual dispatch never touches the issue, so an experiment cannot raise or clear it.
+  notify:
+    name: Report the nightly result
+    needs: heavy-timeout
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ needs.heavy-timeout.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='Heavy Timeout Models (nightly) is failing'
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+          if [ "$RESULT" = "success" ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --comment "The nightly passed: $RUN_URL"
+            fi
+            exit 0
+          fi
+          body="The nightly run ended **$RESULT**: $RUN_URL
+
+          Each slice's summary lists every class with its outcome, time and memory. Refs #2087, #1706."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

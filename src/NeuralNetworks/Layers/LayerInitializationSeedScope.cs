@@ -91,7 +91,22 @@ internal static class LayerInitializationSeedScope
         _rng = effectiveSeed.HasValue
             ? RandomHelper.CreateSeededRandom(effectiveSeed.Value)
             : null;
+        _pendingModelSeed = null;
     }
+
+    // A seed the model under construction holds but has not handed to the base yet. Most models keep their options
+    // in a field of their own (_options) that the base reads only through GetOptions(), so the base constructor,
+    // which runs first, cannot see the options seed when it resets this scope. It defers instead: the first layer
+    // that asks for a seed once the model's options exist applies that seed, exactly as assigning Options would have.
+    [ThreadStatic]
+    private static Func<bool>? _pendingModelSeed;
+
+    /// <summary>
+    /// Defers this construction's seed to the model being constructed. <paramref name="tryApply"/> runs when a layer
+    /// next asks for a seed; it returns <c>false</c> while the model has no options yet (it is asked again on the
+    /// next request) and <c>true</c> once it has applied its options' seed or found none.
+    /// </summary>
+    internal static void DeferToModelSeed(Func<bool> tryApply) => _pendingModelSeed = tryApply;
 
     /// <summary>
     /// Captures the current construction scope so a caller that reseeds it for a nested construction can
@@ -104,8 +119,27 @@ internal static class LayerInitializationSeedScope
     /// belong to whatever is constructed next. That matters because of the lazy arming in
     /// <see cref="NextSeedOrNull"/>: layers passed as constructor ARGUMENTS are built before the model
     /// constructor body runs, so they would draw from the stale seed rather than their own.
+    /// <para>
+    /// The snapshot also holds the enclosing model's deferred options seed (<see cref="DeferToModelSeed"/>). A nested
+    /// model's own constructor resets the scope and clears that deferral, so without it the enclosing model's later
+    /// layers could no longer apply its options seed.
+    /// </para>
     /// </remarks>
-    internal static Random? CaptureScope() => _rng;
+    internal static ScopeSnapshot CaptureScope() => new ScopeSnapshot(_rng, _pendingModelSeed);
+
+    /// <summary>The construction scope <see cref="CaptureScope"/> saved: the seed sequence and any deferred seed.</summary>
+    internal readonly struct ScopeSnapshot
+    {
+        internal ScopeSnapshot(Random? rng, Func<bool>? pendingModelSeed)
+        {
+            Rng = rng;
+            PendingModelSeed = pendingModelSeed;
+        }
+
+        internal Random? Rng { get; }
+
+        internal Func<bool>? PendingModelSeed { get; }
+    }
 
     [ThreadStatic]
     private static bool _nestedBackboneSeedOffered;
@@ -135,8 +169,12 @@ internal static class LayerInitializationSeedScope
         return NextSeedOrNull();
     }
 
-    /// <summary>Restores a scope captured by <see cref="CaptureScope"/>.</summary>
-    internal static void RestoreScope(Random? capturedScope) => _rng = capturedScope;
+    /// <summary>Restores a scope captured by <see cref="CaptureScope"/>, including its deferred seed.</summary>
+    internal static void RestoreScope(ScopeSnapshot capturedScope)
+    {
+        _rng = capturedScope.Rng;
+        _pendingModelSeed = capturedScope.PendingModelSeed;
+    }
 
     /// <summary>
     /// Returns the next deterministic per-layer init seed, or <c>null</c> when no
@@ -146,6 +184,13 @@ internal static class LayerInitializationSeedScope
     /// </summary>
     internal static int? NextSeedOrNull()
     {
+        // Cleared before the call: applying the seed resets this scope, and that reset must not re-enter it.
+        if (_pendingModelSeed is { } pending)
+        {
+            _pendingModelSeed = null;
+            if (!pending())
+                _pendingModelSeed ??= pending;
+        }
         // ARM LAZILY FROM THE AMBIENT SEED.
         //
         // ResetForModelConstruction runs inside the model's constructor, but a layer can be built

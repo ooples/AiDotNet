@@ -79,12 +79,11 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
     private GradTtsScoreEstimator<T>? _teacher;
     private GradTtsScoreEstimator<T>? _target;
 
-    public override ModelOptions GetOptions() => _options;
-
     public CoMoSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, CoMoSpeechOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new CoMoSpeechOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
@@ -107,6 +106,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         : base(architecture)
     {
         _options = options ?? new CoMoSpeechOptions();
+        Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;

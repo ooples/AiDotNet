@@ -73,19 +73,6 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegFormerOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this SegFormer model.
-    /// </summary>
-    /// <returns>The <see cref="SegFormerOptions"/> used to configure this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control how the model behaves, including the random seed
-    /// for reproducibility. This returns the options that were passed in when creating the model,
-    /// or the defaults if none were provided.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only SegFormer's OWN configuration lives here. _height, _width, _channels, _numClasses,

@@ -84,9 +84,6 @@ public partial class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
     /// <summary>Gets the word+character embedding front-end layer (null until layers are initialized).</summary>
     public WordCharEmbeddingLayer<T>? EmbeddingFrontEnd => _embeddingFrontEnd;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Constructs a word+char BiLSTM-CRF over a prebuilt <see cref="NerTextEncoder"/>.
     /// Prefer <see cref="Create"/>, which builds the encoder from training data for you.
@@ -104,6 +101,7 @@ public partial class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
     {
         _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
         _options = options ?? new BiLSTMCRFOptions();
+        Options = _options;
         if (_options.LabelNames.Length != _options.NumLabels)
             throw new ArgumentException(
                 $"LabelNames length ({_options.LabelNames.Length}) must match NumLabels ({_options.NumLabels}).");

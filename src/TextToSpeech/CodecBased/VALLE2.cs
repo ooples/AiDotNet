@@ -99,9 +99,6 @@ public partial class VALLE2<T> : VallEModelBase<T>
     private VallE2Core<T> Core2 => _core2 ?? throw new InvalidOperationException("VALL-E 2's networks exist in native mode only.");
 
     /// <inheritdoc />
-    public override ModelOptions GetOptions() => Settings;
-
-    /// <inheritdoc />
     protected override IReadOnlyList<string> PhonemeTable => LibriTtsPhonemeTable.Symbols;
 
     /// <inheritdoc />

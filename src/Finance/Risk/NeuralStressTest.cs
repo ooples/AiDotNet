@@ -51,9 +51,6 @@ public partial class NeuralStressTest<T> : RiskModelBase<T>
 
     private readonly NeuralStressTestOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
@@ -80,7 +77,8 @@ public partial class NeuralStressTest<T> : RiskModelBase<T>
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 10,
-            outputSize: 1))
+            // One impact per stress scenario: the default 10 scenarios (#2147).
+            outputSize: 10))
     {
     }
 
@@ -161,7 +159,6 @@ public partial class NeuralStressTest<T> : RiskModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralStressTestLayers(
-                Architecture,
                 _options.NumFeatures,
                 _options.HiddenDimension,
                 _options.NumScenarios,

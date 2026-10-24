@@ -54,9 +54,6 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VisionTransformerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The size of each square patch.
     /// </summary>

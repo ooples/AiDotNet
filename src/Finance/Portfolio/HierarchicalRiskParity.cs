@@ -51,9 +51,6 @@ public partial class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
 
     private readonly HierarchicalRiskParityOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _hiddenDimension;
@@ -77,7 +74,8 @@ public partial class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 10,
-            outputSize: 1))
+            // One weight per asset for the default 10 assets (#2147).
+            outputSize: 10))
     {
     }
 
@@ -146,7 +144,6 @@ public partial class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultHierarchicalRiskParityLayers(
-                Architecture,
                 NumFeatures,
                 _hiddenDimension,
                 _numAssets,

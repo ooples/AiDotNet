@@ -84,14 +84,12 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <summary>The number of entries in the released symbol table (178).</summary>
     public const int SymbolCount = StyleTtsFrontEnd<T>.SymbolCount;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates an ONNX-backed StyleTTS for inference.</summary>
     public StyleTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, StyleTTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new StyleTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();
@@ -109,6 +107,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new StyleTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();

@@ -54,8 +54,6 @@ public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DoubleQLearningOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable1;
     private Dictionary<string, Dictionary<int, T>> _qTable2;
     private double _epsilon;
@@ -78,6 +76,7 @@ public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         _options = options;
+        Options = _options;
         _qTable1 = new Dictionary<string, Dictionary<int, T>>();
         _qTable2 = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = _options.EpsilonStart;

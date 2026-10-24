@@ -106,9 +106,6 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphClassificationOptions _options;
 
-    /// <inheritdoc/>
-    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
-
     private readonly GraphPooling _poolingType;
     [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;

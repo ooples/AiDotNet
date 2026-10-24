@@ -53,9 +53,6 @@ public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the hidden layer (number of neurons).
     /// </summary>

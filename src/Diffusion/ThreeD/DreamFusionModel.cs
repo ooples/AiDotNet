@@ -349,7 +349,8 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         var embSpan = embedding.AsWritableSpan();
 
         // Simple hash-based embedding for fallback
-        int hash = text.GetHashCode();
+        // A stable hash: string.GetHashCode() changes per process (#2361).
+        int hash = AiDotNet.Helpers.StableHash.Seed(text);
         var rng = RandomHelper.CreateSeededRandom(hash);
 
         for (int i = 0; i < embSpan.Length; i++)
