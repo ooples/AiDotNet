@@ -463,7 +463,13 @@ internal sealed class CosyVoiceLm<T>
     /// (without it) when it already occurs at least <c>window · ratio</c> times among the last <c>window</c> tokens.
     /// </summary>
     internal static int SampleRepetitionAware(double[] logProbabilities, IReadOnlyList<int> decoded, CosyVoiceLmConfiguration c, Random random)
+        => SampleRepetitionAware(logProbabilities, decoded, c.TopP, c.TopK, c.RepetitionWindow, c.RepetitionRatio, random);
+
+    /// <inheritdoc cref="SampleRepetitionAware(double[], IReadOnlyList{int}, CosyVoiceLmConfiguration, Random)"/>
+    internal static int SampleRepetitionAware(double[] logProbabilities, IReadOnlyList<int> decoded, double topP, int topK,
+        int repetitionWindow, double repetitionRatio, Random random)
     {
+        var c = (TopP: topP, TopK: topK, RepetitionWindow: repetitionWindow, RepetitionRatio: repetitionRatio);
         var probabilities = logProbabilities.Select(Math.Exp).ToArray();
         var order = Enumerable.Range(0, probabilities.Length).OrderByDescending(v => probabilities[v]).ThenBy(v => v).ToList();
         var kept = new List<int>();

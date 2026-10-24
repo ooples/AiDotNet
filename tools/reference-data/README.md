@@ -21,6 +21,7 @@ that produce those values, so you can check them yourself or regenerate them.
 | `cosyvoice_flow_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_flow_reference.json` | FunAudioLLM/CosyVoice's `MaskedDiffWithXvec`, `InterpolateRegulator` and `ConditionalCFM` (pass checkouts with `--cosyvoice` and `--matcha`) |
 | `cosyvoice_lm_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_lm_reference.json` | FunAudioLLM/CosyVoice's `TransformerLM` (pass checkouts with `--cosyvoice` and `--matcha`) |
 | `s3tokenizer_reference.py` | `TextToSpeech/ReferenceData/s3tokenizer_reference.json` | xingchensong/S3Tokenizer v1 at 9bf5d84, the PyTorch form of CosyVoice's `speech_tokenizer_v1` (pass a checkout with `--s3tokenizer`) |
+| `cosyvoice2_lm_reference.py` | `TextToSpeech/ReferenceData/cosyvoice2_lm_reference.json` | FunAudioLLM/CosyVoice's `Qwen2LM` over transformers 5.18's `Qwen2ForCausalLM` (pass `--cosyvoice` and `--matcha`) |
 | `cosyvoice_frontend_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_frontend_reference.json` | FunAudioLLM/CosyVoice's `text_normalize` without an external normalizer, with inflect 7.3.1 (pass a checkout with `--cosyvoice`) |
 | `world_harvest_reference.py` | `TextToSpeech/ReferenceData/world_harvest_reference.json` | pyworld 0.3.5's `harvest` and `stonemask` (WORLD's C++), and CosyVoice's `compute_f0` built on them |
 | `whisper_tiktoken_reference.py` | `TextToSpeech/ReferenceData/whisper_tiktoken_reference.json` | openai-whisper 20250625's multilingual tiktoken encoding at 99 and 100 languages, CosyVoice's text tokenizer |
