@@ -180,7 +180,7 @@ public class ExperimentTracker : IExperimentTracker
         }
 
         var runId = GenerateRunId();
-        var experiment = _experiments[_activeExperiment];
+        var experiment = _experiments[(_activeExperiment ?? throw new InvalidOperationException("_activeExperiment is null where it is required."))];
 
         var run = new RunInfo
         {

@@ -389,7 +389,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private Interfaces.ICreditRule<T>? _creditRule;
 
     /// <summary>Deterministic RNG seeding the credit rule's fixed feedback matrices (allocated once).</summary>
-    private Random _creditRuleRandom = new(12345);
+    /// <remarks>
+    /// Built through RandomHelper like the seeded assignment in <see cref="SetCreditRule"/>, so both paths
+    /// produce the same runtime type. Constructing Random directly here made a model saved after
+    /// SetCreditRule carry a different random type than a freshly constructed one, and the state registry
+    /// rejects that mismatch when the model is deserialized.
+    /// </remarks>
+    private Random _creditRuleRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(12345);
 
     /// <summary>
     /// Selects a pluggable credit-assignment rule for training. Passing <c>null</c> restores the default
