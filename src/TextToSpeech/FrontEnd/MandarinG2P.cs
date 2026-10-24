@@ -1,8 +1,5 @@
-using System.Globalization;
-using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
-using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.FrontEnd;
 
@@ -30,31 +27,8 @@ public sealed class MandarinG2P
 {
     private static readonly Lazy<MandarinG2P> SharedInstance = new(() => new MandarinG2P(), isThreadSafe: true);
 
-    // pypinyin
-    private readonly Dictionary<string, string[]> _phrases = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _phrasePrefixes = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _characters = new(StringComparer.Ordinal);
-
     private MandarinG2P()
     {
-        foreach (var line in ReadLines("pypinyin_chars.tsv.gz"))
-        {
-            int tab = line.IndexOf('\t');
-            _characters[line.Substring(0, tab)] = line.Substring(tab + 1);
-        }
-        foreach (var line in ReadLines("pypinyin_phrases.tsv.gz"))
-        {
-            int tab = line.IndexOf('\t');
-            string phrase = line.Substring(0, tab);
-            _phrases[phrase] = line.Substring(tab + 1).Split(' ');
-            var codepoints = Codepoints(phrase);
-            var prefix = new StringBuilder();
-            foreach (var c in codepoints)
-            {
-                prefix.Append(c);
-                _phrasePrefixes.Add(prefix.ToString());
-            }
-        }
     }
 
     /// <summary>Every symbol <see cref="Phonemize"/> produces from Chinese, punctuation and Latin letters (characters it
@@ -64,41 +38,9 @@ public sealed class MandarinG2P
     /// <summary>The shared instance (the dictionaries load once, on first use).</summary>
     public static MandarinG2P Default => SharedInstance.Value;
 
-    private static IEnumerable<string> ReadLines(string resource)
-    {
-        var assembly = typeof(MandarinG2P).Assembly;
-        string name = assembly.GetManifestResourceNames().Single(n => n.EndsWith(resource, StringComparison.Ordinal));
-        using var stream = assembly.GetManifestResourceStream(name)!;
-        using var gzip = new GZipStream(stream, CompressionMode.Decompress);
-        using var reader = new StreamReader(gzip, Encoding.UTF8);
-        var lines = new List<string>();
-        for (string? line = reader.ReadLine(); line is not null; line = reader.ReadLine())
-            if (line.Length > 0) lines.Add(line);
-        return lines;
-    }
-
-    // Python iterates strings by code point; supplementary characters are surrogate pairs here.
-    private static List<string> Codepoints(string text)
-    {
-        var result = new List<string>(text.Length);
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
-            {
-                result.Add(text.Substring(i, 2));
-                i++;
-            }
-            else
-            {
-                result.Add(text[i].ToString());
-            }
-        }
-        return result;
-    }
-
     /// <summary>The phonemes of <paramref name="text"/>: one symbol per IPA character, words separated by <c>_</c>.</summary>
     public IReadOnlyList<string> Phonemize(string text) =>
-        Codepoints(ToIpa(text)).Select(c => c == " " ? "_" : c).ToList();
+        ChineseText.Codepoints(ToIpa(text)).Select(c => c == " " ? "_" : c).ToList();
 
     /// <summary>The reference's <c>chinese_to_ipa</c> of <paramref name="text"/>.</summary>
     public string ToIpa(string text)
@@ -131,8 +73,9 @@ public sealed class MandarinG2P
         return text;
     }
 
-    /// <summary>cn2an's <c>an2cn</c> in its default "low" mode.</summary>
-    internal static string AnToCn(string number)
+    /// <summary>cn2an's <c>an2cn</c> in its default "low" mode; <paramref name="joinThousands"/> false is the copy
+    /// EmotiVoice vendors, which predates cn2an's rewrite of 万零X千 and 亿零X千 as 万X千 and 亿X千.</summary>
+    internal static string AnToCn(string number, bool joinThousands = true)
     {
         foreach (char c in number)
             if (!(c is >= '0' and <= '9' || c == '.' || c == '-'))
@@ -141,7 +84,7 @@ public sealed class MandarinG2P
         if (sign.Length > 0) number = number.Substring(1);
         var parts = number.Split('.');
         if (parts.Length > 2) throw new ArgumentException($"Malformed number '{number}'.", nameof(number));
-        string output = IntegerToCn(parts[0]);
+        string output = IntegerToCn(parts[0], joinThousands);
         if (parts.Length == 2)
         {
             string decimals = parts[1].Length > 16 ? parts[1].Substring(0, 16) : parts[1];
@@ -151,7 +94,7 @@ public sealed class MandarinG2P
         return sign + output;
     }
 
-    private static string IntegerToCn(string digits)
+    private static string IntegerToCn(string digits, bool joinThousands)
     {
         // str(int(...)): leading zeros dropped (an empty integer part is int("") in Python, an error).
         if (digits.Length == 0) throw new ArgumentException("cn2an needs an integer part.", nameof(digits));
@@ -174,7 +117,7 @@ public sealed class MandarinG2P
             }
         }
         string result = output.ToString().Replace("零零", "零").Replace("零万", "万").Replace("零亿", "亿").Replace("亿万", "亿").Trim('零');
-        result = Regex.Replace(result, "([万亿])零([一二三四五六七八九壹贰叁肆伍陆柒捌玖][千仟])", "$1$2");
+        if (joinThousands) result = Regex.Replace(result, "([万亿])零([一二三四五六七八九壹贰叁肆伍陆柒捌玖][千仟])", "$1$2");
         if (result.StartsWith("一十", StringComparison.Ordinal)) result = result.Substring(1);
         return result.Length == 0 ? "零" : result;
     }
@@ -186,7 +129,7 @@ public sealed class MandarinG2P
     {
         text = text.Replace('、', '，').Replace('；', '，').Replace('：', '，');
         var output = new StringBuilder();
-        foreach (var word in JiebaCut(text))
+        foreach (var word in Jieba.Default.Cut(text))
         {
             if (!Regex.IsMatch(word, "[一-鿿]"))
             {
@@ -194,7 +137,7 @@ public sealed class MandarinG2P
                 continue;
             }
             if (output.Length > 0) output.Append(' ');
-            foreach (var reading in LazyPinyin(word))
+            foreach (var reading in PypinyinReader.Bopomofo.Read(word))
                 output.Append(Regex.Replace(reading, "([ㄅ-ㄩ])$", "$1ˉ"));
         }
         return output.ToString();
@@ -232,110 +175,8 @@ public sealed class MandarinG2P
     {
         var symbols = new SortedSet<string>(StringComparer.Ordinal) { "_", "j", "w", "ɹ", "`" };
         foreach (var (_, replacement) in BopomofoToIpa)
-            foreach (var c in Codepoints(replacement)) symbols.Add(c);
+            foreach (var c in ChineseText.Codepoints(replacement)) symbols.Add(c);
         return symbols.ToList();
     }, isThreadSafe: true);
 
-    // pypinyin's RE_HANS character ranges.
-    private static readonly (int From, int To)[] HanRanges =
-    {
-        (0x3007, 0x3007), (0xE815, 0xE864), (0xFA18, 0xFA18), (0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xF900, 0xFAFF),
-        (0x20000, 0x2A6DF), (0x2A703, 0x2B73F), (0x2B740, 0x2B81D), (0x2B825, 0x2BF6E), (0x2C029, 0x2CE93),
-        (0x2D016, 0x2D016), (0x2D11B, 0x2EBD9), (0x2F80A, 0x2FA1F), (0x30000, 0x3134A), (0x300F7, 0x31288),
-        (0x30EDD, 0x30EDE), (0x31350, 0x32389),
-    };
-
-    internal static bool IsHan(string codepoint)
-    {
-        int value = char.ConvertToUtf32(codepoint, 0);
-        foreach (var (from, to) in HanRanges)
-            if (value >= from && value <= to) return true;
-        return false;
-    }
-
-    // lazy_pinyin(word, BOPOMOFO): simple_seg into Han and other runs, the Han runs cut by forward maximum matching on
-    // the phrase dictionary (no_non_phrases), each piece read as a phrase or character by character; a run without a
-    // reading is kept as written.
-    private IEnumerable<string> LazyPinyin(string word)
-    {
-        var codepoints = Codepoints(word);
-        var runs = new List<(bool Han, List<string> Text)>();
-        foreach (var c in codepoints)
-        {
-            bool han = IsHan(c);
-            if (runs.Count == 0 || runs[runs.Count - 1].Han != han) runs.Add((han, new List<string>()));
-            runs[runs.Count - 1].Text.Add(c);
-        }
-        foreach (var (han, text) in runs)
-        {
-            if (!han)
-            {
-                yield return string.Concat(text);
-                continue;
-            }
-            foreach (var piece in MaximumMatching(text))
-                foreach (var reading in Convert(piece)) yield return reading;
-        }
-    }
-
-    // pypinyin.seg.mmseg.Seg(no_non_phrases=True).cut
-    private IEnumerable<List<string>> MaximumMatching(List<string> text)
-    {
-        int start = 0;
-        while (start < text.Count)
-        {
-            int lastValid = 0;
-            bool broke = false;
-            for (int index = start; index < text.Count; index++)
-            {
-                string candidate = string.Concat(text.GetRange(start, index - start + 1));
-                if (_phrasePrefixes.Contains(candidate))
-                {
-                    if (_phrases.ContainsKey(candidate)) lastValid = index - start + 1;
-                }
-                else
-                {
-                    if (lastValid > 0)
-                    {
-                        yield return text.GetRange(start, lastValid);
-                        start += lastValid;
-                    }
-                    else
-                    {
-                        yield return text.GetRange(start, 1);
-                        start += 1;
-                    }
-                    broke = true;
-                    break;
-                }
-            }
-            if (broke) continue;
-            // The whole remainder is a prefix.
-            if (lastValid > 0)
-            {
-                yield return text.GetRange(start, lastValid);
-                start += lastValid;
-            }
-            else
-            {
-                string remain = string.Concat(text.GetRange(start, text.Count - start));
-                if (_phrases.ContainsKey(remain)) yield return text.GetRange(start, text.Count - start);
-                else
-                    foreach (var c in text.GetRange(start, text.Count - start)) yield return new List<string> { c };
-                yield break;
-            }
-        }
-    }
-
-    // DefaultConverter.convert(word, BOPOMOFO, heteronym=False, errors="default"): the phrase's readings, or each
-    // character's (a character without a reading is kept as written). mmseg yields phrases and single characters only.
-    private IEnumerable<string> Convert(List<string> piece)
-    {
-        if (piece.Count > 1 && _phrases.TryGetValue(string.Concat(piece), out var readings))
-            return readings;
-        return piece.Select(c => _characters.TryGetValue(c, out var reading) ? reading : c);
-    }
-
-    /// <summary>jieba's <c>lcut(text, cut_all=False)</c> (HMM on), from the shared <see cref="JiebaSegmenter"/>.</summary>
-    internal List<string> JiebaCut(string sentence) => JiebaSegmenter.Default.Cut(sentence);
 }

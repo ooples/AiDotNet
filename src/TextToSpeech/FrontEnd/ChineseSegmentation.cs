@@ -6,16 +6,52 @@ using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.FrontEnd;
 
-/// <summary>
-/// jieba 0.42.1 (MIT), the Chinese word segmenter: <c>lcut</c> (its prefix dictionary's maximum-probability route, with
-/// the B/M/E/S HMM for unknown words), <c>cut_for_search</c> (plus the dictionary's 2- and 3-character sub-words), and
-/// <c>jieba.posseg.lcut</c> (the same route, words tagged from the dictionary, unknown runs segmented and tagged by the
-/// part-of-speech HMM). The dictionaries are jieba's own, exported by <c>tools/reference-data/mandarin_g2p_resources.py</c>
-/// and <c>melo_chinese_resources.py</c>.
-/// </summary>
-internal sealed class JiebaSegmenter
+/// <summary>Reading the Chinese front ends' embedded resources, and Python's code-point view of a string.</summary>
+internal static class ChineseText
 {
-    private static readonly Lazy<JiebaSegmenter> SharedInstance = new(() => new JiebaSegmenter(), isThreadSafe: true);
+    internal static IEnumerable<string> ReadLines(string resource)
+    {
+        var assembly = typeof(ChineseText).Assembly;
+        string name = assembly.GetManifestResourceNames().Single(n => n.EndsWith("." + resource, StringComparison.Ordinal));
+        using var stream = assembly.GetManifestResourceStream(name)!;
+        using var gzip = new GZipStream(stream, CompressionMode.Decompress);
+        using var reader = new StreamReader(gzip, Encoding.UTF8);
+        var lines = new List<string>();
+        for (string? line = reader.ReadLine(); line is not null; line = reader.ReadLine())
+            if (line.Length > 0) lines.Add(line);
+        return lines;
+    }
+
+    // Python iterates strings by code point; supplementary characters are surrogate pairs here.
+    internal static List<string> Codepoints(string text)
+    {
+        var result = new List<string>(text.Length);
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                result.Add(text.Substring(i, 2));
+                i++;
+            }
+            else
+            {
+                result.Add(text[i].ToString());
+            }
+        }
+        return result;
+    }
+}
+
+/// <summary>
+/// jieba 0.42.1 (MIT): <c>lcut</c> (its prefix dictionary's maximum-probability route, with the B/M/E/S HMM for unknown
+/// words), <c>lcut_for_search</c> (plus the dictionary's 2- and 3-character sub-words) and <c>posseg.lcut</c> (the same
+/// route, words tagged from the dictionary, unknown runs segmented and tagged by the part-of-speech HMM). The dictionaries
+/// are jieba's own, exported by <c>tools/reference-data/mandarin_g2p_resources.py</c> and
+/// <c>melo_chinese_resources.py</c>.
+/// </summary>
+internal sealed class Jieba
+{
+    private static readonly Lazy<Jieba> SharedInstance = new(() => new Jieba(), isThreadSafe: true);
 
     private readonly Dictionary<string, long> _frequency = new(StringComparer.Ordinal);
     private readonly double _logTotal;
@@ -25,20 +61,20 @@ internal sealed class JiebaSegmenter
     private readonly Lazy<Dictionary<string, string>> _tags;
     private readonly Lazy<PosModel> _posModel;
 
-    /// <summary>The shared instance (the dictionaries load once, on first use).</summary>
-    public static JiebaSegmenter Default => SharedInstance.Value;
+    /// <summary>The shared instance (the dictionary loads once, on first use).</summary>
+    public static Jieba Default => SharedInstance.Value;
 
-    private JiebaSegmenter()
+    private Jieba()
     {
         long total = 0;
-        foreach (var line in ReadLines("jieba_dict.tsv.gz"))
+        foreach (var line in ChineseText.ReadLines("jieba_dict.tsv.gz"))
         {
             int tab = line.IndexOf('\t');
             string word = line.Substring(0, tab);
             long frequency = long.Parse(line.Substring(tab + 1), CultureInfo.InvariantCulture);
             _frequency[word] = frequency;
             total += frequency;
-            var codepoints = Codepoints(word);
+            var codepoints = ChineseText.Codepoints(word);
             var prefix = new StringBuilder();
             for (int i = 0; i < codepoints.Count - 1; i++)
             {
@@ -49,7 +85,7 @@ internal sealed class JiebaSegmenter
         }
         _logTotal = Math.Log(total);
 
-        var hmm = JObject.Parse(string.Join("\n", ReadLines("jieba_hmm.json.gz")));
+        var hmm = JObject.Parse(string.Join("\n", ChineseText.ReadLines("jieba_hmm.json.gz")));
         foreach (var state in (JObject)hmm["start"]!)
             _hmmStart[state.Key[0]] = (double)state.Value!;
         foreach (var from in (JObject)hmm["trans"]!)
@@ -68,51 +104,15 @@ internal sealed class JiebaSegmenter
         _tags = new Lazy<Dictionary<string, string>>(() =>
         {
             var tags = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var line in ReadLines("jieba_pos.tsv.gz"))
+            foreach (var line in ChineseText.ReadLines("jieba_pos.tsv.gz"))
             {
                 int tab = line.IndexOf('\t');
                 tags[line.Substring(0, tab)] = line.Substring(tab + 1);
             }
             return tags;
         }, isThreadSafe: true);
-        _posModel = new Lazy<PosModel>(() => new PosModel(JObject.Parse(string.Join("\n", ReadLines("jieba_posseg.json.gz")))), isThreadSafe: true);
+        _posModel = new Lazy<PosModel>(() => new PosModel(JObject.Parse(string.Join("\n", ChineseText.ReadLines("jieba_posseg.json.gz")))), isThreadSafe: true);
     }
-
-    internal static IEnumerable<string> ReadLines(string resource)
-    {
-        var assembly = typeof(JiebaSegmenter).Assembly;
-        string name = assembly.GetManifestResourceNames().Single(n => n.EndsWith(resource, StringComparison.Ordinal));
-        using var stream = assembly.GetManifestResourceStream(name)!;
-        using var gzip = new GZipStream(stream, CompressionMode.Decompress);
-        using var reader = new StreamReader(gzip, Encoding.UTF8);
-        var lines = new List<string>();
-        for (string? line = reader.ReadLine(); line is not null; line = reader.ReadLine())
-            if (line.Length > 0) lines.Add(line);
-        return lines;
-    }
-
-    /// <summary>Python iterates strings by code point; supplementary characters are surrogate pairs here.</summary>
-    internal static List<string> Codepoints(string text)
-    {
-        var result = new List<string>(text.Length);
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
-            {
-                result.Add(text.Substring(i, 2));
-                i++;
-            }
-            else
-            {
-                result.Add(text[i].ToString());
-            }
-        }
-        return result;
-    }
-
-    private long? Frequency(string word) => _frequency.TryGetValue(word, out long f) ? f : null;
-
-    // ---------------------------------------------------------------- lcut / cut_for_search
 
     private static readonly Regex JiebaHan = new("([一-鿕a-zA-Z0-9+#&\\._%\\-]+)");
     private static readonly Regex JiebaSkip = new("(\r\n|\\s)");
@@ -128,14 +128,14 @@ internal sealed class JiebaSegmenter
             if (block.Length == 0) continue;
             if (JiebaHan.IsMatch(block) && JiebaHan.Match(block).Index == 0)
             {
-                words.AddRange(CutDag(Codepoints(block)));
+                words.AddRange(CutDag(ChineseText.Codepoints(block)));
                 continue;
             }
             foreach (var x in JiebaSkip.Split(block))
             {
                 if (x.Length == 0) continue;
                 if (JiebaSkip.Match(x) is { Success: true, Index: 0 }) words.Add(x);
-                else words.AddRange(Codepoints(x));
+                else words.AddRange(ChineseText.Codepoints(x));
             }
         }
         return words;
@@ -148,7 +148,7 @@ internal sealed class JiebaSegmenter
         var result = new List<string>();
         foreach (var word in Cut(sentence))
         {
-            var w = Codepoints(word);
+            var w = ChineseText.Codepoints(word);
             if (w.Count > 2)
                 for (int i = 0; i < w.Count - 1; i++)
                 {
@@ -166,11 +166,14 @@ internal sealed class JiebaSegmenter
         return result;
     }
 
+    private long? Frequency(string word) => _frequency.TryGetValue(word, out long f) ? f : null;
+
     // Tokenizer.get_DAG and calc: the maximum-probability route over the dictionary's words.
-    private (int End, double Score)[] Route(List<string> sentence)
+    private (double Score, int End)[] Route(List<string> sentence)
     {
         int n = sentence.Count;
         string Slice(int from, int to) => string.Concat(sentence.GetRange(from, to - from));
+        // get_DAG
         var dag = new List<int>[n];
         for (int k = 0; k < n; k++)
         {
@@ -186,7 +189,8 @@ internal sealed class JiebaSegmenter
             if (ends.Count == 0) ends.Add(k);
             dag[k] = ends;
         }
-        var route = new (int End, double Score)[n + 1];
+        // calc: route[idx] = max over x of (log(FREQ[sentence[idx:x+1]] or 1) − log total + route[x+1].0, x)
+        var route = new (double Score, int End)[n + 1];
         route[n] = (0, 0);
         for (int idx = n - 1; idx >= 0; idx--)
         {
@@ -197,7 +201,7 @@ internal sealed class JiebaSegmenter
                 double score = Math.Log(f == 0 ? 1 : f) - _logTotal + route[x + 1].Score;
                 if (score > best.Score || (score == best.Score && x > best.End)) best = (score, x);
             }
-            route[idx] = (best.End, best.Score);
+            route[idx] = best;
         }
         return route;
     }
@@ -206,6 +210,7 @@ internal sealed class JiebaSegmenter
     private IEnumerable<string> CutDag(List<string> sentence)
     {
         int n = sentence.Count;
+        string Slice(int from, int to) => string.Concat(sentence.GetRange(from, to - from));
         var route = Route(sentence);
         var buffer = new StringBuilder();
         int bufferCount = 0;
@@ -217,7 +222,7 @@ internal sealed class JiebaSegmenter
             else if (Frequency(pending) is not > 0)
                 foreach (var t in FinalSegCut(pending)) yield return t;
             else
-                foreach (var c in Codepoints(pending)) yield return c;
+                foreach (var c in ChineseText.Codepoints(pending)) yield return c;
             buffer.Clear();
             bufferCount = 0;
         }
@@ -233,7 +238,7 @@ internal sealed class JiebaSegmenter
             else
             {
                 foreach (var t in Flush()) yield return t;
-                yield return string.Concat(sentence.GetRange(at, y - at));
+                yield return Slice(at, y);
             }
             at = y;
         }
@@ -248,7 +253,7 @@ internal sealed class JiebaSegmenter
             if (block.Length == 0) continue;
             if (HmmHan.Match(block) is { Success: true, Index: 0 } m && m.Length == block.Length)
             {
-                foreach (var word in Viterbi(Codepoints(block))) yield return word;
+                foreach (var word in Viterbi(ChineseText.Codepoints(block))) yield return word;
                 continue;
             }
             foreach (var x in HmmSkip.Split(block))
@@ -367,7 +372,7 @@ internal sealed class JiebaSegmenter
         {
             if (PosHanInternal.Match(block) is { Success: true, Index: 0 })
             {
-                result.AddRange(PosCutDag(Codepoints(block)));
+                result.AddRange(PosCutDag(ChineseText.Codepoints(block)));
                 continue;
             }
             foreach (var x in PosSkipInternal.Split(block))
@@ -377,7 +382,7 @@ internal sealed class JiebaSegmenter
                     result.Add((x, "x"));
                     continue;
                 }
-                foreach (var xx in Codepoints(x))
+                foreach (var xx in ChineseText.Codepoints(x))
                 {
                     // The reference tests the whole run x for English, not the character xx.
                     if (PosNum.IsMatch(xx)) result.Add((xx, "m"));
@@ -432,7 +437,7 @@ internal sealed class JiebaSegmenter
         {
             if (PosHanDetail.Match(block) is { Success: true, Index: 0 })
             {
-                foreach (var t in PosViterbiCut(Codepoints(block))) yield return t;
+                foreach (var t in PosViterbiCut(ChineseText.Codepoints(block))) yield return t;
                 continue;
             }
             foreach (var x in PosSkipDetail.Split(block))
@@ -520,5 +525,152 @@ internal sealed class JiebaSegmenter
             }
         }
         if (nextIndex < obs.Count) yield return (string.Concat(obs.GetRange(nextIndex, obs.Count - nextIndex)), route[nextIndex].Substring(2));
+    }
+}
+
+/// <summary>
+/// pypinyin 0.55.0's reading of a word (<c>lazy_pinyin</c> and <c>pinyin</c> with their defaults: Han and other runs, the
+/// Han runs cut by maximum matching on the phrase dictionary, each piece read as a phrase or character by character, the
+/// first reading only, a run without a reading kept as written), over readings exported in one style.
+/// </summary>
+internal sealed class PypinyinReader
+{
+    private static readonly Lazy<PypinyinReader> BopomofoInstance =
+        new(() => new PypinyinReader("pypinyin_chars.tsv.gz", "pypinyin_phrases.tsv.gz"), isThreadSafe: true);
+
+    private static readonly Lazy<PypinyinReader> EmotiVoiceInstance =
+        new(() => new PypinyinReader("emotivoice_pinyin_chars.tsv.gz", "emotivoice_pinyin_phrases.tsv.gz"), isThreadSafe: true);
+
+    private readonly Dictionary<string, string[]> _phrases = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _phrasePrefixes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _characters = new(StringComparer.Ordinal);
+
+    /// <summary>pypinyin's BOPOMOFO style (VALL-E X's front end).</summary>
+    public static PypinyinReader Bopomofo => BopomofoInstance.Value;
+
+    /// <summary>pypinyin's TONE3 style with the neutral tone as 5, with pypinyin-dict's CC-CEDICT phrases loaded
+    /// (EmotiVoice's front end; <c>tools/reference-data/emotivoice_frontend_reference.py</c>).</summary>
+    public static PypinyinReader EmotiVoiceTone3 => EmotiVoiceInstance.Value;
+
+    private PypinyinReader(string characters, string phrases)
+    {
+        foreach (var line in ChineseText.ReadLines(characters))
+        {
+            int tab = line.IndexOf('\t');
+            _characters[line.Substring(0, tab)] = line.Substring(tab + 1);
+        }
+        foreach (var line in ChineseText.ReadLines(phrases))
+        {
+            int tab = line.IndexOf('\t');
+            string phrase = line.Substring(0, tab);
+            _phrases[phrase] = line.Substring(tab + 1).Split(' ');
+            var codepoints = ChineseText.Codepoints(phrase);
+            var prefix = new StringBuilder();
+            foreach (var c in codepoints)
+            {
+                prefix.Append(c);
+                _phrasePrefixes.Add(prefix.ToString());
+            }
+        }
+    }
+
+    // pypinyin's RE_HANS character ranges.
+    private static readonly (int From, int To)[] HanRanges =
+    {
+        (0x3007, 0x3007), (0xE815, 0xE864), (0xFA18, 0xFA18), (0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xF900, 0xFAFF),
+        (0x20000, 0x2A6DF), (0x2A703, 0x2B73F), (0x2B740, 0x2B81D), (0x2B825, 0x2BF6E), (0x2C029, 0x2CE93),
+        (0x2D016, 0x2D016), (0x2D11B, 0x2EBD9), (0x2F80A, 0x2FA1F), (0x30000, 0x3134A), (0x300F7, 0x31288),
+        (0x30EDD, 0x30EDE), (0x31350, 0x32389),
+    };
+
+    internal static bool IsHan(string codepoint)
+    {
+        int value = char.ConvertToUtf32(codepoint, 0);
+        foreach (var (from, to) in HanRanges)
+            if (value >= from && value <= to) return true;
+        return false;
+    }
+
+    // lazy_pinyin(word, BOPOMOFO): simple_seg into Han and other runs, the Han runs cut by forward maximum matching on
+    // the phrase dictionary (no_non_phrases), each piece read as a phrase or character by character; a run without a
+    // reading is kept as written.
+    public IEnumerable<string> Read(string word)
+    {
+        var codepoints = ChineseText.Codepoints(word);
+        var runs = new List<(bool Han, List<string> Text)>();
+        foreach (var c in codepoints)
+        {
+            bool han = IsHan(c);
+            if (runs.Count == 0 || runs[runs.Count - 1].Han != han) runs.Add((han, new List<string>()));
+            runs[runs.Count - 1].Text.Add(c);
+        }
+        foreach (var (han, text) in runs)
+        {
+            if (!han)
+            {
+                yield return string.Concat(text);
+                continue;
+            }
+            foreach (var piece in MaximumMatching(text))
+                foreach (var reading in Convert(piece)) yield return reading;
+        }
+    }
+
+    // pypinyin.seg.mmseg.Seg(no_non_phrases=True).cut
+    private IEnumerable<List<string>> MaximumMatching(List<string> text)
+    {
+        int start = 0;
+        while (start < text.Count)
+        {
+            int lastValid = 0;
+            bool broke = false;
+            for (int index = start; index < text.Count; index++)
+            {
+                string candidate = string.Concat(text.GetRange(start, index - start + 1));
+                if (_phrasePrefixes.Contains(candidate))
+                {
+                    if (_phrases.ContainsKey(candidate)) lastValid = index - start + 1;
+                }
+                else
+                {
+                    if (lastValid > 0)
+                    {
+                        yield return text.GetRange(start, lastValid);
+                        start += lastValid;
+                    }
+                    else
+                    {
+                        yield return text.GetRange(start, 1);
+                        start += 1;
+                    }
+                    broke = true;
+                    break;
+                }
+            }
+            if (broke) continue;
+            // The whole remainder is a prefix.
+            if (lastValid > 0)
+            {
+                yield return text.GetRange(start, lastValid);
+                start += lastValid;
+            }
+            else
+            {
+                string remain = string.Concat(text.GetRange(start, text.Count - start));
+                if (_phrases.ContainsKey(remain)) yield return text.GetRange(start, text.Count - start);
+                else
+                    foreach (var c in text.GetRange(start, text.Count - start)) yield return new List<string> { c };
+                yield break;
+            }
+        }
+    }
+
+    // DefaultConverter.convert(word, BOPOMOFO, heteronym=False, errors="default"): the phrase's readings, or each
+    // character's (a character without a reading is kept as written). mmseg yields phrases and single characters only.
+    private IEnumerable<string> Convert(List<string> piece)
+    {
+        if (piece.Count > 1 && _phrases.TryGetValue(string.Concat(piece), out var readings))
+            return readings;
+        return piece.Select(c => _characters.TryGetValue(c, out var reading) ? reading : c);
     }
 }

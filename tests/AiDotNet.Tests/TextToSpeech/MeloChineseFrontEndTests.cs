@@ -84,7 +84,7 @@ public class MeloChineseFrontEndTests
             for (int i = 0; i < sentences.Count; i++)
             {
                 string expected = string.Join(" ", sentences[i].EnumerateArray().Select(p => $"{p[0].GetString()}/{p[1].GetString()}"));
-                string actual = string.Join(" ", JiebaSegmenter.Default.PosCut(pieces[i]).Select(p => $"{p.Word}/{p.Tag}"));
+                string actual = string.Join(" ", Jieba.Default.PosCut(pieces[i]).Select(p => $"{p.Word}/{p.Tag}"));
                 Assert.Equal(expected, actual);
             }
         }
