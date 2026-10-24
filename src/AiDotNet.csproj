@@ -378,6 +378,7 @@
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\ftfy_tables.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.ftfy_tables.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\mecab_unidic_lite.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.mecab_unidic_lite.gz" />
 	  <EmbeddedResource Include="TextToSpeech\Latest\Resources\outetts_en_female_1_neutral.json" LogicalName="AiDotNet.TextToSpeech.Latest.outetts_en_female_1_neutral.json" />
+	  <EmbeddedResource Include="TextToSpeech\Latest\Resources\outetts_qwen3_added_tokens.json.gz" LogicalName="AiDotNet.TextToSpeech.Latest.outetts_qwen3_added_tokens.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_pinyin_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_pinyin_chars.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_pinyin_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_pinyin_phrases.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_lexicon.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_lexicon.tsv.gz" />
