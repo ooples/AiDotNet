@@ -191,7 +191,8 @@ internal sealed partial class Sam2Network<T>
                 double ye = (y + 1) / (h + eps) * scale, xe = (x + 1) / (w + eps) * scale;
                 for (int k = 0; k < f; k++)
                 {
-                    double dim = Math.Pow(10000.0, 2.0 * (k / 2) / f);
+                    // 2 * floor(k / 2): sine and cosine of a pair share one frequency.
+                    double dim = Math.Pow(10000.0, (double)(k - k % 2) / f);
                     double vy = ye / dim, vx = xe / dim;
                     pe[0, k, y, x] = NumOps.FromDouble(k % 2 == 0 ? Math.Sin(vy) : Math.Cos(vy));
                     pe[0, f + k, y, x] = NumOps.FromDouble(k % 2 == 0 ? Math.Sin(vx) : Math.Cos(vx));
@@ -409,7 +410,7 @@ internal sealed partial class Sam2Network<T>
         for (int i = 0; i < count; i++)
             for (int k = 0; k < half; k++)
             {
-                double v = normalizedOffsets[i] / Math.Pow(10000.0, 2.0 * (k / 2) / half);
+                double v = normalizedOffsets[i] / Math.Pow(10000.0, (double)(k - k % 2) / half);
                 pe[i, k] = NumOps.FromDouble(Math.Sin(v));
                 pe[i, half + k] = NumOps.FromDouble(Math.Cos(v));
             }

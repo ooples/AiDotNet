@@ -77,7 +77,7 @@ public class CosyVoice2ModelTests
             var others = model.FrozenLayers;
             var rest = Snapshot(others);
             double loss = Convert.ToDouble(model.Train(sample));
-            Assert.True(double.IsFinite(loss) && loss > 0, $"{stage}: loss {loss}.");
+            Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss) && loss > 0, $"{stage}: loss {loss}.");
             Assert.Equal(stage == CosyVoiceTrainingStage.LanguageModel, !lm.SequenceEqual(Snapshot(model.LanguageModelLayers)));
             Assert.Equal(stage == CosyVoiceTrainingStage.Flow, !flow.SequenceEqual(Snapshot(model.FlowLayers)));
             Assert.Equal(rest, Snapshot(others));
@@ -104,7 +104,7 @@ public class CosyVoice2ModelTests
         model.Voice = voice;
         var audio = model.Synthesize("hi");
         Assert.True(audio.Length > 0 && audio.Length % 480 == 0, $"{audio.Length} samples.");
-        Assert.All(audio.ToArray(), v => Assert.True(double.IsFinite(v) && Math.Abs(v) <= 0.99));
+        Assert.All(audio.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v) && Math.Abs(v) <= 0.99));
     }
 
     [Fact(Timeout = 300000)]
@@ -161,7 +161,7 @@ public class CosyVoice2ModelTests
         Assert.Equal(mel.Shape[2], pitch.Length);
 
         double loss = Convert.ToDouble(model.Train(sample));
-        Assert.True(double.IsFinite(loss) && loss > 0, $"generator loss {loss}.");
+        Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss) && loss > 0, $"generator loss {loss}.");
         Assert.NotEqual(hift, Snapshot(model.VocoderLayers));
         Assert.NotEqual(discriminators, Snapshot(model.DiscriminatorLayers));
         Assert.Equal(lm, Snapshot(model.LanguageModelLayers));

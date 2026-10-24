@@ -197,7 +197,8 @@ internal sealed class Sam2VideoTraining<T>
         if (candidates.Count == 0) return (0, 0, 0);
         int pick = candidates[random.Next(candidates.Count)];
         bool positive = gt[pick] > 0.5 && !(predicted?[pick] ?? false);
-        return (pick % size, pick / size, positive ? 1 : 0);
+        int row = Math.DivRem(pick, size, out int column);
+        return (column, row, positive ? 1 : 0);
     }
 
     /// <summary>

@@ -166,13 +166,19 @@ internal sealed class MeloEnglishFrontEnd
     /// <c>english.g2p(text)</c> of normalized text: the phones, their tones (0–3, before the language offset), and the
     /// number of phones of each BERT word piece, with the silence symbol and its piece at each end.
     /// </summary>
-    public (List<string> Phones, List<int> Tones, List<int> PhonesPerPiece) G2P(string text)
+    public (List<string> Phones, List<int> Tones, List<int> PhonesPerPiece) G2P(string text) => G2P(WordPieces(text), padStartEnd: true);
+
+    /// <summary>
+    /// <c>english.g2p(text=None, pad_start_end, tokenized)</c>: the phones, tones and phones per piece of word pieces
+    /// another tokenizer made (MeloTTS's mixed Chinese-English front end passes multilingual BERT's).
+    /// </summary>
+    public (List<string> Phones, List<int> Tones, List<int> PhonesPerPiece) G2P(IEnumerable<string> pieces, bool padStartEnd)
     {
         var groups = new List<List<string>>();
-        foreach (var token in WordPieces(text))
+        foreach (var token in pieces)
         {
             if (!token.StartsWith("#", StringComparison.Ordinal)) groups.Add(new List<string> { token });
-            else if (groups.Count == 0) throw new ArgumentException("The text starts with a word piece continuation.", nameof(text));
+            else if (groups.Count == 0) throw new ArgumentException("The text starts with a word piece continuation.", nameof(pieces));
             else groups[groups.Count - 1].Add(token.Replace("#", ""));
         }
         var phones = new List<string>();
@@ -214,6 +220,7 @@ internal sealed class MeloEnglishFrontEnd
             perPiece.AddRange(DistributePhones(count, group.Count));
         }
         phones = phones.Select(PostReplace).ToList();
+        if (!padStartEnd) return (phones, tones, perPiece);
         phones.Insert(0, "_");
         phones.Add("_");
         tones.Insert(0, 0);
