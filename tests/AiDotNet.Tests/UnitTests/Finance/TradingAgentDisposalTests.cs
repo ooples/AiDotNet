@@ -59,7 +59,7 @@ public class TradingAgentDisposalTests
             new FinancialA2CAgentOptions<double> { StateSize = StateSize, ActionSize = ActionSize }),
         // SAC's critics score a (state, action) pair.
         "SAC" => new FinancialSACAgent<double>(
-            Arch(StateSize, ActionSize), Arch(StateSize + ActionSize, 1),
+            Arch(StateSize, 2 * ActionSize), Arch(StateSize + ActionSize, 1),
             new FinancialSACAgentOptions<double> { StateSize = StateSize, ActionSize = ActionSize }),
         "MarketMaking" => new MarketMakingAgent<double>(
             new MarketMakingOptions<double> { StateSize = StateSize, ActionSize = ActionSize }),

@@ -39,94 +39,163 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
     Authors = "Xinyu Zhou, Cong Yao, He Wen, Yuzhi Wang, Shuchang Zhou, Weiran He, Jiajun Liang")]
 public partial class EAST<T> : TextDetectorBase<T>
 {
-    private readonly Conv2D<T> _mergeConv1;
-    private readonly Conv2D<T> _mergeConv2;
-    private readonly Conv2D<T> _mergeConv3;
-    private readonly Conv2D<T> _mergeConv4;
+    // Merging stages 2-4 (Zhou et al. 2017, Eq. 2): conv1x1 then conv3x3 over [unpool(h); f], 128, 64 and 32 channels.
+    // One field per module: parameter discovery (training, serialization, counting) walks fields of parameter
+    // sources, and does not look inside an array of tuples, so the merging branch held that way never trained.
+    private readonly Conv2D<T> _reduce2, _reduce3, _reduce4, _fuse2, _fuse3, _fuse4;
+    private readonly BatchNorm2D<T> _reduceNorm2, _reduceNorm3, _reduceNorm4, _fuseNorm2, _fuseNorm3, _fuseNorm4;
+
+    private (Conv2D<T> Reduce, BatchNorm2D<T> ReduceNorm, Conv2D<T> Fuse, BatchNorm2D<T> FuseNorm)[] _stages => new[]
+    {
+        (_reduce2, _reduceNorm2, _fuse2, _fuseNorm2),
+        (_reduce3, _reduceNorm3, _fuse3, _fuseNorm3),
+        (_reduce4, _reduceNorm4, _fuse4, _fuseNorm4),
+    };
+    // g4 = conv3x3(h4), 32 channels (Eq. 1).
+    private readonly Conv2D<T> _finalConv;
+    private readonly BatchNorm2D<T> _finalNorm;
     private readonly Conv2D<T> _scoreHead;
     private readonly Conv2D<T> _geometryHead;
-    private readonly int _hiddenDim;
     private readonly bool _useRotatedBoxes;
 
+    /// <summary>Output channels of merging stages 2, 3 and 4 (Fig. 3).</summary>
+    private static readonly int[] StageChannels = { 128, 64, 32 };
+
     /// <inheritdoc/>
-    public override string Name => $"EAST-{Options.Size}";
+    public override string Name => "EAST";
 
     /// <summary>
-    /// Creates a new EAST text detector.
+    /// The minimum mean score-map value inside a detected box (after locality-aware NMS) for the box to be kept;
+    /// the per-pixel threshold is the detection call's confidence threshold. The paper does not state either; 0.1 is
+    /// the public reimplementation's box_thresh (argman/EAST eval.py).
+    /// </summary>
+    public double BoxScoreThreshold { get; set; } = 0.1;
+
+    /// <summary>
+    /// Creates a new EAST text detector: the paper's VGG16 stem, feature-merging branch and output layer.
     /// </summary>
     /// <param name="options">Text detection options.</param>
     /// <param name="useRotatedBoxes">Whether to predict rotated boxes (RBOX) or quadrilaterals (QUAD).</param>
+    /// <remarks>
+    /// <para>The stem is VGG16, the paper's commonly used base model (Tab. 2): the feature maps after pooling-2 to
+    /// pooling-5 are f4 to f1 (Sec. 3.2). The merging branch unpools (bilinear x2) and concatenates as Eq. 1-2 state,
+    /// with the channel counts of Fig. 3. The paper does not say how its convolutions are normalized; each is followed
+    /// by batch normalization and ReLU, as in the public reimplementations (argman/EAST).</para>
+    /// </remarks>
     public EAST(TextDetectionOptions<T> options, bool useRotatedBoxes = true) : base(options)
     {
-        _hiddenDim = GetHiddenDim(options.Size);
         _useRotatedBoxes = useRotatedBoxes;
 
-        // ResNet backbone
-        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+        Backbone = new VGG16Backbone<T>();
+        var f = Backbone.OutputChannels;               // finest first: f4, f3, f2, f1
+        // h1 = f1 (512 channels at 1/32); each stage concatenates the next finer stem map.
+        _reduce2 = new Conv2D<T>(f[3] + f[2], StageChannels[0], kernelSize: 1);
+        _reduceNorm2 = new BatchNorm2D<T>(StageChannels[0]);
+        _fuse2 = new Conv2D<T>(StageChannels[0], StageChannels[0], kernelSize: 3, padding: 1);
+        _fuseNorm2 = new BatchNorm2D<T>(StageChannels[0]);
+        _reduce3 = new Conv2D<T>(StageChannels[0] + f[1], StageChannels[1], kernelSize: 1);
+        _reduceNorm3 = new BatchNorm2D<T>(StageChannels[1]);
+        _fuse3 = new Conv2D<T>(StageChannels[1], StageChannels[1], kernelSize: 3, padding: 1);
+        _fuseNorm3 = new BatchNorm2D<T>(StageChannels[1]);
+        _reduce4 = new Conv2D<T>(StageChannels[1] + f[0], StageChannels[2], kernelSize: 1);
+        _reduceNorm4 = new BatchNorm2D<T>(StageChannels[2]);
+        _fuse4 = new Conv2D<T>(StageChannels[2], StageChannels[2], kernelSize: 3, padding: 1);
+        _fuseNorm4 = new BatchNorm2D<T>(StageChannels[2]);
+        _finalConv = new Conv2D<T>(StageChannels[2], 32, kernelSize: 3, padding: 1);
+        _finalNorm = new BatchNorm2D<T>(32);
 
-        // Feature merging branch (U-Net style)
-        var stageChannels = Backbone.OutputChannels;
-        _mergeConv1 = new Conv2D<T>(stageChannels[^1], _hiddenDim, kernelSize: 1);
-        // Each merge conv receives the upsampled decoder map CONCATENATED with a raw backbone
-        // stage, so its input width is the decoder width plus that stage's channel count. These were
-        // declared as twice the decoder width, which matches no backbone stage, so the first merge
-        // threw on a channel mismatch (e.g. ResNet-50's C4: 256 + 1024 = 1280 channels into a conv
-        // built for 512) and the model could not run a forward pass at all.
-        _mergeConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
-        _mergeConv3 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
-        _mergeConv4 = new Conv2D<T>(_hiddenDim, _hiddenDim / 2, kernelSize: 3, padding: 1);
-
-        // Output heads
-        _scoreHead = new Conv2D<T>(_hiddenDim / 2, 1, kernelSize: 1); // Text/non-text score
-
-        // Geometry: 4 distances + 1 angle for RBOX, or 8 coordinates for QUAD
-        int geometryChannels = useRotatedBoxes ? 5 : 8;
-        _geometryHead = new Conv2D<T>(_hiddenDim / 2, geometryChannels, kernelSize: 1);
+        // Output layer: conv1x1 to the score map, and to 4 distances + 1 angle (RBOX) or 8 offsets (QUAD).
+        _scoreHead = new Conv2D<T>(32, 1, kernelSize: 1);
+        _geometryHead = new Conv2D<T>(32, useRotatedBoxes ? 5 : 8, kernelSize: 1);
     }
 
-    private static int GetHiddenDim(ModelSize size) => size switch
+    /// <inheritdoc/>
+    public override void SetTrainingMode(bool training)
     {
-        ModelSize.Nano => 64,
-        ModelSize.Small => 128,
-        ModelSize.Medium => 256,
-        ModelSize.Large => 384,
-        ModelSize.XLarge => 512,
-        _ => 256
-    };
+        base.SetTrainingMode(training);
+        if (_finalNorm is null) return;
+        foreach (var stage in _stages)
+        {
+            stage.ReduceNorm.SetTrainingMode(training);
+            stage.FuseNorm.SetTrainingMode(training);
+        }
+        _finalNorm.SetTrainingMode(training);
+    }
+
+    /// <summary>
+    /// The base preprocessing (resize, then pixels / 255), then the ImageNet normalization of the VGG16 stem's
+    /// torchvision weights: (x - mean) / std per channel. The paper initializes the stem from ImageNet (Sec. 4.2) and does
+    /// not state its input normalization; this is the domain those weights expect.
+    /// </summary>
+    protected override Tensor<T> Preprocess(Tensor<T> image)
+    {
+        var x = base.Preprocess(image);
+        if (x.Shape[1] != 3) return x;
+        var mean = new Tensor<T>(new[] { 1, 3, 1, 1 }, new Vector<T>(new[] { 0.485, 0.456, 0.406 }.Select(NumOps.FromDouble).ToArray()));
+        var inverse = new Tensor<T>(new[] { 1, 3, 1, 1 }, new Vector<T>(new[] { 1 / 0.229, 1 / 0.224, 1 / 0.225 }.Select(NumOps.FromDouble).ToArray()));
+        var shape = x.Shape.ToArray();
+        return Engine.TensorMultiply(Engine.TensorSubtract(x, Engine.TensorBroadcastTo(mean, shape)), Engine.TensorBroadcastTo(inverse, shape));
+    }
+
+    /// <summary>The score and geometry maps <c>[B, 1, H/4, W/4]</c> and <c>[B, 5 or 8, H/4, W/4]</c> of images
+    /// <c>[B, 3, H, W]</c>.</summary>
+    internal List<Tensor<T>> Maps(Tensor<T> images) => Forward(images);
+
+    /// <summary>
+    /// Loads a state dict named as the reference transcription names it (tools/reference-data/east_reference.py):
+    /// <c>stem.features.{i}</c> for torchvision's VGG16, <c>merge.{k}.reduce</c>, <c>.reduce_norm</c>, <c>.fuse</c>,
+    /// <c>.fuse_norm</c>, then <c>final</c>, <c>final_norm</c>, <c>score</c> and <c>geometry</c>.
+    /// </summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        // The head convolutions size themselves on their first forward.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            Forward(new Tensor<T>(new[] { 1, 3, 32, 32 }));
+        ((VGG16Backbone<T>)EnsureBackbone).LoadTorchWeights((name, shape) => read("stem." + name, shape));
+        void Conv(Conv2D<T> conv, string name, int outputs, int inputs, int kernel)
+            => conv.SetParameters(new Vector<T>(read(name + ".weight", new[] { outputs, inputs, kernel, kernel })
+                .Concat(read(name + ".bias", new[] { outputs })).Select(NumOps.FromDouble).ToArray()));
+        void Norm(BatchNorm2D<T> norm, string name, int channels)
+        {
+            var shape = new[] { channels };
+            AiDotNet.TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm.Layer, read(name + ".weight", shape), read(name + ".bias", shape),
+                read(name + ".running_mean", shape), read(name + ".running_var", shape));
+        }
+        var f = EnsureBackbone.OutputChannels;
+        int previous = f[f.Count - 1];
+        for (int i = 0; i < _stages.Length; i++)
+        {
+            int skip = f[f.Count - 2 - i], channels = StageChannels[i];
+            Conv(_stages[i].Reduce, $"merge.{i}.reduce", channels, previous + skip, 1);
+            Norm(_stages[i].ReduceNorm, $"merge.{i}.reduce_norm", channels);
+            Conv(_stages[i].Fuse, $"merge.{i}.fuse", channels, channels, 3);
+            Norm(_stages[i].FuseNorm, $"merge.{i}.fuse_norm", channels);
+            previous = channels;
+        }
+        Conv(_finalConv, "final", 32, previous, 3);
+        Norm(_finalNorm, "final_norm", 32);
+        Conv(_scoreHead, "score", 1, 32, 1);
+        Conv(_geometryHead, "geometry", _useRotatedBoxes ? 5 : 8, 32, 1);
+    }
+
+    private Tensor<T> ConvNormRelu(Conv2D<T> conv, BatchNorm2D<T> norm, Tensor<T> x) => Engine.ReLU(norm.Forward(conv.Forward(x)));
 
     /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
-        // Extract multi-scale backbone features
-        var features = EnsureBackbone.ExtractFeatures(input);
-
-        // Feature merging (U-Net style)
-        var x = _mergeConv1.Forward(features[^1]);
-        x = ApplyMergeActivation(x);
-
-        if (features.Count > 1)
+        var features = EnsureBackbone.ExtractFeatures(input);     // f4 (1/4) .. f1 (1/32)
+        var h = features[features.Count - 1];
+        for (int i = 0; i < _stages.Length; i++)
         {
-            x = UpsampleAndConcat(x, features[^2]);
-            x = _mergeConv2.Forward(x);
-            x = ApplyMergeActivation(x);
+            var (reduce, reduceNorm, fuse, fuseNorm) = _stages[i];
+            var skip = features[features.Count - 2 - i];
+            var x = CvTensorOps<T>.ConcatChannels(BilinearUpsample(h, skip.Shape[2], skip.Shape[3]), skip);
+            h = ConvNormRelu(fuse, fuseNorm, ConvNormRelu(reduce, reduceNorm, x));
         }
+        var g = ConvNormRelu(_finalConv, _finalNorm, h);
 
-        if (features.Count > 2)
-        {
-            x = UpsampleAndConcat(x, features[^3]);
-            x = _mergeConv3.Forward(x);
-            x = ApplyMergeActivation(x);
-        }
-
-        x = _mergeConv4.Forward(x);
-        x = ApplyMergeActivation(x);
-
-        // Predict score and geometry
-        var score = _scoreHead.Forward(x);
-        score = ApplySigmoid(score);
-
-        var geometry = BoundGeometry(_geometryHead.Forward(x));
-
+        var score = ApplySigmoid(_scoreHead.Forward(g));
+        var geometry = BoundGeometry(_geometryHead.Forward(g));
         return new List<Tensor<T>> { score, geometry };
     }
 
@@ -188,10 +257,13 @@ public partial class EAST<T> : TextDetectorBase<T>
         regions = ApplyTextNMS(LocalityAwareMerge(regions, 0.2), 0.2);
 
         // The merged score is a SUM (it orders the NMS above); report the box's mean score-map value, as the
-        // reference does after LANMS, so confidences stay in [0, 1] and threshold like single-pixel scores.
+        // reference does after LANMS, so confidences stay in [0, 1]. The reference filters that mean with its own,
+        // lower threshold (box_thresh 0.1 against score_map_thresh 0.8 for pixels): the mean covers the whole box while
+        // only its shrunk core is text in the score map, so a well-trained detector's box means sit near the core's
+        // share of the box. Filtering them with the pixel threshold removed every box once training succeeded.
         foreach (var region in regions)
             region.Confidence = NumOps.FromDouble(MeanScoreInside(region, score, scaleX, scaleY));
-        regions = regions.Where(r => NumOps.ToDouble(r.Confidence) >= confidenceThreshold).ToList();
+        regions = regions.Where(r => NumOps.ToDouble(r.Confidence) > BoxScoreThreshold).ToList();
 
         // Limit to max detections
         if (regions.Count > Options.MaxDetections)
@@ -223,8 +295,10 @@ public partial class EAST<T> : TextDetectorBase<T>
         return Engine.TensorConcatenate(new[] { distances, angle }, 1);
     }
 
-    /// <summary>The paper's optimizer (Zhou et al. 2017, Section 4.1): Adam at learning rate 1e-3.</summary>
-    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer() => PaperAdam(1e-3);
+    /// <summary>The paper's optimizer (Zhou et al. 2017, Sec. 3.5): Adam starting at 1e-3, decayed to one tenth every
+    /// 27300 minibatches, stopping at 1e-5.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperAdam(1e-3, new AiDotNet.LearningRateSchedulers.StepLRScheduler(1e-3, stepSize: 27300, gamma: 0.1, minLearningRate: 1e-5));
 
     /// <summary>
     /// EAST's loss (Zhou et al. 2017, Section 3.4): <c>L = L_s + lambda_g L_g</c> with lambda_g = 1. <c>L_s</c> is
@@ -469,13 +543,22 @@ public partial class EAST<T> : TextDetectorBase<T>
 
     /// <inheritdoc/>
     protected override long GetHeadParameterCount()
+        => _stages.Sum(s => s.Reduce.GetParameterCount() + s.ReduceNorm.GetParameterCount() + s.Fuse.GetParameterCount() + s.FuseNorm.GetParameterCount())
+           + _finalConv.GetParameterCount() + _finalNorm.GetParameterCount() + _scoreHead.GetParameterCount() + _geometryHead.GetParameterCount();
+
+    private IEnumerable<(Action<BinaryWriter> Write, Action<BinaryReader> Read)> HeadParts()
     {
-        return _mergeConv1.GetParameterCount() +
-               _mergeConv2.GetParameterCount() +
-               _mergeConv3.GetParameterCount() +
-               _mergeConv4.GetParameterCount() +
-               _scoreHead.GetParameterCount() +
-               _geometryHead.GetParameterCount();
+        foreach (var (reduce, reduceNorm, fuse, fuseNorm) in _stages)
+        {
+            yield return (reduce.WriteParameters, reduce.ReadParameters);
+            yield return (reduceNorm.WriteParameters, reduceNorm.ReadParameters);
+            yield return (fuse.WriteParameters, fuse.ReadParameters);
+            yield return (fuseNorm.WriteParameters, fuseNorm.ReadParameters);
+        }
+        yield return (_finalConv.WriteParameters, _finalConv.ReadParameters);
+        yield return (_finalNorm.WriteParameters, _finalNorm.ReadParameters);
+        yield return (_scoreHead.WriteParameters, _scoreHead.ReadParameters);
+        yield return (_geometryHead.WriteParameters, _geometryHead.ReadParameters);
     }
 
     /// <inheritdoc/>
@@ -497,44 +580,19 @@ public partial class EAST<T> : TextDetectorBase<T>
         using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
 
-        // Read and verify header
         int magic = reader.ReadInt32();
         if (magic != 0x45415354) // "EAST" in ASCII
-        {
             throw new InvalidDataException($"Invalid EAST model file. Expected magic 0x45415354, got 0x{magic:X8}");
-        }
-
         int version = reader.ReadInt32();
-        if (version != 1)
-        {
-            throw new InvalidDataException($"Unsupported EAST model version: {version}");
-        }
-
-        string name = reader.ReadString();
+        if (version != 2)
+            throw new InvalidDataException($"Unsupported EAST model version: {version} (this build reads version 2, the VGG16 network).");
         bool useRotatedBoxes = reader.ReadBoolean();
-        int hiddenDim = reader.ReadInt32();
-
-        if (name != Name)
-        {
+        if (useRotatedBoxes != _useRotatedBoxes)
             throw new InvalidOperationException(
-                $"EAST configuration mismatch. Expected name={Name}, got name={name}");
-        }
+                $"EAST configuration mismatch. Expected useRotatedBoxes={_useRotatedBoxes}, got {useRotatedBoxes}.");
 
-        if (useRotatedBoxes != _useRotatedBoxes || hiddenDim != _hiddenDim)
-        {
-            throw new InvalidOperationException(
-                $"EAST configuration mismatch. Expected useRotatedBoxes={_useRotatedBoxes}, hiddenDim={_hiddenDim}, " +
-                $"got useRotatedBoxes={useRotatedBoxes}, hiddenDim={hiddenDim}");
-        }
-
-        // Read component weights
         EnsureBackbone.ReadParameters(reader);
-        _mergeConv1.ReadParameters(reader);
-        _mergeConv2.ReadParameters(reader);
-        _mergeConv3.ReadParameters(reader);
-        _mergeConv4.ReadParameters(reader);
-        _scoreHead.ReadParameters(reader);
-        _geometryHead.ReadParameters(reader);
+        foreach (var part in HeadParts()) part.Read(reader);
     }
 
     /// <inheritdoc/>
@@ -542,29 +600,12 @@ public partial class EAST<T> : TextDetectorBase<T>
     {
         using var stream = File.Create(path);
         using var writer = new BinaryWriter(stream);
-
-        // Write header
         writer.Write(0x45415354); // "EAST" in ASCII
-        writer.Write(1); // Version 1
-        writer.Write(Name);
+        writer.Write(2);          // version 2: the VGG16 network
         writer.Write(_useRotatedBoxes);
-        writer.Write(_hiddenDim);
-
-        // Write component weights
         EnsureBackbone.WriteParameters(writer);
-        _mergeConv1.WriteParameters(writer);
-        _mergeConv2.WriteParameters(writer);
-        _mergeConv3.WriteParameters(writer);
-        _mergeConv4.WriteParameters(writer);
-        _scoreHead.WriteParameters(writer);
-        _geometryHead.WriteParameters(writer);
+        foreach (var part in HeadParts()) part.Write(writer);
     }
-
-    /// <summary>
-    /// ReLU. (This was named ApplyBatchNormReLU, but it never normalised anything: EAST's merge branch
-    /// here has no batch-norm parameters, so the name described a step the model does not take.)
-    /// </summary>
-    private Tensor<T> ApplyMergeActivation(Tensor<T> x) => Engine.ReLU(x);
 
     /// <summary>
     /// Elementwise Sigmoid, delegated to the engine.
@@ -576,11 +617,6 @@ public partial class EAST<T> : TextDetectorBase<T>
     /// silently never trained. The engine op records itself on the tape.
     /// </remarks>
     private Tensor<T> ApplySigmoid(Tensor<T> x) => Engine.Sigmoid(x);
-
-    private Tensor<T> UpsampleAndConcat(Tensor<T> x, Tensor<T> skip)
-        // Upsample to the skip connection's resolution, then stack along channels. Tape-visible, so
-        // the decoder's gradient reaches the backbone through every skip.
-        => CvTensorOps<T>.ConcatChannels(BilinearUpsample(x, skip.Shape[2], skip.Shape[3]), skip);
 
     private Tensor<T> BilinearUpsample(Tensor<T> x, int targetH, int targetW)
         // Asymmetric bilinear (src = dst * in / out, no half-pixel offset), as the loop it replaces.

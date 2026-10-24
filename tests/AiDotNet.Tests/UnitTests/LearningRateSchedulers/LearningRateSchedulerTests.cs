@@ -147,6 +147,21 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
         }
 
         [Fact(Timeout = 60000)]
+        public async Task LinearWarmup_WithoutWarmup_StartsAtTheSchedulesFirstRate()
+        {
+            // With no warmup the first step must run at the schedule's rate; the warmup's initial rate (0 by default)
+            // used to make it a no-op.
+            var scheduler = new LinearWarmupScheduler(
+                baseLearningRate: 0.1,
+                warmupSteps: 0,
+                totalSteps: 100,
+                decayMode: LinearWarmupScheduler.DecayMode.Cosine,
+                endLr: 0.01);
+
+            Assert.Equal(0.1, scheduler.CurrentLearningRate, 12);
+        }
+
+        [Fact(Timeout = 60000)]
         public async Task LinearWarmup_ReachesPeakAfterWarmup()
         {
             var scheduler = new LinearWarmupScheduler(

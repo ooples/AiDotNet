@@ -139,7 +139,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
     private BarkTransformerStageLayer<T> _semantic;
     private BarkTransformerStageLayer<T> _coarse;
     private BarkTransformerStageLayer<T> _fine;
-    private readonly BarkCodecLayer<T> _codec;
+    private readonly AudioCodecLayer<T> _codec;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private TrainingStage _trainingStage;
     private int _fineTrainingHead;
@@ -176,7 +176,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
             _options.Fine,
             inputStreams: _options.NumCodebooks,
             outputHeads: _options.NumCodebooks - _options.NumberOfFineCodebooksGiven);
-        _codec = new BarkCodecLayer<T>(codec ?? CreateDefaultCodec(_options));
+        _codec = new AudioCodecLayer<T>(codec ?? CreateDefaultCodec(_options));
         InitializeLayers();
         StreamingTraining = StreamingTrainingMode.Auto;
     }
@@ -241,6 +241,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
         if (textTokenIds is null) throw new ArgumentNullException(nameof(textTokenIds));
         generationOptions ??= new BarkGenerationOptions();
         generationOptions.Validate();
+        var semanticRandom = StageRandom(generationOptions.SemanticSampling);
         cancellationToken.ThrowIfCancellationRequested();
 
         var context = BuildSemanticPrompt(textTokenIds, history);
@@ -265,7 +266,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
                 0,
                 _options.SemanticVocabularySize,
                 generationOptions.AllowEarlyStop ? _options.SemanticPadTokenId : null);
-            int next = Sample(masked, generationOptions.SemanticSampling);
+            int next = Sample(masked, generationOptions.SemanticSampling, semanticRandom);
             bool reachedEosProbability = generationOptions.AllowEarlyStop
                 && generationOptions.SemanticEarlyStopProbability > 0.0
                 && TokenSampler<T>.ProbabilityOf(
@@ -305,6 +306,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
             throw new ArgumentException("Bark coarse generation requires at least one semantic token.", nameof(semanticTokens));
         generationOptions ??= new BarkGenerationOptions();
         generationOptions.Validate();
+        var coarseRandom = StageRandom(generationOptions.CoarseSampling);
 
         double semanticToCoarseRatio = _options.CoarseRateHz / _options.SemanticRateHz
             * _options.NumberOfCoarseCodebooks;
@@ -345,7 +347,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
             int codebook = step % _options.NumberOfCoarseCodebooks;
             int tokenStart = checked(_options.SemanticVocabularySize + codebook * _options.CodebookSize);
             var masked = RestrictLogits(nextLogits!, tokenStart, tokenStart + _options.CodebookSize);
-            int sampled = Sample(masked, generationOptions.CoarseSampling);
+            int sampled = Sample(masked, generationOptions.CoarseSampling, coarseRandom);
             flatOutput[step] = sampled - tokenStart;
             coarseContext.Add(sampled);
             windowContext!.Add(sampled);
@@ -382,6 +384,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
 
         generationOptions ??= new BarkGenerationOptions();
         generationOptions.Validate();
+        var fineRandom = StageRandom(generationOptions.FineSampling);
         int frames = coarseTokens.GetLength(1);
         if (frames <= 0)
             throw new ArgumentException("Bark fine generation requires at least one coarse frame.", nameof(coarseTokens));
@@ -450,7 +453,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
                 for (int frame = relativeFillStart; frame < window; frame++)
                 {
                     var frameLogits = ExtractPositionLogits(logits, frame, _options.CodebookSize);
-                    int token = Sample(frameLogits, generationOptions.FineSampling);
+                    int token = Sample(frameLogits, generationOptions.FineSampling, fineRandom);
                     slice[codebook, frame] = token;
                 }
             }
@@ -496,7 +499,10 @@ public partial class BarkModel<T> : TtsModelBase<T>
     {
         var timings = new Dictionary<BarkGenerationStage, TimeSpan>();
         var stopwatch = Stopwatch.StartNew();
-
+        var previousRandom = _requestRandom;
+        _requestRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
+        try
+        {
         StageStarted?.Invoke(BarkGenerationStage.Semantic);
         var semantic = GenerateSemanticTokens(textTokenIds, generationOptions, history, cancellationToken);
         timings[BarkGenerationStage.Semantic] = stopwatch.Elapsed;
@@ -517,6 +523,11 @@ public partial class BarkModel<T> : TtsModelBase<T>
         timings[BarkGenerationStage.Codec] = stopwatch.Elapsed;
 
         return new BarkGenerationResult<T>(semantic, coarse, fine, audio, timings);
+        }
+        finally
+        {
+            _requestRandom = previousRandom;
+        }
     }
 
     /// <summary>Asynchronous four-stage generation with cooperative cancellation.</summary>
@@ -691,6 +702,20 @@ public partial class BarkModel<T> : TtsModelBase<T>
         }
     }
 
+    /// <summary>
+    /// The semantic stage's logits for the first generated token of <paramref name="textTokenIds"/> (no history): what
+    /// the text contributes to generation before any sampling. Used to check that the text reaches the model when the
+    /// sampled tokens of an untrained network cannot show it.
+    /// </summary>
+    internal Vector<T> FirstSemanticLogits(IReadOnlyList<int> textTokenIds)
+    {
+        ThrowIfDisposed();
+        if (textTokenIds is null) throw new ArgumentNullException(nameof(textTokenIds));
+        var context = BuildSemanticPrompt(textTokenIds, null);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return _semantic.LastTokenLogits(_semantic.ForwardUncached(ToTokenTensor(Tail(context, _options.Semantic.BlockSize))));
+    }
+
     private List<int> BuildSemanticPrompt(IReadOnlyList<int> textTokenIds, BarkHistoryPrompt? history)
     {
         var prompt = new List<int>(_options.MaxTextLength + _options.SemanticHistoryLength + 1);
@@ -804,17 +829,37 @@ public partial class BarkModel<T> : TtsModelBase<T>
     private static IAudioCodec<T> CreateDefaultCodec(BarkOptions options)
     {
         bool tiny = options.Semantic.HiddenSize <= 32;
-        var codecOptions = new EnCodecOptions
-        {
-            SampleRate = options.SampleRate,
-            NumQuantizers = options.NumCodebooks,
-            CodebookSize = options.CodebookSize,
-            EncoderChannels = tiny ? [4, 8] : [32, 64, 128, 256, 512],
-            DownsampleRatios = tiny ? [4, 2] : [8, 5, 4, 2],
-            EncoderDim = tiny ? 8 : 128,
-            CodebookDim = tiny ? 8 : 128,
-        };
-        var architecture = new NeuralNetworkArchitecture<T>(inputFeatures: 1, outputSize: codecOptions.EncoderDim);
+        // Bark codes with EnCodec 24 kHz at 6 kbps: the released codec's 32 codebooks, of which the bandwidth selects the
+        // first NumCodebooks (0.75 kbps each at 75 frames per second), so the official checkpoint loads unchanged.
+        var codecOptions = tiny
+            ? new EnCodecOptions
+            {
+                SampleRate = options.SampleRate,
+                NumQuantizers = options.NumCodebooks,
+                CodebookSize = options.CodebookSize,
+                Filters = 4,
+                Ratios = [4, 2],
+                Dimension = 8,
+                ResidualKernelSizes = [3, 1],
+                DiscriminatorWindows = [32, 16],
+                DiscriminatorFilters = 4,
+                MelScales = [5, 6],
+                MelBins = 8,
+            }
+            : EnCodecOptions.OfficialCheckpoint24kHz();
+        if (!tiny) codecOptions.SampleRate = options.SampleRate;
+        codecOptions.CodebookSize = options.CodebookSize;
+        // Every requested codebook in the tiny codec; the first NumCodebooks of the full one.
+        double perCodebook = codecOptions.SampleRate / (double)codecOptions.Ratios.Aggregate(1, (a, b) => a * b)
+            * Math.Log(codecOptions.CodebookSize, 2) / 1000.0;
+        codecOptions.TargetBandwidthKbps = options.NumCodebooks * perCodebook;
+        // Bark only encodes and decodes with its codec, so the codec's training discriminators are never built.
+        codecOptions.IncludeDiscriminators = false;
+        // Nor is the codec trained here, so its k-means initialization (which runs on a first training batch) never
+        // would: its codebooks would stay zero and every token sequence would decode to the same waveform. Start from
+        // random codebooks; a loaded checkpoint replaces them with the fitted ones.
+        codecOptions.KMeansIterations = 0;
+        var architecture = new NeuralNetworkArchitecture<T>(inputFeatures: 1, outputSize: codecOptions.Dimension);
         return new EnCodec<T>(architecture, codecOptions);
     }
 
@@ -863,10 +908,20 @@ public partial class BarkModel<T> : TtsModelBase<T>
         return new Vector<T>(values);
     }
 
-    private static int Sample(Vector<T> logits, SamplingOptions options)
+    private static int Sample(Vector<T> logits, SamplingOptions options, Random random)
         => options.IsGreedy
             ? TokenSampler<T>.ArgMax(logits)
-            : TokenSampler<T>.Sample(logits, options);
+            : TokenSampler<T>.Sample(logits, options, random);
+
+    // The generator of the request being generated: Generate's, shared by its stages; null outside one.
+    private Random? _requestRandom;
+
+    // A stage's generator: its own seed when it sets one, else the request's, else a fresh one from SamplingSeed (a
+    // stage generated on its own).
+    private Random StageRandom(SamplingOptions stageOptions)
+        => stageOptions.Seed is int seed
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed)
+            : _requestRandom ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
 
     private static List<int> Tail(IReadOnlyList<int> values, int count)
     {

@@ -1,29 +1,31 @@
 using AiDotNet.Attributes;
+using AiDotNet.Audio.Classification;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Fingerprinting;
 
 /// <summary>
-/// AST (Audio Spectrogram Transformer) — a single-stream Vision-Transformer
-/// applied to log-mel spectrograms, trained for audio event classification
-/// and fingerprinting (Gong et al. 2021).
+/// AST (Audio Spectrogram Transformer, Gong et al. 2021) as an audio fingerprinter: the clip's AST representation is
+/// its fingerprint, compared by cosine similarity.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// AST applies the standard ViT recipe (Dosovitskiy et al. 2021) directly to
-/// audio: convert the waveform to a log-mel spectrogram, treat it as a 2-D
-/// image, slice it into 16×16 patches, embed each patch linearly, add
-/// positional encodings, run N=12 transformer encoder layers, mean-pool, and
-/// classify. AST-Base (768-dim, 12-layer, 12-head) initialised from a
-/// DeiT/ViT ImageNet checkpoint achieves SOTA on AudioSet.
+/// This runs the same network as <see cref="AST{T}"/> (<see cref="AstNetwork{T}"/>, the official code's model): a
+/// 128-bin Kaldi filterbank of the waveform, 16×16 patches with an overlap of 6, DeiT's class and distillation tokens,
+/// 12 pre-norm Transformer blocks, and the average of the two tokens as the clip representation. The fingerprint is
+/// that representation; <see cref="Classify"/> scores the labels with the paper's sigmoid head, and training is the
+/// paper's AudioSet recipe.
 /// </para>
 /// <para>
 /// <b>Reference:</b> Gong, Y., Chung, Y.-A. &amp; Glass, J. (2021),
@@ -42,31 +44,29 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://arxiv.org/abs/2104.01778",
     Year = 2021,
     Authors = "Yuan Gong, Yu-An Chung, James Glass")]
-[PreprocessesInput("PreprocessAudio converts the caller's waveform into a rank-4 log-mel spectrogram before the AST patch embedding runs.")]
-[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
-    BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-5, Beta1 = 0.95, Beta2 = 0.999, WeightDecay = 5e-7, ReferenceBatchSize = 12,
+                WarmupSteps = 1000, Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.5, MilestoneFractions = [0.4, 0.6, 0.8],
+                Source = "Gong et al. 2021, Sec. 3.1.1 (full AudioSet): batch 12, Adam, binary cross-entropy, initial rate 1e-5 for 5 epochs, halved every epoch after the 2nd (milestones at 2/5, 3/5 and 4/5 of the run). The official recipe (YuanGongND/ast egs/audioset/run.sh, traintest.py) fills in betas (0.95, 0.999), weight decay 5e-7 and a linear warmup over the first 1000 steps.")]
+[TaskVariantOf(typeof(AST<>), "audio fingerprinting with the clip representation")]
 public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />
-    /// <remarks>
-    /// Measured: <c>PredictCore</c> folds <c>Layers</c> over the mel input and <c>PostprocessOutput</c>
-    /// is the identity. The <c>CreateDefaultASTLayers</c> overload this model calls ends with
-    /// <c>SequenceTokenSliceLayer</c> (take the CLS token) then
-    /// <c>DenseLayer&lt;T&gt;(outputSize: numClasses)</c>, supplied from <c>_options.NumClasses</c> -
-    /// AudioSet class LOGITS, not the <c>EmbeddingDim</c> the transformer stack runs at.
-    /// <c>Classify</c> corroborates it: it reads <c>probs.Shape[^1]</c> as the class count.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.NumClasses;
+    /// <remarks>Predict returns one sigmoid probability per label.</remarks>
+    protected override int OutputFeatureWidth => _labels.Length;
 
-    private readonly ASTModelOptions _options;
+    private readonly ASTOptions _options;
+    private readonly string[] _labels;
     private readonly bool _useNativeMode;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private AstPipeline<T>? _pipeline;
+    private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
     /// <summary>
-    /// Cached Hann window for the STFT preprocessing step. Built once on the
-    /// first <see cref="PreprocessAudio"/> call and reused.
+    /// Path to the loaded ONNX model file when constructed in ONNX mode;
+    /// <c>null</c> in native mode. Captured so a clone can reconstruct an ONNX model without losing its execution-mode
+    /// configuration.
     /// </summary>
-    [Scratch]
-    private Tensor<T>? _hannWindow;
+    private readonly string? _modelPath;
 
     /// <inheritdoc/>
     public string Name => _useNativeMode ? "AST-Native" : "AST-ONNX";
@@ -74,247 +74,153 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     /// <inheritdoc/>
     public int FingerprintLength => _options.EmbeddingDim;
 
+    /// <summary>The labels <see cref="Classify"/> names (<see cref="ASTOptions.CustomLabels"/>, else AudioSet's 527).</summary>
+    public IReadOnlyList<string> Labels => _labels;
+
     #region Constructors
 
-    /// <summary>Initializes AST in ONNX inference mode.</summary>
+    /// <summary>Initializes AST in ONNX inference mode, for a graph returning the clip representation
+    /// <c>[batch, EmbeddingDim]</c> from the official input <c>[batch, TargetLength, NumMels]</c>.</summary>
     public ASTModel(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        ASTModelOptions? options = null)
+        ASTOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new ASTModelOptions();
-        Options = _options;
-        ValidateOptions(_options);
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-
+        _options = options ?? new ASTOptions();
+        Options = _options;
+        _labels = _options.CustomLabels ?? AST<T>.AudioSetLabels;
         SampleRate = _options.SampleRate;
-        NumMels = _options.NumMelBands;
+        NumMels = _options.NumMels;
         _useNativeMode = false;
         _modelPath = modelPath;
-        OnnxEncoder = new OnnxModel<T>(modelPath);
-
-        InitializeLayers();
+        _pipeline = new AstPipeline<T>(Engine, _options, _labels.Length, layers: null);
+        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
     }
-
-    /// <summary>
-    /// Path to the loaded ONNX model file when constructed in ONNX mode;
-    /// <c>null</c> in native mode. Captured so <see cref="CreateNewInstance"/>
-    /// can reconstruct an ONNX clone without losing its execution-mode
-    /// configuration.
-    /// </summary>
-    private readonly string? _modelPath;
 
     /// <summary>Initializes AST in native training / inference mode.</summary>
     public ASTModel(
         NeuralNetworkArchitecture<T> architecture,
-        ASTModelOptions? options = null)
-        : base(architecture)
+        ASTOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new ASTModelOptions();
+        _options = options ?? new ASTOptions();
         Options = _options;
-        ValidateOptions(_options);
+        _labels = _options.CustomLabels ?? AST<T>.AudioSetLabels;
         SampleRate = _options.SampleRate;
-        NumMels = _options.NumMelBands;
+        NumMels = _options.NumMels;
         _useNativeMode = true;
         InitializeLayers();
-    }
-
-    /// <summary>
-    /// Validates that every option used in STFT / mel / patch / transformer
-    /// math is in range. Fails fast at construction so a bad caller config
-    /// produces an actionable ArgumentOutOfRangeException instead of a
-    /// downstream "matrix shape mismatch" deep inside the first forward.
-    /// </summary>
-    private static void ValidateOptions(ASTModelOptions o)
-    {
-        if (o.SampleRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.SampleRate), o.SampleRate, "SampleRate must be > 0.");
-        if (o.StftWindowSize <= 1)
-            throw new ArgumentOutOfRangeException(nameof(o.StftWindowSize), o.StftWindowSize, "StftWindowSize must be > 1.");
-        if (o.HopLength <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.HopLength), o.HopLength, "HopLength must be > 0.");
-        if (o.NumMelBands <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.NumMelBands), o.NumMelBands, "NumMelBands must be > 0.");
-        if (o.TargetLength <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.TargetLength), o.TargetLength, "TargetLength must be > 0.");
-        if (o.PatchSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.PatchSize), o.PatchSize, "PatchSize must be > 0.");
-        if (o.NumClasses <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.NumClasses), o.NumClasses, "NumClasses must be > 0.");
-        if (o.EmbeddingDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.EmbeddingDim), o.EmbeddingDim, "EmbeddingDim must be > 0.");
-        if (o.NumLayers <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.NumLayers), o.NumLayers, "NumLayers must be > 0.");
-        if (o.NumHeads <= 0)
-            throw new ArgumentOutOfRangeException(nameof(o.NumHeads), o.NumHeads, "NumHeads must be > 0.");
-        if (o.EmbeddingDim % o.NumHeads != 0)
-            throw new ArgumentException(
-                $"EmbeddingDim ({o.EmbeddingDim}) must be divisible by NumHeads ({o.NumHeads}) — " +
-                "multi-head attention splits the embedding equally across heads.",
-                nameof(o.EmbeddingDim));
-        if (o.DropoutRate < 0.0 || o.DropoutRate >= 1.0)
-            throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), o.DropoutRate, "DropoutRate must be in [0, 1).");
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? throw new InvalidOperationException("ASTModel declares its paper recipe.");
     }
 
     #endregion
 
-    #region Layer Construction (Golden-Standard Pattern)
+    /// <summary>The network, the same one <see cref="AST{T}"/> runs.</summary>
+    internal AstNetwork<T> Network => Pipeline.Network;
 
-    /// <summary>
-    /// Initializes the AST layer stack following the codebase's golden
-    /// single-stream pattern: prefer user-supplied <c>Architecture.Layers</c>;
-    /// otherwise fall back to the paper-faithful <see cref="LayerHelper{T}.CreateDefaultASTLayers"/>.
-    /// </summary>
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode) return;
+    private AstPipeline<T> Pipeline => _pipeline ?? throw new InvalidOperationException("The AST front end is not initialized.");
 
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-        }
-        else
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultASTLayers(
-                patchSize: _options.PatchSize,
-                embeddingDim: _options.EmbeddingDim,
-                numLayers: _options.NumLayers,
-                numHeads: _options.NumHeads,
-                feedForwardDim: _options.FeedForwardDim,
-                numClasses: _options.NumClasses,
-                maxSequenceLength: _options.TargetLength));
-        }
-    }
+    /// <summary>Loads an official AST checkpoint's state dict.</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
-    #endregion
-
-    #region Preprocessing — Mel Spectrogram
-
-    /// <summary>
-    /// Converts raw audio samples into a log-mel spectrogram via the engine's
-    /// fused <see cref="IEngine.MelSpectrogram{T}"/> kernel — the AST §2.1
-    /// 128-mel × 10 ms-hop pipeline routed through a single BLAS / GPU-eligible
-    /// engine op.
-    /// </summary>
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (rawAudio.Shape.Length == 1)
-            rawAudio = Engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
-
-        int batchSize = rawAudio.Shape[0];
-
-        _hannWindow ??= BuildHannWindow(_options.StftWindowSize);
-
-        var mel = Engine.MelSpectrogram(
-            input: rawAudio,
-            sampleRate: _options.SampleRate,
-            nFft: _options.StftWindowSize,
-            hopLength: _options.HopLength,
-            nMels: _options.NumMelBands,
-            fMin: NumOps.Zero,
-            fMax: NumOps.FromDouble(_options.SampleRate / 2.0),
-            window: _hannWindow,
-            powerToDb: true);
-
-        int numFrames = mel.Length / (batchSize * _options.NumMelBands);
-        return Engine.Reshape(mel, [batchSize, 1, numFrames, _options.NumMelBands]);
-    }
+    #region Layer Initialization
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
-
-    /// <summary>
-    /// Builds a periodic Hann window of length <paramref name="windowSize"/>
-    /// as a <see cref="Tensor{T}"/>: <c>w[n] = 0.5·(1 − cos(2πn/(N−1)))</c>.
-    /// Generic in <typeparamref name="T"/> via the inherited NumOps.
-    /// </summary>
-    private Tensor<T> BuildHannWindow(int windowSize)
+    protected override void InitializeLayers()
     {
-        var window = new Tensor<T>([windowSize]);
-        for (int n = 0; n < windowSize; n++)
-        {
-            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / (windowSize - 1)));
-            window[n] = NumOps.FromDouble(w);
-        }
-        return window;
+        if (!_useNativeMode || _options is null || _pipeline is not null) return;
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("ASTModel builds the paper's network; custom layers are not supported.");
+        var layers = new List<LayerBase<T>>();
+        _pipeline = new AstPipeline<T>(Engine, _options, _labels.Length, layers);
+        int seed = _options.Seed ?? 42;
+        _pipeline.Network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
+        _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 1);
+        Layers.AddRange(layers);
     }
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    #endregion
+
+    #region Preprocessing
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => Pipeline.Features(rawAudio);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => Engine.Sigmoid(modelOutput);
 
     #endregion
 
     #region Public API
 
-    /// <inheritdoc/>
+    /// <summary>The per-label probabilities <c>[batch, labels]</c> of waveforms <c>[samples]</c> or <c>[batch, samples]</c>.</summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        var mel = PreprocessAudio(input);
-        if (!_useNativeMode && OnnxEncoder is not null)
+        if (!_useNativeMode)
+            throw new NotSupportedException("The ONNX graph returns the representation; use Fingerprint.");
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
         {
-            return PostprocessOutput(OnnxEncoder.Run(mel));
+            return PostprocessOutput(Network.Forward(PreprocessAudio(input)));
         }
-        var hidden = mel;
-        foreach (var layer in Layers) hidden = layer.Forward(hidden);
-        return hidden;
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
-    /// <summary>Returns the top-K class predictions with softmax-normalised probabilities.</summary>
+    /// <inheritdoc />
+    /// <remarks>The label logits of the waveforms.</remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Network.Forward(PreprocessAudio(input));
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
+    /// <summary>The <paramref name="topK"/> most probable labels of the first clip, by the paper's independent sigmoid
+    /// scores (AudioSet is multi-label).</summary>
     public List<(string Label, double Probability)> Classify(Tensor<T> audio, int topK = 5)
     {
-        var logits = Predict(audio);
-        var probs = SoftmaxLastAxis(logits);
-
-        // Take the first batch row and pick top-K.
-        int classCount = probs.Shape[^1];
-        var indexed = new (double prob, int idx)[classCount];
-        for (int i = 0; i < classCount; i++)
-            indexed[i] = (Convert.ToDouble(probs[0, i]), i);
-        Array.Sort(indexed, (a, b) => b.prob.CompareTo(a.prob));
-
-        var result = new List<(string, double)>(topK);
-        for (int k = 0; k < Math.Min(topK, classCount); k++)
-            result.Add(($"class_{indexed[k].idx}", indexed[k].prob));
-        return result;
+        var probabilities = Predict(audio);
+        int count = _labels.Length;
+        var row = probabilities.ToArray().Take(count).Select((p, i) => (Label: _labels[i], Probability: NumOps.ToDouble(p)));
+        return row.OrderByDescending(r => r.Probability).Take(Math.Min(topK, count)).ToList();
     }
 
     /// <inheritdoc/>
+    /// <remarks>The fingerprint is the clip's AST representation (the averaged class and distillation tokens).</remarks>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
-        // InitializeLayers leaves Layers empty in ONNX mode (the ONNX
-        // graph is executed via OnnxEncoder instead), so the layer-walk
-        // below would exit immediately and serialize the preprocessed
-        // mel spectrogram as the "fingerprint" — silently wrong. Require
-        // native mode here until an ONNX-embedding output is wired
-        // explicitly.
-        if (!_useNativeMode)
+        ThrowIfDisposed();
+        var features = PreprocessAudio(audio);
+        Tensor<T> representation;
+        if (!_useNativeMode && OnnxEncoder is not null)
         {
-            throw new NotSupportedException(
-                "ASTModel.Fingerprint() in ONNX mode requires an explicit " +
-                "embedding-producing output to be wired. Use the native " +
-                "constructor or invoke the ONNX encoder directly via the " +
-                "OnnxEncoder property.");
+            representation = OnnxEncoder.Run(features);
         }
-
-        // For fingerprinting we want the pooled embedding (one layer before the
-        // classification head). Run the layer stack and stop at the
-        // GlobalPoolingLayer output.
-        var mel = PreprocessAudio(audio);
-        var hidden = mel;
-        foreach (var layer in Layers)
+        else
         {
-            hidden = layer.Forward(hidden);
-            if (layer is GlobalPoolingLayer<T>) break;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                representation = Network.Encode(features);
         }
-
-        var flat = hidden.ToVector();
-        var data = new T[flat.Length];
-        for (int i = 0; i < flat.Length; i++) data[i] = flat[i];
         return new AudioFingerprint<T>
         {
-            Data = data,
+            Data = representation.ToArray().Take(_options.EmbeddingDim).ToArray(),
             SampleRate = SampleRate,
             Duration = audio.Length / (double)SampleRate
         };
@@ -332,8 +238,8 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         double dot = 0.0, n1 = 0.0, n2 = 0.0;
         for (int i = 0; i < fp1.Data.Length; i++)
         {
-            double a = Convert.ToDouble(fp1.Data[i]);
-            double b = Convert.ToDouble(fp2.Data[i]);
+            double a = NumOps.ToDouble(fp1.Data[i]);
+            double b = NumOps.ToDouble(fp2.Data[i]);
             dot += a * b; n1 += a * a; n2 += b * b;
         }
         return dot / (Math.Sqrt(n1) * Math.Sqrt(n2) + 1e-12);
@@ -371,23 +277,31 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>The model trains on the mel spectrogram of the waveform, as it predicts.</remarks>
-    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
-        => (PreprocessAudio(input), target);
+    /// <inheritdoc />
+    protected override string? TrainingUnavailableReason => _useNativeMode ? null : OnnxTrainingUnavailableReason;
+
+    /// <summary>
+    /// One training step on waveforms <c>[batch, samples]</c> and multi-hot labels <c>[batch, labels]</c>, as the
+    /// paper trains on AudioSet: mixup, SpecAugment and binary cross-entropy.
+    /// </summary>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot train in ONNX inference mode.");
+        var (features, targets) = Pipeline.TrainingBatch(input, expected, _trainingRandom);
+        TrainWithCustomObjective(features, targets, (x, y) => Pipeline.Loss(Network.Forward(x), y), _optimizer);
+        return true;
+    }
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+
     #endregion
 
     #region Helpers
-
-    /// <summary>Numerically-stable softmax along the last axis. Engine-routed.</summary>
-    private Tensor<T> SoftmaxLastAxis(Tensor<T> logits) =>
-        Engine.TensorSoftmax(logits, axis: logits.Shape.Length - 1);
 
     private bool _disposed;
     private void ThrowIfDisposed()
@@ -409,34 +323,21 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         {
             Name = Name,
             Description = "AST — Audio Spectrogram Transformer (Gong et al. 2021).",
-            Complexity = _options.NumLayers,
+            Complexity = _options.NumEncoderLayers,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["EmbeddingDim"] = _options.EmbeddingDim,
-                ["NumLayers"] = _options.NumLayers,
-                ["NumHeads"] = _options.NumHeads,
+                ["NumEncoderLayers"] = _options.NumEncoderLayers,
+                ["NumAttentionHeads"] = _options.NumAttentionHeads,
                 ["PatchSize"] = _options.PatchSize,
-                ["NumMelBands"] = _options.NumMelBands,
+                ["FrequencyStride"] = _options.FrequencyStride,
+                ["TimeStride"] = _options.TimeStride,
+                ["NumMels"] = _options.NumMels,
                 ["TargetLength"] = _options.TargetLength,
-                ["NumClasses"] = _options.NumClasses,
+                ["NumClasses"] = _labels.Length,
                 ["SampleRate"] = _options.SampleRate,
             }
         };
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
-    private static void VerifyEqual<TValue>(TValue persisted, TValue current, string name)
-        where TValue : IEquatable<TValue>
-    {
-        if (!persisted.Equals(current))
-            throw new InvalidOperationException(
-                $"Persisted ASTModelOptions.{name} = {persisted} does not match constructor option {current}. " +
-                "Reconstruct ASTModel with matching ASTModelOptions before loading this checkpoint.");
-    }
 
     #endregion
 }

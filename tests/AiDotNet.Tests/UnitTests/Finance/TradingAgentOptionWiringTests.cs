@@ -125,7 +125,8 @@ public sealed class TradingAgentOptionWiringTests
             var options = SacOptions(seed: 72);
             options.Tau = tau;
             using var agent = (FinancialSACAgent<double>)Create(Sac, options);
-            var target = Network(agent, typeof(FinancialSACAgent<double>), "_targetCritic1");
+            // The 2018a default bootstraps from a target value network V̄.
+            var target = Network(agent, typeof(FinancialSACAgent<double>), "_targetValue");
             var before = target.GetParameters().Clone();
 
             StoreBandit(agent, state, pairs: 16);

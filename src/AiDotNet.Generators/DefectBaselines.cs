@@ -39,11 +39,5 @@ internal static class DefectBaselines
             "global::AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>",
             "global::AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>",
             "global::AiDotNet.SelfSupervisedLearning.Evaluation.KNNEvaluator<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.AmazonPolly<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.AzureNeuralTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.ElevenLabsTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.GoogleCloudTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.Murf<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.NVIDIARivaTTS<T>",
         };
 }

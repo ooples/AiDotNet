@@ -38,8 +38,8 @@ public class MASOptions<T>
     public int? NumSamples { get; set; }
 
     /// <summary>
-    /// Gets or sets whether to normalize importance values.
-    /// Helps when different parameters have very different scales.
+    /// Gets or sets whether to divide each task's importance by its maximum (false: the paper accumulates the raw
+    /// Ω of Aljundi et al. 2018, Eq. 2).
     /// </summary>
     public bool? NormalizeImportance { get; set; }
 
@@ -203,7 +203,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
 
         _lambda = opts.Lambda ?? NumOps.FromDouble(1.0);
         _numSamples = opts.NumSamples ?? 256;
-        _normalizeImportance = opts.NormalizeImportance ?? true;
+        _normalizeImportance = opts.NormalizeImportance ?? false;
         _importanceMode = opts.ImportanceMode ?? MASImportanceMode.OutputSensitivity;
         _accumulationMode = opts.AccumulationMode ?? ImportanceAccumulationMode.Sum;
         _decayFactor = NumOps.FromDouble(opts.DecayFactor ?? 0.9);
@@ -293,7 +293,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 $"Parameter dimension mismatch: current={currentParams.Length}, stored={_omega.Length}");
         }
 
-        // MAS loss: (λ/2) × Σ Ω_i × (θ_i - θ*_i)²
+        // MAS penalty (Aljundi et al. 2018, Eq. 3): λ Σ Ω_i (θ_i − θ*_i)²
         T loss = NumOps.Zero;
 
         for (int i = 0; i < currentParams.Length; i++)
@@ -304,23 +304,25 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
             loss = NumOps.Add(loss, weightedDiff);
         }
 
-        var halfLambda = NumOps.Divide(_lambda, NumOps.FromDouble(2.0));
-        return NumOps.Multiply(halfLambda, loss);
+        return NumOps.Multiply(_lambda, loss);
     }
 
     /// <inheritdoc/>
-    public override Vector<T> AdjustGradients(Vector<T> gradients)
+    /// <remarks>Adds the gradient of the penalty λ Σ Ω_i (θ_i − θ*_i)², which is 2 λ Ω_i (θ_i − θ*_i)
+    /// (Aljundi et al. 2018, Eq. 3).</remarks>
+    public override Vector<T> AdjustGradients(IFullModel<T, TInput, TOutput> model, Vector<T> gradients)
     {
-        // MAS doesn't adjust gradients directly - regularization is through loss
         if (_omega == null || _optimalParameters == null || TaskCount == 0)
-        {
             return gradients;
-        }
-
-        // Add MAS gradient contribution: λ × Ω_i × (θ_i - θ*_i)
-        // Note: We need current parameters, but we can't get them here
-        // So this is done in ComputeRegularizationLoss and the trainer handles it
-        return gradients;
+        var current = InterfaceGuard.Parameterizable(model).GetParameters();
+        if (current.Length != _omega.Length || gradients.Length != _omega.Length)
+            throw new InvalidOperationException(
+                $"Parameter dimension mismatch: current={current.Length}, gradients={gradients.Length}, stored={_omega.Length}");
+        var adjusted = CloneVector(gradients);
+        var twoLambda = NumOps.Multiply(NumOps.FromDouble(2.0), _lambda);
+        for (int i = 0; i < current.Length; i++)
+            adjusted[i] = NumOps.Add(adjusted[i], NumOps.Multiply(twoLambda, NumOps.Multiply(_omega[i], NumOps.Subtract(current[i], _optimalParameters[i]))));
+        return adjusted;
     }
 
     /// <inheritdoc/>
@@ -445,41 +447,41 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </summary>
     private void ProcessSingleSampleImportance(IFullModel<T, TInput, TOutput> model, TInput input, Vector<T> omega)
     {
-        try
+        // g_ij(x_k) = ∂[ℓ2²(F(x_k; θ))]/∂θ_ij (Aljundi et al. 2018, §4.1): one backward pass of the squared output norm.
+        Vector<T> paramGrads;
+        if (model is IGradientComputable<T, TInput, TOutput> gradientModel)
         {
-            // Forward pass
-            var output = model.Predict(input);
-
-            // We need gradients of output norm with respect to parameters
-            // This requires backpropagation through the network
-
-            // For models that support gradient computation:
-            if (model is IGradientCapable<T, TInput, TOutput> gradModel)
-            {
-                // Compute gradient of output L2 norm: d||y||²/dθ = 2y · (dy/dθ)
-                var outputVector = ConvertToVector(output);
-                var gradOutput = ComputeOutputNormGradient(outputVector);
-
-                // Get parameter gradients
-                var paramGrads = gradModel.ComputeParameterGradients(input, gradOutput);
-
-                // Accumulate absolute gradients in-place (mutation required — omega is caller's vector)
-                var absGrads = (Vector<T>)Engine.Abs(paramGrads);
-                for (int i = 0; i < omega.Length && i < absGrads.Length; i++)
-                {
-                    omega[i] = NumOps.Add(omega[i], absGrads[i]);
-                }
-            }
-            else
-            {
-                // Fallback: use finite difference approximation
-                ComputeFiniteDifferenceImportance(model, input, omega);
-            }
+            paramGrads = gradientModel.ComputeGradients(input, model.Predict(input), SquaredOutputNorm);
         }
-        catch (Exception ex)
+        else if (model is IGradientCapable<T, TInput, TOutput> gradModel)
         {
-            System.Diagnostics.Trace.TraceWarning($"MAS importance: skipping sample due to error: {ex.Message}");
+            var outputVector = ConvertToVector(model.Predict(input));
+            paramGrads = gradModel.ComputeParameterGradients(input, ComputeOutputNormGradient(outputVector));
         }
+        else
+        {
+            ComputeFiniteDifferenceImportance(model, input, omega);
+            return;
+        }
+        var absGrads = (Vector<T>)Engine.Abs(paramGrads);
+        for (int i = 0; i < omega.Length && i < absGrads.Length; i++)
+            omega[i] = NumOps.Add(omega[i], absGrads[i]);
+    }
+
+    private static readonly SquaredOutputNormLoss SquaredOutputNorm = new();
+
+    /// <summary>ℓ2²(F(x)) = Σ F(x)², ignoring the target: the quantity whose parameter gradient MAS measures.</summary>
+    private sealed class SquaredOutputNormLoss : AiDotNet.LossFunctions.LossFunctionBase<T>
+    {
+        public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < predicted.Length; i++) sum = NumOps.Add(sum, NumOps.Multiply(predicted[i], predicted[i]));
+            return sum;
+        }
+
+        public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+            => Engine.ReduceSum(Engine.TensorMultiply(predicted, predicted), Enumerable.Range(0, predicted.Shape.Length).ToArray(), keepDims: false);
     }
 
     /// <summary>

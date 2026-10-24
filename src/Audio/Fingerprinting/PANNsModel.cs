@@ -47,6 +47,7 @@ namespace AiDotNet.Audio.Fingerprinting;
     Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 32,
                 Source = "Kong et al. 2020, Sec. IV: batch size 32 and an Adam optimizer with a learning rate of 0.001. Built here rather than by the factory because the paper does not clip gradients and the options default to clipping; the declaration verifies the hand-built values instead of replacing them.")]
+[TaskVariantOf(typeof(AiDotNet.Audio.Classification.PANNs<>), "audio embeddings for fingerprinting")]
 public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />

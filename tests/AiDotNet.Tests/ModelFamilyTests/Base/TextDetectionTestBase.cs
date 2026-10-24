@@ -108,43 +108,47 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
                 // ambiguous layout fails here instead of guessing which equal-shaped tensor to edit.
                 var geometryBias = Assert.Single(trainable,
                     chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == 5).Tensor;
-                // EAST bounds its RBOX head as the paper does: each distance is sigmoid(raw) * map side (8 here)
-                // and the angle is (sigmoid(raw) - 0.5) * pi / 2. The biases are the inverse of the geometry wanted.
-                double DistanceBias(double distance) => Math.Log(distance / (8.0 - distance));
+                // EAST bounds its RBOX head as the paper does: each distance is sigmoid(raw) * map side (16 here: the
+                // paper's output is at 1/4 of the 64-pixel image) and the angle is (sigmoid(raw) - 0.5) * pi / 2. The
+                // biases are the inverse of the geometry wanted.
+                double DistanceBias(double distance) => Math.Log(distance / (16.0 - distance));
                 var overlappingGeometry = new[] { 2.0, 2.9, 2.0, 2.9, 0.0 };
                 for (int index = 0; index < 4; index++)
                     geometryBias[index] = ToT(DistanceBias(overlappingGeometry[index]));
                 geometryBias[4] = ToT(0);
                 var raw = detector.Predict(image);
-                // Public Predict flattens/concatenates every head per image: 64 score cells,
-                // followed by five geometry channels with the same 8-by-8 row-major grid.
-                Assert.Equal(new[] { 1, 6 * 8 * 8 }, raw.Shape.ToArray());
-                for (int row = 0; row < 8; row++)
-                    for (int column = 0; column < 8; column++)
+                // Public Predict flattens/concatenates every head per image: 256 score cells,
+                // followed by five geometry channels with the same 16-by-16 row-major grid.
+                Assert.Equal(new[] { 1, 6 * 16 * 16 }, raw.Shape.ToArray());
+                for (int row = 0; row < 16; row++)
+                    for (int column = 0; column < 16; column++)
                     {
-                        int cell = row * 8 + column;
+                        int cell = row * 16 + column;
                         Assert.Equal(0.5, ToD(raw[0, cell]), 10);
                         for (int index = 0; index < overlappingGeometry.Length; index++)
-                            Assert.Equal(overlappingGeometry[index], ToD(raw[0, (index + 1) * 64 + cell]), 10);
+                            Assert.Equal(overlappingGeometry[index], ToD(raw[0, (index + 1) * 256 + cell]), 10);
                     }
-                // Locality-aware NMS, worked by hand: each cell's box is 46.4x32 px. Walking a row, the running
-                // score-weighted merge absorbs cells 0-6: cell 6 is 28 px from the mean of cells 0-5, IoU
-                // 18.4 / 74.4 = 0.247. Cell 7 is 32 px from the mean 28 of cells 0-6, IoU 14.4 / 78.4 = 0.184, below
-                // the 0.2 threshold, so it starts its own group. (A distance of 3 put cell 7 at exactly 0.2, a tie
-                // that floating-point rounding decides either way.) Standard NMS then keeps rows 0, 3 and 6 of
-                // both the merged boxes and the singles: 6 regions, the first being row 0's merged box, x 28 +- 23.2,
-                // y 4 +- 16. Zero distances are not a valid positive fixture.
-                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 6, (4.8, -12, 51.2, 20));
+                // Locality-aware NMS, worked by hand. Each cell's box is 23.2x16 px around its centre, 4 px apart:
+                // the ratios of the 8-pixel-stride case this replaced (46.4x32 px, 8 px apart), so every overlap is
+                // unchanged. Walking a row, the running score-weighted merge absorbs cells 0-6: cell 6 is 12 px from
+                // the mean of cells 0-5, IoU 9.2 / 37.2 = 0.247. Cell 7 is 16 px from the mean (cell 3) of cells 0-6,
+                // IoU 7.2 / 39.2 = 0.184, below the 0.2 threshold, so it starts a group; cells 7-13 merge the same way
+                // and cells 14-15 (IoU 0.706) form a third. The groups are centred at x 14, 42 and 60 px, with
+                // summed scores 3.5, 3.5 and 1. Standard NMS: rows k apart overlap by (16 - 4k) / (16 + 4k), so it
+                // keeps rows 0, 3, 6, 9, 12 and 15 of each group (0.143 at k = 3); the groups at x 42 and 60 overlap
+                // by 5.2 / 41.2 = 0.126 and both stay. 3 x 6 = 18 regions, the first (score 3.5, row-major first)
+                // being row 0's left group, x 14 +- 11.6, y 2 +- 8. Zero distances are not a valid positive fixture.
+                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 18, (2.4, -6, 25.6, 10));
 
                 for (int index = 0; index < 4; index++) geometryBias[index] = ToT(DistanceBias(0.25));
                 geometryBias[4] = ToT(0);
                 var separated = detector.Detect(image, DetectConfidenceThreshold);
-                AssertPositiveTextResult(separated, 64, (2, 2, 6, 6));
+                AssertPositiveTextResult(separated, 256, (1, 1, 3, 3));
                 for (int index = 0; index < separated.TextRegions.Count; index++)
                 {
-                    double left = 8 * (index % 8) + 2;
-                    double top = 8 * (index / 8) + 2;
-                    AssertBoxEquals(separated.TextRegions[index], (left, top, left + 4, top + 4));
+                    double left = 4 * (index % 16) + 1;
+                    double top = 4 * (index / 16) + 1;
+                    AssertBoxEquals(separated.TextRegions[index], (left, top, left + 2, top + 2));
                 }
                 break;
             default:
@@ -191,8 +195,10 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
         var image = new Tensor<T>(new[] { 1, 3, 64, 64 });
         var words = new[]
         {
-            SyntheticTextImages.Draw(image, 0, "HI", 6, 6, 3),
-            SyntheticTextImages.Draw(image, 0, "TEL", 8, 38, 3),
+            // White text in the detectors' [0, 255] pixel domain; drawn at 1 it was 1/255 after preprocessing, a
+            // contrast only a backbone that normalizes its first layer could see.
+            SyntheticTextImages.Draw(image, 0, "HI", 6, 6, 3, 255),
+            SyntheticTextImages.Draw(image, 0, "TEL", 8, 38, 3, 255),
         };
         var batch = new TextDetectionTrainingBatch(new[]
         {

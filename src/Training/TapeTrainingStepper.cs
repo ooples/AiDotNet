@@ -188,7 +188,39 @@ internal sealed class TapeTrainingStepper<T>
             request.Target,
             (x, _) => request.Forward(x),
             (predicted, y) => request.ComputeLoss(predicted, y),
-            new EagerStepHooks { OnGradients = request.OnGradients, ModelGradientClip = request.ModelGradientClip });
+            new EagerStepHooks
+            {
+                OnGradients = request.OnGradients,
+                // The fused plan adds the optimizer's L2 to the gradient ahead of its clip; the eager step it falls back
+                // to must too, or a model trains on a different objective whenever compilation declines.
+                RegularizeGradients = request.RegularizeGradients ?? OptimizerRegularization(request.Optimizer),
+                ModelGradientClip = request.ModelGradientClip,
+            });
+    }
+
+    /// <summary>
+    /// The optimizer's own regularization as a gradient update, applied the way its flat path applies it (L2 adds
+    /// strength * theta), or null when it has none or applies it inside its own step.
+    /// </summary>
+    private static Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? OptimizerRegularization(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        if (FusedTrainingSession<T>.OptimizerRegularizationOf(optimizer) is not { } regularization) return null;
+        return (parameters, gradients) =>
+        {
+            var engine = AiDotNetEngine.Current;
+            // Recording off: theta is a trainable parameter, and recording g + lambda * theta would join the
+            // optimizer's arithmetic to the next step's graph.
+            using var noGrad = new NoGradScope<T>();
+            foreach (var parameter in parameters)
+            {
+                if (!gradients.TryGetValue(parameter, out var gradient) || gradient is null) continue;
+                var theta = parameter._shape.SequenceEqual(gradient._shape) ? parameter : engine.Reshape(parameter, gradient._shape);
+                gradients[parameter] = regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2
+                    ? engine.TensorAdd(gradient, engine.TensorMultiplyScalar(theta, NumOps.FromDouble(l2.GetOptions().Strength)))
+                    : regularization.Regularize(gradient, theta);
+            }
+        };
     }
 
     /// <summary>
@@ -203,6 +235,9 @@ internal sealed class TapeTrainingStepper<T>
     /// <param name="modelGradientClip">The model's own global-norm clip (0 = none), applied before the optimizer's.</param>
     /// <param name="beforeUpdate">Runs after the gradients exist and before the update (e.g. restoring full-precision
     /// shadow weights for quantization-aware training).</param>
+    /// <param name="applyOptimizerRegularization">Whether the optimizer's own configured regularization (a paper's
+    /// coupled weight decay as L2) is added to the gradients before the clip, as the fused session and
+    /// <see cref="EagerStep"/> add it. False only for an objective that already contains that term.</param>
     /// <returns>The objective's value before the update.</returns>
     public static T EagerObjectiveStep(
         IReadOnlyList<Tensor<T>> parameters,
@@ -210,10 +245,12 @@ internal sealed class TapeTrainingStepper<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
         double modelGradientClip = 0.0,
-        Action? beforeUpdate = null)
+        Action? beforeUpdate = null,
+        bool applyOptimizerRegularization = true)
     {
         Guard.NotNull(parameters);
-        return EagerObjectiveStep(() => parameters, objective, optimizer, onGradients, modelGradientClip, beforeUpdate);
+        return EagerObjectiveStep(() => parameters, objective, optimizer, onGradients, modelGradientClip, beforeUpdate,
+            applyOptimizerRegularization);
     }
 
     /// <summary>
@@ -226,7 +263,8 @@ internal sealed class TapeTrainingStepper<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
         double modelGradientClip = 0.0,
-        Action? beforeUpdate = null)
+        Action? beforeUpdate = null,
+        bool applyOptimizerRegularization = true)
     {
         Guard.NotNull(parameters);
         Guard.NotNull(objective);
@@ -240,7 +278,13 @@ internal sealed class TapeTrainingStepper<T>
             placeholder,
             (_, _) => objective(),
             (value, _) => value,
-            new EagerStepHooks { OnGradients = onGradients, ModelGradientClip = modelGradientClip, BeforeUpdate = beforeUpdate });
+            new EagerStepHooks
+            {
+                OnGradients = onGradients,
+                RegularizeGradients = applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null,
+                ModelGradientClip = modelGradientClip,
+                BeforeUpdate = beforeUpdate,
+            });
     }
 
     /// <summary>
@@ -283,6 +327,8 @@ internal sealed class TapeTrainingStepper<T>
     /// <param name="microObjective">Builds the scalar loss of micro-batch <c>i</c> from the live parameters.</param>
     /// <param name="optimizer">The update rule; its moments are keyed by tensor reference.</param>
     /// <param name="onGradients">Receives the averaged gradients before the update.</param>
+    /// <param name="applyOptimizerRegularization">Whether the optimizer's own configured regularization is added to the
+    /// averaged gradients before the update (see <see cref="EagerObjectiveStep(IReadOnlyList{Tensor{T}}, Func{Tensor{T}}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}, Action{IReadOnlyDictionary{Tensor{T}, Tensor{T}}}?, double, Action?, bool)"/>).</param>
     /// <returns>The mean micro-objective value before the update.</returns>
     /// <remarks>
     /// Each micro-batch's gradients are copied into owned accumulators before its tape is disposed (the dispose
@@ -294,7 +340,8 @@ internal sealed class TapeTrainingStepper<T>
         int microBatchCount,
         Func<int, Tensor<T>> microObjective,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
+        bool applyOptimizerRegularization = true)
     {
         Guard.NotNull(parameters);
         Guard.NotNull(microObjective);
@@ -336,6 +383,7 @@ internal sealed class TapeTrainingStepper<T>
 
         T meanLoss = NumOps.FromDouble(lossSum / microBatchCount);
         onGradients?.Invoke(accumulated);
+        if (applyOptimizerRegularization) OptimizerRegularization(optimizer)?.Invoke(reached, accumulated);
 
         // A line-searching optimizer re-evaluates the batch objective: the mean of the micro-objectives.
         Tensor<T> MeanObjective()
@@ -382,6 +430,9 @@ internal sealed class TapeTrainingStepper<T>
 
         /// <summary>Receives the parameters' gradients before clipping (the model's public gradient surface).</summary>
         public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
+
+        /// <summary>Adds the optimizer's regularization to the reached parameters' gradients, before clipping.</summary>
+        public Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? RegularizeGradients { get; init; }
 
         /// <summary>The model's own global-norm clip (0 = none), applied before the update.</summary>
         public double ModelGradientClip { get; init; }
@@ -439,6 +490,7 @@ internal sealed class TapeTrainingStepper<T>
 
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
         hooks?.OnGradients?.Invoke(gradients);
+        hooks?.RegularizeGradients?.Invoke(reached, gradients);
         if (hooks is { ModelGradientClip: > 0.0 })
             ClipByGlobalNorm(gradients, hooks.ModelGradientClip);
         hooks?.BeforeUpdate?.Invoke();

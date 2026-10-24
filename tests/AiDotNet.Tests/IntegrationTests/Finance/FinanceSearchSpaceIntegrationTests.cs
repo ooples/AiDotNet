@@ -253,8 +253,9 @@ public class FinanceSearchSpaceIntegrationTests
         var samplesRange = searchSpace["NumSamples"];
         Assert.Equal(ParameterType.Integer, samplesRange.Type);
         Assert.Equal(50.0, ToDouble(samplesRange.MinValue));
-        Assert.Equal(200.0, ToDouble(samplesRange.MaxValue));
-        Assert.Equal(100.0, ToDouble(samplesRange.DefaultValue));
+        Assert.Equal(400.0, ToDouble(samplesRange.MaxValue));
+        // The paper draws 200 sample paths (appendix).
+        Assert.Equal(200.0, ToDouble(samplesRange.DefaultValue));
     }
 
     [Fact(Timeout = 120000)]

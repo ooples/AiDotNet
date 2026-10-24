@@ -398,7 +398,8 @@ public class TradingAgentLearningTests
             Seed = 909,
         };
 
-        using var agent = new FinancialSACAgent<double>(Actor(), Critic(takesAction: true), options);
+        // The paper's Gaussian head: a mean and a log standard deviation per action dimension.
+        using var agent = new FinancialSACAgent<double>(Architecture(StateSize, 2 * ActionSize), Critic(takesAction: true), options);
 
         var state = State(7);
         var deterministic = agent.SelectTradingAction(state, training: false);
@@ -416,8 +417,17 @@ public class TradingAgentLearningTests
         Assert.Contains(deltas, d => d < 0);   // it can explore DOWNWARD at all
         Assert.Contains(deltas, d => d > 0);
 
-        // Symmetric: the mean perturbation is near zero, not near the old +0.05.
-        var mean = deltas.Average();
-        Assert.True(Math.Abs(mean) < 0.01, $"exploration noise has a mean of {mean:F4}; it must be centred on the policy");
+        // Centred on the policy. SAC samples a = MaxPositionSize * tanh(mu + sigma * eps), and tanh is monotone, so the
+        // sample's MEDIAN is exactly the deterministic action tanh(mu); its mean is not (E[tanh(u)] != tanh(E[u]) away
+        // from mu = 0). The old uniform [0, 0.1) noise had a median of +0.05.
+        // The bound is four standard errors of a sample median (1.2533 sd / sqrt(n)): the paper's head starts near
+        // sigma = 1, so the spread, and with it the sampling error, is ten times the old fixed sigma = 0.1's.
+        var ordered = deltas.OrderBy(d => d).ToList();
+        double median = 0.5 * (ordered[ordered.Count / 2 - 1] + ordered[ordered.Count / 2]);
+        double mean = deltas.Average();
+        double sd = Math.Sqrt(deltas.Sum(d => (d - mean) * (d - mean)) / (deltas.Count - 1));
+        double bound = 4 * 1.2533 * sd / Math.Sqrt(deltas.Count);
+        Assert.True(Math.Abs(median) < bound,
+            $"exploration noise has a median of {median:F4} (bound {bound:F4}); it must be centred on the policy");
     }
 }

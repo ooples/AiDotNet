@@ -120,6 +120,8 @@ public class OptimizerVectorUpdateStateSafetyTests
             null, new AdafactorOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = 0.01 })),
         ("ScheduleFreeAdamW", () => new ScheduleFreeAdamWOptimizer<double, Matrix<double>, Vector<double>>(
             null, new ScheduleFreeAdamWOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = 0.01 })),
+        ("DAdaptAdam", () => new DAdaptAdamOptimizer<double, Matrix<double>, Vector<double>>(
+            null, new DAdaptAdamOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = 1.0 })),
         ("RMSprop", () => new RootMeanSquarePropagationOptimizer<double, Matrix<double>, Vector<double>>(
             null!, new RootMeanSquarePropagationOptimizerOptions<double, Matrix<double>, Vector<double>>
             {

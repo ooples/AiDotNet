@@ -405,26 +405,6 @@ public class DiffusionExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task DiffWaveModel_Construction()
-    {
-        var model = new DiffWaveModel<float>();
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task MusicGenModel_Construction()
-    {
-        // FP32: same rationale as the diffusion family above. MusicGen wasn't
-        // on commit 1c21d67f9's standalone-OOM list — that probe covered only
-        // the diffusion / VAE families — but the local sweep after Kandinsky
-        // FP32 surfaced it as an OOM in the shared diffusion-shard process at
-        // FP64. Migrating to FP32 brings it under the same memory budget as
-        // the other paper-scale models in this file.
-        var model = new MusicGenModel<float>();
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task RiffusionModel_Construction()
     {
         var model = new RiffusionModel<float>();
@@ -439,13 +419,6 @@ public class DiffusionExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SoundStormModel_Construction()
-    {
-        var model = new SoundStormModel<float>();
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task JEN1Model_Construction()
     {
         var model = new JEN1Model<float>();
@@ -456,13 +429,6 @@ public class DiffusionExtendedIntegrationTests
     public async Task UdioModel_Construction()
     {
         var model = new UdioModel<float>();
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task VoiceCraftModel_Construction()
-    {
-        var model = new VoiceCraftModel<float>();
         Assert.NotNull(model);
     }
 

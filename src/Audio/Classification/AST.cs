@@ -1,9 +1,10 @@
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
-using AiDotNet.Diffusion.Audio;
+using AiDotNet.LossFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -30,13 +31,15 @@ namespace AiDotNet.Audio.Classification;
 /// <b>Architecture:</b> AST treats the audio spectrogram as an image and processes it with
 /// a standard Vision Transformer:
 /// <list type="number">
-/// <item><b>Audio preprocessing</b>: Raw waveform is converted to a 128-bin log-mel spectrogram</item>
+/// <item><b>Audio preprocessing</b>: Raw waveform is converted to a 128-bin Kaldi log-mel filterbank (25 ms
+/// frames every 10 ms), padded or cut to 1024 frames and normalized to mean 0 and standard deviation 0.5</item>
 /// <item><b>Patch embedding</b>: The spectrogram is split into overlapping 16x16 patches (stride 10),
 /// each linearly projected to a 768-dimensional embedding</item>
-/// <item><b>[CLS] token</b>: A learnable classification token is prepended to the patch sequence</item>
+/// <item><b>Tokens</b>: DeiT's class and distillation tokens are prepended to the patch sequence</item>
 /// <item><b>Positional encoding</b>: Learnable positional embeddings encode spatial position</item>
-/// <item><b>Transformer encoder</b>: 12-layer encoder with 12-head self-attention processes patches</item>
-/// <item><b>Classification</b>: The [CLS] token output is projected to class logits via a linear head</item>
+/// <item><b>Transformer encoder</b>: 12 pre-norm blocks with 12-head self-attention</item>
+/// <item><b>Classification</b>: The average of the two tokens' outputs goes through LayerNorm and a linear head,
+/// and a sigmoid scores each label</item>
 /// </list>
 /// </para>
 /// <para>
@@ -58,18 +61,18 @@ namespace AiDotNet.Audio.Classification;
 /// with overlap (stride 10), which means each patch shares some pixels with its neighbors.
 /// This overlap improves accuracy at the cost of more patches to process.
 ///
-/// <b>Step 3 - Add a special token:</b> A special [CLS] (classification) token is added.
-/// This token will collect information from all patches and serve as the overall summary.
+/// <b>Step 3 - Add summary tokens:</b> Two special tokens (DeiT's class and distillation tokens) are added.
+/// They collect information from all patches and serve as the overall summary.
 ///
 /// <b>Step 4 - Understand context:</b> A 12-layer Transformer encoder lets every patch attend
-/// to every other patch. The [CLS] token gathers global information.
+/// to every other patch. The two summary tokens gather global information.
 ///
-/// <b>Step 5 - Classify:</b> The [CLS] token output goes through a linear layer to produce
+/// <b>Step 5 - Classify:</b> The average of the two tokens goes through a linear layer to produce
 /// probabilities for each sound class. Sigmoid activation enables multi-label detection.
 ///
 /// <b>Usage with a pre-trained ONNX model (recommended):</b>
 /// <code>
-/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 768, outputSize: 527);
+/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 160000, outputSize: 527);
 /// var ast = new AST&lt;float&gt;(arch, "ast_audioset.onnx");
 /// var result = ast.Detect(audioTensor);
 /// foreach (var evt in result.Events)
@@ -80,10 +83,9 @@ namespace AiDotNet.Audio.Classification;
 ///
 /// <b>Usage with native training:</b>
 /// <code>
-/// var options = new ASTOptions { EmbeddingDim = 768, NumEncoderLayers = 12 };
-/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 768, outputSize: 527);
-/// var ast = new AST&lt;float&gt;(arch, options);
-/// ast.Train(spectrogramFeatures, labels);
+/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 160000, outputSize: 527);
+/// var ast = new AST&lt;float&gt;(arch, new ASTOptions());
+/// ast.Train(waveforms, multiHotLabels);   // [batch, samples] at 16 kHz, [batch, 527]
 /// </code>
 /// </para>
 /// <para>
@@ -101,16 +103,20 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AST: Audio Spectrogram Transformer", "https://arxiv.org/abs/2104.01778", Year = 2021, Authors = "Yuan Gong, Yu-An Chung, James Glass")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-5, Beta1 = 0.95, Beta2 = 0.999, WeightDecay = 5e-7, ReferenceBatchSize = 12,
+                WarmupSteps = 1000, Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.5, MilestoneFractions = [0.4, 0.6, 0.8],
+                Source = "Gong et al. 2021, Sec. 3.1.1 (full AudioSet): batch 12, Adam, binary cross-entropy, initial rate 1e-5 for 5 epochs, halved every epoch after the 2nd (milestones at 2/5, 3/5 and 4/5 of the run). The official recipe (YuanGongND/ast egs/audioset/run.sh, traintest.py) fills in betas (0.95, 0.999), weight decay 5e-7 and a linear warmup over the first 1000 steps.")]
 public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
     private readonly ASTOptions _options;
 
-    private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
+    private readonly bool _useNativeMode;
     private bool _disposed;
+    private AstPipeline<T>? _pipeline;
+    private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
     /// <summary>
     /// AudioSet-527 standard event labels used by AST pre-trained models.
@@ -132,21 +138,9 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// Creates an AST model for ONNX inference mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input/output dimensions.</param>
-    /// <param name="modelPath">Path to the pre-trained ONNX model file.</param>
+    /// <param name="modelPath">Path to a pre-trained ONNX graph that takes the official input
+    /// <c>[batch, TargetLength, NumMels]</c> and returns label logits.</param>
     /// <param name="options">AST configuration options. If null, uses paper defaults.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this constructor when you have a pre-trained AST model file.
-    /// The model will be ready for inference immediately without training.
-    ///
-    /// Example:
-    /// <code>
-    /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 768, outputSize: 527);
-    /// var ast = new AST&lt;float&gt;(arch, "ast_audioset.onnx");
-    /// var result = ast.Detect(audioTensor);
-    /// </code>
-    /// </para>
-    /// </remarks>
     public AST(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -157,97 +151,46 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+
         _options = options ?? new ASTOptions();
         Options = _options;
-        _options.ModelPath = modelPath;
         _useNativeMode = false;
-
+        _options.ModelPath = modelPath;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
-
-        _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: _options.SampleRate,
-            nMels: _options.NumMels,
-            nFft: _options.FftSize,
-            hopLength: _options.HopLength,
-            fMin: _options.FMin,
-            fMax: _options.FMax,
-            logMel: true);
-
-        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-        InitializeLayers();
+        _pipeline = new AstPipeline<T>(Engine, _options, ClassLabels.Count, layers: null);
+        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
     }
 
     /// <summary>
-    /// Creates an AST model for native training mode.
+    /// Creates an AST model for native training and inference: the paper's network, initialized as the official code
+    /// initializes it when training from scratch.
     /// </summary>
-    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="architecture">Neural network architecture defining input/output dimensions.</param>
     /// <param name="options">AST configuration options. If null, uses paper defaults.</param>
-    /// <param name="optimizer">Optional custom optimizer. Defaults to AdamW.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this constructor to train an AST model from scratch.
-    ///
-    /// Example:
-    /// <code>
-    /// var options = new ASTOptions { EmbeddingDim = 768, CustomLabels = new[] { "speech", "music", "noise" } };
-    /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 768, outputSize: 3);
-    /// var ast = new AST&lt;float&gt;(arch, options);
-    /// ast.Train(features, labels);
-    /// </code>
-    /// </para>
-    /// </remarks>
+    /// <param name="optimizer">Optimizer for training; the paper's recipe by default.</param>
     public AST(
         NeuralNetworkArchitecture<T> architecture,
         ASTOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ASTOptions();
         Options = _options;
         _useNativeMode = true;
-        // The rate this model publishes on its own options. Built bare, the optimizer
-        // would use its own default instead and LearningRate would be configuration that
-        // nothing reads — the defect that diverged MusicFlamingo's training.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
-
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
-
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-
-        _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: _options.SampleRate,
-            nMels: _options.NumMels,
-            nFft: _options.FftSize,
-            hopLength: _options.HopLength,
-            fMin: _options.FMin,
-            fMax: _options.FMax,
-            logMel: true);
-
         InitializeLayers();
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? throw new InvalidOperationException("AST declares its paper recipe.");
     }
 
     /// <summary>
     /// Creates an AST model asynchronously with optional model download.
     /// </summary>
-    /// <param name="options">AST configuration options.</param>
-    /// <param name="progress">Optional progress reporter for download tracking.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A configured AST model ready for inference.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The easiest way to get started. Downloads and sets up everything:
-    /// <code>
-    /// var ast = await AST&lt;float&gt;.CreateAsync(
-    ///     progress: new Progress&lt;double&gt;(p => Console.Write($"\rDownloading: {p:P0}")));
-    /// var result = ast.Detect(audioTensor);
-    /// </code>
-    /// </para>
-    /// </remarks>
     internal static async Task<AST<T>> CreateAsync(
         ASTOptions? options = null,
         IProgress<double>? progress = null,
@@ -276,74 +219,53 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     #endregion
 
+    /// <summary>The network, the same one <see cref="Fingerprinting.ASTModel{T}"/> runs.</summary>
+    internal AstNetwork<T> Network => Pipeline.Network;
+
+    private AstPipeline<T> Pipeline => _pipeline ?? throw new InvalidOperationException("The AST front end is not initialized.");
+
+    /// <summary>Loads an official AST checkpoint's state dict.</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
+
+    /// <summary>Initializes from an ImageNet DeiT checkpoint with the paper's adaptation (§2.2).</summary>
+    internal void LoadImageNetDeiT(Func<string, int[], double[]> read, int imageGrid)
+        => Network.LoadImageNetDeiT(read, imageGrid, Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 2));
+
     #region IAudioEventDetector Properties
 
-    /// <summary>
-    /// Gets the list of event types this model can detect.
-    /// </summary>
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedEvents => ClassLabels;
 
-    /// <summary>
-    /// Gets the event labels.
-    /// </summary>
+    /// <inheritdoc/>
     public IReadOnlyList<string> EventLabels => ClassLabels;
 
-    /// <summary>
-    /// Gets the time resolution for event detection in seconds.
-    /// </summary>
+    /// <inheritdoc/>
     public double TimeResolution => _options.WindowSize * (1 - _options.WindowOverlap);
 
     #endregion
 
     #region IAudioEventDetector Methods
 
-    /// <summary>
-    /// Detects all audio events using the default confidence threshold.
-    /// </summary>
-    /// <param name="audio">Raw audio waveform tensor [samples].</param>
-    /// <returns>Detection result with events above the threshold.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass in audio and get back detected sounds with timing and confidence.
-    /// <code>
-    /// var result = ast.Detect(audioTensor);
-    /// foreach (var evt in result.Events)
-    ///     Console.WriteLine($"{evt.EventType}: {evt.Confidence:P1}");
-    /// </code>
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     public AudioEventResult<T> Detect(Tensor<T> audio)
     {
         ThrowIfDisposed();
         return Detect(audio, NumOps.FromDouble(_options.Threshold));
     }
 
-    /// <summary>
-    /// Detects audio events with a custom confidence threshold.
-    /// </summary>
-    /// <param name="audio">Raw audio waveform tensor [samples].</param>
-    /// <param name="threshold">Confidence threshold [0, 1].</param>
-    /// <returns>Detection result with events above threshold.</returns>
+    /// <inheritdoc/>
     public AudioEventResult<T> Detect(Tensor<T> audio, T threshold)
     {
         ThrowIfDisposed();
-
         double thresholdValue = NumOps.ToDouble(threshold);
         double totalDuration = audio.Length / (double)_options.SampleRate;
-
         var windows = SplitIntoWindows(audio);
         var allEvents = new List<AudioEvent<T>>();
 
         for (int windowIdx = 0; windowIdx < windows.Count; windowIdx++)
         {
-            var window = windows[windowIdx];
             double startTime = windowIdx * TimeResolution;
-
-            var melSpec = _melSpectrogram?.Forward(window) ??
-                throw new InvalidOperationException("MelSpectrogram not initialized.");
-
-            var scores = ClassifyWindow(melSpec);
-
+            var scores = ClassifyWindow(windows[windowIdx]);
             for (int i = 0; i < scores.Length && i < ClassLabels.Count; i++)
             {
                 double score = NumOps.ToDouble(scores[i]);
@@ -362,14 +284,12 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
 
         var mergedEvents = MergeEvents(allEvents);
-        var eventStats = ComputeEventStatistics(mergedEvents);
-
         return new AudioEventResult<T>
         {
             Events = mergedEvents,
             TotalDuration = totalDuration,
             DetectedEventTypes = mergedEvents.Select(e => e.EventType).Distinct().ToList(),
-            EventStats = eventStats
+            EventStats = ComputeEventStatistics(mergedEvents)
         };
     }
 
@@ -393,7 +313,6 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         var result = Detect(audio, threshold);
         var eventTypeSet = new HashSet<string>(eventTypes, StringComparer.OrdinalIgnoreCase);
         var filteredEvents = result.Events.Where(e => eventTypeSet.Contains(e.EventType)).ToList();
-
         return new AudioEventResult<T>
         {
             Events = filteredEvents,
@@ -407,25 +326,9 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public Tensor<T> GetEventProbabilities(Tensor<T> audio)
     {
         ThrowIfDisposed();
-
         var windows = SplitIntoWindows(audio);
-        var probabilities = new Tensor<T>([windows.Count, ClassLabels.Count]);
-
-        for (int windowIdx = 0; windowIdx < windows.Count; windowIdx++)
-        {
-            var window = windows[windowIdx];
-            var melSpec = _melSpectrogram?.Forward(window) ??
-                throw new InvalidOperationException("MelSpectrogram not initialized.");
-
-            var scores = ClassifyWindow(melSpec);
-
-            for (int i = 0; i < ClassLabels.Count && i < scores.Length; i++)
-            {
-                probabilities[windowIdx, i] = scores[i];
-            }
-        }
-
-        return probabilities;
+        var rows = windows.Select(w => Engine.Reshape(Predict(w), new[] { 1, ClassLabels.Count })).ToArray();
+        return rows.Length == 1 ? rows[0] : Engine.TensorConcatenate(rows, 0);
     }
 
     /// <inheritdoc/>
@@ -449,51 +352,32 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) return;
-
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-        }
-        else
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultASTLayers(
-                patchFeatureSize: _options.PatchSize * _options.PatchSize,
-                embeddingDim: _options.EmbeddingDim,
-                numEncoderLayers: _options.NumEncoderLayers,
-                numAttentionHeads: _options.NumAttentionHeads,
-                feedForwardDim: _options.FeedForwardDim,
-                numClasses: ClassLabels.Count,
-                maxSequenceLength: 1214,
-                dropoutRate: _options.DropoutRate));
-        }
+        if (!_useNativeMode || _options is null || _pipeline is not null) return;
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("AST builds the paper's network; custom layers are not supported.");
+        var layers = new List<LayerBase<T>>();
+        _pipeline = new AstPipeline<T>(Engine, _options, ClassLabels.Count, layers);
+        int seed = _options.Seed ?? 42;
+        _pipeline.Network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
+        _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 1);
+        Layers.AddRange(layers);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// The per-label probabilities <c>[batch, labels]</c> (sigmoid, multi-label) of waveforms <c>[samples]</c> or
+    /// <c>[batch, samples]</c> at <see cref="ASTOptions.SampleRate"/>.
+    /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-
+        var features = PreprocessAudio(input);
         if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            return OnnxEncoder.Run(input);
-        }
-
-        // Force inference mode so the probabilities are deterministic (dropout off), then run the
-        // sigmoid via PostprocessOutput — AST (Gong et al. 2021) emits per-class sigmoid probabilities
-        // in [0,1] for multi-label audio-event detection. Without this the head returned raw logits, so
-        // Predict produced negative / >1 "class scores" (ClassOutput_ShouldBeNonNegative) and silence
-        // mapped to a non-silent RMS (SilenceIn_NearSilenceOut). Mirrors PANNs.PredictCore.
+            return PostprocessOutput(OnnxEncoder.Run(features));
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try
         {
-            var current = input;
-            foreach (var layer in Layers)
-            {
-                current = layer.Forward(current);
-            }
-            return PostprocessOutput(current);
+            return PostprocessOutput(Network.Forward(features));
         }
         finally
         {
@@ -502,31 +386,46 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>The label logits of the waveforms.</remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Network.Forward(PreprocessAudio(input));
+
+    /// <summary>
+    /// One training step on waveforms <c>[batch, samples]</c> and multi-hot labels <c>[batch, labels]</c>, as the
+    /// paper trains on AudioSet: mixup, SpecAugment and binary cross-entropy (<see cref="AstPipeline{T}"/>).
+    /// </summary>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+        {
+            throw new NotSupportedException(
+                "Training is not supported in ONNX mode. Create an AST model " +
+                "without a modelPath parameter to train natively.");
+        }
+        var (features, targets) = Pipeline.TrainingBatch(input, expected, _trainingRandom);
+        TrainWithCustomObjective(features, targets, (x, y) => Pipeline.Loss(Network.Forward(x), y), _optimizer);
+        return true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
+    /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    /// <inheritdoc/>
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_melSpectrogram is null)
-            throw new InvalidOperationException("MelSpectrogram not initialized.");
-
-        return _melSpectrogram.Forward(rawAudio);
-    }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-    {
-        var result = new Tensor<T>(modelOutput._shape);
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            double logit = NumOps.ToDouble(modelOutput[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-logit));
-            result[i] = NumOps.FromDouble(sigmoid);
-        }
-        return result;
-    }
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => Pipeline.Features(rawAudio);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => Engine.Sigmoid(modelOutput);
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
@@ -544,114 +443,49 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         metadata.AdditionalInfo["NumAttentionHeads"] = _options.NumAttentionHeads.ToString();
         metadata.AdditionalInfo["FeedForwardDim"] = _options.FeedForwardDim.ToString();
         metadata.AdditionalInfo["PatchSize"] = _options.PatchSize.ToString();
-        metadata.AdditionalInfo["PatchStride"] = _options.PatchStride.ToString();
+        metadata.AdditionalInfo["FrequencyStride"] = _options.FrequencyStride.ToString();
+        metadata.AdditionalInfo["TimeStride"] = _options.TimeStride.ToString();
         metadata.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();
         metadata.AdditionalInfo["NumMels"] = _options.NumMels.ToString();
+        metadata.AdditionalInfo["TargetLength"] = _options.TargetLength.ToString();
         metadata.AdditionalInfo["NumClasses"] = ClassLabels.Count.ToString();
         return metadata;
     }
-
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
 
     #endregion
 
     #region Classification Helpers
 
-    private T[] ClassifyWindow(Tensor<T> melSpec)
-    {
-        Tensor<T> output;
-
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            var input = new Tensor<T>([1, 1, melSpec.Shape[0], melSpec.Shape[1]]);
-            for (int t = 0; t < melSpec.Shape[0]; t++)
-            {
-                for (int f = 0; f < melSpec.Shape[1]; f++)
-                {
-                    input[0, 0, t, f] = melSpec[t, f];
-                }
-            }
-            output = OnnxEncoder.Run(input);
-        }
-        else if (_useNativeMode)
-        {
-            var input = new Tensor<T>([melSpec.Length]);
-            int idx = 0;
-            for (int t = 0; t < melSpec.Shape[0]; t++)
-            {
-                for (int f = 0; f < melSpec.Shape[1]; f++)
-                {
-                    input[idx++] = melSpec[t, f];
-                }
-            }
-            output = Predict(input);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                "No model available for classification. Provide an ONNX model path or use native training mode.");
-        }
-
-        var scores = new T[ClassLabels.Count];
-        for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
-        {
-            double logit = NumOps.ToDouble(output[i]);
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
-        }
-
-        return scores;
-    }
+    /// <summary>The label probabilities of one waveform window.</summary>
+    private T[] ClassifyWindow(Tensor<T> window) => Predict(window).ToArray();
 
     #endregion
 
     #region Audio Windowing Helpers
 
+    /// <summary>
+    /// Splits audio into windows of <see cref="ASTOptions.WindowSize"/> seconds every
+    /// <see cref="TimeResolution"/> seconds; a remainder longer than a tenth of a window becomes a last, zero-padded
+    /// window, and audio shorter than one window is one zero-padded window.
+    /// </summary>
     private List<Tensor<T>> SplitIntoWindows(Tensor<T> audio)
     {
+        var flat = Engine.Reshape(audio, new[] { audio.Length });
+        int length = flat.Length;
         var windows = new List<Tensor<T>>();
         int windowSamples = (int)(_options.WindowSize * _options.SampleRate);
-        int hopSamples = (int)(windowSamples * (1 - _options.WindowOverlap));
-
-        if (hopSamples <= 0) hopSamples = 1;
-
-        int lastStart = 0;
-        for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
+        int hopSamples = Math.Max(1, (int)(windowSamples * (1 - _options.WindowOverlap)));
+        Tensor<T> Window(int start)
         {
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < windowSamples; i++)
-            {
-                window[i] = audio[start + i];
-            }
-            windows.Add(window);
-            lastStart = start + hopSamples;
+            int available = Math.Min(windowSamples, length - start);
+            var part = Engine.TensorSlice(flat, new[] { start }, new[] { available });
+            return available == windowSamples ? part : Engine.TensorConcatenate(new[] { part, new Tensor<T>(new[] { windowSamples - available }) }, 0);
         }
 
-        int remainingStart = windows.Count > 0 ? lastStart : 0;
-        int remainingSamples = audio.Length - remainingStart;
-
-        if (remainingSamples > windowSamples / 10)
-        {
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < remainingSamples && i < windowSamples; i++)
-            {
-                window[i] = audio[remainingStart + i];
-            }
-            windows.Add(window);
-        }
-        else if (windows.Count == 0 && audio.Length > 0)
-        {
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < audio.Length; i++)
-            {
-                window[i] = audio[i];
-            }
-            windows.Add(window);
-        }
-
+        int next = 0;
+        for (; next + windowSamples <= length; next += hopSamples) windows.Add(Window(next));
+        int remainder = length - next;
+        if (windows.Count == 0 ? length > 0 : remainder > windowSamples / 10) windows.Add(Window(next));
         return windows;
     }
 
@@ -810,15 +644,8 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
                 while (_buffer.Count >= _windowSamples)
                 {
-                    var window = new Tensor<T>([_windowSamples]);
-                    for (int i = 0; i < _windowSamples; i++)
-                    {
-                        window[i] = _buffer[i];
-                    }
-
-                    var melSpec = _detector._melSpectrogram?.Forward(window) ??
-                        throw new InvalidOperationException("MelSpectrogram not initialized.");
-                    var scores = _detector.ClassifyWindow(melSpec);
+                    var window = new Tensor<T>(new[] { _windowSamples }, new Vector<T>(_buffer.GetRange(0, _windowSamples).ToArray()));
+                    var scores = _detector.ClassifyWindow(window);
 
                     double thresholdValue = _detector.NumOps.ToDouble(_threshold);
                     for (int i = 0; i < scores.Length && i < _detector.ClassLabels.Count; i++)

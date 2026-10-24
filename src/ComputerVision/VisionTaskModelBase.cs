@@ -77,8 +77,10 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _trainingOptimizer ??= CreateTrainingOptimizer();
 
-    /// <summary>Adam (Kingma and Ba 2015) with betas (0.9, 0.999) and epsilon 1e-8.</summary>
-    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> PaperAdam(double learningRate)
+    /// <summary>Adam (Kingma and Ba 2015) with betas (0.9, 0.999) and epsilon 1e-8, and the paper's learning-rate
+    /// schedule when it states one (advanced once per minibatch, the unit papers count decay steps in).</summary>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> PaperAdam(double learningRate,
+        AiDotNet.LearningRateSchedulers.ILearningRateScheduler? schedule = null)
         => new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -87,6 +89,8 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
                 UseAdaptiveBetas = false,
                 UseAdaptiveLearningRate = false,
                 EnableGradientClipping = false,
+                LearningRateScheduler = schedule,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
             });
 
     /// <summary>AdamW (Loshchilov and Hutter 2019) with betas (0.9, 0.999), epsilon 1e-8 and decoupled weight decay.</summary>
@@ -134,6 +138,13 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
     protected virtual Tensor<T> TrainingForward(Tensor<T> input) => Predict(input);
 
     /// <summary>
+    /// The target of the raw-output <see cref="Train"/> step in progress, or null outside one. A
+    /// <see cref="TrainingForward"/> that emits data outputs reads it to take them out of the loss.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    protected Tensor<T>? RawStepTarget { get; private set; }
+
+    /// <summary>
     /// The zero input, <c>[1, channels, height, width]</c>, whose forward pass resolves this model's
     /// shape-deferred layers exactly as its first real input would.
     /// </summary>
@@ -157,6 +168,7 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
         if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(true);
+        RawStepTarget = expectedOutput;
         try
         {
             RecordTrainingLoss(TensorModelTrainer<T>.Step(
@@ -164,6 +176,7 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
         }
         finally
         {
+            RawStepTarget = null;
             SetTrainingMode(wasTraining);
         }
     }

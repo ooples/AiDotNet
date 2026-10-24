@@ -393,12 +393,18 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
 
          For #2326: AiDotNet.Tensors ships lib/net462 and lib/netstandard2.0 since 0.137.1
          (AiDotNet.Tensors #679), which the new AiDotNet targets need. 0.138.1 depends on AiDotNet.Evolution
-         0.3.0, so Evolution moves with it. -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.140.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.139.2" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.140.0" />
+         0.3.0, so Evolution moves with it.
+
+         Bumped 0.139.2 to 0.140.0 for AiDotNet.Tensors #1401, which removed native OpenBLAS and Intel MKL:
+         AiDotNet.Native.OpenBLAS is no longer published and nothing loads it, so its reference is gone.
+
+         Bumped 0.140.0 to 0.141.0 for AiDotNet.Tensors #1458, one exp kernel on every CPU vendor: Intel CPUs with
+         fast gathers took a table exp that rounds differently from the polynomial one AMD takes, and Adam amplified
+         the difference into another trajectory (SegNeXt's train/test-gap invariant failed only on Intel runners). -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.141.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.141.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.5.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.140.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.141.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />

@@ -98,7 +98,7 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Per the paper (Gao et al., 2023):
     /// Directly denoises mel spectrogram frames conditioned on character-level text,
     /// without explicit duration prediction or alignment modules.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -106,15 +106,6 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             return OnnxModel.Run(input);
         var output = Predict(input);
         return PostprocessAudio(output);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

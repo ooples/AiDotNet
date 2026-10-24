@@ -218,7 +218,7 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
     /// <c>Engine.Reshape</c> records the operation instead. This model trains - <see cref="Train"/>
     /// calls <c>TrainWithTape</c> - and <see cref="Forward"/> routes any unbatched (rank-3) input
     /// through both helpers, so inheriting the copying versions would break the gradient chain and
-    /// train nothing at all. VideoLISA, EfficientTAM, OneFormer, GroundedSAM2 and ViTCoMer carry the
+    /// train nothing at all. VideoLISA, EfficientTAM, OneFormer and ViTCoMer carry the
     /// same shadowing for the same measured reason (zero-gradient failures in
     /// GradientFlow_ShouldBeNonZeroAndFinite).
     /// </para>

@@ -25,7 +25,7 @@ internal static class AutoformerVerify
         // a realistic small Autoformer; MovingAverageKernel=25 is the model default.
         var opts = new AutoformerOptions<double>
         {
-            LookbackWindow = 32,
+            LookbackWindow = 32, LabelLength = 16,
             ForecastHorizon = 10,
             EmbeddingDim = 16,
             NumEncoderLayers = 1,

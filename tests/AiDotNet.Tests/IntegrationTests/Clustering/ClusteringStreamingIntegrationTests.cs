@@ -20,7 +20,7 @@ public class ClusteringStreamingIntegrationTests
             Seed = 42
         };
 
-        var model = new MiniBatchKMeans<double>(options);
+        var model = new AiDotNet.Clustering.Partitioning.MiniBatchKMeans<double>(options);
         model.Train(dataset.Data);
 
         Assert.True(model.IsTrained);
@@ -49,7 +49,7 @@ public class ClusteringStreamingIntegrationTests
             Seed = 7
         };
 
-        var model = new MiniBatchKMeans<double>(options);
+        var model = new AiDotNet.Clustering.Partitioning.MiniBatchKMeans<double>(options);
         model.Train(dataset.Data);
 
         var centersBefore = ClusteringTestHelpers.RequireNotNull(model.ClusterCenters, "ClusterCenters");
@@ -68,7 +68,7 @@ public class ClusteringStreamingIntegrationTests
     public async Task StreamingMiniBatchKMeans_FitPredict_ReturnsLabels()
     {
         var dataset = ClusteringTestData.CreateTwoClusterBlobs(pointsPerCluster: 3);
-        var model = new MiniBatchKMeans<double>(new MiniBatchKMeansOptions<double>
+        var model = new AiDotNet.Clustering.Partitioning.MiniBatchKMeans<double>(new MiniBatchKMeansOptions<double>
         {
             NumClusters = 2,
             BatchSize = 3,

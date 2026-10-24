@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -15,6 +16,7 @@ using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 using AiDotNet.Finance.Base;
+using AiDotNet.TimeSeries;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
 /// <summary>
@@ -41,6 +43,12 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// <b>Reference:</b> Wu et al., "Autoformer: Decomposition Transformers with Auto-Correlation",
 /// NeurIPS 2021. https://arxiv.org/abs/2106.13008
 /// </para>
+/// <para>
+/// The network is the official code's (<see cref="AiDotNet.TimeSeries.AutoformerNetwork{T}"/>, shared with
+/// <see cref="AiDotNet.TimeSeries.AutoformerModel{T}"/> and checked against thuml/Autoformer), forecasting every input
+/// series jointly. Standardize the data with training statistics first, as the reference does. The temporal embedding
+/// needs timestamps, which this interface does not carry, so it is not used.
+/// </para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -49,9 +57,9 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///     inputSize: 7, outputSize: 7);   // seven series (ETTh1), forecast jointly
 ///
-/// // Training mode with native layers
+/// // Training mode: [batch, 96, 7] in, [batch, 96, 7] out
 /// var model = new Autoformer&lt;double&gt;(architecture);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -67,121 +75,33 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting", "https://arxiv.org/abs/2106.13008", Year = 2021, Authors = "Haixu Wu, Jiehui Xu, Jianmin Wang, Mingsheng Long")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 32,
-                Source = "Wu et al. 2021, Implementation details: Adam with an initial learning rate of 1e-4 and batch size 32. Built here rather than by the factory so a caller-configured rate still wins; the declaration then reports any difference from the paper.")]
+                Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.5,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Wu et al. 2021, Implementation details: Adam with an initial learning rate of 1e-4 and batch size 32; the official code (lradj 'type1') halves the rate after every epoch.")]
+[TaskVariantOf(typeof(AiDotNet.TimeSeries.AutoformerModel<>), "financial forecasting")]
 public partial class Autoformer<T> : ForecastingModelBase<T>
 {
-    #region Execution Mode
-
-    /// <summary>
-    /// Indicates whether this network uses native layers (true) or ONNX model (false).
-    /// </summary>
     private readonly bool _useNativeMode;
-
-    #endregion
-
-    
-    #region Native Mode Fields
-
-    /// <summary>
-    /// Input embedding layer that projects features to model dimension.
-    /// </summary>
-    private ILayer<T>? _inputEmbedding;
-
-    /// <summary>
-    /// Encoder layers with auto-correlation.
-    /// </summary>
-    private readonly List<ILayer<T>> _encoderLayers = [];
-
-    /// <summary>
-    /// Decoder layers for generating predictions.
-    /// </summary>
-    private readonly List<ILayer<T>> _decoderLayers = [];
-
-    /// <summary>
-    /// Final layer normalization.
-    /// </summary>
-    private ILayer<T>? _finalNorm;
-
-    /// <summary>
-    /// Output projection layer.
-    /// </summary>
-    private ILayer<T>? _outputProjection;
-
-    /// <summary>
-    /// Instance normalization mean (for RevIN).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _instanceMean;
-
-    /// <summary>
-    /// Instance normalization standard deviation (for RevIN).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _instanceStd;
-
-    /// <summary>
-    /// Trend component from decomposition.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _trendComponent;
-
-    /// <summary>
-    /// Seasonal component from decomposition.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _seasonalComponent;
-
-    #endregion
-
-    #region Shared Fields
-
-    /// <summary>
-    /// The optimizer for training the model.
-    /// </summary>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-
-    /// <summary>
-    /// The loss function for computing prediction errors.
-    /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
     private readonly AutoformerOptions<T> _options;
-
-    private int _sequenceLength;
-    private int _predictionHorizon;
-    private int _numFeatures;
-    private int _numEncoderLayers;
-    private int _numDecoderLayers;
-    private int _numHeads;
-    private int _modelDimension;
-    private int _feedForwardDimension;
-    private int _movingAverageKernel;
-    private int _topKFactor;
-    private double _dropout;
-    private bool _useInstanceNormalization;
-
-    #endregion
+    private readonly int _numFeatures;
+    private readonly Random _random;
+    private AutoformerNetwork<T>? _network;
 
     #region IForecastingModel Properties
 
-    /// <inheritdoc/>
-    public override int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _options.LookbackWindow;
 
-    /// <inheritdoc/>
-    public override int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _options.ForecastHorizon;
 
-    /// <inheritdoc/>
     public override int NumFeatures => _numFeatures;
 
-    /// <inheritdoc/>
     public override int PatchSize => 1;
 
-    /// <inheritdoc/>
     public override int Stride => 1;
 
-    /// <inheritdoc/>
     public override bool IsChannelIndependent => false;
 
-    /// <inheritdoc/>
     public override bool UseNativeMode => _useNativeMode;
 
     #endregion
@@ -189,18 +109,25 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     #region Constructors
 
     /// <summary>
-    /// Creates an Autoformer network using a pretrained ONNX model.
+    /// Creates an Autoformer with the reference's defaults for a single series.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="onnxModelPath">Path to the ONNX model file.</param>
-    /// <param name="options">Configuration options for the model.</param>
-    /// <param name="optimizer">Optional optimizer.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this constructor when you have a pretrained Autoformer model.
-    /// </para>
-    /// </remarks>
+    public Autoformer()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 1,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
+    /// Creates an Autoformer that runs a pre-trained ONNX model.
+    /// </summary>
+    /// <param name="architecture">The architecture; its input size is the number of series (channels).</param>
+    /// <param name="onnxModelPath">The ONNX model file.</param>
+    /// <param name="options">The Autoformer options.</param>
+    /// <param name="optimizer">Unused in ONNX mode; accepted for symmetry.</param>
+    /// <param name="lossFunction">The loss reported by evaluation (mean squared error by default).</param>
     public Autoformer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
@@ -213,45 +140,28 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model file not found: {onnxModelPath}", onnxModelPath);
-
-        options ??= new AutoformerOptions<T>();
-        _options = options;
+        _options = options ?? new AutoformerOptions<T>();
         Options = _options;
-
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
-
-        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
-            optimizer ?? CreateDefaultOptimizer(options));
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
-        _sequenceLength = options.LookbackWindow;
-        _predictionHorizon = options.ForecastHorizon;
         _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
-        _numEncoderLayers = options.NumEncoderLayers;
-        _numDecoderLayers = options.NumDecoderLayers;
-        _numHeads = options.NumAttentionHeads;
-        _modelDimension = options.EmbeddingDim;
-        _feedForwardDimension = options.EmbeddingDim * 4;
-        _movingAverageKernel = options.MovingAverageKernel;
-        _topKFactor = options.AutoCorrelationFactor;
-        _dropout = options.DropoutRate;
-        _useInstanceNormalization = true;
+        _random = RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                { InitialLearningRate = _options.LearningRate });
     }
 
     /// <summary>
-    /// Creates an Autoformer network in native mode for training from scratch.
+    /// Creates a trainable Autoformer.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="options">Configuration options for the model.</param>
-    /// <param name="optimizer">Optional optimizer.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this constructor to train a new Autoformer model.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The architecture; its input size is the number of series (channels), which the
+    /// model forecasts jointly (the reference's <c>features='M'</c>).</param>
+    /// <param name="options">The Autoformer options.</param>
+    /// <param name="optimizer">The optimizer; the paper's Adam with the per-epoch halving when null.</param>
+    /// <param name="lossFunction">The training loss (mean squared error by default, as in the reference).</param>
     public Autoformer(
         NeuralNetworkArchitecture<T> architecture,
         AutoformerOptions<T>? options = null,
@@ -259,31 +169,18 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        options ??= new AutoformerOptions<T>();
-        _options = options;
+        _options = options ?? new AutoformerOptions<T>();
         Options = _options;
-
         _useNativeMode = true;
         OnnxSession = null;
         OnnxModelPath = null;
-
-        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
-            optimizer ?? CreateDefaultOptimizer(options));
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
-        _sequenceLength = options.LookbackWindow;
-        _predictionHorizon = options.ForecastHorizon;
         _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
-        _numEncoderLayers = options.NumEncoderLayers;
-        _numDecoderLayers = options.NumDecoderLayers;
-        _numHeads = options.NumAttentionHeads;
-        _modelDimension = options.EmbeddingDim;
-        _feedForwardDimension = options.EmbeddingDim * 4;
-        _movingAverageKernel = options.MovingAverageKernel;
-        _topKFactor = options.AutoCorrelationFactor;
-        _dropout = options.DropoutRate;
-        _useInstanceNormalization = true;
-
+        _random = RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                { InitialLearningRate = _options.LearningRate });
         InitializeLayers();
     }
 
@@ -291,178 +188,59 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region Initialization
 
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
-        AutoformerOptions<T> options)
-    {
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = options.LearningRate,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
-            });
-    }
-
-    /// <summary>
-    /// Initializes the layers for native mode operation.
-    /// </summary>
+    /// <inheritdoc />
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, InitializeLayers builds and wires up model components. This sets up the Autoformer architecture before use.
-    /// </para>
+    /// Builds the shared <see cref="AutoformerNetwork{T}"/> (the official code's model) and initializes it as the
+    /// reference does; every one of its layers is in <c>Layers</c>.
     /// </remarks>
     protected override void InitializeLayers()
     {
+        if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayersWithOwnershipRollback(Layers);
-        }
-        else if (_useNativeMode)
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAutoformerLayers(
-                _sequenceLength,
-                _predictionHorizon,
-                _numFeatures,
-                _numEncoderLayers,
-                _numDecoderLayers,
-                _numHeads,
-                _modelDimension,
-                _feedForwardDimension));
-
-            ExtractLayerReferences();
-        }
-    }
-
-    /// <summary>
-    /// Extracts references to specific layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        if (Layers.Count == 0)
-            return;
-
-        // Idempotent: clear the per-block reference lists before repopulating.
-        // ExtractLayerReferences runs once in the ctor AND again after deserialize
-        // (to re-bind to the reloaded layers); without clearing, the second call
-        // APPENDED the deserialized layers onto the construction-time ones, so a
-        // clone ran a doubled/mixed encoder+decoder stack and its output drifted
-        // from the original.
-        _encoderLayers.Clear();
-        _decoderLayers.Clear();
-
-        _inputEmbedding = Layers[0];
-
-        int encoderStartIndex = 1;
-        int encoderEndIndex = encoderStartIndex + _numEncoderLayers;
-        for (int i = encoderStartIndex; i < encoderEndIndex && i < Layers.Count; i++)
-        {
-            _encoderLayers.Add(Layers[i]);
-        }
-
-        int decoderStartIndex = encoderEndIndex;
-        int decoderEndIndex = decoderStartIndex + _numDecoderLayers;
-        for (int i = decoderStartIndex; i < decoderEndIndex && i < Layers.Count; i++)
-        {
-            _decoderLayers.Add(Layers[i]);
-        }
-
-        int normIndex = decoderEndIndex;
-        if (normIndex < Layers.Count)
-            _finalNorm = Layers[normIndex];
-
-        int projIndex = normIndex + 1;
-        if (projIndex < Layers.Count)
-            _outputProjection = Layers[projIndex];
-    }
-
-    /// <summary>
-    /// Validates custom layers provided by the user.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, ValidateCustomLayers checks inputs and configuration. This protects the Autoformer architecture from mismatches and errors.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateCustomLayers(List<ILayer<T>> layers)
-    {
-        base.ValidateCustomLayers(layers);
-
-        if (layers.Count < 3)
-            throw new ArgumentException("Autoformer requires at least 3 layers: embedding, encoder, and output.");
+            throw new ArgumentException(
+                "Autoformer builds its own encoder-decoder network; custom layers in the architecture are not supported.");
+        var o = _options;
+        var layers = new List<LayerBase<T>>();
+        _network = new AutoformerNetwork<T>(Engine, layers, new AutoformerConfiguration(
+            _numFeatures, _numFeatures, _numFeatures, o.EmbeddingDim, o.NumAttentionHeads, o.NumEncoderLayers,
+            o.NumDecoderLayers, o.FeedForwardDim, o.MovingAverageKernel, o.AutoCorrelationFactor, o.DropoutRate, o.UseGelu,
+            TimeFeatures: 0, o.LabelLength, o.ForecastHorizon));
+        _network.InitializeLikeReference(RandomHelper.CreateSeededRandom(o.Seed ?? 42));
+        Layers.AddRange(layers);
     }
 
     #endregion
 
     #region NeuralNetworkBase Overrides
 
-    /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, Predict produces predictions from input data. This is the main inference step of the Autoformer architecture.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        return Forecast(input);
-    }
+    /// <inheritdoc />
+    /// <remarks>The forward is not a fold of <c>Layers</c> (decomposition, attention and the decoder branch off the
+    /// list), so the activations are those the forecast actually computes.</remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+        => _useNativeMode ? ObservedLayerActivations(input) : new Dictionary<string, Tensor<T>>();
 
-    /// <summary>
-    /// Training-mode forward: calls <see cref="Forward"/> so attention
-    /// dropout and series-decomp noise (both gated on training mode)
-    /// stay active under the gradient tape. Default would hit
-    /// <c>ForecastNative</c>, which disables training mode first.
-    /// </summary>
-    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
-    {
-        return Forward(input);
-    }
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input);
 
-    /// <summary>
-    /// Autoformer's forward mutates per-input RevIN statistics and progressive
-    /// trend/seasonal decomposition state. Those values are data-dependent and
-    /// cannot be captured once in a static compiled plan and safely replayed
-    /// for later training inputs. Use the eager tape path so each step records
-    /// the current decomposition and applies finite-gradient validation and
-    /// clipping before Adam updates the live parameters.
-    /// </summary>
-    protected override bool SupportsFusedCompiledTraining => false;
-
-    /// <inheritdoc/>
-    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, GetModelMetadata performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var o = _options;
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Autoformer" },
-                { "SequenceLength", _sequenceLength },
-                { "PredictionHorizon", _predictionHorizon },
+                { "SequenceLength", o.LookbackWindow },
+                { "LabelLength", o.LabelLength },
+                { "PredictionHorizon", o.ForecastHorizon },
                 { "NumFeatures", _numFeatures },
-                { "NumEncoderLayers", _numEncoderLayers },
-                { "NumDecoderLayers", _numDecoderLayers },
-                { "NumHeads", _numHeads },
-                { "ModelDimension", _modelDimension },
-                { "MovingAverageKernel", _movingAverageKernel },
+                { "NumEncoderLayers", o.NumEncoderLayers },
+                { "NumDecoderLayers", o.NumDecoderLayers },
+                { "NumHeads", o.NumAttentionHeads },
+                { "ModelDimension", o.EmbeddingDim },
+                { "MovingAverageKernel", o.MovingAverageKernel },
+                { "AutoCorrelationFactor", o.AutoCorrelationFactor },
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -470,136 +248,73 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the Autoformer architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the Autoformer architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
     #endregion
 
     #region IForecastingModel Implementation
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, Forecast produces predictions from input data. This is the main inference step of the Autoformer architecture.
-    /// </para>
-    /// </remarks>
     protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
-
         return _useNativeMode ? ForecastNative(input, quantiles) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the Autoformer architecture.
-    /// </para>
-    /// </remarks>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
         if (steps < 1)
             throw new ArgumentOutOfRangeException(nameof(steps), "Steps must be at least 1.");
-
         var currentInput = input;
         var allPredictions = new List<Tensor<T>>();
-
         int stepsRemaining = steps;
         while (stepsRemaining > 0)
         {
             var forecast = Forecast(currentInput);
-            int stepsToUse = Math.Min(stepsRemaining, _predictionHorizon);
+            int stepsToUse = Math.Min(stepsRemaining, PredictionHorizon);
             allPredictions.Add(forecast);
             stepsRemaining -= stepsToUse;
-
             if (stepsRemaining > 0)
-            {
                 currentInput = ShiftInputWithPredictions(currentInput, forecast, stepsToUse);
-            }
         }
-
         return ConcatenatePredictions(allPredictions, steps);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, Evaluate performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     public override Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
             throw new ArgumentNullException(nameof(inputs));
         if (targets is null)
             throw new ArgumentNullException(nameof(targets));
-
         var predictions = Forecast(inputs);
-        var metrics = new Dictionary<string, T>();
-
-        T maeSum = NumOps.Zero;
+        T maeSum = NumOps.Zero, mseSum = NumOps.Zero;
         int count = predictions.Length;
         for (int i = 0; i < count; i++)
         {
             T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
             maeSum = NumOps.Add(maeSum, NumOps.Abs(diff));
-        }
-        metrics["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count));
-
-        T mseSum = NumOps.Zero;
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
             mseSum = NumOps.Add(mseSum, NumOps.Multiply(diff, diff));
         }
-        metrics["MSE"] = NumOps.Divide(mseSum, NumOps.FromDouble(count));
-        metrics["RMSE"] = NumOps.Sqrt(metrics["MSE"]);
-
-        return metrics;
+        var mse = NumOps.Divide(mseSum, NumOps.FromDouble(count));
+        return new Dictionary<string, T>
+        {
+            ["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count)),
+            ["MSE"] = mse,
+            ["RMSE"] = NumOps.Sqrt(mse),
+        };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        if (!_useInstanceNormalization)
-            return input;
+    /// <inheritdoc />
+    /// <remarks>Autoformer normalizes nothing per instance: the reference standardizes the whole dataset with training
+    /// statistics before the model sees it, so the input is returned unchanged.</remarks>
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) => input;
 
-        return ApplyRevIN(input, normalize: true);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the Autoformer architecture is performing.
-    /// </para>
-    /// </remarks>
     public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
         {
-            ["SequenceLength"] = NumOps.FromDouble(_sequenceLength),
-            ["PredictionHorizon"] = NumOps.FromDouble(_predictionHorizon),
+            ["SequenceLength"] = NumOps.FromDouble(SequenceLength),
+            ["PredictionHorizon"] = NumOps.FromDouble(PredictionHorizon),
             ["NumFeatures"] = NumOps.FromDouble(_numFeatures),
             ["ParameterCount"] = NumOps.FromDouble(GetParameterCount())
         };
@@ -607,114 +322,38 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #endregion
 
-    #region Forward/Backward Pass
+    #region Forward
 
-    /// <summary>
-    /// Performs the forward pass through all layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, Forward runs the forward pass through the layers. This moves data through the Autoformer architecture to compute outputs.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Forward(Tensor<T> input)
+    // [L, F] or [B, L, F] history → [B, H, F] forecast (the decoder input comes from the history's decomposition).
+    private Tensor<T> Forward(Tensor<T> input, bool training)
     {
-        var current = _useInstanceNormalization ? ApplyRevIN(input, normalize: true) : input;
-
-        if (_inputEmbedding is not null)
-        {
-            current = _inputEmbedding.Forward(current);
-        }
-
-        (_trendComponent, _seasonalComponent) = InitializeDecomposition(current);
-
-        foreach (var layer in _encoderLayers)
-        {
-            current = layer.Forward(current);
-            var (trend, seasonal) = SeriesDecomposition(current);
-            _trendComponent = AddTensors(_trendComponent, trend);
-            _seasonalComponent = seasonal;
-            current = _seasonalComponent;
-        }
-
-        foreach (var layer in _decoderLayers)
-        {
-            current = layer.Forward(current);
-            var (trend, seasonal) = SeriesDecomposition(current);
-            _trendComponent = AddTensors(_trendComponent, trend);
-            current = seasonal;
-        }
-
-        current = AddTensors(current, _trendComponent!);
-
-        if (_finalNorm is not null)
-        {
-            current = _finalNorm.Forward(current);
-        }
-
-        if (_outputProjection is not null)
-        {
-            current = _outputProjection.Forward(current);
-        }
-
-        current = AdjustToPredictionHorizon(current);
-
-        if (_useInstanceNormalization)
-        {
-            current = ApplyRevIN(current, normalize: false);
-        }
-
-        return current;
+        if (_network is null) throw new InvalidOperationException("The native network is not initialized.");
+        var history = input.Rank == 2 ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] }) : input;
+        if (history.Rank != 3 || history.Shape[2] != _numFeatures)
+            throw new ArgumentException(
+                $"Autoformer expects [batch, length, {_numFeatures}] (or [length, {_numFeatures}]), got [{string.Join(", ", input.Shape.ToArray())}].",
+                nameof(input));
+        return _network.Forward(history, null, null, training, _random);
     }
 
-    /// <summary>
-    /// Performs native mode forecasting.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, ForecastNative produces predictions from input data. This is the main inference step of the Autoformer architecture.
-    /// </para>
-    /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
-        bool wasTraining = IsTrainingMode;
-        if (wasTraining)
-            SetTrainingMode(false);
-        try
-        {
-            return Forward(input);
-        }
-        finally
-        {
-            if (wasTraining)
-                SetTrainingMode(true);
-        }
+        SetTrainingMode(false);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Forward(input, training: false);
     }
 
-    /// <summary>
-    /// Performs ONNX mode forecasting.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, ForecastOnnx produces predictions from input data. This is the main inference step of the Autoformer architecture.
-    /// </para>
-    /// </remarks>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input) => Forward(input, training: true);
+
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
-
         var inputName = OnnxSession.InputMetadata.Keys.First();
-        var inputShape = input._shape.Select(d => (long)d).ToArray();
         var onnxInput = new OnnxTensors.DenseTensor<float>(
             input.ToArray().Select(x => Convert.ToSingle(x)).ToArray(),
-            inputShape.Select(d => (int)d).ToArray());
-
-        var inputs = new List<NamedOnnxValue>
-        {
-            NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
-        };
-
+            input._shape.ToArray());
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = OnnxSession.Run(inputs);
         var output = results.First().AsTensor<float>();
         var outputArray = output.ToArray().Select(x => NumOps.FromDouble(x)).ToArray();
@@ -723,283 +362,38 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #endregion
 
-    #region Model-Specific Processing
-
-    /// <summary>
-    /// Initializes decomposition components.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, private performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private (Tensor<T> trend, Tensor<T> seasonal) InitializeDecomposition(Tensor<T> input)
-    {
-        var trend = new Tensor<T>(input._shape);
-        var seasonal = input.Clone();
-        return (trend, seasonal);
-    }
-
-    /// <summary>
-    /// Performs series decomposition using moving average.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, private performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private (Tensor<T> trend, Tensor<T> seasonal) SeriesDecomposition(Tensor<T> input)
-    {
-        var trend = MovingAverage(input, _movingAverageKernel);
-        var seasonal = SubtractTensors(input, trend);
-        return (trend, seasonal);
-    }
-
-    /// <summary>
-    /// Computes moving average.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, MovingAverage performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> MovingAverage(Tensor<T> input, int kernelSize)
-    {
-        if (input.Rank != 3)
-            throw new ArgumentException("Autoformer moving average expects [batch, time, features].", nameof(input));
-
-        int seqLen = input.Shape[1];
-        int halfKernel = kernelSize / 2;
-        int window = (2 * halfKernel) + 1;
-
-        // TensorAvgPool1D consumes [batch, channels, width], while Autoformer carries
-        // [batch, time, features]. Zero-pad the time axis, pool every position, and
-        // compensate at the boundaries so the divisor remains the number of real samples
-        // (the exact historical forward contract). Every transformation is an IEngine op,
-        // keeping the trend branch connected to the gradient tape.
-        var channelsFirst = Engine.TensorPermute(input, new[] { 0, 2, 1 });
-        var padded = Engine.TensorConstantPad(
-            channelsFirst, new[] { halfKernel, halfKernel }, NumOps.Zero);
-        var averaged = Engine.TensorAvgPool1D(padded, window, stride: 1);
-
-        var boundaryScale = new Tensor<T>(new[] { 1, 1, seqLen });
-        for (int t = 0; t < seqLen; t++)
-        {
-            int start = Math.Max(0, t - halfKernel);
-            int end = Math.Min(seqLen, t + halfKernel + 1);
-            boundaryScale[0, 0, t] = NumOps.FromDouble((double)window / (end - start));
-        }
-
-        return Engine.TensorPermute(
-            Engine.TensorMultiply(averaged, boundaryScale),
-            new[] { 0, 2, 1 });
-    }
-
-    /// <summary>
-    /// Applies RevIN normalization/denormalization.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, ApplyRevIN performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
-    {
-        if (normalize)
-        {
-            int batchSize = input.Shape[0];
-            int seqLen = input.Shape[1];
-            int features = input.Shape[2];
-
-            _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
-            _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
-
-            var normalized = new Tensor<T>(input._shape);
-            T epsilon = NumOps.FromDouble(1e-5);
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        sum = NumOps.Add(sum, input[b, t, f]);
-                    }
-                    T mean = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-                    _instanceMean[b, 0, f] = mean;
-
-                    T varSum = NumOps.Zero;
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        var diff = NumOps.Subtract(input[b, t, f], mean);
-                        varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-                    }
-                    T std = NumOps.Sqrt(NumOps.Add(NumOps.Divide(varSum, NumOps.FromDouble(seqLen)), epsilon));
-                    _instanceStd[b, 0, f] = std;
-
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        normalized[b, t, f] = NumOps.Divide(NumOps.Subtract(input[b, t, f], mean), std);
-                    }
-                }
-            }
-
-            return normalized;
-        }
-        else
-        {
-            if (_instanceMean is null || _instanceStd is null)
-                return input;
-
-            // Tape-connected denormalization: output * std + mean, broadcasting the
-            // per-instance stats [B,1,F] across the time dimension. Doing this with
-            // manual per-element indexing built a fresh tensor that was detached
-            // from the autodiff graph, so the loss had no gradient path back to the
-            // layers — training produced zero gradients (params never changed). The
-            // RevIN stats themselves are treated as constants (paper-faithful: the
-            // reversible affine just rescales the prediction), so d(output)/d(input)
-            // = std and gradients flow through the layer stack.
-            var scaled = Engine.TensorMultiply(input, _instanceStd);
-            return Engine.TensorAdd(scaled, _instanceMean);
-        }
-    }
-
-    /// <summary>
-    /// Adjusts output to prediction horizon.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, AdjustToPredictionHorizon produces predictions from input data. This is the main inference step of the Autoformer architecture.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> AdjustToPredictionHorizon(Tensor<T> output)
-    {
-        int currentLen = output.Shape[1];
-        if (currentLen == _predictionHorizon)
-            return output;
-
-        // Tape-connected length adjustment along the time axis. The previous
-        // manual per-element copy built a fresh tensor that detached the autodiff
-        // graph right before the loss, so no gradient reached the layers.
-        if (currentLen > _predictionHorizon)
-        {
-            // Keep the first _predictionHorizon steps.
-            return Engine.TensorNarrow(output, dim: 1, start: 0, length: _predictionHorizon);
-        }
-
-        // currentLen < _predictionHorizon: pad with zeros along the time axis.
-        // The zero pad carries no gradient; Concat keeps the real-output portion
-        // tape-connected.
-        var pad = new Tensor<T>(new[] { output.Shape[0], _predictionHorizon - currentLen, output.Shape[2] });
-        return Engine.Concat(new[] { output, pad }, 1);
-    }
-
-    #endregion
-
     #region Helper Methods
 
-    /// <summary>
-    /// Adds two tensors element-wise.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, AddTensors performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> AddTensors(Tensor<T>? a, Tensor<T>? b)
-    {
-        if (a is null)
-            return b ?? new Tensor<T>(new[] { 1 });
-        if (b is null)
-            return a;
-
-        return Engine.TensorAdd(a, b);
-    }
-
-    /// <summary>
-    /// Subtracts tensor b from tensor a.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, SubtractTensors performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> SubtractTensors(Tensor<T> a, Tensor<T> b)
-    {
-        return Engine.TensorSubtract(a, b);
-    }
-
-    /// <summary>
-    /// Shifts input and appends predictions.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, ShiftInputWithPredictions produces predictions from input data. This is the main inference step of the Autoformer architecture.
-    /// </para>
-    /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
     {
-        int batchSize = input.Shape[0];
-        int features = input.Shape[2];
-        var newInput = new Tensor<T>(new[] { batchSize, _sequenceLength, features });
-
-        int keepLen = _sequenceLength - steps;
+        int batchSize = input.Shape[0], length = input.Shape[1], features = input.Shape[2];
+        var newInput = new Tensor<T>(new[] { batchSize, length, features });
+        int keepLen = length - steps;
         for (int b = 0; b < batchSize; b++)
         {
             for (int t = 0; t < keepLen; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    newInput[b, t, f] = input[b, t + steps, f];
-                }
-            }
-
+                for (int f = 0; f < features; f++) newInput[b, t, f] = input[b, t + steps, f];
             for (int t = 0; t < steps; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    newInput[b, keepLen + t, f] = predictions[b, t, f];
-                }
-            }
+                for (int f = 0; f < features; f++) newInput[b, keepLen + t, f] = predictions[b, t, f];
         }
-
         return newInput;
     }
 
-    /// <summary>
-    /// Concatenates prediction tensors.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the Autoformer architecture.
-    /// </para>
-    /// </remarks>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
-
         int batchSize = predictions[0].Shape[0];
         var result = new Tensor<T>(new[] { batchSize, totalSteps, _numFeatures });
-
         int currentStep = 0;
         foreach (var pred in predictions)
         {
             int stepsToAdd = Math.Min(pred.Shape[1], totalSteps - currentStep);
             for (int b = 0; b < batchSize; b++)
-            {
                 for (int t = 0; t < stepsToAdd; t++)
-                {
-                    for (int f = 0; f < _numFeatures; f++)
-                    {
-                        result[b, currentStep + t, f] = pred[b, t, f];
-                    }
-                }
-            }
+                    for (int f = 0; f < _numFeatures; f++) result[b, currentStep + t, f] = pred[b, t, f];
             currentStep += stepsToAdd;
         }
-
         return result;
     }
 
@@ -1007,25 +401,11 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region IDisposable
 
-    /// <summary>
-    /// Releases resources.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, Dispose performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            OnnxSession?.Dispose();
-        }
-
+        if (disposing) OnnxSession?.Dispose();
         base.Dispose(disposing);
     }
 
     #endregion
 }
-
-

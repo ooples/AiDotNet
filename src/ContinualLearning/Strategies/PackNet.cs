@@ -236,7 +236,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     }
 
     /// <inheritdoc/>
-    public override Vector<T> AdjustGradients(Vector<T> gradients)
+    public override Vector<T> AdjustGradients(IFullModel<T, TInput, TOutput> model, Vector<T> gradients)
     {
         if (_parameterOwnership == null)
         {

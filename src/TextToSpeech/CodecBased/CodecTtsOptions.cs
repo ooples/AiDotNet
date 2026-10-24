@@ -39,7 +39,7 @@ public class CodecTtsOptions : TtsModelOptions
     public int NumCodebooks { get; set; } = 8;
 
     /// <summary>Gets or sets the codebook vocabulary size.</summary>
-    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the codec frame rate in Hz.</summary>
     public int CodecFrameRate { get; set; } = 50;

@@ -781,8 +781,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 // MultiHeadAttentionLayer's `&& !InitializationStrategy.IsLazy` guard.
                 if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
                 {
-                    InitializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
-                    if (UseBias) InitializationStrategy.InitializeBiases(_biases);
+                    // Through LayerBase's rule, as every other layer: a pinned RandomSeed drives the strategy's own
+                    // distribution from a seeded copy (WithSeededRandom); without one the strategy draws from its
+                    // own generator. Calling the strategy directly ignored the seed, so an explicit strategy on a
+                    // cloned architecture (SAC's twin critics) drew from the process-shared generator and two
+                    // identically seeded agents started from different weights.
+                    InitializeLayerWeights(_weights, inputSize, outputSize);
+                    if (UseBias) InitializeLayerBiases(_biases);
                 }
                 else
                 {

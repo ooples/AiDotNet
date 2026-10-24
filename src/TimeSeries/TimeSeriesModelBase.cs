@@ -832,90 +832,82 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         return value;
     }
 
-    protected bool TryPredictFromTimeIndexCalibration(
-        Matrix<T> input,
-        Vector<T> trainingSeries,
-        out Vector<T> predictions)
+    /// <summary>
+    /// Answers a one-column time-index input (the public supervised calling convention) with the model's own forecasts,
+    /// for models that read a lookback window of <paramref name="window"/> values (more than one, so a one-column input
+    /// cannot itself be a window). With as many rows as the training series, row i is the one-step forecast of
+    /// observation i from the observations before it (row 0, which has none, is the training mean); otherwise the rows
+    /// are the forecasts of the steps after the training series, each appended to the history for the next. A history
+    /// shorter than the window is extended to the left by repeating its first value. The input's values are not read.
+    /// A model whose multi-step forecast is not that recursion (Chronos holds the context's scale over the horizon)
+    /// passes it as <paramref name="forecastSteps"/>, which then gives the rows past the training series. A model that
+    /// reads a shorter history as it is (Chronos masks what is missing) passes <paramref name="extendShortHistory"/>
+    /// false.
+    /// </summary>
+    /// <returns>False when the input is a matrix of windows rather than a time index; the caller then reads its rows.</returns>
+    protected bool TryForecastTimeIndex(Matrix<T> input, Vector<T> trainingSeries, int window, Func<Vector<T>, T> forecastNext,
+        out Vector<T> predictions, Func<Vector<T>, int, Vector<T>>? forecastSteps = null, bool extendShortHistory = true)
     {
-        if (input == null)
-        {
-            throw new ArgumentNullException(nameof(input), "Input features matrix cannot be null.");
-        }
-
+        if (input == null) throw new ArgumentNullException(nameof(input), "Input features matrix cannot be null.");
+        if (forecastNext == null) throw new ArgumentNullException(nameof(forecastNext));
         predictions = new Vector<T>(0);
-        if (input.Columns != 1 || trainingSeries.Length < 2)
+        if (input.Columns != 1 || window <= 1) return false;
+        if (trainingSeries.Length == 0) throw new InvalidOperationException("The model must be trained before predicting.");
+        int n = input.Rows;
+        predictions = new Vector<T>(n);
+        if (n == trainingSeries.Length)
         {
-            return false;
-        }
-
-        // Public supervised time-series calls commonly pass a one-column time
-        // index matrix, while neural forecasters internally train on target
-        // lookback windows. Preserve that public contract with a calibrated
-        // target-scale trend head; full lookback-window inputs still use the
-        // model-specific architecture path.
-        if (input.Rows == 0)
-        {
+            double mean = 0;
+            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(trainingSeries[i]);
+            predictions[0] = GuardPrediction(NumOps.FromDouble(mean / n));
+            var observed = trainingSeries.ToArray();
+            for (int i = 1; i < n; i++)
+                predictions[i] = GuardPrediction(forecastNext(LookbackWindow(observed, i, window, extendShortHistory)));
             return true;
         }
-
-        var (intercept, slope) = FitLinearTimeIndexTrend(trainingSeries);
-        bool useInputTimeValues = ShouldUseInputTimeValues(input);
-
-        predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
+        if (forecastSteps != null)
         {
-            double t = useInputTimeValues ? NumOps.ToDouble(input[i, 0]) : i;
-            predictions[i] = GuardPrediction(NumOps.FromDouble(intercept + slope * t));
+            var steps = forecastSteps(trainingSeries, n);
+            for (int i = 0; i < n; i++) predictions[i] = GuardPrediction(steps[i]);
+            return true;
         }
-
+        var history = trainingSeries.ToList();
+        for (int i = 0; i < n; i++)
+        {
+            var value = GuardPrediction(forecastNext(LookbackWindow(history, history.Count, window, extendShortHistory)));
+            predictions[i] = value;
+            history.Add(value);
+        }
         return true;
     }
 
-    private (double Intercept, double Slope) FitLinearTimeIndexTrend(Vector<T> series)
+    /// <summary>
+    /// Answers a one-column input for a model that scores windows rather than forecasting (an anomaly score of each
+    /// window): the column is the series to score, and row i scores its window of values ending at i (extended to the
+    /// left by repeating the first). Passing the training series gives the score of each training observation.
+    /// </summary>
+    /// <returns>False when the input is a matrix of windows; the caller then scores its rows.</returns>
+    protected bool TryScoreSeries(Matrix<T> input, int window, Func<Vector<T>, T> score, out Vector<T> predictions)
     {
-        int n = series.Length;
-        double sumT = 0;
-        double sumY = 0;
-        double sumTT = 0;
-        double sumTY = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            double y = NumOps.ToDouble(series[i]);
-            sumT += i;
-            sumY += y;
-            sumTT += (double)i * i;
-            sumTY += i * y;
-        }
-
-        double denominator = n * sumTT - sumT * sumT;
-        if (Math.Abs(denominator) < 1e-12)
-        {
-            return (sumY / n, 0.0);
-        }
-
-        double slope = (n * sumTY - sumT * sumY) / denominator;
-        double intercept = (sumY - slope * sumT) / n;
-        return (intercept, slope);
+        if (input == null) throw new ArgumentNullException(nameof(input), "Input features matrix cannot be null.");
+        if (score == null) throw new ArgumentNullException(nameof(score));
+        predictions = new Vector<T>(0);
+        if (input.Columns != 1 || window <= 1) return false;
+        var series = input.GetColumn(0).ToArray();
+        predictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++) predictions[i] = score(LookbackWindow(series, i + 1, window));
+        return true;
     }
 
-    private bool ShouldUseInputTimeValues(Matrix<T> input)
+    /// <summary>The <paramref name="window"/> values of <paramref name="history"/> before index <paramref name="end"/>;
+    /// when fewer precede it, those, extended to the left by repeating the first value unless <paramref name="extend"/>
+    /// is false.</summary>
+    private static Vector<T> LookbackWindow(IReadOnlyList<T> history, int end, int window, bool extend = true)
     {
-        if (input.Rows == 1)
-        {
-            return true;
-        }
-
-        double first = NumOps.ToDouble(input[0, 0]);
-        double last = NumOps.ToDouble(input[input.Rows - 1, 0]);
-        if (double.IsNaN(first) || double.IsInfinity(first)
-            || double.IsNaN(last) || double.IsInfinity(last))
-        {
-            return false;
-        }
-
-        double range = Math.Abs(last - first);
-        return range > 2.0 || range >= input.Rows * 0.5;
+        if (!extend && end < window) window = end;
+        var result = new Vector<T>(window);
+        for (int t = 0; t < window; t++) result[t] = history[Math.Max(0, end - window + t)];
+        return result;
     }
 
     protected virtual void ValidatePredictionInput(Matrix<T> input)

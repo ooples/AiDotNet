@@ -88,7 +88,7 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     public abstract T ComputeRegularizationLoss(IFullModel<T, TInput, TOutput> model);
 
     /// <inheritdoc/>
-    public abstract Vector<T> AdjustGradients(Vector<T> gradients);
+    public abstract Vector<T> AdjustGradients(IFullModel<T, TInput, TOutput> model, Vector<T> gradients);
 
     /// <inheritdoc/>
     public abstract void FinalizeTask(IFullModel<T, TInput, TOutput> model);

@@ -11,10 +11,9 @@ namespace AiDotNet.Enums;
 /// </remarks>
 public enum VisionMambaModelSize
 {
-    /// <summary>Tiny variant. 2.8x faster, 86.8% less GPU memory than DeiT.</summary>
+    /// <summary>Vim-Ti: width 192, 24 layers. 2.8x faster, 86.8% less GPU memory than DeiT.</summary>
     Tiny,
-    /// <summary>Small variant. Good balance.</summary>
-    Small,
-    /// <summary>Base variant. Maximum accuracy.</summary>
-    Base
+    /// <summary>Vim-S: width 384, 24 layers, with a 2D rotary position embedding in the official segmentation
+    /// configuration.</summary>
+    Small
 }

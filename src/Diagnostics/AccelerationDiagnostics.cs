@@ -106,13 +106,7 @@ public sealed class AccelerationSnapshot
     public bool HasCuda { get; init; }
     public bool HasOpenCl { get; init; }
     public bool HasHip { get; init; }
-    /// <summary>Always false: AiDotNet.Tensors no longer has a native OpenBLAS route; the CPU GEMM is managed.</summary>
-    [Obsolete("AiDotNet.Tensors removed its native OpenBLAS route (Tensors #368); the CPU GEMM is managed. Always false.")]
-    public bool HasOpenBlas { get; init; }
     public bool HasClBlast { get; init; }
-    /// <summary>Always false: AiDotNet.Tensors no longer has a native MKL route; the CPU GEMM is managed.</summary>
-    [Obsolete("AiDotNet.Tensors removed its native MKL route (Tensors #368); the CPU GEMM is managed. Always false.")]
-    public bool HasMkl { get; init; }
     public bool HasGpuAcceleration { get; init; }
     public int ProcessorCount { get; init; }
     public int L1CacheKB { get; init; }

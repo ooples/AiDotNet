@@ -52,8 +52,20 @@ internal sealed class FusedTrainingStepRequest<T>
     /// <summary>The model's own global-norm clip (0 = none); combined with the optimizer's by taking the smaller.</summary>
     public double ModelGradientClip { get; init; }
 
+    /// <summary>
+    /// Whether the model excludes some of its parameters from the optimizer's L2 term (coupled weight decay); asked only
+    /// when the optimizer regularizes with L2. Null = none excluded.
+    /// </summary>
+    public Func<bool>? ExcludesParametersFromWeightDecay { get; init; }
+
     /// <summary>Receives the step's gradients while their buffers are valid (the model's public gradient surface).</summary>
     public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
+
+    /// <summary>
+    /// Adds the optimizer's regularization to the gradients when the step runs eager, before clipping, as the fused plan
+    /// adds its L2. Null = the optimizer's plain regularization on every reached parameter.
+    /// </summary>
+    public Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? RegularizeGradients { get; init; }
 
     /// <summary>
     /// Why this step's forward cannot be compiled once and replayed, or null when it can. A non-null reason keeps the
@@ -241,8 +253,15 @@ internal sealed class FusedTrainingSession<T>
         double l2 = 0.0;
         if (OptimizerRegularizationOf(optimizer) is { } regularization)
         {
+            // The plan adds one L2 strength to every parameter; a model that excludes some (TF EfficientNet decays
+            // nothing in batch normalization) trains on the eager tape, which skips them.
             if (regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2Regularization)
+            {
+                if (request.ExcludesParametersFromWeightDecay?.Invoke() == true)
+                    return DeclineAndDropCommitted(
+                        "L2 with parameters excluded from weight decay has no fused form; the eager tape applies it");
                 l2 = l2Regularization.GetOptions().Strength;
+            }
             else
                 return DeclineAndDropCommitted("regularization " + regularization.GetType().Name
                     + " has no fused form; the eager tape applies it");

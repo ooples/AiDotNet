@@ -1,10 +1,12 @@
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ComputerVision.Segmentation.Foundation;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.VisionLanguage.Interfaces;
@@ -63,13 +65,18 @@ namespace AiDotNet.VisionLanguage.Encoders;
                 Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.1,
                 Milestones = [60000, 86666],
                 Source = "Kirillov et al. 2023, Training recipe: AdamW with beta1 0.9, beta2 0.999, linear warmup for 250 iterations, initial rate 8e-4 after warmup, decreased 10x at 60k and again at 86666 iterations over a 90k-iteration run, batch size 256, weight decay 0.1.")]
+[TaskVariantOf(typeof(AiDotNet.ComputerVision.Segmentation.Foundation.SAM<>), "image encoder for vision-language models")]
 public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SAMOptions _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
+    private readonly bool _useNativeMode;
     private bool _disposed;
+    private SamNetwork<T>? _network;
+    private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
+
+    /// <summary>The network, the same one the promptable segmentation SAM runs.</summary>
+    internal SamNetwork<T> Network => _network ?? throw new InvalidOperationException("The native network is not initialized.");
 
     public SAM(
         NeuralNetworkArchitecture<T> architecture,
@@ -83,14 +90,13 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
-        base.EmbeddingDim = _options.EmbeddingDim;
+        base.EmbeddingDim = _options.MaskDecoderDim;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
     public SAM(
@@ -104,76 +110,113 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         Options = _options;
         if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0)
         {
-            _options = new SAMOptions(_options) { ImageSize = architecture.InputHeight };
+            // The encoder square holds the architecture's longer side, rounded up to the patch: an image of any size up
+            // to it is zero-padded to the square (SamNetwork.Preprocess, the official Sam.preprocess).
+            int longer = Math.Max(architecture.InputHeight, architecture.InputWidth), patch = _options.PatchSize;
+            _options = new SAMOptions(_options) { ImageSize = (longer + patch - 1) / patch * patch };
             Options = _options;
         }
         _useNativeMode = true;
-        // The rate this model publishes on its own options. Built bare, the optimizer
-        // would use its own default instead and LearningRate would be configuration that
-        // nothing reads — the defect that diverged MusicFlamingo's training.
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-        { InitialLearningRate = _options.LearningRate });
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? throw new InvalidOperationException("SAM declares its paper recipe.");
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
-        base.EmbeddingDim = _options.EmbeddingDim;
+        base.EmbeddingDim = _options.MaskDecoderDim;
         InitializeLayers();
     }
 
-    public int EmbeddingDimension => _options.EmbeddingDim;
+    /// <summary>The image embedding's channels (the mask decoder's width, 256 in the released models).</summary>
+    public int EmbeddingDimension => _options.MaskDecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
 
-    public Tensor<T> EncodeImage(Tensor<T> image)
+    /// <summary>The configuration the options describe: the encoder's width, depth and heads, its global-attention
+    /// blocks at every quarter of the depth (as the released ViT-B/L/H place them), and the decoder.</summary>
+    private SamConfiguration Configuration()
     {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(p);
-        var c = p;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        int depth = _options.NumLayers;
+        var global = Enumerable.Range(1, 4).Select(k => k * depth / 4 - 1).Where(i => i >= 0).Distinct().ToArray();
+        return new SamConfiguration
+        {
+            ImageSize = _options.ImageSize, PatchSize = _options.PatchSize, EncoderDim = _options.EmbeddingDim, EncoderDepth = depth,
+            EncoderHeads = _options.NumHeads, MlpRatio = _options.FfnMultiplier, WindowSize = _options.WindowSize,
+            GlobalAttention = global, RelativePositions = _options.UseRelativePositionalEncoding, OutChannels = _options.MaskDecoderDim,
+            DecoderDepth = _options.NumMaskDecoderLayers, MultimaskOutputs = _options.NumMultimaskOutputs,
+            PixelMean = _options.ImageMean, PixelStd = _options.ImageStd,
+        };
     }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultViTLayers(
-                    _options.EmbeddingDim,
-                    _options.NumLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    patchSize: _options.PatchSize
-                )
-            );
+        if (!_useNativeMode || _options is null || _network is not null) return;
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("SAM builds the paper's network; custom layers are not supported.");
+        var layers = new List<LayerBase<T>>();
+        _network = new SamNetwork<T>(Engine, layers, Configuration());
+        int seed = _options.Seed ?? 42;
+        _network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
+        _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 1);
+        Layers.AddRange(layers);
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    /// <summary>Loads an official SAM checkpoint's state dict.</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
+
+    private Tensor<T> Batched(Tensor<T> image) => image.Rank == 3
+        ? Engine.Reshape(image, new[] { 1, image.Shape[0], image.Shape[1], image.Shape[2] })
+        : image;
+
+    /// <summary>
+    /// The image embedding <c>[MaskDecoderDim, g, g]</c> (or <c>[B, MaskDecoderDim, g, g]</c>) of images in 0..1 at most
+    /// the encoder size: normalized by the options' mean and std, zero-padded to a square, and run through SAM's image
+    /// encoder.
+    /// </summary>
+    public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+            return OnnxModel.Run(PreprocessImage(image));
+        bool single = image.Rank == 3;
+        var embedding = Network.EncodeImage(Network.Preprocess(PreprocessImage(Batched(image))));
+        return single ? Engine.Reshape(embedding, new[] { embedding.Shape[1], embedding.Shape[2], embedding.Shape[3] }) : embedding;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) => EncodeImage(input);
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeImage(input);
+
+    /// <summary>
+    /// One step of SAM's training on an image and its ground-truth mask (<c>H·W</c> values): the paper's interactive
+    /// prompt simulation through the full network (<see cref="SamTraining{T}"/>), the encoder trained with the decoder.
+    /// </summary>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        var image = Batched(input);
+        // The network's preprocessing normalizes with the options' mean and std; images arrive in 0..1.
+        var training = new SamTraining<T>(Engine, Network, 20.0, 1.0, 2.0, 0.25);
+        var objective = training.Objective(image, expected, _trainingRandom);
+        // The objective runs the whole network itself; TrainWithCustomLoss would also run (and discard) a forward pass.
+        TrainWithCustomObjective(image, expected, (_, _) => objective(), _optimizer);
+        return true;
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
     protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
-        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    /// <summary>SAM normalizes and pads to a square in its network (<see cref="EncodeImage"/>); the image passes
+    /// through unchanged here.</summary>
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) => image;
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
@@ -182,8 +225,8 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "SAM-Native" : "SAM-ONNX",
-            Description = "Segment Anything Model (Kirillov et al., 2023)",
-            FeatureCount = _options.EmbeddingDim,
+            Description = "Segment Anything Model (Kirillov et al., 2023): the image encoder",
+            FeatureCount = _options.MaskDecoderDim,
             Complexity = _options.NumLayers,
         };
         m.AdditionalInfo["Architecture"] = "SAM";
@@ -191,10 +234,6 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         m.AdditionalInfo["WindowSize"] = _options.WindowSize.ToString();
         return m;
     }
-
-
-
-
 
     private void ThrowIfDisposed()
     {

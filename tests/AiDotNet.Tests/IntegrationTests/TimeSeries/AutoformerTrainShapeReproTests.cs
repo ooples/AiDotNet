@@ -62,7 +62,7 @@ public class AutoformerTrainShapeReproTests
 
         var options = new AutoformerOptions<double>
         {
-            LookbackWindow = 12,
+            LookbackWindow = 12, LabelLength = 6,
             ForecastHorizon = 1,
             // ffDim is 4 * EmbeddingDim. A crossed gradient shows up as "Got [4d, d] and [d, 4d]" —
             // e.g. [32, 8] at d=8, or [2048, 512] at the default d=512 seen in the sweep.
@@ -106,7 +106,7 @@ public class AutoformerTrainShapeReproTests
         // EmbeddingDim (512) and the encoder/decoder layer counts stay at their defaults.
         var options = new AutoformerOptions<float>
         {
-            LookbackWindow = 24,
+            LookbackWindow = 24, LabelLength = 12,
             ForecastHorizon = 1,
             Epochs = 2,
             UseEarlyStopping = true,
@@ -147,7 +147,7 @@ public class AutoformerTrainShapeReproTests
                 var (x, y) = SyntheticSeries(n: 160, features: 3, seed: 11 + i);
                 var options = new AutoformerOptions<double>
                 {
-                    LookbackWindow = 12,
+                    LookbackWindow = 12, LabelLength = 6,
                     ForecastHorizon = 1,
                     EmbeddingDim = 8,
                     NumEncoderLayers = 1,
@@ -201,7 +201,7 @@ public class AutoformerTrainShapeReproTests
 
                     var options = new AutoformerOptions<float>
                     {
-                        LookbackWindow = 24,
+                        LookbackWindow = 24, LabelLength = 12,
                         ForecastHorizon = 1,
                         EmbeddingDim = 64,
                         Epochs = 2,
@@ -266,7 +266,7 @@ public class AutoformerTrainShapeReproTests
 
             var options = new AutoformerOptions<float>
             {
-                LookbackWindow = 24,
+                LookbackWindow = 24, LabelLength = 12,
                 ForecastHorizon = 1,
                 Epochs = 2,
                 UseEarlyStopping = true,

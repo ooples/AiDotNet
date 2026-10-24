@@ -1,0 +1,107 @@
+# Reference data generators
+
+The C# tests under `tests/AiDotNet.Tests` compare AiDotNet's implementations against fixed values from the
+original implementations: the official codec code, librosa, PyWorld, NATSpeech, Hugging Face T5, pyannote.audio,
+espeak-ng and Pheme's own modules. This folder holds the scripts
+that produce those values, so you can check them yourself or regenerate them.
+
+| Script | Fixture it produces | Reference implementation |
+|---|---|---|
+| `dac_reference.py` | `Audio/Codecs/ReferenceData/dac_official_layout_reference.json` | Hugging Face `transformers` `DacModel` |
+| `encodec_reference.py` | `Audio/Codecs/ReferenceData/encodec_official_layout_reference.json` | Hugging Face `transformers` `EncodecModel` |
+| `speechtokenizer_reference.py` | `Audio/Codecs/ReferenceData/speechtokenizer_official_layout_reference.json` | the authors' `speechtokenizer` package |
+| `pitch_reference.py` | `Audio/Pitch/ReferenceData/pyworld_dio_stonemask.json` and `natspeech_pitch_cwt.json` | PyWorld, and NATSpeech's `cwt.py` (vendored unchanged in `natspeech_cwt.py`) |
+| `tacotron_mel_reference.py` | `TextToSpeech/ReferenceData/librosa_tacotron_mel.json` | librosa |
+| `t5_reference.py` | `TextToSpeech/ReferenceData/t5_reference.json` | Hugging Face `transformers` `T5ForConditionalGeneration` (Pheme's text-to-semantic model) |
+| `speartts_reference.py` | `TextToSpeech/ReferenceData/speartts_reference.json` | Hugging Face `transformers` `T5ForConditionalGeneration` with its own encoder table (SPEAR-TTS's reading model): label smoothing, a reading-stage SGD step, beam search |
+| `chattts_reference.py` | `TextToSpeech/ReferenceData/chattts_reference.json` | 2noise/ChatTTS's `Embed`, `Speaker.apply` and `DVAE` (pass a checkout with `--chattts`) around Hugging Face `LlamaModel` |
+| `hift_reference.py` | `TextToSpeech/ReferenceData/hift_reference.json` | FunAudioLLM/CosyVoice's `HiFTGenerator` and `ConvRNNF0Predictor` (pass a checkout with `--cosyvoice`) |
+| `wenet_encoder_reference.py` | `TextToSpeech/ReferenceData/wenet_encoder_reference.json` | FunAudioLLM/CosyVoice's wenet `ConformerEncoder` / `TransformerEncoder` with ESPnet relative positions (pass a checkout with `--cosyvoice`) |
+| `cosyvoice_decoder_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_decoder_reference.json` | FunAudioLLM/CosyVoice's `ConditionalDecoder` over Matcha-TTS at CosyVoice's pinned commit (pass checkouts with `--cosyvoice` and `--matcha`) |
+| `cosyvoice_flow_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_flow_reference.json` | FunAudioLLM/CosyVoice's `MaskedDiffWithXvec`, `InterpolateRegulator` and `ConditionalCFM` (pass checkouts with `--cosyvoice` and `--matcha`) |
+| `cosyvoice_lm_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_lm_reference.json` | FunAudioLLM/CosyVoice's `TransformerLM` (pass checkouts with `--cosyvoice` and `--matcha`) |
+| `s3tokenizer_v2_reference.py` | `TextToSpeech/ReferenceData/s3tokenizer_v2_reference.json` | xingchensong/S3Tokenizer v2 at 9bf5d84, CosyVoice 2's `speech_tokenizer_v2_25hz` (pass a checkout with `--s3tokenizer`) |
+| `qwen2_tokenizer_reference.py` | `TextToSpeech/ReferenceData/qwen2_tokenizer_reference.json` | transformers 5.18's tokenizer over Qwen/Qwen2.5-0.5B's files with CosyVoice 2's added tokens (pass the tokenizer directory with `--qwen`) |
+| `s3tokenizer_reference.py` | `TextToSpeech/ReferenceData/s3tokenizer_reference.json` | xingchensong/S3Tokenizer v1 at 9bf5d84, the PyTorch form of CosyVoice's `speech_tokenizer_v1` (pass a checkout with `--s3tokenizer`) |
+| `cosyvoice2_flow_reference.py` | `TextToSpeech/ReferenceData/cosyvoice2_flow_reference.json` | FunAudioLLM/CosyVoice's `CausalMaskedDiffWithXvec` (UpsampleConformerEncoder, CausalConditionalCFM/Decoder), offline and streaming (pass `--cosyvoice` and `--matcha`) |
+| `hift24_reference.py` | `TextToSpeech/ReferenceData/hift24_reference.json` | FunAudioLLM/CosyVoice's `HiFTGenerator` at 24 kHz (three stages) and its `SineGen2`, CosyVoice 2's vocoder (pass `--cosyvoice`) |
+| `cosyvoice2_lm_reference.py` | `TextToSpeech/ReferenceData/cosyvoice2_lm_reference.json` | FunAudioLLM/CosyVoice's `Qwen2LM` over transformers 5.18's `Qwen2ForCausalLM` (pass `--cosyvoice` and `--matcha`) |
+| `cosyvoice_frontend_reference.py` | `TextToSpeech/ReferenceData/cosyvoice_frontend_reference.json` | FunAudioLLM/CosyVoice's `text_normalize` without an external normalizer, with inflect 7.3.1 (pass a checkout with `--cosyvoice`) |
+| `world_harvest_reference.py` | `TextToSpeech/ReferenceData/world_harvest_reference.json` | pyworld 0.3.5's `harvest` and `stonemask` (WORLD's C++), and CosyVoice's `compute_f0` built on them |
+| `whisper_tiktoken_reference.py` | `TextToSpeech/ReferenceData/whisper_tiktoken_reference.json` | openai-whisper 20250625's multilingual tiktoken encoding at 99 and 100 languages, CosyVoice's text tokenizer |
+| `campplus_reference.py` | `TextToSpeech/ReferenceData/campplus_reference.json` | modelscope/3D-Speaker's `CAMPPlus` at 065629c, CosyVoice's x-vector extractor, and CosyVoice's front end for it (torchaudio's `kaldi.fbank`, mean-normalized) (pass a directory holding the `speakerlab` package with `--speakerlab`) |
+| `conformer_reference.py` | `TextToSpeech/ReferenceData/soundstorm_conformer_reference.json` | Pheme's `modules/conformer.py` (needs `--pheme`, a checkout of PolyAI-LDN/pheme) |
+| `pheme_s2a_reference.py` | `TextToSpeech/ReferenceData/pheme_s2a_reference.json` | Pheme's `modules/s2a_model.py` `TTSConformer` (needs `--pheme`) |
+| `valle_reference.py` | `TextToSpeech/ReferenceData/valle_reference.json` | lifeiteng/vall-e's `VALLE` (needs `--valle`, a checkout of lifeiteng/vall-e) |
+| `mandarin_g2p_reference.py` | `TextToSpeech/ReferenceData/mandarin_g2p_reference.json` | Plachtaa/VALL-E-X's `chinese_to_ipa` and cn2an (needs `--vallex`, a checkout of Plachtaa/VALL-E-X) |
+| `mandarin_g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/jieba_*` and `pypinyin_*` (the Mandarin G2P's data, not a test fixture) | jieba 0.42.1 and pypinyin 0.55.0 |
+| `vocos_encodec_reference.py` | `TextToSpeech/ReferenceData/vocos_encodec_reference.json` | the vocos package's `VocosBackbone` and `ISTFTHead` (VALL-E 2's decoder) |
+| `t5_tokenizer_reference.py` | `Tokenization/ReferenceData/t5_tokenizer_reference.json` | sentencepiece with google-t5/t5-base's `spiece.model` (MusicGen's T5 tokenizer) |
+| `dadapt_adam_reference.py` | `UnitTests/Optimizers/ReferenceData/dadapt_adam_reference.json` | audiocraft's `DAdaptAdam` (needs `--audiocraft`, a checkout of facebookresearch/audiocraft) |
+| `musicgen_reference.py` | `Audio/ReferenceData/musicgen_reference.json` | audiocraft's `LMModel` with the delay pattern, and a tiny Hugging Face T5 encoder (needs `--audiocraft`) |
+| `xvector_reference.py` | `TextToSpeech/ReferenceData/pyannote_xvector_reference.json` | pyannote.audio `XVectorSincNet` |
+| `espeak_g2p_reference.py` | `TextToSpeech/ReferenceData/espeak_arctic_phonemes.json` | espeak-ng through `phonemizer` (the front end Pheme was trained with) |
+| `g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz` and `nrl_rules.tsv` (the English G2P's data, not a test fixture) | CMUdict and NRL Report 7948's rules, from pinned sources |
+| `parler_tts_reference.py` | `TextToSpeech/ReferenceData/parler_tts_reference.json` | huggingface/parler-tts's `ParlerTTSForConditionalGeneration` (needs `--parler`, a checkout of huggingface/parler-tts, and its own environment; see below) |
+| `prompttts_style_reference.py` | `TextToSpeech/ReferenceData/prompttts_style_reference.json` | THUDM/P-tuning-v2's `BertPrefixForSequenceClassification` (PromptTTS's style encoder; needs `--ptuning`, a checkout of THUDM/P-tuning-v2, and the Parler-TTS environment) |
+| `styletts_reference.py` | `TextToSpeech/ReferenceData/styletts_reference.json` | yl4579/StyleTTS's `models.py`, `Utils/ASR` and `Utils/JDC`, and resemble-ai/monotonic_align (needs `--styletts`, a checkout of yl4579/StyleTTS, and the Parler-TTS environment with torchaudio, munch, pyyaml and monotonic_align built from its repository) |
+
+## Set up
+
+You need a 64-bit Python 3.12 or newer (librosa 1.0 requires it, and PyTorch has no 32-bit builds).
+
+```
+python -m venv .venv
+.venv\Scripts\python -m pip install -r tools/reference-data/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+.venv\Scripts\python -m pip install --no-deps pycwt==0.4.0b0
+```
+
+pycwt gets its own step because it declares `numpy<2`, while librosa 1.0 needs numpy 2.1 or newer, so pip refuses to
+install the two together. pycwt runs correctly on numpy 2 (the checks below pass with it), and `requirements.txt`
+already lists what it needs.
+
+On macOS or Linux the interpreter is `.venv/bin/python`.
+
+Parler-TTS's code runs only on `transformers` 4.46 (it imports helpers that later versions removed), so
+`parler_tts_reference.py` needs an environment of its own:
+
+```
+python -m venv .venv-parler
+.venv-parler\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+.venv-parler\Scripts\python -m pip install transformers==4.46.1 sentencepiece safetensors "numpy<2.6" protobuf
+.venv-parler\Scripts\python tools/reference-data/parler_tts_reference.py --parler <checkout> --stubs <dir>
+```
+
+The `parler_tts` package imports descript's `dac` package for its own DAC wrapper, which the script does not use.
+Without that package installed, pass `--stubs`, a directory holding `dac/__init__.py` (empty) and `dac/model.py`
+(`class DAC: pass`).
+
+## Check the committed fixtures
+
+Run a script with no arguments, from anywhere:
+
+```
+.venv\Scripts\python tools/reference-data/dac_reference.py
+```
+
+It recomputes every value in its fixture and prints either `matches the reference implementation` or `MISMATCH`
+with the values that differ. A mismatch exits with code 1.
+
+- **The codec fixtures must match exactly.** Each one stores its own small random model (the weights, base64-encoded)
+  and its input audio. The script loads both into the official implementation and recomputes the latent, the codes
+  and the decoded audio.
+- **The pitch and spectrogram fixtures are checked to 1e-12, relative.** Their input is the synthetic voice in
+  `test_signal.py`, which matches the C# tests' `Signal` helper value for value. PyWorld and the FFT behind librosa
+  and pycwt are compiled code, and different builds disagree in the last few digits. That is far tighter than
+  the C# tests themselves, which allow 1e-9 to 1e-6.
+
+## Regenerate a fixture
+
+Add `--write`:
+
+```
+.venv\Scripts\python tools/reference-data/pitch_reference.py --write
+```
+
+For the codec fixtures this keeps the stored weights and input audio and rewrites only the outputs, so the C# tests
+keep testing the same model. Run the matching C# tests afterwards, and look at `git diff` before committing.

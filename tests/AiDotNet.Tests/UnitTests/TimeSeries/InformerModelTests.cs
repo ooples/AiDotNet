@@ -1,321 +1,130 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Forecasting.Transformers;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
 using Xunit;
-using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
 /// <summary>
-/// Unit tests for InformerModel (Efficient Transformer for Long Sequence Time Series Forecasting).
+/// The Informer models' behaviour; the network itself is checked against the official code in
+/// <see cref="InformerReferenceTests"/>.
 /// </summary>
 public class InformerModelTests
 {
-    #region Constructor Tests
-
-    [Fact(Timeout = 60000)]
-    public async Task Constructor_WithDefaultOptions_CreatesValidModel()
+    private static InformerOptions<double> Small(int seed = 3) => new()
     {
-        var model = new InformerModel<double>();
+        LookbackWindow = 16, LabelLength = 8, ForecastHorizon = 4, EmbeddingDim = 16, FeedForwardDim = 32,
+        NumEncoderLayers = 2, NumDecoderLayers = 1, NumAttentionHeads = 2, SamplingFactor = 2, DropoutRate = 0.0,
+        Epochs = 8, BatchSize = 8, LearningRate = 1e-3, Seed = seed,
+    };
 
-        Assert.NotNull(model);
+    private static Vector<double> Sine(int length)
+    {
+        var y = new Vector<double>(length);
+        for (int i = 0; i < length; i++) y[i] = 3.0 + Math.Sin(2 * Math.PI * i / 12.0) + 0.02 * i;
+        return y;
+    }
+
+    private static double InSampleMse(InformerModel<double> model, Vector<double> y)
+    {
+        var p = model.Predict(new Matrix<double>(y.Length, 1));
+        double s = 0;
+        for (int i = 16; i < y.Length; i++) s += (p[i] - y[i]) * (p[i] - y[i]);
+        return s / (y.Length - 16);
     }
 
     [Fact(Timeout = 60000)]
-    public async Task Constructor_WithCustomOptions_CreatesValidModel()
+    public async Task Constructor_RejectsInvalidSizes()
     {
-        var options = new InformerOptions<double>
-        {
-            LookbackWindow = 24,
-            ForecastHorizon = 12,
-            EmbeddingDim = 64,
-            NumEncoderLayers = 2,
-            NumDecoderLayers = 1,
-            NumAttentionHeads = 4,
-            Epochs = 10,
-            BatchSize = 16
-        };
+        await Task.Yield();
+        Assert.Throws<ArgumentException>(() => new InformerModel<double>(new InformerOptions<double> { EmbeddingDim = 0 }));
+        Assert.Throws<ArgumentException>(() => new InformerModel<double>(new InformerOptions<double> { NumEncoderLayers = 0 }));
+        Assert.Throws<ArgumentException>(() => new InformerModel<double>(new InformerOptions<double> { NumAttentionHeads = 0 }));
+        Assert.Throws<ArgumentException>(() => new InformerModel<double>(new InformerOptions<double> { LookbackWindow = 8, LabelLength = 9 }));
+        // The width must split evenly over the heads.
+        Assert.Throws<ArgumentException>(() => new InformerModel<double>(new InformerOptions<double> { EmbeddingDim = 10, NumAttentionHeads = 4, LookbackWindow = 8, LabelLength = 4 }));
+    }
 
-        var model = new InformerModel<double>(options);
+    [Fact(Timeout = 120000)]
+    public async Task Training_LowersTheInSampleError()
+    {
+        await Task.Yield();
+        var y = Sine(120);
+        var options = Small();
+        options.Epochs = 1;
+        var oneEpoch = new InformerModel<double>(options);
+        oneEpoch.Train(new Matrix<double>(y.Length, 1), y);
+        var trained = new InformerModel<double>(Small());
+        trained.Train(new Matrix<double>(y.Length, 1), y);
+        double early = InSampleMse(oneEpoch, y), late = InSampleMse(trained, y);
+        // The paper's schedule halves the rate every epoch; measured 0.97 -> 0.66.
+        Assert.True(late < 0.8 * early, $"MSE after 1 epoch {early}, after 8 {late}");
+    }
 
-        Assert.NotNull(model);
+    [Fact(Timeout = 120000)]
+    public async Task Predict_InSample_AndAfterTheSeries()
+    {
+        await Task.Yield();
+        var y = Sine(80);
+        var model = new InformerModel<double>(Small());
+        model.Train(new Matrix<double>(y.Length, 1), y);
+        var inSample = model.Predict(new Matrix<double>(y.Length, 1));
+        Assert.Equal(y.Length, inSample.Length);
+        Assert.All(inSample, v => Assert.False(double.IsNaN(v) || double.IsInfinity(v)));
+
+        // One column is time steps after the series: the first four are one generative forecast, the rest continue
+        // from it.
+        var ahead = model.Predict(new Matrix<double>(10, 1));
+        var direct = model.ForecastHorizon(y);
+        for (int h = 0; h < 4; h++) Assert.Equal(direct[h], ahead[h], 12);
+        var extended = y.ToList();
+        extended.AddRange(ahead.Take(4));
+        var next = model.ForecastHorizon(new Vector<double>(extended.ToArray()));
+        for (int h = 0; h < 4; h++) Assert.Equal(next[h], ahead[4 + h], 12);
+
+        // Wider rows are history windows: each prediction is the first step of that window's forecast.
+        var windows = new Matrix<double>(10, 30);
+        for (int r = 0; r < windows.Rows; r++)
+            for (int c = 0; c < windows.Columns; c++) windows[r, c] = y[r + c];
+        var future = model.Predict(windows);
+        for (int r = 0; r < windows.Rows; r++) Assert.Equal(model.ForecastHorizon(windows.GetRow(r))[0], future[r], 12);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Serialization_RoundTripsExactly()
+    {
+        await Task.Yield();
+        var y = Sine(80);
+        var model = new InformerModel<double>(Small());
+        model.Train(new Matrix<double>(y.Length, 1), y);
+        var restored = new InformerModel<double>(Small(seed: 99));
+        restored.Deserialize(model.Serialize());
+        var a = model.ForecastHorizon(y);
+        var b = restored.ForecastHorizon(y);
+        for (int h = 0; h < a.Length; h++) Assert.Equal(a[h], b[h]);
     }
 
     [Fact(Timeout = 60000)]
-    public async Task Constructor_WithZeroEmbeddingDim_ThrowsArgumentException()
+    public async Task TimeSeriesAndFinanceInformers_AreOneNetwork()
     {
-        var options = new InformerOptions<double>
-        {
-            EmbeddingDim = 0
-        };
-
-        Assert.Throws<ArgumentException>(() => new InformerModel<double>(options));
+        await Task.Yield();
+        // Same options and seed: the same layers are built and initialized identically, so on the same (standardized)
+        // history the two classes forecast the same values.
+        var series = new InformerModel<double>(Small());
+        var finance = new Informer<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), Small());
+        var history = new Vector<double>(16);
+        var window = new Tensor<double>(new[] { 1, 16, 1 });
+        for (int t = 0; t < 16; t++) window[0, t, 0] = history[t] = Math.Sin(t * 0.7);
+        var a = series.ForecastHorizon(history);
+        var b = finance.Forecast(window);
+        Assert.Equal(new[] { 1, 4, 1 }, b.Shape.ToArray());
+        for (int h = 0; h < 4; h++) Assert.Equal(a[h], b[0, h, 0], 12);
     }
-
-    [Fact(Timeout = 60000)]
-    public async Task Constructor_WithZeroEncoderLayers_ThrowsArgumentException()
-    {
-        var options = new InformerOptions<double>
-        {
-            NumEncoderLayers = 0
-        };
-
-        Assert.Throws<ArgumentException>(() => new InformerModel<double>(options));
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task Constructor_WithZeroDecoderLayers_ThrowsArgumentException()
-    {
-        var options = new InformerOptions<double>
-        {
-            NumDecoderLayers = 0
-        };
-
-        Assert.Throws<ArgumentException>(() => new InformerModel<double>(options));
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task Constructor_WithZeroAttentionHeads_ThrowsArgumentException()
-    {
-        var options = new InformerOptions<double>
-        {
-            NumAttentionHeads = 0
-        };
-
-        Assert.Throws<ArgumentException>(() => new InformerModel<double>(options));
-    }
-
-    #endregion
-
-    #region Training Tests
-
-    [Fact(Timeout = 60000)]
-    public async Task Train_WithValidData_CompletesWithoutError()
-    {
-        var options = new InformerOptions<double>
-        {
-            LookbackWindow = 8,
-            ForecastHorizon = 4,
-            EmbeddingDim = 16,
-            NumEncoderLayers = 1,
-            NumDecoderLayers = 1,
-            NumAttentionHeads = 2,
-            Epochs = 2,
-            BatchSize = 2
-        };
-
-        var model = new InformerModel<double>(options);
-        var trainingData = GenerateSyntheticData(50, options.LookbackWindow);
-
-        var exception = Record.Exception(() => model.Train(trainingData.inputs, trainingData.targets));
-
-        Assert.Null(exception);
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task Train_WithMinimalData_CompletesWithoutError()
-    {
-        var options = new InformerOptions<double>
-        {
-            LookbackWindow = 4,
-            ForecastHorizon = 2,
-            EmbeddingDim = 8,
-            NumEncoderLayers = 1,
-            NumDecoderLayers = 1,
-            NumAttentionHeads = 1,
-            Epochs = 1,
-            BatchSize = 1
-        };
-
-        var model = new InformerModel<double>(options);
-        var trainingData = GenerateSyntheticData(20, options.LookbackWindow);
-
-        var exception = Record.Exception(() => model.Train(trainingData.inputs, trainingData.targets));
-
-        Assert.Null(exception);
-    }
-
-    #endregion
-
-    #region Prediction Tests
-
-    [Fact(Timeout = 60000)]
-    public async Task PredictSingle_AfterTraining_ReturnsValidPrediction()
-    {
-        var options = new InformerOptions<double>
-        {
-            LookbackWindow = 8,
-            ForecastHorizon = 4,
-            EmbeddingDim = 16,
-            NumEncoderLayers = 1,
-            NumDecoderLayers = 1,
-            NumAttentionHeads = 2,
-            Epochs = 2,
-            BatchSize = 2
-        };
-
-        var model = new InformerModel<double>(options);
-        var trainingData = GenerateSyntheticData(50, options.LookbackWindow);
-        model.Train(trainingData.inputs, trainingData.targets);
-
-        var input = new Vector<double>(options.LookbackWindow);
-        for (int i = 0; i < options.LookbackWindow; i++)
-        {
-            input[i] = Math.Sin(2 * Math.PI * i / 10);
-        }
-
-        var prediction = model.PredictSingle(input);
-
-        Assert.False(double.IsNaN(prediction), "Prediction is NaN");
-        Assert.False(double.IsInfinity(prediction), "Prediction is Infinity");
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task PredictSingle_ReturnsFiniteValues()
-    {
-        var options = new InformerOptions<double>
-        {
-            LookbackWindow = 8,
-            ForecastHorizon = 4,
-            EmbeddingDim = 16,
-            NumEncoderLayers = 1,
-            NumDecoderLayers = 1,
-            NumAttentionHeads = 2,
-            Epochs = 2,
-            BatchSize = 2
-        };
-
-        var model = new InformerModel<double>(options);
-        var trainingData = GenerateSyntheticData(50, options.LookbackWindow);
-        model.Train(trainingData.inputs, trainingData.targets);
-
-        var input = new Vector<double>(options.LookbackWindow);
-        for (int i = 0; i < options.LookbackWindow; i++)
-        {
-            input[i] = i * 0.1;
-        }
-
-        var prediction = model.PredictSingle(input);
-
-        Assert.False(double.IsNaN(prediction), "Prediction contains NaN");
-        Assert.False(double.IsInfinity(prediction), "Prediction contains Infinity");
-    }
-
-    [Fact(Timeout = 60000)]
-    public async Task Predict_WithMatrix_ReturnsValidPredictions()
-    {
-        var options = new InformerOptions<double>
-        {
-            LookbackWindow = 8,
-            ForecastHorizon = 4,
-            EmbeddingDim = 16,
-            NumEncoderLayers = 1,
-            NumDecoderLayers = 1,
-            NumAttentionHeads = 2,
-            Epochs = 2,
-            BatchSize = 2
-        };
-
-        var model = new InformerModel<double>(options);
-        var trainingData = GenerateSyntheticData(50, options.LookbackWindow);
-        model.Train(trainingData.inputs, trainingData.targets);
-
-        var inputMatrix = new Matrix<double>(1, options.LookbackWindow);
-        for (int i = 0; i < options.LookbackWindow; i++)
-        {
-            inputMatrix[0, i] = Math.Sin(2 * Math.PI * i / 10);
-        }
-
-        var predictions = model.Predict(inputMatrix);
-
-        Assert.NotNull(predictions);
-        Assert.True(predictions.Length > 0);
-    }
-
-    #endregion
-
-    #region Serialization Tests
-
-    [Fact(Timeout = 60000)]
-    public async Task Serialize_AndDeserialize_PreservesModel()
-    {
-        var options = new InformerOptions<double>
-        {
-            LookbackWindow = 8,
-            ForecastHorizon = 4,
-            EmbeddingDim = 16,
-            NumEncoderLayers = 1,
-            NumDecoderLayers = 1,
-            NumAttentionHeads = 2,
-            Epochs = 2,
-            BatchSize = 2
-        };
-
-        var model = new InformerModel<double>(options);
-        var trainingData = GenerateSyntheticData(50, options.LookbackWindow);
-        model.Train(trainingData.inputs, trainingData.targets);
-
-        var serialized = model.Serialize();
-        Assert.NotNull(serialized);
-        Assert.NotEmpty(serialized);
-
-        var deserializedModel = new InformerModel<double>(options);
-        deserializedModel.Deserialize(serialized);
-
-        var input = new Vector<double>(options.LookbackWindow);
-        for (int i = 0; i < options.LookbackWindow; i++)
-        {
-            input[i] = i * 0.1;
-        }
-
-        var originalPrediction = model.PredictSingle(input);
-        var deserializedPrediction = deserializedModel.PredictSingle(input);
-
-        Assert.Equal(originalPrediction, deserializedPrediction, 6);
-    }
-
-    #endregion
-
-    #region Float Type Tests
-
-    [Fact(Timeout = 60000)]
-    public async Task Constructor_WithFloatType_CreatesValidModel()
-    {
-        var options = new InformerOptions<float>
-        {
-            LookbackWindow = 8,
-            ForecastHorizon = 4,
-            EmbeddingDim = 16,
-            NumEncoderLayers = 1,
-            NumDecoderLayers = 1,
-            NumAttentionHeads = 2
-        };
-
-        var model = new InformerModel<float>(options);
-
-        Assert.NotNull(model);
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    private static (Matrix<double> inputs, Vector<double> targets) GenerateSyntheticData(int numSamples, int lookback)
-    {
-        var inputs = new Matrix<double>(numSamples, lookback);
-        var targets = new Vector<double>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            double baseValue = i * 0.1;
-            for (int j = 0; j < lookback; j++)
-            {
-                inputs[i, j] = Math.Sin(2 * Math.PI * (baseValue + j) / 10) + 0.1 * (j % 3);
-            }
-            targets[i] = Math.Sin(2 * Math.PI * (baseValue + lookback) / 10) + 0.1 * (lookback % 3);
-        }
-
-        return (inputs, targets);
-    }
-
-    #endregion
 }

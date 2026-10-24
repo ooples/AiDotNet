@@ -260,7 +260,7 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
     }
 
     /// <inheritdoc/>
-    public override Vector<T> AdjustGradients(Vector<T> gradients)
+    public override Vector<T> AdjustGradients(IFullModel<T, TInput, TOutput> model, Vector<T> gradients)
     {
         if (_columns.Count <= 1)
         {

@@ -177,6 +177,7 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 WindowType.Blackman => 0.42 - 0.5 * Math.Cos(2 * Math.PI * n / (length - 1))
                     + 0.08 * Math.Cos(4 * Math.PI * n / (length - 1)),
                 WindowType.Rectangular => 1.0,
+                WindowType.Povey => Math.Pow(0.5 * (1 - Math.Cos(2 * Math.PI * n / (length - 1))), 0.85),
                 _ => 0.5 * (1 - Math.Cos(2 * Math.PI * n / (length - 1)))
             };
         }

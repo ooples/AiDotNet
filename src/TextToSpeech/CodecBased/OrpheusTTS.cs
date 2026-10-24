@@ -95,7 +95,7 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. Orpheus: text with emotion tags -> LLaMA-3B -> SNAC codec tokens -> SNAC decoder -> waveform.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -169,15 +169,6 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
             wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
         }
         return wave;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

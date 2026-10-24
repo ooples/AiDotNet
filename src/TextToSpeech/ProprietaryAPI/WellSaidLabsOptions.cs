@@ -1,36 +1,31 @@
-using AiDotNet.TextToSpeech.EndToEnd;
-
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
-/// <summary>Options for WellSaidLabs TTS API wrapper.</summary>
+/// <summary>Options for the WellSaid Labs text-to-speech client (<c>POST /v1/tts/stream</c>).</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the WellSaidLabs model. Default values follow the original paper settings.</para>
+/// <para>Defaults: the endpoint https://api.wellsaidlabs.com and speaker 3. The service returns MP3 only; the client decodes
+/// it and resamples to <see cref="CloudTtsOptions.SampleRate"/> (24 kHz) when the stream's rate differs. The key goes in
+/// the <c>X-Api-Key</c> header.</para>
+/// <para><b>For Beginners:</b> Set <see cref="CloudTtsOptions.ApiKey"/> to your WellSaid key and
+/// <see cref="CloudTtsOptions.VoiceId"/> to a speaker (voice avatar) id.</para>
 /// </remarks>
-public class WellSaidLabsOptions : EndToEndTtsOptions
+public class WellSaidLabsOptions : CloudTtsOptions
 {
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public WellSaidLabsOptions(WellSaidLabsOptions other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
-        ApiKey = other.ApiKey;
-        ApiEndpoint = other.ApiEndpoint;
-        VoiceId = other.VoiceId;
+        Model = other.Model;
     }
 
+    /// <summary>Creates the default options.</summary>
     public WellSaidLabsOptions()
     {
-        NumFlowSteps = 0;
-        NumEncoderLayers = 2;
-        NumDecoderLayers = 2;
-        NumHeads = 4;
-        DropoutRate = 0.0;
+        VoiceId = "3";
+        SampleRate = 24000;
     }
 
-    public string ApiKey { get; set; } = string.Empty;
-    public string ApiEndpoint { get; set; } = string.Empty;
-    public string VoiceId { get; set; } = "default";
+    /// <summary>Gets or sets the model, or null for the service's default.</summary>
+    public string? Model { get; set; }
 }
