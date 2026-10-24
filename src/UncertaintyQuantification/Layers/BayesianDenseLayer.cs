@@ -95,8 +95,13 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         };
     }
 
-    private readonly Random _rng;
+    // Seeded from RandomSeed (the constructor's randomSeed, else the model's construction scope); re-seeded when a
+    // model wires a seed later, so equal seeds reproduce both the initial means and the sampled weights.
+    private Random _rng;
     private readonly object _rngLock = new();
+    private bool _constructed;
+    private bool _initializedWithoutSeed;
+    private long _unseededInitFingerprint;
     private readonly int _inputSize;
     private readonly int _outputSize;
     private readonly T _priorSigma;
@@ -171,26 +176,56 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         _inputSize = inputSize;
         _outputSize = outputSize;
         _priorSigma = NumOps.FromDouble(priorSigma);
-        _rng = randomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(randomSeed.Value)
+        // An explicit seed wins over the one the base constructor drew from the model's construction scope. Reading
+        // only the argument left every layer a model built unseeded: a seeded BayesianNeuralNetwork drew different
+        // initial means and sampled weights on every run.
+        if (randomSeed.HasValue)
+            RandomSeed = randomSeed.Value;
+        _rng = RandomSeed is int seed
+            ? RandomHelper.CreateSeededRandom(seed)
             : RandomHelper.CreateSecureRandom();
 
         // Initialize weight and bias parameters
         InitializeParameters();
+        if (!RandomSeed.HasValue || RandomSeedCameFromConstructionScope)
+        {
+            _initializedWithoutSeed = true;
+            _unseededInitFingerprint = ComputeParameterFingerprint(new[] { _weightMean });
+        }
+
+        _constructed = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A layer built into an explicit architecture layer list is constructed before the network opens its seed
+    /// scope, so the seed arrives later, when the network wires layer seeds. The sampling stream restarts from it,
+    /// and if the means are still exactly what construction drew they are redrawn from it too, in place, so a bound
+    /// parameter buffer keeps its views. Means that were trained, loaded or set since are left alone.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        // The base constructor assigns the scope seed before this constructor has run; it seeds _rng itself.
+        if (!_constructed || RandomSeed is not int seed)
+            return;
+        lock (_rngLock)
+        {
+            _rng = RandomHelper.CreateSeededRandom(seed);
+        }
+
+        if (!_initializedWithoutSeed)
+            return;
+        _initializedWithoutSeed = false;
+        if (ComputeParameterFingerprint(new[] { _weightMean }) != _unseededInitFingerprint)
+            return;
+        FillWeightMeans();
     }
 
     private void InitializeParameters()
     {
         // Initialize weight means with Xavier initialization
         _weightMean = new Tensor<T>([_outputSize, _inputSize]);
-        var scale = Math.Sqrt(2.0 / (_inputSize + _outputSize));
-        for (int i = 0; i < _outputSize; i++)
-        {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                _weightMean[i, j] = NumOps.FromDouble(NextGaussian(0, scale));
-            }
-        }
+        FillWeightMeans();
 
         // Initialize weight log variances to small values (start relatively confident)
         _weightLogVar = new Tensor<T>([_outputSize, _inputSize]);
@@ -515,6 +550,19 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         _sampledBiasEpsilon = null;
         _samplePending = false;
         ClearGradients();
+    }
+
+    // Xavier initialization of the weight means, written into the existing tensor.
+    private void FillWeightMeans()
+    {
+        var scale = Math.Sqrt(2.0 / (_inputSize + _outputSize));
+        for (int i = 0; i < _outputSize; i++)
+        {
+            for (int j = 0; j < _inputSize; j++)
+            {
+                _weightMean[i, j] = NumOps.FromDouble(NextGaussian(0, scale));
+            }
+        }
     }
 
     private double NextGaussian(double mean = 0.0, double stdDev = 1.0)
