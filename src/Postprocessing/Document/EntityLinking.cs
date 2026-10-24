@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace AiDotNet.Postprocessing.Document;
@@ -355,7 +356,7 @@ public class EntityLinking<T> : PostprocessorBase<T, string, IList<Entity>>, IDi
     {
         // Extract just the numeric value
         var numericPart = RegexHelper.Replace(moneyText, @"[^\d.]", "");
-        if (decimal.TryParse(numericPart, out var amount))
+        if (decimal.TryParse(numericPart, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount))
         {
             string currency = moneyText.Contains("$") ? "USD" :
                              moneyText.Contains("£") ? "GBP" :

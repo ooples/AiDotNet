@@ -112,7 +112,7 @@ public class LiveDashboard : ITrainingDashboard
         {
             _listener.Start();
         }
-        catch (HttpListenerException)
+        catch (HttpListenerException ex)
         {
             // Fall back to localhost-only if external binding fails (requires admin on Windows)
             if (AllowExternalConnections)
@@ -120,7 +120,8 @@ public class LiveDashboard : ITrainingDashboard
                 _listener.Prefixes.Clear();
                 _listener.Prefixes.Add($"http://localhost:{Port}/");
                 _listener.Start();
-                Console.WriteLine($"[LiveDashboard] Note: External connections unavailable, bound to localhost only");
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[LiveDashboard] External connections unavailable, bound to localhost only: {ex}");
             }
             else
             {

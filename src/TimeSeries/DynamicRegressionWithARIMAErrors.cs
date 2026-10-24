@@ -620,7 +620,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
         catch (Exception ex)
         {
             // Handle potential numerical instability
-            Console.WriteLine($"Error in AR coefficient estimation: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"Error in AR coefficient estimation: {ex}");
             _arCoefficients = new Vector<T>(p); // Initialize with zeros
         }
     }
