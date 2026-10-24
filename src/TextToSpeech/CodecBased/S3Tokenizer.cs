@@ -4,12 +4,27 @@ using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
-/// <summary>The sizes of a CosyVoice supervised semantic speech tokenizer (S3Tokenizer v1, <c>ModelConfig</c>).</summary>
-/// <param name="FirstStride">The first convolution's stride: 1 for <c>speech_tokenizer_v1</c> (50 tokens a second),
-/// 2 for <c>speech_tokenizer_v1_25hz</c> (25).</param>
-internal sealed record S3TokenizerConfiguration(int Mels = 128, int Context = 1500, int State = 1280, int Heads = 20, int Layers = 6,
-    int CodebookSize = 4096, int FirstStride = 1)
+/// <summary>Which S3 tokenizer: CosyVoice 1's or CosyVoice 2's.</summary>
+internal enum S3TokenizerVersion
 {
+    /// <summary><c>speech_tokenizer_v1</c>: sinusoidal positions and a 4,096-entry codebook.</summary>
+    V1,
+
+    /// <summary><c>speech_tokenizer_v2_25hz</c>: rotary positions, an FSMN memory in every attention block and a finite
+    /// scalar quantizer of 3⁸ = 6,561 codes.</summary>
+    V2,
+}
+
+/// <summary>The sizes of a CosyVoice supervised semantic speech tokenizer (S3Tokenizer, <c>ModelConfig</c>).</summary>
+/// <param name="FirstStride">The first convolution's stride: 1 for <c>speech_tokenizer_v1</c> (50 tokens a second),
+/// 2 for <c>speech_tokenizer_v1_25hz</c> and v2 (25).</param>
+/// <param name="Version">v1 or v2 (CosyVoice 2's); v2 needs 64-wide heads, as its rotary table is fixed at 64.</param>
+internal sealed record S3TokenizerConfiguration(int Mels = 128, int Context = 1500, int State = 1280, int Heads = 20, int Layers = 6,
+    int CodebookSize = 4096, int FirstStride = 1, S3TokenizerVersion Version = S3TokenizerVersion.V1)
+{
+    /// <summary>CosyVoice 2's <c>speech_tokenizer_v2_25hz</c>.</summary>
+    public static S3TokenizerConfiguration V2Default => new(CodebookSize: 6561, FirstStride: 2, Version: S3TokenizerVersion.V2);
+
     /// <summary>Tokens per second of 16 kHz audio (the 100 Hz mel frames, halved by the second convolution and divided
     /// by the first's stride).</summary>
     public int TokenRate => 50 / FirstStride;
@@ -38,7 +53,14 @@ internal sealed class S3Tokenizer<T>
     private Tensor<T> _codebook;
 
     internal sealed record Block(LayerNormalizationLayer<T> AttentionNorm, DenseLayer<T> Query, BiasFreeLinearLayer<T> Key,
-        DenseLayer<T> Value, DenseLayer<T> Output, LayerNormalizationLayer<T> MlpNorm, DenseLayer<T> Mlp1, DenseLayer<T> Mlp2);
+        DenseLayer<T> Value, DenseLayer<T> Output, LayerNormalizationLayer<T> MlpNorm, DenseLayer<T> Mlp1, DenseLayer<T> Mlp2)
+    {
+        /// <summary>v2's FSMN memory: a depthwise 31-tap convolution over the values (no bias); null for v1.</summary>
+        public NormedConv1DLayer<T>? Fsmn { get; init; }
+    }
+
+    // v2's FSMN kernel and rotary table width (precompute_freqs_cis(64, …)).
+    private const int FsmnKernel = 31, RotaryDim = 64;
 
     public S3Tokenizer(IEngine engine, List<LayerBase<T>> layers, S3TokenizerConfiguration configuration, Random initialization)
     {
@@ -46,6 +68,10 @@ internal sealed class S3Tokenizer<T>
         Configuration = configuration;
         var c = configuration;
         if (c.State % c.Heads != 0) throw new ArgumentException("The width must divide by the heads.", nameof(configuration));
+        if (c.Version == S3TokenizerVersion.V2 && c.State / c.Heads != RotaryDim)
+            throw new ArgumentException($"S3Tokenizer v2's rotary table is {RotaryDim} wide; its heads must be too.", nameof(configuration));
+        if (c.Version == S3TokenizerVersion.V2 && c.CodebookSize != 6561)
+            throw new ArgumentException("S3Tokenizer v2 quantizes to 3^8 = 6,561 codes.", nameof(configuration));
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
         double Uniform(int fanIn) => (2 * initialization.NextDouble() - 1) / Math.Sqrt(fanIn);
         DenseLayer<T> Linear(int inputs, int outputs)
@@ -73,12 +99,33 @@ internal sealed class S3Tokenizer<T>
             var value = Linear(c.State, c.State);
             var output = Linear(c.State, c.State);
             var mlpNorm = Add(new LayerNormalizationLayer<T>(c.State, 1e-5));
-            Blocks.Add(new Block(attentionNorm, query, key, value, output, mlpNorm, Linear(c.State, 4 * c.State), Linear(4 * c.State, c.State)));
+            NormedConv1DLayer<T>? fsmn = null;
+            if (c.Version == S3TokenizerVersion.V2)
+            {
+                fsmn = Add(new NormedConv1DLayer<T>(c.State, c.State, FsmnKernel, 1, 1, c.State, 0, false, ConvolutionNormalization.None, useBias: false));
+                fsmn.Reinitialize(() => Uniform(FsmnKernel));
+            }
+            Blocks.Add(new Block(attentionNorm, query, key, value, output, mlpNorm, Linear(c.State, 4 * c.State), Linear(4 * c.State, c.State))
+            {
+                Fsmn = fsmn,
+            });
         }
-        _positions = Sinusoids(c.Context, c.State);
-        // The released codebook is learned; a fresh tokenizer draws one from N(0, 1) until weights are loaded.
-        _codebook = new Tensor<T>(new[] { c.CodebookSize, c.State }, TorchParameters.Gaussian<T>(initialization, c.CodebookSize * c.State, 1.0));
+        if (c.Version == S3TokenizerVersion.V2)
+        {
+            _positions = new Tensor<T>(new[] { 0, c.State });
+            _codebook = new Tensor<T>(new[] { 0, c.State });
+            ProjectDown = Linear(c.State, 8);
+        }
+        else
+        {
+            _positions = Sinusoids(c.Context, c.State);
+            // The released codebook is learned; a fresh tokenizer draws one from N(0, 1) until weights are loaded.
+            _codebook = new Tensor<T>(new[] { c.CodebookSize, c.State }, TorchParameters.Gaussian<T>(initialization, c.CodebookSize * c.State, 1.0));
+        }
     }
+
+    /// <summary>v2's FSQ projection to the 8 quantized dimensions; null for v1.</summary>
+    public DenseLayer<T>? ProjectDown { get; }
 
     public S3TokenizerConfiguration Configuration { get; }
     public NormedConv1DLayer<T> Conv1 { get; }
@@ -159,24 +206,63 @@ internal sealed class S3Tokenizer<T>
     {
         var c = Configuration;
         int frames = mel.Shape[1], d = c.State, heads = c.Heads, dk = d / heads;
+        bool v2 = c.Version == S3TokenizerVersion.V2;
         var x = ActivationHelper.ExactGelu(Conv1.Forward(_engine.Reshape(mel, new[] { 1, c.Mels, frames })), _engine);
         x = ActivationHelper.ExactGelu(Conv2.Forward(x), _engine);
         int length = x.Shape[2];
-        if (length > c.Context) throw new ArgumentException($"At most {2 * c.Context * c.FirstStride} frames fit the positional table.", nameof(mel));
         x = _engine.Reshape(_engine.TensorPermute(x, new[] { 0, 2, 1 }), new[] { length, d });
-        x = _engine.TensorAdd(x, _engine.TensorSlice(_positions, new[] { 0, 0 }, new[] { length, d }));
+        Tensor<T>? cos = null, sin = null;
+        if (v2)
+        {
+            if (length > 2048) throw new ArgumentException("At most 2,048 positions fit v2's rotary table.", nameof(mel));
+            // precompute_freqs_cis(64, 2048): angle t · 10000^(−2k/64), the 32 frequencies repeated for both halves.
+            cos = new Tensor<T>(new[] { 1, length, dk });
+            sin = new Tensor<T>(new[] { 1, length, dk });
+            for (int t = 0; t < length; t++)
+                for (int k = 0; k < dk / 2; k++)
+                {
+                    double angle = t * (1.0 / Math.Pow(10000.0, 2.0 * k / dk));
+                    cos[0, t, k] = cos[0, t, k + dk / 2] = NumOps.FromDouble(Math.Cos(angle));
+                    sin[0, t, k] = sin[0, t, k + dk / 2] = NumOps.FromDouble(Math.Sin(angle));
+                }
+        }
+        else
+        {
+            if (length > c.Context) throw new ArgumentException($"At most {2 * c.Context * c.FirstStride} frames fit the positional table.", nameof(mel));
+            x = _engine.TensorAdd(x, _engine.TensorSlice(_positions, new[] { 0, 0 }, new[] { length, d }));
+        }
+        Tensor<T> Rotate(Tensor<T> h)                                                                    // [H, L, dk]
+        {
+            if (cos is null || sin is null) return h;
+            var shape = h.Shape.ToArray();
+            var first = _engine.TensorSlice(h, new[] { 0, 0, 0 }, new[] { shape[0], shape[1], dk / 2 });
+            var second = _engine.TensorSlice(h, new[] { 0, 0, dk / 2 }, new[] { shape[0], shape[1], dk / 2 });
+            var rotated = _engine.TensorConcatenate(new[] { _engine.TensorNegate(second), first }, 2);
+            return _engine.TensorAdd(_engine.TensorMultiply(h, _engine.TensorBroadcastTo(cos, shape)),
+                _engine.TensorMultiply(rotated, _engine.TensorBroadcastTo(sin, shape)));
+        }
         // Queries and keys are each scaled by d_k^−¼, as the reference does.
         var scale = NumOps.FromDouble(Math.Pow(dk, -0.25));
         Tensor<T> Heads(Tensor<T> t) => _engine.TensorPermute(_engine.Reshape(t, new[] { length, heads, dk }), new[] { 1, 0, 2 });
         foreach (var block in Blocks)
         {
             var normed = block.AttentionNorm.Forward(x);
-            var q = _engine.TensorMultiplyScalar(Heads(block.Query.Forward(normed)), scale);
-            var k = _engine.TensorMultiplyScalar(Heads(block.Key.Forward(normed)), scale);
-            var v = Heads(block.Value.Forward(normed));
+            var values = block.Value.Forward(normed);                                                      // [L, d]
+            var q = _engine.TensorMultiplyScalar(Rotate(Heads(block.Query.Forward(normed))), scale);
+            var k = _engine.TensorMultiplyScalar(Rotate(Heads(block.Key.Forward(normed))), scale);
+            var v = Heads(values);
             var weights = _engine.Softmax(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })), axis: 2);
             var context = _engine.Reshape(_engine.TensorPermute(_engine.BatchMatMul(weights, v), new[] { 1, 0, 2 }), new[] { length, d });
-            x = _engine.TensorAdd(x, block.Output.Forward(context));
+            var attended = block.Output.Forward(context);
+            if (block.Fsmn is not null)
+            {
+                // forward_fsmn: the values padded by 15 frames each side, the depthwise convolution, plus the values.
+                var channels = _engine.Reshape(_engine.TensorTranspose(values), new[] { 1, d, length });
+                var padding = new Tensor<T>(new[] { 1, d, (FsmnKernel - 1) / 2 });
+                var memory = block.Fsmn.Forward(_engine.TensorConcatenate(new[] { padding, channels, padding }, 2));
+                attended = _engine.TensorAdd(attended, _engine.TensorAdd(_engine.TensorTranspose(_engine.Reshape(memory, new[] { d, length })), values));
+            }
+            x = _engine.TensorAdd(x, attended);
             x = _engine.TensorAdd(x, block.Mlp2.Forward(ActivationHelper.ExactGelu(block.Mlp1.Forward(block.MlpNorm.Forward(x)), _engine)));
         }
         return x;
@@ -186,6 +272,7 @@ internal sealed class S3Tokenizer<T>
     /// (<c>VectorQuantization.encode</c>; the codebook itself is not normalized).</summary>
     public int[] Quantize(Tensor<T> hidden)
     {
+        if (ProjectDown is not null) return QuantizeFsq(hidden);
         int rows = hidden.Shape[0], d = Configuration.State, size = Configuration.CodebookSize;
         var squared = new double[size];
         for (int e = 0; e < size; e++)
@@ -212,6 +299,28 @@ internal sealed class S3Tokenizer<T>
                 // torch's max returns the first index of the maximum.
                 if (score > best) { best = score; codes[r] = e; }
             }
+        }
+        return codes;
+    }
+
+    /// <summary>v2's finite scalar quantization (<c>FSQCodebook.encode</c>): the 8 projected values through tanh, scaled by
+    /// 0.999, rounded half to even into {−1, 0, 1}, shifted to {0, 1, 2} and read as base-3 digits, least significant
+    /// first.</summary>
+    private int[] QuantizeFsq(Tensor<T> hidden)
+    {
+        var projected = (ProjectDown ?? throw new InvalidOperationException("v2 has an FSQ projection.")).Forward(hidden);
+        int rows = projected.Shape[0];
+        var codes = new int[rows];
+        for (int r = 0; r < rows; r++)
+        {
+            double code = 0, power = 1;
+            for (int j = 0; j < 8; j++)
+            {
+                double digit = Math.Round(Math.Tanh(NumOps.ToDouble(projected[r, j])) * 0.9990000128746033) + 1;
+                code += digit * power;
+                power *= 3;
+            }
+            codes[r] = (int)code;
         }
         return codes;
     }
@@ -252,8 +361,9 @@ internal sealed class S3Tokenizer<T>
             TorchParameters.LayerNorm(_engine, norm, read(name + ".weight", new[] { d }), read(name + ".bias", new[] { d }));
         Conv1.LoadTorchWeights(read("encoder.conv1.weight", new[] { d, c.Mels, 3 }), null, read("encoder.conv1.bias", new[] { d }));
         Conv2.LoadTorchWeights(read("encoder.conv2.weight", new[] { d, d, 3 }), null, read("encoder.conv2.bias", new[] { d }));
-        _positions = new Tensor<T>(new[] { c.Context, d },
-            new Vector<T>(read("encoder.positional_embedding", new[] { c.Context, d }).Select(NumOps.FromDouble).ToArray()));
+        if (c.Version == S3TokenizerVersion.V1)
+            _positions = new Tensor<T>(new[] { c.Context, d },
+                new Vector<T>(read("encoder.positional_embedding", new[] { c.Context, d }).Select(NumOps.FromDouble).ToArray()));
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
@@ -266,8 +376,13 @@ internal sealed class S3Tokenizer<T>
             Norm(b.MlpNorm, p + ".mlp_ln");
             Dense(b.Mlp1, p + ".mlp.0", d, 4 * d);
             Dense(b.Mlp2, p + ".mlp.2", 4 * d, d);
+            if (b.Fsmn is not null)
+                b.Fsmn.LoadTorchWeights(read(p + ".attn.fsmn_block.weight", new[] { d, 1, FsmnKernel }), null, new double[d]);
         }
-        _codebook = new Tensor<T>(new[] { c.CodebookSize, d },
-            new Vector<T>(read("quantizer._codebook.embed", new[] { c.CodebookSize, d }).Select(NumOps.FromDouble).ToArray()));
+        if (ProjectDown is not null)
+            Dense(ProjectDown, "quantizer._codebook.project_down", d, 8);
+        else
+            _codebook = new Tensor<T>(new[] { c.CodebookSize, d },
+                new Vector<T>(read("quantizer._codebook.embed", new[] { c.CodebookSize, d }).Select(NumOps.FromDouble).ToArray()));
     }
 }
