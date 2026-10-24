@@ -1256,8 +1256,16 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             var numOps = MathHelper.GetNumericOperations<T>();
 
-            if (type == SymbolicExpressionType.Constant && double.TryParse(expression, NumberStyles.Float, CultureInfo.InvariantCulture, out double constant))
+            if (type == SymbolicExpressionType.Constant)
             {
+                // A constant is written with a '.' decimal point. Anything else ("0,5" included) is refused rather than
+                // silently becoming 0, which the fall-through below would make it (#2359).
+                if (!double.TryParse(expression, NumberStyles.Float, CultureInfo.InvariantCulture, out double constant))
+                {
+                    throw new ArgumentException(
+                        $"\"{expression}\" is not a constant written with a '.' decimal point.", nameof(expression));
+                }
+
                 return new SymbolicExpressionNode<T>(numOps.FromDouble(constant));
             }
 

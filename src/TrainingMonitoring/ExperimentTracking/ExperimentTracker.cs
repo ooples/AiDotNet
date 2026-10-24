@@ -816,7 +816,13 @@ public class ExperimentTracker : IExperimentTracker
         if (field.StartsWith("metrics."))
         {
             var metricKey = field.Substring(8);
-            if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            // A metric bound is written with a '.' decimal point. One that does not parse ("0,5") is refused: skipping it
+            // would silently drop the predicate and return unfiltered runs (#2359).
+            if (!double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            {
+                throw new ArgumentException(
+                    $"The filter value \"{valueStr}\" for {field} is not a number written with a '.' decimal point.", nameof(filter));
+            }
             {
                 query = op switch
                 {

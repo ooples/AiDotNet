@@ -26,6 +26,10 @@ internal static class SharedHttp
     /// <summary>The timeout <see cref="HttpClient"/> applies when none is set: 100 seconds.</summary>
     internal static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(100);
 
+    // Stream.CopyToAsync's own default buffer. It is passed explicitly because the overload taking only a token is
+    // .NET Core 2.1+; net471 and netstandard2.0 have only the one that also takes a buffer size.
+    private const int CopyBufferSize = 81920;
+
     /// <summary>The shared download client. It follows redirects, up to ten.</summary>
     internal static HttpClient Downloads { get; } = Create();
 
@@ -67,7 +71,7 @@ internal static class SharedHttp
         using (cancellationToken.Register(response.Dispose))
         using (var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
         {
-            await body.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
+            await body.CopyToAsync(destination, CopyBufferSize, cancellationToken).ConfigureAwait(false);
         }
         cancellationToken.ThrowIfCancellationRequested();
     }
