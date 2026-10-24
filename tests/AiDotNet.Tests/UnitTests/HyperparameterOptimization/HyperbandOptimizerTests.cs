@@ -143,7 +143,7 @@ public class HyperbandOptimizerTests
         var searchSpace = CreateSimpleSearchSpace();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null, searchSpace, 10));
+        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(global::AiDotNet.Tests.TestNull.Of<System.Func<System.Collections.Generic.Dictionary<string, object>, double>>(), searchSpace, 10));
     }
 
     [Fact(Timeout = 60000)]
@@ -153,7 +153,7 @@ public class HyperbandOptimizerTests
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(SimpleObjective, null, 10));
+        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(SimpleObjective, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.HyperparameterSearchSpace>(), 10));
     }
 
     [Fact(Timeout = 60000)]
@@ -420,7 +420,7 @@ public class HyperbandOptimizerTests
         var optimizer = new HyperbandOptimizer<double, double[], double[]>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.GetTrials(null));
+        Assert.Throws<ArgumentNullException>(() => optimizer.GetTrials(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Models.HyperparameterTrial<double>, bool>>()));
     }
 
     #endregion

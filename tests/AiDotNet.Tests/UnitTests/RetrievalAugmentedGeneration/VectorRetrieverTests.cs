@@ -307,7 +307,7 @@ public class VectorRetrieverTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
-            new VectorRetriever<double>(null, embeddingModel));
+            new VectorRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDocumentStore<double>>(), embeddingModel));
         Assert.Equal("documentStore", exception.ParamName);
     }
 
@@ -319,7 +319,7 @@ public class VectorRetrieverTests
 
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
-            new VectorRetriever<double>(documentStore, null));
+            new VectorRetriever<double>(documentStore, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IEmbeddingModel<double>>()));
         Assert.Equal("embeddingModel", exception.ParamName);
     }
 
@@ -670,7 +670,7 @@ public class VectorRetrieverTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            retriever.Retrieve("query", 5, null).ToList());
+            retriever.Retrieve("query", 5, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, object>>()).ToList());
     }
 
     #endregion
@@ -687,7 +687,7 @@ public class VectorRetrieverTests
 
         // Act & Assert - RetrieverBase throws ArgumentException for null/empty queries
         Assert.Throws<ArgumentException>(() =>
-            retriever.Retrieve(null).ToList());
+            retriever.Retrieve(global::AiDotNet.Tests.TestNull.Of<string>()).ToList());
     }
 
     [Fact(Timeout = 60000)]

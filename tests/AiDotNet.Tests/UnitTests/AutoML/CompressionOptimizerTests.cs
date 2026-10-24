@@ -114,7 +114,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                optimizer.Optimize(null, evaluator));
+                optimizer.Optimize(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), evaluator));
         }
 
         [Fact(Timeout = 60000)]
@@ -126,7 +126,7 @@ namespace AiDotNetTests.UnitTests.AutoML
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                optimizer.Optimize(weights, null));
+                optimizer.Optimize(weights, global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>, double>>()));
         }
 
         [Fact(Timeout = 60000)]

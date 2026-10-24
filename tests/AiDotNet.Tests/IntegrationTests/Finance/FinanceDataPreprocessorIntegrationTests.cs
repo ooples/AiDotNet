@@ -211,7 +211,7 @@ public class FinanceDataPreprocessorIntegrationTests
     {
         var provider = new MarketDataProvider<double>();
 
-        Assert.Throws<ArgumentNullException>(() => provider.Add(null));
+        Assert.Throws<ArgumentNullException>(() => provider.Add(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Finance.Data.MarketDataPoint<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -219,7 +219,7 @@ public class FinanceDataPreprocessorIntegrationTests
     {
         var provider = new MarketDataProvider<double>();
 
-        Assert.Throws<ArgumentNullException>(() => provider.AddRange(null));
+        Assert.Throws<ArgumentNullException>(() => provider.AddRange(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.Finance.Data.MarketDataPoint<double>>>()));
     }
 
     #endregion
@@ -318,7 +318,7 @@ public class FinanceDataPreprocessorIntegrationTests
         var preprocessor = new FinancialPreprocessor<double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            preprocessor.CreateFeatureTensor(null));
+            preprocessor.CreateFeatureTensor(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<AiDotNet.Finance.Data.MarketDataPoint<double>>>()));
     }
 
     #endregion
@@ -505,7 +505,7 @@ public class FinanceDataPreprocessorIntegrationTests
         var preprocessor = new FinancialPreprocessor<double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            preprocessor.NormalizeMinMax(null, out _));
+            preprocessor.NormalizeMinMax(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), out _));
     }
 
     #endregion
@@ -595,7 +595,7 @@ public class FinanceDataPreprocessorIntegrationTests
         var preprocessor = new FinancialPreprocessor<double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            preprocessor.NormalizeZScore(null, out _));
+            preprocessor.NormalizeZScore(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), out _));
     }
 
     #endregion

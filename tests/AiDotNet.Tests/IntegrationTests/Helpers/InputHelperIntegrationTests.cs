@@ -747,7 +747,7 @@ public class InputHelperIntegrationTests
         var matrix = new Matrix<double>(3, 2);
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetBatch(matrix, null));
+            InputHelper<double, Matrix<double>>.GetBatch(matrix, global::AiDotNet.Tests.TestNull.Of<int[]>()));
     }
 
     [Fact(Timeout = 120000)]

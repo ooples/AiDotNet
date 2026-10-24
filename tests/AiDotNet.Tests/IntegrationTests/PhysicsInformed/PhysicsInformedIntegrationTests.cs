@@ -116,7 +116,7 @@ public class PhysicsInformedIntegrationTests
         var inputs = new Vector<double>(new double[] { 0.5 });
 
         Assert.Throws<ArgumentNullException>(() =>
-            loss.ComputePhysicsLossGradients(null, null, derivatives, inputs));
+            loss.ComputePhysicsLossGradients(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), null, derivatives, inputs));
     }
 
     [Fact(Timeout = 120000)]
@@ -127,7 +127,7 @@ public class PhysicsInformedIntegrationTests
         var derivatives = CreateEmptyDerivatives(1, 1);
 
         Assert.Throws<ArgumentNullException>(() =>
-            loss.ComputePhysicsLossGradients(predictions, null, derivatives, null));
+            loss.ComputePhysicsLossGradients(predictions, null, derivatives, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -191,7 +191,7 @@ public class PhysicsInformedIntegrationTests
     public async Task PhysicsLossGradient_Constructor_NullNumOps_ThrowsArgumentNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new PhysicsLossGradient<double>(2, 3, null));
+            new PhysicsLossGradient<double>(2, 3, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.Interfaces.INumericOperations<double>>()));
     }
 
     private static INumericOperations<double> NumOps()
@@ -638,7 +638,7 @@ public class PhysicsInformedIntegrationTests
         Assert.Throws<ArgumentNullException>(() =>
             new PhysicsInformedNeuralNetwork<double>(
                 architecture,
-                null,
+                global::AiDotNet.Tests.TestNull.Of<AiDotNet.PhysicsInformed.Interfaces.IPDESpecification<double>>(),
                 Array.Empty<IBoundaryCondition<double>>()));
     }
 
@@ -652,7 +652,7 @@ public class PhysicsInformedIntegrationTests
             new PhysicsInformedNeuralNetwork<double>(
                 architecture,
                 pde,
-                null));
+                global::AiDotNet.Tests.TestNull.Of<AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition<double>[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -800,7 +800,7 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
         Assert.Throws<ArgumentNullException>(() =>
-            new VariationalPINN<double>(architecture, null));
+            new VariationalPINN<double>(architecture, global::AiDotNet.Tests.TestNull.Of<System.Func<double[], double[], double[,], double[], double[,], double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -867,7 +867,7 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
         Assert.Throws<ArgumentNullException>(() =>
-            new DeepRitzMethod<double>(architecture, null));
+            new DeepRitzMethod<double>(architecture, global::AiDotNet.Tests.TestNull.Of<System.Func<double[], double[], double[,], double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -953,7 +953,7 @@ public class PhysicsInformedIntegrationTests
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
         Assert.Throws<ArgumentNullException>(() =>
-            hnn.ComputeHamiltonian(null));
+            hnn.ComputeHamiltonian(global::AiDotNet.Tests.TestNull.Of<double[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -1141,7 +1141,7 @@ public class PhysicsInformedIntegrationTests
     public async Task FourierLayer_Constructor_NullSpatialDimensions_ThrowsArgument()
     {
         Assert.Throws<ArgumentException>(() =>
-            new FourierLayer<double>(16, 8, null));
+            new FourierLayer<double>(16, 8, global::AiDotNet.Tests.TestNull.Of<int[]>()));
     }
 
     [Fact(Timeout = 120000)]

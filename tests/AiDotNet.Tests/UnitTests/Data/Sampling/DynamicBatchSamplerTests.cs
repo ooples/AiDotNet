@@ -30,7 +30,7 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
         public async Task Constructor_WithNullSampleLengths_ThrowsArgumentException()
         {
             Assert.Throws<ArgumentException>(() =>
-                new DynamicBatchSampler(sampleLengths: null, maxTokensPerBatch: 100));
+                new DynamicBatchSampler(sampleLengths: global::AiDotNet.Tests.TestNull.Of<int[]>(), maxTokensPerBatch: 100));
         }
 
         [Fact(Timeout = 60000)]

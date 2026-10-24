@@ -34,7 +34,7 @@ public class NullableReferenceTypeTests
         // Suppress the nullable warning at the call site to simulate a caller without NRT.
         // The method signature says non-nullable, but we force null through at runtime.
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
-        string result = AcceptNonNullableString(null);
+        string result = AcceptNonNullableString(global::AiDotNet.Tests.TestNull.Of<string>());
 #pragma warning restore CS8625
         Assert.Null(result);
     }
@@ -47,7 +47,7 @@ public class NullableReferenceTypeTests
     public async Task NonNullableProperty_CanBeNull_WhenSetFromDisabledContext()
     {
 #pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
-        var holder = new StringHolder { Value = null };
+        var holder = new StringHolder { Value = global::AiDotNet.Tests.TestNull.Of<string>() };
 #pragma warning restore CS8625
         Assert.Null(holder.Value);
     }

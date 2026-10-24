@@ -10,7 +10,7 @@ public class AggregationStrategyBaseTests
     {
         Assert.Throws<ArgumentException>(() =>
             AggregationStrategyBaseAccessor.CallGetTotalWeightOrThrow(
-                clientWeights: null,
+                clientWeights: global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<int, double>>(),
                 clientIds: new[] { 1 },
                 paramName: "weights"));
     }

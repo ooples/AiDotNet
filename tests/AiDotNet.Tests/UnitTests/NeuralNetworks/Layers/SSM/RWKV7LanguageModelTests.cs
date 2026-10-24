@@ -634,7 +634,7 @@ public class RWKV7LanguageModelTests
     public async Task Options_CopyConstructor_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>(null));
+            new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>>()));
     }
 
     [Fact(Timeout = 120000)]

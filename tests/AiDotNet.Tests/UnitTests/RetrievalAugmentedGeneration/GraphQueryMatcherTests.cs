@@ -150,7 +150,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public async Task FindNodes_InvalidLabel_ThrowsException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => _matcher.FindNodes(null));
+            Assert.Throws<ArgumentException>(() => _matcher.FindNodes(global::AiDotNet.Tests.TestNull.Of<string>()));
             Assert.Throws<ArgumentException>(() => _matcher.FindNodes(""));
             Assert.Throws<ArgumentException>(() => _matcher.FindNodes("   "));
         }
@@ -242,13 +242,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindPaths(null, "KNOWS", "Person"));
+                _matcher.FindPaths(global::AiDotNet.Tests.TestNull.Of<string>(), "KNOWS", "Person"));
 
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindPaths("Person", null, "Person"));
+                _matcher.FindPaths("Person", global::AiDotNet.Tests.TestNull.Of<string>(), "Person"));
 
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindPaths("Person", "KNOWS", null));
+                _matcher.FindPaths("Person", "KNOWS", global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         #endregion
@@ -311,7 +311,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindPathsOfLength(null, 1));
+                _matcher.FindPathsOfLength(global::AiDotNet.Tests.TestNull.Of<string>(), 1));
 
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 _matcher.FindPathsOfLength("alice", 0));
@@ -380,10 +380,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindShortestPaths(null, "bob"));
+                _matcher.FindShortestPaths(global::AiDotNet.Tests.TestNull.Of<string>(), "bob"));
 
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindShortestPaths("alice", null));
+                _matcher.FindShortestPaths("alice", global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -455,7 +455,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 _matcher.ExecutePattern("(Person)"));
 
             Assert.Throws<ArgumentException>(() =>
-                _matcher.ExecutePattern(null));
+                _matcher.ExecutePattern(global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         #endregion

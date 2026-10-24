@@ -22,7 +22,14 @@ internal static class TestNull
     /// Hands <paramref name="value"/> to a non-nullable parameter unchanged, for a theory whose data
     /// includes a null case.
     /// </summary>
-    internal static T Pass<T>(T value) where T : class => value;
+    /// <remarks>
+    /// The parameter is annotated nullable, so a theory passes its nullable argument without a warning;
+    /// with nullable warnings still off here, handing that null on as <typeparamref name="T"/> reports
+    /// nothing.
+    /// </remarks>
+#nullable enable annotations
+    internal static T Pass<T>(T? value) where T : class => value;
+#nullable disable
 
     /// <summary>
     /// Casts <paramref name="value"/> to <typeparamref name="T"/>, letting a null result through for a

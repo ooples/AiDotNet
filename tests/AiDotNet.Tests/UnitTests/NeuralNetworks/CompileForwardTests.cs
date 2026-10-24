@@ -34,7 +34,7 @@ public class CompileForwardTests
     public void CompileForward_ThrowsOnNullInput()
     {
         var network = BuildNetwork();
-        Assert.Throws<ArgumentNullException>(() => network.CompileForward(null));
+        Assert.Throws<ArgumentNullException>(() => network.CompileForward(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>()));
     }
 
     /// <summary>

@@ -48,7 +48,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new EnsembleFitDetector<double, Matrix<double>, Vector<double>>(null));
+                new EnsembleFitDetector<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.List<AiDotNet.Interfaces.IFitDetector<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -110,7 +110,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var ensemble = new EnsembleFitDetector<double, Matrix<double>, Vector<double>>(detectors);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => ensemble.DetectFit(null));
+            Assert.Throws<ArgumentNullException>(() => ensemble.DetectFit(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.ModelEvaluationData<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
         }
 
         [Fact(Timeout = 60000)]

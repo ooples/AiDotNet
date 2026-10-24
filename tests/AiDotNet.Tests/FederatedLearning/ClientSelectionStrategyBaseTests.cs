@@ -10,7 +10,7 @@ public class ClientSelectionStrategyBaseTests
     public async Task GetDesiredClientCount_Throws_WhenCandidatesNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ClientSelectionStrategyBaseAccessor.CallGetDesiredClientCount(candidates: null, fraction: 0.5));
+            ClientSelectionStrategyBaseAccessor.CallGetDesiredClientCount(candidates: global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<int>>(), fraction: 0.5));
     }
 
     [Theory]
@@ -38,14 +38,14 @@ public class ClientSelectionStrategyBaseTests
     public async Task ShuffleAndTake_Throws_WhenItemsNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: null, count: 1, random: RandomHelper.CreateSeededRandom(1)));
+            ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<int>>(), count: 1, random: RandomHelper.CreateSeededRandom(1)));
     }
 
     [Fact(Timeout = 60000)]
     public async Task ShuffleAndTake_Throws_WhenRandomNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: new[] { 1 }, count: 1, random: null));
+            ClientSelectionStrategyBaseAccessor.CallShuffleAndTake(items: new[] { 1 }, count: 1, random: global::AiDotNet.Tests.TestNull.Of<System.Random>()));
     }
 
     [Theory]

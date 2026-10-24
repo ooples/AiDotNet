@@ -827,7 +827,7 @@ public class ScalerIntegrationTests
         var scaler = new StandardScaler<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => scaler.Fit(null));
+        Assert.Throws<ArgumentNullException>(() => scaler.Fit(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>()));
     }
 
     [Fact(Timeout = 120000)]

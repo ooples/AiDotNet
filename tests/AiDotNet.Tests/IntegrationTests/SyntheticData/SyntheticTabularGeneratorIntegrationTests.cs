@@ -1144,7 +1144,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         generator.Fit(data, columns, timeGanTrainingEpochs);
 
         Assert.True(generator.IsFitted);
-        Assert.Throws<ArgumentNullException>(() => generator.GetNamedLayerActivations(null));
+        Assert.Throws<ArgumentNullException>(() => generator.GetNamedLayerActivations(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
 
         // Once fitted, the synthesis path consumes latent noise of HiddenDimension width. Exercise
         // both public entry points with that exact width and verify all real stages are exposed.

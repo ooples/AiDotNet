@@ -85,7 +85,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
     public async Task Experiment_NullName_ThrowsException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new Experiment(null));
+        Assert.Throws<ArgumentNullException>(() => new Experiment(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -160,7 +160,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         var experiment = new Experiment("Original");
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => experiment.Name = null);
+        Assert.Throws<ArgumentNullException>(() => experiment.Name = global::AiDotNet.Tests.TestNull.Of<string>());
     }
 
     [Fact(Timeout = 120000)]
@@ -289,7 +289,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
     public async Task ExperimentRun_NullExperimentId_ThrowsException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new ExperimentRun<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new ExperimentRun<double>(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -374,7 +374,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         var run = new ExperimentRun<double>("exp-123");
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => run.LogParameters(null));
+        Assert.Throws<ArgumentNullException>(() => run.LogParameters(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, object>>()));
     }
 
     #endregion
@@ -453,7 +453,7 @@ public class ExperimentTrackingIntegrationTests : IDisposable
         var run = new ExperimentRun<double>("exp-123");
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => run.LogMetrics(null));
+        Assert.Throws<ArgumentNullException>(() => run.LogMetrics(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, double>>()));
     }
 
     [Fact(Timeout = 120000)]

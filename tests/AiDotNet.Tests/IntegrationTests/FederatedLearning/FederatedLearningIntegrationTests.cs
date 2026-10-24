@@ -195,7 +195,7 @@ public class FederatedLearningIntegrationTests
     public async Task UniformRandomClientSelectionStrategy_SelectClients_ThrowsOnNullRequest()
     {
         var strategy = new UniformRandomClientSelectionStrategy();
-        Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(null));
+        Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.ClientSelectionRequest>()));
     }
 
     [Fact(Timeout = 120000)]

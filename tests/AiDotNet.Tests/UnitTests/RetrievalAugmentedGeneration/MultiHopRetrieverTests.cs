@@ -112,7 +112,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public async Task Constructor_NullBaseRetriever_Throws()
         {
             Assert.Throws<ArgumentNullException>(() =>
-                new MultiHopRetriever<double>(null, new FixedFollowUpGenerator("f")));
+                new MultiHopRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IRetriever<double>>(), new FixedFollowUpGenerator("f")));
             await Task.CompletedTask;
         }
 
@@ -121,7 +121,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             var retriever = new QueueRetriever(new List<List<Document<double>>>());
             Assert.Throws<ArgumentNullException>(() =>
-                new MultiHopRetriever<double>(retriever, null));
+                new MultiHopRetriever<double>(retriever, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IGenerator<double>>()));
             await Task.CompletedTask;
         }
 

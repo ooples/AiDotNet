@@ -31,7 +31,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() => new ContinuumMemorySystemLayer<double>(
-                inputShape: null,
+                inputShape: global::AiDotNet.Tests.TestNull.Of<int[]>(),
                 hiddenDim: 128,
                 numFrequencyLevels: 3));
         }
@@ -176,7 +176,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
                 numFrequencyLevels: 3);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => layer.Forward((Tensor<double>?)null));
+            Assert.Throws<ArgumentNullException>(() => layer.Forward(global::AiDotNet.Tests.TestNull.Of<Tensor<double>>()));
         }
 
         [Fact(Timeout = 60000)]

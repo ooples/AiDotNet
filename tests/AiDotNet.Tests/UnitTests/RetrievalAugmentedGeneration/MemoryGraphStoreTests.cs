@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = new MemoryGraphStore<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.AddNode(null));
+            Assert.Throws<ArgumentNullException>(() => store.AddNode(global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -138,7 +138,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = new MemoryGraphStore<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.AddEdge(null));
+            Assert.Throws<ArgumentNullException>(() => store.AddEdge(global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Graph.GraphEdge<double>>()));
         }
 
         [Fact(Timeout = 60000)]

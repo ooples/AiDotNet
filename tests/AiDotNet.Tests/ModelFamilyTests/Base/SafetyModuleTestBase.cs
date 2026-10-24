@@ -271,7 +271,7 @@ public abstract class SafetyModuleTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var module = CreateModule();
-        Assert.ThrowsAny<ArgumentException>(() => module.Evaluate(null));
+        Assert.ThrowsAny<ArgumentException>(() => module.Evaluate(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     // INVARIANT 10: Empty content does not crash

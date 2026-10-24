@@ -80,7 +80,7 @@ public class RealESRGANIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new RealESRGAN<double>(
-            null,
+            global::AiDotNet.Tests.TestNull.Of<AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>>(),
             discriminatorArch,
             InputType.ThreeDimensional));
     }
@@ -94,7 +94,7 @@ public class RealESRGANIntegrationTests
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new RealESRGAN<double>(
             generatorArch,
-            null,
+            global::AiDotNet.Tests.TestNull.Of<AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>>(),
             InputType.ThreeDimensional));
     }
 
@@ -271,7 +271,7 @@ public class RealESRGANIntegrationTests
         var model = new RealESRGAN<double>(generatorArch, discriminatorArch, InputType.ThreeDimensional, options: new RealESRGANOptions { ScaleFactor = 4 });
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => model.Upscale(null));
+        Assert.Throws<ArgumentNullException>(() => model.Upscale(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     #endregion

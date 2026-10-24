@@ -282,7 +282,7 @@ public class LFTMechanismTests
     public void Constructor_RejectsInvalidConfiguration()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new LFTAlgorithm<double, Matrix<double>, Vector<double>>(null));
+            new LFTAlgorithm<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.MetaLearning.Options.LFTOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
 
         // ThrowsAny: MetaLearnerBase validates IMetaLearnerOptions before this class's own checks,
         // so the exact ArgumentException subtype is the base's choice. What matters is rejection.

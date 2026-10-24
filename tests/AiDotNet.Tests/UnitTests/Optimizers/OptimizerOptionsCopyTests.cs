@@ -13,7 +13,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new ASGDOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new ASGDOptimizerOptions<double, Matrix<double>, Vector<double>>(null));
+            new ASGDOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.ASGDOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>>(null));
+            new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.RAdamOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new RpropOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new RpropOptimizerOptions<double, Matrix<double>, Vector<double>>(null));
+            new RpropOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.RpropOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     /// <summary>
@@ -54,7 +54,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(null));
+            new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.BFGSOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(null));
+            new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.LBFGSOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(null));
+            new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.TrustRegionOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     private static TOptions Populate<TOptions>(TOptions options, out List<string> unmutated)

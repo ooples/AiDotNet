@@ -95,7 +95,7 @@ public class SecureAggregationTests
     {
         var secureAggregation = new SecureAggregation<double>(parameterCount: 1, randomSeed: 123);
 
-        Assert.Throws<ArgumentException>(() => secureAggregation.GeneratePairwiseSecrets(null));
+        Assert.Throws<ArgumentException>(() => secureAggregation.GeneratePairwiseSecrets(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.List<int>>()));
         Assert.Throws<ArgumentException>(() => secureAggregation.GeneratePairwiseSecrets(new List<int> { 1 }));
     }
 

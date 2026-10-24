@@ -29,7 +29,7 @@ public class DDIMSchedulerTests
     public async Task Constructor_WithNullConfig_ThrowsArgumentNullException()
     {
         // Arrange & Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new DDIMScheduler<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new DDIMScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
     }
 
     #endregion
@@ -276,7 +276,7 @@ public class DDIMSchedulerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            scheduler.Step(null, scheduler.Timesteps[0], sample, 0.0));
+            scheduler.Step(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), scheduler.Timesteps[0], sample, 0.0));
     }
 
     [Fact(Timeout = 120000)]
@@ -289,7 +289,7 @@ public class DDIMSchedulerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            scheduler.Step(modelOutput, scheduler.Timesteps[0], null, 0.0));
+            scheduler.Step(modelOutput, scheduler.Timesteps[0], global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), 0.0));
     }
 
     [Fact(Timeout = 120000)]

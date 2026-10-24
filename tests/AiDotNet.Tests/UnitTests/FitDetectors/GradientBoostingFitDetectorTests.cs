@@ -57,7 +57,7 @@ namespace AiDotNetTests.UnitTests.FitDetectors
             var detector = new GradientBoostingFitDetector<double, Matrix<double>, Vector<double>>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => detector.DetectFit(null));
+            Assert.Throws<ArgumentNullException>(() => detector.DetectFit(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.ModelEvaluationData<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
         }
 
         [Fact(Timeout = 60000)]

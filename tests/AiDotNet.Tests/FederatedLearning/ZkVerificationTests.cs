@@ -181,7 +181,7 @@ public class ZkVerificationTests
     public async Task GradientNormRangeProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new GradientNormRangeProof<double>(null, 10.0));
+            new GradientNormRangeProof<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.Verification.IZkProofSystem>(), 10.0));
     }
 
     // ========== GradientBoundednessProof Tests ==========
@@ -202,7 +202,7 @@ public class ZkVerificationTests
     public async Task GradientBoundednessProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new GradientBoundednessProof<double>(null, 1.0));
+            new GradientBoundednessProof<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.Verification.IZkProofSystem>(), 1.0));
     }
 
     // ========== LossThresholdProof Tests ==========
@@ -222,7 +222,7 @@ public class ZkVerificationTests
     public async Task LossThresholdProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new LossThresholdProof<double>(null, 10.0));
+            new LossThresholdProof<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.Verification.IZkProofSystem>(), 10.0));
     }
 
     // ========== ComputationIntegrityProof Tests ==========
@@ -252,7 +252,7 @@ public class ZkVerificationTests
     public async Task ComputationIntegrityProof_NullProofSystem_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new ComputationIntegrityProof<double>(null, 5));
+            new ComputationIntegrityProof<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.Verification.IZkProofSystem>(), 5));
     }
 
     // ========== ModelUpdateVerifier Tests ==========

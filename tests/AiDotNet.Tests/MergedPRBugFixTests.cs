@@ -775,7 +775,7 @@ public class MergedPRBugFixTests
             var registry = new ModelRegistry<double, double[], double[]>(tempDir);
 
             // ACT & ASSERT: Null/empty model names should throw ArgumentException
-            Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion(null, 1));
+            Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion(global::AiDotNet.Tests.TestNull.Of<string>(), 1));
             Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion("", 1));
             Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion("   ", 1));
         }
@@ -940,8 +940,8 @@ public class MergedPRBugFixTests
         var validTensor = new Tensor<double>([1, 2, 2, 1]);
 
         // ACT & ASSERT: Null arguments should throw ArgumentNullException
-        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(null, validTensor));
-        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(validTensor, null));
+        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), validTensor));
+        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(validTensor, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -952,8 +952,8 @@ public class MergedPRBugFixTests
         var validTensor = new Tensor<double>([1000]);
 
         // ACT & ASSERT
-        Assert.Throws<ArgumentNullException>(() => stoi.Compute(null, validTensor));
-        Assert.Throws<ArgumentNullException>(() => stoi.Compute(validTensor, null));
+        Assert.Throws<ArgumentNullException>(() => stoi.Compute(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), validTensor));
+        Assert.Throws<ArgumentNullException>(() => stoi.Compute(validTensor, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -964,8 +964,8 @@ public class MergedPRBugFixTests
         var validTensor = new Tensor<double>([100]);
 
         // ACT & ASSERT
-        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(null, validTensor));
-        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(validTensor, null));
+        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), validTensor));
+        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(validTensor, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -990,8 +990,8 @@ public class MergedPRBugFixTests
         var validTensor = new Tensor<double>([100]);
 
         // ACT & ASSERT
-        Assert.Throws<ArgumentNullException>(() => snr.Compute(null, validTensor));
-        Assert.Throws<ArgumentNullException>(() => snr.Compute(validTensor, null));
+        Assert.Throws<ArgumentNullException>(() => snr.Compute(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), validTensor));
+        Assert.Throws<ArgumentNullException>(() => snr.Compute(validTensor, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -1018,8 +1018,8 @@ public class MergedPRBugFixTests
         var validBox = new double[] { 0, 0, 0, 5, 5, 5 };
 
         // ACT & ASSERT
-        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(null, validBox));
-        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(validBox, null));
+        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(global::AiDotNet.Tests.TestNull.Of<double[]>(), validBox));
+        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(validBox, global::AiDotNet.Tests.TestNull.Of<double[]>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -1070,7 +1070,7 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT
-            Assert.Throws<ArgumentNullException>(() => writer.AddScalars("test", null));
+            Assert.Throws<ArgumentNullException>(() => writer.AddScalars("test", global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, float>>()));
         }
         finally
         {
@@ -1089,8 +1089,8 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT
-            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", (float[]?)null));
-            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", (float[,]?)null));
+            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", global::AiDotNet.Tests.TestNull.Of<float[]>()));
+            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", global::AiDotNet.Tests.TestNull.Of<float[,]>()));
         }
         finally
         {
@@ -1131,7 +1131,7 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT
-            Assert.Throws<ArgumentNullException>(() => writer.AddImages("test", null));
+            Assert.Throws<ArgumentNullException>(() => writer.AddImages("test", global::AiDotNet.Tests.TestNull.Of<float[,,,]>()));
         }
         finally
         {
@@ -1150,8 +1150,8 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT: Null checks
-            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", null, new float[] { 0.5f }));
-            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", new int[] { 1 }, null));
+            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", global::AiDotNet.Tests.TestNull.Of<int[]>(), new float[] { 0.5f }));
+            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", new int[] { 1 }, global::AiDotNet.Tests.TestNull.Of<float[]>()));
 
             // ACT & ASSERT: Length mismatch
             Assert.Throws<ArgumentException>(() => writer.AddPrCurve("test", new int[] { 1, 0 }, new float[] { 0.5f }));
@@ -1173,7 +1173,7 @@ public class MergedPRBugFixTests
             using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
 
             // ACT & ASSERT
-            Assert.Throws<ArgumentNullException>(() => writer.LogWeights("layer1", null));
+            Assert.Throws<ArgumentNullException>(() => writer.LogWeights("layer1", global::AiDotNet.Tests.TestNull.Of<float[]>()));
         }
         finally
         {
@@ -1892,7 +1892,7 @@ public class MergedPRBugFixTests
         // ACT & ASSERT - CalculateDistributionStats throws on null input
         Assert.Throws<ArgumentNullException>(() =>
             analyzer.CalculateDistributionStats(
-                (List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>?)null));
+                global::AiDotNet.Tests.TestNull.Of<List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>>()));
     }
 
     [Fact(Timeout = 60000)]

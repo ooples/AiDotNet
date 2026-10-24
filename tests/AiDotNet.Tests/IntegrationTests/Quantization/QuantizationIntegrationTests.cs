@@ -1336,7 +1336,7 @@ public class QuantizationIntegrationTests
         var calibrationData = CreateCalibrationData(50, 10).ToList();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => quantizer.Calibrate(null, calibrationData));
+        Assert.Throws<ArgumentNullException>(() => quantizer.Calibrate(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, double[], double[]>>(), calibrationData));
     }
 
     [Fact(Timeout = 120000)]

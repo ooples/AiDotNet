@@ -969,7 +969,7 @@ public class FinanceSearchSpaceIntegrationTests
 
         env.Reset();
 
-        Assert.Throws<ArgumentNullException>(() => env.Step(null));
+        Assert.Throws<ArgumentNullException>(() => env.Step(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -1822,14 +1822,14 @@ public class FinanceSearchSpaceIntegrationTests
     public async Task MarketDataProvider_AddNull_ThrowsArgumentNullException()
     {
         var provider = new MarketDataProvider<double>();
-        Assert.Throws<ArgumentNullException>(() => provider.Add(null));
+        Assert.Throws<ArgumentNullException>(() => provider.Add(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Finance.Data.MarketDataPoint<double>>()));
     }
 
     [Fact(Timeout = 120000)]
     public async Task MarketDataProvider_AddRangeNull_ThrowsArgumentNullException()
     {
         var provider = new MarketDataProvider<double>();
-        Assert.Throws<ArgumentNullException>(() => provider.AddRange(null));
+        Assert.Throws<ArgumentNullException>(() => provider.AddRange(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.Finance.Data.MarketDataPoint<double>>>()));
     }
 
     [Fact(Timeout = 120000)]

@@ -402,21 +402,21 @@ public class SparseTensorIntegrationTests
     public async Task SparseTensor_Coo_NullRowIndices_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new SparseTensor<double>(3, 3, null, new[] { 0 }, new[] { 1.0 }));
+            new SparseTensor<double>(3, 3, global::AiDotNet.Tests.TestNull.Of<int[]>(), new[] { 0 }, new[] { 1.0 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task SparseTensor_Coo_NullColumnIndices_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new SparseTensor<double>(3, 3, new[] { 0 }, null, new[] { 1.0 }));
+            new SparseTensor<double>(3, 3, new[] { 0 }, global::AiDotNet.Tests.TestNull.Of<int[]>(), new[] { 1.0 }));
     }
 
     [Fact(Timeout = 120000)]
     public async Task SparseTensor_Coo_NullValues_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new SparseTensor<double>(3, 3, new[] { 0 }, new[] { 0 }, null));
+            new SparseTensor<double>(3, 3, new[] { 0 }, new[] { 0 }, global::AiDotNet.Tests.TestNull.Of<double[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -449,7 +449,7 @@ public class SparseTensorIntegrationTests
     public async Task SparseTensor_FromDense_Null_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            SparseTensor<double>.FromDense(null));
+            SparseTensor<double>.FromDense(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     #endregion

@@ -97,7 +97,7 @@ public class ReasoningExtendedIntegrationTests
         var sampler = new DiversitySampler<double>();
         var t1 = new ThoughtNode<double> { Thought = "Some thought" };
 
-        double diversity = sampler.CalculateDiversity(t1, null);
+        double diversity = sampler.CalculateDiversity(t1, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Reasoning.Models.ThoughtNode<double>>());
 
         Assert.Equal(0.0, diversity);
     }
@@ -368,7 +368,7 @@ public class ReasoningExtendedIntegrationTests
     public async Task CalculatorVerifier_CanVerify_NullStep_ReturnsFalse()
     {
         var verifier = new CalculatorVerifier<double>();
-        Assert.False(verifier.CanVerify(null));
+        Assert.False(verifier.CanVerify(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Reasoning.Models.ReasoningStep<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -463,7 +463,7 @@ public class ReasoningExtendedIntegrationTests
         var verifier = new CalculatorVerifier<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            verifier.VerifyStepAsync(null));
+            verifier.VerifyStepAsync(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Reasoning.Models.ReasoningStep<double>>()));
     }
 
     #endregion
@@ -761,7 +761,7 @@ public class ReasoningExtendedIntegrationTests
         var search = new BestFirstSearch<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(null, new MockThoughtGenerator<double>(),
+            search.SearchAsync(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Reasoning.Models.ThoughtNode<double>>(), new MockThoughtGenerator<double>(),
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 
@@ -834,7 +834,7 @@ public class ReasoningExtendedIntegrationTests
         var search = new BreadthFirstSearch<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(null, new MockThoughtGenerator<double>(),
+            search.SearchAsync(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Reasoning.Models.ThoughtNode<double>>(), new MockThoughtGenerator<double>(),
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 
@@ -878,7 +878,7 @@ public class ReasoningExtendedIntegrationTests
         var search = new DepthFirstSearch<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            search.SearchAsync(null, new MockThoughtGenerator<double>(),
+            search.SearchAsync(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Reasoning.Models.ThoughtNode<double>>(), new MockThoughtGenerator<double>(),
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 
@@ -971,7 +971,7 @@ public class ReasoningExtendedIntegrationTests
         var mcts = new MonteCarloTreeSearch<double>();
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            mcts.SearchAsync(null, new MockThoughtGenerator<double>(),
+            mcts.SearchAsync(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Reasoning.Models.ThoughtNode<double>>(), new MockThoughtGenerator<double>(),
                 new MockThoughtEvaluator<double>(), new ReasoningConfig()));
     }
 

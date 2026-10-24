@@ -91,7 +91,7 @@ public class SSMQuantizationHelperTests
         var config = new QuantizationConfiguration { TargetBitWidth = 8 };
 
         Assert.Throws<ArgumentNullException>(() =>
-            SSMQuantizationHelper<float>.QuantizeSSMLayer(null, config));
+            SSMQuantizationHelper<float>.QuantizeSSMLayer(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.ILayer<float>>(), config));
     }
 
     [Fact(Timeout = 120000)]
@@ -100,7 +100,7 @@ public class SSMQuantizationHelperTests
         var block = new MambaBlock<float>(4, 32, 8);
 
         Assert.Throws<ArgumentNullException>(() =>
-            SSMQuantizationHelper<float>.QuantizeSSMLayer(block, null));
+            SSMQuantizationHelper<float>.QuantizeSSMLayer(block, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Deployment.Optimization.Quantization.QuantizationConfiguration>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -126,7 +126,7 @@ public class SSMQuantizationHelperTests
     public async Task QuantizeStateCache_ThrowsOnNullCache()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            SSMQuantizationHelper<float>.QuantizeStateCache(null));
+            SSMQuantizationHelper<float>.QuantizeStateCache(global::AiDotNet.Tests.TestNull.Of<AiDotNet.NeuralNetworks.Layers.SSM.SSMStateCache<float>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -230,7 +230,7 @@ public class SSMQuantizationHelperTests
     public async Task EstimateMemorySavings_ThrowsOnNullLayer()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            SSMQuantizationHelper<float>.EstimateMemorySavings(null, 8));
+            SSMQuantizationHelper<float>.EstimateMemorySavings(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.ILayer<float>>(), 8));
     }
 
     [Fact(Timeout = 120000)]
@@ -265,7 +265,7 @@ public class SSMQuantizationHelperTests
     public async Task ComputeQuantizationError_ThrowsOnNullLayer()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            SSMQuantizationHelper<float>.ComputeQuantizationError(null, 8));
+            SSMQuantizationHelper<float>.ComputeQuantizationError(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.ILayer<float>>(), 8));
     }
 
     [Fact(Timeout = 120000)]

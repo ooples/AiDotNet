@@ -484,7 +484,7 @@ public class PhysicsInformedExtendedIntegrationTests
         var history = new DomainDecompositionTrainingHistory<double>(2);
 
         Assert.Throws<ArgumentNullException>(() =>
-            history.AddEpoch(0.5, null, 0.05, 0.3));
+            history.AddEpoch(0.5, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.List<double>>(), 0.05, 0.3));
     }
 
     [Fact(Timeout = 120000)]
@@ -931,7 +931,7 @@ public class PhysicsInformedExtendedIntegrationTests
     public async Task SchrodingerEquation_Construction_NullPotential_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new SchrodingerEquation<double>(null));
+            new SchrodingerEquation<double>(global::AiDotNet.Tests.TestNull.Of<System.Func<double, double>>()));
     }
 
     [Fact(Timeout = 120000)]

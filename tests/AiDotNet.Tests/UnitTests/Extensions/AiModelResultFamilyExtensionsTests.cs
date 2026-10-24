@@ -117,7 +117,7 @@ public class AiModelResultFamilyExtensionsTests
                 }),
         };
         Assert.Throws<ArgumentNullException>(
-            () => result.GenerateSampled(null, maxNewTokens: 4, temperature: 1.0f));
+            () => result.GenerateSampled(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(), maxNewTokens: 4, temperature: 1.0f));
     }
 
     // ---------------- Graph ----------------
@@ -145,6 +145,6 @@ public class AiModelResultFamilyExtensionsTests
         var result = BuildWrongFamilyResult();
         var feat = new Tensor<float>(new[] { 3, 2 }, new Vector<float>(new float[6]));
         Assert.Throws<InvalidOperationException>(
-            () => result.PredictLink(null, feat, sourceNode: 0, targetNode: 1));
+            () => result.PredictLink(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(), feat, sourceNode: 0, targetNode: 1));
     }
 }

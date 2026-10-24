@@ -180,7 +180,7 @@ public class DiversitySamplingTests
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => sampler.SelectSamples(model, null, batchSize: 3));
+        Assert.Throws<ArgumentNullException>(() => sampler.SelectSamples(model, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), batchSize: 3));
     }
 
     [Fact(Timeout = 60000)]
@@ -276,7 +276,7 @@ public class DiversitySamplingTests
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => sampler.ComputeInformativenessScores(model, null));
+        Assert.Throws<ArgumentNullException>(() => sampler.ComputeInformativenessScores(model, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     [Fact(Timeout = 60000)]

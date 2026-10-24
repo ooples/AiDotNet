@@ -378,7 +378,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         public void GetSimilarWithFilter_NullFilter_BehavesLikeGetSimilar()
         {
             var store = BuildRichStore();
-            var results = store.GetSimilarWithFilter(new Vector<float>(new float[] { 1, 0, 0 }), null, topK: 3).ToList();
+            var results = store.GetSimilarWithFilter(new Vector<float>(new float[] { 1, 0, 0 }), global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Filtering.MetadataFilter>(), topK: 3).ToList();
             Assert.Equal(3, results.Count);
         }
 

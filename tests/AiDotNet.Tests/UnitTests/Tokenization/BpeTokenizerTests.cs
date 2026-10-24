@@ -367,7 +367,7 @@ public class BpeTokenizerTests
     public async Task Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
-            BpeTokenizer.Train(null, 100));
+            BpeTokenizer.Train(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<string>>(), 100));
     }
 
     [Fact(Timeout = 60000)]

@@ -140,7 +140,7 @@ public class AiModelDataPipelineTests
         await Task.Yield();
         var pipeline = new AiModelDataPipeline<double, Matrix<double>, Vector<double>>();
 
-        Assert.Throws<ArgumentNullException>(() => pipeline.ConfigureDataLoader(null));
+        Assert.Throws<ArgumentNullException>(() => pipeline.ConfigureDataLoader(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDataLoader<double>>()));
     }
 
     [Fact(Timeout = 30000)]
@@ -149,7 +149,7 @@ public class AiModelDataPipelineTests
         await Task.Yield();
         var pipeline = new AiModelDataPipeline<double, Matrix<double>, Vector<double>>();
 
-        Assert.Throws<ArgumentNullException>(() => pipeline.ConfigureDataPreparation(null));
+        Assert.Throws<ArgumentNullException>(() => pipeline.ConfigureDataPreparation(global::AiDotNet.Tests.TestNull.Of<System.Action<AiDotNet.Preprocessing.DataPreparation.DataPreparationPipeline<double>>>()));
     }
 
     [Fact(Timeout = 30000)]

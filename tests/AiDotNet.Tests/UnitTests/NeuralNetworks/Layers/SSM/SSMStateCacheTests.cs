@@ -76,7 +76,7 @@ public class SSMStateCacheTests
     public async Task CacheSSMState_ThrowsOnNull()
     {
         var cache = new SSMStateCache<float>();
-        Assert.Throws<ArgumentNullException>(() => cache.CacheSSMState(0, null));
+        Assert.Throws<ArgumentNullException>(() => cache.CacheSSMState(0, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -124,7 +124,7 @@ public class SSMStateCacheTests
     public async Task CacheConvBuffer_ThrowsOnNull()
     {
         var cache = new SSMStateCache<float>();
-        Assert.Throws<ArgumentNullException>(() => cache.CacheConvBuffer(0, null));
+        Assert.Throws<ArgumentNullException>(() => cache.CacheConvBuffer(0, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>()));
     }
 
     [Fact(Timeout = 120000)]

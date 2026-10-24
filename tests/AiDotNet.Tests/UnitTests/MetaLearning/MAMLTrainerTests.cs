@@ -78,7 +78,7 @@ public class MAMLTrainerTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(null));
+            new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.MetaLearning.Options.MAMLOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>()));
     }
 
     #endregion
@@ -126,7 +126,7 @@ public class MAMLTrainerTests
         var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null));
+        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Data.Structures.TaskBatch<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -168,7 +168,7 @@ public class MAMLTrainerTests
         var algorithm = new MAMLAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null));
+        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IMetaLearningTask<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>()));
     }
 
     #endregion

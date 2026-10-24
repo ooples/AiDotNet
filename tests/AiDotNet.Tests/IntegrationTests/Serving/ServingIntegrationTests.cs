@@ -203,7 +203,7 @@ public class ServingIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchScheduler_Creation_ThrowsOnNullConfig()
     {
-        Assert.Throws<ArgumentNullException>(() => new BatchScheduler<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new BatchScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Serving.ContinuousBatching.BatchSchedulerConfig>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -223,7 +223,7 @@ public class ServingIntegrationTests
     {
         var scheduler = new BatchScheduler<double>();
 
-        Assert.Throws<ArgumentNullException>(() => scheduler.AddSequence(null));
+        Assert.Throws<ArgumentNullException>(() => scheduler.AddSequence(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Serving.ContinuousBatching.SequenceState<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -354,7 +354,7 @@ public class ServingIntegrationTests
         var scheduler = new BatchScheduler<double>();
 
         // Should not throw
-        scheduler.CompleteSequence(null);
+        scheduler.CompleteSequence(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Serving.ContinuousBatching.SequenceState<double>>());
     }
 
     [Fact(Timeout = 120000)]
@@ -484,7 +484,7 @@ public class ServingIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SequenceState_Creation_ThrowsOnNullRequest()
     {
-        Assert.Throws<ArgumentNullException>(() => new SequenceState<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new SequenceState<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Serving.ContinuousBatching.GenerationRequest<double>>()));
     }
 
     [Fact(Timeout = 120000)]

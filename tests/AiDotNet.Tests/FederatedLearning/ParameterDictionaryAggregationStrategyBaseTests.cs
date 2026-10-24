@@ -18,9 +18,9 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
     [Fact(Timeout = 60000)]
     public async Task AggregateWeightedAverage_ValidatesInputs()
     {
-        Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(null, new Dictionary<int, double>()));
+        Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string, double[]>>>(), new Dictionary<int, double>()));
         Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(new Dictionary<int, Dictionary<string, double[]>>(), new Dictionary<int, double>()));
-        Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(new Dictionary<int, Dictionary<string, double[]>> { [1] = new Dictionary<string, double[]>() }, null));
+        Assert.Throws<ArgumentException>(() => AggregateWeightedAverage(new Dictionary<int, Dictionary<string, double[]>> { [1] = new Dictionary<string, double[]>() }, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<int, double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -117,6 +117,6 @@ public sealed class ParameterDictionaryAggregationStrategyBaseTests : ParameterD
             clientModels: new Dictionary<int, Dictionary<string, double[]>>(),
             clientWeights: new Dictionary<int, double>(),
             totalWeight: 1.0,
-            destination: null));
+            destination: global::AiDotNet.Tests.TestNull.Of<double[]>()));
     }
 }

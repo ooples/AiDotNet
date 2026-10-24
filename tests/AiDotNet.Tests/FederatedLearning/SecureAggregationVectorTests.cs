@@ -39,7 +39,7 @@ public class SecureAggregationVectorTests
         var secureAggregation = new SecureAggregationVector<double>(parameterCount: 2, randomSeed: 1);
         secureAggregation.GeneratePairwiseSecrets(new List<int> { 0, 1 });
 
-        Assert.Throws<ArgumentNullException>(() => secureAggregation.MaskUpdate(0, null));
+        Assert.Throws<ArgumentNullException>(() => secureAggregation.MaskUpdate(0, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         Assert.Throws<ArgumentException>(() => secureAggregation.MaskUpdate(0, new Vector<double>(3)));
         Assert.Throws<ArgumentOutOfRangeException>(() => secureAggregation.MaskUpdate(0, new Vector<double>(2), clientWeight: 0.0));
     }

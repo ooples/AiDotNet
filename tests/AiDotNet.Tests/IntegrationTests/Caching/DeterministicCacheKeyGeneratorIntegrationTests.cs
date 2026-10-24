@@ -145,7 +145,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            DeterministicCacheKeyGenerator.GenerateKey<double>(null, inputDescriptor));
+            DeterministicCacheKeyGenerator.GenerateKey<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), inputDescriptor));
     }
 
     [Fact(Timeout = 120000)]
@@ -156,7 +156,7 @@ public class DeterministicCacheKeyGeneratorIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            DeterministicCacheKeyGenerator.GenerateKey<double>(parameters, null));
+            DeterministicCacheKeyGenerator.GenerateKey<double>(parameters, global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     #endregion

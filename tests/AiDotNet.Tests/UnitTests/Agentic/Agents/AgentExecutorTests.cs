@@ -170,7 +170,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Agents
         {
             await Task.Yield();
 
-            Assert.Throws<ArgumentNullException>(() => new AgentExecutor<double>(client: null));
+            Assert.Throws<ArgumentNullException>(() => new AgentExecutor<double>(client: global::AiDotNet.Tests.TestNull.Of<AiDotNet.Agentic.Models.IChatClient<double>>()));
         }
 
         [Fact(Timeout = 60000)]

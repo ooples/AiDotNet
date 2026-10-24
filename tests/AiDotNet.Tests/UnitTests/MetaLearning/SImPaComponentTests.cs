@@ -120,7 +120,7 @@ public class SImPaComponentTests
     {
         var generator = SmallGenerator();
         Assert.Throws<ArgumentException>(() => generator.SetParameters(new Vector<double>(3)));
-        Assert.Throws<ArgumentNullException>(() => generator.SetParameters(null));
+        Assert.Throws<ArgumentNullException>(() => generator.SetParameters(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ImplicitPosteriorGenerator<double>(0));
     }
 

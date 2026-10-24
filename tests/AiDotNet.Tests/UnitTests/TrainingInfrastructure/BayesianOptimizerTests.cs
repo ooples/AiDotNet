@@ -176,7 +176,7 @@ public class BayesianOptimizerTests
         searchSpace.AddContinuous("x", 0.0, 1.0);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null, searchSpace, nTrials: 5));
+        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(global::AiDotNet.Tests.TestNull.Of<System.Func<System.Collections.Generic.Dictionary<string, object>, double>>(), searchSpace, nTrials: 5));
     }
 
     [Fact(Timeout = 60000)]
@@ -187,7 +187,7 @@ public class BayesianOptimizerTests
         Func<Dictionary<string, object>, double> objective = _ => 0.0;
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(objective, null, nTrials: 5));
+        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(objective, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.HyperparameterSearchSpace>(), nTrials: 5));
     }
 
     [Fact(Timeout = 60000)]

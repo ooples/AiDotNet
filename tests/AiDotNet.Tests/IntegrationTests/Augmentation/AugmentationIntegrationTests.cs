@@ -1252,7 +1252,7 @@ public class AugmentationIntegrationTests
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => pipeline.Add(null));
+        Assert.Throws<ArgumentNullException>(() => pipeline.Add(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Augmentation.IAugmentation<double, AiDotNet.Augmentation.Image.ImageTensor<double>>>()));
     }
 
     #endregion

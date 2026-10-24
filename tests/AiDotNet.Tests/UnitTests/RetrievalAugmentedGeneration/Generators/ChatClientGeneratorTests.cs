@@ -113,5 +113,5 @@ public class ChatClientGeneratorTests
 
     [Fact]
     public void Constructor_NullChatClient_Throws()
-        => Assert.Throws<ArgumentNullException>(() => new ChatClientGenerator<double>(null));
+        => Assert.Throws<ArgumentNullException>(() => new ChatClientGenerator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Agentic.Models.IChatClient<double>>()));
 }

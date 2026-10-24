@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new WeightClusteringCompression<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => compression.Compress(null));
+            Assert.Throws<ArgumentNullException>(() => compression.Compress(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -132,7 +132,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                compression.Decompress(null, metadata));
+                compression.Decompress(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), metadata));
         }
 
         [Fact(Timeout = 60000)]

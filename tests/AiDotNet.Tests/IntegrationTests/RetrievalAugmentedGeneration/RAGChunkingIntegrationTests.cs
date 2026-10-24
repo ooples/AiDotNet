@@ -80,7 +80,7 @@ public class RAGChunkingIntegrationTests
     public async Task FixedSize_NullText_Throws()
     {
         var strategy = new FixedSizeChunkingStrategy();
-        Assert.Throws<ArgumentNullException>(() => strategy.Chunk(null).ToList());
+        Assert.Throws<ArgumentNullException>(() => strategy.Chunk(global::AiDotNet.Tests.TestNull.Of<string>()).ToList());
     }
 
     [Fact(Timeout = 120000)]

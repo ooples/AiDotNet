@@ -237,9 +237,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Filtering
         [Fact]
         public void NullMetadata_TreatedAsEmpty()
         {
-            Assert.False(MetadataFilter.Eq("k", "v").Matches(null));
-            Assert.True(MetadataFilter.Ne("k", "v").Matches(null));
-            Assert.False(MetadataFilter.Exists("k").Matches(null));
+            Assert.False(MetadataFilter.Eq("k", "v").Matches(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyDictionary<string, object>>()));
+            Assert.True(MetadataFilter.Ne("k", "v").Matches(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyDictionary<string, object>>()));
+            Assert.False(MetadataFilter.Exists("k").Matches(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyDictionary<string, object>>()));
         }
 
         // ---------------- Factory guards ----------------

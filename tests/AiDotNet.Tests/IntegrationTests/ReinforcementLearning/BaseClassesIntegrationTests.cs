@@ -25,7 +25,7 @@ public partial class BaseClassesIntegrationTests
     {
         var policy = new TestPolicy();
 
-        Assert.Throws<ArgumentNullException>(() => policy.InvokeValidateState(null));
+        Assert.Throws<ArgumentNullException>(() => policy.InvokeValidateState(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         Assert.Throws<ArgumentException>(() => policy.InvokeValidateState(new Vector<double>(0)));
         Assert.Throws<ArgumentException>(() => policy.InvokeValidateActionSize(expected: 2, actual: 1));
     }

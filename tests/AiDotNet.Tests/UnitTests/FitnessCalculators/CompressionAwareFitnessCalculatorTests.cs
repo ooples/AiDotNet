@@ -99,7 +99,7 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new CompressionAwareFitnessCalculator<double, Matrix<double>, Vector<double>>(null));
+                new CompressionAwareFitnessCalculator<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFitnessCalculator<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
         }
 
         [Fact(Timeout = 60000)]

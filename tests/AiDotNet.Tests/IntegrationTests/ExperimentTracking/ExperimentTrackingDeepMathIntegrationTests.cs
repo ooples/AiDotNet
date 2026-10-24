@@ -94,14 +94,14 @@ public class ExperimentTrackingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Experiment_NullName_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new Experiment(null));
+        Assert.Throws<ArgumentNullException>(() => new Experiment(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
     public async Task Experiment_SetName_Null_Throws()
     {
         var exp = new Experiment("initial");
-        Assert.Throws<ArgumentNullException>(() => exp.Name = null);
+        Assert.Throws<ArgumentNullException>(() => exp.Name = global::AiDotNet.Tests.TestNull.Of<string>());
     }
 
     [Fact(Timeout = 120000)]
@@ -190,7 +190,7 @@ public class ExperimentTrackingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ExperimentRun_Creation_NullExperimentId_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new ExperimentRun<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new ExperimentRun<double>(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -269,7 +269,7 @@ public class ExperimentTrackingDeepMathIntegrationTests
     public async Task LogParameters_NullDict_Throws()
     {
         var run = new ExperimentRun<double>("exp-1");
-        Assert.Throws<ArgumentNullException>(() => run.LogParameters(null));
+        Assert.Throws<ArgumentNullException>(() => run.LogParameters(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, object>>()));
     }
 
     // ============================

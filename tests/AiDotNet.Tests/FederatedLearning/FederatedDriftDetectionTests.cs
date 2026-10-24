@@ -246,7 +246,7 @@ public class FederatedDriftDetectionTests
     [Fact(Timeout = 60000)]
     public async Task Statistical_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new StatisticalDriftDetector<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new StatisticalDriftDetector<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedDriftOptions>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -256,7 +256,7 @@ public class FederatedDriftDetectionTests
         var detector = new StatisticalDriftDetector<double>(options);
 
         Assert.Throws<ArgumentNullException>(() =>
-            detector.DetectDrift(0, CreateClientModels(3, 10), CreateGlobalModel(10), null));
+            detector.DetectDrift(0, CreateClientModels(3, 10), CreateGlobalModel(10), global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<int, double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -329,7 +329,7 @@ public class FederatedDriftDetectionTests
         var detector = new ModelDriftDetector<double>(options);
 
         Assert.Throws<ArgumentNullException>(() =>
-            detector.DetectDrift(0, null, CreateGlobalModel(10), CreateStableMetrics(3)));
+            detector.DetectDrift(0, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>(), CreateGlobalModel(10), CreateStableMetrics(3)));
     }
 
     [Fact(Timeout = 60000)]
@@ -339,7 +339,7 @@ public class FederatedDriftDetectionTests
         var detector = new ModelDriftDetector<double>(options);
 
         Assert.Throws<ArgumentNullException>(() =>
-            detector.DetectDrift(0, CreateClientModels(3, 10), null, CreateStableMetrics(3)));
+            detector.DetectDrift(0, CreateClientModels(3, 10), global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), CreateStableMetrics(3)));
     }
 
     [Fact(Timeout = 60000)]
@@ -367,7 +367,7 @@ public class FederatedDriftDetectionTests
     [Fact(Timeout = 60000)]
     public async Task Model_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new ModelDriftDetector<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new ModelDriftDetector<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedDriftOptions>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -514,14 +514,14 @@ public class FederatedDriftDetectionTests
     public async Task DriftAdaptive_NullOptions_Throws()
     {
         var detector = new StatisticalDriftDetector<double>(new FederatedDriftOptions());
-        Assert.Throws<ArgumentNullException>(() => new DriftAdaptiveAggregator<double>(null, detector));
+        Assert.Throws<ArgumentNullException>(() => new DriftAdaptiveAggregator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedDriftOptions>(), detector));
     }
 
     [Fact(Timeout = 60000)]
     public async Task DriftAdaptive_NullDetector_Throws()
     {
         var options = new FederatedDriftOptions();
-        Assert.Throws<ArgumentNullException>(() => new DriftAdaptiveAggregator<double>(options, null));
+        Assert.Throws<ArgumentNullException>(() => new DriftAdaptiveAggregator<double>(options, global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.DriftDetection.IFederatedDriftDetector<double>>()));
     }
 
     // ========== DriftReport and Related Types Tests ==========

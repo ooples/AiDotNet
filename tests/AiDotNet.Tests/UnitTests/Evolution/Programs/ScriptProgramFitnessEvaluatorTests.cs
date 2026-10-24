@@ -254,8 +254,8 @@ public sealed class ScriptProgramFitnessEvaluatorTests
         var engine = new ScriptedProgramExecutionEngine(_ => Printed("{\"quality\": 1}"));
 
 #pragma warning disable CS8625
-        Assert.Throws<ArgumentNullException>(() => new ScriptProgramFitnessEvaluator(null, Script));
-        Assert.Throws<ArgumentNullException>(() => new ScriptProgramFitnessEvaluator(engine, null));
+        Assert.Throws<ArgumentNullException>(() => new ScriptProgramFitnessEvaluator(global::AiDotNet.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine>(), Script));
+        Assert.Throws<ArgumentNullException>(() => new ScriptProgramFitnessEvaluator(engine, global::AiDotNet.Tests.TestNull.Of<string>()));
 #pragma warning restore CS8625
         Assert.Throws<ArgumentException>(() => new ScriptProgramFitnessEvaluator(engine, "   "));
         Assert.Throws<ArgumentException>(() => new ScriptProgramFitnessEvaluator(engine, Script, id: " "));

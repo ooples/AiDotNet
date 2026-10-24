@@ -62,7 +62,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     public async Task EstimateTokens_NullString_ReturnsZero()
     {
         var manager = new ContextWindowManager(4096);
-        Assert.Equal(0, manager.EstimateTokens(null));
+        Assert.Equal(0, manager.EstimateTokens(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -354,7 +354,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     public async Task CostEstimation_EmptyPrompt_ThrowsOnNull()
     {
         var analyzer = TokenCountAnalyzer.ForGpt4();
-        Assert.Throws<ArgumentNullException>(() => analyzer.Analyze(null));
+        Assert.Throws<ArgumentNullException>(() => analyzer.Analyze(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     // ============================
@@ -566,7 +566,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     public async Task Validate_NullPrompt_ReportsError()
     {
         var validator = new PromptValidator();
-        var issues = validator.Validate(null);
+        var issues = validator.Validate(global::AiDotNet.Tests.TestNull.Of<string>());
 
         Assert.Contains(issues, i => i.Code == "PE001" && i.Severity == IssueSeverity.Error);
     }

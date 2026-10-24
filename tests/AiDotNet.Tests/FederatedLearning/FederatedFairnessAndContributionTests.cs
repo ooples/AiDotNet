@@ -139,7 +139,7 @@ public class FederatedFairnessAndContributionTests
     [Fact(Timeout = 60000)]
     public async Task ShapleyValue_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new ShapleyValueEvaluator<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new ShapleyValueEvaluator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.ContributionEvaluationOptions>()));
     }
 
     // ========== DataShapleyEvaluator Tests ==========
@@ -192,7 +192,7 @@ public class FederatedFairnessAndContributionTests
     [Fact(Timeout = 60000)]
     public async Task DataShapley_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new DataShapleyEvaluator<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new DataShapleyEvaluator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.ContributionEvaluationOptions>()));
     }
 
     // ========== PrototypicalContributionEvaluator Tests ==========
@@ -239,7 +239,7 @@ public class FederatedFairnessAndContributionTests
     [Fact(Timeout = 60000)]
     public async Task Prototypical_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new PrototypicalContributionEvaluator<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new PrototypicalContributionEvaluator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.ContributionEvaluationOptions>()));
     }
 
     // ========== GroupFairnessConstraint Tests ==========
@@ -314,7 +314,7 @@ public class FederatedFairnessAndContributionTests
     [Fact(Timeout = 60000)]
     public async Task GroupFairness_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new GroupFairnessConstraint<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new GroupFairnessConstraint<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedFairnessOptions>()));
     }
 
     // ========== ContributionBasedIncentive Tests ==========

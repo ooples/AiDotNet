@@ -276,7 +276,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // No-stub contract: ColBERT refuses to run over a missing/placeholder embedder — it must be given
             // a real one, failing loudly rather than silently producing meaningless late-interaction scores.
             Assert.Throws<ArgumentNullException>(
-                () => new ColbertReranker<double>((ITokenEmbeddingModel<double>?)null));
+                () => new ColbertReranker<double>(global::AiDotNet.Tests.TestNull.Of<ITokenEmbeddingModel<double>>()));
             await Task.CompletedTask;
         }
 
@@ -285,7 +285,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             var adapter = new EmbeddingModelTokenAdapter<double>(RealEmbedder());
 
-            Assert.Throws<ArgumentNullException>(() => adapter.EmbedTokens(null));
+            Assert.Throws<ArgumentNullException>(() => adapter.EmbedTokens(global::AiDotNet.Tests.TestNull.Of<string>()));
             await Task.CompletedTask;
         }
 

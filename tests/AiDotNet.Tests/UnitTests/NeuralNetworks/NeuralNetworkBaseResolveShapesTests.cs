@@ -231,7 +231,7 @@ public class NeuralNetworkBaseResolveShapesTests
     public void ResolveShapes_NullSampleInput_ThrowsArgumentNullException()
     {
         var model = BuildNeRF();
-        Assert.Throws<ArgumentNullException>(() => model.ResolveShapes(null));
+        Assert.Throws<ArgumentNullException>(() => model.ResolveShapes(global::AiDotNet.Tests.TestNull.Of<Tensor<float>>()));
     }
 
     [Fact]

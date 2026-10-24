@@ -222,7 +222,7 @@ public class ConditionalPromptTemplateTests
     {
         var template = new ConditionalPromptTemplate("Hello {name}");
 
-        var result = template.Validate(null);
+        var result = template.Validate(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, string>>());
 
         Assert.False(result);
     }

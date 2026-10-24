@@ -261,7 +261,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRetriever<double>(null, embeddingModel));
+                new GraphRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDocumentStore<double>>(), embeddingModel));
         }
 
         [Fact(Timeout = 60000)]
@@ -272,7 +272,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRetriever<double>(store, null));
+                new GraphRetriever<double>(store, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IEmbeddingModel<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -280,7 +280,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRetriever<double>(null, null));
+                new GraphRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDocumentStore<double>>(), global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IEmbeddingModel<double>>()));
         }
 
         #endregion
@@ -369,7 +369,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null).ToList());
+                retriever.Retrieve(global::AiDotNet.Tests.TestNull.Of<string>()).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -690,7 +690,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                retriever.Retrieve("content", topK: 5, null).ToList());
+                retriever.Retrieve("content", topK: 5, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, object>>()).ToList());
         }
 
         #endregion

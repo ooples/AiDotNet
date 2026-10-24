@@ -17,7 +17,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             var config = new CompressionConfig();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => CompressionHelper.Compress(null, config));
+            Assert.Throws<ArgumentNullException>(() => CompressionHelper.Compress(global::AiDotNet.Tests.TestNull.Of<byte[]>(), config));
         }
 
         [Fact(Timeout = 60000)]
@@ -27,7 +27,7 @@ namespace AiDotNetTests.UnitTests.Helpers
             var data = new byte[] { 1, 2, 3, 4, 5 };
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => CompressionHelper.Compress(data, null));
+            Assert.Throws<ArgumentNullException>(() => CompressionHelper.Compress(data, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Deployment.Configuration.CompressionConfig>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -63,7 +63,7 @@ namespace AiDotNetTests.UnitTests.Helpers
         public async Task DecompressIfNeeded_WithNullData_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => CompressionHelper.DecompressIfNeeded(null));
+            Assert.Throws<ArgumentNullException>(() => CompressionHelper.DecompressIfNeeded(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -143,7 +143,7 @@ namespace AiDotNetTests.UnitTests.Helpers
         public async Task IsCompressedData_WithNullData_ReturnsFalse()
         {
             // Act
-            var result = CompressionHelper.IsCompressedData(null);
+            var result = CompressionHelper.IsCompressedData(global::AiDotNet.Tests.TestNull.Of<byte[]>());
 
             // Assert
             Assert.False(result);
@@ -206,7 +206,7 @@ namespace AiDotNetTests.UnitTests.Helpers
         public async Task GetCompressionStats_WithNullData_ReturnsZeros()
         {
             // Act
-            var stats = CompressionHelper.GetCompressionStats(null, null);
+            var stats = CompressionHelper.GetCompressionStats(global::AiDotNet.Tests.TestNull.Of<byte[]>(), global::AiDotNet.Tests.TestNull.Of<byte[]>());
 
             // Assert
             Assert.Equal(0, stats.originalSize);

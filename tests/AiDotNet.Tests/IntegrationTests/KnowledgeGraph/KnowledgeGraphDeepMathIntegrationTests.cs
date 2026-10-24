@@ -30,7 +30,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GraphNode_Construction_NullIdThrows()
     {
-        Assert.Throws<ArgumentException>(() => new GraphNode<double>(null, "PERSON"));
+        Assert.Throws<ArgumentException>(() => new GraphNode<double>(global::AiDotNet.Tests.TestNull.Of<string>(), "PERSON"));
     }
 
     [Fact(Timeout = 120000)]
@@ -42,7 +42,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GraphNode_Construction_NullLabelThrows()
     {
-        Assert.Throws<ArgumentException>(() => new GraphNode<double>("node-1", null));
+        Assert.Throws<ArgumentException>(() => new GraphNode<double>("node-1", global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -138,19 +138,19 @@ public class KnowledgeGraphDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GraphEdge_Construction_NullSourceThrows()
     {
-        Assert.Throws<ArgumentException>(() => new GraphEdge<double>(null, "t", "REL"));
+        Assert.Throws<ArgumentException>(() => new GraphEdge<double>(global::AiDotNet.Tests.TestNull.Of<string>(), "t", "REL"));
     }
 
     [Fact(Timeout = 120000)]
     public async Task GraphEdge_Construction_NullTargetThrows()
     {
-        Assert.Throws<ArgumentException>(() => new GraphEdge<double>("s", null, "REL"));
+        Assert.Throws<ArgumentException>(() => new GraphEdge<double>("s", global::AiDotNet.Tests.TestNull.Of<string>(), "REL"));
     }
 
     [Fact(Timeout = 120000)]
     public async Task GraphEdge_Construction_NullRelationThrows()
     {
-        Assert.Throws<ArgumentException>(() => new GraphEdge<double>("s", "t", null));
+        Assert.Throws<ArgumentException>(() => new GraphEdge<double>("s", "t", global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Theory]

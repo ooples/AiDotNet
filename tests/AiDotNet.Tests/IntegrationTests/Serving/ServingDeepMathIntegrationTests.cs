@@ -420,7 +420,7 @@ public class ServingDeepMathIntegrationTests
     public async Task BatchScheduler_AddNull_Throws()
     {
         var scheduler = new BatchScheduler<double>();
-        Assert.Throws<ArgumentNullException>(() => scheduler.AddSequence(null));
+        Assert.Throws<ArgumentNullException>(() => scheduler.AddSequence(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Serving.ContinuousBatching.SequenceState<double>>()));
     }
 
     [Fact(Timeout = 120000)]

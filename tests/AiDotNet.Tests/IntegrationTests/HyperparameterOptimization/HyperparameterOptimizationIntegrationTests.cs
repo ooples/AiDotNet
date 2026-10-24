@@ -455,7 +455,7 @@ public class HyperparameterOptimizationIntegrationTests
     {
         var searchSpace = new HyperparameterSearchSpace();
         Assert.Throws<ArgumentException>(() => searchSpace.AddContinuous("", 0, 1));
-        Assert.Throws<ArgumentException>(() => searchSpace.AddContinuous(null, 0, 1));
+        Assert.Throws<ArgumentException>(() => searchSpace.AddContinuous(global::AiDotNet.Tests.TestNull.Of<string>(), 0, 1));
     }
 
     [Fact(Timeout = 120000)]
@@ -769,7 +769,7 @@ public class HyperparameterOptimizationIntegrationTests
         var searchSpace = new HyperparameterSearchSpace();
         searchSpace.AddInteger("x", 1, 5);
 
-        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(null, searchSpace, 10));
+        Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(global::AiDotNet.Tests.TestNull.Of<System.Func<System.Collections.Generic.Dictionary<string, object>, double>>(), searchSpace, 10));
     }
 
     [Fact(Timeout = 120000)]
@@ -778,7 +778,7 @@ public class HyperparameterOptimizationIntegrationTests
         var optimizer = new GridSearchOptimizer<double, double[], double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            optimizer.Optimize(_ => 0, null, 10));
+            optimizer.Optimize(_ => 0, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.HyperparameterSearchSpace>(), 10));
     }
 
     [Fact(Timeout = 120000)]
@@ -839,7 +839,7 @@ public class HyperparameterOptimizationIntegrationTests
     public async Task GridSearchOptimizer_GetTrials_ThrowsOnNullFilter()
     {
         var optimizer = new GridSearchOptimizer<double, double[], double>();
-        Assert.Throws<ArgumentNullException>(() => optimizer.GetTrials(null));
+        Assert.Throws<ArgumentNullException>(() => optimizer.GetTrials(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Models.HyperparameterTrial<double>, bool>>()));
     }
 
     #endregion
@@ -1404,7 +1404,7 @@ public class HyperparameterOptimizationIntegrationTests
     public async Task HyperparameterOptimizerBase_ReportTrial_ThrowsOnNullTrial()
     {
         var optimizer = new RandomSearchOptimizer<double, double[], double>();
-        Assert.Throws<ArgumentNullException>(() => optimizer.ReportTrial(null, 0.5));
+        Assert.Throws<ArgumentNullException>(() => optimizer.ReportTrial(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.HyperparameterTrial<double>>(), 0.5));
     }
 
     [Fact(Timeout = 120000)]

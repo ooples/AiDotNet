@@ -110,7 +110,7 @@ public class PhysicsInformedDeepMathIntegrationTests
     {
         var history = new DomainDecompositionTrainingHistory<double>(2);
         Assert.Throws<ArgumentNullException>(() =>
-            history.AddEpoch(1.0, null, 0.1, 0.2));
+            history.AddEpoch(1.0, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.List<double>>(), 0.1, 0.2));
     }
 
     [Fact(Timeout = 120000)]

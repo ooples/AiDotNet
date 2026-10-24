@@ -342,7 +342,7 @@ public class MbPAMechanismTests
     {
         var model = new IdentityEmbeddingModel(FeatureDim);
         Assert.Throws<ArgumentNullException>(() =>
-            new MbPAAlgorithm<double, Matrix<double>, Vector<double>>(null));
+            new MbPAAlgorithm<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.MetaLearning.Options.MbPAOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
 
         // ThrowsAny, not Throws: MetaLearnerBase validates IMetaLearnerOptions before this class's
         // own range checks run, so the exact ArgumentException subtype is the base's choice. What

@@ -180,7 +180,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Act & Assert
             var ex = Assert.Throws<ArgumentNullException>(() =>
                 new ColBERTRetriever<double>(
-                    null,
+                    global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDocumentStore<double>>(),
                     modelPath: "model.onnx",
                     maxDocLength: 512,
                     maxQueryLength: 32));
@@ -198,7 +198,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var ex = Assert.Throws<ArgumentNullException>(() =>
                 new ColBERTRetriever<double>(
                     store,
-                    modelPath: null,
+                    modelPath: global::AiDotNet.Tests.TestNull.Of<string>(),
                     maxDocLength: 512,
                     maxQueryLength: 32));
 
@@ -419,7 +419,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null).ToList());
+                retriever.Retrieve(global::AiDotNet.Tests.TestNull.Of<string>()).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -589,7 +589,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert - null metadata filters should throw
             Assert.Throws<ArgumentNullException>(() =>
-                retriever.Retrieve("fox", topK: 5, null).ToList());
+                retriever.Retrieve("fox", topK: 5, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, object>>()).ToList());
         }
 
         #endregion

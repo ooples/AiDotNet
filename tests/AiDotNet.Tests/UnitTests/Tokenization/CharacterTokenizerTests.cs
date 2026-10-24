@@ -210,7 +210,7 @@ public class CharacterTokenizerTests
     public async Task Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
-            CharacterTokenizer.Train(null));
+            CharacterTokenizer.Train(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<string>>()));
     }
 
     [Fact(Timeout = 60000)]

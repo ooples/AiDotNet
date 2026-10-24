@@ -46,8 +46,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         {
             var metric = new EuclideanDistanceMetric<double>();
             var quantizer = new ScalarQuantizer<double>();
-            Assert.Throws<ArgumentNullException>(() => new QuantizedFlatIndex<double>(null, quantizer));
-            Assert.Throws<ArgumentNullException>(() => new QuantizedFlatIndex<double>(metric, null));
+            Assert.Throws<ArgumentNullException>(() => new QuantizedFlatIndex<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<double>>(), quantizer));
+            Assert.Throws<ArgumentNullException>(() => new QuantizedFlatIndex<double>(metric, global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization.IVectorQuantizer<double>>()));
         }
 
         [Fact]

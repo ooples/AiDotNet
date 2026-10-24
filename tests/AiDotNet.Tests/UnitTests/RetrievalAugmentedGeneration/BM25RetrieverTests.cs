@@ -153,7 +153,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new BM25Retriever<double>(null));
+                new BM25Retriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDocumentStore<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -291,7 +291,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null).ToList());
+                retriever.Retrieve(global::AiDotNet.Tests.TestNull.Of<string>()).ToList());
         }
 
         [Fact(Timeout = 60000)]

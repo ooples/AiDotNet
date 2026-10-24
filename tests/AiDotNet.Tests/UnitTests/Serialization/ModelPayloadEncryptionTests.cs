@@ -105,14 +105,14 @@ public class ModelPayloadEncryptionTests
     public async Task Encrypt_NullPayload_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.Encrypt(null, "key", "aad"));
+            ModelPayloadEncryption.Encrypt(global::AiDotNet.Tests.TestNull.Of<byte[]>(), "key", "aad"));
     }
 
     [Fact(Timeout = 60000)]
     public async Task Encrypt_NullKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
-            ModelPayloadEncryption.Encrypt(new byte[] { 1 }, null, "aad"));
+            ModelPayloadEncryption.Encrypt(new byte[] { 1 }, global::AiDotNet.Tests.TestNull.Of<string>(), "aad"));
     }
 
     [Fact(Timeout = 60000)]
@@ -126,35 +126,35 @@ public class ModelPayloadEncryptionTests
     public async Task Decrypt_NullCiphertext_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.Decrypt(null, "key", new byte[16], new byte[12], new byte[16], "aad"));
+            ModelPayloadEncryption.Decrypt(global::AiDotNet.Tests.TestNull.Of<byte[]>(), "key", new byte[16], new byte[12], new byte[16], "aad"));
     }
 
     [Fact(Timeout = 60000)]
     public async Task Decrypt_NullKey_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
-            ModelPayloadEncryption.Decrypt(new byte[] { 1 }, null, new byte[16], new byte[12], new byte[16], "aad"));
+            ModelPayloadEncryption.Decrypt(new byte[] { 1 }, global::AiDotNet.Tests.TestNull.Of<string>(), new byte[16], new byte[12], new byte[16], "aad"));
     }
 
     [Fact(Timeout = 60000)]
     public async Task Decrypt_NullSalt_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", null, new byte[12], new byte[16], "aad"));
+            ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", global::AiDotNet.Tests.TestNull.Of<byte[]>(), new byte[12], new byte[16], "aad"));
     }
 
     [Fact(Timeout = 60000)]
     public async Task Decrypt_NullNonce_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", new byte[16], null, new byte[16], "aad"));
+            ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", new byte[16], global::AiDotNet.Tests.TestNull.Of<byte[]>(), new byte[16], "aad"));
     }
 
     [Fact(Timeout = 60000)]
     public async Task Decrypt_NullTag_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", new byte[16], new byte[12], null, "aad"));
+            ModelPayloadEncryption.Decrypt(new byte[] { 1 }, "key", new byte[16], new byte[12], global::AiDotNet.Tests.TestNull.Of<byte[]>(), "aad"));
     }
 
     [Fact(Timeout = 60000)]
@@ -192,7 +192,7 @@ public class ModelPayloadEncryptionTests
     [Fact(Timeout = 60000)]
     public async Task BuildAad_NullInputs()
     {
-        var aad = ModelPayloadEncryption.BuildAad(null, null, null);
+        var aad = ModelPayloadEncryption.BuildAad(global::AiDotNet.Tests.TestNull.Of<string>(), global::AiDotNet.Tests.TestNull.Of<int[]>(), global::AiDotNet.Tests.TestNull.Of<int[]>());
         Assert.Equal("||", aad);
     }
 #endif
@@ -269,7 +269,7 @@ public class ModelPayloadEncryptionTests
         Assert.Throws<ArgumentNullException>(() =>
             ModelFileHeader.WrapWithHeaderEncrypted(
                 new byte[] { 1 }, model, Array.Empty<int>(), Array.Empty<int>(),
-                SerializationFormat.Binary, null, new byte[12], new byte[16]));
+                SerializationFormat.Binary, global::AiDotNet.Tests.TestNull.Of<byte[]>(), new byte[12], new byte[16]));
     }
 
     [Fact(Timeout = 60000)]
@@ -279,7 +279,7 @@ public class ModelPayloadEncryptionTests
         Assert.Throws<ArgumentNullException>(() =>
             ModelFileHeader.WrapWithHeaderEncrypted(
                 new byte[] { 1 }, model, Array.Empty<int>(), Array.Empty<int>(),
-                SerializationFormat.Binary, new byte[16], null, new byte[16]));
+                SerializationFormat.Binary, new byte[16], global::AiDotNet.Tests.TestNull.Of<byte[]>(), new byte[16]));
     }
 
     [Fact(Timeout = 60000)]
@@ -289,7 +289,7 @@ public class ModelPayloadEncryptionTests
         Assert.Throws<ArgumentNullException>(() =>
             ModelFileHeader.WrapWithHeaderEncrypted(
                 new byte[] { 1 }, model, Array.Empty<int>(), Array.Empty<int>(),
-                SerializationFormat.Binary, new byte[16], new byte[12], null));
+                SerializationFormat.Binary, new byte[16], new byte[12], global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -465,7 +465,7 @@ public class ModelPayloadEncryptionTests
     public async Task SaveEncrypted_ThrowsOnNullModel()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelLoader.SaveEncrypted(null, "file.aimf", "key", Array.Empty<int>(), Array.Empty<int>()));
+            ModelLoader.SaveEncrypted(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IModelSerializer>(), "file.aimf", "key", Array.Empty<int>(), Array.Empty<int>()));
     }
 
     [Fact(Timeout = 60000)]

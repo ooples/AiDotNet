@@ -21,7 +21,7 @@ public sealed class RobustFullModelAggregationStrategyBaseTests
     [Fact(Timeout = 60000)]
     public async Task GetReferenceModelOrThrow_ThrowsForNullOrEmpty()
     {
-        Assert.Throws<ArgumentException>(() => GetReferenceModelOrThrow(null));
+        Assert.Throws<ArgumentException>(() => GetReferenceModelOrThrow(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<int, AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>>()));
         Assert.Throws<ArgumentException>(() => GetReferenceModelOrThrow(new Dictionary<int, IFullModel<double, Matrix<double>, Vector<double>>>()));
     }
 
@@ -84,7 +84,7 @@ public sealed class RobustFullModelAggregationStrategyBaseTests
     public async Task WeightedAverageOrUnweightedAverage_ThrowsWhenClientsMissing()
     {
         Assert.Throws<ArgumentException>(() => WeightedAverageOrUnweightedAverage(
-            selectedClientIds: null,
+            selectedClientIds: global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<int>>(),
             clientParameters: new Dictionary<int, Vector<double>>(),
             clientWeights: new Dictionary<int, double>(),
             useClientWeights: false));

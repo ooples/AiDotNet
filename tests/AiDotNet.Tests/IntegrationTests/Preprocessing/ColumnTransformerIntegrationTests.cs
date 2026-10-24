@@ -103,7 +103,7 @@ public class ColumnTransformerIntegrationTests
         var transformer = new ColumnTransformer<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => transformer.Add("test", null, new[] { 0 }));
+        Assert.Throws<ArgumentNullException>(() => transformer.Add("test", global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDataTransformer<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Matrix<double>>>(), new[] { 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -114,7 +114,7 @@ public class ColumnTransformerIntegrationTests
         var scaler = new StandardScaler<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => transformer.Add("test", scaler, null));
+        Assert.Throws<ArgumentException>(() => transformer.Add("test", scaler, global::AiDotNet.Tests.TestNull.Of<int[]>()));
     }
 
     [Fact(Timeout = 120000)]

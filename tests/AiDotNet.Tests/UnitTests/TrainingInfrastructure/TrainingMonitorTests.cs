@@ -70,7 +70,7 @@ public class TrainingMonitorTests : IDisposable
     public async Task StartSession_WithNullName_ThrowsArgumentException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => _monitor.StartSession(null));
+        Assert.Throws<ArgumentException>(() => _monitor.StartSession(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -146,7 +146,7 @@ public class TrainingMonitorTests : IDisposable
         var sessionId = _monitor.StartSession("test-session");
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => _monitor.LogMetric(sessionId, null, 0.5, step: 1));
+        Assert.Throws<ArgumentException>(() => _monitor.LogMetric(sessionId, global::AiDotNet.Tests.TestNull.Of<string>(), 0.5, step: 1));
     }
 
     [Fact(Timeout = 60000)]
@@ -179,7 +179,7 @@ public class TrainingMonitorTests : IDisposable
         var sessionId = _monitor.StartSession("test-session");
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _monitor.LogMetrics(sessionId, null, step: 1));
+        Assert.Throws<ArgumentNullException>(() => _monitor.LogMetrics(sessionId, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, double>>(), step: 1));
     }
 
     [Fact(Timeout = 60000)]

@@ -31,7 +31,7 @@ public class TeacherModelWrapperTests
     {
         // Arrange, Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new TeacherModelWrapper<double>(null, outputDimension: 3));
+            new TeacherModelWrapper<double>(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), outputDimension: 3));
     }
 
     [Fact(Timeout = 60000)]
@@ -78,6 +78,6 @@ public class TeacherModelWrapperTests
         var wrapper = new TeacherModelWrapper<double>(forwardFunc, outputDimension: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => wrapper.GetLogits(null));
+        Assert.Throws<ArgumentNullException>(() => wrapper.GetLogits(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 }

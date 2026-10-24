@@ -94,7 +94,7 @@ public class MetaLearnerBaseIntegrationTests
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
-        Assert.Throws<ArgumentNullException>(() => learner.Evaluate(null));
+        Assert.Throws<ArgumentNullException>(() => learner.Evaluate(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Data.Structures.TaskBatch<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 120000)]

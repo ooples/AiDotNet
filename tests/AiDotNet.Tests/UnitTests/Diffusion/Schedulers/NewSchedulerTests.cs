@@ -591,7 +591,7 @@ public class NewSchedulerTests
             var s = scheduler;
             Assert.Throws<ArgumentNullException>(() =>
             {
-                s.Step(null, t, sample, 0.0);
+                s.Step(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), t, sample, 0.0);
             });
         }
     }

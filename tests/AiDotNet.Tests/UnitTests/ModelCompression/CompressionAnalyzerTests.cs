@@ -44,7 +44,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var analyzer = new CompressionAnalyzer<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => analyzer.Analyze(null));
+            Assert.Throws<ArgumentException>(() => analyzer.Analyze(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         }
 
         [Fact(Timeout = 60000)]

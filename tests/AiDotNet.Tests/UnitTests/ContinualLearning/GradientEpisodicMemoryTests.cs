@@ -192,7 +192,7 @@ public class GradientEpisodicMemoryTests
         var targets = CreateTestTensor(batchSize: 5, featureSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => gem.AfterTask(null, (inputs, targets), taskId: 0));
+        Assert.Throws<ArgumentNullException>(() => gem.AfterTask(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.INeuralNetwork<double>>(), (inputs, targets), taskId: 0));
     }
 
     [Fact(Timeout = 60000)]
@@ -204,7 +204,7 @@ public class GradientEpisodicMemoryTests
         var targets = CreateTestTensor(batchSize: 5, featureSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => gem.AfterTask(network, (null, targets), taskId: 0));
+        Assert.Throws<ArgumentNullException>(() => gem.AfterTask(network, (global::AiDotNet.Tests.TestNull.Of<Tensor<double>>(), targets), taskId: 0));
     }
 
     [Fact(Timeout = 60000)]
@@ -216,7 +216,7 @@ public class GradientEpisodicMemoryTests
         var inputs = CreateTestTensor(batchSize: 5, featureSize: 10);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => gem.AfterTask(network, (inputs, null), taskId: 0));
+        Assert.Throws<ArgumentNullException>(() => gem.AfterTask(network, (inputs, global::AiDotNet.Tests.TestNull.Of<Tensor<double>>()), taskId: 0));
     }
 
     [Fact(Timeout = 60000)]
@@ -340,7 +340,7 @@ public class GradientEpisodicMemoryTests
         var gradients = new Vector<double>(10);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => gem.ModifyGradients(null, gradients));
+        Assert.Throws<ArgumentNullException>(() => gem.ModifyGradients(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.INeuralNetwork<double>>(), gradients));
     }
 
     [Fact(Timeout = 60000)]
@@ -351,7 +351,7 @@ public class GradientEpisodicMemoryTests
         var network = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => gem.ModifyGradients(network, null));
+        Assert.Throws<ArgumentNullException>(() => gem.ModifyGradients(network, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     [Fact(Timeout = 60000)]

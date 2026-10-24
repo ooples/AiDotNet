@@ -785,7 +785,7 @@ public class LoggingIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task TensorBoardWriter_Constructor_WithNullLogDir_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new TensorBoardWriter(null));
+        Assert.Throws<ArgumentNullException>(() => new TensorBoardWriter(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]

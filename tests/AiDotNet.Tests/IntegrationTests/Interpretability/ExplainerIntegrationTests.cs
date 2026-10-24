@@ -1125,7 +1125,7 @@ public class ExplainerIntegrationTests
     {
         Assert.Throws<ArgumentNullException>(() =>
             new TreeSHAPExplainer<double>(
-                tree: null,
+                tree: global::AiDotNet.Tests.TestNull.Of<AiDotNet.LinearAlgebra.DecisionTreeNode<double>>(),
                 numFeatures: 3,
                 expectedValue: 15.0));
     }
@@ -1488,13 +1488,13 @@ public class ExplainerIntegrationTests
     public async Task Explainers_NullPredictFunction_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new IntegratedGradientsExplainer<double>(null, null, _numFeatures));
+            new IntegratedGradientsExplainer<double>(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), null, _numFeatures));
 
         Assert.Throws<ArgumentNullException>(() =>
-            new DeepLIFTExplainer<double>(predictFunction: null, numFeatures: _numFeatures));
+            new DeepLIFTExplainer<double>(predictFunction: global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), numFeatures: _numFeatures));
 
         Assert.Throws<ArgumentNullException>(() =>
-            new SaliencyMapExplainer<double>(null, numFeatures: _numFeatures));
+            new SaliencyMapExplainer<double>(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), numFeatures: _numFeatures));
     }
 
     [Fact(Timeout = 120000)]

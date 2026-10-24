@@ -313,7 +313,7 @@ public class Int8InferenceModelIntegrationTests
     public async Task FromTrained_RejectsNullModel()
     {
         await Task.Yield();
-        Assert.Throws<ArgumentNullException>(() => Int8InferenceModel.FromTrained(null));
+        Assert.Throws<ArgumentNullException>(() => Int8InferenceModel.FromTrained(global::AiDotNet.Tests.TestNull.Of<AiDotNet.NeuralNetworks.NeuralNetworkBase<float>>()));
     }
 
     [Fact(Timeout = 120000)]

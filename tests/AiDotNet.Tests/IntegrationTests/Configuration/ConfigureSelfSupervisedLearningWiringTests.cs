@@ -146,7 +146,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
             .ConfigureSelfSupervisedLearning(
                 configure: null,
                 pretrainAction: (m, c, ct) =>
-                    Task.FromResult<IFullModel<double, Matrix<double>, Vector<double>>>(null));
+                    Task.FromResult<IFullModel<double, Matrix<double>, Vector<double>>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await builder.BuildAsync());
         Assert.Contains("pretrainAction", ex.Message);
@@ -159,7 +159,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
         Assert.Throws<ArgumentNullException>(() =>
             builder.ConfigureSelfSupervisedLearning(
                 configure: null,
-                pretrainAction: null));
+                pretrainAction: global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>, AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningConfig<double>, System.Threading.CancellationToken, System.Threading.Tasks.Task<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -250,7 +250,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
     public void ConfigureSSLMethod_NullArgument_ThrowsArgumentNull()
     {
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
-        Assert.Throws<ArgumentNullException>(() => builder.ConfigureSelfSupervisedLearningMethod(null));
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureSelfSupervisedLearningMethod(global::AiDotNet.Tests.TestNull.Of<AiDotNet.SelfSupervisedLearning.ISelfSupervisedLearningMethod<double>>()));
     }
 
     [Fact(Timeout = 120000)]

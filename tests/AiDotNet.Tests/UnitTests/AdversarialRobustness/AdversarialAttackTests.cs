@@ -117,7 +117,7 @@ public class AdversarialAttackTests
     [Fact(Timeout = 60000)]
     public async Task FGSMAttack_Constructor_WithNullOptions_ThrowsException()
     {
-        Assert.Throws<ArgumentNullException>(() => new FGSMAttack<double, Vector<double>, Vector<double>>(null));
+        Assert.Throws<ArgumentNullException>(() => new FGSMAttack<double, Vector<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.AdversarialAttackOptions<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -127,7 +127,7 @@ public class AdversarialAttackTests
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
 
-        Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialExample(null, OneHotLabel(0), model));
+        Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialExample(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), OneHotLabel(0), model));
     }
 
     [Fact(Timeout = 60000)]
@@ -137,7 +137,7 @@ public class AdversarialAttackTests
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
-        Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialExample(input, OneHotLabel(0), null));
+        Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialExample(input, OneHotLabel(0), global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -504,7 +504,7 @@ public class AdversarialAttackTests
         var model = new MockClassificationModel();
         var labels = new Vector<double>[] { OneHotLabel(0), OneHotLabel(1), OneHotLabel(2) };
 
-        Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialBatch(null, labels, model));
+        Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialBatch(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>[]>(), labels, model));
     }
 
     [Fact(Timeout = 60000)]
@@ -520,7 +520,7 @@ public class AdversarialAttackTests
             new Vector<double>(new[] { 0.5, 0.5, 0.5 })
         };
 
-        Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialBatch(inputs, null, model));
+        Assert.Throws<ArgumentNullException>(() => attack.GenerateAdversarialBatch(inputs, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>[]>(), model));
     }
 
     [Fact(Timeout = 60000)]
@@ -566,7 +566,7 @@ public class AdversarialAttackTests
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
         var adversarial = new Vector<double>(new[] { 0.6, 0.5, 0.8 });
 
-        Assert.Throws<ArgumentNullException>(() => attack.CalculatePerturbation(null, adversarial));
+        Assert.Throws<ArgumentNullException>(() => attack.CalculatePerturbation(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), adversarial));
     }
 
     [Fact(Timeout = 60000)]
@@ -576,7 +576,7 @@ public class AdversarialAttackTests
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
         var original = new Vector<double>(new[] { 0.5, 0.6, 0.7 });
 
-        Assert.Throws<ArgumentNullException>(() => attack.CalculatePerturbation(original, null));
+        Assert.Throws<ArgumentNullException>(() => attack.CalculatePerturbation(original, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -635,7 +635,7 @@ public class AdversarialAttackTests
     {
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => attack.Deserialize(null));
+        Assert.Throws<ArgumentNullException>(() => attack.Deserialize(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -672,7 +672,7 @@ public class AdversarialAttackTests
     {
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
-        Assert.Throws<ArgumentException>(() => attack.SaveModel(null));
+        Assert.Throws<ArgumentException>(() => attack.SaveModel(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]
