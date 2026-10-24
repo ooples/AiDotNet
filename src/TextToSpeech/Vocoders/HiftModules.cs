@@ -166,7 +166,69 @@ internal sealed class HiftGenerator<T>
         for (int h = 0; h < harmonics; h++)
             for (int s = 0; s < samples; s++)
                 noise[h, s] = Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
-        return Merge(Harmonics(f0, phases, noise));
+        if (c.SampleRate == 22050) return Merge(Harmonics(f0, phases, noise));
+        // SineGen2's initial phases are fractions of a cycle, U[0, 1), drawn after the noise's shape is known.
+        var fractions = new double[harmonics];
+        for (int h = 1; h < harmonics; h++) fractions[h] = phases[h] / (2 * Math.PI) + 0.5;
+        return Merge(HarmonicsByFrames(f0, fractions, noise));
+    }
+
+    /// <summary>
+    /// <c>SineGen2</c>'s harmonics <c>[1, H+1, samples]</c> (the generator's sine source at any rate but 22.05 kHz): each
+    /// harmonic's per-sample increment <c>(k·f0 / sr) mod 1</c>, its first sample offset by the harmonic's initial phase
+    /// (a fraction of a cycle; the fundamental's is 0), linearly resampled to the frames (<c>scale_factor = 1 / scale</c>),
+    /// summed into a phase, scaled by the upsampling and linearly resampled back to the samples; then as
+    /// <see cref="Harmonics"/>: the voiced samples' sines plus noise.
+    /// </summary>
+    public Tensor<T> HarmonicsByFrames(Tensor<T> f0, double[] initialPhases, double[,] noise)
+    {
+        var c = Configuration;
+        int frames = f0.Length, scale = c.UpsampleScale, samples = frames * scale, harmonics = c.Harmonics + 1;
+        var sines = new Tensor<T>(new[] { 1, harmonics, samples });
+        // F.interpolate(mode="linear", align_corners=False) with a scale factor: source = (i + 0.5) / factor − 0.5,
+        // clamped at 0, the output length ⌊length · factor⌋.
+        static double[] Interpolate(double[] values, double factor)
+        {
+            int length = values.Length, size = (int)Math.Floor(length * factor);
+            double step = 1.0 / factor;
+            var result = new double[size];
+            for (int i = 0; i < size; i++)
+            {
+                double source = Math.Max(0.0, (i + 0.5) * step - 0.5);
+                int low = Math.Min((int)source, length - 1);
+                int high = low < length - 1 ? low + 1 : low;
+                double weight = source - low;
+                result[i] = (1 - weight) * values[low] + weight * values[high];
+            }
+            return result;
+        }
+        for (int h = 0; h < harmonics; h++)
+        {
+            var increments = new double[samples];
+            for (int s = 0; s < samples; s++)
+            {
+                double value = NumOps.ToDouble(f0[s / scale]) * (h + 1) / c.SampleRate;
+                increments[s] = value - Math.Floor(value);
+            }
+            increments[0] += h == 0 ? 0.0 : initialPhases[h];
+            var perFrame = Interpolate(increments, 1.0 / scale);
+            double cumulative = 0;
+            for (int i = 0; i < perFrame.Length; i++)
+            {
+                cumulative += perFrame[i];
+                perFrame[i] = cumulative * 2 * Math.PI * scale;
+            }
+            var phase = Interpolate(perFrame, scale);
+            for (int s = 0; s < samples; s++)
+            {
+                double f = NumOps.ToDouble(f0[s / scale]);
+                bool voiced = f > c.VoicedThreshold;
+                double noiseAmplitude = voiced ? c.NsfSigma : c.NsfAlpha / 3;
+                double sine = s < phase.Length ? Math.Sin(phase[s]) : 0.0;
+                sines[0, h, s] = NumOps.FromDouble((voiced ? c.NsfAlpha * sine : 0.0) + noiseAmplitude * noise[h, s]);
+            }
+        }
+        return sines;
     }
 
     /// <summary>
