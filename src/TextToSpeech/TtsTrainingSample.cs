@@ -75,4 +75,10 @@ public sealed class TtsTrainingSample<T>
     /// token ids <c>[tokens]</c>, for models that synthesize from a description (Parler-TTS).
     /// </summary>
     public Tensor<T>? Description { get; init; }
+
+    /// <summary>
+    /// The utterance's text as the token ids <c>[tokens]</c> of the language model a model reads it through, for models
+    /// that embed the text itself as well as its phonemes (EmotiVoice's SimBERT content embedding).
+    /// </summary>
+    public Tensor<T>? Transcript { get; init; }
 }

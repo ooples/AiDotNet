@@ -28,18 +28,18 @@ internal sealed class Pypinyin050
 
     private Pypinyin050()
     {
-        foreach (var line in JiebaSegmenter.ReadLines("pypinyin050_chars.tsv.gz"))
+        foreach (var line in ChineseText.ReadLines("pypinyin050_chars.tsv.gz"))
         {
             int tab = line.IndexOf('\t');
             _characters[line.Substring(0, tab)] = Pair(line.Substring(tab + 1));
         }
-        foreach (var line in JiebaSegmenter.ReadLines("pypinyin050_phrases.tsv.gz"))
+        foreach (var line in ChineseText.ReadLines("pypinyin050_phrases.tsv.gz"))
         {
             int tab = line.IndexOf('\t');
             string phrase = line.Substring(0, tab);
             _phrases[phrase] = line.Substring(tab + 1).Split(' ').Select(Pair).ToArray();
             var prefix = new StringBuilder();
-            foreach (var c in JiebaSegmenter.Codepoints(phrase))
+            foreach (var c in ChineseText.Codepoints(phrase))
             {
                 prefix.Append(c);
                 _phrasePrefixes.Add(prefix.ToString());
@@ -52,9 +52,9 @@ internal sealed class Pypinyin050
     {
         var result = new List<(string, string)>();
         var runs = new List<(bool Han, List<string> Text)>();
-        foreach (var c in JiebaSegmenter.Codepoints(word))
+        foreach (var c in ChineseText.Codepoints(word))
         {
-            bool han = MandarinG2P.IsHan(c);
+            bool han = PypinyinReader.IsHan(c);
             if (runs.Count == 0 || runs[runs.Count - 1].Han != han) runs.Add((han, new List<string>()));
             runs[runs.Count - 1].Text.Add(c);
         }
@@ -144,11 +144,11 @@ internal sealed class MeloChineseFrontEnd
 
     private MeloChineseFrontEnd()
     {
-        var data = JObject.Parse(string.Join("\n", JiebaSegmenter.ReadLines("melo_chinese.json.gz")));
+        var data = JObject.Parse(string.Join("\n", ChineseText.ReadLines("melo_chinese.json.gz")));
         foreach (var entry in (JObject)data["opencpop"]!) _opencpop[entry.Key] = (string)entry.Value!;
         foreach (var w in (JArray)data["must_neural_tone_words"]!) _mustNeutral.Add((string)w!);
         foreach (var w in (JArray)data["must_not_neural_tone_words"]!) _mustNotNeutral.Add((string)w!);
-        foreach (var c in JiebaSegmenter.Codepoints((string)data["numeric"]!)) _numeric.Add(c);
+        foreach (var c in ChineseText.Codepoints((string)data["numeric"]!)) _numeric.Add(c);
     }
 
     private bool IsNumeric(string c) => _numeric.Contains(c);
@@ -201,7 +201,7 @@ internal sealed class MeloChineseFrontEnd
         var perCharacter = new List<int>();
         foreach (var raw in sentences) AppendSegment(raw, phones, tones, perCharacter);
         // The reference asserts both ("Sometimes it will crash"): a character pypinyin or jieba drops breaks the alignment.
-        if (perCharacter.Sum() != phones.Count || perCharacter.Count != JiebaSegmenter.Codepoints(text).Count)
+        if (perCharacter.Sum() != phones.Count || perCharacter.Count != ChineseText.Codepoints(text).Count)
             throw new ArgumentException($"The phones of '{text}' do not align one reading per character.", nameof(text));
         phones.Insert(0, "_");
         phones.Add("_");
@@ -217,7 +217,7 @@ internal sealed class MeloChineseFrontEnd
     {
         var initials = new List<string>();
         var finals = new List<string>();
-        foreach (var (word, pos) in PreMerge(JiebaSegmenter.Default.PosCut(Latin.Replace(raw, ""))))
+        foreach (var (word, pos) in PreMerge(Jieba.Default.PosCut(Latin.Replace(raw, ""))))
         {
             if (pos == "eng") continue;
             var readings = Pypinyin050.Default.LazyPinyin(word);
@@ -274,7 +274,7 @@ internal sealed class MeloChineseFrontEnd
 
     // ------------------------------------------------------------------ tone sandhi (ToneSandhi)
 
-    private static List<string> Chars(string word) => JiebaSegmenter.Codepoints(word);
+    private static List<string> Chars(string word) => ChineseText.Codepoints(word);
     private static string WithTone(string final, char tone) => final.Substring(0, final.Length - 1) + tone;
 
     private List<(string Word, string Pos)> PreMerge(List<(string Word, string Pos)> seg)
@@ -454,7 +454,7 @@ internal sealed class MeloChineseFrontEnd
     private List<string> SplitWord(string word)
     {
         // jieba.cut_for_search, sorted by length (stably), the shortest taken as one part.
-        var parts = JiebaSegmenter.Default.CutForSearch(word).Select((w, i) => (w, i)).OrderBy(p => Chars(p.w).Count).ThenBy(p => p.i).Select(p => p.w).ToList();
+        var parts = Jieba.Default.CutForSearch(word).Select((w, i) => (w, i)).OrderBy(p => Chars(p.w).Count).ThenBy(p => p.i).Select(p => p.w).ToList();
         string first = parts[0];
         int at = word.IndexOf(first, StringComparison.Ordinal);
         if (at == 0) return new List<string> { first, word.Substring(first.Length) };

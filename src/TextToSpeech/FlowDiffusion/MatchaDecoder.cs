@@ -322,6 +322,10 @@ internal enum MatchaFeedForward
 /// <remarks>CosyVoice's <c>ConditionalDecoder</c> is the same network with several Transformer blocks per level, a GELU
 /// feed-forward and a proper key mask (<c>mask_to_bias</c>: −1e10 on padding); <see cref="MatchaDecoder{T}(IEngine, int, int, int[], double, int, int, int, int, MatchaFeedForward, bool)"/>
 /// selects those.</remarks>
+/// <remarks>CosyVoice 2's <c>CausalConditionalDecoder</c> (<c>causal</c>) makes every 3-tap convolution of the blocks,
+/// the last down and up levels and the final block causal (left-padded by 2), normalizes the blocks with LayerNorm over
+/// channels instead of GroupNorm, and in streaming attends within chunks (<see cref="EstimateChannels"/>'s
+/// <c>chunk</c>) and every earlier chunk.</remarks>
 internal sealed class MatchaDecoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -337,20 +341,33 @@ internal sealed class MatchaDecoder<T>
     private readonly bool _biasMask;
     private readonly Block _finalBlock;
     private readonly KaimingConv1DLayer<T> _finalProjection;
+    private readonly bool _causal;
+    // The causal convolutions (left-padded by kernel − 1 before running).
+    private readonly HashSet<KaimingConv1DLayer<T>> _causalConvs = new();
 
     /// <param name="blocksPerLevel">Transformer blocks after each ResNet block (Matcha: 1).</param>
     /// <param name="feedForward">The Transformer blocks' feed-forward activation (Matcha: SnakeBeta).</param>
     /// <param name="biasMask">Mask padded keys with −1e10 (CosyVoice's <c>mask_to_bias</c>) instead of adding the 0/1
     /// frame mask to the logits as Matcha does.</param>
+    /// <param name="causal">CosyVoice 2's <c>CausalConditionalDecoder</c> (needs <paramref name="biasMask"/>).</param>
     public MatchaDecoder(IEngine engine, int inChannels, int outChannels, int[] channels, double dropout, int headDim,
         int heads, int midBlocks, int blocksPerLevel = 1, MatchaFeedForward feedForward = MatchaFeedForward.SnakeBeta,
-        bool biasMask = false)
+        bool biasMask = false, bool causal = false)
     {
         if (blocksPerLevel < 1) throw new ArgumentOutOfRangeException(nameof(blocksPerLevel), "Each level has at least one Transformer block.");
+        if (causal && !biasMask) throw new ArgumentException("The causal decoder masks with mask_to_bias.", nameof(causal));
         _engine = engine;
         _inChannels = inChannels;
         _feedForward = feedForward;
         _biasMask = biasMask;
+        _causal = causal;
+        KaimingConv1DLayer<T> LastConv(int dim)
+        {
+            if (!causal) return Add(new KaimingConv1DLayer<T>(dim, dim, 3, 1, 1, false));
+            var conv = Add(new KaimingConv1DLayer<T>(dim, dim, 3, 1, 0, false));
+            _causalConvs.Add(conv);
+            return conv;
+        }
         List<TransformerBlock> Transformers(int dim) =>
             Enumerable.Range(0, blocksPerLevel).Select(_ => new TransformerBlock(this, dim, heads, headDim, dropout)).ToList();
         int timeDim = channels[0] * 4;
@@ -363,7 +380,7 @@ internal sealed class MatchaDecoder<T>
             output = channels[i];
             bool last = i == channels.Length - 1;
             _downs.Add((new ResnetBlock(this, input, output, timeDim), Transformers(output),
-                Add(new KaimingConv1DLayer<T>(output, output, 3, last ? 1 : 2, 1, false))));
+                last ? LastConv(output) : Add(new KaimingConv1DLayer<T>(output, output, 3, 2, 1, false))));
         }
         for (int i = 0; i < midBlocks; i++)
             _mids.Add((new ResnetBlock(this, channels[^1], output, timeDim), Transformers(output)));
@@ -374,7 +391,7 @@ internal sealed class MatchaDecoder<T>
             bool last = i == up.Length - 2;
             _ups.Add((new ResnetBlock(this, 2 * up[i], up[i + 1], timeDim), Transformers(up[i + 1]),
                 last
-                    ? Add(new KaimingConv1DLayer<T>(up[i + 1], up[i + 1], 3, 1, 1, false))
+                    ? LastConv(up[i + 1])
                     : Add(new KaimingConv1DLayer<T>(up[i + 1], up[i + 1], 4, 2, 1, true))));
         }
         _finalBlock = new Block(this, up[^1], up[^1]);
@@ -402,8 +419,10 @@ internal sealed class MatchaDecoder<T>
 
     /// <summary>The vector field <c>[frames, out]</c> of an input already stacked on channels, <c>[1, in, frames]</c>
     /// (CosyVoice stacks x, μ, the speaker embedding repeated over frames, and the prompt condition).</summary>
-    public Tensor<T> EstimateChannels(Tensor<T> h, double t, Tensor<T> mask)
+    /// <param name="chunk">Streaming attention chunk (CosyVoice 2's <c>static_chunk_size</c>); 0 attends everywhere.</param>
+    public Tensor<T> EstimateChannels(Tensor<T> h, double t, Tensor<T> mask, int chunk = 0)
     {
+        if (chunk > 0 && !_biasMask) throw new ArgumentException("Chunked attention needs mask_to_bias masking.", nameof(chunk));
         int frames = h.Shape[2];
         if (h.Shape[1] != _inChannels) throw new ArgumentException($"Expected {_inChannels} input channels.", nameof(h));
         var time = _time2.Forward(_engine.Swish(_time1.Forward(TimeEmbedding(t))));
@@ -414,9 +433,9 @@ internal sealed class MatchaDecoder<T>
         {
             var m = masks[^1];
             h = resnet.Forward(h, m, time);
-            foreach (var transformer in transformers) h = transformer.Forward(h, m);
+            foreach (var transformer in transformers) h = transformer.Forward(h, m, chunk);
             hiddens.Add(h);
-            h = down.Forward(Mask(h, m));
+            h = Convolve(down, Mask(h, m));
             masks.Add(Every2nd(m));
         }
         masks.RemoveAt(masks.Count - 1);
@@ -424,7 +443,7 @@ internal sealed class MatchaDecoder<T>
         foreach (var (resnet, transformers) in _mids)
         {
             h = resnet.Forward(h, midMask, time);
-            foreach (var transformer in transformers) h = transformer.Forward(h, midMask);
+            foreach (var transformer in transformers) h = transformer.Forward(h, midMask, chunk);
         }
         var upMask = mask;
         foreach (var (resnet, transformers, up) in _ups)
@@ -437,8 +456,8 @@ internal sealed class MatchaDecoder<T>
             // upsamples one frame long. Matcha's frames are a multiple of 4, where this changes nothing.
             if (h.Shape[2] != skip.Shape[2]) h = _engine.TensorSlice(h, new[] { 0, 0, 0 }, new[] { h.Shape[0], h.Shape[1], skip.Shape[2] });
             h = resnet.Forward(_engine.TensorConcatenate(new[] { h, skip }, 1), upMask, time);
-            foreach (var transformer in transformers) h = transformer.Forward(h, upMask);
-            h = up.Forward(Mask(h, upMask));
+            foreach (var transformer in transformers) h = transformer.Forward(h, upMask, chunk);
+            h = Convolve(up, Mask(h, upMask));
         }
         h = _finalBlock.Forward(h, upMask);
         var output = Mask(_finalProjection.Forward(Mask(h, upMask)), mask);           // [1, mel, frames]
@@ -500,6 +519,13 @@ internal sealed class MatchaDecoder<T>
         return embedding;
     }
 
+    // A convolution, left-padded by kernel − 1 first when it is causal (CausalConv1d).
+    private Tensor<T> Convolve(KaimingConv1DLayer<T> conv, Tensor<T> x) =>
+        _causalConvs.Contains(conv) ? conv.Forward(PadLeft(x, 2)) : conv.Forward(x);
+
+    private Tensor<T> PadLeft(Tensor<T> x, int count) =>
+        _engine.TensorConcatenate(new[] { new Tensor<T>(new[] { x.Shape[0], x.Shape[1], count }), x }, 2);
+
     // mask [frames] broadcast over [1, channels, frames].
     private Tensor<T> Mask(Tensor<T> x, Tensor<T> mask)
         => _engine.TensorMultiply(x, _engine.TensorTile(_engine.Reshape(mask, new[] { 1, 1, mask.Length }), new[] { x.Shape[0], x.Shape[1], 1 }));
@@ -512,34 +538,54 @@ internal sealed class MatchaDecoder<T>
         return result;
     }
 
-    /// <summary>Conv(3) → GroupNorm(8) → Mish, with the input and output masked.</summary>
+    /// <summary>Conv(3) → GroupNorm(8) → Mish, with the input and output masked; causal (<c>CausalBlock1D</c>), a
+    /// left-padded convolution and LayerNorm over the channels.</summary>
     private sealed class Block
     {
         private readonly MatchaDecoder<T> _owner;
         private readonly KaimingConv1DLayer<T> _conv;
-        private readonly GroupNormalizationLayer<T> _norm;
+        private readonly GroupNormalizationLayer<T>? _groupNorm;
+        private readonly LayerNormalizationLayer<T>? _layerNorm;
 
         public Block(MatchaDecoder<T> owner, int dim, int dimOut)
         {
             _owner = owner;
-            _conv = owner.Add(new KaimingConv1DLayer<T>(dim, dimOut, 3, 1, 1, false));
-            _norm = owner.Add(new GroupNormalizationLayer<T>(8, dimOut, 1e-5));
+            _conv = owner.Add(new KaimingConv1DLayer<T>(dim, dimOut, 3, 1, owner._causal ? 0 : 1, false));
+            if (owner._causal)
+            {
+                owner._causalConvs.Add(_conv);
+                _layerNorm = owner.Add(new LayerNormalizationLayer<T>(dimOut, 1e-5));
+            }
+            else
+            {
+                _groupNorm = owner.Add(new GroupNormalizationLayer<T>(8, dimOut, 1e-5));
+            }
         }
 
         public Tensor<T> Forward(Tensor<T> x, Tensor<T> mask)
         {
             var engine = _owner._engine;
-            var h = _conv.Forward(_owner.Mask(x, mask));
+            var h = _owner.Convolve(_conv, _owner.Mask(x, mask));
             int channels = h.Shape[1], frames = h.Shape[2];
-            h = engine.Reshape(_norm.Forward(engine.Reshape(h, new[] { 1, channels, 1, frames })), new[] { 1, channels, frames });
+            h = _layerNorm is not null
+                ? engine.Reshape(engine.TensorTranspose(_layerNorm.Forward(engine.TensorTranspose(engine.Reshape(h, new[] { channels, frames })))),
+                    new[] { 1, channels, frames })
+                : engine.Reshape((_groupNorm ?? throw new InvalidOperationException("A block has a norm.")).Forward(
+                    engine.Reshape(h, new[] { 1, channels, 1, frames })), new[] { 1, channels, frames });
             return _owner.Mask(engine.Mish(h), mask);
         }
 
-        /// <summary>Loads <c>{p}block.0</c> (the convolution) and <c>{p}block.1</c> (the GroupNorm).</summary>
+        /// <summary>Loads <c>{p}block.0</c> (the convolution) and <c>{p}block.1</c> (the GroupNorm), or the causal
+        /// block's <c>{p}block.2</c> (the LayerNorm, after a transpose).</summary>
         public void LoadTorch(Func<string, int[], double[]> read, string p)
         {
             _conv.LoadTorch(read(p + "block.0.weight", Array.Empty<int>()), read(p + "block.0.bias", Array.Empty<int>()));
-            _norm.LoadAffine(read(p + "block.1.weight", Array.Empty<int>()), read(p + "block.1.bias", Array.Empty<int>()));
+            if (_layerNorm is not null)
+                CodecBased.TorchParameters.LayerNorm(_owner._engine, _layerNorm, read(p + "block.2.weight", Array.Empty<int>()),
+                    read(p + "block.2.bias", Array.Empty<int>()));
+            else
+                (_groupNorm ?? throw new InvalidOperationException("A block has a norm.")).LoadAffine(
+                    read(p + "block.1.weight", Array.Empty<int>()), read(p + "block.1.bias", Array.Empty<int>()));
         }
     }
 
@@ -622,7 +668,7 @@ internal sealed class MatchaDecoder<T>
         }
 
         // x [1, dim, frames] channels-first; returns the same layout.
-        public Tensor<T> Forward(Tensor<T> x, Tensor<T> mask)
+        public Tensor<T> Forward(Tensor<T> x, Tensor<T> mask, int chunk = 0)
         {
             var engine = _owner._engine;
             int frames = x.Shape[2];
@@ -637,6 +683,18 @@ internal sealed class MatchaDecoder<T>
                 ? engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorNegate(mask), NumOps.One), NumOps.FromDouble(-1e10))
                 : mask;
             var additiveMask = engine.TensorTile(engine.Reshape(keyMask, new[] { 1, frames }), new[] { frames, 1 });
+            if (chunk > 0)
+            {
+                // add_optional_chunk_mask: key j is visible to query i when it is a real frame and j < (i / chunk + 1)·chunk;
+                // mask_to_bias then puts −1e10 on every hidden key.
+                additiveMask = new Tensor<T>(new[] { frames, frames });
+                for (int i = 0; i < frames; i++)
+                {
+                    int end = Math.Min(frames, (i / chunk + 1) * chunk);
+                    for (int j = 0; j < frames; j++)
+                        if (j >= end || NumOps.ToDouble(mask[j]) == 0) additiveMask[i, j] = NumOps.FromDouble(-1e10);
+                }
+            }
             var heads = new Tensor<T>[_heads];
             for (int i = 0; i < _heads; i++)
             {

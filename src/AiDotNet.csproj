@@ -375,6 +375,11 @@
 	<!-- English G2P data, built by tools/reference-data/g2p_resources.py: the CMU Pronouncing Dictionary
 	     (BSD-2-Clause, see NOTICE) and the letter-to-sound rules of NRL Report 7948 (a US Government work). -->
 	<ItemGroup>
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_pinyin_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_pinyin_chars.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_pinyin_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_pinyin_phrases.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_lexicon.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_lexicon.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_tokens.txt.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_tokens.txt.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_speakers.txt.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_speakers.txt.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\cmudict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.cmudict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\melo_cmudict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.melo_cmudict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pen_cmudict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pen_cmudict.tsv.gz" />
@@ -389,7 +394,10 @@
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-chinese-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-multilingual-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-multilingual-uncased-vocab.txt.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\simbert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\whisper-multilingual.tiktoken.gz" LogicalName="AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\qwen2-vocab.json.gz" LogicalName="AiDotNet.Tokenization.qwen2-vocab.json.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\qwen2-merges.txt.gz" LogicalName="AiDotNet.Tokenization.qwen2-merges.txt.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\nrl_rules.tsv" LogicalName="AiDotNet.TextToSpeech.FrontEnd.nrl_rules.tsv" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_dict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_dict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_hmm.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_hmm.json.gz" />

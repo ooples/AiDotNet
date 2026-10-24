@@ -205,24 +205,49 @@ internal sealed class G2pEn
         return prons;
     }
 
-    // nltk.word_tokenize for the strings MeloTTS passes: letters, or one punctuation mark; MeloTTS's BERT tokens never
-    // hold spaces, so splitting at spaces and splitting off a final period or comma (the Treebank tokenizer's rules for a
-    // single token) covers them.
+    // nltk.word_tokenize for one word at a time (MeloTTS's BERT tokens, EmotiVoice's words): no spaces inside a word, so
+    // splitting at spaces and splitting off a final period, comma, question or exclamation mark (the Treebank tokenizer's
+    // rules for a single token) covers the punctuation; then NLTKWordTokenizer's quote and contraction rules: a leading
+    // apostrophe before a word ("'tis" excepted), a final 's, 'm, 'd, ', 'll, 're, 've or n't, and MacIntyre's
+    // contractions (can|not, gon|na, ...).
+    private static readonly Regex StartingQuote = new(@"(?<!\w)(')(?!(?:re|ve|ll|m|t|s|d|n)\b)(?=\w)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex[] EndingQuotes =
+    {
+        new(@"([^' ])('[sS]|'[mM]|'[dD]|') ", RegexOptions.CultureInvariant),
+        new(@"([^' ])('ll|'LL|'re|'RE|'ve|'VE|n't|N'T) ", RegexOptions.CultureInvariant),
+    };
+    private static readonly Regex[] Contractions =
+    {
+        new(@"\b(can)(not)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@"\b(d)('ye)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@"\b(gim)(me)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@"\b(gon)(na)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@"\b(got)(ta)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@"\b(lem)(me)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@"\b(more)('n)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@"\b(wan)(na)(?=\s)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@" ('t)(is)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+        new(@" ('t)(was)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+    };
+
     private static List<string> NltkWordTokens(string text)
     {
         var tokens = new List<string>();
-        foreach (var piece in text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var raw in text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
         {
+            string piece = StartingQuote.Replace(raw, "$1 ");
+            string? mark = null;
             if (piece.Length > 1 && (piece.EndsWith(".", StringComparison.Ordinal) || piece.EndsWith(",", StringComparison.Ordinal)
                 || piece.EndsWith("?", StringComparison.Ordinal) || piece.EndsWith("!", StringComparison.Ordinal)))
             {
-                tokens.Add(piece.Substring(0, piece.Length - 1));
-                tokens.Add(piece.Substring(piece.Length - 1));
+                mark = piece.Substring(piece.Length - 1);
+                piece = piece.Substring(0, piece.Length - 1);
             }
-            else
-            {
-                tokens.Add(piece);
-            }
+            piece = " " + piece + " ";
+            foreach (var rule in EndingQuotes) piece = rule.Replace(piece, "$1 $2 ");
+            foreach (var rule in Contractions) piece = rule.Replace(piece, " $1 $2 ");
+            tokens.AddRange(piece.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
+            if (mark is not null) tokens.Add(mark);
         }
         return tokens;
     }
