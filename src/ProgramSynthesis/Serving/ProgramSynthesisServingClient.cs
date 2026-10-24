@@ -10,7 +10,7 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.ProgramSynthesis.Serving;
 
-public sealed class ProgramSynthesisServingClient : IProgramSynthesisServingClient
+public sealed class ProgramSynthesisServingClient : IProgramSynthesisServingClient, IDisposable
 {
     private static readonly JsonSerializerSettings DefaultJsonSettings = new()
     {
@@ -19,6 +19,11 @@ public sealed class ProgramSynthesisServingClient : IProgramSynthesisServingClie
 
     private readonly ProgramSynthesisServingClientOptions _options;
     private readonly HttpClient _httpClient;
+
+    // Disposed only when this client created it; one passed in the options belongs to the caller.
+    private readonly bool _ownsHttpClient;
+
+    private bool _disposed;
 
     public ProgramSynthesisServingClient(ProgramSynthesisServingClientOptions options)
     {
@@ -29,6 +34,7 @@ public sealed class ProgramSynthesisServingClient : IProgramSynthesisServingClie
             throw new ArgumentException("BaseAddress is required.", nameof(options));
         }
 
+        _ownsHttpClient = _options.HttpClient is null;
         _httpClient = _options.HttpClient ?? new HttpClient();
         _httpClient.Timeout = TimeSpan.FromMilliseconds(_options.TimeoutMs > 0 ? _options.TimeoutMs : 100_000);
 
@@ -174,5 +180,15 @@ public sealed class ProgramSynthesisServingClient : IProgramSynthesisServingClie
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.BearerToken);
         }
+    }
+
+    /// <summary>Releases the HTTP client when this client created it.</summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        if (_ownsHttpClient)
+            _httpClient.Dispose();
+        _disposed = true;
     }
 }

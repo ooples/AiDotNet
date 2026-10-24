@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.Helpers;
 
@@ -103,7 +104,7 @@ public class CheXpertDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
                     continue;
                 }
 
-                if (double.TryParse(parts[csvIdx].Trim(), out double val))
+                if (double.TryParse(parts[csvIdx].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
                 {
                     if (val < 0) // Uncertain
                     {

@@ -430,9 +430,11 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
         if (x == null) throw new ArgumentNullException(nameof(x));
 
         // Use deterministic seed based on input for reproducible predictions
+        // Mixed by hand, not with HashCode.Combine: its seed is randomized per process, so the "reproducible"
+        // prediction changed on every run (#2361). double.GetHashCode is a function of the bits alone.
         int seed = 0;
         for (int i = 0; i < x.Length; i++)
-            seed = HashCode.Combine(seed, _numOps.ToDouble(x[i]).GetHashCode());
+            seed = unchecked(seed * 31 + _numOps.ToDouble(x[i]).GetHashCode());
         var random = RandomHelper.CreateSeededRandom(seed);
 
         // Create input matrix from single vector

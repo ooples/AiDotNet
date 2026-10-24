@@ -161,7 +161,8 @@ public class MultiQueryExpansion : QueryExpansionBase
             $"describe {query}"
         };
 
-        return phrases[query.GetHashCode() % phrases.Length];
+        // A stable, non-negative index: a negative GetHashCode() indexed out of range, and it changed per process (#2361).
+        return phrases[AiDotNet.Helpers.StableHash.Index(query, phrases.Length)];
     }
 
     private string SimplifyQuery(string query)
@@ -193,7 +194,7 @@ public class MultiQueryExpansion : QueryExpansionBase
             if (synonymMap.ContainsKey(lowerWord))
             {
                 var synonyms = synonymMap[lowerWord];
-                words[i] = synonyms[query.GetHashCode() % synonyms.Length];
+                words[i] = synonyms[AiDotNet.Helpers.StableHash.Index(query, synonyms.Length)];
                 break;
             }
         }

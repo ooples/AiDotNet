@@ -225,7 +225,8 @@ public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguag
     private Tensor<T> EncodePrompt(string prompt)
     {
         var emb = new Tensor<T>([_options.LLMHiddenDim]);
-        int hash = prompt.GetHashCode();
+        // A stable hash: string.GetHashCode() changes per process, so the same prompt would encode differently each run (#2361).
+        int hash = AiDotNet.Helpers.StableHash.Seed(prompt);
         for (int i = 0; i < _options.LLMHiddenDim; i++)
             emb[i] = NumOps.FromDouble(Math.Sin((hash + i) * 0.1) * 0.5);
         return emb;

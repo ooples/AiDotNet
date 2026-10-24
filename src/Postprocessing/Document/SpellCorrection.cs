@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -172,7 +173,7 @@ public class SpellCorrection<T> : PostprocessorBase<T, string, string>, IDisposa
             return true;
 
         // Numbers are always correct
-        if (double.TryParse(word, out _))
+        if (double.TryParse(word, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out _))
             return true;
 
         // Check dictionaries
