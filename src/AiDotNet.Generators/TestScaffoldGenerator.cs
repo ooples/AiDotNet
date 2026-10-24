@@ -10693,17 +10693,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
-                // CosyVoice production keeps the 1024-wide, 14-layer supervised-semantic-token
-                // LM and 4096-way codec head. Exercise the complete text encoder -> codec LM ->
-                // acoustic-token head through its public options at clone/training smoke scale.
+                // CosyVoice-300M is a 1,024-wide 14-layer LM over a 6-block Conformer text encoder, a 6-block Conformer
+                // flow with a 12-mid-block U-Net estimator, HiFT, the S3 tokenizer and CAM++. Keep every component at
+                // 16 wide with one block each (the D-TDNN keeps its 52 layers, narrow) and 16 speech tokens; the text
+                // vocabulary stays Whisper's 51,866. One warmup step: the recipe's 2,500 would hold a short probe's
+                // learning rate near zero.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.CosyVoiceOptions { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, NumHeads = 2, " +
-                    "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.CosyVoiceOptions { TextEncoderDim = 16, LLMDim = 16, " +
+                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, LmFeedForwardDim = 32, CodebookSize = 16, " +
+                    "FlowDim = 16, FlowHeads = 2, FlowFeedForwardDim = 32, FlowEncoderLayers = 1, DecoderChannels = new[] { 16 }, " +
+                    "DecoderHeads = 2, DecoderHeadDim = 8, DecoderBlocks = 1, DecoderMidBlocks = 1, FlowTimesteps = 2, " +
+                    "HiftBaseChannels = 16, HiftHarmonics = 2, SpeechTokenizerState = 16, SpeechTokenizerHeads = 2, " +
+                    "SpeechTokenizerLayers = 1, SpeakerEncoderChannels = 8, SpeakerEncoderGrowthRate = 4, " +
+                    "SpeakerEmbeddingDim = 8, MelChannels = 8, DropoutRate = 0.0, WarmupSteps = 1 })";
             }
             else if (model.ClassName == "CosyVoice2" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -15962,7 +15967,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS" or "ParlerTTS")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS" or "ParlerTTS" or "CosyVoice")
                 {
                     // Pheme, VALL-E and SPEAR-TTS read phoneme ids (SoundStorm text bytes, Parler-TTS T5 token ids) and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).
@@ -15988,6 +15993,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                    // CosyVoice trains at its recipe's Adam 1e-3 (no learning-rate option to raise, unlike ChatTTS): one step
+                    // lowers the tiny LM's loss by 0.8%, under the probe's 1% bar, so the probe takes six.
+                    if (model.ClassName == "CosyVoice")
+                        sb.AppendLine("    protected override int MemorizationTaskIterations => 6;");
                 }
                 else if (model.ClassName == "StyleTTS")
                 {
@@ -21527,7 +21536,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return className is "GPTSoVITS" or "CSM" or "Bark" or "BarkModel" or "OrpheusTTS"
             or "FireRedTTS" or "FishSpeech" or "FishSpeechV15"
             or "UniAudio" or "Zonos" or "XTTSv2" or "XTTSv2Clone"
-            or "CosyVoice" or "CosyVoice2" or "CosyVoice3"
+            or "CosyVoice2" or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "IndexTTS" or "IndexTTS2" or "OuteTTS"
             or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
@@ -21562,7 +21571,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Dia" => 32,
             "Bark" or "BarkModel" => 32,
             "OrpheusTTS" => 80,
-            "CosyVoice" => 16,
             "CosyVoice2" => 16,
             "CosyVoice3" => 16,
             "CosyVoiceClone" => 16,

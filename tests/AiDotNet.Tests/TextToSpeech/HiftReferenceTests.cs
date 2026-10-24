@@ -21,9 +21,8 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class HiftReferenceTests
 {
-    private static JObject Reference()
+    private static JObject Reference(string fileName)
     {
-        const string fileName = "hift_reference.json";
         string output = Path.Combine(AppContext.BaseDirectory, "TextToSpeech", "ReferenceData", fileName);
         if (!File.Exists(output))
         {
@@ -37,9 +36,9 @@ public class HiftReferenceTests
         return JObject.Parse(File.ReadAllText(output));
     }
 
-    private static (HiftGenerator<double> Model, List<LayerBase<double>> Layers, JObject Fixture) Load()
+    private static (HiftGenerator<double> Model, List<LayerBase<double>> Layers, JObject Fixture) Load(string fileName)
     {
-        var f = Reference();
+        var f = Reference(fileName);
         var c = f["config"]!;
         int[] Ints(JToken t) => t.Select(v => (int)v).ToArray();
         var configuration = new HiftConfiguration(
@@ -94,11 +93,14 @@ public class HiftReferenceTests
         return (new Tensor<double>(new[] { 1, c.InChannels, frames }, new Vector<double>(mel)), harmonics);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task F0SourceAndWaveform_MatchCosyVoice()
+    // CosyVoice 1's 22.05 kHz generator (two stages) and CosyVoice 2's 24 kHz one (three stages, SineGen2).
+    [Theory(Timeout = 120000)]
+    [InlineData("hift_reference.json")]
+    [InlineData("hift24_reference.json")]
+    public async Task F0SourceAndWaveform_MatchCosyVoice(string fixture)
     {
         await Task.Yield();
-        var (model, _, f) = Load();
+        var (model, _, f) = Load(fixture);
         var (mel, harmonics) = Inputs(f, model.Configuration);
         AssertClose(f["f0"]!, model.PredictF0(mel), "f0");
         var source = model.Merge(harmonics);
@@ -106,11 +108,13 @@ public class HiftReferenceTests
         AssertClose(f["audio"]!, model.Decode(mel, source), "audio");
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task OneSgdStep_MatchesCosyVoice()
+    [Theory(Timeout = 120000)]
+    [InlineData("hift_reference.json")]
+    [InlineData("hift24_reference.json")]
+    public async Task OneSgdStep_MatchesCosyVoice(string fixture)
     {
         await Task.Yield();
-        var (model, layers, f) = Load();
+        var (model, layers, f) = Load(fixture);
         var (mel, harmonics) = Inputs(f, model.Configuration);
         Tensor<double> source;
         using (new NoGradScope<double>()) source = model.Merge(harmonics);
@@ -131,5 +135,25 @@ public class HiftReferenceTests
             AiDotNetEngine.Current.InvalidatePersistentTensor(p);
         }
         AssertClose(f["audio_after_sgd"]!, model.Decode(mel, source), "audio after the step");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SineGen2_MatchesCosyVoice()
+    {
+        await Task.Yield();
+        var (model, _, f) = Load("hift24_reference.json");
+        var contour = f["f0_contour"]!.Select(v => (double)v).ToArray();
+        var f0 = new Tensor<double>(new[] { contour.Length }, new Vector<double>(contour));
+        int harmonics = model.Configuration.Harmonics + 1, samples = contour.Length * model.Configuration.UpsampleScale;
+        var phases = f["phases"]!.Select(v => (double)v).ToArray();
+        var raw = f["noise"]!.Select(v => (double)v).ToArray();                                         // [1, samples, h]
+        var noise = new double[harmonics, samples];
+        for (int s = 0; s < samples; s++) for (int k = 0; k < harmonics; k++) noise[k, s] = raw[s * harmonics + k];
+        var sines = model.HarmonicsByFrames(f0, phases, noise);                                         // [1, h, samples]
+        var expected = f["sines"]!.Select(v => (double)v).ToArray();                                   // [1, samples, h]
+        for (int s = 0; s < samples; s++)
+            for (int k = 0; k < harmonics; k++)
+                Assert.True(Math.Abs(expected[s * harmonics + k] - sines[0, k, s]) <= 1e-9,
+                    $"sample {s} harmonic {k}: reference {expected[s * harmonics + k]:R}, port {sines[0, k, s]:R}.");
     }
 }
