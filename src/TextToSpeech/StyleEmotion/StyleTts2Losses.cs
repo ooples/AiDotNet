@@ -163,7 +163,8 @@ internal sealed class StyleTts2Losses<T>
 
     /// <summary>The generator's adversarial objective against the wave discriminators (the reference's
     /// <c>GeneratorLoss</c>): least-squares scores, feature matching ×2 and the relativistic loss.</summary>
-    public Tensor<T> Generator(List<(Tensor<T> Score, List<Tensor<T>> Features)> onReal, List<(Tensor<T> Score, List<Tensor<T>> Features)> onGenerated)
+    public Tensor<T> Generator(List<(Tensor<T> Score, List<Tensor<T>> Features)> onReal, List<(Tensor<T> Score, List<Tensor<T>> Features)> onGenerated,
+        bool relativistic = true)
     {
         var adversarial = AddAll(onGenerated.Select(o => OneMinusSquared(o.Score)));
         var features = new List<Tensor<T>>();
@@ -172,17 +173,19 @@ internal sealed class StyleTts2Losses<T>
                 features.Add(Mean(_engine.TensorAbs(_engine.TensorSubtract(onReal[d].Features[l], onGenerated[d].Features[l]))));
         var matching = _engine.TensorMultiplyScalar(AddAll(features), NumOps.FromDouble(2.0));
         // generator_TPRLS_loss swaps the roles: its "real" is the generated scores.
-        var tpr = Tpr(onGenerated.Select(o => o.Score).ToList(), onReal.Select(o => o.Score).ToList());
-        return _engine.TensorAdd(_engine.TensorAdd(adversarial, matching), tpr);
+        var total = _engine.TensorAdd(adversarial, matching);
+        return relativistic ? _engine.TensorAdd(total, Tpr(onGenerated.Select(o => o.Score).ToList(), onReal.Select(o => o.Score).ToList())) : total;
     }
 
     /// <summary>The wave discriminators' objective (the reference's <c>DiscriminatorLoss</c>).</summary>
-    public Tensor<T> Discriminator(List<(Tensor<T> Score, List<Tensor<T>> Features)> onReal, List<(Tensor<T> Score, List<Tensor<T>> Features)> onGenerated)
+    public Tensor<T> Discriminator(List<(Tensor<T> Score, List<Tensor<T>> Features)> onReal, List<(Tensor<T> Score, List<Tensor<T>> Features)> onGenerated,
+        bool relativistic = true)
     {
         var terms = new List<Tensor<T>>();
         for (int d = 0; d < onReal.Count; d++)
             terms.Add(_engine.TensorAdd(OneMinusSquared(onReal[d].Score), Mean(_engine.TensorMultiply(onGenerated[d].Score, onGenerated[d].Score))));
-        return _engine.TensorAdd(AddAll(terms), Tpr(onReal.Select(o => o.Score).ToList(), onGenerated.Select(o => o.Score).ToList()));
+        var total = AddAll(terms);
+        return relativistic ? _engine.TensorAdd(total, Tpr(onReal.Select(o => o.Score).ToList(), onGenerated.Select(o => o.Score).ToList())) : total;
     }
 
     /// <summary>WavLM's hidden states of a 24 kHz waveform (resampled to 16 kHz), each <c>[frames, hidden]</c>.</summary>

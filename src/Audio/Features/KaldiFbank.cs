@@ -152,6 +152,7 @@ internal sealed class KaldiFbank<T>
                 WindowType.Hamming => 0.54 - 0.46 * Math.Cos(a * i),
                 WindowType.Blackman => 0.42 - 0.5 * Math.Cos(a * i) + 0.08 * Math.Cos(2 * a * i),
                 WindowType.Rectangular => 1.0,
+                WindowType.Povey => Math.Pow(0.5 - 0.5 * Math.Cos(a * i), 0.85),
                 _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported window."),
             };
         }
