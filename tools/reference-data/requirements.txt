@@ -26,3 +26,4 @@ openai-whisper==20250625
 tiktoken==0.9.0
 # CosyVoice's text front end (cosyvoice_frontend_reference.py): CosyVoice's pin.
 inflect==7.3.1
+# Qwen2.5 tokenizer files for qwen2_tokenizer_reference.py: huggingface.co/Qwen/Qwen2.5-0.5B (tokenizer.json, vocab.json, merges.txt).
