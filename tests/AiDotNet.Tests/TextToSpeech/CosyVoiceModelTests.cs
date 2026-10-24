@@ -118,6 +118,74 @@ public class CosyVoiceModelTests
             model.GenerateSpeechTokens(text, new Random(5)));
     }
 
+    private static CosyVoice<double> SmallWithDiscriminators() => new(new NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+        new CosyVoiceOptions
+        {
+            TextEncoderDim = 16, LLMDim = 16, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, LmFeedForwardDim = 32,
+            CodebookSize = 16, FlowDim = 16, FlowHeads = 2, FlowFeedForwardDim = 32, FlowEncoderLayers = 1,
+            DecoderChannels = new[] { 16 }, DecoderHeads = 2, DecoderHeadDim = 8, DecoderBlocks = 1, DecoderMidBlocks = 1,
+            FlowTimesteps = 2, HiftBaseChannels = 16, HiftHarmonics = 2, SpeechTokenizerState = 16, SpeechTokenizerHeads = 2,
+            SpeechTokenizerLayers = 1, SpeakerEncoderChannels = 8, SpeakerEncoderGrowthRate = 4, SpeakerEmbeddingDim = 8,
+            DropoutRate = 0.0, WarmupSteps = 1, IncludeDiscriminators = true,
+        });
+
+    [Fact(Timeout = 300000)]
+    public async Task VocoderTargets_AreCosyVoicesComputeF0()
+    {
+        await Task.Yield();
+        using var model = SmallWithDiscriminators();
+        var f = WorldHarvestFixture();
+        var signal = f["signals"]!["22050"]!.Select(v => (double)v).ToArray();
+        var audio = new Tensor<double>(new[] { signal.Length }, new Vector<double>(signal));
+        // Shorter than the segment, so truncate zero-pads it: no crop is drawn.
+        var (real, mel, pitch) = model.VocoderTargets(new TtsTrainingSample<double> { Tokens = new Tensor<double>(new[] { 1 }), Audio = audio }, new Random(0));
+        Assert.Equal(24576, real.Length);
+        Assert.Equal(new[] { 1, 80, 96 }, mel.Shape.ToArray());
+        var expected = f["compute_f0"]!.Select(v => (double)v).ToArray();
+        Assert.Equal(expected.Length, pitch.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.True(Math.Abs(expected[i] - pitch[i]) <= 1e-8 * Math.Max(1, expected[i]), $"frame {i}: CosyVoice {expected[i]}, port {pitch[i]}.");
+    }
+
+    [Fact(Timeout = 600000)]
+    public async Task VocoderStage_TrainsHiftAndItsDiscriminatorsOnly()
+    {
+        await Task.Yield();
+        using var model = SmallWithDiscriminators();
+        model.CurrentStage = CosyVoiceTrainingStage.Vocoder;
+        var hift = Snapshot(model.VocoderLayers);
+        var discriminators = Snapshot(model.DiscriminatorLayers);
+        var lm = Snapshot(model.LanguageModelLayers);
+        var flow = Snapshot(model.FlowLayers);
+        var audio = Tone(30000, 22050);
+        double loss = Convert.ToDouble(model.Train(new TtsTrainingSample<double>
+        {
+            Tokens = new Tensor<double>(new[] { 1 }), Audio = audio, CodecTokens = new Tensor<double>(new[] { 1 }),
+        }));
+        Assert.True(double.IsFinite(loss) && loss > 0, $"generator loss {loss}.");
+        Assert.NotEqual(hift, Snapshot(model.VocoderLayers));
+        Assert.NotEqual(discriminators, Snapshot(model.DiscriminatorLayers));
+        Assert.Equal(lm, Snapshot(model.LanguageModelLayers));
+        Assert.Equal(flow, Snapshot(model.FlowLayers));
+    }
+
+    private static Newtonsoft.Json.Linq.JObject WorldHarvestFixture()
+    {
+        const string fileName = "world_harvest_reference.json";
+        string output = System.IO.Path.Combine(AppContext.BaseDirectory, "TextToSpeech", "ReferenceData", fileName);
+        if (!System.IO.File.Exists(output))
+        {
+            var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
+            while (dir is not null && !System.IO.File.Exists(output))
+            {
+                output = System.IO.Path.Combine(dir.FullName, "tests", "AiDotNet.Tests", "TextToSpeech", "ReferenceData", fileName);
+                dir = dir.Parent;
+            }
+        }
+        return Newtonsoft.Json.Linq.JObject.Parse(System.IO.File.ReadAllText(output));
+    }
+
     [Fact(Timeout = 120000)]
     public async Task Tokenize_IsWhispersHundredLanguageEncoding_WithSpecialsAllowed()
     {

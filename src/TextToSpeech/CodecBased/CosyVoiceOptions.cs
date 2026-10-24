@@ -64,6 +64,8 @@ public class CosyVoiceOptions : CodecTtsOptions
         SpeakerEncoderGrowthRate = other.SpeakerEncoderGrowthRate;
         SamplingSeed = other.SamplingSeed;
         WarmupSteps = other.WarmupSteps;
+        IncludeDiscriminators = other.IncludeDiscriminators;
+        VocoderSegmentLength = other.VocoderSegmentLength;
     }
 
     /// <summary>Language tokens in the text tokenizer: 100 (Whisper large-v3's) for CosyVoice-300M.</summary>
@@ -149,6 +151,14 @@ public class CosyVoiceOptions : CodecTtsOptions
 
     /// <summary>The learning-rate warmup of each stage's Adam (WarmupLR's <c>warmup_steps</c>: 2,500).</summary>
     public int WarmupSteps { get; set; } = 2500;
+
+    /// <summary>Whether to build HiFT's discriminators (the multi-period and multi-resolution spectrogram
+    /// discriminators), which only <see cref="CosyVoiceTrainingStage.Vocoder"/> training uses.</summary>
+    public bool IncludeDiscriminators { get; set; }
+
+    /// <summary>The samples a vocoder training step crops or pads an utterance to (the recipe's <c>truncate_length</c>,
+    /// 24,576: 96 frames); a multiple of HopSize.</summary>
+    public int VocoderSegmentLength { get; set; } = 24576;
 
     /// <summary>The seed of sampling and of training's random draws.</summary>
     public int SamplingSeed { get; set; } = 1986;
