@@ -630,7 +630,7 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         int f0Length = GetSamplesForHarvest(fs, xLength, framePeriod);
         for (int i = 0; i < f0Length; i++)
         {
-            temporalPositions[i] = i * framePeriod / 1000.0;
+            temporalPositions[i] = (double)i * framePeriod / 1000.0;
             f0[i] = 0.0;
         }
 

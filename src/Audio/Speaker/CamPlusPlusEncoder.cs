@@ -76,7 +76,7 @@ internal sealed class CamPlusPlusEncoder<T>
         {
             var conv = Add(new NormedConv1DLayer<T>(inputs, outputs, kernel, stride, dilation, 1, padding, false,
                 ConvolutionNormalization.None, useBias: bias));
-            double std = Math.Sqrt(2.0 / (inputs * kernel));
+            double std = Math.Sqrt(2.0 / ((double)inputs * kernel));
             conv.Reinitialize(() => std * Gaussian());
             return conv;
         }

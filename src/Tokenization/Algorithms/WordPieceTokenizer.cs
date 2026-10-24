@@ -20,6 +20,7 @@ namespace AiDotNet.Tokenization.Algorithms
 
         private const string BertBaseUncasedResource = "AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz";
         private const string BertBaseChineseResource = "AiDotNet.Tokenization.bert-base-chinese-vocab.txt.gz";
+        private const string BertBaseMultilingualUncasedResource = "AiDotNet.Tokenization.bert-base-multilingual-uncased-vocab.txt.gz";
 
         /// <summary>
         /// BERT-base's uncased WordPiece tokenizer (Devlin et al. 2019): the released 30,522-token vocabulary
@@ -36,6 +37,14 @@ namespace AiDotNet.Tokenization.Algorithms
         /// </summary>
         public static WordPieceTokenizer BertBaseChinese(IEnumerable<string>? additionalTokens = null) =>
             new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseChineseResource, additionalTokens), "[UNK]"), SpecialTokens.Bert());
+
+        /// <summary>
+        /// Multilingual BERT-base's uncased WordPiece tokenizer: the released 105,879-token vocabulary
+        /// (google-research/bert, Apache-2.0), shipped with the library, with each CJK character its own word,
+        /// lowercasing and accent stripping. MeloTTS's mixed Chinese-English front end tokenizes its English with it.
+        /// </summary>
+        public static WordPieceTokenizer BertBaseMultilingualUncased() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseMultilingualUncasedResource, null), "[UNK]"), SpecialTokens.Bert());
 
         private const string SimBertChineseResource = "AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz";
 

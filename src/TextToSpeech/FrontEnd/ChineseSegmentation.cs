@@ -43,9 +43,11 @@ internal static class ChineseText
 }
 
 /// <summary>
-/// jieba 0.42.1's default word segmentation (<c>jieba.lcut(text)</c>: its prefix dictionary, the maximum-probability
-/// route and the HMM for unknown words), from the dictionary <c>tools/reference-data/mandarin_g2p_resources.py</c>
-/// exports.
+/// jieba 0.42.1 (MIT): <c>lcut</c> (its prefix dictionary's maximum-probability route, with the B/M/E/S HMM for unknown
+/// words), <c>lcut_for_search</c> (plus the dictionary's 2- and 3-character sub-words) and <c>posseg.lcut</c> (the same
+/// route, words tagged from the dictionary, unknown runs segmented and tagged by the part-of-speech HMM). The dictionaries
+/// are jieba's own, exported by <c>tools/reference-data/mandarin_g2p_resources.py</c> and
+/// <c>melo_chinese_resources.py</c>.
 /// </summary>
 internal sealed class Jieba
 {
@@ -56,6 +58,8 @@ internal sealed class Jieba
     private readonly Dictionary<char, double> _hmmStart = new();
     private readonly Dictionary<char, Dictionary<char, double>> _hmmTransition = new();
     private readonly Dictionary<char, Dictionary<string, double>> _hmmEmission = new();
+    private readonly Lazy<Dictionary<string, string>> _tags;
+    private readonly Lazy<PosModel> _posModel;
 
     /// <summary>The shared instance (the dictionary loads once, on first use).</summary>
     public static Jieba Default => SharedInstance.Value;
@@ -96,6 +100,18 @@ internal sealed class Jieba
             foreach (var emission in (JObject)state.Value!) row[emission.Key] = (double)emission.Value!;
             _hmmEmission[state.Key[0]] = row;
         }
+
+        _tags = new Lazy<Dictionary<string, string>>(() =>
+        {
+            var tags = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var line in ChineseText.ReadLines("jieba_pos.tsv.gz"))
+            {
+                int tab = line.IndexOf('\t');
+                tags[line.Substring(0, tab)] = line.Substring(tab + 1);
+            }
+            return tags;
+        }, isThreadSafe: true);
+        _posModel = new Lazy<PosModel>(() => new PosModel(JObject.Parse(string.Join("\n", ChineseText.ReadLines("jieba_posseg.json.gz")))), isThreadSafe: true);
     }
 
     private static readonly Regex JiebaHan = new("([一-鿕a-zA-Z0-9+#&\\._%\\-]+)");
@@ -125,10 +141,35 @@ internal sealed class Jieba
         return words;
     }
 
+    /// <summary>jieba's <c>lcut_for_search(text)</c>: each word of <see cref="Cut"/>, preceded by its dictionary 2-grams
+    /// (words over 2 characters) and 3-grams (over 3).</summary>
+    public List<string> CutForSearch(string sentence)
+    {
+        var result = new List<string>();
+        foreach (var word in Cut(sentence))
+        {
+            var w = ChineseText.Codepoints(word);
+            if (w.Count > 2)
+                for (int i = 0; i < w.Count - 1; i++)
+                {
+                    string gram = w[i] + w[i + 1];
+                    if (Frequency(gram) is > 0) result.Add(gram);
+                }
+            if (w.Count > 3)
+                for (int i = 0; i < w.Count - 2; i++)
+                {
+                    string gram = w[i] + w[i + 1] + w[i + 2];
+                    if (Frequency(gram) is > 0) result.Add(gram);
+                }
+            result.Add(word);
+        }
+        return result;
+    }
+
     private long? Frequency(string word) => _frequency.TryGetValue(word, out long f) ? f : null;
 
-    // Tokenizer.__cut_DAG
-    private IEnumerable<string> CutDag(List<string> sentence)
+    // Tokenizer.get_DAG and calc: the maximum-probability route over the dictionary's words.
+    private (double Score, int End)[] Route(List<string> sentence)
     {
         int n = sentence.Count;
         string Slice(int from, int to) => string.Concat(sentence.GetRange(from, to - from));
@@ -162,6 +203,15 @@ internal sealed class Jieba
             }
             route[idx] = best;
         }
+        return route;
+    }
+
+    // Tokenizer.__cut_DAG
+    private IEnumerable<string> CutDag(List<string> sentence)
+    {
+        int n = sentence.Count;
+        string Slice(int from, int to) => string.Concat(sentence.GetRange(from, to - from));
+        var route = Route(sentence);
         var buffer = new StringBuilder();
         int bufferCount = 0;
         IEnumerable<string> Flush()
@@ -275,6 +325,207 @@ internal sealed class Jieba
         }
         if (nextIndex < observations.Count) yield return string.Concat(observations.GetRange(nextIndex, observations.Count - nextIndex));
     }
+
+    // ---------------------------------------------------------------- posseg
+
+    private sealed class PosModel
+    {
+        public PosModel(JObject model)
+        {
+            foreach (var entry in (JObject)model["char_state"]!)
+                CharStates[entry.Key] = ((JArray)entry.Value!).Select(v => (string)v!).ToList();
+            foreach (var entry in (JObject)model["start"]!) Start[entry.Key] = (double)entry.Value!;
+            foreach (var from in (JObject)model["trans"]!)
+            {
+                var row = new Dictionary<string, double>(StringComparer.Ordinal);
+                foreach (var to in (JObject)from.Value!) row[to.Key] = (double)to.Value!;
+                Transition[from.Key] = row;
+            }
+            foreach (var state in (JObject)model["emit"]!)
+            {
+                var row = new Dictionary<string, double>(StringComparer.Ordinal);
+                foreach (var e in (JObject)state.Value!) row[e.Key] = (double)e.Value!;
+                Emission[state.Key] = row;
+            }
+        }
+
+        public Dictionary<string, List<string>> CharStates { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, double> Start { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, Dictionary<string, double>> Transition { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, Dictionary<string, double>> Emission { get; } = new(StringComparer.Ordinal);
+    }
+
+    private static readonly Regex PosHanInternal = new("([一-鿕a-zA-Z0-9+#&\\._]+)");
+    private static readonly Regex PosSkipInternal = new("(\r\n|\\s)");
+    private static readonly Regex PosHanDetail = new("([一-鿕]+)");
+    private static readonly Regex PosSkipDetail = new("([\\.0-9]+|[a-zA-Z0-9]+)");
+    private static readonly Regex PosEng = new("^[a-zA-Z0-9]+");
+    private static readonly Regex PosNum = new("^[\\.0-9]+");
+
+    private string Tag(string word) => _tags.Value.TryGetValue(word, out var tag) ? tag : "x";
+
+    /// <summary>jieba's <c>posseg.lcut(text)</c> (HMM on): each word and its part-of-speech tag.</summary>
+    public List<(string Word, string Tag)> PosCut(string sentence)
+    {
+        var result = new List<(string, string)>();
+        foreach (var block in PosHanInternal.Split(sentence))
+        {
+            if (PosHanInternal.Match(block) is { Success: true, Index: 0 })
+            {
+                result.AddRange(PosCutDag(ChineseText.Codepoints(block)));
+                continue;
+            }
+            foreach (var x in PosSkipInternal.Split(block))
+            {
+                if (PosSkipInternal.Match(x) is { Success: true, Index: 0 })
+                {
+                    result.Add((x, "x"));
+                    continue;
+                }
+                foreach (var xx in ChineseText.Codepoints(x))
+                {
+                    // The reference tests the whole run x for English, not the character xx.
+                    if (PosNum.IsMatch(xx)) result.Add((xx, "m"));
+                    else if (PosEng.IsMatch(x)) result.Add((xx, "eng"));
+                    else result.Add((xx, "x"));
+                }
+            }
+        }
+        return result;
+    }
+
+    // POSTokenizer.__cut_DAG
+    private IEnumerable<(string, string)> PosCutDag(List<string> sentence)
+    {
+        int n = sentence.Count;
+        var route = Route(sentence);
+        var buffer = new List<string>();
+        IEnumerable<(string, string)> Flush()
+        {
+            if (buffer.Count == 0) yield break;
+            string pending = string.Concat(buffer);
+            if (buffer.Count == 1) yield return (pending, Tag(pending));
+            else if (Frequency(pending) is not > 0)
+                foreach (var t in PosCutDetail(pending)) yield return t;
+            else
+                foreach (var c in buffer) yield return (c, Tag(c));
+            buffer.Clear();
+        }
+        int at = 0;
+        while (at < n)
+        {
+            int y = route[at].End + 1;
+            string word = string.Concat(sentence.GetRange(at, y - at));
+            if (y - at == 1)
+            {
+                buffer.Add(word);
+            }
+            else
+            {
+                foreach (var t in Flush()) yield return t;
+                yield return (word, Tag(word));
+            }
+            at = y;
+        }
+        foreach (var t in Flush()) yield return t;
+    }
+
+    // POSTokenizer.__cut_detail
+    private IEnumerable<(string, string)> PosCutDetail(string sentence)
+    {
+        foreach (var block in PosHanDetail.Split(sentence))
+        {
+            if (PosHanDetail.Match(block) is { Success: true, Index: 0 })
+            {
+                foreach (var t in PosViterbiCut(ChineseText.Codepoints(block))) yield return t;
+                continue;
+            }
+            foreach (var x in PosSkipDetail.Split(block))
+            {
+                if (x.Length == 0) continue;
+                if (PosNum.IsMatch(x)) yield return (x, "m");
+                else if (PosEng.IsMatch(x)) yield return (x, "eng");
+                else yield return (x, "x");
+            }
+        }
+    }
+
+    // posseg.viterbi over (position, tag) states, then words from the path (POSTokenizer.__cut).
+    private IEnumerable<(string, string)> PosViterbiCut(List<string> obs)
+    {
+        var m = _posModel.Value;
+        var allStates = m.Transition.Keys.ToList();
+        IEnumerable<string> StatesOf(string c) => m.CharStates.TryGetValue(c, out var s) ? s : allStates;
+        double Emit(string state, string c) => m.Emission[state].TryGetValue(c, out var p) ? p : MinFloat;
+        var v = new List<Dictionary<string, double>> { new(StringComparer.Ordinal) };
+        var memPath = new List<Dictionary<string, string>> { new(StringComparer.Ordinal) };
+        foreach (var y in StatesOf(obs[0]))
+        {
+            v[0][y] = m.Start[y] + Emit(y, obs[0]);
+            memPath[0][y] = "";
+        }
+        for (int t = 1; t < obs.Count; t++)
+        {
+            v.Add(new Dictionary<string, double>(StringComparer.Ordinal));
+            memPath.Add(new Dictionary<string, string>(StringComparer.Ordinal));
+            var prevStates = memPath[t - 1].Keys.Where(x => m.Transition[x].Count > 0).ToList();
+            var expectNext = new HashSet<string>(prevStates.SelectMany(x => m.Transition[x].Keys), StringComparer.Ordinal);
+            var obsStates = new HashSet<string>(StatesOf(obs[t]), StringComparer.Ordinal);
+            obsStates.IntersectWith(expectNext);
+            IEnumerable<string> candidates = obsStates.Count > 0 ? obsStates : expectNext.Count > 0 ? expectNext : allStates;
+            foreach (var y in candidates)
+            {
+                (double Prob, string State) best = (double.NegativeInfinity, "");
+                bool any = false;
+                foreach (var y0 in prevStates)
+                {
+                    double trans = m.Transition[y0].TryGetValue(y, out var tp) ? tp : double.NegativeInfinity;
+                    double prob = v[t - 1][y0] + trans + Emit(y, obs[t]);
+                    // max over (prob, state) tuples: a tie goes to the greater state.
+                    if (!any || prob > best.Prob || (prob == best.Prob && string.CompareOrdinal(y0, best.State) > 0)) best = (prob, y0);
+                    any = true;
+                }
+                v[t][y] = best.Prob;
+                memPath[t][y] = best.State;
+            }
+        }
+        (double Prob, string State) last = (double.NegativeInfinity, "");
+        bool first = true;
+        foreach (var y in memPath[memPath.Count - 1].Keys)
+        {
+            double p = v[v.Count - 1][y];
+            if (first || p > last.Prob || (p == last.Prob && string.CompareOrdinal(y, last.State) > 0)) last = (p, y);
+            first = false;
+        }
+        var route = new string[obs.Count];
+        string state = last.State;
+        for (int i = obs.Count - 1; i >= 0; i--)
+        {
+            route[i] = state;
+            state = memPath[i][state];
+        }
+        int begin = 0, nextIndex = 0;
+        for (int i = 0; i < obs.Count; i++)
+        {
+            char position = route[i][0];
+            string tag = route[i].Substring(2);
+            if (position == 'B')
+            {
+                begin = i;
+            }
+            else if (position == 'E')
+            {
+                yield return (string.Concat(obs.GetRange(begin, i - begin + 1)), tag);
+                nextIndex = i + 1;
+            }
+            else if (position == 'S')
+            {
+                yield return (obs[i], tag);
+                nextIndex = i + 1;
+            }
+        }
+        if (nextIndex < obs.Count) yield return (string.Concat(obs.GetRange(nextIndex, obs.Count - nextIndex)), route[nextIndex].Substring(2));
+    }
 }
 
 /// <summary>
@@ -332,7 +583,7 @@ internal sealed class PypinyinReader
         (0x30EDD, 0x30EDE), (0x31350, 0x32389),
     };
 
-    private static bool IsHan(string codepoint)
+    internal static bool IsHan(string codepoint)
     {
         int value = char.ConvertToUtf32(codepoint, 0);
         foreach (var (from, to) in HanRanges)
