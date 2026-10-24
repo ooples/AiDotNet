@@ -23,7 +23,7 @@ internal enum WenetInputLayer
 /// the same block.</param>
 internal sealed record WenetEncoderConfiguration(int InputSize, int OutputSize, int Heads, int LinearUnits, int Blocks,
     WenetInputLayer InputLayer, bool Swish, bool Conformer, int StaticChunkSize = 0, double Dropout = 0.1, double PositionalDropout = 0.1,
-    double AttentionDropout = 0.0);
+    double AttentionDropout = 0.0, bool AfterNorm = true);
 
 /// <summary>
 /// A wenet encoder with ESPnet relative positional attention (CosyVoice <c>cosyvoice/transformer</c>: <c>BaseEncoder</c>,
@@ -90,14 +90,15 @@ internal sealed class WenetEncoder<T>
             Blocks.Add(new Block(normAttention, query, key, value, output, position, biasU, biasV, normFeedForward,
                 Linear(d, c.LinearUnits), Linear(c.LinearUnits, d)));
         }
-        AfterNorm = Norm(1e-5);
+        AfterNorm = c.AfterNorm ? Norm(1e-5) : null;
     }
 
     public WenetEncoderConfiguration Configuration { get; }
     public DenseLayer<T> EmbedLinear { get; }
     public LayerNormalizationLayer<T> EmbedNorm { get; }
     public List<Block> Blocks { get; } = new();
-    public LayerNormalizationLayer<T> AfterNorm { get; }
+    /// <summary>The final LayerNorm; null for a stack that another one continues (UpsampleConformerEncoder's first).</summary>
+    public LayerNormalizationLayer<T>? AfterNorm { get; }
 
     private Tensor<T> Value(BiasFreeLinearLayer<T> holder) => holder.Forward(new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.One })));
 
@@ -123,10 +124,10 @@ internal sealed class WenetEncoder<T>
         return table;
     }
 
-    /// <summary>The attention mask bias <c>[L, L]</c>: 0 where query i may attend key j, −∞ elsewhere.</summary>
-    private Tensor<T> MaskBias(int length)
+    /// <summary>The attention mask bias <c>[L, L]</c> for chunks of <paramref name="chunk"/> (0: none): 0 where query i
+    /// may attend key j, −∞ elsewhere.</summary>
+    private Tensor<T> MaskBias(int length, int chunk)
     {
-        int chunk = Configuration.StaticChunkSize;
         var bias = new Tensor<T>(new[] { length, length });
         if (chunk <= 0) return bias;
         var blocked = NumOps.FromDouble(double.NegativeInfinity);
@@ -141,14 +142,31 @@ internal sealed class WenetEncoder<T>
     /// <summary>The encoded states <c>[L, OutputSize]</c> of inputs <c>[L, InputSize]</c>.</summary>
     public Tensor<T> Forward(Tensor<T> input, bool training, Random random)
     {
+        var (x, positions) = Embed(input, training, random);
+        x = RunBlocks(x, positions, Configuration.StaticChunkSize, training, random);
+        return AfterNorm is null ? x : AfterNorm.Forward(x);
+    }
+
+    /// <summary>The input layer and positional encoding: the states <c>[L, OutputSize]</c> (scaled by √d) and the relative
+    /// position table <c>[2L − 1, OutputSize]</c>.</summary>
+    internal (Tensor<T> States, Tensor<T> Positions) Embed(Tensor<T> input, bool training, Random random)
+    {
         var c = Configuration;
-        int length = input.Shape[0], d = c.OutputSize, heads = c.Heads, dk = d / heads;
+        int length = input.Shape[0], d = c.OutputSize;
         var x = EmbedNorm.Forward(EmbedLinear.Forward(input));
         x = Dropout(x, c.Dropout, training, random);
         if (c.InputLayer == WenetInputLayer.LinearLegacy) x = _engine.ReLU(x);
         x = Dropout(_engine.TensorMultiplyScalar(x, NumOps.FromDouble(Math.Sqrt(d))), c.PositionalDropout, training, random);
-        var positions = Dropout(PositionTable(length), c.PositionalDropout, training, random);
-        var mask = MaskBias(length);
+        return (x, Dropout(PositionTable(length), c.PositionalDropout, training, random));
+    }
+
+    /// <summary>The blocks on embedded states, attending within chunks of <paramref name="chunk"/> and every earlier chunk
+    /// (0: everywhere).</summary>
+    internal Tensor<T> RunBlocks(Tensor<T> x, Tensor<T> positions, int chunk, bool training, Random random)
+    {
+        var c = Configuration;
+        int length = x.Shape[0], d = c.OutputSize, heads = c.Heads, dk = d / heads;
+        var mask = MaskBias(length, chunk);
         // rel_shift: query i, key j reads column (L − 1) − i + j of the [L, 2L − 1] position scores.
         var shift = new Tensor<int>(new[] { length * length });
         for (int i = 0; i < length; i++)
@@ -181,12 +199,13 @@ internal sealed class WenetEncoder<T>
             hidden = block.FeedForward2.Forward(Dropout(hidden, c.Dropout, training, random));
             x = _engine.TensorAdd(x, Dropout(hidden, c.Dropout, training, random));
         }
-        return AfterNorm.Forward(x);
+        return x;
     }
 
     /// <summary>Loads a wenet encoder's state (<c>{prefix}embed.out.0/1</c>, <c>{prefix}encoders.{i}.*</c>,
     /// <c>{prefix}after_norm</c>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix, string embedName = "embed",
+        string encodersName = "encoders")
     {
         var c = Configuration;
         int d = c.OutputSize;
@@ -194,12 +213,12 @@ internal sealed class WenetEncoder<T>
             TorchParameters.Linear(_engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
         void Norm(LayerNormalizationLayer<T> norm, string name) =>
             TorchParameters.LayerNorm(_engine, norm, read(name + ".weight", new[] { d }), read(name + ".bias", new[] { d }));
-        Dense(EmbedLinear, prefix + "embed.out.0", c.InputSize, d);
-        Norm(EmbedNorm, prefix + "embed.out.1");
+        Dense(EmbedLinear, $"{prefix}{embedName}.out.0", c.InputSize, d);
+        Norm(EmbedNorm, $"{prefix}{embedName}.out.1");
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
-            string p = $"{prefix}encoders.{i}";
+            string p = $"{prefix}{encodersName}.{i}";
             // The Transformer layer names its norms norm1/norm2, the Conformer layer norm_mha/norm_ff.
             bool conformer = c.Conformer;
             Norm(b.NormAttention, p + (conformer ? ".norm_mha" : ".norm1"));
@@ -214,6 +233,6 @@ internal sealed class WenetEncoder<T>
             Dense(b.FeedForward1, p + ".feed_forward.w_1", d, c.LinearUnits);
             Dense(b.FeedForward2, p + ".feed_forward.w_2", c.LinearUnits, d);
         }
-        Norm(AfterNorm, prefix + "after_norm");
+        if (AfterNorm is not null) Norm(AfterNorm, prefix + "after_norm");
     }
 }

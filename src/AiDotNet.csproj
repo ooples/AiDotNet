@@ -384,6 +384,9 @@
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-chinese-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\simbert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\whisper-multilingual.tiktoken.gz" LogicalName="AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\qwen2-vocab.json.gz" LogicalName="AiDotNet.Tokenization.qwen2-vocab.json.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\qwen2-merges.txt.gz" LogicalName="AiDotNet.Tokenization.qwen2-merges.txt.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\nrl_rules.tsv" LogicalName="AiDotNet.TextToSpeech.FrontEnd.nrl_rules.tsv" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_dict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_dict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_hmm.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_hmm.json.gz" />

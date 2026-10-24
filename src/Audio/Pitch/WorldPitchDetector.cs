@@ -554,6 +554,651 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
 
     #endregion
 
+    #region Harvest (harvest.cpp)
+
+    /// <summary>Number of frames Harvest produces (WORLD GetSamplesForHarvest).</summary>
+    public static int GetSamplesForHarvest(int fs, int xLength, double framePeriod)
+        => (int)(1000.0 * xLength / fs / framePeriod) + 1;
+
+    /// <summary>
+    /// F0 by WORLD's Harvest (Morise 2017; PyWorld's <c>harvest</c>), one value per <paramref name="framePeriodMs"/>
+    /// from time 0, between this detector's F0 floor and ceiling. Unlike DIO it searches 40 bands per octave on audio
+    /// resampled near 8 kHz, refines each candidate by instantaneous frequency and links the contour across frames; it
+    /// is the extractor CosyVoice's HiFT training reads its F0 targets from.
+    /// </summary>
+    /// <remarks>Ported line for line from WORLD's <c>harvest.cpp</c> (as PyWorld 0.3.5 bundles it), keeping its
+    /// quirks: the 1 ms basic contour sampled at the requested period, and <c>ExtendSub</c>'s mean F0 carried from one
+    /// voiced section to the next.</remarks>
+    /// <returns>F0 in Hz per frame (0 where unvoiced) and each frame's time in seconds.</returns>
+    public (double[] F0, double[] TemporalPositions) Harvest(double[] x, double framePeriodMs)
+    {
+        if (x is null) throw new ArgumentNullException(nameof(x));
+        if (framePeriodMs <= 0) throw new ArgumentOutOfRangeException(nameof(framePeriodMs));
+        if (x.Length < 2) throw new ArgumentException("Harvest needs at least two samples.", nameof(x));
+        int fs = SampleRate;
+        int dimensionRatio = MatlabRound(fs / 8000.0);
+        const double channelsInOctave = 40;
+
+        int basicLength = GetSamplesForHarvest(fs, x.Length, 1);
+        var basicF0 = new double[basicLength];
+        var basicPositions = new double[basicLength];
+        HarvestGeneralBody(x, fs, 1, MinPitch, MaxPitch, channelsInOctave, dimensionRatio, basicPositions, basicF0);
+        if (framePeriodMs == 1.0) return (basicF0, basicPositions);
+
+        int f0Length = GetSamplesForHarvest(fs, x.Length, framePeriodMs);
+        var positions = new double[f0Length];
+        var f0 = new double[f0Length];
+        for (int i = 0; i < f0Length; i++)
+        {
+            positions[i] = i * framePeriodMs / 1000.0;
+            f0[i] = basicF0[Math.Min(basicLength - 1, MatlabRound(positions[i] * 1000.0))];
+        }
+        return (f0, positions);
+    }
+
+    /// <summary>StoneMask's refinement (PyWorld's <c>stonemask</c>) of an F0 contour at its frames' times.</summary>
+    public double[] StoneMask(double[] x, double[] f0, double[] temporalPositions)
+    {
+        if (x is null) throw new ArgumentNullException(nameof(x));
+        if (f0 is null) throw new ArgumentNullException(nameof(f0));
+        if (temporalPositions is null) throw new ArgumentNullException(nameof(temporalPositions));
+        if (f0.Length != temporalPositions.Length) throw new ArgumentException("Each F0 value needs its time.", nameof(temporalPositions));
+        var refined = new double[f0.Length];
+        for (int i = 0; i < f0.Length; i++) refined[i] = GetRefinedF0(x, SampleRate, temporalPositions[i], f0[i]);
+        return refined;
+    }
+
+    private void HarvestGeneralBody(double[] x, int fs, int framePeriod, double f0Floor, double f0Ceil,
+        double channelsInOctave, int speed, double[] temporalPositions, double[] f0)
+    {
+        int xLength = x.Length;
+        double adjustedF0Floor = f0Floor * 0.9;
+        double adjustedF0Ceil = f0Ceil * 1.1;
+        int numberOfChannels = 1 + (int)(Math.Log(adjustedF0Ceil / adjustedF0Floor) / Log2 * channelsInOctave);
+        var boundaryF0List = new double[numberOfChannels];
+        for (int i = 0; i < numberOfChannels; i++)
+            boundaryF0List[i] = adjustedF0Floor * Math.Pow(2.0, (i + 1) / channelsInOctave);
+
+        int decimationRatio = Math.Max(Math.Min(speed, 12), 1);
+        int yLength = (int)Math.Ceiling((double)xLength / decimationRatio);
+        double actualFs = (double)fs / decimationRatio;
+        int fftSize = GetSuitableFftSize(yLength + 5 + 2 * (int)(2.0 * actualFs / boundaryF0List[0]));
+
+        var y = new double[fftSize];
+        var (ySpecRe, ySpecIm) = HarvestWaveformAndSpectrum(x, xLength, yLength, fftSize, decimationRatio, y);
+
+        int f0Length = GetSamplesForHarvest(fs, xLength, framePeriod);
+        for (int i = 0; i < f0Length; i++)
+        {
+            temporalPositions[i] = i * framePeriod / 1000.0;
+            f0[i] = 0.0;
+        }
+
+        const int overlapParameter = 7;
+        int maxCandidates = MatlabRound(numberOfChannels / 10.0) * overlapParameter;
+        var f0Candidates = new double[f0Length][];
+        var f0Scores = new double[f0Length][];
+        for (int i = 0; i < f0Length; i++)
+        {
+            f0Candidates[i] = new double[maxCandidates];
+            f0Scores[i] = new double[maxCandidates];
+        }
+
+        var rawF0Candidates = new double[numberOfChannels][];
+        for (int i = 0; i < numberOfChannels; i++)
+        {
+            rawF0Candidates[i] = new double[f0Length];
+            HarvestF0CandidateFromRawEvent(boundaryF0List[i], actualFs, ySpecRe, ySpecIm, yLength, fftSize, f0Floor, f0Ceil,
+                temporalPositions, f0Length, rawF0Candidates[i]);
+        }
+        int numberOfCandidates = DetectOfficialF0Candidates(rawF0Candidates, numberOfChannels, f0Length, maxCandidates, f0Candidates);
+        OverlapF0Candidates(f0Length, numberOfCandidates, f0Candidates);
+        numberOfCandidates *= overlapParameter;
+
+        for (int i = 0; i < f0Length; i++)
+            for (int j = 0; j < numberOfCandidates; j++)
+            {
+                var (refined, score) = HarvestRefinedF0(y, yLength, actualFs, temporalPositions[i], f0Candidates[i][j], f0Floor, f0Ceil);
+                f0Candidates[i][j] = refined;
+                f0Scores[i][j] = score;
+            }
+        RemoveUnreliableCandidates(f0Length, numberOfCandidates, f0Candidates, f0Scores);
+
+        var bestF0Contour = new double[f0Length];
+        HarvestFixF0Contour(f0Candidates, f0Scores, f0Length, numberOfCandidates, bestF0Contour);
+        SmoothF0Contour(bestF0Contour, f0Length, f0);
+    }
+
+    // GetWaveformAndSpectrum (with its Sub): the signal decimated after edge extension, its mean removed, its spectrum.
+    private (double[] Re, double[] Im) HarvestWaveformAndSpectrum(double[] x, int xLength, int yLength, int fftSize,
+        int decimationRatio, double[] y)
+    {
+        if (decimationRatio == 1)
+        {
+            for (int i = 0; i < xLength; i++) y[i] = x[i];
+        }
+        else
+        {
+            int lag = (int)(Math.Ceiling(140.0 / decimationRatio) * decimationRatio);
+            int newXLength = xLength + lag * 2;
+            var newY = new double[newXLength];
+            var newX = new double[newXLength];
+            for (int i = 0; i < lag; i++) newX[i] = x[0];
+            for (int i = lag; i < lag + xLength; i++) newX[i] = x[i - lag];
+            for (int i = lag + xLength; i < newXLength; i++) newX[i] = x[xLength - 1];
+            Decimate(newX, newXLength, decimationRatio, newY);
+            for (int i = 0; i < yLength; i++) y[i] = newY[lag / decimationRatio + i];
+        }
+
+        double meanY = 0.0;
+        for (int i = 0; i < yLength; i++) meanY += y[i];
+        meanY /= yLength;
+        for (int i = 0; i < yLength; i++) y[i] -= meanY;
+        for (int i = yLength; i < fftSize; i++) y[i] = 0.0;
+        return ForwardFft(y);
+    }
+
+    // GetFilteredSignal: the signal through a Nuttall-windowed cosine band-pass at boundaryF0, delay compensated.
+    private double[] HarvestFilteredSignal(double boundaryF0, int fftSize, double fs, double[] ySpecRe, double[] ySpecIm,
+        int yLength)
+    {
+        int filterLengthHalf = MatlabRound(fs / boundaryF0 * 2.0);
+        var bandPassFilter = new double[fftSize];
+        NuttallWindow(filterLengthHalf * 2 + 1, bandPassFilter);
+        for (int i = -filterLengthHalf; i <= filterLengthHalf; i++)
+            bandPassFilter[i + filterLengthHalf] *= Math.Cos(2 * Math.PI * boundaryF0 * i / fs);
+
+        var (re, im) = ForwardFft(bandPassFilter);
+        // The convolution; c2r reads bins 0 … fft/2 only, so the reference's mirrored upper half does not matter.
+        for (int i = 0; i <= fftSize / 2; i++)
+        {
+            double tmp = ySpecRe[i] * re[i] - ySpecIm[i] * im[i];
+            im[i] = ySpecRe[i] * im[i] + ySpecIm[i] * re[i];
+            re[i] = tmp;
+        }
+        var filtered = InverseRealFft(re, im, fftSize);
+        int indexBias = filterLengthHalf + 1;
+        for (int i = 0; i < yLength; i++) filtered[i] = filtered[i + indexBias];
+        return filtered;
+    }
+
+    // GetF0CandidateFromRawEvent: the four zero-crossing interval series, interpolated to the frames and averaged.
+    private void HarvestF0CandidateFromRawEvent(double boundaryF0, double fs, double[] ySpecRe, double[] ySpecIm, int yLength,
+        int fftSize, double f0Floor, double f0Ceil, double[] temporalPositions, int f0Length, double[] f0Candidate)
+    {
+        var filtered = HarvestFilteredSignal(boundaryF0, fftSize, fs, ySpecRe, ySpecIm, yLength);
+        var locations = new double[4][];
+        var intervals = new double[4][];
+        var counts = new int[4];
+        for (int k = 0; k < 4; k++)
+        {
+            locations[k] = new double[yLength];
+            intervals[k] = new double[yLength];
+        }
+        // GetFourZeroCrossingIntervals: negative-going, positive-going, peaks and dips, each by the same engine.
+        counts[0] = ZeroCrossingEngine(filtered, yLength, fs, locations[0], intervals[0]);
+        for (int i = 0; i < yLength; i++) filtered[i] = -filtered[i];
+        counts[1] = ZeroCrossingEngine(filtered, yLength, fs, locations[1], intervals[1]);
+        for (int i = 0; i < yLength - 1; i++) filtered[i] = filtered[i] - filtered[i + 1];
+        counts[2] = ZeroCrossingEngine(filtered, yLength - 1, fs, locations[2], intervals[2]);
+        for (int i = 0; i < yLength - 1; i++) filtered[i] = -filtered[i];
+        counts[3] = ZeroCrossingEngine(filtered, yLength - 1, fs, locations[3], intervals[3]);
+
+        if (CheckEvent(counts[0] - 2) * CheckEvent(counts[1] - 2) * CheckEvent(counts[2] - 2) * CheckEvent(counts[3] - 2) == 0)
+        {
+            for (int i = 0; i < f0Length; i++) f0Candidate[i] = 0.0;
+            return;
+        }
+        var interpolated = new double[4][];
+        for (int k = 0; k < 4; k++)
+        {
+            interpolated[k] = new double[f0Length];
+            Interp1(locations[k], intervals[k], counts[k], temporalPositions, f0Length, interpolated[k]);
+        }
+        double upper = boundaryF0 * 1.1, lower = boundaryF0 * 0.9;
+        for (int i = 0; i < f0Length; i++)
+        {
+            f0Candidate[i] = (interpolated[0][i] + interpolated[1][i] + interpolated[2][i] + interpolated[3][i]) / 4.0;
+            if (f0Candidate[i] > upper || f0Candidate[i] < lower || f0Candidate[i] > f0Ceil || f0Candidate[i] < f0Floor)
+                f0Candidate[i] = 0.0;
+        }
+    }
+
+    // DetectOfficialF0Candidates (with Sub1, Sub2): per frame, the mean of each run of at least 10 voiced bands.
+    private static int DetectOfficialF0Candidates(double[][] rawF0Candidates, int numberOfChannels, int f0Length,
+        int maxCandidates, double[][] f0Candidates)
+    {
+        int numberOfCandidates = 0;
+        var vuv = new int[numberOfChannels];
+        var st = new int[numberOfChannels];
+        var ed = new int[numberOfChannels];
+        for (int i = 0; i < f0Length; i++)
+        {
+            for (int j = 0; j < numberOfChannels; j++) vuv[j] = rawF0Candidates[j][i] > 0 ? 1 : 0;
+            vuv[0] = vuv[numberOfChannels - 1] = 0;
+            int numberOfVoicedSections = 0;
+            for (int j = 1; j < numberOfChannels; j++)
+            {
+                int tmp = vuv[j] - vuv[j - 1];
+                if (tmp == 1) st[numberOfVoicedSections] = j;
+                if (tmp == -1) ed[numberOfVoicedSections++] = j;
+            }
+
+            int count = 0;
+            for (int s = 0; s < numberOfVoicedSections; s++)
+            {
+                if (ed[s] - st[s] < 10) continue;
+                double tmpF0 = 0.0;
+                for (int j = st[s]; j < ed[s]; j++) tmpF0 += rawF0Candidates[j][i];
+                tmpF0 /= ed[s] - st[s];
+                f0Candidates[i][count++] = tmpF0;
+            }
+            for (int s = count; s < maxCandidates; s++) f0Candidates[i][s] = 0.0;
+            numberOfCandidates = Math.Max(numberOfCandidates, count);
+        }
+        return numberOfCandidates;
+    }
+
+    // OverlapF0Candidates: each frame also takes the candidates of the three frames on either side.
+    private static void OverlapF0Candidates(int f0Length, int numberOfCandidates, double[][] f0Candidates)
+    {
+        const int n = 3;
+        for (int i = 1; i <= n; i++)
+            for (int j = 0; j < numberOfCandidates; j++)
+            {
+                for (int k = i; k < f0Length; k++)
+                    f0Candidates[k][j + numberOfCandidates * i] = f0Candidates[k - i][j];
+                for (int k = 0; k < f0Length - i; k++)
+                    f0Candidates[k][j + numberOfCandidates * (i + n)] = f0Candidates[k + i][j];
+            }
+    }
+
+    // GetRefinedF0 (Harvest's): instantaneous-frequency refinement of a candidate, and its reliability score.
+    private (double F0, double Score) HarvestRefinedF0(double[] x, int xLength, double fs, double currentPosition,
+        double currentF0, double f0Floor, double f0Ceil)
+    {
+        if (currentF0 <= 0.0) return (0.0, 0.0);
+
+        int halfWindowLength = (int)(1.5 * fs / currentF0 + 1.0);
+        double windowLengthInTime = (2.0 * halfWindowLength + 1.0) / fs;
+        int baseTimeLength = halfWindowLength * 2 + 1;
+        var baseTime = new double[baseTimeLength];
+        for (int i = 0; i < baseTimeLength; i++) baseTime[i] = (-halfWindowLength + i) / fs;
+        int fftSize = (int)Math.Pow(2.0, 2.0 + (int)(Math.Log(halfWindowLength * 2.0 + 1.0) / Log2));
+
+        // GetMeanF0 with GetBaseIndex, GetMainWindow, GetDiffWindow and GetSpectra.
+        int basicIndex = MatlabRound((currentPosition + baseTime[0]) * fs + 0.001);
+        var mainWindow = new double[baseTimeLength];
+        for (int i = 0; i < baseTimeLength; i++)
+        {
+            double tmp = (basicIndex + i - 1.0) / fs - currentPosition;
+            mainWindow[i] = 0.42 + 0.5 * Math.Cos(2.0 * Math.PI * tmp / windowLengthInTime)
+                + 0.08 * Math.Cos(4.0 * Math.PI * tmp / windowLengthInTime);
+        }
+        var diffWindow = new double[baseTimeLength];
+        diffWindow[0] = -mainWindow[1] / 2.0;
+        for (int i = 1; i < baseTimeLength - 1; i++) diffWindow[i] = -(mainWindow[i + 1] - mainWindow[i - 1]) / 2.0;
+        diffWindow[baseTimeLength - 1] = mainWindow[baseTimeLength - 2] / 2.0;
+
+        var waveform = new double[fftSize];
+        for (int i = 0; i < baseTimeLength; i++)
+            waveform[i] = x[Math.Max(0, Math.Min(xLength - 1, basicIndex + i - 1))] * mainWindow[i];
+        var (mainRe, mainIm) = ForwardFft(waveform);
+        for (int i = 0; i < baseTimeLength; i++)
+            waveform[i] = x[Math.Max(0, Math.Min(xLength - 1, basicIndex + i - 1))] * diffWindow[i];
+        var (diffRe, diffIm) = ForwardFft(waveform);
+
+        var powerSpectrum = new double[fftSize / 2 + 1];
+        var numeratorI = new double[fftSize / 2 + 1];
+        for (int j = 0; j <= fftSize / 2; j++)
+        {
+            numeratorI[j] = mainRe[j] * diffIm[j] - mainIm[j] * diffRe[j];
+            powerSpectrum[j] = mainRe[j] * mainRe[j] + mainIm[j] * mainIm[j];
+        }
+
+        // FixF0 (Harvest's): the amplitude-weighted harmonic frequencies, and the inverse of their mean deviation.
+        int numberOfHarmonics = Math.Min((int)(fs / 2.0 / currentF0), 6);
+        double numerator = 0.0, denominator = 0.0, score = 0.0;
+        for (int i = 0; i < numberOfHarmonics; i++)
+        {
+            int index = MatlabRound(currentF0 * fftSize / fs * (i + 1));
+            double instantaneousFrequency = powerSpectrum[index] == 0.0 ? 0.0
+                : (double)index * fs / fftSize + numeratorI[index] / powerSpectrum[index] * fs / 2.0 / Math.PI;
+            double amplitude = Math.Sqrt(powerSpectrum[index]);
+            numerator += amplitude * instantaneousFrequency;
+            denominator += amplitude * (i + 1.0);
+            score += Math.Abs((instantaneousFrequency / (i + 1.0) - currentF0) / currentF0);
+        }
+        double refinedF0 = numerator / (denominator + SafeGuardMinimum);
+        double refinedScore = 1.0 / (score / numberOfHarmonics + SafeGuardMinimum);
+        if (refinedF0 < f0Floor || refinedF0 > f0Ceil || refinedScore < 2.5) return (0.0, 0.0);
+        return (refinedF0, refinedScore);
+    }
+
+    // SelectBestF0 (Harvest's): the candidate nearest the reference within the allowed relative error.
+    private static double HarvestSelectBestF0(double referenceF0, double[] f0Candidates, int numberOfCandidates,
+        double allowedRange, out double bestError)
+    {
+        double bestF0 = 0.0;
+        bestError = allowedRange;
+        for (int i = 0; i < numberOfCandidates; i++)
+        {
+            double tmp = Math.Abs(referenceF0 - f0Candidates[i]) / referenceF0;
+            if (tmp > bestError) continue;
+            bestF0 = f0Candidates[i];
+            bestError = tmp;
+        }
+        return bestF0;
+    }
+
+    // RemoveUnreliableCandidates: a candidate with no close candidate in the frame before or after is dropped.
+    private static void RemoveUnreliableCandidates(int f0Length, int numberOfCandidates, double[][] f0Candidates, double[][] f0Scores)
+    {
+        var tmp = new double[f0Length][];
+        for (int i = 0; i < f0Length; i++)
+        {
+            tmp[i] = new double[numberOfCandidates];
+            Array.Copy(f0Candidates[i], tmp[i], numberOfCandidates);
+        }
+        for (int i = 1; i < f0Length - 1; i++)
+            for (int j = 0; j < numberOfCandidates; j++)
+            {
+                double referenceF0 = f0Candidates[i][j];
+                if (referenceF0 == 0) continue;
+                HarvestSelectBestF0(referenceF0, tmp[i + 1], numberOfCandidates, 1.0, out double error1);
+                HarvestSelectBestF0(referenceF0, tmp[i - 1], numberOfCandidates, 1.0, out double error2);
+                if (Math.Min(error1, error2) <= 0.05) continue;
+                f0Candidates[i][j] = 0;
+                f0Scores[i][j] = 0;
+            }
+    }
+
+    // FixF0Contour: the best-scoring candidate per frame, then the four fixing steps.
+    private static void HarvestFixF0Contour(double[][] f0Candidates, double[][] f0Scores, int f0Length, int numberOfCandidates,
+        double[] bestF0Contour)
+    {
+        var contour1 = new double[f0Length];
+        var contour2 = new double[f0Length];
+        // SearchF0Base.
+        for (int i = 0; i < f0Length; i++)
+        {
+            double best = 0.0;
+            contour1[i] = 0.0;
+            for (int j = 0; j < numberOfCandidates; j++)
+                if (f0Scores[i][j] > best)
+                {
+                    contour1[i] = f0Candidates[i][j];
+                    best = f0Scores[i][j];
+                }
+        }
+        // These parameters are optimized by speech databases.
+        HarvestFixStep1(contour1, f0Length, 0.008, contour2);
+        HarvestFixStep2(contour2, f0Length, 6, contour1);
+        HarvestFixStep3(contour1, f0Length, numberOfCandidates, f0Candidates, 0.18, f0Scores, contour2);
+        HarvestFixStep4(contour2, f0Length, 9, bestF0Contour);
+    }
+
+    // Step 1: a rapid change of the contour is replaced by 0.
+    private static void HarvestFixStep1(double[] f0Base, int f0Length, double allowedRange, double[] f0Step1)
+    {
+        for (int i = 0; i < f0Length; i++) f0Step1[i] = 0.0;
+        for (int i = 2; i < f0Length; i++)
+        {
+            if (f0Base[i] == 0.0) continue;
+            double referenceF0 = f0Base[i - 1] * 2 - f0Base[i - 2];
+            f0Step1[i] = Math.Abs((f0Base[i] - referenceF0) / referenceF0) > allowedRange
+                && Math.Abs(f0Base[i] - f0Base[i - 1]) / f0Base[i - 1] > allowedRange ? 0.0 : f0Base[i];
+        }
+    }
+
+    // GetBoundaryList: the first and last frame of each voiced section (the ends treated as unvoiced).
+    private static int HarvestBoundaryList(double[] f0, int f0Length, int[] boundaryList)
+    {
+        int numberOfBoundaries = 0;
+        var vuv = new int[f0Length];
+        for (int i = 0; i < f0Length; i++) vuv[i] = f0[i] > 0 ? 1 : 0;
+        vuv[0] = vuv[f0Length - 1] = 0;
+        for (int i = 1; i < f0Length; i++)
+            if (vuv[i] - vuv[i - 1] != 0)
+            {
+                boundaryList[numberOfBoundaries] = i - numberOfBoundaries % 2;
+                numberOfBoundaries++;
+            }
+        return numberOfBoundaries;
+    }
+
+    // Step 2: voiced sections shorter than voiceRangeMinimum frames are removed.
+    private static void HarvestFixStep2(double[] f0Step1, int f0Length, int voiceRangeMinimum, double[] f0Step2)
+    {
+        Array.Copy(f0Step1, f0Step2, f0Length);
+        var boundaryList = new int[f0Length];
+        int numberOfBoundaries = HarvestBoundaryList(f0Step1, f0Length, boundaryList);
+        for (int i = 0; i < numberOfBoundaries / 2; i++)
+        {
+            if (boundaryList[i * 2 + 1] - boundaryList[i * 2] >= voiceRangeMinimum) continue;
+            for (int j = boundaryList[i * 2]; j <= boundaryList[i * 2 + 1]; j++) f0Step2[j] = 0.0;
+        }
+    }
+
+    // GetMultiChannelF0: each voiced section in a channel of its own.
+    private static void HarvestMultiChannelF0(double[] f0, int f0Length, int[] boundaryList, int numberOfBoundaries,
+        double[][] multiChannelF0)
+    {
+        for (int i = 0; i < numberOfBoundaries / 2; i++)
+        {
+            for (int j = 0; j < boundaryList[i * 2]; j++) multiChannelF0[i][j] = 0.0;
+            for (int j = boundaryList[i * 2]; j <= boundaryList[i * 2 + 1]; j++) multiChannelF0[i][j] = f0[j];
+            for (int j = boundaryList[i * 2 + 1] + 1; j < f0Length; j++) multiChannelF0[i][j] = 0.0;
+        }
+    }
+
+    // ExtendF0: extends a section from origin by following the nearest candidates until four frames find none.
+    private static int HarvestExtendF0(int origin, int lastPoint, int shift, double[][] f0Candidates, int numberOfCandidates,
+        double allowedRange, double[] extendedF0)
+    {
+        const int threshold = 4;
+        double tmpF0 = extendedF0[origin];
+        int shiftedOrigin = origin;
+        int distance = Math.Abs(lastPoint - origin);
+        int count = 0;
+        for (int i = 0; i <= distance; i++)
+        {
+            int index = origin + shift * i;
+            extendedF0[index + shift] = HarvestSelectBestF0(tmpF0, f0Candidates[index + shift], numberOfCandidates, allowedRange, out _);
+            if (extendedF0[index + shift] == 0.0)
+            {
+                count++;
+            }
+            else
+            {
+                tmpF0 = extendedF0[index + shift];
+                count = 0;
+                shiftedOrigin = index + shift;
+            }
+            if (count == threshold) break;
+        }
+        return shiftedOrigin;
+    }
+
+    // Swap: exchanges two channels' contours and boundaries.
+    private static void HarvestSwap(int index1, int index2, double[][] f0, int[] boundary)
+    {
+        (f0[index1], f0[index2]) = (f0[index2], f0[index1]);
+        (boundary[index1 * 2], boundary[index2 * 2]) = (boundary[index2 * 2], boundary[index1 * 2]);
+        (boundary[index1 * 2 + 1], boundary[index2 * 2 + 1]) = (boundary[index2 * 2 + 1], boundary[index1 * 2 + 1]);
+    }
+
+    // Extend, with ExtendSub: every section extended both ways, then only those long enough for their mean F0 kept.
+    // FixStep3 passes the same arrays as input and output, and that aliasing is kept.
+    private static int HarvestExtend(double[][] multiChannelF0, int numberOfSections, int f0Length, int[] boundaryList,
+        double[][] f0Candidates, int numberOfCandidates, double allowedRange, double[][] extendedF0, int[] shiftedBoundaryList)
+    {
+        const int threshold = 100;
+        for (int i = 0; i < numberOfSections; i++)
+        {
+            shiftedBoundaryList[i * 2 + 1] = HarvestExtendF0(boundaryList[i * 2 + 1],
+                Math.Min(f0Length - 2, boundaryList[i * 2 + 1] + threshold), 1, f0Candidates, numberOfCandidates, allowedRange,
+                extendedF0[i]);
+            shiftedBoundaryList[i * 2] = HarvestExtendF0(boundaryList[i * 2], Math.Max(1, boundaryList[i * 2] - threshold), -1,
+                f0Candidates, numberOfCandidates, allowedRange, extendedF0[i]);
+        }
+
+        const double meanThreshold = 2200.0;
+        int count = 0;
+        // The reference never resets the mean between sections.
+        double meanF0 = 0.0;
+        for (int i = 0; i < numberOfSections; i++)
+        {
+            int st = shiftedBoundaryList[i * 2];
+            int ed = shiftedBoundaryList[i * 2 + 1];
+            for (int j = st; j < ed; j++) meanF0 += multiChannelF0[i][j];
+            meanF0 /= ed - st;
+            if (meanThreshold / meanF0 < ed - st) HarvestSwap(count++, i, extendedF0, shiftedBoundaryList);
+        }
+        return count;
+    }
+
+    // MergeF0 with MakeSortedOrder, SearchScore and MergeF0Sub: overlapping channels merged by their candidates' scores.
+    private static void HarvestMergeF0(double[][] multiChannelF0, int[] boundaryList, int numberOfChannels, int f0Length,
+        double[][] f0Candidates, double[][] f0Scores, int numberOfCandidates, double[] mergedF0)
+    {
+        var order = new int[numberOfChannels];
+        for (int i = 0; i < numberOfChannels; i++) order[i] = i;
+        for (int i = 1; i < numberOfChannels; i++)
+            for (int j = i - 1; j >= 0; j--)
+            {
+                if (boundaryList[order[j] * 2] > boundaryList[order[i] * 2]) (order[i], order[j]) = (order[j], order[i]);
+                else break;
+            }
+
+        for (int i = 0; i < f0Length; i++) mergedF0[i] = multiChannelF0[0][i];
+        for (int i = 1; i < numberOfChannels; i++)
+        {
+            if (boundaryList[order[i] * 2] - boundaryList[1] > 0)
+            {
+                for (int j = boundaryList[order[i] * 2]; j <= boundaryList[order[i] * 2 + 1]; j++)
+                    mergedF0[j] = multiChannelF0[order[i]][j];
+                boundaryList[0] = boundaryList[order[i] * 2];
+                boundaryList[1] = boundaryList[order[i] * 2 + 1];
+            }
+            else
+            {
+                boundaryList[1] = HarvestMergeF0Sub(mergedF0, boundaryList[0], boundaryList[1], multiChannelF0[order[i]],
+                    boundaryList[order[i] * 2], boundaryList[order[i] * 2 + 1], f0Candidates, f0Scores, numberOfCandidates, mergedF0);
+            }
+        }
+    }
+
+    private static double HarvestSearchScore(double f0, double[] f0Candidates, double[] f0Scores, int numberOfCandidates)
+    {
+        double score = 0.0;
+        for (int i = 0; i < numberOfCandidates; i++)
+            if (f0 == f0Candidates[i] && score < f0Scores[i]) score = f0Scores[i];
+        return score;
+    }
+
+    private static int HarvestMergeF0Sub(double[] f01, int st1, int ed1, double[] f02, int st2, int ed2, double[][] f0Candidates,
+        double[][] f0Scores, int numberOfCandidates, double[] mergedF0)
+    {
+        if (st1 <= st2 && ed1 >= ed2) return ed1;
+        double score1 = 0.0, score2 = 0.0;
+        for (int i = st2; i <= ed1; i++)
+        {
+            score1 += HarvestSearchScore(f01[i], f0Candidates[i], f0Scores[i], numberOfCandidates);
+            score2 += HarvestSearchScore(f02[i], f0Candidates[i], f0Scores[i], numberOfCandidates);
+        }
+        if (score1 > score2)
+            for (int i = ed1; i <= ed2; i++) mergedF0[i] = f02[i];
+        else
+            for (int i = st2; i <= ed2; i++) mergedF0[i] = f02[i];
+        return ed2;
+    }
+
+    // Step 3: voiced sections are extended by the continuity of the contour.
+    private static void HarvestFixStep3(double[] f0Step2, int f0Length, int numberOfCandidates, double[][] f0Candidates,
+        double allowedRange, double[][] f0Scores, double[] f0Step3)
+    {
+        Array.Copy(f0Step2, f0Step3, f0Length);
+        var boundaryList = new int[f0Length];
+        int numberOfBoundaries = HarvestBoundaryList(f0Step2, f0Length, boundaryList);
+        var multiChannelF0 = new double[numberOfBoundaries / 2][];
+        for (int i = 0; i < numberOfBoundaries / 2; i++) multiChannelF0[i] = new double[f0Length];
+        HarvestMultiChannelF0(f0Step2, f0Length, boundaryList, numberOfBoundaries, multiChannelF0);
+
+        int numberOfChannels = HarvestExtend(multiChannelF0, numberOfBoundaries / 2, f0Length, boundaryList, f0Candidates,
+            numberOfCandidates, allowedRange, multiChannelF0, boundaryList);
+        if (numberOfChannels != 0)
+            HarvestMergeF0(multiChannelF0, boundaryList, numberOfChannels, f0Length, f0Candidates, f0Scores, numberOfCandidates, f0Step3);
+    }
+
+    // Step 4: F0 in a short unvoiced gap is interpolated across it.
+    private static void HarvestFixStep4(double[] f0Step3, int f0Length, int threshold, double[] f0Step4)
+    {
+        Array.Copy(f0Step3, f0Step4, f0Length);
+        var boundaryList = new int[f0Length];
+        int numberOfBoundaries = HarvestBoundaryList(f0Step3, f0Length, boundaryList);
+        for (int i = 0; i < numberOfBoundaries / 2 - 1; i++)
+        {
+            int distance = boundaryList[(i + 1) * 2] - boundaryList[i * 2 + 1] - 1;
+            if (distance >= threshold) continue;
+            double tmp0 = f0Step3[boundaryList[i * 2 + 1]] + 1;
+            double tmp1 = f0Step3[boundaryList[(i + 1) * 2]] - 1;
+            double coefficient = (tmp1 - tmp0) / (distance + 1.0);
+            int count = 1;
+            for (int j = boundaryList[i * 2 + 1] + 1; j <= boundaryList[(i + 1) * 2] - 1; j++) f0Step4[j] = tmp0 + coefficient * count++;
+        }
+    }
+
+    // FilteringF0: a zero-lag (forward-backward) second-order Butterworth filter over one section.
+    private static void HarvestFilteringF0(double[] a, double[] b, double[] x, int xLength, int st, int ed, double[] y)
+    {
+        var tmpX = new double[xLength];
+        for (int i = 0; i < st; i++) x[i] = x[st];
+        for (int i = ed + 1; i < xLength; i++) x[i] = x[ed];
+
+        double w0 = 0.0, w1 = 0.0;
+        for (int i = 0; i < xLength; i++)
+        {
+            double wt = x[i] + a[0] * w0 + a[1] * w1;
+            tmpX[xLength - i - 1] = b[0] * wt + b[1] * w0 + b[0] * w1;
+            w1 = w0;
+            w0 = wt;
+        }
+        w0 = w1 = 0.0;
+        for (int i = 0; i < xLength; i++)
+        {
+            double wt = tmpX[i] + a[0] * w0 + a[1] * w1;
+            y[xLength - i - 1] = b[0] * wt + b[1] * w0 + b[0] * w1;
+            w1 = w0;
+            w0 = wt;
+        }
+    }
+
+    // SmoothF0Contour: each voiced section through the zero-lag filter, padded by 300 frames of zeros.
+    private static void SmoothF0Contour(double[] f0, int f0Length, double[] smoothedF0)
+    {
+        double[] b = { 0.0078202080334971724, 0.015640416066994345 };
+        double[] a = { 1.7347257688092754, -0.76600660094326412 };
+        const int lag = 300;
+        int newF0Length = f0Length + lag * 2;
+        var f0Contour = new double[newF0Length];
+        for (int i = lag; i < lag + f0Length; i++) f0Contour[i] = f0[i - lag];
+
+        var boundaryList = new int[newF0Length];
+        int numberOfBoundaries = HarvestBoundaryList(f0Contour, newF0Length, boundaryList);
+        var multiChannelF0 = new double[numberOfBoundaries / 2][];
+        for (int i = 0; i < numberOfBoundaries / 2; i++) multiChannelF0[i] = new double[newF0Length];
+        HarvestMultiChannelF0(f0Contour, newF0Length, boundaryList, numberOfBoundaries, multiChannelF0);
+
+        for (int i = 0; i < numberOfBoundaries / 2; i++)
+        {
+            HarvestFilteringF0(a, b, multiChannelF0[i], newF0Length, boundaryList[i * 2], boundaryList[i * 2 + 1], f0Contour);
+            for (int j = boundaryList[i * 2]; j <= boundaryList[i * 2 + 1]; j++) smoothedF0[j - lag] = f0Contour[j];
+        }
+    }
+
+    #endregion
+
     #region WORLD helpers (common.cpp, matlabfunctions.cpp)
 
     private static int MatlabRound(double x) => x > 0 ? (int)(x + 0.5) : (int)(x - 0.5);
