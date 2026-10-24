@@ -26,6 +26,14 @@ internal sealed record LlamaConfiguration
 
     public double RopeTheta { get; init; } = 10000;
 
+    /// <summary>Biases on the query, key and value projections (Qwen2's <c>q_proj</c>, <c>k_proj</c>, <c>v_proj</c>;
+    /// LLaMA has none).</summary>
+    public bool AttentionBias { get; init; }
+
+    /// <summary>Whether a token table comes with a language-model head; false for a decoder whose output hidden
+    /// states another head reads (CosyVoice 2's Qwen2 reads text through the table and speaks through its own head).</summary>
+    public bool IncludeHead { get; init; } = true;
+
     /// <summary>LoRA rank on the query and value projections (Hu et al. 2022); 0 for none.</summary>
     public int LoraRank { get; init; }
 
@@ -39,7 +47,8 @@ internal sealed record LlamaConfiguration
 /// <summary>
 /// LLaMA (Touvron et al. 2023) as Hugging Face's <c>LlamaForCausalLM</c> computes it: token embeddings, pre-norm decoder
 /// layers of RMSNorm, causal self-attention with rotary position embeddings (no biases) and a SwiGLU feed-forward block,
-/// a final RMSNorm and an untied language-model head.
+/// a final RMSNorm and an untied language-model head. With <see cref="LlamaConfiguration.AttentionBias"/> it is Qwen2
+/// (<c>Qwen2ForCausalLM</c>), which adds biases to the query, key and value projections.
 /// </summary>
 /// <remarks>Parameter names follow the Hugging Face checkpoints (<c>model.embed_tokens</c>, <c>model.layers.{i}.*</c>,
 /// <c>model.norm</c>, <c>lm_head</c>).</remarks>
@@ -50,7 +59,13 @@ internal sealed class LlamaNetwork<T>
 
     internal sealed record Layer(BiasFreeLinearLayer<T> InputNorm, BiasFreeLinearLayer<T> Query, BiasFreeLinearLayer<T> Key,
         BiasFreeLinearLayer<T> Value, BiasFreeLinearLayer<T> Output, BiasFreeLinearLayer<T> PostNorm, BiasFreeLinearLayer<T> Gate,
-        BiasFreeLinearLayer<T> Up, BiasFreeLinearLayer<T> Down, Lora? QueryLora, Lora? ValueLora);
+        BiasFreeLinearLayer<T> Up, BiasFreeLinearLayer<T> Down, Lora? QueryLora, Lora? ValueLora)
+    {
+        /// <summary>The query, key and value biases, null without <see cref="LlamaConfiguration.AttentionBias"/>.</summary>
+        public BiasFreeLinearLayer<T>? QueryBias { get; init; }
+        public BiasFreeLinearLayer<T>? KeyBias { get; init; }
+        public BiasFreeLinearLayer<T>? ValueBias { get; init; }
+    }
 
     /// <summary>A LoRA branch: down projection A, up projection B, and dropout on its input.</summary>
     internal sealed record Lora(BiasFreeLinearLayer<T> A, BiasFreeLinearLayer<T> B, DropoutLayer<T>? Dropout);
@@ -93,11 +108,17 @@ internal sealed class LlamaNetwork<T>
             var key = Linear(c.Hidden, kv);
             var value = Linear(c.Hidden, kv);
             var valueLora = Adapter(kv);
+            var queryBias = c.AttentionBias ? Values(c.Hidden) : null;
+            var keyBias = c.AttentionBias ? Values(kv) : null;
+            var valueBias = c.AttentionBias ? Values(kv) : null;
             Layers.Add(new Layer(input, query, key, value, Linear(c.Hidden, c.Hidden), Values(c.Hidden), Linear(c.Hidden, c.Intermediate),
-                Linear(c.Hidden, c.Intermediate), Linear(c.Intermediate, c.Hidden), queryLora, valueLora));
+                Linear(c.Hidden, c.Intermediate), Linear(c.Intermediate, c.Hidden), queryLora, valueLora)
+            {
+                QueryBias = queryBias, KeyBias = keyBias, ValueBias = valueBias,
+            });
         }
         FinalNorm = Values(c.Hidden);
-        LmHead = c.VocabSize > 0 ? Linear(c.Hidden, c.VocabSize) : null;
+        LmHead = c.VocabSize > 0 && c.IncludeHead ? Linear(c.Hidden, c.VocabSize) : null;
     }
 
     public LlamaConfiguration Configuration { get; }
@@ -235,9 +256,15 @@ internal sealed class LlamaNetwork<T>
         var c = Configuration;
         int b = x.Shape[0], l = x.Shape[1], hd = c.Hidden / c.Heads, groups = c.Heads / c.KeyValueHeads;
         var normed = RmsNorm(layer.InputNorm, x);
-        Tensor<T> Project(BiasFreeLinearLayer<T> projection, Lora? lora)
+        Tensor<T> Project(BiasFreeLinearLayer<T> projection, Lora? lora, BiasFreeLinearLayer<T>? projectionBias)
         {
             var y = Rows(projection, normed);
+            if (projectionBias is not null)
+            {
+                var shape = y.Shape.ToArray();
+                var row = _engine.Reshape(Value(projectionBias), Enumerable.Repeat(1, shape.Length - 1).Concat(new[] { shape[^1] }).ToArray());
+                y = _engine.TensorAdd(y, _engine.TensorBroadcastTo(row, shape));
+            }
             if (lora is null) return y;
             // peft's LoRA: W x + (alpha / r) B A dropout(x).
             var x = lora.Dropout is null ? normed : lora.Dropout.Forward(normed);
@@ -245,9 +272,9 @@ internal sealed class LlamaNetwork<T>
         }
         Tensor<T> Heads(Tensor<T> projected, int heads)
             => _engine.TensorPermute(_engine.Reshape(projected, new[] { b, l, heads, hd }), new[] { 0, 2, 1, 3 });
-        var q = Rotate(Heads(Project(layer.Query, layer.QueryLora), c.Heads), cos, sin);
-        var k = Rotate(Heads(Project(layer.Key, null), c.KeyValueHeads), cos, sin);
-        var v = Heads(Project(layer.Value, layer.ValueLora), c.KeyValueHeads);
+        var q = Rotate(Heads(Project(layer.Query, layer.QueryLora, layer.QueryBias), c.Heads), cos, sin);
+        var k = Rotate(Heads(Project(layer.Key, null, layer.KeyBias), c.KeyValueHeads), cos, sin);
+        var v = Heads(Project(layer.Value, layer.ValueLora, layer.ValueBias), c.KeyValueHeads);
         if (groups > 1)
         {
             // repeat_kv: each key-value head serves `groups` consecutive query heads.
@@ -316,6 +343,9 @@ internal sealed class LlamaNetwork<T>
             Linear(layer.Key, $"{n}.self_attn.k_proj.weight", h, kv);
             Linear(layer.Value, $"{n}.self_attn.v_proj.weight", h, kv);
             Linear(layer.Output, $"{n}.self_attn.o_proj.weight", h, h);
+            if (layer.QueryBias is not null) Vector(layer.QueryBias, $"{n}.self_attn.q_proj.bias", new[] { h });
+            if (layer.KeyBias is not null) Vector(layer.KeyBias, $"{n}.self_attn.k_proj.bias", new[] { kv });
+            if (layer.ValueBias is not null) Vector(layer.ValueBias, $"{n}.self_attn.v_proj.bias", new[] { kv });
             Vector(layer.PostNorm, $"{n}.post_attention_layernorm.weight", new[] { h });
             Linear(layer.Gate, $"{n}.mlp.gate_proj.weight", h, c.Intermediate);
             Linear(layer.Up, $"{n}.mlp.up_proj.weight", h, c.Intermediate);
@@ -345,7 +375,8 @@ internal sealed class LlamaNetwork<T>
         {
             int count = shape.Aggregate(1, (a, s) => a * s);
             var values = new double[count];
-            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal)) return values;
+            // lora_B and the projections' biases start at zero.
+            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal) || name.EndsWith(".bias", StringComparison.Ordinal)) return values;
             if (name.EndsWith("lora_A.weight", StringComparison.Ordinal))
             {
                 double bound = 1.0 / Math.Sqrt(shape[1]);
