@@ -26,6 +26,8 @@ internal static class Ftfy
         public readonly Dictionary<int, string> InvalidCharrefs = new();
         public readonly HashSet<int> InvalidCodepoints = new();
         public readonly Dictionary<char, string> WidthMap = new();
+        public readonly string PythonWord;
+        public readonly string PythonSpace;
         public readonly Regex Badness;
         public readonly Regex Utf8Detector;
 
@@ -56,6 +58,8 @@ internal static class Ftfy
             foreach (var entry in (JObject)root["invalid_charrefs"]!) InvalidCharrefs[int.Parse(entry.Key, CultureInfo.InvariantCulture)] = (string)entry.Value!;
             foreach (var code in root["invalid_codepoints"]!) InvalidCodepoints.Add((int)code);
             foreach (var entry in (JObject)root["width_map"]!) WidthMap[(char)int.Parse(entry.Key, CultureInfo.InvariantCulture)] = (string)entry.Value!;
+            PythonWord = (string)root["python_word"]!;
+            PythonSpace = (string)root["python_space"]!;
             Badness = new Regex((string)root["badness"]!, RegexOptions.IgnorePatternWhitespace | RegexOptions.CultureInvariant);
             Utf8Detector = new Regex((string)root["utf8_detector"]!, RegexOptions.IgnorePatternWhitespace | RegexOptions.CultureInvariant);
         }
@@ -118,6 +122,10 @@ internal static class Ftfy
             if (text == previous) return text;
         }
     }
+
+    /// <summary>Python's <c>\w</c> and <c>\s</c> as .NET character classes (<c>str.isalnum()</c> or '_', and
+    /// <c>str.isspace()</c>; the word class holds the Basic Multilingual Plane only).</summary>
+    internal static (string Word, string Space) PythonClasses => (Data.PythonWord, Data.PythonSpace);
 
     internal static bool IsBad(string text) => Data.Badness.IsMatch(text);
 
