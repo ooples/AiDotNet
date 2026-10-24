@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -862,7 +863,7 @@ Then: SUGGESTIONS: list";
             else
             {
                 var parts = line.Split(':');
-                if (parts.Length >= 2 && double.TryParse(parts[^1].Trim(), out double score))
+                if (parts.Length >= 2 && double.TryParse(parts[^1].Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double score))
                 {
                     scores[parts[0].Trim()] = NumOps.FromDouble(score / 10.0);
                 }

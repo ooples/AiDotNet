@@ -611,11 +611,11 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
                 }
                 catch (IOException ex)
                 {
-                    Console.WriteLine($"[DataVersionControl] Failed to read version file '{versionFile}': {ex.Message}");
+                    System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Failed to read version file '{versionFile}': {ex}");
                 }
                 catch (JsonException ex)
                 {
-                    Console.WriteLine($"[DataVersionControl] Failed to deserialize version file '{versionFile}': {ex.Message}");
+                    System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Failed to deserialize version file '{versionFile}': {ex}");
                 }
             }
         }
@@ -661,7 +661,7 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DataVersionControl] Failed to load lineage: {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Failed to load lineage: {ex}");
             }
         }
     }
@@ -692,7 +692,7 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DataVersionControl] Failed to load tags: {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Failed to load tags: {ex}");
             }
         }
     }
@@ -723,7 +723,7 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DataVersionControl] Failed to load run links: {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Failed to load run links: {ex}");
             }
         }
     }
@@ -762,7 +762,7 @@ public class DataVersionControl<T> : DataVersionControlBase<T>
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DataVersionControl] Failed to load snapshots: {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Failed to load snapshots: {ex}");
             }
         }
     }

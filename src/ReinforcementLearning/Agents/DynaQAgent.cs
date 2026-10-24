@@ -89,7 +89,7 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         // and zero every other slot — this preserves the one-hot invariant
         // while keeping the selected slot's exact value state-dependent.
         var result = new Vector<T>(_options.ActionSize);
-        var seedRng = new System.Random(stateKey.GetHashCode());
+        var seedRng = RandomHelper.CreateSeededRandom(AiDotNet.Helpers.StableHash.Seed(stateKey)) /* stable across processes (#2361) */;
         result[selectedAction] = NumOps.Add(NumOps.One, NumOps.FromDouble(seedRng.NextDouble() * 1e-9));
         return result;
     }
@@ -163,7 +163,7 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
             // Barto §2.6). See identical comment in DynaQPlusAgent — same
             // tabular-RL fix to avoid the "same action for every untrained
             // state" degeneracy that breaks DifferentStates_DifferentActions.
-            var seedRng = new System.Random(stateKey.GetHashCode());
+            var seedRng = RandomHelper.CreateSeededRandom(AiDotNet.Helpers.StableHash.Seed(stateKey)) /* stable across processes (#2361) */;
             for (int a = 0; a < _options.ActionSize; a++)
             {
                 double jitter = seedRng.NextDouble() * 1e-6;

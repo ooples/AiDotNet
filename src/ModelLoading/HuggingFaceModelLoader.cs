@@ -36,7 +36,7 @@ namespace AiDotNet.ModelLoading;
 /// ```
 /// </para>
 /// </remarks>
-public class HuggingFaceModelLoader<T>
+public class HuggingFaceModelLoader<T> : IDisposable
 {
     /// <summary>
     /// Default HuggingFace Hub API URL.
@@ -479,5 +479,17 @@ public class HuggingFaceModelLoader<T>
         }
 
         return string.Equals(input, pattern, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool _disposed;
+
+    /// <summary>Releases the HTTP client this loader created.</summary>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _httpClient.Dispose();
+        _disposed = true;
+        GC.SuppressFinalize(this);
     }
 }

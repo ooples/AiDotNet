@@ -756,8 +756,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 catch (Exception ex)
                 {
                     // GPU initialization failed - fall back to CPU
-                    Console.WriteLine($"[AiDotNet] GPU initialization failed: {ex.Message}");
-                    Console.WriteLine("[AiDotNet] Falling back to CPU execution");
+                    System.Diagnostics.Trace.TraceWarning($"[AiDotNet] GPU initialization failed: {ex}");
+                    System.Diagnostics.Trace.TraceWarning("[AiDotNet] Falling back to CPU execution");
                     UseCpuEngine();
                 }
                 break;
@@ -782,8 +782,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 catch (Exception ex)
                 {
                     // GPU initialization failed in Conservative mode - fall back to CPU silently
-                    Console.WriteLine($"[AiDotNet] GPU initialization failed in Conservative mode: {ex.Message}");
-                    Console.WriteLine("[AiDotNet] Falling back to CPU execution");
+                    System.Diagnostics.Trace.TraceWarning($"[AiDotNet] GPU initialization failed in Conservative mode: {ex}");
+                    System.Diagnostics.Trace.TraceWarning("[AiDotNet] Falling back to CPU execution");
                     UseCpuEngine();
                 }
                 break;
@@ -927,7 +927,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         catch (ArgumentException ex)
         {
-            Console.WriteLine($"[AiDotNet] Warning: Invalid GPU execution option: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"[AiDotNet] Warning: Invalid GPU execution option: {ex}");
             return;
         }
 
@@ -1828,7 +1828,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             catch (Exception ex)
             {
                 // Log detailed error info to help diagnose calibration issues
-                Console.WriteLine($"Warning: Calibration failed ({ex.GetType().Name}): {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"Warning: Calibration failed ({ex.GetType().Name}): {ex}");
                 if (ex.InnerException != null)
                 {
                     Console.WriteLine($"  Inner exception: {ex.InnerException.Message}");
@@ -1871,7 +1871,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: QAT simulation failed: {ex.Message}. Proceeding with standard PTQ.");
+                System.Diagnostics.Trace.TraceWarning($"Warning: QAT simulation failed: {ex}. Proceeding with standard PTQ.");
             }
         }
 

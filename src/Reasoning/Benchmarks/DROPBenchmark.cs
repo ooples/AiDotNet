@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
@@ -350,7 +351,7 @@ Question: How many items does the store have now?",
 
         foreach (Match match in matches)
         {
-            if (double.TryParse(match.Value, out double number))
+            if (double.TryParse(match.Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double number))
             {
                 numbers.Add(number);
             }

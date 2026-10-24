@@ -538,14 +538,14 @@ public class DataVersionControl : IDataVersionControl
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"[DataVersionControl] Skipped invalid version file '{versionFile}': {ex.Message}");
+                            System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Skipped invalid version file '{versionFile}': {ex}");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[DataVersionControl] Skipped invalid dataset directory '{datasetDir}': {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Skipped invalid dataset directory '{datasetDir}': {ex}");
             }
         }
 
@@ -566,7 +566,7 @@ public class DataVersionControl : IDataVersionControl
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[DataVersionControl] Skipped invalid lineage file '{lineageFile}': {ex.Message}");
+                    System.Diagnostics.Trace.TraceWarning($"[DataVersionControl] Skipped invalid lineage file '{lineageFile}': {ex}");
                 }
             }
         }

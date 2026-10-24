@@ -199,8 +199,8 @@ public class FileStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBa
 ///     lineParser: (line, lineNumber) =&gt;
 ///     {
 ///         var parts = line.Split(',');
-///         var features = parts.Take(10).Select(float.Parse).ToArray();
-///         var label = float.Parse(parts[10]);
+///         var features = parts.Take(10).Select(p => float.Parse(p, CultureInfo.InvariantCulture)).ToArray();
+///         var label = float.Parse(parts[10], CultureInfo.InvariantCulture);
 ///         return (features, label);
 ///     },
 ///     batchSize: 256,

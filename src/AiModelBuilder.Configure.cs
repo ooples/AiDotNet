@@ -2416,7 +2416,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: Quantization failed: {ex.Message}. Model will use original precision.");
+                System.Diagnostics.Trace.TraceWarning($"Warning: Quantization failed: {ex}. Model will use original precision.");
             }
         }
 

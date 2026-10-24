@@ -1,3 +1,4 @@
+using System.Globalization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -338,7 +339,7 @@ Provide only the refined reasoning step:";
             RegexTimeout
         );
 
-        if (scoreMatch.Success && double.TryParse(scoreMatch.Groups[1].Value, out double parsedScore))
+        if (scoreMatch.Success && double.TryParse(scoreMatch.Groups[1].Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double parsedScore))
         {
             score = Math.Max(0.0, Math.Min(1.0, parsedScore)); // Clamp to [0, 1]
         }
