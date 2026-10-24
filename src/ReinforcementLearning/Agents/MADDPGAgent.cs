@@ -81,8 +81,6 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
     private MADDPGOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // Networks for each agent
@@ -113,6 +111,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _options.Validate();
         // Issue #3 fix: Use configured actor learning rate for default optimizer
         _optimizer = optimizer ?? options.Optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,

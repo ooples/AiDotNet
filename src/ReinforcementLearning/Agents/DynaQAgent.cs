@@ -44,8 +44,6 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
     private List<(string state, int action)> _visitedStateActions;
@@ -58,6 +56,7 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _model = new Dictionary<string, Dictionary<int, (string, T)>>();
         _visitedStateActions = new List<(string, int)>();
@@ -90,7 +89,7 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         // and zero every other slot — this preserves the one-hot invariant
         // while keeping the selected slot's exact value state-dependent.
         var result = new Vector<T>(_options.ActionSize);
-        var seedRng = new System.Random(stateKey.GetHashCode());
+        var seedRng = RandomHelper.CreateSeededRandom(AiDotNet.Helpers.StableHash.Seed(stateKey)) /* stable across processes (#2361) */;
         result[selectedAction] = NumOps.Add(NumOps.One, NumOps.FromDouble(seedRng.NextDouble() * 1e-9));
         return result;
     }
@@ -164,7 +163,7 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
             // Barto §2.6). See identical comment in DynaQPlusAgent — same
             // tabular-RL fix to avoid the "same action for every untrained
             // state" degeneracy that breaks DifferentStates_DifferentActions.
-            var seedRng = new System.Random(stateKey.GetHashCode());
+            var seedRng = RandomHelper.CreateSeededRandom(AiDotNet.Helpers.StableHash.Seed(stateKey)) /* stable across processes (#2361) */;
             for (int a = 0; a < _options.ActionSize; a++)
             {
                 double jitter = seedRng.NextDouble() * 1e-6;

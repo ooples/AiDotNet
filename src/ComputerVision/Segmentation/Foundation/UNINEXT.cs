@@ -69,17 +69,6 @@ public partial class UNINEXT<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly UNINEXTOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this UNINEXT model.
-    /// </summary>
-    /// <returns>The <see cref="UNINEXTOptions"/> for this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only UNINEXT's OWN configuration lives here. _height, _width, _channels, _numClasses,

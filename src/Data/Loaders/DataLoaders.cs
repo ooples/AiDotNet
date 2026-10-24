@@ -1016,8 +1016,8 @@ public static class DataLoaders
     ///     lineParser: (line, lineNumber) =&gt;
     ///     {
     ///         var parts = line.Split(',');
-    ///         var features = parts.Take(10).Select(double.Parse).ToArray();
-    ///         var label = double.Parse(parts[10]);
+    ///         var features = parts.Take(10).Select(p => double.Parse(p, CultureInfo.InvariantCulture)).ToArray();
+    ///         var label = double.Parse(parts[10], CultureInfo.InvariantCulture);
     ///         return (features, label);
     ///     },
     ///     batchSize: 256,

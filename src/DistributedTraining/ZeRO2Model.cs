@@ -188,6 +188,9 @@ public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
+        // Sharding initializes lazily; without this the first call read an empty LocalShard.
+        EnsureShardingInitialized();
+
         // ZeRO-2 workflow with explicit gradient computation (IFullModel.IGradientComputable support):
         //   1. ComputeGradients: Forward + backward pass to compute TRUE gradients
         //   2. ReduceScatter gradients (each rank gets a shard)
@@ -315,6 +318,9 @@ public partial class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override TOutput Predict(TInput input)
     {
+        // Sharding initializes lazily; without this the first call read an empty LocalShard.
+        EnsureShardingInitialized();
+
         InterfaceGuard.Parameterizable(WrappedModel).SetParameters(LocalShard);
         return WrappedModel.Predict(input);
     }

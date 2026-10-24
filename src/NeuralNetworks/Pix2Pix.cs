@@ -86,9 +86,6 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
     // which is the order this hook used and therefore the serialization order. Removed under AIDN082.
     private readonly Pix2PixOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The optimizer for the generator network.
     /// </summary>

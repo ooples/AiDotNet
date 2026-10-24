@@ -68,8 +68,9 @@ public class ForecastOutputRankDiagnosticTests
                 model = Construct(closed);
                 if (model is null) { skipped.Add($"{open.Name}: no architecture constructor"); continue; }
 
-                int[]? one = TryPredictShape(model, 1);
-                int[]? two = TryPredictShape(model, 2);
+                var (seqLen, features) = InputGeometry(model);
+                int[]? one = TryPredictShape(model, 1, seqLen, features);
+                int[]? two = TryPredictShape(model, 2, seqLen, features);
                 if (one is null || two is null)
                 {
                     skipped.Add($"{open.Name}: Predict failed at batch 1 or 2");
@@ -115,15 +116,22 @@ public class ForecastOutputRankDiagnosticTests
         return false;
     }
 
-    private static int[]? TryPredictShape(object model, int batch)
+    private static int[]? TryPredictShape(object model, int batch, int seqLen, int features)
     {
         try
         {
-            var input = new Tensor<double>(new[] { batch, SeqLen, Features });
+            var input = new Tensor<double>(new[] { batch, seqLen, features });
             return ((NeuralNetworkBase<double>)model).Predict(input).Shape.ToArray();
         }
         catch { return null; }
     }
+
+    // The sequence length and feature count the model was built from, or the harness defaults for a model that
+    // publishes neither.
+    private static (int SeqLen, int Features) InputGeometry(object model)
+        => model is FinancialModelBase<double> financial && financial.SequenceLength > 0 && financial.NumFeatures > 0
+            ? (financial.SequenceLength, financial.NumFeatures)
+            : (SeqLen, Features);
 
     private static object? Construct(Type closed)
     {
@@ -136,9 +144,21 @@ public class ForecastOutputRankDiagnosticTests
         });
         if (ctor is null) return null;
 
+        // #2147: a model refuses an architecture that disagrees with the sizes its options build, so a fixed 16 x 4
+        // with an output of 1 described none of them. Build once to learn the model's own geometry, then build the
+        // model the harness predicts with from an architecture stating that geometry and no output size.
+        object? probe = Build(ctor, SeqLen, Features);
+        if (probe is null) return null;
+        var (seqLen, features) = InputGeometry(probe);
+        (probe as IDisposable)?.Dispose();
+        return Build(ctor, seqLen, features);
+    }
+
+    private static object? Build(System.Reflection.ConstructorInfo ctor, int seqLen, int features)
+    {
         var architecture = new NeuralNetworkArchitecture<double>(
             InputType.TwoDimensional, NeuralNetworkTaskType.Regression,
-            inputHeight: SeqLen, inputWidth: Features, outputSize: 1);
+            inputHeight: seqLen, inputWidth: features);
 
         var args = ModelSweepConstruction.Arguments(ctor.GetParameters(), architecture);
 

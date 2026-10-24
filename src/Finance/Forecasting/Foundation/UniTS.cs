@@ -173,9 +173,6 @@ public partial class UniTS<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly UniTSOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
@@ -540,7 +537,7 @@ public partial class UniTS<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the UniTS model, Forecast produces predictions from input data. This is the main inference step of the UniTS architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 

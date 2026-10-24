@@ -90,8 +90,6 @@ public partial class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
 
     private readonly CLIPAOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -105,6 +103,7 @@ public partial class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
         : base(architecture)
     {
         _options = options ?? new CLIPAOptions();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -140,6 +139,7 @@ public partial class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLa
         : base(architecture)
     {
         _options = options ?? new CLIPAOptions();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,

@@ -107,8 +107,6 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
     private int _encoderLayerEnd;
     private int _system2EndLayerIndex;
 
-    public override ModelOptions GetOptions() => _options;
-
     public Helix(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -117,6 +115,7 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         : base(architecture)
     {
         _options = options ?? new HelixOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -140,6 +139,7 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         : base(architecture)
     {
         _options = options ?? new HelixOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateConfiguredOptimizer();
         base.ImageSize = _options.ImageSize;

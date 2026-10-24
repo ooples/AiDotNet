@@ -65,9 +65,6 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
 {
     private readonly NeuralProgramSynthesizerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly CodeSynthesisArchitecture<T> _architecture;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ICodeModel<T> _codeModel;

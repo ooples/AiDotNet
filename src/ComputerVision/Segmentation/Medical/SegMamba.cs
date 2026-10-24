@@ -95,7 +95,6 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
     }
 
     private readonly SegMambaOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only SegMamba's OWN configuration lives here. _height, _width, _channels, _numClasses,

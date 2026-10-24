@@ -68,7 +68,6 @@ public partial class MoG<T> : FrameInterpolationBase<T>
     #region Fields
 
     private readonly MoGOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -84,6 +83,7 @@ public partial class MoG<T> : FrameInterpolationBase<T>
         if (string.IsNullOrEmpty(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new MoGOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
         _options.ModelPath = modelPath;
@@ -97,6 +97,7 @@ public partial class MoG<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new MoGOptions();
+        Options = _options;
         _useNativeMode = true;
         // Honor the model's configured LearningRate (1e-4) and clip gradients. The bare AdamWOptimizer(this)
         // dropped both and ran at Adam's own 1e-3 default, which is 10x the rate this model declares and left

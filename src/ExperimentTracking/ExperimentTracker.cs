@@ -212,7 +212,7 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
             {
                 // Directory may be in use or have permission issues
                 // The experiment is already removed from memory, so log and continue
-                Console.WriteLine($"[ExperimentTracker] Failed to delete experiment directory '{experimentDir}': {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[ExperimentTracker] Failed to delete experiment directory '{experimentDir}': {ex}");
             }
         }
     }
@@ -314,12 +314,12 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
             catch (IOException ex)
             {
                 // Skip experiment with unreadable data
-                Console.WriteLine($"[ExperimentTracker] Failed to read experiment file '{metaFile}': {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[ExperimentTracker] Failed to read experiment file '{metaFile}': {ex}");
             }
             catch (JsonException ex)
             {
                 // Skip experiment with corrupted data
-                Console.WriteLine($"[ExperimentTracker] Failed to deserialize experiment file '{metaFile}': {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[ExperimentTracker] Failed to deserialize experiment file '{metaFile}': {ex}");
             }
         }
     }
@@ -350,12 +350,12 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
             catch (IOException ex)
             {
                 // Skip run with unreadable data
-                Console.WriteLine($"[ExperimentTracker] Failed to read run file '{metaFile}': {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[ExperimentTracker] Failed to read run file '{metaFile}': {ex}");
             }
             catch (JsonException ex)
             {
                 // Skip run with corrupted data
-                Console.WriteLine($"[ExperimentTracker] Failed to deserialize run file '{metaFile}': {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[ExperimentTracker] Failed to deserialize run file '{metaFile}': {ex}");
             }
         }
     }

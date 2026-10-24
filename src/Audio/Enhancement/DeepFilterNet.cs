@@ -67,9 +67,6 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
 {
     private readonly DeepFilterNetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Model Architecture Parameters
 
     /// <summary>

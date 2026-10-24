@@ -85,9 +85,6 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
 {
     private readonly MultiFidelityPINNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The multi-fidelity solution: the low-fidelity network's output plus this network's learned
     /// correction, u_HF(x) = u_LF(x) + delta(x).

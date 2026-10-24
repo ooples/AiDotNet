@@ -60,10 +60,16 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Howard et al. 2019, Sec. 6: RMSProp with 0.9 momentum, an initial learning rate of 0.1 at batch size 4096, a decay rate of 0.01 every 3 epochs, and l2 weight decay of 1e-5. This model does NOT currently train with RMSProp: our implementation drives the loss to infinity on this network at 1e-3 and at the 7.8e-4 the linear scaling rule produces, where Adam trains at the same rate. The optimizer built here is therefore Adam and the report says so, rather than the paper value being deleted to hide the difference.")]
 public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
 {
-    private readonly MobileNetV3Options _options;
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
+    /// <remarks>An architecture may state the image it is configured for, height x width x channels (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        new[] { _configuration.InputHeight * _configuration.InputWidth * _configuration.InputChannels };
+
+    private readonly MobileNetV3Options _options;
 
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -184,7 +190,7 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
         else
         {
             // Use MobileNetV3-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV3Layers(Architecture, _configuration));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV3Layers(_configuration));
         }
 
         // Set eval mode: BN with constant spatial input in training mode normalizes to zero

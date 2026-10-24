@@ -81,9 +81,6 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     private int _updates;
     private bool _disposed;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Creates a trainable MusicGen.</summary>
     public MusicGenModel(NeuralNetworkArchitecture<T> architecture, MusicGenOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)

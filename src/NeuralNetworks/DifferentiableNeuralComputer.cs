@@ -76,9 +76,6 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (memory addressing regularization) should be used during training.
     /// </summary>

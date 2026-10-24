@@ -44,8 +44,6 @@ public partial class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
 {
     private readonly VALLEXCloneOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -58,6 +56,7 @@ public partial class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
         : base(architecture)
     {
         _options = options ?? new VALLEXCloneOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -80,6 +79,7 @@ public partial class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceClone
         : base(architecture)
     {
         _options = options ?? new VALLEXCloneOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;

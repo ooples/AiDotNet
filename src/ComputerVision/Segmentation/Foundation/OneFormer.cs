@@ -75,17 +75,6 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly OneFormerOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this OneFormer model.
-    /// </summary>
-    /// <returns>The <see cref="OneFormerOptions"/> for this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only OneFormer's OWN configuration lives here. _height, _width, _channels, _numClasses,

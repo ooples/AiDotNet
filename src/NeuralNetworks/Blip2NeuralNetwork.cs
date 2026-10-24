@@ -81,9 +81,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
 {
     private readonly Blip2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

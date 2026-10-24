@@ -94,9 +94,6 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// </summary>
     private readonly SpeakerEmbeddingOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Whether the model has been disposed.
     /// </summary>
@@ -199,6 +196,7 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         // Copied rather than held by reference so nothing here can mutate an options object the
         // caller still holds.
         _options = options is null ? new SpeakerEmbeddingOptions() : new SpeakerEmbeddingOptions(options);
+        Options = _options;
         _options.Validate();
 
         _useNativeMode = false;
@@ -249,6 +247,7 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new SpeakerEmbeddingOptions();
+        Options = _options;
         _options.Validate();
 
         _useNativeMode = true;

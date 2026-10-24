@@ -57,16 +57,17 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     /// </remarks>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
-    private readonly ConvTransformerOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly ConvTransformerOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public ConvTransformer(NeuralNetworkArchitecture<T> architecture, string modelPath, ConvTransformerOptions? options = null) : base(architecture) { _options = options ?? new ConvTransformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public ConvTransformer(NeuralNetworkArchitecture<T> architecture, string modelPath, ConvTransformerOptions? options = null) : base(architecture) { _options = options ?? new ConvTransformerOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
     public ConvTransformer(NeuralNetworkArchitecture<T> architecture, ConvTransformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new ConvTransformerOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateTransformerScheduleAdamOptimizer(
             _options.EncoderDim,

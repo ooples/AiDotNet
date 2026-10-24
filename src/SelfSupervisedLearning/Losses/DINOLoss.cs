@@ -266,7 +266,9 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
         return new Tensor<T>(result, [batchSize, _outputDim]);
     }
 
-    private void UpdateCenter(Tensor<T> teacherOutput)
+    // Internal so a training step can advance the center once per step, after an objective that may be evaluated
+    // more than once.
+    internal void UpdateCenter(Tensor<T> teacherOutput)
     {
         var batchSize = teacherOutput.Shape[0];
         var momentum = NumOps.FromDouble(_centerMomentum);

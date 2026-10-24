@@ -231,11 +231,9 @@ public partial class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         _conditioner = conditioner;
 
         _audioVAE = audioVAE ?? new AudioVAE<T>(
-            melChannels: melChannels,
+            melBins: melChannels,
             latentChannels: AUDIOLDM_LATENT_CHANNELS,
-            baseChannels: 64,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
+            latentScaleFactor: AudioVAE<T>.AudioLdmLatentScale,
             seed: seed);
 
         var unetBaseChannels = isVersion2 ? 384 : 256;

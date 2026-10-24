@@ -60,7 +60,6 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     #region Fields
 
     private readonly CanaryOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
@@ -94,6 +93,7 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         : base(architecture)
     {
         _options = options ?? new CanaryOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -109,6 +109,7 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         : base(architecture)
     {
         _options = options ?? new CanaryOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

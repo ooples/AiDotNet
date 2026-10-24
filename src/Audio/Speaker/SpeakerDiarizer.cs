@@ -65,9 +65,6 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
 
     private readonly SpeakerDiarizerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly SpeakerEmbeddingExtractor<T> _embeddingExtractor;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _useNativeMode;
@@ -149,6 +146,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         }
 
         _options = options ?? new SpeakerDiarizerOptions();
+        Options = _options;
         _useNativeMode = false;
 
         // Load ONNX model
@@ -207,6 +205,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         : base(architecture)
     {
         _options = options ?? new SpeakerDiarizerOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

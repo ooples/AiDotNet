@@ -95,9 +95,6 @@ public partial class RAPIDFlow<T> : OpticalFlowBase<T>
 {
     private readonly RAPIDFlowOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     // Pyramid levels. Channel widths match the paper's defaults (Morimitsu
     // ICRA 2024, rapidflow.py constructor defaults in the official PTLFlow
     // reference implementation):

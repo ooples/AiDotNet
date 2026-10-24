@@ -106,9 +106,6 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
         base.HiddenDim = _vits.HiddenDim;
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _vits;
-
     /// <summary>The options, available to the hooks the base constructor calls before a derived constructor runs.</summary>
     protected VitsModelOptions VitsOptions => _vits;
 

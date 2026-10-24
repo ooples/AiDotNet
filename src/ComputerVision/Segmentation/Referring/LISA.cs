@@ -63,7 +63,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 public partial class LISA<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly LISAOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only LISA's OWN configuration lives here. _height, _width, _channels, _numClasses,

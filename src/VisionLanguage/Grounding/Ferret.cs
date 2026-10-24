@@ -68,8 +68,6 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
 {
     private readonly FerretOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -84,6 +82,7 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         : base(architecture)
     {
         _options = options ?? new FerretOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -106,6 +105,7 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         : base(architecture)
     {
         _options = options ?? new FerretOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

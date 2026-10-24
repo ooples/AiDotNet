@@ -101,9 +101,6 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly TFCOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _hiddenDimension;
@@ -244,7 +241,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultTFCLayers(
-                Architecture, _contextLength, _forecastHorizon, _hiddenDimension,
+                _contextLength, _forecastHorizon, _hiddenDimension,
                 _projectionDimension, _numTimeLayers, _numFreqLayers, _dropout));
             ExtractLayerReferences();
         }
@@ -371,7 +368,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ComputeContrastiveLossTape(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
+        var normalized = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         var timeCurrent = normalized;
         if (timeCurrent.Rank == 1)
             timeCurrent = Engine.Reshape(timeCurrent, new[] { 1, timeCurrent.Length });
@@ -452,7 +449,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// </summary>
     private T ComputeContrastiveLoss(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
+        var normalized = ApplyInstanceNormalization(SqueezeUnivariateFeatureAxis(input));
         var timeCurrent = normalized;
         if (timeCurrent.Rank == 1) timeCurrent = timeCurrent.Reshape(new[] { 1, timeCurrent.Length });
 
@@ -531,7 +528,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
             throw new NotSupportedException("TFC does not support quantile forecasting. Pass null for point forecasts.");
@@ -701,7 +698,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         // fused plan, class-field capture at trace time would freeze the trace-batch
         // stats; tensor-threaded stats re-execute on every replay. The abstract
         // override caches them for external ApplyInstanceNormalization callers.
-        var (normalized, mean, std) = NormalizeWithStats(input);
+        var (normalized, mean, std) = NormalizeWithStats(SqueezeUnivariateFeatureAxis(input));
         _revinMeanTensor = mean;
         _revinStdTensor = std;
         var current = normalized;

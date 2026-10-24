@@ -61,9 +61,6 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     private readonly LiquidStateMachineOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the reservoir (number of neurons).
     /// </summary>

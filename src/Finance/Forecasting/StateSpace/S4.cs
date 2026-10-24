@@ -123,9 +123,6 @@ public partial class S4<T> : ForecastingModelBase<T>
     private int[]? _residualBlockLengths;    private readonly ILossFunction<T> _lossFunction;
     private readonly S4Options<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _modelDimension;
@@ -345,7 +342,6 @@ public partial class S4<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultS4Layers(
-                Architecture,
                 _contextLength,
                 _forecastHorizon,
                 _modelDimension,
@@ -590,7 +586,7 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// using HiPPO-like dynamics and produces future predictions.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 

@@ -78,9 +78,6 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
 {
     private readonly InternVideo2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

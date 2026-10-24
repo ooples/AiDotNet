@@ -83,8 +83,6 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     private const double ActorPolicyGradientStep = 0.05;
     private const double FiniteDifferenceEpsilon = 1e-3;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
 
     private INeuralNetwork<T> _actorNetwork;
@@ -111,6 +109,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     public TD3Agent(TD3Options<T> options) : base(CreateBaseOptions(options))
     {
         _options = options;
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
         _random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _stepCount = 0;

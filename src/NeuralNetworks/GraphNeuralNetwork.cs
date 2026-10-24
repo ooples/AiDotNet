@@ -65,9 +65,6 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
     private readonly GraphNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (graph smoothness regularization) should be used during training.
     /// </summary>

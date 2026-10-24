@@ -66,7 +66,6 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Fields
 
     private readonly ACEStepOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -102,6 +101,7 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture)
     {
         _options = options ?? new ACEStepOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -115,6 +115,7 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture)
     {
         _options = options ?? new ACEStepOptions();
+        Options = _options;
         _useNativeMode = true;
         // ACEStepOptions.LearningRate was declared and then read by nothing, so the optimizer ran at
         // AdamWOptimizerOptions' own default of 1e-3 -- ten times the rate this model documents and
@@ -263,7 +264,8 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     private Tensor<T> EncodePrompt(string prompt)
     {
         var emb = new Tensor<T>([_options.TextEncoderDim]);
-        int hash = prompt.GetHashCode();
+        // A stable hash: string.GetHashCode() changes per process, so the same prompt would encode differently each run (#2361).
+        int hash = AiDotNet.Helpers.StableHash.Seed(prompt);
         for (int i = 0; i < _options.TextEncoderDim; i++)
             emb[i] = NumOps.FromDouble(Math.Sin((hash + i) * 0.1) * 0.5);
         return emb;

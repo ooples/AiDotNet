@@ -58,7 +58,6 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
     #region Fields
 
     private readonly PyAnnoteOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -83,6 +82,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         : base(architecture)
     {
         _options = options ?? new PyAnnoteOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         EmbeddingDimension = _options.EmbeddingDim;
@@ -99,6 +99,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         : base(architecture)
     {
         _options = options ?? new PyAnnoteOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

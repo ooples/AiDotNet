@@ -61,9 +61,6 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
 {
     private readonly E2FGVIOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private int _height;

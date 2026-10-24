@@ -55,7 +55,6 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
     #region Fields
 
     private readonly MelBandRoFormerOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
     [Scratch]
@@ -70,7 +69,7 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
     public MelBandRoFormer(NeuralNetworkArchitecture<T> architecture, string modelPath, MelBandRoFormerOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new MelBandRoFormerOptions(); _useNativeMode = false;
+        _options = options ?? new MelBandRoFormerOptions(); Options = _options; _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
@@ -84,7 +83,7 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new MelBandRoFormerOptions(); _useNativeMode = true;
+        _options = options ?? new MelBandRoFormerOptions(); Options = _options; _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.

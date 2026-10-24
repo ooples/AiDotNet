@@ -44,16 +44,9 @@ public class LinearProjector<T> : IProjectorHead<T>
     private readonly int _outputDim;
     private readonly bool _useBias;
 
-    private Tensor<T> _weight;
-    private Tensor<T>? _bias;
-    [Scratch]
-    private Tensor<T>? _gradWeight;
-    [Scratch]
-    private Tensor<T>? _gradBias;
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    private bool _isTraining = true;
+    // Written in place, never replaced: an optimizer keys its state by tensor reference.
+    private readonly Tensor<T> _weight;
+    private readonly Tensor<T>? _bias;
 
     /// <inheritdoc />
     public int InputDimension => _inputDim;
@@ -112,11 +105,13 @@ public class LinearProjector<T> : IProjectorHead<T>
     }
 
     /// <inheritdoc />
+    public IReadOnlyList<Tensor<T>> GetTrainableTensors() =>
+        _bias is null ? new[] { _weight } : new[] { _weight, _bias };
+
+    /// <inheritdoc />
     public Tensor<T> Project(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
-
-        _lastInput = input;
 
         // Vectorized: output = input @ weight + bias
         var output = Engine.TensorMatMul(input, _weight);
@@ -132,18 +127,9 @@ public class LinearProjector<T> : IProjectorHead<T>
     public Vector<T> GetParameters()
     {
         var paramList = new List<T>();
-
-        for (int i = 0; i < _weight.Length; i++)
+        foreach (var tensor in GetTrainableTensors())
         {
-            paramList.Add(_weight.Data.Span[i]);
-        }
-
-        if (_useBias && _bias is not null)
-        {
-            for (int i = 0; i < _bias.Length; i++)
-            {
-                paramList.Add(_bias.Data.Span[i]);
-            }
+            for (int i = 0; i < tensor.Length; i++) paramList.Add(tensor[i]);
         }
 
         return new Vector<T>([.. paramList]);
@@ -153,87 +139,38 @@ public class LinearProjector<T> : IProjectorHead<T>
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters; got {parameters.Length}.", nameof(parameters));
 
+        // Written into the live tensors, in GetParameters' order, so an optimizer keyed by tensor reference keeps its
+        // state.
         int offset = 0;
-
-        // Set weight
-        var weightData = new T[_inputDim * _outputDim];
-        for (int i = 0; i < weightData.Length; i++)
+        foreach (var tensor in GetTrainableTensors())
         {
-            weightData[i] = parameters[offset++];
-        }
-        _weight = new Tensor<T>(weightData, [_inputDim, _outputDim]);
-
-        // Set bias
-        if (_useBias)
-        {
-            var biasData = new T[_outputDim];
-            for (int i = 0; i < biasData.Length; i++)
-            {
-                biasData[i] = parameters[offset++];
-            }
-            _bias = new Tensor<T>(biasData, [_outputDim]);
+            for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
         }
     }
 
     /// <inheritdoc />
-    public Vector<T> GetParameterGradients()
-    {
-        var gradList = new List<T>();
-
-        if (_gradWeight is not null)
-        {
-            for (int i = 0; i < _gradWeight.Length; i++)
-            {
-                gradList.Add(_gradWeight.Data.Span[i]);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < _inputDim * _outputDim; i++)
-            {
-                gradList.Add(NumOps.Zero);
-            }
-        }
-
-        if (_useBias)
-        {
-            if (_gradBias is not null)
-            {
-                for (int i = 0; i < _gradBias.Length; i++)
-                {
-                    gradList.Add(_gradBias.Data.Span[i]);
-                }
-            }
-            else
-            {
-                for (int i = 0; i < _outputDim; i++)
-                {
-                    gradList.Add(NumOps.Zero);
-                }
-            }
-        }
-
-        return new Vector<T>([.. gradList]);
-    }
+    /// <exception cref="NotSupportedException">Always: the gradient tape differentiates this head.</exception>
+    public Vector<T> GetParameterGradients() => throw new NotSupportedException(
+        "LinearProjector keeps no gradients: record Project on a GradientTape and differentiate GetTrainableTensors().");
 
     /// <inheritdoc />
+    /// <remarks>This head keeps no gradients, so there is nothing to clear.</remarks>
     public void ClearGradients()
     {
-        _gradWeight = null;
-        _gradBias = null;
     }
 
     /// <inheritdoc />
+    /// <remarks>A linear head computes the same function in training and evaluation.</remarks>
     public void SetTrainingMode(bool isTraining)
     {
-        _isTraining = isTraining;
     }
 
     /// <inheritdoc />
+    /// <remarks>The head keeps no per-call state; Reset leaves the weights as they are.</remarks>
     public void Reset()
     {
-        ClearGradients();
-        _lastInput = null;
     }
 }

@@ -93,9 +93,6 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 {
     private readonly ConvTasNetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly INumericOperations<T> _numOps;
 
     // Architecture sizes, kept for the public surface, streaming and metadata.

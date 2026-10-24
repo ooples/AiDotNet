@@ -88,8 +88,6 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     private AcousticConditionEncoderLayer<T>? _phonemePredictor;
     private DenseLayer<T>? _phonemeProjection;
 
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>The speaker embedding table (null when the architecture supplies its own layers).</summary>
     internal EmbeddingLayer<T>? SpeakerEmbeddingTable => _speakerEmbedding;
 
@@ -110,6 +108,7 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
         : base(architecture)
     {
         _options = options ?? new AdaSpeechOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -136,6 +135,7 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
         : base(architecture)
     {
         _options = options ?? new AdaSpeechOptions();
+        Options = _options;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
         base.SampleRate = _options.SampleRate;

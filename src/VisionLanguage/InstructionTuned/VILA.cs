@@ -69,8 +69,6 @@ public partial class VILA<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
 {
     private readonly VILAOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -85,6 +83,7 @@ public partial class VILA<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         : base(architecture)
     {
         _options = options ?? new VILAOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -107,6 +106,7 @@ public partial class VILA<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         : base(architecture)
     {
         _options = options ?? new VILAOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

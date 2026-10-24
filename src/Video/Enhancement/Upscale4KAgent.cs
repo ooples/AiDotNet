@@ -59,7 +59,6 @@ public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly Upscale4KAgentOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -77,6 +76,7 @@ public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new Upscale4KAgentOptions();
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -90,6 +90,7 @@ public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new Upscale4KAgentOptions();
+        Options = _options;
         _useNativeMode = true;
         // The public SR options specify a conservative 1e-4 learning rate. AdamW's
         // generic default is 1e-3, which is too aggressive for the residual

@@ -67,7 +67,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 public partial class SegGPT<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SegGPTOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only SegGPT's OWN configuration lives here. _height, _width, _channels, _numClasses,

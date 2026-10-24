@@ -95,9 +95,6 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     private readonly ILossFunction<T> _lossFunction;
     private readonly CSDIOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _sequenceLength;
     private int _numFeatures;
     private int _hiddenDimension;
@@ -274,7 +271,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultCSDILayers(
-                Architecture, _sequenceLength, _numFeatures, _hiddenDimension,
+                _sequenceLength, _numFeatures, _hiddenDimension,
                 _numResidualLayers, _numHeads, _timeEmbeddingDim, _dropout));
             ExtractLayerReferences();
         }
@@ -597,7 +594,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
     #region IForecastingModel Implementation
 
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
             throw new NotSupportedException("CSDI does not support quantile forecasting. Pass null for point forecasts.");

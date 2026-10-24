@@ -75,9 +75,6 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
 {
     private readonly Florence2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>BART's begin-of-sequence token.</summary>
     private const int BosTokenId = 0;
 
@@ -105,6 +102,7 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
         : base(architecture)
     {
         _options = options ?? new Florence2Options();
+        Options = _options;
         _options.Validate();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -134,6 +132,7 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
         : base(architecture)
     {
         _options = options ?? new Florence2Options();
+        Options = _options;
         if (architecture.InputType == InputType.ThreeDimensional && architecture.InputHeight > 0
             && architecture.InputHeight == architecture.InputWidth)
             _options.ImageSize = architecture.InputHeight;

@@ -80,7 +80,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
               "Justin Tansuwan, Nathan Wan, Yonghui Wu, Xuedong Zhang")]
 public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly MedicalASROptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly MedicalASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
 
     // Views into Layers. Under LAS the list holds two sub-graphs - listener then speller - which
@@ -104,8 +104,8 @@ public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public MedicalASR(NeuralNetworkArchitecture<T> architecture, string modelPath, MedicalASROptions? options = null) : base(architecture) { _options = options ?? new MedicalASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public MedicalASR(NeuralNetworkArchitecture<T> architecture, MedicalASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MedicalASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public MedicalASR(NeuralNetworkArchitecture<T> architecture, string modelPath, MedicalASROptions? options = null) : base(architecture) { _options = options ?? new MedicalASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public MedicalASR(NeuralNetworkArchitecture<T> architecture, MedicalASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MedicalASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes medical speech using domain-specialized Conformer encoder.

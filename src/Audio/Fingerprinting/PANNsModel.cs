@@ -72,9 +72,6 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     private Tensor<T>? _hannWindow;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
-    /// <inheritdoc/>
     public override double MaxGradNormValue
         => _options.EnableGradientClipping ? _options.MaxGradientNorm : 0.0;
 
@@ -94,6 +91,7 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         : base(architecture)
     {
         _options = options ?? new PANNsModelOptions();
+        Options = _options;
         ValidateOptions(_options);
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
@@ -126,6 +124,7 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PANNsModelOptions();
+        Options = _options;
         ValidateOptions(_options);
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
             optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(

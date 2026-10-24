@@ -49,7 +49,7 @@ public class TLoRAModelTests : DiffusionModelTestBase<float>
             predictor: new UNetNoisePredictor<float>(
                 architecture: null, inputChannels: 4, outputChannels: 4,
                 baseChannels: 32, channelMultipliers: [1, 2],
-                numResBlocks: 1, attentionResolutions: [2], contextDim: 64, seed: 42),
+                numResBlocks: 1, attentionResolutions: [1], contextDim: 64, seed: 42),
             vae: new StandardVAE<float>(
                 inputChannels: 3, latentChannels: 4,
                 baseChannels: 16, channelMultipliers: [1, 2],

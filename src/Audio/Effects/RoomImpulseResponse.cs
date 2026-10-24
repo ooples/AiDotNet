@@ -74,7 +74,6 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
     #region Fields
 
     private readonly RoomImpulseResponseOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -128,6 +127,7 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
     {
         _ = optionsAreValidated;
         _options = options;
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -153,6 +153,7 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
     {
         _ = optionsAreValidated;
         _options = options;
+        Options = _options;
         _useNativeMode = true;
         // FiNS uses AdamW at 1e-4, clips the global norm at 5 in the shared trainer,
         // and halves the rate every 40,000 optimizer steps.

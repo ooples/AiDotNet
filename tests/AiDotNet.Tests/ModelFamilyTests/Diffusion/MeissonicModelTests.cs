@@ -1,19 +1,28 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.TextToImage;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Compute-bound foundation-scale model: Clone_ShouldProduceIdenticalOutput exceeds the 120s
-// [Fact(Timeout)] gate in ISOLATION (verified solo, fresh process), so it belongs in the HeavyTimeout
-// nightly lane rather than the default PR gate (#1706/#1305) - the Clone logic is correct; the model is
-// simply too large to run a forward within the envelope.
-[Xunit.Trait("Category", "HeavyTimeout")]
+[Xunit.Collection("FoundationScaleSerial")]
+// #2087 / #1706: out of the HeavyTimeout lane. The default foundation-scale config is too large for
+// the PR gate, so per the #1706 out-of-memory ladder the test caps the latent at 16x16 and injects
+// a small same-architecture EMMDiTPredictor and StandardVAE. Channel counts, context widths, patch
+// sizes and scale factors keep the model's defaults; only width and depth shrink.
 public class MeissonicModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 16, 64, 64];
-    protected override int[] OutputShape => [1, 16, 64, 64];
+    protected override int[] InputShape => [1, 16, 16, 16];
+    protected override int[] OutputShape => [1, 16, 16, 16];
 
     protected override IDiffusionModel<float> CreateModel()
-        => new MeissonicModel<float>(seed: 42);
+        => new MeissonicModel<float>(
+            predictor: new EMMDiTPredictor<float>(
+                inputChannels: 16, contextDim: 768, numLayersOverride: 2, numHeadsOverride: 4,
+                hiddenSizeOverride: 64, seed: 42),
+            vae: new StandardVAE<float>(
+                inputChannels: 3, latentChannels: 16, baseChannels: 16,
+                channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: 42),
+            seed: 42);
 }

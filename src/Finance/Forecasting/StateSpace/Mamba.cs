@@ -142,9 +142,6 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly MambaOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
@@ -522,7 +519,7 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the Mamba model, Forecast produces predictions from input data. This is the main inference step of the Mamba architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 

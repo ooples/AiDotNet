@@ -62,9 +62,6 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
     private readonly AutoencoderOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the encoded representation (latent space).
     /// </summary>

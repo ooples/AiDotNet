@@ -58,9 +58,6 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HopfieldNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the weight matrix that stores the connection strengths between neurons.
     /// </summary>

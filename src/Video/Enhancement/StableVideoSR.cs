@@ -62,7 +62,6 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly StableVideoSROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -82,6 +81,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         if (string.IsNullOrEmpty(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options is null ? new StableVideoSROptions() : new StableVideoSROptions(options);
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -106,6 +106,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options is null ? new StableVideoSROptions() : new StableVideoSROptions(options);
+        Options = _options;
         _options.ValidateNativePaperContract();
         _useNativeMode = true;
         _conditioner = conditioner;

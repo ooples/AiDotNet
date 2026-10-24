@@ -532,7 +532,9 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
             taskType: NeuralNetworkTaskType.Regression,
             inputHeight: options.SequenceLength,
             inputWidth: options.NumFeatures,
-            outputSize: options.NumAssets)
+            // Each sample is one stock's window and yields that stock's predicted return; NumAssets is the
+            // cross-section's size, i.e. the batch, not a per-sample output (#2147).
+            outputSize: 1)
         {
             RandomSeed = options.Seed ?? 1,
         };

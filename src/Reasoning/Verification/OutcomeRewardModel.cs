@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using AiDotNet.Helpers;
 using AiDotNet.Agentic.Models;
@@ -312,7 +313,7 @@ internal class OutcomeRewardModel<T> : IRewardModel<T>
         var matches = Regex.Matches(text, @"-?\d+\.?\d*", RegexOptions.None, RegexTimeout);
         foreach (Match match in matches)
         {
-            if (double.TryParse(match.Value, out double number))
+            if (double.TryParse(match.Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double number))
             {
                 numbers.Add(number);
             }
@@ -350,7 +351,7 @@ Respond with ONLY a number between 0.0 and 1.0, nothing else.";
 
             // Extract number from response
             var match = Regex.Match(response, @"([0-1]\.?\d*)", RegexOptions.None, RegexTimeout);
-            if (match.Success && double.TryParse(match.Value, out double similarity))
+            if (match.Success && double.TryParse(match.Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double similarity))
             {
                 return MathHelper.Clamp(similarity, 0.0, 1.0);
             }

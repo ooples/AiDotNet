@@ -63,7 +63,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 public partial class PIDNet<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly PIDNetOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only PIDNet's OWN configuration lives here. _height, _width, _channels, _numClasses,

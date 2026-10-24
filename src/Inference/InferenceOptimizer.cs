@@ -126,7 +126,7 @@ internal class InferenceOptimizer<T>
             {
                 // Some layer types may not yet support serialization-based cloning.
                 // Do not mutate the user's original model; just skip optimizations.
-                Console.WriteLine($"Warning: model cloning failed for inference optimizations: {ex.Message}. Skipping inference optimizations for this model instance.");
+                System.Diagnostics.Trace.TraceWarning($"Warning: model cloning failed for inference optimizations: {ex}. Skipping inference optimizations for this model instance.");
                 InferenceDiagnostics.RecordException(
                     area: "InferenceOptimizer",
                     feature: "CloneForRewrite",

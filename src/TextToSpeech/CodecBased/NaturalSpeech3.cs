@@ -53,8 +53,6 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech3Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     private bool _useNativeMode;
@@ -68,6 +66,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new NaturalSpeech3Options();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -90,6 +89,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new NaturalSpeech3Options();
+        Options = _options;
         // PaperOptimizerFactory ignores a non-positive override and would silently train on the
         // paper warmup instead of the value the caller set.
         if (_options.WarmupSteps <= 0)

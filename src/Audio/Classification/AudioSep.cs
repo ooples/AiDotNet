@@ -75,7 +75,6 @@ public partial class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T
     #region Fields
 
     private readonly AudioSepOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -93,6 +92,7 @@ public partial class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T
         : base(architecture, new AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new AudioSepOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -114,6 +114,7 @@ public partial class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T
         : base(architecture, new AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new AudioSepOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

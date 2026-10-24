@@ -54,8 +54,6 @@ public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     }
     private LinearQLearningOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private double _epsilon;
 
@@ -71,6 +69,7 @@ public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
 
         // Initialize weights to zero

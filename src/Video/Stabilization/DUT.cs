@@ -55,9 +55,6 @@ public partial class DUT<T> : VideoStabilizationBase<T>
 {
     private readonly DUTOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -72,6 +69,7 @@ public partial class DUT<T> : VideoStabilizationBase<T>
         : base(architecture)
     {
         _options = options ?? new DUTOptions();
+        Options = _options;
         _useNativeMode = false;
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
@@ -88,6 +86,7 @@ public partial class DUT<T> : VideoStabilizationBase<T>
         : base(architecture)
     {
         _options = options ?? new DUTOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>

@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 public partial class MedNeXt<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedNeXtOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only MedNeXt's OWN configuration lives here. _height, _width, _channels, _numClasses,

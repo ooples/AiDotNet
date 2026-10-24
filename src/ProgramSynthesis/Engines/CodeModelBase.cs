@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -673,7 +674,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
                 return false;
             }
 
-            if (!double.TryParse(example.ExpectedOutput, out var expected))
+            if (!double.TryParse(example.ExpectedOutput, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var expected))
             {
                 return false;
             }
@@ -760,7 +761,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         var parts = inner.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var p in parts)
         {
-            if (!double.TryParse(p.Trim(), out var v))
+            if (!double.TryParse(p.Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var v))
             {
                 values = new List<double>();
                 return false;

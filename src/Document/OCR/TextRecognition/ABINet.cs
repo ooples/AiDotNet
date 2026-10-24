@@ -83,9 +83,6 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
         return LossFunction.ComputeTapeLoss(trainingPrediction, trainingTarget).Data.Span[0];
     }
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

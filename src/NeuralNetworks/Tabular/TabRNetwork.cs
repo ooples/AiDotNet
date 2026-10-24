@@ -88,9 +88,6 @@ public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new TabROptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the number of neighbors to retrieve.
     /// </summary>
@@ -128,6 +125,7 @@ public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabROptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // WeightDecay is a published knob on TabROptions; a bare AdamOptimizer
         // ignored it entirely. AdamW applies it as decoupled decay, and its learning-rate

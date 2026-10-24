@@ -61,9 +61,6 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
 {
     private readonly DocOwlOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

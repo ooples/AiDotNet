@@ -65,7 +65,6 @@ public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly StreamDiffVSROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -81,6 +80,7 @@ public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
         if (string.IsNullOrEmpty(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new StreamDiffVSROptions();
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -94,6 +94,7 @@ public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new StreamDiffVSROptions();
+        Options = _options;
         _useNativeMode = true;
         // Appendix C: "AdamW optimizer (beta1 = 0.9, beta2 = 0.999, weight decay 0.01)" at a CONSTANT
         // learning rate of 5e-5, for every training stage. These now come from StreamDiffVSROptions,

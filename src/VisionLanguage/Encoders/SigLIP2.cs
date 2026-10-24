@@ -118,8 +118,6 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
 
     private readonly SigLIP2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -146,6 +144,7 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         : base(architecture)
     {
         _options = options ?? new SigLIP2Options();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -187,6 +186,7 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         : base(architecture)
     {
         _options = options ?? new SigLIP2Options();
+        Options = _options;
         _useNativeMode = true;
         // SigLIP2 is a paper-scale ViT (Tschannen et al. 2025): VisionEmbeddingDim
         // 768 with many transformer blocks. The framework AdamW default LR (1e-3)

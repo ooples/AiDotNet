@@ -63,7 +63,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SEEMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only SEEM's OWN configuration lives here. _height, _width, _channels, _numClasses,

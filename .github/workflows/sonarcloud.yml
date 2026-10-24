@@ -2569,14 +2569,17 @@ jobs:
 
           # The matrix result only says failure/cancelled. Preserve every concrete shard conclusion
           # so a cancelled or OOM-killed shard with no TRX cannot disappear from the totals.
+          # 50 per page, not 100: once a run of this size has been re-run, GitHub answers every
+          # per_page=100 jobs request with HTTP 502 (PR #2332, run 39550124921), while 50 succeeds.
           $jobs = @()
           $page = 1
+          $perPage = 50
           do {
             $response = Invoke-GitHubApiWithRetry -Headers $headers -Uri `
-              "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?per_page=100&page=$page"
+              "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?per_page=$perPage&page=$page"
             $jobs += @($response.jobs)
             $page++
-          } while ($response.jobs.Count -eq 100)
+          } while ($response.jobs.Count -eq $perPage)
           @($jobs) | ConvertTo-Json -Depth 8 | Set-Content current-jobs.json
 
           $baselinePath = '.github/ci-test-baseline.json'

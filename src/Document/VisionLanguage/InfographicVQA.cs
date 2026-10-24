@@ -72,9 +72,6 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
 {
     private readonly InfographicVQAOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

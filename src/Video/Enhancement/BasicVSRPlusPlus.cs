@@ -86,9 +86,6 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 {
     private readonly BasicVSRPlusPlusOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

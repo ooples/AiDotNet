@@ -87,9 +87,6 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new TabTransformerOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -156,6 +153,7 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabTransformerOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         if (_options.LearningRate <= 0)

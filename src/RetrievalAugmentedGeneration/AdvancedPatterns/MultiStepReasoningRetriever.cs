@@ -1,3 +1,4 @@
+using System.Globalization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -519,14 +520,14 @@ public class ToolAugmentedReasoningRetriever<T>
         expression = expression.Replace(" ", "");
 
         // Try simple parsing
-        if (double.TryParse(expression, out double result))
+        if (double.TryParse(expression, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double result))
             return result;
 
         // Handle basic operations (very limited)
         if (expression.Contains('+'))
         {
             var parts = expression.Split('+');
-            return double.Parse(parts[0]) + double.Parse(parts[1]);
+            return double.Parse(parts[0], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture) + double.Parse(parts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
         }
 
         throw new NotSupportedException("Complex expressions not supported in this simple implementation");

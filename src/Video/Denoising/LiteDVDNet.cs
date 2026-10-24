@@ -68,9 +68,6 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly LiteDVDNetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -85,6 +82,7 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
         : base(architecture)
     {
         _options = options ?? new LiteDVDNetOptions();
+        Options = _options;
         _useNativeMode = false;
         TemporalRadius = (_options.TemporalWindowSize - 1) / 2;
         _options.ModelPath = modelPath;
@@ -102,6 +100,7 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
         : base(architecture)
     {
         _options = options ?? new LiteDVDNetOptions();
+        Options = _options;
         _useNativeMode = true;
         // LiteDVDNet is trained with standard Adam at 1e-3 and the original Adam hyperparameters.
         // AdamW is a different algorithm even when its configured weight decay happens to be zero;

@@ -44,8 +44,6 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SeedTTSOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -58,6 +56,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new SeedTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -80,6 +79,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new SeedTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

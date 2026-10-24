@@ -120,10 +120,173 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <param name="batch">The input batch tensor.</param>
     /// <param name="augmentationContext">Optional augmentation context.</param>
     /// <returns>The result of the training step.</returns>
+    /// <remarks>
+    /// <para>
+    /// One tape-based update: the two views are built once (outside the objective, so a re-evaluation replays the same
+    /// draws), the method's <see cref="ComputeObjective"/> is recorded on the gradient tape, the online network's
+    /// tensors (<see cref="GetOnlineTrainableTensors"/>) are stepped by the optimizer, and
+    /// <see cref="AfterOptimizerStep"/> updates whatever follows the online network (a momentum target, a queue, a
+    /// center).
+    /// </para>
+    /// <para>
+    /// This used to return a zero loss and change nothing: no method overrode it, so every self-supervised method,
+    /// and the pretraining session and pretrainer that call TrainStep, silently skipped training.
+    /// </para>
+    /// </remarks>
     protected virtual SelfSupervisedLearningStepResult<T> TrainStepCore(Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext)
     {
-        // Default implementation uses tape-based training
-        return new SelfSupervisedLearningStepResult<T> { Loss = NumOps.Zero };
+        var (view1, view2) = CreateViews(batch, augmentationContext);
+        var optimizer = _trainingOptimizer ??= CreateOptimizer();
+        // The configured schedule (linear scaling, warmup, cosine decay) sets this step's rate.
+        double learningRate = GetEffectiveLearningRate();
+        if (optimizer is AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
+            scheduled.SetScheduledLearningRate(learningRate);
+
+        // SGD and Adam take weight decay as an L2 term in the gradient (torch.optim's weight_decay), which is the
+        // gradient of (wd / 2) * ||w||^2 added to the objective; the decoupled optimizers apply it themselves.
+        double coupledDecay = CoupledWeightDecay();
+        T penalty = NumOps.Zero;
+        T loss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+            GetOnlineTrainableTensors,
+            () =>
+            {
+                var objective = ComputeObjective(view1, view2);
+                if (coupledDecay <= 0) return objective;
+                var l2 = L2Penalty(GetOnlineTrainableTensors(), coupledDecay);
+                penalty = l2.Length > 0 ? l2.GetFlat(0) : NumOps.Zero;
+                return Engine.TensorAdd(objective, l2);
+            },
+            optimizer);
+        AfterOptimizerStep();
+        // The reported loss is the method's objective, without the weight-decay term.
+        return CreateStepResult(NumOps.Subtract(loss, penalty));
+    }
+
+    // The weight decay the objective carries: the configured decay for SGD and Adam, which have no decay of their own.
+    private double CoupledWeightDecay()
+    {
+        double wd = _config.WeightDecay ?? 0.0;
+        if (wd < 0 || double.IsNaN(wd)) throw new InvalidOperationException($"Weight decay must be non-negative; got {wd}.");
+        var type = _config.OptimizerType ?? DefaultOptimizerType;
+        return type == SelfSupervisedLearningOptimizerType.SGD || type == SelfSupervisedLearningOptimizerType.Adam ? wd : 0.0;
+    }
+
+    // (wd / 2) * sum ||w||^2 over the given tensors, as a one-element tensor the tape records.
+    private Tensor<T> L2Penalty(IReadOnlyList<Tensor<T>> tensors, double weightDecay)
+    {
+        Tensor<T>? total = null;
+        foreach (var tensor in tensors)
+        {
+            var sum = Engine.ReduceSum(Engine.TensorMultiply(tensor, tensor), Enumerable.Range(0, tensor.Rank).ToArray(), keepDims: false);
+            var flat = Engine.Reshape(sum, new[] { 1 });
+            total = total is null ? flat : Engine.TensorAdd(total, flat);
+        }
+        return total is null
+            ? new Tensor<T>(new[] { 1 })
+            : Engine.TensorMultiplyScalar(total, NumOps.FromDouble(weightDecay / 2.0));
+    }
+
+    // Created on the first training step, so a method configured after construction still gets its settings.
+    [Scratch]
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
+
+    /// <summary>The rate the training optimizer last stepped at (NaN before the first step).</summary>
+    internal double TrainingOptimizerLearningRate => _trainingOptimizer?.GetCurrentLearningRate() ?? double.NaN;
+
+    [Scratch]
+    private SelfSupervisedLearningAugmentationPolicies<T>? _viewPolicies;
+
+    /// <summary>
+    /// The two views a training step compares. A context that supplies <see cref="SelfSupervisedLearningAugmentationContext{T}.PrecomputedView"/>
+    /// pairs the batch with it; otherwise the method's augmentation policy makes both views.
+    /// </summary>
+    protected virtual (Tensor<T> View1, Tensor<T> View2) CreateViews(
+        Tensor<T> batch, SelfSupervisedLearningAugmentationContext<T>? augmentationContext)
+    {
+        if (augmentationContext?.PrecomputedView is { } precomputed)
+            return (batch, precomputed);
+        var policies = _viewPolicies ??= new SelfSupervisedLearningAugmentationPolicies<T>(_config.Seed);
+        return AugmentViews(policies, batch);
+    }
+
+    /// <summary>The method's own augmentation pipeline (SimCLR's by default).</summary>
+    protected virtual (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => policies.ApplySimCLR(batch);
+
+    /// <summary>
+    /// The method's training loss for two views of a batch, built from the live online parameters so the tape records
+    /// it. Each method states its paper's objective here.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The method defines no training objective.</exception>
+    protected virtual Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2) =>
+        throw new NotSupportedException($"{Name} defines no training objective.");
+
+    /// <summary>
+    /// The tensors the optimizer steps: the online encoder's and the projector's. A method with further online heads
+    /// (a predictor) adds them; momentum targets are never included, they follow by EMA in <see cref="AfterOptimizerStep"/>.
+    /// </summary>
+    protected virtual IReadOnlyList<Tensor<T>> GetOnlineTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>(EncoderTrainableTensors(_encoder));
+        if (_projector is not null) tensors.AddRange(_projector.GetTrainableTensors());
+        return tensors;
+    }
+
+    /// <summary>
+    /// The encoder's training forward, recorded on the gradient tape (Predict runs without it, for inference).
+    /// </summary>
+    protected Tensor<T> EncodeForTraining(Tensor<T> input) => EncodeForTraining(_encoder, input);
+
+    /// <summary>A network's training forward, recorded on the gradient tape.</summary>
+    protected static Tensor<T> EncodeForTraining(INeuralNetwork<T> network, Tensor<T> input) =>
+        network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> trainable
+            ? trainable.ForwardForTraining(input)
+            : network.ForwardWithMemory(input);
+
+    /// <summary>The trainable tensors of an encoder network, the live objects its forward reads.</summary>
+    /// <exception cref="NotSupportedException">The encoder is not a network whose tensors can be stepped.</exception>
+    protected static IReadOnlyList<Tensor<T>> EncoderTrainableTensors(INeuralNetwork<T> encoder) =>
+        encoder is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network
+            ? network.CollectModelTrainableTensors()
+            : throw new NotSupportedException(
+                $"A {encoder.GetType().Name} encoder exposes no trainable tensors; self-supervised training needs a NeuralNetworkBase encoder.");
+
+    /// <summary>Runs after the optimizer step: momentum targets, queues and centers update here.</summary>
+    protected virtual void AfterOptimizerStep()
+    {
+    }
+
+    /// <summary>The optimizer the paper trains this method with, unless the configuration names another.</summary>
+    protected virtual SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.AdamW;
+
+    /// <summary>The learning rate when the configuration sets none.</summary>
+    protected virtual double DefaultLearningRate => 1e-3;
+
+    /// <summary>Creates the training optimizer from the configuration.</summary>
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateOptimizer()
+    {
+        // The first step's rate; TrainStepCore sets each step's from GetEffectiveLearningRate. SGD and Adam take the
+        // weight decay through the objective (see TrainStepCore).
+        double lr = GetEffectiveLearningRate();
+        double wd = _config.WeightDecay ?? 0.0;
+        switch (_config.OptimizerType ?? DefaultOptimizerType)
+        {
+            case SelfSupervisedLearningOptimizerType.SGD:
+                return new AiDotNet.Optimizers.MomentumOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr });
+            case SelfSupervisedLearningOptimizerType.Adam:
+                return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr });
+            case SelfSupervisedLearningOptimizerType.LARS:
+                return new AiDotNet.Optimizers.LARSOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.LARSOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });
+            case SelfSupervisedLearningOptimizerType.LAMB:
+                return new AiDotNet.Optimizers.LAMBOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.LAMBOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });
+            default:
+                return new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                    new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });
+        }
     }
 
     /// <inheritdoc />
@@ -215,26 +378,24 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <returns>The current learning rate.</returns>
     public virtual double GetEffectiveLearningRate()
     {
-        var baseLr = _config.LearningRate ?? 0.3;
-        var batchSize = _config.BatchSize ?? 256;
+        // The base rate is per 256 samples (the linear scaling rule of the papers: SimCLR's 0.3, MoCo v3's 1.5e-4).
+        double baseLr = _config.LearningRate ?? DefaultLearningRate;
+        int batchSize = _config.BatchSize ?? 256;
+        double effectiveLr = baseLr * batchSize / 256.0;
 
-        // Linear scaling rule
-        var effectiveLr = baseLr * batchSize / 256.0;
-
-        // Apply cosine decay if enabled
-        if (_config.UseCosineDecay == true)
-        {
-            var totalSteps = (_config.PretrainingEpochs ?? 100) * 1000; // Approximate
-            var progress = Math.Min(1.0, (double)_currentStep / totalSteps);
-            effectiveLr *= 0.5 * (1.0 + Math.Cos(Math.PI * progress));
-        }
-
-        // Apply warmup if in warmup phase
-        var warmupEpochs = _config.WarmupEpochs ?? 10;
+        // Linear warmup over the first WarmupEpochs, by epoch: epoch k of W runs at (k + 1) / W of the rate, so no
+        // epoch trains at zero.
+        int warmupEpochs = Math.Max(0, _config.WarmupEpochs ?? 10);
         if (_currentEpoch < warmupEpochs)
+            return effectiveLr * (_currentEpoch + 1) / warmupEpochs;
+
+        // Then cosine decay to zero over the remaining epochs (MoCo v3's schedule).
+        if (_config.UseCosineDecay ?? true)
         {
-            var warmupProgress = (double)_currentEpoch / warmupEpochs;
-            effectiveLr *= warmupProgress;
+            int totalEpochs = _config.PretrainingEpochs ?? 100;
+            int decayEpochs = Math.Max(1, totalEpochs - warmupEpochs);
+            double progress = Math.Min(1.0, (double)(_currentEpoch - warmupEpochs) / decayEpochs);
+            effectiveLr *= 0.5 * (1.0 + Math.Cos(Math.PI * progress));
         }
 
         return effectiveLr;

@@ -72,17 +72,6 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
 
     private readonly SAMHQOptions _options;
 
-    /// <summary>
-    /// Gets the configuration options for this SAM-HQ model.
-    /// </summary>
-    /// <returns>The <see cref="SAMHQOptions"/> for this model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Options control model behavior including random seed for reproducibility.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     // Only SAM-HQ's OWN configuration lives here. _height, _width, _channels, _numClasses,

@@ -92,9 +92,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     {
         private readonly HamiltonianNeuralNetworkOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         private readonly int _stateDim; // Dimension of state space (q and p together)
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 

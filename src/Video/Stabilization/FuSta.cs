@@ -55,9 +55,6 @@ public partial class FuSta<T> : VideoStabilizationBase<T>
 {
     private readonly FuStaOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -72,6 +69,7 @@ public partial class FuSta<T> : VideoStabilizationBase<T>
         : base(architecture)
     {
         _options = options ?? new FuStaOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsFullFrame = true;
         CropRatio = 0.0;
@@ -90,6 +88,7 @@ public partial class FuSta<T> : VideoStabilizationBase<T>
         : base(architecture)
     {
         _options = options ?? new FuStaOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>

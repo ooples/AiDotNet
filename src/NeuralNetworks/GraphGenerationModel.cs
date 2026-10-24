@@ -83,9 +83,6 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphGenerationModelOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the reconstruction error.
     /// </summary>
