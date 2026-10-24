@@ -405,6 +405,7 @@
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gruut_fr_pos.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gruut_fr_pos.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gruut_locales.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gruut_locales.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\num2words_currency.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.num2words_currency.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\mecab_ko_dic.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.mecab_ko_dic.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi221_kanwa.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi221_kanwa.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi221_itaiji.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi221_itaiji.tsv.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-japanese-v3-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-japanese-v3-vocab.txt.gz" />
