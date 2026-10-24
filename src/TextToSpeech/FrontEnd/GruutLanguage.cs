@@ -85,7 +85,7 @@ internal sealed class GruutLanguage
     public Regex MinorBreakPattern { get; }
     public Regex WordBreakPattern { get; }
     public string DateFormat { get; }
-    public Num2WordsEuropean Numbers { get; }
+    public Num2WordsBase Numbers { get; }
     public string DecimalSymbol { get; }
     public string GroupSymbol { get; }
     public string[] Months { get; }
