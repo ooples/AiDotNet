@@ -30,7 +30,7 @@ public class OpenSoraTrainingTests
 
     private static Tensor<double> Frames(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var tensor = new Tensor<double>([1, 3, 16, 16]);
         for (int i = 0; i < tensor.Length; i++) tensor[i] = rng.NextDouble() * 2.0 - 1.0;
         return tensor;

@@ -470,7 +470,7 @@ public class OnnxCrossEncoderReranker<T> : RerankerBase<T>, IDisposable
         {
             var dir = Path.GetDirectoryName(tokenizerPath);
             if (!string.IsNullOrEmpty(dir))
-                return dir!;
+                return dir;
         }
 
         // Fall back to the given path; AutoTokenizer will surface a clear error if it is invalid.

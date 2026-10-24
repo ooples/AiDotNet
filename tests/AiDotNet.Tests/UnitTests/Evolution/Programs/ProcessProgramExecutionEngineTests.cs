@@ -409,12 +409,12 @@ public sealed class ProcessProgramExecutionEngineTests
     public async Task TheEngineValidatesItsArguments()
     {
 #pragma warning disable CS8625
-        Assert.Throws<ArgumentNullException>(() => new ProcessProgramExecutionEngine(null));
+        Assert.Throws<ArgumentNullException>(() => new ProcessProgramExecutionEngine(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Configuration.ProgramSandboxOptions>()));
 #pragma warning restore CS8625
 
         using var engine = new ProcessProgramExecutionEngine(new ProgramSandboxOptions());
 #pragma warning disable CS8625
-        await Assert.ThrowsAsync<ArgumentNullException>(() => engine.ExecuteAsync(null));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => engine.ExecuteAsync(global::AiDotNet.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Execution.ProgramExecuteRequest>()));
 #pragma warning restore CS8625
     }
 

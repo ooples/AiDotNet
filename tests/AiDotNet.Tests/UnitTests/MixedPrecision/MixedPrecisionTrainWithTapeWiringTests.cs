@@ -96,7 +96,7 @@ public class MixedPrecisionTrainWithTapeWiringTests
         Assert.True(model.IsMixedPrecisionEnabled);
         var ctx = model.GetMixedPrecisionContext();
         Assert.NotNull(ctx);
-        Assert.Equal(128.0, ctx!.LossScaler.Scale);
+        Assert.Equal(128.0, ctx.LossScaler.Scale);
 
         model.DisableMixedPrecision();
         Assert.False(model.IsMixedPrecisionEnabled);
@@ -185,7 +185,7 @@ public class MixedPrecisionTrainWithTapeWiringTests
         // (we call UnscaleGradientsAndCheck on every step).
         var ctx = model.GetMixedPrecisionContext();
         Assert.NotNull(ctx);
-        Assert.Equal(1.0, ctx!.LossScaler.Scale);
+        Assert.Equal(1.0, ctx.LossScaler.Scale);
     }
 
     [Fact(Timeout = 60000)]
@@ -291,7 +291,7 @@ public class MixedPrecisionTrainWithTapeWiringTests
         model.EnableMixedPrecision(new MixedPrecisionConfig { InitialLossScale = 256.0 });
         var ctx = model.GetMixedPrecisionContext();
         Assert.NotNull(ctx);
-        Assert.Equal(256.0, ctx!.LossScaler.Scale);
+        Assert.Equal(256.0, ctx.LossScaler.Scale);
     }
 
     /// <summary>
@@ -343,7 +343,7 @@ public class MixedPrecisionTrainWithTapeWiringTests
 
         var ctx = model.GetMixedPrecisionContext();
         Assert.NotNull(ctx);
-        Assert.True(ctx!.LossScaler.Scale < initialScale,
+        Assert.True(ctx.LossScaler.Scale < initialScale,
             $"Expected loss scale to back off from {initialScale} after overflow, " +
             $"but scale is still {ctx.LossScaler.Scale}.");
     }

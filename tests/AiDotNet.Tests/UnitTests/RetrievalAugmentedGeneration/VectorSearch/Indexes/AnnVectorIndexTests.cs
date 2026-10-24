@@ -23,7 +23,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         // Deterministic well-separated clusters: cluster c centred at a far-apart lattice point.
         private static (List<(string id, Vector<double> v)> data, Vector<double>[] centers) MakeData(int seed)
         {
-            var rng = new Random(seed);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
             var data = new List<(string, Vector<double>)>();
             var centers = new Vector<double>[Clusters];
             for (int c = 0; c < Clusters; c++)
@@ -123,7 +123,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         [InlineData(AnnVectorIndexType.IvfPq)]
         public void CosineQuantizedIndexes_PreserveAngularClusterRecall(AnnVectorIndexType type)
         {
-            var rng = new Random(1234);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1234);
             var index = new AnnVectorIndex<double>(
                 type, Dim, AnnVectorMetric.Cosine, nlist: Clusters, nprobe: 4, m: 4, ksub: 16, seed: 7);
 

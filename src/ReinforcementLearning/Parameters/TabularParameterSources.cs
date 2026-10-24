@@ -170,7 +170,9 @@ public sealed class ValueTableParameterSource<T> : IParameterSource<T>, AiDotNet
         int count = reader.ReadInt32();
         if (count < 0) throw new InvalidDataException($"Value-table topology has negative count {count}.");
         _table.Clear();
-        for (int i = 0; i < count; i++) _table.Add(reader.ReadString(), default!);
+        // Topology only: the values are zero until the parameters themselves are read.
+        var zero = MathHelper.GetNumericOperations<T>().Zero;
+        for (int i = 0; i < count; i++) _table.Add(reader.ReadString(), zero);
     }
 }
 

@@ -128,9 +128,9 @@ public sealed class ResizableTensorFieldParameterSource<T> :
             new ParameterSlotDescriptor(
                 "$", ParameterSlotRole.Trainable,
                 unresolved ? ParameterReadiness.ShapeDeferred
-                    : value!.Length == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
+                    : (value ?? throw new InvalidOperationException("value is null where it is required.")).Length == 0 ? ParameterReadiness.ShapeResolvedUnmaterialized
                     : ParameterReadiness.Materialized,
-                unresolved ? null : (long?)value!.Length,
+                unresolved ? null : (long?)(value ?? throw new InvalidOperationException("value is null where it is required.")).Length,
                 shape: value?.Shape.ToArray(),
                 elementType: typeof(T).FullName)
         };
@@ -550,7 +550,7 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
                 return false;
             }
 
-            count = checked(count + slots[i].ParameterCount!.Value);
+            count = checked(count + (slots[i].ParameterCount ?? throw new InvalidOperationException("slots[i].ParameterCount is null where it is required.")));
         }
         return true;
     }

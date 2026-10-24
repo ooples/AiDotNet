@@ -416,7 +416,7 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGDMomentum, config.Type);
         Assert.Equal(0.8f, config.Beta1, 6);
         Assert.NotNull(config.Extras);
-        Assert.True(config.Extras!.Nesterov,
+        Assert.True(config.Extras.Nesterov,
             "NAG fused without the Nesterov flag — the kernel would run classical momentum while the eager path runs the look-ahead.");
     }
 
@@ -450,7 +450,7 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.Equal(0.02f, config.LearningRate, 6);
 
         Assert.NotNull(config.Extras);
-        Assert.Equal(0.3f, config.Extras!.L1, 6);
+        Assert.Equal(0.3f, config.Extras.L1, 6);
         Assert.Equal(0.7f, config.Extras.L2, 6);
         Assert.Equal(1.5f, config.Extras.FtrlBeta, 6);
         Assert.Equal(-0.5f, config.Extras.LrPower, 6);
@@ -624,7 +624,7 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.NotNull(config.Extras);
 
         // lr * L1 must reproduce the eager threshold of 0.04.
-        Assert.Equal(0.4f, config.Extras!.L1, 5);
+        Assert.Equal(0.4f, config.Extras.L1, 5);
         Assert.Equal(0.04f, config.LearningRate * config.Extras.L1, 5);
         Assert.NotEqual(0.04f, config.Extras.L1);
     }
@@ -656,7 +656,7 @@ public class FusedSpecMatchesEagerBehaviourTests
 
         // ProximalL1UpdateSimd: z = param - lr*grad; param = sign(z)*max(|z| - lr*l1, 0).
         double kernelLr = config.LearningRate;
-        double kernelL1 = config.Extras!.L1;
+        double kernelL1 = (config.Extras ?? throw new InvalidOperationException("config.Extras is null where it is required.")).L1;
         double threshold = kernelLr * kernelL1;
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -795,7 +795,7 @@ public class FusedSpecMatchesEagerBehaviourTests
 
         // The memory depth determines how many curvature pairs the recursion runs over, so a default of
         // zero here would silently reduce L-BFGS to gradient descent on the fused path.
-        Assert.Equal(7, config.Extras!.LbfgsMemorySize);
+        Assert.Equal(7, config.Extras.LbfgsMemorySize);
     }
 
     /// <summary>
@@ -856,7 +856,7 @@ public class FusedSpecMatchesEagerBehaviourTests
         // The kernel computes min(radius/||g||, lr), so both numbers have to arrive.
         Assert.Equal(0.5f, config.LearningRate, 6);
         Assert.NotNull(config.Extras);
-        Assert.Equal(2.5f, config.Extras!.TrustRegionRadius, 6);
+        Assert.Equal(2.5f, config.Extras.TrustRegionRadius, 6);
     }
 
     /// <summary>

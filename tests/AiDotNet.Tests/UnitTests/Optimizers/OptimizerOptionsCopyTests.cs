@@ -13,7 +13,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new ASGDOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new ASGDOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+            new ASGDOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.ASGDOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact]
@@ -23,7 +23,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+            new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.RAdamOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new RpropOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new RpropOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+            new RpropOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.RpropOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     /// <summary>
@@ -54,7 +54,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+            new BFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.BFGSOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+            new LBFGSOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.LBFGSOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class OptimizerOptionsCopyTests
 
         AssertCompleteCopy(source, new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(source), unmutated);
         Assert.Throws<ArgumentNullException>(() =>
-            new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(null!));
+            new TrustRegionOptimizerOptions<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.TrustRegionOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     private static TOptions Populate<TOptions>(TOptions options, out List<string> unmutated)
@@ -88,14 +88,14 @@ public class OptimizerOptionsCopyTests
                 // Derived from the current value rather than a literal, so a property whose default
                 // happens to equal the literal cannot silently drop out of the sweep. Rprop's
                 // InitialLearningRate defaults to exactly the 0.25 an earlier version used.
-                Type type when type == typeof(bool) => !(bool)current!,
+                Type type when type == typeof(bool) => !(bool)(current ?? throw new InvalidOperationException("current is null where it is required.")),
                 Type type when type == typeof(bool?) => !(current as bool? ?? false),
-                Type type when type == typeof(int) => (int)current! + 17,
+                Type type when type == typeof(int) => (int)(current ?? throw new InvalidOperationException("current is null where it is required.")) + 17,
                 Type type when type == typeof(int?) => (current as int? ?? 0) + 19,
-                Type type when type == typeof(long) => (long)current! + 23L,
-                Type type when type == typeof(double) => (double)current! + 1.5,
+                Type type when type == typeof(long) => (long)(current ?? throw new InvalidOperationException("current is null where it is required.")) + 23L,
+                Type type when type == typeof(double) => (double)(current ?? throw new InvalidOperationException("current is null where it is required.")) + 1.5,
                 Type type when type == typeof(double?) => (current as double? ?? 0.0) + 1.75,
-                Type type when type == typeof(float) => (float)current! + 1.25f,
+                Type type when type == typeof(float) => (float)(current ?? throw new InvalidOperationException("current is null where it is required.")) + 1.25f,
                 Type type when type == typeof(string) => (current as string ?? "") + "copy-test-sentinel",
                 // FirstOrDefault, not First: a single-member enum (or one whose only member already equals
                 // the current value) would otherwise throw out of the helper and read as a crash rather

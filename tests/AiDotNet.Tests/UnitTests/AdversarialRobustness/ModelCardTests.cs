@@ -460,7 +460,7 @@ public class ModelCardTests
     {
         var card = new ModelCard();
 
-        Assert.Throws<ArgumentException>(() => card.SaveToFile(null!));
+        Assert.Throws<ArgumentException>(() => card.SaveToFile(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -578,7 +578,7 @@ public class ModelCardTests
     public async Task CreateFromEvaluation_WithNullModelName_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() =>
-            ModelCard.CreateFromEvaluation(null!, "Classification", null, null));
+            ModelCard.CreateFromEvaluation(global::AiDotNet.Tests.TestNull.Of<string>(), "Classification", null, null));
     }
 
     [Fact(Timeout = 60000)]
@@ -614,7 +614,7 @@ public class ModelCardTests
     [Fact(Timeout = 60000)]
     public async Task CreateFromEvaluation_WithNullModelType_SetsEmptyString()
     {
-        var card = ModelCard.CreateFromEvaluation("MyModel", null!, null, null);
+        var card = ModelCard.CreateFromEvaluation("MyModel", global::AiDotNet.Tests.TestNull.Of<string>(), null, null);
 
         Assert.Equal(string.Empty, card.ModelType);
     }

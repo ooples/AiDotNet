@@ -73,11 +73,11 @@ public sealed class ProgramChangesDescriptionRoutingTests
     [Fact]
     public void RoutingRefusesArgumentsItCannotWorkWith()
     {
-        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(null!, Source, Description));
-        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), null!, Description));
-        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), Source, null!));
+        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<AiDotNet.Evolution.Programs.ProgramDiffBlock>>(), Source, Description));
+        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), global::AiDotNet.Tests.TestNull.Of<string>(), Description));
+        Assert.Throws<ArgumentNullException>(() => ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), Source, global::AiDotNet.Tests.TestNull.Of<string>()));
         Assert.Throws<ArgumentNullException>(() =>
-            ProgramDiff.SplitByTarget(new ProgramDiffBlock[] { null! }, Source, Description));
+            ProgramDiff.SplitByTarget(new ProgramDiffBlock[] { global::AiDotNet.Tests.TestNull.Of<AiDotNet.Evolution.Programs.ProgramDiffBlock>() }, Source, Description));
 
         ProgramDiffTargetSplit empty = ProgramDiff.SplitByTarget(Array.Empty<ProgramDiffBlock>(), Source, Description);
         Assert.True(empty.IsSuccess);

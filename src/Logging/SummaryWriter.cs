@@ -77,10 +77,10 @@ public class SummaryWriter : IDisposable
         }
         else
         {
-            _logDir = logDir!;
+            _logDir = (logDir ?? throw new InvalidOperationException("logDir is null where it is required."));
         }
 
-        _writer = new TensorBoardWriter(_logDir!, filename);
+        _writer = new TensorBoardWriter((_logDir ?? throw new InvalidOperationException("_logDir is null where it is required.")), filename);
         _defaultStep = 0;
     }
 

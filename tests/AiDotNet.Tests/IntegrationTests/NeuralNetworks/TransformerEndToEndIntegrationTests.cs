@@ -57,10 +57,10 @@ public class TransformerEndToEndIntegrationTests
         var field = typeof(Transformer<float>).GetField("_optimizer",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(field);
-        var actualOptimizer = field!.GetValue(transformer);
+        var actualOptimizer = field.GetValue(transformer);
         Assert.NotNull(actualOptimizer);
 
-        var actualType = actualOptimizer!.GetType();
+        var actualType = actualOptimizer.GetType();
         _output.WriteLine($"Transformer default optimizer type: {actualType.Name}");
 
         Assert.True(

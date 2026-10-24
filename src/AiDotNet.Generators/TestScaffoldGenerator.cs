@@ -17819,7 +17819,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 generated,
                 @"[ \t]*protected override int MoreData(Short|Long)Iterations => \d+;[ \t]*\r?\n",
                 string.Empty,
-                System.Text.RegularExpressions.RegexOptions.Multiline);
+                System.Text.RegularExpressions.RegexOptions.Multiline,
+                System.TimeSpan.FromSeconds(1));
 
             int classBrace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
             if (classBrace >= 0)
@@ -17850,7 +17851,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     generated,
                     @"[ \t]*protected override int " + memberName + @" => \d+;[ \t]*\r?\n",
                     string.Empty,
-                    System.Text.RegularExpressions.RegexOptions.Multiline);
+                    System.Text.RegularExpressions.RegexOptions.Multiline,
+                    System.TimeSpan.FromSeconds(1));
 
                 int brace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
                 if (brace >= 0)
@@ -17977,7 +17979,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var line in lines)
         {
             var match = System.Text.RegularExpressions.Regex.Match(
-                line, @"^\s*protected override [^\s]+(?:<[^>]*>)?(?:\[\])? ([A-Za-z_][A-Za-z0-9_]*)\s*=>");
+                line, @"^\s*protected override [^\s]+(?:<[^>]*>)?(?:\[\])? ([A-Za-z_][A-Za-z0-9_]*)\s*=>",
+                System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
 
             if (match.Success && !seen.Add(match.Groups[1].Value))
                 continue;
@@ -22194,7 +22197,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("            // Return deterministic, normalized probability-like output.");
         sb.AppendLine("            int batch = input.Shape[0];");
         sb.AppendLine("            int numClasses = 4;");
-        sb.AppendLine("            var rng = new System.Random(batch);");
+        sb.AppendLine("            var rng = global::AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(batch);");
         sb.AppendLine($"            var data = new {numericType}[batch * numClasses];");
         sb.AppendLine("            for (int i = 0; i < batch; i++)");
         sb.AppendLine("            {");

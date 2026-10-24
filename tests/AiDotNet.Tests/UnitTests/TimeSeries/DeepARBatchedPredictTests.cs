@@ -38,7 +38,7 @@ public sealed class DeepARBatchedPredictTests
         }
         model.Train(trainX, trainY);
 
-        var rng = new Random(windowLength);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(windowLength);
         var input = new Matrix<double>(17, windowLength);
         for (int i = 0; i < input.Rows; i++)
             for (int j = 0; j < windowLength; j++) input[i, j] = rng.NextDouble() * 2 - 1;

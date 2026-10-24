@@ -223,7 +223,7 @@ public class DocumentationGenerator : IIncrementalGenerator
         }
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
-            summary = ExtractXmlElement(xmlDoc, "summary");
+            summary = ExtractXmlElement((xmlDoc ?? throw new System.InvalidOperationException("xmlDoc is null where it is required.")), "summary");
             beginnerGuide = ExtractBeginnerRemarks(xmlDoc);
         }
 

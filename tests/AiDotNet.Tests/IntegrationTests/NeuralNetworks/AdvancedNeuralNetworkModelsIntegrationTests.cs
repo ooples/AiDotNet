@@ -28,7 +28,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     /// </summary>
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var length = 1;
         foreach (var dim in shape) length *= dim;
         var flatData = new float[length];
@@ -53,7 +53,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     /// </summary>
     private static Tensor<float> CreateTokenIndices(int length, int vocabularySize, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var flatData = new float[length];
         for (int i = 0; i < length; i++)
         {

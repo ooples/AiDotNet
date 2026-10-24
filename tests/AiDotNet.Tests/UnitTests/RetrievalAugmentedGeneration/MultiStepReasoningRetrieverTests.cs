@@ -68,7 +68,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new MultiStepReasoningRetriever<double>(null!, mockRetriever));
+                new MultiStepReasoningRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IGenerator<double>>(), mockRetriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -79,7 +79,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new MultiStepReasoningRetriever<double>(generator, null!));
+                new MultiStepReasoningRetriever<double>(generator, global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -124,7 +124,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                multiStepRetriever.RetrieveMultiStep(null!, 10));
+                multiStepRetriever.RetrieveMultiStep(global::AiDotNet.Tests.TestNull.Of<string>(), 10));
         }
 
         [Fact(Timeout = 60000)]
@@ -333,7 +333,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new ToolAugmentedReasoningRetriever<double>(null!, mockRetriever));
+                new ToolAugmentedReasoningRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IGenerator<double>>(), mockRetriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -344,7 +344,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new ToolAugmentedReasoningRetriever<double>(generator, null!));
+                new ToolAugmentedReasoningRetriever<double>(generator, global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -371,7 +371,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                toolRetriever.RegisterTool(null!, input => "output"));
+                toolRetriever.RegisterTool(global::AiDotNet.Tests.TestNull.Of<string>(), input => "output"));
         }
 
         [Fact(Timeout = 60000)]
@@ -384,7 +384,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                toolRetriever.RegisterTool("test_tool", null!));
+                toolRetriever.RegisterTool("test_tool", global::AiDotNet.Tests.TestNull.Of<System.Func<string, string>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -412,7 +412,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                toolRetriever.RetrieveWithTools(null!, 10));
+                toolRetriever.RetrieveWithTools(global::AiDotNet.Tests.TestNull.Of<string>(), 10));
         }
 
         [Fact(Timeout = 60000)]

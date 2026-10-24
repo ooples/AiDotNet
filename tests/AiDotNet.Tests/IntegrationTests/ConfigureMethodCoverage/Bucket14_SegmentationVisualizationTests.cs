@@ -57,11 +57,11 @@ public class Bucket14_SegmentationVisualizationTests : ConfigureMethodTestBase
             .BuildAsync();
 
         Assert.NotNull(result.Options);
-        var carried = result.Options!.SegmentationVisualization;
+        var carried = result.Options.SegmentationVisualization;
 
         Assert.NotNull(carried);
         Assert.Same(config, result.SegmentationVisualization);
-        Assert.Equal(0.25, carried!.Alpha);
+        Assert.Equal(0.25, carried.Alpha);
         Assert.False(carried.DrawContours);
         Assert.Equal(7, carried.ContourThickness);
         Assert.Equal(0.9, carried.MinDisplayConfidence);

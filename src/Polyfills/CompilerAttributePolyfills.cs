@@ -108,6 +108,21 @@ namespace System.Diagnostics.CodeAnalysis
     }
 
     /// <summary>
+    /// Indicates that an output may be null even if its type does not allow it, when the method returns the
+    /// specified value.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
+    public sealed class MaybeNullWhenAttribute : Attribute
+    {
+        public MaybeNullWhenAttribute(bool returnValue)
+        {
+            ReturnValue = returnValue;
+        }
+
+        public bool ReturnValue { get; }
+    }
+
+    /// <summary>
     /// Specifies that the method or property will ensure that the listed field and property members
     /// have non-null values when returning with the specified return value condition.
     /// </summary>

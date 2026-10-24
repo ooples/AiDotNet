@@ -179,7 +179,7 @@ public class ClipTokenizerFactoryTests
     public async Task IsClipCompatible_WithNullTokenizer_ReturnsFalse()
     {
         // Act
-        var isCompatible = ClipTokenizerFactory.IsClipCompatible(null!);
+        var isCompatible = ClipTokenizerFactory.IsClipCompatible(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Interfaces.ITokenizer>());
 
         // Assert
         Assert.False(isCompatible);
@@ -259,7 +259,7 @@ public class ClipTokenizerFactoryTests
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            ClipTokenizerFactory.FromPretrained(null!, "merges.txt"));
+            ClipTokenizerFactory.FromPretrained(global::AiDotNet.Tests.TestNull.Of<string>(), "merges.txt"));
     }
 
     [Fact(Timeout = 60000)]
@@ -267,7 +267,7 @@ public class ClipTokenizerFactoryTests
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            ClipTokenizerFactory.FromPretrained("vocab.json", null!));
+            ClipTokenizerFactory.FromPretrained("vocab.json", global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]

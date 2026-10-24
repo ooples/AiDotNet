@@ -626,12 +626,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             var metaJson = row[MetadataField]?.ToString();
             if (!string.IsNullOrEmpty(metaJson))
             {
-                var parsed = JsonConvert.DeserializeObject<Dictionary<string, object>>(metaJson!);
+                var parsed = JsonConvert.DeserializeObject<Dictionary<string, object>>((metaJson ?? throw new InvalidOperationException("metaJson is null where it is required.")));
                 if (parsed != null)
                     metadata = parsed;
             }
 
-            return new Document<T>(id!, content, metadata);
+            return new Document<T>((id ?? throw new InvalidOperationException("id is null where it is required.")), content, metadata);
         }
 
         private static bool IsNumeric(object value)

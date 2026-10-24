@@ -178,7 +178,7 @@ public sealed class ProgramEvolutionTaskTests
     public void InvalidArgumentsAreRejected()
     {
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => new ProgramEvolutionTask(null));
+        Assert.Throws<ArgumentNullException>(() => new ProgramEvolutionTask(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IProgramFitnessEvaluator>()));
 #pragma warning restore CS8600, CS8625
         var evaluator = new DelegateProgramFitnessEvaluator(_ => 1.0);
         Assert.Throws<ArgumentException>(() => new ProgramEvolutionTask(evaluator, id: " "));

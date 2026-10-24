@@ -96,7 +96,7 @@ public class SerializationIntegrationTests : IDisposable
     public async Task JsonConverterRegistry_RegisterConverter_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            JsonConverterRegistry.RegisterConverter(null!));
+            JsonConverterRegistry.RegisterConverter(global::AiDotNet.Tests.TestNull.Of<Newtonsoft.Json.JsonConverter>()));
     }
 
     [Fact(Timeout = 120000)]

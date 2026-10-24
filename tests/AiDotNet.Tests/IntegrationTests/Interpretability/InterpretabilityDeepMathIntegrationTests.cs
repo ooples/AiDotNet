@@ -561,7 +561,7 @@ public class InterpretabilityDeepMathIntegrationTests
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0 });
 
         Assert.Throws<ArgumentNullException>(() =>
-            detector.DetectBias(null, sensitiveFeature));
+            detector.DetectBias(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), sensitiveFeature));
     }
 
     [Fact(Timeout = 120000)]

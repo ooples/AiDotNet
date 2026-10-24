@@ -191,7 +191,7 @@ public class LinearRegressionIntegrationTests
         // Arrange: 10 features
         var options = new RegressionOptions<double> { UseIntercept = true };
         var regression = new MultipleRegression<double>(options);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int numSamples = 50;
         int numFeatures = 10;
 

@@ -19,7 +19,7 @@ public class PolarDecompositionIntegrationTests
 
     private static Matrix<double> CreateTestMatrix(int size, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(size, size);
         for (int i = 0; i < size; i++)
         {
@@ -34,7 +34,7 @@ public class PolarDecompositionIntegrationTests
     private static Matrix<double> CreateSpdMatrix(int size, int seed = 42)
     {
         // Create SPD matrix via A^T*A
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var B = new Matrix<double>(size, size);
         for (int i = 0; i < size; i++)
         {

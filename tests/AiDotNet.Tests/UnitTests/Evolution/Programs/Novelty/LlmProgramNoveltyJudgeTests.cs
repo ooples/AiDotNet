@@ -110,7 +110,7 @@ public sealed class LlmProgramNoveltyJudgeTests
     {
         var client = new FakeChatClient("NOVEL");
 #pragma warning disable CS8625
-        Assert.Throws<ArgumentNullException>(() => new LlmProgramNoveltyJudge<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new LlmProgramNoveltyJudge<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Agentic.Models.IChatClient<double>>()));
 #pragma warning restore CS8625
         Assert.Throws<ArgumentException>(() => new LlmProgramNoveltyJudge<double>(client, id: "  "));
         Assert.Throws<ArgumentOutOfRangeException>(() =>

@@ -271,7 +271,7 @@ public class GpuAccelerationTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new GpuPINNTrainer<double>(null!));
+            new GpuPINNTrainer<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -329,7 +329,7 @@ public class GpuAccelerationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            trainer.UpdateOptions(null!));
+            trainer.UpdateOptions(global::AiDotNet.Tests.TestNull.Of<AiDotNet.PhysicsInformed.GpuPINNTrainingOptions>()));
     }
 
     [Fact(Timeout = 60000)]

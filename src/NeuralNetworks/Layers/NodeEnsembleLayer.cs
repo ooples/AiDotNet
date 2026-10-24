@@ -142,7 +142,7 @@ public partial class NodeEnsembleLayer<T> : LayerBase<T>, IShapeContract
         var outs = new Tensor<T>[_numTrees];
         for (int i = 0; i < _numTrees; i++)
         {
-            outs[i] = _trees![i].Forward(x);
+            outs[i] = (_trees ?? throw new InvalidOperationException("_trees is null where it is required."))[i].Forward(x);
         }
         return Engine.TensorConcatenate(outs, axis: 1);
     }

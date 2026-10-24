@@ -310,7 +310,7 @@ public class GPInferenceCorrectnessTests
     public async Task BetaLikelihood_Sample_IsInUnitInterval()
     {
         var likelihood = new BetaLikelihood<double>(precision: 10.0);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         double[] testMeans = { 0.1, 0.3, 0.5, 0.7, 0.9 };
 
@@ -330,7 +330,7 @@ public class GPInferenceCorrectnessTests
     public async Task BetaLikelihood_Sample_HasCorrectMean()
     {
         var likelihood = new BetaLikelihood<double>(precision: 20.0);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         double mu = 0.3;
         double sum = 0;
@@ -353,7 +353,7 @@ public class GPInferenceCorrectnessTests
     public async Task BetaLikelihood_FromData_EstimatesPrecision()
     {
         // Generate data from Beta(3, 7) which has mean 0.3 and variance 0.3*0.7/11 ≈ 0.019
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var y = new Vector<double>(100);
         for (int i = 0; i < 100; i++)
         {
@@ -419,7 +419,7 @@ public class GPInferenceCorrectnessTests
         for (int i = 0; i < 10; i++)
         {
             X[i, 0] = i;
-            y[i] = Math.Sin(i) + 0.1 * i * (new Random(42 + i).NextDouble() - 0.5);
+            y[i] = Math.Sin(i) + 0.1 * i * (AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42 + i).NextDouble() - 0.5);
         }
 
         gp.Fit(X, y);

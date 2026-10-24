@@ -468,7 +468,11 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
             {
                 foreach (var connection in _tcpConnections.Values)
                 {
-                    try { connection.Close(); } catch { }
+                    try { connection.Close(); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning($"NCCL backend: closing a TCP connection failed ({ex.GetType().Name}: {ex.Message}).");
+                    }
                 }
                 _tcpConnections.Clear();
             }

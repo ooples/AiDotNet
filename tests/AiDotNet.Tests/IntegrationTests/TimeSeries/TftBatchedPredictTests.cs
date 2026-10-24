@@ -41,7 +41,7 @@ public class TftBatchedPredictTests
         }
         else
         {
-            var rng = new Random(rows + width);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(rows + width);
             input = new Matrix<double>(rows, width);
             for (int i = 0; i < rows; i++) for (int j = 0; j < width; j++) input[i, j] = Math.Sin(0.3 * (i + j)) + 0.1 * rng.NextDouble();
         }

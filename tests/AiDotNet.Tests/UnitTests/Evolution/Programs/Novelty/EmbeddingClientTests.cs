@@ -50,9 +50,9 @@ public sealed class EmbeddingClientTests
         await Assert.ThrowsAsync<ArgumentException>(async () =>
             await client.EmbedAsync(Array.Empty<string>()));
 #pragma warning disable CS8625
-        await Assert.ThrowsAsync<ArgumentNullException>(async () => await client.EmbedAsync(null));
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await client.EmbedAsync(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<string>>()));
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await client.EmbedAsync(new string[] { null }));
+            await client.EmbedAsync(new string[] { global::AiDotNet.Tests.TestNull.Of<string>() }));
 #pragma warning restore CS8625
     }
 
@@ -175,7 +175,7 @@ public sealed class EmbeddingClientTests
     public void CachingClientRejectsAnInvalidCapacityAndANullInner()
     {
 #pragma warning disable CS8625
-        Assert.Throws<ArgumentNullException>(() => new CachingEmbeddingClient(null));
+        Assert.Throws<ArgumentNullException>(() => new CachingEmbeddingClient(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IEmbeddingClient>()));
 #pragma warning restore CS8625
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new CachingEmbeddingClient(new DeterministicEmbeddingClient(), capacity: 0));

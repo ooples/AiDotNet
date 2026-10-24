@@ -28,7 +28,7 @@ public class ExplanationFaithfulnessTests
             return s;
         }
 
-        var rng = new Random(1);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1);
         var data = new Matrix<double>(60, 3);
         for (int i = 0; i < 60; i++)
             for (int j = 0; j < 3; j++) data[i, j] = rng.NextDouble() * 2 - 1;

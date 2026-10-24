@@ -30,8 +30,8 @@ public class DimensionalityReductionDeepMathIntegrationTests
 
         pca.Fit(data);
 
-        Assert.Equal(3.0, pca.Mean![0], Tol);
-        Assert.Equal(4.0, pca.Mean![1], Tol);
+        Assert.Equal(3.0, (pca.Mean ?? throw new InvalidOperationException("pca.Mean is null where it is required."))[0], Tol);
+        Assert.Equal(4.0, pca.Mean[1], Tol);
     }
 
     [Fact(Timeout = 120000)]
@@ -50,7 +50,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
 
         pca.Fit(data);
 
-        double sum = pca.ExplainedVarianceRatio!.Sum();
+        double sum = (pca.ExplainedVarianceRatio ?? throw new InvalidOperationException("pca.ExplainedVarianceRatio is null where it is required.")).Sum();
         Assert.Equal(1.0, sum, 1e-3);
     }
 
@@ -69,7 +69,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
 
         pca.Fit(data);
 
-        for (int i = 0; i < pca.ExplainedVariance!.Length - 1; i++)
+        for (int i = 0; i < (pca.ExplainedVariance ?? throw new InvalidOperationException("pca.ExplainedVariance is null where it is required.")).Length - 1; i++)
         {
             Assert.True(pca.ExplainedVariance[i] >= pca.ExplainedVariance[i + 1],
                 $"Variance at index {i} ({pca.ExplainedVariance[i]}) should be >= variance at {i + 1} ({pca.ExplainedVariance[i + 1]})");
@@ -114,7 +114,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         pca.Fit(data);
 
         // First component should explain nearly 100% of variance
-        Assert.True(pca.ExplainedVarianceRatio![0] > 0.999,
+        Assert.True((pca.ExplainedVarianceRatio ?? throw new InvalidOperationException("pca.ExplainedVarianceRatio is null where it is required."))[0] > 0.999,
             $"First component should explain >99.9% for perfectly correlated data, got {pca.ExplainedVarianceRatio[0]:P2}");
     }
 
@@ -136,9 +136,9 @@ public class DimensionalityReductionDeepMathIntegrationTests
         pca.Fit(data);
 
         // Both eigenvalues should be non-zero (features have independent variation)
-        Assert.True(pca.ExplainedVariance![0] > 0, "First eigenvalue should be positive");
+        Assert.True((pca.ExplainedVariance ?? throw new InvalidOperationException("pca.ExplainedVariance is null where it is required."))[0] > 0, "First eigenvalue should be positive");
         // Sum of explained variance ratios = 1
-        double totalRatio = pca.ExplainedVarianceRatio!.Sum();
+        double totalRatio = (pca.ExplainedVarianceRatio ?? throw new InvalidOperationException("pca.ExplainedVarianceRatio is null where it is required.")).Sum();
         Assert.Equal(1.0, totalRatio, 1e-3);
     }
 
@@ -196,7 +196,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
                 double dot = 0;
                 for (int k = 0; k < 3; k++)
                 {
-                    dot += pca.Components![i, k] * pca.Components[j, k];
+                    dot += (pca.Components ?? throw new InvalidOperationException("pca.Components is null where it is required."))[i, k] * pca.Components[j, k];
                 }
                 Assert.Equal(0.0, dot, 1e-3);
             }
@@ -223,7 +223,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
             double norm = 0;
             for (int k = 0; k < 3; k++)
             {
-                norm += pca.Components![i, k] * pca.Components[i, k];
+                norm += (pca.Components ?? throw new InvalidOperationException("pca.Components is null where it is required."))[i, k] * pca.Components[i, k];
             }
             norm = Math.Sqrt(norm);
             Assert.Equal(1.0, norm, 1e-3);
@@ -365,7 +365,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         pca.Fit(data);
 
         Assert.Equal(1, pca.NComponentsOut);
-        Assert.Equal(1.0, pca.ExplainedVarianceRatio![0], 1e-3);
+        Assert.Equal(1.0, (pca.ExplainedVarianceRatio ?? throw new InvalidOperationException("pca.ExplainedVarianceRatio is null where it is required."))[0], 1e-3);
     }
 
     [Fact(Timeout = 120000)]
@@ -491,7 +491,7 @@ public class DimensionalityReductionDeepMathIntegrationTests
         var rp = new RandomProjection<double>(nComponents: 5);
 
         var data = new Matrix<double>(4, 10);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 10; j++)
                 data[i, j] = rng.NextDouble() * 10;

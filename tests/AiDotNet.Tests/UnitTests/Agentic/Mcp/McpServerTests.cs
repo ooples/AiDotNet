@@ -15,7 +15,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
         private static ToolCollection ToolsWith(out RecordingTool tool)
         {
             tool = new RecordingTool("adder", "Adds a and b.", args =>
-                ((int)args["a"] + (int)args["b"]).ToString());
+                ((int)(args["a"] ?? throw new InvalidOperationException("args[\"a\"] is null where it is required.")) + (int)(args["b"] ?? throw new InvalidOperationException("args[\"b\"] is null where it is required."))).ToString());
             return new ToolCollection().Add(tool);
         }
 
@@ -28,8 +28,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
 
             var result = await server.HandleRequestAsync("tools/list", null);
 
-            var tools = (JArray)result["tools"];
-            var entry = Assert.Single(tools);
+            var tools = (JArray)(result["tools"] ?? throw new InvalidOperationException("(JArray)result[\"tools\"] is null where it is required."));
+            var entry = Assert.Single((tools ?? throw new InvalidOperationException("tools is null where it is required.")));
             Assert.Equal("adder", (string?)entry["name"]);
             Assert.Equal("Adds a and b.", (string?)entry["description"]);
             Assert.NotNull(entry["inputSchema"]);
@@ -50,7 +50,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
             var result = await server.HandleRequestAsync("tools/call", parameters);
 
             Assert.Single(tool.Invocations);
-            Assert.False((bool)result["isError"]);
+            Assert.False((bool)(result["isError"] ?? throw new InvalidOperationException("result[\"isError\"] is null where it is required.")));
             Assert.Equal("5", (string?)result["content"]?[0]?["text"]);
         }
 

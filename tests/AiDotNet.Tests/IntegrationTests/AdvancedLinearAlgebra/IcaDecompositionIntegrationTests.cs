@@ -19,7 +19,7 @@ public class IcaDecompositionIntegrationTests
 
     private static Matrix<double> CreateMixedSignals(int samples, int sources, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(samples, sources);
         for (int i = 0; i < samples; i++)
         {
@@ -42,7 +42,7 @@ public class IcaDecompositionIntegrationTests
 
     private static Matrix<double> CreateRandomMatrix(int rows, int cols, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
         {

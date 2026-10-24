@@ -29,7 +29,7 @@ public class TransformerEncoderBlockLayoutAuditTests
 
     private static Tensor<float> RandTensor(int[] shape, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int len = 1;
         foreach (var d in shape) len *= d;
         var data = new float[len];
@@ -226,11 +226,11 @@ public class TransformerEncoderBlockLayoutAuditTests
         Assert.NotNull(encBlock);
         Assert.NotNull(decBlock);
 
-        Assert.Contains("QuantizedAttentionLayer", encBlock!.AttentionLayer.GetType().Name);
+        Assert.Contains("QuantizedAttentionLayer", encBlock.AttentionLayer.GetType().Name);
         Assert.Contains("QuantizedDenseLayer", encBlock.FfnUpLayer.GetType().Name);
         Assert.Contains("QuantizedDenseLayer", encBlock.FfnDownLayer.GetType().Name);
 
-        Assert.Contains("QuantizedAttentionLayer", decBlock!.SelfAttentionLayer.GetType().Name);
+        Assert.Contains("QuantizedAttentionLayer", decBlock.SelfAttentionLayer.GetType().Name);
         Assert.IsType<MultiHeadAttentionLayer<float>>(decBlock.CrossAttentionLayer);
         Assert.Contains("QuantizedDenseLayer", decBlock.FfnUpLayer.GetType().Name);
         Assert.Contains("QuantizedDenseLayer", decBlock.FfnDownLayer.GetType().Name);

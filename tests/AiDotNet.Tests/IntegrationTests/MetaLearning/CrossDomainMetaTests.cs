@@ -23,7 +23,7 @@ public class CrossDomainMetaTests
         var supportY = new Vector<double>(4);
         var queryX = new Matrix<double>(4, 3);
         var queryY = new Vector<double>(4);
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < 4; i++)
         {
             for (int j = 0; j < 3; j++)

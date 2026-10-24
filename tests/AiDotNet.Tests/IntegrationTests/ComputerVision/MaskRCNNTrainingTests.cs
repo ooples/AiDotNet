@@ -50,8 +50,9 @@ public class MaskRCNNTrainingTests
         => ((IParameterSource<double>)component).GetParameters();
 
     private static object Field(MaskRCNN<double> model, string name)
-        => typeof(MaskRCNN<double>).GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(model)!;
+        => (typeof(MaskRCNN<double>).GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?? throw new InvalidOperationException($"MaskRCNN has no field '{name}'."))
+            .GetValue(model) ?? throw new InvalidOperationException($"MaskRCNN field '{name}' is null.");
 
     [Fact(Timeout = 120000)]
     public async Task MaskHead_UpsamplesA14x14RoiTo28x28PerClassLogits()
