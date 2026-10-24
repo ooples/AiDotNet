@@ -37,6 +37,16 @@ namespace AiDotNet.Tokenization.Algorithms
         public static WordPieceTokenizer BertBaseChinese(IEnumerable<string>? additionalTokens = null) =>
             new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseChineseResource, additionalTokens), "[UNK]"), SpecialTokens.Bert());
 
+        private const string SimBertChineseResource = "AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz";
+
+        /// <summary>
+        /// SimBERT's WordPiece tokenizer (WangZeJun/simbert-base-chinese, which EmotiVoice's style encoder reads): its
+        /// 13,685-token Chinese vocabulary, a subset of BERT-base Chinese's, with each CJK character its own word and
+        /// lowercasing.
+        /// </summary>
+        public static WordPieceTokenizer SimBertChinese() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(SimBertChineseResource, null), "[UNK]"), SpecialTokens.Bert());
+
         private static Dictionary<string, int> LoadVocabulary(string resource, IEnumerable<string>? additionalTokens)
         {
             var assembly = typeof(WordPieceTokenizer).Assembly;
