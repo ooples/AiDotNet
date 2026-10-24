@@ -1669,12 +1669,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // doubles throughput; paired with the HeavyTrainingTimeoutClassNames smoke cap (below) this
         // brings the deep dual-stream train path inside the gate while keeping the model paper-scale.
         "ViLBERT",
-        // NOTE: EmotiVoice, TinyBERTNER, UNet3D from the #1624 inventory have MANUAL
+        // NOTE: TinyBERTNER, UNet3D from the #1624 inventory have MANUAL
         // scaffolds (ModelFamilyTests/NeuralNetworks/*Tests.cs), so they are not
         // auto-generated and the float-list does not apply — UNet3DTests is already
-        // <float>; EmotiVoiceTests / TinyBERTNERTests are floated directly in their
-        // manual scaffolds instead (their bases TTSModelTestBase / TransformerNERTestBase
-        // were generic-ized to <T> for that).
+        // <float>; TinyBERTNERTests is floated directly in its manual scaffold instead
+        // (its base TransformerNERTestBase was generic-ized to <T> for that).
         // --- Whisper / ASR family (large-v3-scale defaults; same double-timeout) ---
         "DistilWhisper", "FasterWhisper", "KotobaWhisper", "WhisperLargeV3",
         "WhisperLargeV3Turbo", "WhisperLive", "WhisperX", "Moonshine", "WhisperCPP",
@@ -1912,7 +1911,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // preserved; family bases (NeuralNetwork / AudioNN / VisionLanguage / EmbeddingModel) are generic
         // over T so the floatify rewrite compiles. ---
         "CLIPA", "InternVL25", "InternVL3", "ACEStep", "AudioVisualEventLocalizationNetwork", "BASIC", "ConvolutionalNeuralNetwork",
-        "DCGAN", "Data2VecASR", "DeepBeliefNetwork", "DenseNetNetwork", "Donut", "EmotiVoice", "Emu",
+        "DCGAN", "Data2VecASR", "DeepBeliefNetwork", "DenseNetNetwork", "Donut", "Emu",
         "ExtremeLearningMachine", "Kokoro", "MCDropoutNeuralNetwork", "MPLUGOwl2",
         "Mamba2", "MedCLIP", "MedFlamingo", "MinMo", "LLaVANeXTVideo", "NaturalSpeech2", "NeuFlowV2",
         "NeuralParametricEQ", "OMGLLaVA",
@@ -6839,6 +6838,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "BertHidden = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, BertEmbedding = 8, BertMaxPositions = 64, " +
                     "SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8, SlmPositionalConvKernel = 16, " +
                     "SlmPositionalConvGroups = 2, SpeakerChannels = 2, SpeakerBlocks = [1, 1, 1, 1], SpeakerEmbedding = 8 })";
+            }
+            else if (model.ClassName == "EmotiVoice" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.StyleEmotion.", System.StringComparison.Ordinal))
+            {
+                // EmotiVoice's release is a 384-wide acoustic model over 2014 speakers, a 512-channel HiFi-GAN upsampling
+                // 256x, full-width discriminators and a 12-layer 768-wide SimBERT; keep every module at a tiny width: a
+                // 16-wide acoustic model over the released 502 phoneme tokens with 2-block encoder and decoder over 10 mel bins, a 16-channel HiFi-GAN
+                // upsampling 4x4 (a 16-sample hop with a 64-point FFT) on 8-frame segments, discriminators at 1/16 width
+                // and a 1-layer 8-wide SimBERT.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.StyleEmotion.EmotiVoiceOptions { HopSize = 16, FftSize = 64, WindowLength = 64, MelChannels = 10, " +
+                    "HiddenDim = 16, SpeakerCount = 4, Heads = 2, EncoderLayers = 2, DecoderLayers = 2, VarianceChannels = 16, " +
+                    "UpsampleRates = [4, 4], UpsampleKernels = [8, 8], UpsampleInitialChannels = 16, SegmentFrames = 8, " +
+                    "DiscriminatorWidthDivisor = 16, StyleBertHidden = 8, StyleBertLayers = 1, StyleBertHeads = 2, StyleBertIntermediate = 16 })";
             }
             else if (model.ClassName == "HiFiGAN" && model.TypeParameterCount == 1)
             {
@@ -16269,6 +16285,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "EmotiVoice")
+                {
+                    // EmotiVoice reads phoneme ids and trains on the recording (its mel spectrogram for the aligner, a segment
+                    // of it for HiFi-GAN): eight ids and 512 samples. Its synthesized length follows the predicted durations,
+                    // so the text-sensitivity probes compare the deterministic training objective, as for StyleTTS 2.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 512 };");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                        ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS")
                 {
                     // VITS, VITS2 and Piper read characters or phoneme ids and train on the waveform: four ids (nine tokens
@@ -16353,8 +16385,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
-                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS")
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
                         // random choice of soft or hard alignment, so its training loss is one draw too.
