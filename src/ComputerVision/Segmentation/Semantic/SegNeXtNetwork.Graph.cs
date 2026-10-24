@@ -352,7 +352,7 @@ internal sealed class SegNeXtNetwork<T>
         void Conv(ConvolutionalLayer<T> conv)
         {
             int k = conv.KernelSize, outputs = conv.OutputDepth, inputs = conv.InputDepth;
-            var w = TorchParameters.Gaussian<T>(random, outputs * inputs * k * k, Math.Sqrt(2.0 / (k * k * outputs)));
+            var w = TorchParameters.Gaussian<T>(random, outputs * inputs * k * k, Math.Sqrt(2.0 / ((double)k * k * outputs)));
             int count = conv.GetParameters().Length;
             var full = new Vector<T>(count);
             for (int i = 0; i < w.Length; i++) full[i] = w[i];

@@ -393,9 +393,13 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
         var voice = Voice;
-        bool zeroShot = voice?.ReferenceTokens is not null && voice.ReferenceCodecTokens is not null;
-        var promptText = zeroShot && voice?.ReferenceTokens is { } transcript ? IdsOf(transcript) : Array.Empty<int>();
-        var promptSpeech = zeroShot && voice?.ReferenceCodecTokens is { } prompt ? IdsOf(prompt) : Array.Empty<int>();
+        // Zero-shot only when the voice carries both the transcript and its speech tokens.
+        int[] promptText = Array.Empty<int>(), promptSpeech = Array.Empty<int>();
+        if (voice is { ReferenceTokens: { } transcript, ReferenceCodecTokens: { } prompt })
+        {
+            promptText = IdsOf(transcript);
+            promptSpeech = IdsOf(prompt);
+        }
         return GenerateWithLanguageModel(text, promptText, promptSpeech, voice?.SpeakerEmbedding, random);
     }
 
