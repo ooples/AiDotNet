@@ -31,11 +31,10 @@ internal static class OuteTTSAudio
 
     /// <summary><c>DacInterface.encode</c>: the loudness-normalized recording in 5-second windows, each padded to a
     /// multiple of the hop and encoded, the codes concatenated: <c>[codebooks, frames]</c>.</summary>
-    public static int[,] Encode<T>(AiDotNet.Audio.Effects.DAC<T> codec, double[] audio, int sampleRate, double windowSeconds = 5.0)
+    public static int[,] Encode<T>(Func<Tensor<T>, int[,]> encode, int hop, double[] audio, int sampleRate, double windowSeconds = 5.0)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         var x = ProcessAudio(audio, sampleRate);
-        int hop = codec.HopLength;
         int window = (int)(Math.Ceiling((int)(windowSeconds * sampleRate) / (double)hop) * hop);
         var pieces = new List<int[,]>();
         for (int start = 0; start < x.Length; start += window)
@@ -44,7 +43,7 @@ internal static class OuteTTSAudio
             int padded = (int)Math.Ceiling(length / (double)hop) * hop;
             var chunk = new Tensor<T>(new[] { 1, 1, padded });
             for (int i = 0; i < length; i++) chunk[0, 0, i] = ops.FromDouble(x[start + i]);
-            pieces.Add(codec.Encode(chunk));
+            pieces.Add(encode(chunk));
         }
         int codebooks = pieces[0].GetLength(0), frames = pieces.Sum(p => p.GetLength(1));
         var codes = new int[codebooks, frames];
@@ -60,7 +59,7 @@ internal static class OuteTTSAudio
 
     /// <summary><c>DacInterface.decode</c>: the codes in 2048-frame chunks, each decoded and faded in and out, then the
     /// whole loudness-normalized.</summary>
-    public static double[] Decode<T>(AiDotNet.Audio.Effects.DAC<T> codec, int[,] codes, int sampleRate, int chunkFrames = 2048)
+    public static double[] Decode<T>(Func<int[,], Tensor<T>> decode, int[,] codes, int sampleRate, int chunkFrames = 2048)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         int codebooks = codes.GetLength(0), frames = codes.GetLength(1);
@@ -71,7 +70,7 @@ internal static class OuteTTSAudio
             var chunk = new int[codebooks, length];
             for (int q = 0; q < codebooks; q++)
                 for (int t = 0; t < length; t++) chunk[q, t] = codes[q, start + t];
-            var decoded = codec.Decode(chunk);
+            var decoded = decode(chunk);
             var samples = decoded.ToArray().Select(v => ops.ToDouble(v)).ToArray();
             ApplyFade(samples, sampleRate);
             audio.AddRange(samples);
@@ -213,33 +212,71 @@ internal static class OuteTTSSampler
         if (topK > 0)
         {
             int k = Math.Min(topK, scores.Length);
-            double kth = scores.OrderByDescending(v => v).ElementAt(k - 1);
+            double kth = KthLargest(scores, k);
             for (int i = 0; i < scores.Length; i++) if (scores[i] < kth) scores[i] = double.NegativeInfinity;
         }
         if (topP < 1.0)
         {
             // Ascending order, stable for ties; remove while the cumulative probability stays at most 1 − top_p, keeping
-            // the most likely token.
-            var order = Enumerable.Range(0, scores.Length).OrderBy(i => scores[i]).ToArray();
-            var probabilities = Softmax(order.Select(i => scores[i]).ToArray());
+            // the most likely token. Removed tokens (-inf) sort first with probability 0 and stay removed, so only the
+            // finite scores are ordered.
+            var current = scores;
+            var order = Enumerable.Range(0, scores.Length).Where(i => !double.IsNegativeInfinity(current[i])).ToArray();
+            Array.Sort(order, (a, b) => current[a] != current[b] ? current[a].CompareTo(current[b]) : a.CompareTo(b));
+            var probabilities = Softmax(order.Select(i => current[i]).ToArray());
             double cumulative = 0;
-            var remove = new bool[scores.Length];
+            var remove = new bool[order.Length];
             for (int j = 0; j < order.Length; j++)
             {
                 cumulative += probabilities[j];
-                remove[order[j]] = cumulative <= 1 - topP && j < order.Length - 1;
+                remove[j] = cumulative <= 1 - topP && j < order.Length - 1;
             }
-            for (int i = 0; i < scores.Length; i++) if (remove[i]) scores[i] = double.NegativeInfinity;
+            for (int j = 0; j < order.Length; j++) if (remove[j]) scores[order[j]] = double.NegativeInfinity;
         }
         if (minP > 0)
         {
             var probabilities = Softmax(scores);
             double threshold = minP * probabilities.Max();
-            int best = Enumerable.Range(0, scores.Length).OrderByDescending(i => scores[i]).First();
+            int best = 0;
+            for (int i = 1; i < scores.Length; i++) if (scores[i] > scores[best]) best = i;
             for (int i = 0; i < scores.Length; i++)
                 if (probabilities[i] < threshold && i != best) scores[i] = double.NegativeInfinity;
         }
         return scores;
+    }
+
+    // The k-th largest score (ties counted), as torch.topk's last value: a min-heap of the k largest so far.
+    private static double KthLargest(double[] scores, int k)
+    {
+        var heap = new double[k];
+        int count = 0;
+        foreach (double v in scores)
+        {
+            if (count < k)
+            {
+                int i = count++;
+                heap[i] = v;
+                while (i > 0 && heap[(i - 1) / 2] > heap[i])
+                {
+                    (heap[i], heap[(i - 1) / 2]) = (heap[(i - 1) / 2], heap[i]);
+                    i = (i - 1) / 2;
+                }
+            }
+            else if (v > heap[0])
+            {
+                heap[0] = v;
+                for (int i = 0; ;)
+                {
+                    int l = 2 * i + 1, r = l + 1, m = i;
+                    if (l < k && heap[l] < heap[m]) m = l;
+                    if (r < k && heap[r] < heap[m]) m = r;
+                    if (m == i) break;
+                    (heap[i], heap[m]) = (heap[m], heap[i]);
+                    i = m;
+                }
+            }
+        }
+        return heap[0];
     }
 
     internal static double[] Softmax(double[] scores)

@@ -1,3 +1,4 @@
+using AiDotNet.Audio.Codecs;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -84,6 +85,17 @@ public partial class DAC<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw new NotSupportedException("Pretrained weights load into the native encoder, quantizer and decoder.");
+        var o = PaperOptions;
+        _usedDescriptNames = LoadDescriptModules(Engine, _encoder!, _decoder!, _quantizer!, o.EncoderRates.Length, o.DecoderRates.Length, o.NumQuantizers,
+            o.CodebookSize, o.CodebookDim, read);
+    }
+
+    /// <summary>Loads descript-audio-codec's layout into DAC's modules wherever they live (a codec, or a model that owns
+    /// them); returns the names read.</summary>
+    internal static HashSet<string> LoadDescriptModules(IEngine engine, DacEncoder<T> encoder, DacDecoder<T> decoder, FactorizedVectorQuantizerLayer<T> quantizer,
+        int encoderBlocks, int decoderBlocks, int quantizers, int codebookSize, int codebookDim, Func<string, double[]?> read)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
         var used = new HashSet<string>(StringComparer.Ordinal);
         double[] Read(string name, int count)
         {
@@ -108,21 +120,19 @@ public partial class DAC<T>
                     throw new InvalidOperationException($"No loader for {layer.GetType().Name} at '{descript}'.");
             }
         }
-        var o = PaperOptions;
-        int encoderBlocks = o.EncoderRates.Length, decoderBlocks = o.DecoderRates.Length;
-        foreach (var (name, layer) in _encoder!.Named("encoder")) Load(DescriptName(name, encoderBlocks, decoderBlocks), layer);
-        foreach (var (name, layer) in _decoder!.Named("decoder")) Load(DescriptName(name, encoderBlocks, decoderBlocks), layer);
-        for (int q = 0; q < o.NumQuantizers; q++)
+        foreach (var (name, layer) in encoder.Named("encoder")) Load(DescriptName(name, encoderBlocks, decoderBlocks), layer);
+        foreach (var (name, layer) in decoder.Named("decoder")) Load(DescriptName(name, encoderBlocks, decoderBlocks), layer);
+        for (int q = 0; q < quantizers; q++)
         {
             string prefix = $"quantizer.quantizers.{q}";
-            Load($"{prefix}.in_proj", _quantizer!.InProjection(q));
-            Load($"{prefix}.out_proj", _quantizer.OutProjection(q));
-            var codebook = Read($"{prefix}.codebook.weight", o.CodebookSize * o.CodebookDim);
-            var target = _quantizer.Codebook(q);
-            for (int i = 0; i < codebook.Length; i++) target[i] = NumOps.FromDouble(codebook[i]);
-            Engine.InvalidatePersistentTensor(target);
+            Load($"{prefix}.in_proj", quantizer.InProjection(q));
+            Load($"{prefix}.out_proj", quantizer.OutProjection(q));
+            var codebook = Read($"{prefix}.codebook.weight", codebookSize * codebookDim);
+            var target = quantizer.Codebook(q);
+            for (int i = 0; i < codebook.Length; i++) target[i] = ops.FromDouble(codebook[i]);
+            engine.InvalidatePersistentTensor(target);
         }
-        _usedDescriptNames = used;
+        return used;
     }
 
     private HashSet<string>? _usedDescriptNames;
