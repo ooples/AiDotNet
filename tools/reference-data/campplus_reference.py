@@ -8,7 +8,9 @@ randomized BatchNorm statistics, and records in tests/AiDotNet.Tests/TextToSpeec
   context-aware masking pools a full 100-frame segment and a short 15-frame one);
 - the training-mode loss sum(embedding * target) with batch statistics;
 - the eval-mode embeddings after one SGD step, which also read the running statistics the training forward updated.
-  The step is lr 1e-3: the training-mode embedding norm divides by a small batch variance, so larger steps diverge.
+  The step is lr 1e-3: the training-mode embedding norm divides by a small batch variance, so larger steps diverge;
+- CosyVoice's front end on a waveform (frontend._extract_spk_embedding): torchaudio's kaldi.fbank (num_mel_bins
+  feat_dim, dither 0, 16 kHz, the Povey window) minus each band's utterance mean, and its eval-mode embedding.
 Default: verify; --write: regenerate.
 """
 import argparse
@@ -26,6 +28,7 @@ CONFIG = dict(feat_dim=16, embedding_size=6, growth_rate=4, bn_size=2, init_chan
 FRAMES = 230
 BATCH = 2
 LEARNING_RATE = 1e-3
+SAMPLES = 4800
 
 
 def flat(tensor):
@@ -50,6 +53,15 @@ def build(root, state=None):
     if state is not None:
         model.load_state_dict(state, strict=True)
     return model
+
+
+def front_end(model, waveform):
+    import torchaudio.compliance.kaldi as kaldi
+    feat = kaldi.fbank(waveform.unsqueeze(0), num_mel_bins=CONFIG["feat_dim"], dither=0, sample_frequency=16000)
+    feat = feat - feat.mean(dim=0, keepdim=True)
+    model.eval()
+    with torch.no_grad():
+        return feat, model(feat.unsqueeze(0))
 
 
 def run(model, features, target):
@@ -80,11 +92,16 @@ def main():
         generator = torch.Generator().manual_seed(7)
         features = torch.randn(BATCH, FRAMES, CONFIG["feat_dim"], generator=generator)
         target = torch.randn(BATCH, CONFIG["embedding_size"], generator=generator)
+        time = torch.arange(SAMPLES) / 16000
+        waveform = (0.3 * torch.sin(2 * torch.pi * 220 * time) + 0.1 * torch.sin(2 * torch.pi * 1250 * time)
+                    + 0.05 * torch.randn(SAMPLES, generator=generator))
+        fbank, waveform_embedding = front_end(model, waveform)
         embedding, loss, after = run(model, features, target)
         data = {"config": CONFIG, "frames": FRAMES, "batch": BATCH, "learning_rate": LEARNING_RATE,
                 "safetensors_base64": base64.b64encode(save_safetensors(state)).decode("ascii"),
                 "features": flat(features), "target": flat(target), "embedding": flat(embedding),
-                "loss": float(loss.detach()), "embedding_after_sgd": flat(after)}
+                "loss": float(loss.detach()), "embedding_after_sgd": flat(after),
+                "waveform": flat(waveform), "fbank": flat(fbank), "waveform_embedding": flat(waveform_embedding)}
         _fixture.save(FIXTURE, data, __file__)
         print("wrote " + FIXTURE)
         return
@@ -92,11 +109,14 @@ def main():
     model = build(args.speakerlab, load_safetensors(base64.b64decode(data["safetensors_base64"])))
     features = torch.tensor(data["features"]).reshape(BATCH, FRAMES, CONFIG["feat_dim"])
     target = torch.tensor(data["target"]).reshape(BATCH, CONFIG["embedding_size"])
+    fbank, waveform_embedding = front_end(model, torch.tensor(data["waveform"]))
     embedding, loss, after = run(model, features, target)
     check = _fixture.Comparison("CAM++")
     check.floats("embedding", data["embedding"], flat(embedding), 1e-12, float)
     check.floats("loss", [data["loss"]], [float(loss.detach())], 1e-12, float)
     check.floats("embedding_after_sgd", data["embedding_after_sgd"], flat(after), 1e-12, float)
+    check.floats("fbank", data["fbank"], flat(fbank), 1e-12, float)
+    check.floats("waveform_embedding", data["waveform_embedding"], flat(waveform_embedding), 1e-12, float)
     check.report(exact=False)
 
 
