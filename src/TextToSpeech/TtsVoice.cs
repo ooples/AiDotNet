@@ -45,4 +45,16 @@ public sealed class TtsVoice<T>
     /// (Parler-TTS).
     /// </summary>
     public Tensor<T>? Description { get; init; }
+
+    /// <summary>
+    /// A speaker embedding <c>[dim]</c> computed from a recording of the speaker, for models conditioned on one
+    /// (CosyVoice's CAM++ x-vector).
+    /// </summary>
+    public Tensor<T>? SpeakerEmbedding { get; init; }
+
+    /// <summary>
+    /// The discrete speech tokens of the reference recording <c>[frames]</c>, for models that continue a prompt in token
+    /// space (CosyVoice's S3 tokens, which its language model and its flow both read).
+    /// </summary>
+    public Tensor<T>? ReferenceCodecTokens { get; init; }
 }
