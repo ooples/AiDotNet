@@ -17,7 +17,8 @@ using AiDotNet.Tokenization.Algorithms;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
-/// <summary>Which CosyVoice network a training step trains (the recipe trains <c>llm</c>, then <c>flow</c>).</summary>
+/// <summary>Which CosyVoice network a training step trains (the recipe trains <c>llm</c>, <c>flow</c> and <c>hifigan</c>
+/// in turn).</summary>
 public enum CosyVoiceTrainingStage
 {
     /// <summary>The text-to-speech-token language model (<c>TransformerLM</c>): next-token cross-entropy.</summary>
@@ -25,6 +26,10 @@ public enum CosyVoiceTrainingStage
 
     /// <summary>The speech-token-to-mel flow (<c>MaskedDiffWithXvec</c>): conditional flow matching.</summary>
     Flow,
+
+    /// <summary>HiFT against its discriminators (<c>HiFiGan</c>): per utterance a discriminator step, then a generator
+    /// step. Needs <see cref="CosyVoiceOptions.IncludeDiscriminators"/>.</summary>
+    Vocoder,
 }
 
 /// <summary>
@@ -81,6 +86,14 @@ public enum CosyVoiceTrainingStage
     GradientAccumulationSteps = 2, Provenance = RecipeProvenance.ReleasedCode,
     Source = "FunAudioLLM/CosyVoice examples/libritts/cosyvoice/conf/cosyvoice.yaml train_conf, the flow's run of the "
         + "same recipe as the language model's.")]
+[PaperOptimizer(OptimizerKind.Adam, Component = "vocoder", LearningRate = 2e-4, MaxGradientNorm = 5,
+    Provenance = RecipeProvenance.ReleasedCode,
+    Source = "The paper names no optimizer. FunAudioLLM/CosyVoice examples/libritts/cosyvoice/conf/cosyvoice.yaml "
+        + "train_conf_gan: Adam at a constant 2e-4 for HiFT, gradient clipping at 5, no accumulation.")]
+[PaperOptimizer(OptimizerKind.Adam, Component = "discriminator", LearningRate = 2e-4, MaxGradientNorm = 5,
+    Provenance = RecipeProvenance.ReleasedCode,
+    Source = "The paper names no optimizer. FunAudioLLM/CosyVoice cosyvoice.yaml train_conf_gan optim_d: Adam at a "
+        + "constant 2e-4 for the discriminators.")]
 public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
 {
     // S3 and CAM++ read 16 kHz audio (load_wav(prompt_wav, 16000)).
@@ -99,6 +112,12 @@ public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     private readonly List<LayerBase<T>> _hiftLayers = new();
     private readonly List<LayerBase<T>> _speechTokenizerLayers = new();
     private readonly List<LayerBase<T>> _speakerEncoderLayers = new();
+    private readonly List<LayerBase<T>> _discriminatorLayers = new();
+    private CosyVoiceHiFTDiscriminators<T>? _discriminators;
+    private CosyVoiceHiFTLosses<T>? _vocoderLosses;
+    // Which side of the GAN a vocoder step updates; read by the parameter selection.
+    private bool _discriminatorTurn;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _discriminatorOptimizer;
     private CosyVoiceLm<T>? _lm;
     private CosyVoiceFlow<T>? _flow;
     private HiftGenerator<T>? _hift;
@@ -209,6 +228,8 @@ public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     internal IReadOnlyList<LayerBase<T>> LanguageModelLayers => _lmLayers;
     internal IReadOnlyList<LayerBase<T>> FlowLayers => _flowLayers;
     internal IReadOnlyList<LayerBase<T>> FrozenLayers => _hiftLayers.Concat(_speechTokenizerLayers).Concat(_speakerEncoderLayers).ToList();
+    internal IReadOnlyList<LayerBase<T>> VocoderLayers => _hiftLayers;
+    internal IReadOnlyList<LayerBase<T>> DiscriminatorLayers => _discriminatorLayers;
 
     /// <inheritdoc />
     protected override void InitializeLayers()
@@ -268,11 +289,22 @@ public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
             random);
         _speakerEncoder.SetTrainingMode(false);
 
+        if (o.IncludeDiscriminators)
+        {
+            if (o.VocoderSegmentLength <= 0 || o.VocoderSegmentLength % o.HopSize != 0)
+                throw new ArgumentException($"VocoderSegmentLength must be a positive multiple of HopSize ({o.HopSize}).");
+            _discriminators = new CosyVoiceHiFTDiscriminators<T>(Engine);
+            _discriminatorLayers.AddRange(_discriminators.Layers);
+            // The loss mel is the recipe's own (mel_spec_transform1: 80 bands to Nyquist), whatever HiFT reads.
+            _vocoderLosses = new CosyVoiceHiFTLosses<T>(Engine, o.SampleRate);
+        }
+
         AddUnsplitLayers(_lmLayers.Cast<ILayer<T>>().ToList());
         ComponentLayers.AddRange(_flowLayers);
         ComponentLayers.AddRange(_hiftLayers);
         ComponentLayers.AddRange(_speechTokenizerLayers);
         ComponentLayers.AddRange(_speakerEncoderLayers);
+        ComponentLayers.AddRange(_discriminatorLayers);
     }
 
     /// <inheritdoc />
@@ -543,8 +575,137 @@ public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (CurrentStage == CosyVoiceTrainingStage.Vocoder) return TrainVocoder(sample);
         var objective = BuildObjective(sample, _trainingRandom, training: true);
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => objective(), StageOptimizer());
+    }
+
+    /// <summary>
+    /// One GAN step on an utterance (<c>HiFiGan.forward_discriminator</c>, then <c>forward_generator</c>): the recording
+    /// cropped or padded to <see cref="CosyVoiceOptions.VocoderSegmentLength"/>, its mel, and its F0 (Harvest, as
+    /// <c>compute_f0</c> extracts it). The discriminators learn from HiFT's output computed without gradients; HiFT
+    /// then learns from the adversarial, feature-matching, mel, TPR and F0 losses.
+    /// </summary>
+    /// <returns>The generator's loss.</returns>
+    private T TrainVocoder(TtsTrainingSample<T> sample)
+    {
+        var discriminators = _discriminators ?? throw new InvalidOperationException(
+            "Training the vocoder needs HiFT's discriminators; build the model with IncludeDiscriminators = true.");
+        var losses = _vocoderLosses ?? throw new InvalidOperationException("The vocoder losses are built with the discriminators.");
+        var (real, mel, pitch) = VocoderTargets(sample, _trainingRandom);
+        var hift = Hift;
+        var random = _trainingRandom;
+        Tensor<T> Flat(Tensor<T> x) => Engine.Reshape(x, new[] { x.Length });
+
+        _discriminatorTurn = true;
+        try
+        {
+            TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
+            {
+                Tensor<T> generated;
+                using (new NoGradScope<T>()) generated = Flat(hift.Forward(mel, random));
+                return losses.Discriminator(discriminators.Forward(real), discriminators.Forward(generated));
+            }, VocoderOptimizer("discriminator"));
+        }
+        finally
+        {
+            _discriminatorTurn = false;
+        }
+
+        var generator = GeneratorObjective(real, mel, pitch, random);
+        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => generator(), VocoderOptimizer("vocoder"));
+    }
+
+    // forward_generator's loss: HiFT's output from the mel and its own F0's excitation, against the recording.
+    private Func<Tensor<T>> GeneratorObjective(Tensor<T> real, Tensor<T> mel, Tensor<T> pitch, Random random)
+    {
+        var discriminators = _discriminators ?? throw new InvalidOperationException(
+            "Training the vocoder needs HiFT's discriminators; build the model with IncludeDiscriminators = true.");
+        var losses = _vocoderLosses ?? throw new InvalidOperationException("The vocoder losses are built with the discriminators.");
+        var hift = Hift;
+        return () =>
+        {
+            var f0 = hift.PredictF0(mel);
+            var audio = hift.Decode(mel, hift.Source(f0, random));
+            var generated = Engine.Reshape(audio, new[] { audio.Length });
+            return losses.Generator(real, generated, discriminators.Forward(real), discriminators.Forward(generated), f0, pitch).Total;
+        };
+    }
+
+    /// <summary>
+    /// A vocoder step's targets (the recipe's <c>truncate</c>, <c>compute_fbank</c>, <c>compute_f0</c>): the recording
+    /// <c>[segment]</c>, its mel <c>[1, MelChannels, frames]</c> and its F0 <c>[frames]</c> — Harvest (DIO when Harvest
+    /// finds fewer than five voiced frames) refined by StoneMask at the mel's frame period, linearly resampled to the
+    /// mel's frames — or <see cref="TtsTrainingSample{T}.Pitch"/> when given.
+    /// </summary>
+    internal (Tensor<T> Audio, Tensor<T> Mel, Tensor<T> Pitch) VocoderTargets(TtsTrainingSample<T> sample, Random random)
+    {
+        var recording = sample.Audio ?? throw new ArgumentException("The vocoder trains on the recording; set Audio.", nameof(sample));
+        int segment = _options.VocoderSegmentLength, length = recording.Length;
+        var audio = new Tensor<T>(new[] { segment });
+        int start = length > segment ? random.Next(length - segment + 1) : 0;
+        for (int i = 0; i < Math.Min(segment, length); i++) audio[i] = recording[start + i];
+
+        Tensor<T> features;
+        using (new NoGradScope<T>()) features = MelSpectrogram(audio);
+        int frames = features.Shape[0];
+        var mel = Engine.Reshape(Engine.TensorTranspose(features), new[] { 1, _options.MelChannels, frames });
+
+        double[] f0;
+        if (sample.Pitch is { } given)
+        {
+            if (given.Length != frames) throw new ArgumentException($"Pitch needs one value per mel frame ({frames}).", nameof(sample));
+            f0 = given;
+        }
+        else
+        {
+            f0 = Resize(HarvestF0(audio), frames);
+        }
+        var pitch = new Tensor<T>(new[] { frames });
+        for (int i = 0; i < frames; i++) pitch[i] = NumOps.FromDouble(f0[i]);
+        return (audio, mel, pitch);
+    }
+
+    // compute_f0: pw.harvest at the mel's frame period, pw.dio if harvest finds fewer than five voiced frames, then
+    // pw.stonemask.
+    private double[] HarvestF0(Tensor<T> audio)
+    {
+        var x = new double[audio.Length];
+        for (int i = 0; i < x.Length; i++) x[i] = NumOps.ToDouble(audio[i]);
+        double period = _options.HopSize * 1000.0 / _options.SampleRate;
+        var detector = new AiDotNet.Audio.Pitch.WorldPitchDetector<T>(_options.SampleRate);
+        var (f0, positions) = detector.Harvest(x, period);
+        if (f0.Count(v => v != 0) < 5)
+            (f0, positions) = new AiDotNet.Audio.Pitch.WorldPitchDetector<T>(_options.SampleRate, refineWithStoneMask: false).EstimateF0(x, period);
+        return detector.StoneMask(x, f0, positions);
+    }
+
+    // F.interpolate(mode='linear', align_corners=False) of a contour to `size` points.
+    internal static double[] Resize(double[] values, int size)
+    {
+        var result = new double[size];
+        int length = values.Length;
+        double scale = (double)length / size;
+        for (int i = 0; i < size; i++)
+        {
+            double source = Math.Max(0.0, scale * (i + 0.5) - 0.5);
+            int low = Math.Min((int)source, length - 1);
+            int high = low < length - 1 ? low + 1 : low;
+            double weight = source - low;
+            result[i] = (1 - weight) * values[low] + weight * values[high];
+        }
+        return result;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? VocoderOptimizer(string component)
+    {
+        if (_suppliedOptimizer is not null) return _suppliedOptimizer;
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> Create() => PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, component)
+            ?? throw new InvalidOperationException($"CosyVoice declares an optimizer for the {component}.");
+        if (component == "discriminator") return _discriminatorOptimizer ??= Create();
+        if (!_stageOptimizers.TryGetValue(CosyVoiceTrainingStage.Vocoder, out var optimizer))
+            _stageOptimizers[CosyVoiceTrainingStage.Vocoder] = optimizer = Create();
+        return optimizer;
     }
 
     /// <inheritdoc />
@@ -578,6 +739,11 @@ public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         Guard.NotNull(sample);
         if (!HasPaperLayers)
             throw new NotSupportedException("The objective needs CosyVoice's layers; this model was built from caller-supplied layers.");
+        if (CurrentStage == CosyVoiceTrainingStage.Vocoder)
+        {
+            var (real, logMel, pitch) = VocoderTargets(sample, random);
+            return GeneratorObjective(real, logMel, pitch, random);
+        }
         var text = IdsOf(sample.Tokens);
         if (text.Any(id => id < 0 || id >= _text.VocabularySize))
             throw new ArgumentOutOfRangeException(nameof(sample), $"Text ids lie in [0, {_text.VocabularySize}).");
@@ -641,11 +807,17 @@ public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <inheritdoc />
-    /// <remarks>A stage updates its own network only; HiFT, the S3 tokenizer and CAM++ stay as loaded.</remarks>
+    /// <remarks>A stage updates its own network only (the vocoder stage HiFT, or its discriminators on their turn); the S3
+    /// tokenizer and CAM++ stay as loaded.</remarks>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (!HasPaperLayers) return parameters;
-        var layers = CurrentStage == CosyVoiceTrainingStage.LanguageModel ? _lmLayers : _flowLayers;
+        var layers = CurrentStage switch
+        {
+            CosyVoiceTrainingStage.LanguageModel => _lmLayers,
+            CosyVoiceTrainingStage.Flow => _flowLayers,
+            _ => _discriminatorTurn ? _discriminatorLayers : _hiftLayers,
+        };
         var selected = new HashSet<Tensor<T>>(Training.TapeTrainingStep<T>.CollectParameters(layers.Cast<ILayer<T>>().ToList(), -1),
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         return parameters.Where(selected.Contains).ToList();
