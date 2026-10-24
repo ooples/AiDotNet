@@ -1,0 +1,7746 @@
+{
+ "es": {
+  "sentences": [
+   {
+    "text": "Hola, ¿cómo estás? ¡Muy bien!",
+    "normalized": "hola, ¿cómo estás? ¡muy bien!",
+    "pieces": [
+     "hola",
+     ",",
+     "¿",
+     "cómo",
+     "estás",
+     "?",
+     "¡",
+     "muy",
+     "bien",
+     "!"
+    ],
+    "phones": [
+     "_",
+     "ˈ",
+     "o",
+     "l",
+     "a",
+     ",",
+     "¿",
+     "k",
+     "ˈ",
+     "o",
+     "m",
+     "o",
+     "e",
+     "s",
+     "t",
+     "ˈ",
+     "a",
+     "s",
+     "?",
+     "¡",
+     "m",
+     "ˈ",
+     "u",
+     "j",
+     "j",
+     "b",
+     "j",
+     "ˈ",
+     "e",
+     "n",
+     "!",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     4,
+     1,
+     1,
+     5,
+     6,
+     1,
+     1,
+     5,
+     5,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "En nuestros tiempos estos dos pueblos ilustres empiezan a curarse, gracias sólo a la sana y vigorosa higiene de 1789.",
+    "normalized": "en nuestros tiempos estos dos pueblos ilustres empiezan a curarse, gracias sólo a la sana y vigorosa higiene de 1789.",
+    "pieces": [
+     "en",
+     "nuestros",
+     "tiempos",
+     "estos",
+     "dos",
+     "pueblos",
+     "ilustre",
+     "##s",
+     "empiezan",
+     "a",
+     "curar",
+     "##se",
+     ",",
+     "gracias",
+     "sólo",
+     "a",
+     "la",
+     "sana",
+     "y",
+     "vigor",
+     "##osa",
+     "higiene",
+     "de",
+     "1",
+     "##7",
+     "##8",
+     "##9",
+     "."
+    ],
+    "phones": [
+     "_",
+     "e",
+     "n",
+     "n",
+     "w",
+     "ˌ",
+     "e",
+     "s",
+     "t",
+     "ɾ",
+     "o",
+     "s",
+     "t",
+     "j",
+     "ˈ",
+     "e",
+     "m",
+     "p",
+     "o",
+     "s",
+     "ˈ",
+     "e",
+     "s",
+     "t",
+     "o",
+     "s",
+     "d",
+     "ˈ",
+     "o",
+     "s",
+     "p",
+     "w",
+     "ˈ",
+     "e",
+     "β",
+     "l",
+     "o",
+     "s",
+     "i",
+     "l",
+     "ˈ",
+     "u",
+     "s",
+     "t",
+     "ɾ",
+     "e",
+     "s",
+     "e",
+     "m",
+     "p",
+     "j",
+     "ˈ",
+     "e",
+     "θ",
+     "a",
+     "n",
+     "a",
+     "k",
+     "u",
+     "ɾ",
+     "ˈ",
+     "a",
+     "ɾ",
+     "s",
+     "e",
+     ",",
+     "ɡ",
+     "ɾ",
+     "ˈ",
+     "a",
+     "θ",
+     "j",
+     "a",
+     "s",
+     "s",
+     "ˈ",
+     "o",
+     "l",
+     "o",
+     "a",
+     "l",
+     "a",
+     "s",
+     "ˈ",
+     "a",
+     "n",
+     "a",
+     "i",
+     "b",
+     "ˌ",
+     "i",
+     "ɣ",
+     "o",
+     "ɾ",
+     "ˈ",
+     "o",
+     "s",
+     "a",
+     "i",
+     "x",
+     "j",
+     "ˈ",
+     "e",
+     "n",
+     "e",
+     "d",
+     "e",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "s",
+     "ˌ",
+     "e",
+     "t",
+     "e",
+     "θ",
+     "j",
+     "ˈ",
+     "ɛ",
+     "n",
+     "t",
+     "o",
+     "s",
+     "o",
+     "t",
+     "ʃ",
+     "ˈ",
+     "ɛ",
+     "n",
+     "t",
+     "a",
+     "i",
+     "n",
+     "w",
+     "ˈ",
+     "e",
+     "β",
+     "e",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     2,
+     9,
+     8,
+     6,
+     4,
+     8,
+     5,
+     4,
+     9,
+     1,
+     4,
+     4,
+     1,
+     8,
+     5,
+     1,
+     2,
+     5,
+     1,
+     5,
+     5,
+     7,
+     2,
+     8,
+     8,
+     8,
+     8,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "El niño comió 21 manzanas y 1000000 de uvas en 2024.",
+    "normalized": "el niño comió 21 manzanas y 1000000 de uvas en 2024.",
+    "pieces": [
+     "el",
+     "niño",
+     "comió",
+     "21",
+     "manzanas",
+     "y",
+     "1000",
+     "##000",
+     "de",
+     "uvas",
+     "en",
+     "202",
+     "##4",
+     "."
+    ],
+    "phones": [
+     "_",
+     "e",
+     "l",
+     "n",
+     "ˈ",
+     "i",
+     "ɲ",
+     "o",
+     "k",
+     "o",
+     "m",
+     "j",
+     "ˈ",
+     "o",
+     "b",
+     "e",
+     "ɪ",
+     "n",
+     "t",
+     "j",
+     "ˈ",
+     "u",
+     "n",
+     "o",
+     "m",
+     "a",
+     "n",
+     "θ",
+     "ˈ",
+     "a",
+     "n",
+     "a",
+     "s",
+     "i",
+     "ˈ",
+     "u",
+     "n",
+     "m",
+     "i",
+     "ʎ",
+     "ˈ",
+     "o",
+     "n",
+     "d",
+     "e",
+     "ˈ",
+     "u",
+     "β",
+     "a",
+     "s",
+     "e",
+     "n",
+     "d",
+     "ˈ",
+     "o",
+     "s",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "b",
+     "ˌ",
+     "e",
+     "ɪ",
+     "n",
+     "t",
+     "i",
+     "k",
+     "w",
+     "ˈ",
+     "a",
+     "t",
+     "ɾ",
+     "o",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     2,
+     5,
+     6,
+     10,
+     9,
+     1,
+     5,
+     4,
+     2,
+     5,
+     2,
+     11,
+     11,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "La señora Pérez llegó el 12mayo2020 con €5 y £3; costó 100 euros.",
+    "normalized": "la señora pérez llegó el 12mayo2020 con €5 y £3, costó 100 euros.",
+    "pieces": [
+     "la",
+     "señora",
+     "pérez",
+     "llegó",
+     "el",
+     "12",
+     "##may",
+     "##o",
+     "##20",
+     "##20",
+     "con",
+     "[UNK]",
+     "y",
+     "[UNK]",
+     ",",
+     "costó",
+     "100",
+     "euros",
+     "."
+    ],
+    "phones": [
+     "_",
+     "l",
+     "a",
+     "s",
+     "e",
+     "ɲ",
+     "ˈ",
+     "o",
+     "ɾ",
+     "a",
+     "p",
+     "ˈ",
+     "e",
+     "ɾ",
+     "e",
+     "θ",
+     "ʎ",
+     "e",
+     "ɣ",
+     "ˈ",
+     "o",
+     "e",
+     "l",
+     "d",
+     "ˈ",
+     "o",
+     "θ",
+     "e",
+     "m",
+     "ˈ",
+     "a",
+     "j",
+     "j",
+     "o",
+     "d",
+     "ˈ",
+     "o",
+     "s",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "b",
+     "ˈ",
+     "e",
+     "ɪ",
+     "n",
+     "t",
+     "e",
+     "k",
+     "o",
+     "n",
+     "UNK",
+     "i",
+     "UNK",
+     ",",
+     "k",
+     "o",
+     "s",
+     "t",
+     "ˈ",
+     "o",
+     "θ",
+     "j",
+     "ˈ",
+     "e",
+     "n",
+     "ˈ",
+     "e",
+     "ʊ",
+     "ɾ",
+     "o",
+     "s",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     2,
+     7,
+     6,
+     5,
+     2,
+     6,
+     5,
+     5,
+     5,
+     5,
+     3,
+     1,
+     1,
+     1,
+     1,
+     6,
+     5,
+     6,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "¿Y a quién echaría de menos, en el mundo si no fuese a vos?",
+    "normalized": "¿y a quién echaría de menos, en el mundo si no fuese a vos?",
+    "pieces": [
+     "¿",
+     "y",
+     "a",
+     "quién",
+     "echar",
+     "##ía",
+     "de",
+     "menos",
+     ",",
+     "en",
+     "el",
+     "mundo",
+     "si",
+     "no",
+     "fuese",
+     "a",
+     "vos",
+     "?"
+    ],
+    "phones": [
+     "_",
+     "¿",
+     "i",
+     "a",
+     "k",
+     "j",
+     "ˈ",
+     "e",
+     "n",
+     "ˌ",
+     "e",
+     "t",
+     "ʃ",
+     "a",
+     "ɾ",
+     "ˈ",
+     "i",
+     "a",
+     "d",
+     "e",
+     "m",
+     "ˈ",
+     "e",
+     "n",
+     "o",
+     "s",
+     ",",
+     "e",
+     "n",
+     "e",
+     "l",
+     "m",
+     "ˈ",
+     "u",
+     "n",
+     "d",
+     "o",
+     "s",
+     "i",
+     "n",
+     "ˈ",
+     "o",
+     "f",
+     "w",
+     "ˈ",
+     "e",
+     "s",
+     "e",
+     "a",
+     "b",
+     "ˈ",
+     "o",
+     "s",
+     "?",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     1,
+     1,
+     1,
+     5,
+     5,
+     4,
+     2,
+     6,
+     1,
+     2,
+     2,
+     6,
+     2,
+     3,
+     6,
+     1,
+     4,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Pingüino, cigüeña, acción, jamón y desvío.",
+    "normalized": "pingüino, cigüeña, acción, jamón y desvío.",
+    "pieces": [
+     "[UNK]",
+     ",",
+     "[UNK]",
+     ",",
+     "acción",
+     ",",
+     "jamón",
+     "y",
+     "desvío",
+     "."
+    ],
+    "phones": [
+     "_",
+     "UNK",
+     ",",
+     "UNK",
+     ",",
+     "a",
+     "k",
+     "θ",
+     "j",
+     "ˈ",
+     "o",
+     "n",
+     ",",
+     "x",
+     "a",
+     "m",
+     "ˈ",
+     "o",
+     "n",
+     "i",
+     "d",
+     "e",
+     "s",
+     "β",
+     "ˈ",
+     "i",
+     "o",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     7,
+     1,
+     6,
+     1,
+     7,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "El perro de San Roque no tiene rabo porque Ramón Rodríguez se lo ha robado.",
+    "normalized": "el perro de san roque no tiene rabo porque ramón rodríguez se lo ha robado.",
+    "pieces": [
+     "el",
+     "perro",
+     "de",
+     "san",
+     "roque",
+     "no",
+     "tiene",
+     "rab",
+     "##o",
+     "porque",
+     "ramón",
+     "rodríguez",
+     "se",
+     "lo",
+     "ha",
+     "robado",
+     "."
+    ],
+    "phones": [
+     "_",
+     "e",
+     "l",
+     "p",
+     "ˈ",
+     "e",
+     "ɾ",
+     "ɾ",
+     "o",
+     "d",
+     "e",
+     "s",
+     "ˈ",
+     "a",
+     "n",
+     "ɾ",
+     "ɾ",
+     "ˈ",
+     "o",
+     "k",
+     "e",
+     "n",
+     "ˈ",
+     "o",
+     "t",
+     "j",
+     "ˈ",
+     "e",
+     "n",
+     "e",
+     "ɾ",
+     "ɾ",
+     "ˈ",
+     "a",
+     "β",
+     "o",
+     "p",
+     "ˌ",
+     "o",
+     "ɾ",
+     "k",
+     "e",
+     "ɾ",
+     "ɾ",
+     "a",
+     "m",
+     "ˈ",
+     "o",
+     "n",
+     "ɾ",
+     "ɾ",
+     "o",
+     "ð",
+     "ɾ",
+     "ˈ",
+     "i",
+     "ɣ",
+     "e",
+     "θ",
+     "s",
+     "e",
+     "l",
+     "o",
+     "ˈ",
+     "a",
+     "ɾ",
+     "ɾ",
+     "o",
+     "β",
+     "ˈ",
+     "a",
+     "ð",
+     "o",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     2,
+     6,
+     2,
+     4,
+     6,
+     3,
+     6,
+     3,
+     3,
+     6,
+     7,
+     10,
+     2,
+     2,
+     2,
+     8,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Ella dijo: \"Ven aquí\" (rápido) — y se fue...",
+    "normalized": "ella dijo, ven aquí rápido y se fue.",
+    "pieces": [
+     "ella",
+     "dijo",
+     ",",
+     "ven",
+     "aquí",
+     "rápido",
+     "y",
+     "se",
+     "fue",
+     "."
+    ],
+    "phones": [
+     "_",
+     "ˈ",
+     "e",
+     "ʎ",
+     "a",
+     "d",
+     "ˈ",
+     "i",
+     "x",
+     "o",
+     ",",
+     "b",
+     "ˈ",
+     "e",
+     "n",
+     "a",
+     "k",
+     "ˈ",
+     "i",
+     "ɾ",
+     "ɾ",
+     "ˈ",
+     "a",
+     "p",
+     "i",
+     "ð",
+     "o",
+     "i",
+     "s",
+     "e",
+     "f",
+     "w",
+     "ˈ",
+     "e",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     4,
+     5,
+     1,
+     4,
+     4,
+     8,
+     1,
+     2,
+     4,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Zxqv flibbertigibbet anticonstitucionalmente.",
+    "normalized": "zxqv flibbertigibbet anticonstitucionalmente.",
+    "pieces": [
+     "z",
+     "##x",
+     "##q",
+     "##v",
+     "fl",
+     "##ib",
+     "##bert",
+     "##igi",
+     "##bb",
+     "##et",
+     "anticon",
+     "##st",
+     "##it",
+     "##uci",
+     "##onal",
+     "##mente",
+     "."
+    ],
+    "phones": [
+     "_",
+     "θ",
+     "k",
+     "s",
+     "m",
+     "b",
+     "f",
+     "l",
+     "i",
+     "β",
+     "β",
+     "e",
+     "ɾ",
+     "t",
+     "i",
+     "x",
+     "ˈ",
+     "i",
+     "β",
+     "β",
+     "e",
+     "t",
+     "ˌ",
+     "a",
+     "n",
+     "t",
+     "i",
+     "k",
+     "ˌ",
+     "o",
+     "n",
+     "s",
+     "t",
+     "i",
+     "t",
+     "ˌ",
+     "u",
+     "θ",
+     "j",
+     "o",
+     "n",
+     "ˈ",
+     "a",
+     "l",
+     "m",
+     "ˈ",
+     "e",
+     "n",
+     "t",
+     "e",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     2,
+     1,
+     1,
+     1,
+     3,
+     3,
+     3,
+     3,
+     2,
+     2,
+     5,
+     5,
+     5,
+     5,
+     4,
+     4,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Hay 3 gatos, 15 perros y 99 pájaros en el año 1999.",
+    "normalized": "hay 3 gatos, 15 perros y 99 pájaros en el año 1999.",
+    "pieces": [
+     "hay",
+     "3",
+     "gatos",
+     ",",
+     "15",
+     "perros",
+     "y",
+     "99",
+     "pájaros",
+     "en",
+     "el",
+     "año",
+     "1999",
+     "."
+    ],
+    "phones": [
+     "_",
+     "ˈ",
+     "a",
+     "ɪ",
+     "t",
+     "ɾ",
+     "ˈ",
+     "e",
+     "s",
+     "ɡ",
+     "ˈ",
+     "a",
+     "t",
+     "o",
+     "s",
+     ",",
+     "k",
+     "ˈ",
+     "i",
+     "n",
+     "θ",
+     "e",
+     "p",
+     "ˈ",
+     "e",
+     "ɾ",
+     "ɾ",
+     "o",
+     "s",
+     "i",
+     "n",
+     "o",
+     "β",
+     "ˈ",
+     "ɛ",
+     "n",
+     "t",
+     "a",
+     "i",
+     "n",
+     "w",
+     "ˈ",
+     "e",
+     "β",
+     "e",
+     "p",
+     "ˈ",
+     "a",
+     "x",
+     "a",
+     "ɾ",
+     "o",
+     "s",
+     "e",
+     "n",
+     "e",
+     "l",
+     "ˈ",
+     "a",
+     "ɲ",
+     "o",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "n",
+     "ˌ",
+     "o",
+     "β",
+     "e",
+     "θ",
+     "j",
+     "ˈ",
+     "ɛ",
+     "n",
+     "t",
+     "o",
+     "s",
+     "n",
+     "o",
+     "β",
+     "ˈ",
+     "ɛ",
+     "n",
+     "t",
+     "a",
+     "i",
+     "n",
+     "w",
+     "ˈ",
+     "e",
+     "β",
+     "e",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     3,
+     5,
+     6,
+     1,
+     6,
+     7,
+     1,
+     15,
+     8,
+     2,
+     2,
+     4,
+     32,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Wi-Fi, e-mail y rock & roll.",
+    "normalized": "wi fi, e mail y rock y roll.",
+    "pieces": [
+     "w",
+     "##i",
+     "fi",
+     ",",
+     "e",
+     "mail",
+     "y",
+     "rock",
+     "y",
+     "roll",
+     "."
+    ],
+    "phones": [
+     "_",
+     "x",
+     "i",
+     "f",
+     "ˈ",
+     "i",
+     ",",
+     "e",
+     "m",
+     "a",
+     "ɪ",
+     "l",
+     "i",
+     "ɾ",
+     "ɾ",
+     "ˈ",
+     "o",
+     "k",
+     "i",
+     "ɾ",
+     "ɾ",
+     "ˈ",
+     "o",
+     "ʎ",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     1,
+     1,
+     3,
+     1,
+     1,
+     4,
+     1,
+     5,
+     1,
+     5,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Él tenía 1e5 razones y ¥100.",
+    "normalized": "él tenía 1e5 razones y ¥100.",
+    "pieces": [
+     "él",
+     "tenía",
+     "1",
+     "##e",
+     "##5",
+     "razones",
+     "y",
+     "[UNK]",
+     "."
+    ],
+    "phones": [
+     "_",
+     "ˈ",
+     "e",
+     "l",
+     "t",
+     "e",
+     "n",
+     "ˈ",
+     "i",
+     "a",
+     "θ",
+     "j",
+     "ˈ",
+     "e",
+     "n",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "ɾ",
+     "ɾ",
+     "a",
+     "θ",
+     "ˈ",
+     "o",
+     "n",
+     "e",
+     "s",
+     "i",
+     "UNK",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     3,
+     6,
+     3,
+     3,
+     3,
+     9,
+     1,
+     1,
+     1,
+     1
+    ]
+   }
+  ],
+  "words": [
+   {
+    "word": "hola",
+    "ipa": "ˈola"
+   },
+   {
+    "word": "1789",
+    "ipa": "mˈil sˌeteθjˈɛntos otʃˈɛnta i nwˈeβe"
+   },
+   {
+    "word": "1",
+    "ipa": "ˈuno"
+   },
+   {
+    "word": "21",
+    "ipa": "beɪntjˈuno"
+   },
+   {
+    "word": "2000",
+    "ipa": "dˈos mˈil"
+   },
+   {
+    "word": "100000",
+    "ipa": "θjˈen mˈil"
+   },
+   {
+    "word": "1e5",
+    "ipa": "θjˈen mˈil"
+   },
+   {
+    "word": "2e3",
+    "ipa": "dˈos mˈil"
+   },
+   {
+    "word": "abc123",
+    "ipa": "ˌaβθeˈeo"
+   },
+   {
+    "word": "zxqv",
+    "ipa": "θksmb"
+   },
+   {
+    "word": "¿",
+    "ipa": "¿"
+   },
+   {
+    "word": ",",
+    "ipa": ","
+   },
+   {
+    "word": "€5",
+    "ipa": "θˈinko ˈeʊɾos"
+   },
+   {
+    "word": "£3",
+    "ipa": "tɾˈes lˈiβɾas"
+   },
+   {
+    "word": "¥100",
+    "ipa": "θjˈen ʝˈenes"
+   },
+   {
+    "word": "$7",
+    "ipa": "sjˈete dˈolaɾes"
+   },
+   {
+    "word": "₹12",
+    "ipa": "dˈoθe ɾɾˈupjas"
+   },
+   {
+    "word": "€nan1",
+    "ipa": "ɡnane"
+   },
+   {
+    "word": "12mayo2020",
+    "ipa": "dˈoθe mˈajjo dˈos mˈil bˈeɪnte"
+   },
+   {
+    "word": "1ene2020",
+    "ipa": "ˈuno enˈeɾo dˈos mˈil bˈeɪnte"
+   },
+   {
+    "word": "2020mayo12",
+    "ipa": "dˈoθe mˈajjo dˈos mˈil bˈeɪnte"
+   },
+   {
+    "word": "29feb2019",
+    "ipa": "ɡmfeβˈeeˈoo"
+   },
+   {
+    "word": "31abr2020",
+    "ipa": "bwˌaβɾeˈeˈuo"
+   },
+   {
+    "word": "veintiún",
+    "ipa": "beɪntjˈun"
+   },
+   {
+    "word": "méxico",
+    "ipa": "mˈɛxiko"
+   },
+   {
+    "word": "pingüino",
+    "ipa": "pˌiŋɡuˈino"
+   },
+   {
+    "word": "1000000",
+    "ipa": "ˈun miʎˈon"
+   },
+   {
+    "word": "1000001",
+    "ipa": "ˈun miʎˈon ˈuno"
+   },
+   {
+    "word": "999999999",
+    "ipa": "nˌoβeθjˈɛntos noβˈɛnta i nwˈeβe miʎˈones nˌoβeθjˈɛntos noβˈɛnta i nwˈeβe mˈil nˌoβeθjˈɛntos noβˈɛnta i nwˈeβe"
+   },
+   {
+    "word": "123456789012",
+    "ipa": "θjˈɛnto bˌeɪntitɾˈes mˈil kwˌatɾoθjˈɛntos θinkwˈɛnta i sˈeɪs miʎˈones sˌeteθjˈɛntos otʃˈɛnta i nwˈeβe mˈil dˈoθe"
+   },
+   {
+    "word": "0",
+    "ipa": "θˈeɾo"
+   },
+   {
+    "word": "00",
+    "ipa": "θˈeɾo"
+   },
+   {
+    "word": "007",
+    "ipa": "sjˈete"
+   },
+   {
+    "word": "15",
+    "ipa": "kˈinθe"
+   },
+   {
+    "word": "1er",
+    "ipa": "ʝeɾ"
+   },
+   {
+    "word": "x",
+    "ipa": "ks"
+   },
+   {
+    "word": "ll",
+    "ipa": "ʎ"
+   },
+   {
+    "word": "ñ",
+    "ipa": "ɲ"
+   },
+   {
+    "word": "wi-fi",
+    "ipa": "xi fˈi"
+   },
+   {
+    "word": "rock_and",
+    "ipa": "ɾɾˈok ˌand"
+   },
+   {
+    "word": "a’b",
+    "ipa": "ˈaβ"
+   },
+   {
+    "word": "«hola»",
+    "ipa": "«ˈola»"
+   },
+   {
+    "word": "(hola)",
+    "ipa": "ˈola"
+   },
+   {
+    "word": "¿hola",
+    "ipa": "¿ˈola"
+   },
+   {
+    "word": "hola!",
+    "ipa": "ˈola!"
+   },
+   {
+    "word": "1999",
+    "ipa": "mˈil nˌoβeθjˈɛntos noβˈɛnta i nwˈeβe"
+   },
+   {
+    "word": "3000",
+    "ipa": "tɾˈes mˈil"
+   },
+   {
+    "word": "2999",
+    "ipa": "dˈos mˈil nˌoβeθjˈɛntos noβˈɛnta i nwˈeβe"
+   },
+   {
+    "word": "1001",
+    "ipa": "mˈil ˈuno"
+   }
+  ],
+  "dictionary": [
+   {
+    "word": "a",
+    "ipa": "a"
+   },
+   {
+    "word": "abieldaré",
+    "ipa": "ˌaβjelðaɾˈe"
+   },
+   {
+    "word": "aborrascaremos",
+    "ipa": "ˌaβoɾɾˌaskaɾˈemos"
+   },
+   {
+    "word": "absorbiesen",
+    "ipa": "ˌaβsoɾβjˈesen"
+   },
+   {
+    "word": "acantalearé",
+    "ipa": "ˌakantˌaleaɾˈe"
+   },
+   {
+    "word": "aceda",
+    "ipa": "aθˈeða"
+   },
+   {
+    "word": "achique",
+    "ipa": "atʃˈike"
+   },
+   {
+    "word": "acondicionadoras",
+    "ipa": "ˌakondˌiθjonaðˈoɾas"
+   },
+   {
+    "word": "acrisoladas",
+    "ipa": "ˌakɾisolˈaðas"
+   },
+   {
+    "word": "adamasque",
+    "ipa": "ˌaðamˈaske"
+   },
+   {
+    "word": "admitirlas",
+    "ipa": "ˌadmitˈiɾlas"
+   },
+   {
+    "word": "advertiríamos",
+    "ipa": "ˌaðβeɾtiɾˈiamos"
+   },
+   {
+    "word": "aflojaréis",
+    "ipa": "ˌafloxaɾˈeis"
+   },
+   {
+    "word": "agitaran",
+    "ipa": "ˌaxitˈaɾan"
+   },
+   {
+    "word": "aguardado",
+    "ipa": "ˌaɣwaɾðˈaðo"
+   },
+   {
+    "word": "ahuevada",
+    "ipa": "ˌaweβˈaða"
+   },
+   {
+    "word": "alanceares",
+    "ipa": "ˌalanθeˈaɾes"
+   },
+   {
+    "word": "aleccionará",
+    "ipa": "ˌalekθjˌonaɾˈa"
+   },
+   {
+    "word": "aliarán",
+    "ipa": "ˌaljaɾˈan"
+   },
+   {
+    "word": "almenarían",
+    "ipa": "ˌalmenaɾˈian"
+   },
+   {
+    "word": "aludí",
+    "ipa": "ˌaluðˈi"
+   },
+   {
+    "word": "amaricadas",
+    "ipa": "ˌamaɾikˈaðas"
+   },
+   {
+    "word": "ametala",
+    "ipa": "ˌametˈala"
+   },
+   {
+    "word": "amortajamientos",
+    "ipa": "ˌamoɾtˌaxamjˈɛntos"
+   },
+   {
+    "word": "anatematismos",
+    "ipa": "ˌanatˌematˈismos"
+   },
+   {
+    "word": "aniquilándolas",
+    "ipa": "ˌanikilˈandolas"
+   },
+   {
+    "word": "anudadora",
+    "ipa": "ˌanuðaðˈoɾa"
+   },
+   {
+    "word": "apareo",
+    "ipa": "ˌapaɾˈeo"
+   },
+   {
+    "word": "apercibiendo",
+    "ipa": "ˌapeɾθiβjˈɛndo"
+   },
+   {
+    "word": "aplique",
+    "ipa": "aplˈike"
+   },
+   {
+    "word": "aprendiéndooslas",
+    "ipa": "ˌapɾendjˈendoˌoslas"
+   },
+   {
+    "word": "aquerenciarnos",
+    "ipa": "ˌakeɾenθjˈaɾnos"
+   },
+   {
+    "word": "armó",
+    "ipa": "aɾmˈo"
+   },
+   {
+    "word": "arrendadero",
+    "ipa": "ˌaɾɾendaðˈeɾo"
+   },
+   {
+    "word": "arásemos",
+    "ipa": "aɾˈasemos"
+   },
+   {
+    "word": "asfaltareis",
+    "ipa": "ˌasfaltˈaɾeɪs"
+   },
+   {
+    "word": "asustan",
+    "ipa": "asˈustan"
+   },
+   {
+    "word": "atesoremos",
+    "ipa": "ˌatesoɾˈemos"
+   },
+   {
+    "word": "atoxicáramos",
+    "ipa": "ˌatoksikˈaɾamos"
+   },
+   {
+    "word": "atándolo",
+    "ipa": "atˈandolo"
+   },
+   {
+    "word": "avecino",
+    "ipa": "ˌaβeθˈino"
+   },
+   {
+    "word": "ayunaríamos",
+    "ipa": "ˌajjunaɾˈiamos"
+   },
+   {
+    "word": "bacteriológicamente",
+    "ipa": "bˌakteɾjolˈoxikamˈente"
+   },
+   {
+    "word": "bambollas",
+    "ipa": "bambˈoʎas"
+   },
+   {
+    "word": "barreábamos",
+    "ipa": "bˌaɾɾeˈaβamos"
+   },
+   {
+    "word": "beatificábamos",
+    "ipa": "bˌeatˌifikˈaβamos"
+   },
+   {
+    "word": "birlándolo",
+    "ipa": "biɾlˈandolo"
+   },
+   {
+    "word": "bolearíamos",
+    "ipa": "bˌoleaɾˈiamos"
+   },
+   {
+    "word": "botases",
+    "ipa": "botˈases"
+   },
+   {
+    "word": "bufonearen",
+    "ipa": "bˌufoneˈaɾen"
+   },
+   {
+    "word": "cabrillearía",
+    "ipa": "kˌaβɾiʎˌeaɾˈia"
+   },
+   {
+    "word": "calculando",
+    "ipa": "kˌalkulˈando"
+   },
+   {
+    "word": "campanearais",
+    "ipa": "kˌampaneˈaɾaɪs"
+   },
+   {
+    "word": "capeé",
+    "ipa": "kˌapeˈe"
+   },
+   {
+    "word": "cargároslo",
+    "ipa": "kaɾɣˈaɾoslo"
+   },
+   {
+    "word": "catabólicas",
+    "ipa": "kˌataβˈolikas"
+   },
+   {
+    "word": "cefaleas",
+    "ipa": "θˌefalˈeas"
+   },
+   {
+    "word": "cerraja",
+    "ipa": "θeɾɾˈaxa"
+   },
+   {
+    "word": "chapurreasteis",
+    "ipa": "tʃˌapuɾɾeˈasteɪs"
+   },
+   {
+    "word": "chospados",
+    "ipa": "tʃospˈaðos"
+   },
+   {
+    "word": "circunvolaste",
+    "ipa": "θˌiɾkumbolˈaste"
+   },
+   {
+    "word": "coartara",
+    "ipa": "kˌoaɾtˈaɾa"
+   },
+   {
+    "word": "colchoneros",
+    "ipa": "kˌoltʃonˈeɾos"
+   },
+   {
+    "word": "comediarán",
+    "ipa": "kˌomeðjaɾˈan"
+   },
+   {
+    "word": "compito",
+    "ipa": "kompˈito"
+   },
+   {
+    "word": "concentráis",
+    "ipa": "kˌonθentɾˈais"
+   },
+   {
+    "word": "conectivo",
+    "ipa": "kˌonektˈiβo"
+   },
+   {
+    "word": "conglomerasteis",
+    "ipa": "kˌoŋɡlomeɾˈasteɪs"
+   },
+   {
+    "word": "consiguiéndoselos",
+    "ipa": "kˌonsiɣjˈendosˌelos"
+   },
+   {
+    "word": "contendisteis",
+    "ipa": "kˌontendˈisteɪs"
+   },
+   {
+    "word": "contrasellábamos",
+    "ipa": "kˌontɾaseʎˈaβamos"
+   },
+   {
+    "word": "copiarla",
+    "ipa": "kopjˈaɾla"
+   },
+   {
+    "word": "corseases",
+    "ipa": "kˌoɾseˈases"
+   },
+   {
+    "word": "cribo",
+    "ipa": "kɾˈiβo"
+   },
+   {
+    "word": "cuaternidad",
+    "ipa": "kwˌateɾniðˈad"
+   },
+   {
+    "word": "curioseamos",
+    "ipa": "kˌuɾjoseˈamos"
+   },
+   {
+    "word": "decepcionares",
+    "ipa": "dˌeθepθjonˈaɾes"
+   },
+   {
+    "word": "degenerados",
+    "ipa": "dˌexeneɾˈaðos"
+   },
+   {
+    "word": "demostrabas",
+    "ipa": "dˌemostɾˈaβas"
+   },
+   {
+    "word": "deprendió",
+    "ipa": "dˌepɾendjˈo"
+   },
+   {
+    "word": "desacompañaré",
+    "ipa": "dˌesakˌompaɲaɾˈe"
+   },
+   {
+    "word": "desaherrojen",
+    "ipa": "dˌesaeɾɾˈoxen"
+   },
+   {
+    "word": "desandases",
+    "ipa": "dˌesandˈases"
+   },
+   {
+    "word": "desarraigaremos",
+    "ipa": "dˌesaɾɾˌaɪɣaɾˈemos"
+   },
+   {
+    "word": "desatoraréis",
+    "ipa": "dˌesatˌoɾaɾˈeis"
+   },
+   {
+    "word": "desbloquee",
+    "ipa": "dˌesβlokˈee"
+   },
+   {
+    "word": "descanterasen",
+    "ipa": "dˌeskanteɾˈasen"
+   },
+   {
+    "word": "descerraría",
+    "ipa": "dˌesθeɾɾaɾˈia"
+   },
+   {
+    "word": "descompadrábamos",
+    "ipa": "dˌeskompaðɾˈaβamos"
+   },
+   {
+    "word": "descorderáramos",
+    "ipa": "dˌeskoɾðeɾˈaɾamos"
+   },
+   {
+    "word": "desdentaste",
+    "ipa": "dˌesðentˈaste"
+   },
+   {
+    "word": "desembriagará",
+    "ipa": "dˌesembɾiˌaɣaɾˈa"
+   },
+   {
+    "word": "desencajaban",
+    "ipa": "dˌesenkaxˈaβan"
+   },
+   {
+    "word": "desencuerdan",
+    "ipa": "dˌesenkwˈeɾðan"
+   },
+   {
+    "word": "desenlabonados",
+    "ipa": "dˌesenlˌaβonˈaðos"
+   },
+   {
+    "word": "desentrenó",
+    "ipa": "dˌesentɾenˈo"
+   },
+   {
+    "word": "desfiguráramos",
+    "ipa": "dˌesfiɣuɾˈaɾamos"
+   },
+   {
+    "word": "desgoznasteis",
+    "ipa": "dˌesɣoθnˈasteɪs"
+   },
+   {
+    "word": "deshipoteco",
+    "ipa": "dˌesipotˈeko"
+   },
+   {
+    "word": "desintegres",
+    "ipa": "dˌesintˈeɣɾes"
+   },
+   {
+    "word": "desmajolado",
+    "ipa": "dˌesmaxolˈaðo"
+   },
+   {
+    "word": "desmicares",
+    "ipa": "dˌesmikˈaɾes"
+   },
+   {
+    "word": "desobligo",
+    "ipa": "dˌesoβlˈiɣo"
+   },
+   {
+    "word": "despalmara",
+    "ipa": "dˌespalmˈaɾa"
+   },
+   {
+    "word": "despellejaron",
+    "ipa": "dˌespeʎexˈaɾon"
+   },
+   {
+    "word": "despiojáis",
+    "ipa": "dˌespjoxˈais"
+   },
+   {
+    "word": "despresaríamos",
+    "ipa": "dˌespɾesaɾˈiamos"
+   },
+   {
+    "word": "destaparía",
+    "ipa": "dˌestapaɾˈia"
+   },
+   {
+    "word": "destrincarais",
+    "ipa": "dˌestɾinkˈaɾaɪs"
+   },
+   {
+    "word": "desvenare",
+    "ipa": "dˌesβenˈaɾe"
+   },
+   {
+    "word": "detraemos",
+    "ipa": "dˌetɾaˈemos"
+   },
+   {
+    "word": "didascálicos",
+    "ipa": "dˌiðaskˈalikos"
+   },
+   {
+    "word": "dimitas",
+    "ipa": "dimˈitas"
+   },
+   {
+    "word": "disenso",
+    "ipa": "disˈɛnso"
+   },
+   {
+    "word": "distarás",
+    "ipa": "dˌistaɾˈas"
+   },
+   {
+    "word": "documentada",
+    "ipa": "dˌokumentˈaða"
+   },
+   {
+    "word": "drogó",
+    "ipa": "dɾoɣˈo"
+   },
+   {
+    "word": "edén",
+    "ipa": "eðˈen"
+   },
+   {
+    "word": "elongación",
+    "ipa": "ˌeloŋɡaθjˈon"
+   },
+   {
+    "word": "embastadas",
+    "ipa": "ˌembastˈaðas"
+   },
+   {
+    "word": "emborrachándoles",
+    "ipa": "ˌemboɾɾatʃˈandoles"
+   },
+   {
+    "word": "embrosquilásemos",
+    "ipa": "ˌembɾoskilˈasemos"
+   },
+   {
+    "word": "empantanaban",
+    "ipa": "ˌempantanˈaβan"
+   },
+   {
+    "word": "empelazgarás",
+    "ipa": "ˌempelˌaθɣaɾˈas"
+   },
+   {
+    "word": "emplantillaras",
+    "ipa": "ˌemplantiʎˈaɾas"
+   },
+   {
+    "word": "emulase",
+    "ipa": "ˌemulˈase"
+   },
+   {
+    "word": "encabruñaría",
+    "ipa": "ˌenkaβɾˌuɲaɾˈia"
+   },
+   {
+    "word": "encandelaren",
+    "ipa": "ˌenkandelˈaɾen"
+   },
+   {
+    "word": "encarpetare",
+    "ipa": "ˌenkaɾpetˈaɾe"
+   },
+   {
+    "word": "encendramos",
+    "ipa": "ˌenθendɾˈamos"
+   },
+   {
+    "word": "enclaustráis",
+    "ipa": "ˌenklaʊstɾˈais"
+   },
+   {
+    "word": "encorcharé",
+    "ipa": "ˌenkoɾtʃaɾˈe"
+   },
+   {
+    "word": "enculatáremos",
+    "ipa": "ˌenkulatˈaɾemos"
+   },
+   {
+    "word": "enfangaseis",
+    "ipa": "ˌemfaŋɡˈaseɪs"
+   },
+   {
+    "word": "enfurruscasen",
+    "ipa": "ˌemfuɾɾuskˈasen"
+   },
+   {
+    "word": "engañarte",
+    "ipa": "ˌeŋɡaɲˈaɾte"
+   },
+   {
+    "word": "engruesando",
+    "ipa": "ˌeŋɡɾuesˈando"
+   },
+   {
+    "word": "enjambrada",
+    "ipa": "ˌeŋxambɾˈaða"
+   },
+   {
+    "word": "enlerdar",
+    "ipa": "ˌenleɾðˈaɾ"
+   },
+   {
+    "word": "enmohecéis",
+    "ipa": "ˌenmoeθˈeis"
+   },
+   {
+    "word": "enrehojaremos",
+    "ipa": "ˌenreˌoxaɾˈemos"
+   },
+   {
+    "word": "ensamblaríais",
+    "ipa": "ˌensamblaɾˈiaɪs"
+   },
+   {
+    "word": "ensuciándote",
+    "ipa": "ˌensuθjˈandote"
+   },
+   {
+    "word": "entrabados",
+    "ipa": "ˌentɾaβˈaðos"
+   },
+   {
+    "word": "entreoiríais",
+    "ipa": "ˌentɾeoɪɾˈiaɪs"
+   },
+   {
+    "word": "entunicará",
+    "ipa": "ˌentunˌikaɾˈa"
+   },
+   {
+    "word": "envilortáremos",
+    "ipa": "ˌembiloɾtˈaɾemos"
+   },
+   {
+    "word": "erares",
+    "ipa": "eɾˈaɾes"
+   },
+   {
+    "word": "escaldufado",
+    "ipa": "ˌeskalðufˈaðo"
+   },
+   {
+    "word": "escardasen",
+    "ipa": "ˌeskaɾðˈasen"
+   },
+   {
+    "word": "escogiéndosela",
+    "ipa": "ˌeskoxjˈendosˌela"
+   },
+   {
+    "word": "escudereamos",
+    "ipa": "ˌeskuðˌeɾeˈamos"
+   },
+   {
+    "word": "esmerilares",
+    "ipa": "ˌesmeɾilˈaɾes"
+   },
+   {
+    "word": "esperezada",
+    "ipa": "ˌespeɾeθˈaða"
+   },
+   {
+    "word": "espurreaste",
+    "ipa": "ˌespuɾɾeˈaste"
+   },
+   {
+    "word": "estableciéndonoslos",
+    "ipa": "ˌestaβleθjˈendonˌoslos"
+   },
+   {
+    "word": "esteradas",
+    "ipa": "ˌesteɾˈaðas"
+   },
+   {
+    "word": "estirándomelos",
+    "ipa": "ˌestiɾˈandomˌelos"
+   },
+   {
+    "word": "estrenada",
+    "ipa": "ˌestɾenˈaða"
+   },
+   {
+    "word": "eterizásemos",
+    "ipa": "ˌeteɾiθˈasemos"
+   },
+   {
+    "word": "exagerándomelos",
+    "ipa": "ˌeksaxeɾˈandomˌelos"
+   },
+   {
+    "word": "exculpándotelo",
+    "ipa": "ˌekskulpˈandotˌelo"
+   },
+   {
+    "word": "expansionándoselas",
+    "ipa": "ˌekspansjonˈandosˌelas"
+   },
+   {
+    "word": "expropiarles",
+    "ipa": "ˌekspɾopjˈaɾles"
+   },
+   {
+    "word": "extrañándoos",
+    "ipa": "ˌekstɾaɲˈandoos"
+   },
+   {
+    "word": "falsificados",
+    "ipa": "fˌalsifikˈaðos"
+   },
+   {
+    "word": "federásemos",
+    "ipa": "fˌeðeɾˈasemos"
+   },
+   {
+    "word": "filtrarnos",
+    "ipa": "filtɾˈaɾnos"
+   },
+   {
+    "word": "flexionarías",
+    "ipa": "flˌeksjonaɾˈias"
+   },
+   {
+    "word": "fornicaren",
+    "ipa": "fˌoɾnikˈaɾen"
+   },
+   {
+    "word": "fraseándooslos",
+    "ipa": "fɾˌaseˈandoˌoslos"
+   },
+   {
+    "word": "fulguren",
+    "ipa": "fulɣˈuɾen"
+   },
+   {
+    "word": "gallearíamos",
+    "ipa": "ɡˌaʎeaɾˈiamos"
+   },
+   {
+    "word": "gasolinera",
+    "ipa": "ɡˌasolinˈeɾa"
+   },
+   {
+    "word": "glaseándomelas",
+    "ipa": "ɡlˌaseˈandomˌelas"
+   },
+   {
+    "word": "granjearían",
+    "ipa": "ɡɾˌaŋxeaɾˈian"
+   },
+   {
+    "word": "guerrillearíais",
+    "ipa": "ɡˌeɾɾiʎˌeaɾˈiaɪs"
+   },
+   {
+    "word": "halconearían",
+    "ipa": "ˌalkonˌeaɾˈian"
+   },
+   {
+    "word": "henificar",
+    "ipa": "ˌenifikˈaɾ"
+   },
+   {
+    "word": "higienizando",
+    "ipa": "ˌixjeniθˈando"
+   },
+   {
+    "word": "holeareis",
+    "ipa": "ˌoleˈaɾeɪs"
+   },
+   {
+    "word": "hostilizarías",
+    "ipa": "ˌostilˌiθaɾˈias"
+   },
+   {
+    "word": "identificado",
+    "ipa": "ˌiðentˌifikˈaðo"
+   },
+   {
+    "word": "impelías",
+    "ipa": "ˌimpelˈias"
+   },
+   {
+    "word": "impulsó",
+    "ipa": "ˌimpulsˈo"
+   },
+   {
+    "word": "incorruptible",
+    "ipa": "ˌinkoɾɾupːtˈiβle"
+   },
+   {
+    "word": "indotación",
+    "ipa": "ˌindotaθjˈon"
+   },
+   {
+    "word": "ingleteáramos",
+    "ipa": "ˌiŋɡleteˈaɾamos"
+   },
+   {
+    "word": "inoportunas",
+    "ipa": "ˌinopoɾtˈunas"
+   },
+   {
+    "word": "insuflaba",
+    "ipa": "ˌinsuflˈaβa"
+   },
+   {
+    "word": "interpolándoles",
+    "ipa": "ˌinteɾpolˈandoles"
+   },
+   {
+    "word": "invernáculo",
+    "ipa": "ˌimbeɾnˈakulo"
+   },
+   {
+    "word": "jabalonad",
+    "ipa": "xˌaβalonˈad"
+   },
+   {
+    "word": "jedaría",
+    "ipa": "xˌeðaɾˈia"
+   },
+   {
+    "word": "juráis",
+    "ipa": "xuɾˈais"
+   },
+   {
+    "word": "lajas",
+    "ipa": "lˈaxas"
+   },
+   {
+    "word": "latigueos",
+    "ipa": "lˌatiɣˈeos"
+   },
+   {
+    "word": "leudaba",
+    "ipa": "leʊðˈaβa"
+   },
+   {
+    "word": "limitándoosla",
+    "ipa": "lˌimitˈandoˌosla"
+   },
+   {
+    "word": "llenamente",
+    "ipa": "ʎˈenamˈente"
+   },
+   {
+    "word": "ludas",
+    "ipa": "lˈuðas"
+   },
+   {
+    "word": "maestra",
+    "ipa": "maˈestɾa"
+   },
+   {
+    "word": "malojero",
+    "ipa": "mˌaloxˈeɾo"
+   },
+   {
+    "word": "maneábamos",
+    "ipa": "mˌaneˈaβamos"
+   },
+   {
+    "word": "maravillen",
+    "ipa": "mˌaɾaβˈiʎen"
+   },
+   {
+    "word": "masado",
+    "ipa": "masˈaðo"
+   },
+   {
+    "word": "mañanearían",
+    "ipa": "mˌaɲanˌeaɾˈian"
+   },
+   {
+    "word": "mencionándote",
+    "ipa": "mˌenθjonˈandote"
+   },
+   {
+    "word": "mesándote",
+    "ipa": "mesˈandote"
+   },
+   {
+    "word": "minaseis",
+    "ipa": "minˈaseɪs"
+   },
+   {
+    "word": "modelizaríamos",
+    "ipa": "mˌoðelˌiθaɾˈiamos"
+   },
+   {
+    "word": "mondaste",
+    "ipa": "mondˈaste"
+   },
+   {
+    "word": "morigerábamos",
+    "ipa": "mˌoɾixeɾˈaβamos"
+   },
+   {
+    "word": "muflida",
+    "ipa": "muflˈiða"
+   },
+   {
+    "word": "médium",
+    "ipa": "mˈeðjum"
+   },
+   {
+    "word": "negocié",
+    "ipa": "nˌeɣoθjˈe"
+   },
+   {
+    "word": "notaba",
+    "ipa": "notˈaβa"
+   },
+   {
+    "word": "obstruirías",
+    "ipa": "ˌoβstɾuiɾˈias"
+   },
+   {
+    "word": "oigan",
+    "ipa": "ˈoɪɣan"
+   },
+   {
+    "word": "ordinarieces",
+    "ipa": "ˌoɾðinaɾjˈeθes"
+   },
+   {
+    "word": "oxidándolos",
+    "ipa": "ˌoksiðˈandolos"
+   },
+   {
+    "word": "panamericanismo",
+    "ipa": "pˌanamˌeɾikanˈismo"
+   },
+   {
+    "word": "paridades",
+    "ipa": "pˌaɾiðˈaðes"
+   },
+   {
+    "word": "pataletilla",
+    "ipa": "pˌataletˈiʎa"
+   },
+   {
+    "word": "pelagras",
+    "ipa": "pelˈaɣɾas"
+   },
+   {
+    "word": "perdieseis",
+    "ipa": "peɾðjˈeseɪs"
+   },
+   {
+    "word": "perpetrarían",
+    "ipa": "pˌeɾpetɾaɾˈian"
+   },
+   {
+    "word": "peñaranda",
+    "ipa": "pˌeɲaɾˈanda"
+   },
+   {
+    "word": "pintándosela",
+    "ipa": "pintˈandosˌela"
+   },
+   {
+    "word": "plancheta",
+    "ipa": "plantʃˈeta"
+   },
+   {
+    "word": "pobretes",
+    "ipa": "poβɾˈetes"
+   },
+   {
+    "word": "porcionistas",
+    "ipa": "pˌoɾθjonˈistas"
+   },
+   {
+    "word": "potrearemos",
+    "ipa": "pˌotɾeaɾˈemos"
+   },
+   {
+    "word": "prefinimos",
+    "ipa": "pɾˌefinˈimos"
+   },
+   {
+    "word": "presentándoselas",
+    "ipa": "pɾˌesentˈandosˌelas"
+   },
+   {
+    "word": "privadas",
+    "ipa": "pɾiβˈaðas"
+   },
+   {
+    "word": "prolongareis",
+    "ipa": "pɾˌoloŋɡˈaɾeɪs"
+   },
+   {
+    "word": "prosperar",
+    "ipa": "pɾˌospeɾˈaɾ"
+   },
+   {
+    "word": "pulmonías",
+    "ipa": "pˌulmonˈias"
+   },
+   {
+    "word": "quejigos",
+    "ipa": "kexˈiɣos"
+   },
+   {
+    "word": "racionalizándolos",
+    "ipa": "ɾɾˌaθjonˌaliθˈandolos"
+   },
+   {
+    "word": "rasguemos",
+    "ipa": "ɾɾasɣˈemos"
+   },
+   {
+    "word": "realizándotelas",
+    "ipa": "ɾɾˌealiθˈandotˌelas"
+   },
+   {
+    "word": "rebosarás",
+    "ipa": "ɾɾˌeβosaɾˈas"
+   },
+   {
+    "word": "recatonearéis",
+    "ipa": "ɾɾˌekatˌoneaɾˈeis"
+   },
+   {
+    "word": "recodificaremos",
+    "ipa": "ɾɾˌekoðˌifikaɾˈemos"
+   },
+   {
+    "word": "recordable",
+    "ipa": "ɾɾˌekoɾðˈaβle"
+   },
+   {
+    "word": "redefiniéramos",
+    "ipa": "ɾɾˌeðefinjˈeɾamos"
+   },
+   {
+    "word": "reensayarías",
+    "ipa": "ɾɾˌeensˌajjaɾˈias"
+   },
+   {
+    "word": "refundiere",
+    "ipa": "ɾɾˌefundjˈeɾe"
+   },
+   {
+    "word": "regó",
+    "ipa": "ɾɾeɣˈo"
+   },
+   {
+    "word": "reivindicarle",
+    "ipa": "ɾɾˌeɪβindikˈaɾle"
+   },
+   {
+    "word": "remalladas",
+    "ipa": "ɾɾˌemaʎˈaðas"
+   },
+   {
+    "word": "removimientos",
+    "ipa": "ɾɾˌemoβimjˈɛntos"
+   },
+   {
+    "word": "repechad",
+    "ipa": "ɾɾˌepetʃˈað"
+   },
+   {
+    "word": "reprenderles",
+    "ipa": "ɾɾˌepɾendˈeɾles"
+   },
+   {
+    "word": "resaquemos",
+    "ipa": "ɾɾˌesakˈemos"
+   },
+   {
+    "word": "respaldare",
+    "ipa": "ɾɾˌespalðˈaɾe"
+   },
+   {
+    "word": "resumiéndonoslas",
+    "ipa": "ɾɾˌesumjˈendonˌoslas"
+   },
+   {
+    "word": "retradujeseis",
+    "ipa": "ɾɾˌetɾaðuxˈeseɪs"
+   },
+   {
+    "word": "revelamos",
+    "ipa": "ɾɾˌeβelˈamos"
+   },
+   {
+    "word": "rezongos",
+    "ipa": "ɾɾeθˈoŋɡos"
+   },
+   {
+    "word": "rodearlas",
+    "ipa": "ɾɾˌoðeˈaɾlas"
+   },
+   {
+    "word": "rotulación",
+    "ipa": "ɾɾˌotulaθjˈon"
+   },
+   {
+    "word": "ruté",
+    "ipa": "ɾɾutˈe"
+   },
+   {
+    "word": "salcochamos",
+    "ipa": "sˌalkotʃˈamos"
+   },
+   {
+    "word": "samnite",
+    "ipa": "samnˈite"
+   },
+   {
+    "word": "secaban",
+    "ipa": "sekˈaβan"
+   },
+   {
+    "word": "semióticos",
+    "ipa": "semjˈotikos"
+   },
+   {
+    "word": "sesteó",
+    "ipa": "sˌesteˈo"
+   },
+   {
+    "word": "sincerándoos",
+    "ipa": "sˌinθeɾˈandoos"
+   },
+   {
+    "word": "sobrealzasen",
+    "ipa": "sˌoβɾealθˈasen"
+   },
+   {
+    "word": "sobrevela",
+    "ipa": "sˌoβɾeβˈela"
+   },
+   {
+    "word": "solfeáis",
+    "ipa": "sˌolfeˈais"
+   },
+   {
+    "word": "sonorizaron",
+    "ipa": "sˌonoɾiθˈaɾon"
+   },
+   {
+    "word": "sotaneas",
+    "ipa": "sˌotanˈeas"
+   },
+   {
+    "word": "subvencionaras",
+    "ipa": "sˌubβenθjonˈaɾas"
+   },
+   {
+    "word": "supereminente",
+    "ipa": "sˌupeɾˌeminˈɛnte"
+   },
+   {
+    "word": "sustraigan",
+    "ipa": "sustɾˈaɪɣan"
+   },
+   {
+    "word": "tamborileare",
+    "ipa": "tˌamboɾˌileˈaɾe"
+   },
+   {
+    "word": "tañemos",
+    "ipa": "taɲˈemos"
+   },
+   {
+    "word": "tenutarios",
+    "ipa": "tˌenutˈaɾjos"
+   },
+   {
+    "word": "tijereteas",
+    "ipa": "tˌixeɾetˈeas"
+   },
+   {
+    "word": "toemos",
+    "ipa": "toˈemos"
+   },
+   {
+    "word": "tosigaste",
+    "ipa": "tˌosiɣˈaste"
+   },
+   {
+    "word": "transbordasteis",
+    "ipa": "tɾˌansβoɾðˈasteɪs"
+   },
+   {
+    "word": "tranzaríais",
+    "ipa": "tɾˌanθaɾˈiaɪs"
+   },
+   {
+    "word": "trasmigrara",
+    "ipa": "tɾˌasmiɣɾˈaɾa"
+   },
+   {
+    "word": "tratándotelas",
+    "ipa": "tɾatˈandotˌelas"
+   },
+   {
+    "word": "triptongaría",
+    "ipa": "tɾˌipːtoŋɡaɾˈia"
+   },
+   {
+    "word": "trujimanes",
+    "ipa": "tɾˌuximˈanes"
+   },
+   {
+    "word": "ultramicroscopio",
+    "ipa": "ˌultɾamˌikɾoskˈopjo"
+   },
+   {
+    "word": "vacará",
+    "ipa": "bˌakaɾˈa"
+   },
+   {
+    "word": "varraqueada",
+    "ipa": "bˌaɾɾakeˈaða"
+   },
+   {
+    "word": "veracidades",
+    "ipa": "bˌeɾaθiðˈaðes"
+   },
+   {
+    "word": "vigilases",
+    "ipa": "bˌixilˈases"
+   },
+   {
+    "word": "vocalizamos",
+    "ipa": "bˌokaliθˈamos"
+   },
+   {
+    "word": "zafos",
+    "ipa": "θˈafos"
+   },
+   {
+    "word": "zopetero",
+    "ipa": "θˌopetˈeɾo"
+   }
+  ],
+  "unknown": [
+   {
+    "word": "óíümlüúlgí",
+    "ipa": "ˈoˈiumluˈulxˈi"
+   },
+   {
+    "word": "jfczíka",
+    "ipa": "xfkθˈika"
+   },
+   {
+    "word": "dcmp",
+    "ipa": "dkmp"
+   },
+   {
+    "word": "óuí",
+    "ipa": "ˈowˈi"
+   },
+   {
+    "word": "osñafó",
+    "ipa": "osɲafˈo"
+   },
+   {
+    "word": "áfquoüs",
+    "ipa": "ˈafkˈous"
+   },
+   {
+    "word": "egz",
+    "ipa": "ˌeɣθ"
+   },
+   {
+    "word": "syeb",
+    "ipa": "sjjeβ"
+   },
+   {
+    "word": "nnd",
+    "ipa": "nnd"
+   },
+   {
+    "word": "yzáemrvftv",
+    "ipa": "ʝθˈaemɾβftb"
+   },
+   {
+    "word": "áhi",
+    "ipa": "ˈai"
+   },
+   {
+    "word": "gadóñl",
+    "ipa": "ɡaðˈoɲl"
+   },
+   {
+    "word": "íümiáy",
+    "ipa": "ˈiumjˈai"
+   },
+   {
+    "word": "zána",
+    "ipa": "θˈana"
+   },
+   {
+    "word": "tbnlzgc",
+    "ipa": "tbnlθɣk"
+   },
+   {
+    "word": "níqav",
+    "ipa": "nˈikaβ"
+   },
+   {
+    "word": "yeefnpa",
+    "ipa": "ʝeˌefnpa"
+   },
+   {
+    "word": "xóiúiylj",
+    "ipa": "ksˈoixijjlx"
+   },
+   {
+    "word": "opmkmyú",
+    "ipa": "ˌopmˈemjjˈu"
+   },
+   {
+    "word": "ádgg",
+    "ipa": "ˈaðɣo"
+   },
+   {
+    "word": "üqp",
+    "ipa": "ukp"
+   },
+   {
+    "word": "qáñsleioú",
+    "ipa": "kˈaɲsleɪoˈu"
+   },
+   {
+    "word": "rnnb",
+    "ipa": "ɾɾnnb"
+   },
+   {
+    "word": "ráíp",
+    "ipa": "ɾɾˈaˈia"
+   },
+   {
+    "word": "cls",
+    "ipa": "kls"
+   },
+   {
+    "word": "ifxiívic",
+    "ipa": "ˌifksiˈiβik"
+   },
+   {
+    "word": "úwt",
+    "ipa": "ˈukt"
+   },
+   {
+    "word": "beú",
+    "ipa": "beɪ"
+   },
+   {
+    "word": "tuie",
+    "ipa": "twje"
+   },
+   {
+    "word": "íxci",
+    "ipa": "ˈiksθi"
+   },
+   {
+    "word": "wfúeábña",
+    "ipa": "mfˈueˈaβɲa"
+   },
+   {
+    "word": "yaeffhqáv",
+    "ipa": "ʝˌaeffkˈaβ"
+   },
+   {
+    "word": "óíófübtfú",
+    "ipa": "ˈoˈiˈofˌubtfˈu"
+   },
+   {
+    "word": "ohñ",
+    "ipa": "oɲ"
+   },
+   {
+    "word": "qaxtjmkvíñ",
+    "ipa": "kakstxmaβˈiɲ"
+   },
+   {
+    "word": "uzqmém",
+    "ipa": "uθamˈem"
+   },
+   {
+    "word": "younii",
+    "ipa": "ʝˌoˌunii"
+   },
+   {
+    "word": "wcerkhíúrn",
+    "ipa": "ˌuθeɾtʃˈiˈuɾn"
+   },
+   {
+    "word": "yñuíuecrc",
+    "ipa": "ʝɲˈiekɾk"
+   },
+   {
+    "word": "wtbizóm",
+    "ipa": "btβiθˈom"
+   },
+   {
+    "word": "rpj",
+    "ipa": "ɾɾpx"
+   },
+   {
+    "word": "híg",
+    "ipa": "ˈiɣ"
+   },
+   {
+    "word": "emmúqlaú",
+    "ipa": "ˌemmˈuʎaˈu"
+   },
+   {
+    "word": "lor",
+    "ipa": "loɾ"
+   },
+   {
+    "word": "ükzofáyi",
+    "ipa": "ɾɾˈiθofˈajji"
+   },
+   {
+    "word": "ómayüvóung",
+    "ipa": "ˈomajjuβˈoˈuŋɡ"
+   },
+   {
+    "word": "npyf",
+    "ipa": "npjjf"
+   },
+   {
+    "word": "uqbwüfc",
+    "ipa": "ˈukumfk"
+   },
+   {
+    "word": "várñbneécl",
+    "ipa": "bˈaɾɲbneˈekl"
+   },
+   {
+    "word": "iújíñfoí",
+    "ipa": "iˈuxˈiɲfoˈi"
+   },
+   {
+    "word": "küqtynt",
+    "ipa": "ʝuktjjnt"
+   },
+   {
+    "word": "rñmáh",
+    "ipa": "ɾɾɲmˈa"
+   },
+   {
+    "word": "ybc",
+    "ipa": "ʝbk"
+   },
+   {
+    "word": "hñfkeóázr",
+    "ipa": "ɲfieˈoˈaθe"
+   },
+   {
+    "word": "úñivéú",
+    "ipa": "ˈuɲiβˈeˈu"
+   },
+   {
+    "word": "gmábqibc",
+    "ipa": "ɡmˈabeˈiβk"
+   },
+   {
+    "word": "joasuw",
+    "ipa": "xˌoasˈue"
+   },
+   {
+    "word": "ñgñhüq",
+    "ipa": "ɲɡɲuk"
+   },
+   {
+    "word": "ébyákn",
+    "ipa": "ˈebeˈain"
+   },
+   {
+    "word": "niowlu",
+    "ipa": "njoˈulˈu"
+   },
+   {
+    "word": "mnmgipif",
+    "ipa": "mnmxipif"
+   },
+   {
+    "word": "ygéáimz",
+    "ipa": "ʝxˈeˈaimo"
+   },
+   {
+    "word": "gmw",
+    "ipa": "ɡmo"
+   },
+   {
+    "word": "hüvümeúg",
+    "ipa": "uβumˈeˈue"
+   },
+   {
+    "word": "cüú",
+    "ipa": "kuˈu"
+   },
+   {
+    "word": "mlhnl",
+    "ipa": "mlnl"
+   },
+   {
+    "word": "sgdió",
+    "ipa": "sɣðjˈo"
+   },
+   {
+    "word": "guzó",
+    "ipa": "ɡuθˈo"
+   },
+   {
+    "word": "üwénxacml",
+    "ipa": "ujjˈenwakml"
+   },
+   {
+    "word": "óxxzmkgüa",
+    "ipa": "ˈoksksθmŋɡua"
+   },
+   {
+    "word": "fzmüvqrh",
+    "ipa": "fθmuβkɾ"
+   },
+   {
+    "word": "zivxé",
+    "ipa": "θiβksˈe"
+   },
+   {
+    "word": "znlev",
+    "ipa": "θnleβ"
+   },
+   {
+    "word": "úgawdor",
+    "ipa": "ˈuɣaɪðˈoɾ"
+   },
+   {
+    "word": "vnzleyü",
+    "ipa": "bnθlejjˈe"
+   },
+   {
+    "word": "nhzbhgpqíz",
+    "ipa": "nθtʃxpwˈiθ"
+   },
+   {
+    "word": "mya",
+    "ipa": "mjja"
+   },
+   {
+    "word": "qqrv",
+    "ipa": "kkɾβ"
+   },
+   {
+    "word": "gíecykyúk",
+    "ipa": "xˈiekjjˈejjˈuo"
+   },
+   {
+    "word": "déñásztxsú",
+    "ipa": "dˈeɲˈasθtkssˈu"
+   },
+   {
+    "word": "ssbapck",
+    "ipa": "ssβapθe"
+   },
+   {
+    "word": "yduzdueoé",
+    "ipa": "ʝðˌuθðwˈeoˈe"
+   },
+   {
+    "word": "qpcgójphdá",
+    "ipa": "kpkɣˈoxpðˈa"
+   },
+   {
+    "word": "hndwjhxíiá",
+    "ipa": "ndˈuxksˈijˈa"
+   },
+   {
+    "word": "qáxisipúhü",
+    "ipa": "kˈaksisipˈuu"
+   },
+   {
+    "word": "üwrrmrp",
+    "ipa": "ukɾɾmɾp"
+   },
+   {
+    "word": "pümcda",
+    "ipa": "pumkða"
+   },
+   {
+    "word": "qébcgor",
+    "ipa": "ʝˈebkɣoɾ"
+   },
+   {
+    "word": "fkpx",
+    "ipa": "fˈupks"
+   },
+   {
+    "word": "úwnvvñiehí",
+    "ipa": "ˈuˌombβɲjeˈi"
+   },
+   {
+    "word": "íéqyjx",
+    "ipa": "ˈiˈeixks"
+   },
+   {
+    "word": "usléx",
+    "ipa": "uslˈeks"
+   },
+   {
+    "word": "óuff",
+    "ipa": "ˈoˌuff"
+   },
+   {
+    "word": "ñótaetnft",
+    "ipa": "ɲˈotˌaetmft"
+   },
+   {
+    "word": "usjowuxhuí",
+    "ipa": "ˌusxokˌukswˈi"
+   },
+   {
+    "word": "ítóuozp",
+    "ipa": "ˈitˈowoθp"
+   },
+   {
+    "word": "xxbx",
+    "ipa": "ksksbks"
+   },
+   {
+    "word": "ymxyjllfó",
+    "ipa": "ʝmksjjxʎfˈo"
+   },
+   {
+    "word": "bodksbé",
+    "ipa": "boðˈisβˈe"
+   },
+   {
+    "word": "tfvf",
+    "ipa": "tfβf"
+   },
+   {
+    "word": "gufbjgé",
+    "ipa": "ɡufβxxˈe"
+   },
+   {
+    "word": "oñvózw",
+    "ipa": "oɲβˈoθe"
+   },
+   {
+    "word": "viññecáw",
+    "ipa": "biɲɲekˈae"
+   },
+   {
+    "word": "yfó",
+    "ipa": "ʝfˈo"
+   },
+   {
+    "word": "xah",
+    "ipa": "ksa"
+   },
+   {
+    "word": "ájpkykuny",
+    "ipa": "ˈaxpojjkˌund"
+   },
+   {
+    "word": "srdúthtjl",
+    "ipa": "sɾðˈuttxl"
+   },
+   {
+    "word": "óbú",
+    "ipa": "ˈoβˈu"
+   },
+   {
+    "word": "ugm",
+    "ipa": "ˌuɡm"
+   },
+   {
+    "word": "wnpúü",
+    "ipa": "ɡnpˈue"
+   },
+   {
+    "word": "ílrzlt",
+    "ipa": "ˈilɾθlt"
+   },
+   {
+    "word": "qñzvfúozdn",
+    "ipa": "kɲθβfˈuoθðn"
+   },
+   {
+    "word": "yrdpa",
+    "ipa": "ʝɾðpa"
+   },
+   {
+    "word": "xípákákujq",
+    "ipa": "ksˈipˈaeˈakˈuxk"
+   },
+   {
+    "word": "rdjla",
+    "ipa": "ɾɾðxla"
+   },
+   {
+    "word": "jifwrg",
+    "ipa": "xifˈuɾɣ"
+   },
+   {
+    "word": "ófütbmámfí",
+    "ipa": "ˈofutamˈamfˈi"
+   },
+   {
+    "word": "cáñktu",
+    "ipa": "kˈaɲetw"
+   },
+   {
+    "word": "zetóexe",
+    "ipa": "θetˈoekse"
+   },
+   {
+    "word": "gzóhí",
+    "ipa": "ɡθˈoˈi"
+   },
+   {
+    "word": "yúp",
+    "ipa": "ʝˈup"
+   },
+   {
+    "word": "hóanjsy",
+    "ipa": "ˈoaŋxsjj"
+   },
+   {
+    "word": "vzfqmmy",
+    "ipa": "bθfkmmjj"
+   },
+   {
+    "word": "vtrú",
+    "ipa": "btɾˈu"
+   },
+   {
+    "word": "íyfgjgil",
+    "ipa": "ˈijjfxxxil"
+   },
+   {
+    "word": "mzcóf",
+    "ipa": "mθkˈof"
+   },
+   {
+    "word": "ockh",
+    "ipa": "oktʃ"
+   },
+   {
+    "word": "áevéüinjy",
+    "ipa": "ˈaeβˈexiŋxjj"
+   },
+   {
+    "word": "váazupbqvm",
+    "ipa": "bˈaˌaθupbˈiβm"
+   },
+   {
+    "word": "tígynüvs",
+    "ipa": "tˈixinuβs"
+   },
+   {
+    "word": "kqto",
+    "ipa": "dkto"
+   },
+   {
+    "word": "üüjmmbmf",
+    "ipa": "uuxmmbmf"
+   },
+   {
+    "word": "púávv",
+    "ipa": "pˈuˈaβe"
+   },
+   {
+    "word": "xróh",
+    "ipa": "ksɾˈo"
+   },
+   {
+    "word": "ipeqkvjhas",
+    "ipa": "ˌipekβxas"
+   },
+   {
+    "word": "pxkleócz",
+    "ipa": "pkskleˈokθ"
+   },
+   {
+    "word": "itybk",
+    "ipa": "ˌitˈuβo"
+   },
+   {
+    "word": "áócjyh",
+    "ipa": "ˈaˈokxtʃ"
+   },
+   {
+    "word": "lviqpvdcj",
+    "ipa": "lβikpbðkx"
+   },
+   {
+    "word": "ñgúwáásñó",
+    "ipa": "ɲxˈueˈaˈaseˈo"
+   },
+   {
+    "word": "éhhvéábud",
+    "ipa": "ˈeaβˈeˈaβud"
+   },
+   {
+    "word": "éyuteph",
+    "ipa": "ˈejjutep"
+   },
+   {
+    "word": "püzdúgptzp",
+    "ipa": "puθðˈuxpːtθp"
+   },
+   {
+    "word": "xáko",
+    "ipa": "ksˈako"
+   },
+   {
+    "word": "hegihóasp",
+    "ipa": "ˌexiˈoˈasp"
+   },
+   {
+    "word": "buleííz",
+    "ipa": "buleˈiˈiθ"
+   },
+   {
+    "word": "woctb",
+    "ipa": "ʝokte"
+   },
+   {
+    "word": "utuñjúnmsd",
+    "ipa": "ˌutuɲxˈunmsd"
+   },
+   {
+    "word": "uwúblm",
+    "ipa": "ujjˈuβlm"
+   },
+   {
+    "word": "mdgtur",
+    "ipa": "mðɡtuɾ"
+   }
+  ]
+ },
+ "fr": {
+  "sentences": [
+   {
+    "text": "Bonjour, comment allez-vous ? Très bien, merci !",
+    "normalized": "Bonjour, comment allez vous ? Très bien, merci !",
+    "pieces": [
+     "Bon",
+     "##jour",
+     ",",
+     "comment",
+     "allez",
+     "vous",
+     "?",
+     "Très",
+     "bien",
+     ",",
+     "merci",
+     "!"
+    ],
+    "phones": [
+     "_",
+     "b",
+     "ɔ",
+     "̃",
+     "ʒ",
+     "ˈ",
+     "u",
+     "ʁ",
+     ",",
+     "k",
+     "ɔ",
+     "m",
+     "ˌ",
+     "ɑ",
+     "̃",
+     "a",
+     "l",
+     "ˈ",
+     "e",
+     "z",
+     "v",
+     "u",
+     "?",
+     "t",
+     "ʁ",
+     "ɛ",
+     "b",
+     "j",
+     "ˈ",
+     "ɛ",
+     "̃",
+     ",",
+     "m",
+     "ɛ",
+     "ʁ",
+     "s",
+     "ˈ",
+     "i",
+     "!",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     4,
+     3,
+     1,
+     6,
+     5,
+     2,
+     1,
+     3,
+     5,
+     1,
+     6,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Les enfants sont allés à l'école en 1789 avec 21 amis.",
+    "normalized": "Les enfants sont allés à l'école en 1789 avec 21 amis.",
+    "pieces": [
+     "Les",
+     "enfants",
+     "sont",
+     "allés",
+     "à",
+     "l",
+     "'",
+     "école",
+     "en",
+     "1789",
+     "avec",
+     "21",
+     "amis",
+     "."
+    ],
+    "phones": [
+     "_",
+     "l",
+     "e",
+     "-",
+     "ɑ",
+     "̃",
+     "f",
+     "ˈ",
+     "ɑ",
+     "̃",
+     "z",
+     "s",
+     "ˈ",
+     "ɔ",
+     "̃",
+     "a",
+     "l",
+     "ˈ",
+     "e",
+     "z",
+     "a",
+     "ˈ",
+     "ɛ",
+     "l",
+     "e",
+     "k",
+     "ˈ",
+     "ɔ",
+     "l",
+     "ɑ",
+     "̃",
+     "n",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "s",
+     "ˈ",
+     "ɛ",
+     "t",
+     "s",
+     "ˈ",
+     "ɑ",
+     "̃",
+     "k",
+     "ˈ",
+     "a",
+     "t",
+     "ʁ",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "n",
+     "ˈ",
+     "œ",
+     "f",
+     "a",
+     "v",
+     "ˌ",
+     "ɛ",
+     "k",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "t",
+     "e",
+     "œ",
+     "̃",
+     "n",
+     "a",
+     "m",
+     "ˈ",
+     "i",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     3,
+     7,
+     4,
+     5,
+     1,
+     3,
+     0,
+     5,
+     3,
+     25,
+     5,
+     9,
+     4,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "M. Dupont et Mme Martin habitent au no. 81 de l'avenue.",
+    "normalized": "monsieur Dupont et Madame Martin habitent au numéro 81 de l'avenue.",
+    "pieces": [
+     "monsieur",
+     "Dupont",
+     "et",
+     "Madame",
+     "Martin",
+     "habitent",
+     "au",
+     "numéro",
+     "81",
+     "de",
+     "l",
+     "'",
+     "avenue",
+     "."
+    ],
+    "phones": [
+     "_",
+     "m",
+     "ə",
+     "s",
+     "j",
+     "ˈ",
+     "ø",
+     "d",
+     "y",
+     "p",
+     "ˈ",
+     "ɔ",
+     "̃",
+     "e",
+     "m",
+     "a",
+     "d",
+     "ˈ",
+     "a",
+     "m",
+     "m",
+     "a",
+     "ʁ",
+     "t",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "a",
+     "b",
+     "ˈ",
+     "i",
+     "t",
+     "t",
+     "ˈ",
+     "o",
+     "n",
+     "y",
+     "m",
+     "e",
+     "ʁ",
+     "ˈ",
+     "o",
+     "k",
+     "ˈ",
+     "a",
+     "t",
+     "ʁ",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "t",
+     "œ",
+     "̃",
+     "n",
+     "d",
+     "ˈ",
+     "ə",
+     "-",
+     "ˈ",
+     "ɛ",
+     "l",
+     "a",
+     "v",
+     "n",
+     "ˈ",
+     "y",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     6,
+     6,
+     1,
+     6,
+     7,
+     6,
+     2,
+     7,
+     13,
+     4,
+     3,
+     0,
+     5,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Il y a 121121 étoiles et 2000 planètes, etc.",
+    "normalized": "Il y a 121121 étoiles et 2000 planètes, et cetera.",
+    "pieces": [
+     "Il",
+     "y",
+     "a",
+     "121",
+     "##12",
+     "##1",
+     "étoiles",
+     "et",
+     "2000",
+     "plan",
+     "##ètes",
+     ",",
+     "et",
+     "cet",
+     "##era",
+     "."
+    ],
+    "phones": [
+     "_",
+     "i",
+     "l",
+     "i",
+     "a",
+     "s",
+     "ˈ",
+     "ɑ",
+     "̃",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "t",
+     "e",
+     "œ",
+     "̃",
+     "n",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "s",
+     "ˈ",
+     "ɑ",
+     "̃",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "t",
+     "e",
+     "œ",
+     "̃",
+     "n",
+     "e",
+     "t",
+     "w",
+     "ˈ",
+     "a",
+     "l",
+     "z",
+     "e",
+     "d",
+     "ˈ",
+     "ø",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "p",
+     "l",
+     "a",
+     "n",
+     "ˈ",
+     "ɛ",
+     "t",
+     ",",
+     "e",
+     "s",
+     "ə",
+     "t",
+     "ʁ",
+     "ˈ",
+     "a",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     2,
+     1,
+     1,
+     10,
+     10,
+     10,
+     7,
+     1,
+     7,
+     4,
+     3,
+     1,
+     1,
+     3,
+     3,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "C'est un petit appartement, les grands arbres et des amis.",
+    "normalized": "C'est un petit appartement, les grands arbres et des amis.",
+    "pieces": [
+     "C",
+     "'",
+     "est",
+     "un",
+     "petit",
+     "appartement",
+     ",",
+     "les",
+     "grands",
+     "arbres",
+     "et",
+     "des",
+     "amis",
+     "."
+    ],
+    "phones": [
+     "_",
+     "s",
+     "ˈ",
+     "e",
+     "ɛ",
+     "t",
+     "œ",
+     "̃",
+     "n",
+     "p",
+     "ə",
+     "t",
+     "ˈ",
+     "i",
+     "a",
+     "p",
+     "a",
+     "ʁ",
+     "t",
+     "ə",
+     "m",
+     "ˈ",
+     "ɑ",
+     "̃",
+     ",",
+     "l",
+     "e",
+     "-",
+     "ɡ",
+     "ʁ",
+     "ˈ",
+     "ɑ",
+     "̃",
+     "ˈ",
+     "a",
+     "ʁ",
+     "b",
+     "ʁ",
+     "z",
+     "e",
+     "d",
+     "ˈ",
+     "e",
+     "-",
+     "a",
+     "m",
+     "ˈ",
+     "i",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     3,
+     0,
+     2,
+     3,
+     5,
+     10,
+     1,
+     3,
+     5,
+     6,
+     1,
+     4,
+     4,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Nous avons vu 1 chat, 80 chiens et 71 oiseaux le 12mai2020.",
+    "normalized": "Nous avons vu 1 chat, 80 chiens et 71 oiseaux le 12mai2020.",
+    "pieces": [
+     "Nous",
+     "avons",
+     "vu",
+     "1",
+     "chat",
+     ",",
+     "80",
+     "chiens",
+     "et",
+     "71",
+     "oiseaux",
+     "le",
+     "12",
+     "##mai",
+     "##20",
+     "##20",
+     "."
+    ],
+    "phones": [
+     "_",
+     "n",
+     "u",
+     "a",
+     "v",
+     "ˈ",
+     "ɔ",
+     "̃",
+     "z",
+     "v",
+     "ˈ",
+     "y",
+     "œ",
+     "̃",
+     "n",
+     "ʃ",
+     "ˈ",
+     "a",
+     ",",
+     "k",
+     "ˈ",
+     "a",
+     "t",
+     "ʁ",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "ʃ",
+     "j",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "e",
+     "s",
+     "w",
+     "a",
+     "s",
+     "ˈ",
+     "ɑ",
+     "̃",
+     "t",
+     "e",
+     "ˈ",
+     "ɔ",
+     "̃",
+     "z",
+     "w",
+     "a",
+     "z",
+     "ˈ",
+     "o",
+     "z",
+     "l",
+     "ə",
+     "-",
+     "d",
+     "u",
+     "z",
+     "j",
+     "ˈ",
+     "ɛ",
+     "m",
+     "m",
+     "ˈ",
+     "ɛ",
+     "d",
+     "ˈ",
+     "ø",
+     "m",
+     "ˈ",
+     "i",
+     "l",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     2,
+     6,
+     3,
+     3,
+     3,
+     1,
+     9,
+     5,
+     1,
+     13,
+     6,
+     3,
+     6,
+     5,
+     5,
+     5,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Qu'est-ce que c'est ? « Un livre », dit-il.",
+    "normalized": "Qu'est ce que c'est ? Un livre , dit il.",
+    "pieces": [
+     "Qu",
+     "'",
+     "est",
+     "ce",
+     "que",
+     "c",
+     "'",
+     "est",
+     "?",
+     "Un",
+     "livre",
+     ",",
+     "dit",
+     "il",
+     "."
+    ],
+    "phones": [
+     "_",
+     "k",
+     "ɛ",
+     "t",
+     "s",
+     "ə",
+     "-",
+     "k",
+     "ə",
+     "s",
+     "ˈ",
+     "e",
+     "ɛ",
+     "t",
+     "?",
+     "œ",
+     "̃",
+     "n",
+     "l",
+     "ˈ",
+     "i",
+     "v",
+     "ʁ",
+     ",",
+     "d",
+     "ˈ",
+     "i",
+     "i",
+     "l",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     1,
+     0,
+     2,
+     3,
+     2,
+     3,
+     0,
+     2,
+     1,
+     3,
+     5,
+     1,
+     3,
+     2,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Ils ont payé €5, £3 et 100 dollars.",
+    "normalized": "Ils ont payé €5, £3 et 100 dollars.",
+    "pieces": [
+     "Ils",
+     "ont",
+     "payé",
+     "€",
+     "##5",
+     ",",
+     "£",
+     "##3",
+     "et",
+     "100",
+     "dollars",
+     "."
+    ],
+    "phones": [
+     "_",
+     "i",
+     "l",
+     "z",
+     "ˈ",
+     "ɔ",
+     "̃",
+     "t",
+     "p",
+     "ɛ",
+     "j",
+     "ˈ",
+     "e",
+     "s",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "k",
+     "ø",
+     "ʁ",
+     "ˈ",
+     "o",
+     "z",
+     ",",
+     "t",
+     "ʁ",
+     "w",
+     "ˈ",
+     "a",
+     "l",
+     "ˈ",
+     "i",
+     "v",
+     "ʁ",
+     "e",
+     "s",
+     "ˈ",
+     "ɑ",
+     "̃",
+     "d",
+     "ɔ",
+     "l",
+     "ˈ",
+     "a",
+     "ʁ",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     3,
+     4,
+     5,
+     5,
+     5,
+     1,
+     5,
+     5,
+     1,
+     4,
+     6,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Aujourd'hui, l'hôpital a reçu 1er et 2e prix.",
+    "normalized": "Aujourd'hui, l'hôpital a reçu 1er et 2e prix.",
+    "pieces": [
+     "Aujourd",
+     "'",
+     "hui",
+     ",",
+     "l",
+     "'",
+     "hôpital",
+     "a",
+     "reçu",
+     "1er",
+     "et",
+     "2e",
+     "prix",
+     "."
+    ],
+    "phones": [
+     "_",
+     "o",
+     "ʒ",
+     "ˈ",
+     "u",
+     "ʁ",
+     "y",
+     "ˈ",
+     "i",
+     ",",
+     "ˈ",
+     "ɛ",
+     "l",
+     "o",
+     "p",
+     "i",
+     "t",
+     "ˈ",
+     "a",
+     "l",
+     "a",
+     "ʁ",
+     "ə",
+     "s",
+     "ˈ",
+     "y",
+     "p",
+     "ʁ",
+     "ə",
+     "m",
+     "j",
+     "ˈ",
+     "e",
+     "e",
+     "ˈ",
+     "i",
+     "ː",
+     "p",
+     "ʁ",
+     "ˈ",
+     "i",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     5,
+     0,
+     3,
+     1,
+     3,
+     0,
+     7,
+     1,
+     5,
+     7,
+     1,
+     3,
+     4,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Zxqv grobulateur anticonstitutionnellement.",
+    "normalized": "Zxqv grobulateur anticonstitutionnellement.",
+    "pieces": [
+     "Z",
+     "##x",
+     "##q",
+     "##v",
+     "gro",
+     "##bu",
+     "##lat",
+     "##eur",
+     "antic",
+     "##onst",
+     "##itu",
+     "##tion",
+     "##nellement",
+     "."
+    ],
+    "phones": [
+     "_",
+     "s",
+     "k",
+     "s",
+     "k",
+     "ɡ",
+     "ʁ",
+     "o",
+     "b",
+     "y",
+     "l",
+     "a",
+     "t",
+     "ˈ",
+     "œ",
+     "ʁ",
+     "ɑ",
+     "̃",
+     "t",
+     "i",
+     "k",
+     "ɔ",
+     "̃",
+     "s",
+     "t",
+     "i",
+     "t",
+     "y",
+     "s",
+     "j",
+     "ɔ",
+     "n",
+     "ˈ",
+     "ɛ",
+     "l",
+     "m",
+     "ˈ",
+     "ɑ",
+     "̃",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     3,
+     3,
+     3,
+     2,
+     5,
+     5,
+     5,
+     4,
+     4,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Vingt et un, quatre-vingt-dix-neuf, cent un.",
+    "normalized": "Vingt et un, quatre vingt dix neuf, cent un.",
+    "pieces": [
+     "Vingt",
+     "et",
+     "un",
+     ",",
+     "quatre",
+     "vingt",
+     "dix",
+     "neuf",
+     ",",
+     "cent",
+     "un",
+     "."
+    ],
+    "phones": [
+     "_",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "e",
+     "œ",
+     "̃",
+     "n",
+     ",",
+     "k",
+     "ˈ",
+     "a",
+     "t",
+     "ʁ",
+     "v",
+     "ˈ",
+     "ɛ",
+     "̃",
+     "d",
+     "ˈ",
+     "i",
+     "n",
+     "ˈ",
+     "œ",
+     "f",
+     ",",
+     "s",
+     "ˈ",
+     "ɑ",
+     "̃",
+     "œ",
+     "̃",
+     "n",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     4,
+     1,
+     3,
+     1,
+     5,
+     4,
+     3,
+     4,
+     1,
+     4,
+     3,
+     1,
+     1
+    ]
+   },
+   {
+    "text": "Mlle Dubois & M. Leroy sont arrivés à midi.",
+    "normalized": "mademoiselle Dubois et monsieur Leroy sont arrivés à midi.",
+    "pieces": [
+     "mademoiselle",
+     "Dubois",
+     "et",
+     "monsieur",
+     "Leroy",
+     "sont",
+     "arrivés",
+     "à",
+     "midi",
+     "."
+    ],
+    "phones": [
+     "_",
+     "m",
+     "a",
+     "d",
+     "m",
+     "w",
+     "a",
+     "z",
+     "ˈ",
+     "ɛ",
+     "l",
+     "d",
+     "y",
+     "b",
+     "w",
+     "ˈ",
+     "a",
+     "e",
+     "m",
+     "ə",
+     "s",
+     "j",
+     "ˈ",
+     "ø",
+     "l",
+     "ə",
+     "ʁ",
+     "w",
+     "ˈ",
+     "a",
+     "s",
+     "ˈ",
+     "ɔ",
+     "̃",
+     "a",
+     "ʁ",
+     "i",
+     "v",
+     "ˈ",
+     "e",
+     "z",
+     "a",
+     "m",
+     "i",
+     "d",
+     "ˈ",
+     "i",
+     ".",
+     "_"
+    ],
+    "tones": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "word2ph": [
+     1,
+     10,
+     6,
+     1,
+     6,
+     6,
+     4,
+     7,
+     1,
+     5,
+     1,
+     1
+    ]
+   }
+  ],
+  "words": [
+   {
+    "word": "bonjour",
+    "ipa": "bɔ̃ʒˈuʁ"
+   },
+   {
+    "word": "1789",
+    "ipa": "mˈil sˈɛt sˈɑ̃ kˈatʁ vˈɛ̃ nˈœf"
+   },
+   {
+    "word": "1",
+    "ipa": "œ̃n"
+   },
+   {
+    "word": "21",
+    "ipa": "vˈɛ̃t e œ̃n"
+   },
+   {
+    "word": "71",
+    "ipa": "swasˈɑ̃t e ˈɔ̃z"
+   },
+   {
+    "word": "80",
+    "ipa": "kˈatʁ vˈɛ̃"
+   },
+   {
+    "word": "81",
+    "ipa": "kˈatʁ vˈɛ̃t œ̃n"
+   },
+   {
+    "word": "91",
+    "ipa": "kˈatʁ vˈɛ̃ ˈɔ̃z"
+   },
+   {
+    "word": "99",
+    "ipa": "kˈatʁ vˈɛ̃ dˈi nˈœf"
+   },
+   {
+    "word": "100",
+    "ipa": "sˈɑ̃"
+   },
+   {
+    "word": "101",
+    "ipa": "sˈɑ̃t œ̃n"
+   },
+   {
+    "word": "121121",
+    "ipa": "sˈɑ̃ vˈɛ̃t e œ̃n mˈil sˈɑ̃ vˈɛ̃t e œ̃n"
+   },
+   {
+    "word": "2000",
+    "ipa": "dˈø mˈil"
+   },
+   {
+    "word": "1e5",
+    "ipa": "sˈɑ̃ mˈil"
+   },
+   {
+    "word": "€5",
+    "ipa": "sˈɛ̃k øʁˈoz"
+   },
+   {
+    "word": "£3",
+    "ipa": "tʁwˈa lˈivʁ"
+   },
+   {
+    "word": "$7",
+    "ipa": "sˈɛt dɔlˈaʁ"
+   },
+   {
+    "word": "¥100",
+    "ipa": "ˈeˈe"
+   },
+   {
+    "word": "12mai2020",
+    "ipa": "duzjˈɛm mˈɛ dˈø mˈil vˈɛ̃"
+   },
+   {
+    "word": "1janv2020",
+    "ipa": "pʁəmjˈe ʒɑ̃vjˈe dˈø mˈil vˈɛ̃"
+   },
+   {
+    "word": "1er",
+    "ipa": "pʁəmjˈe"
+   },
+   {
+    "word": "16e",
+    "ipa": "sˈɛz"
+   },
+   {
+    "word": "les",
+    "ipa": "le-"
+   },
+   {
+    "word": "des",
+    "ipa": "dˈe-"
+   },
+   {
+    "word": "vingt",
+    "ipa": "vˈɛ̃"
+   },
+   {
+    "word": "Paris",
+    "ipa": "paʁˈi"
+   },
+   {
+    "word": "PARIS",
+    "ipa": "paʁˈi"
+   },
+   {
+    "word": "aujourd'hui",
+    "ipa": "oʒuʁdyˈi"
+   },
+   {
+    "word": "l'école",
+    "ipa": "lekˈɔl"
+   },
+   {
+    "word": "qu'est",
+    "ipa": "kɛ"
+   },
+   {
+    "word": "allez-vous",
+    "ipa": "alˈevuz"
+   },
+   {
+    "word": "quatre-vingt-dix",
+    "ipa": "kˈatʁvˈɛ̃dˈi"
+   },
+   {
+    "word": "M",
+    "ipa": "ˈɛm"
+   },
+   {
+    "word": "zxqv",
+    "ipa": "sksk"
+   },
+   {
+    "word": "abc123",
+    "ipa": "ˈabkˈe"
+   },
+   {
+    "word": "«",
+    "ipa": "«"
+   },
+   {
+    "word": "»",
+    "ipa": "»"
+   },
+   {
+    "word": "(bonjour)",
+    "ipa": "bɔ̃ʒˈuʁ"
+   },
+   {
+    "word": "¿bonjour",
+    "ipa": "¿"
+   },
+   {
+    "word": "1000000",
+    "ipa": "œ̃n miljˈɔ̃"
+   },
+   {
+    "word": "1000001",
+    "ipa": "œ̃n miljˈɔ̃ œ̃n"
+   },
+   {
+    "word": "200",
+    "ipa": "dˈø sˈɑ̃"
+   },
+   {
+    "word": "300",
+    "ipa": "tʁwˈa sˈɑ̃"
+   },
+   {
+    "word": "1980",
+    "ipa": "mˈil nˈœf sˈɑ̃ kˈatʁ vˈɛ̃"
+   },
+   {
+    "word": "11",
+    "ipa": "ˈɔ̃z"
+   },
+   {
+    "word": "17",
+    "ipa": "dˈi sˈɛt"
+   },
+   {
+    "word": "très",
+    "ipa": "tʁɛ"
+   },
+   {
+    "word": "et",
+    "ipa": "e"
+   },
+   {
+    "word": "un",
+    "ipa": "œ̃n"
+   }
+  ],
+  "dictionary": [
+   {
+    "word": "!sil",
+    "ipa": "!"
+   },
+   {
+    "word": "absente",
+    "ipa": "absˈɑ̃t"
+   },
+   {
+    "word": "accotées",
+    "ipa": "akotˈez"
+   },
+   {
+    "word": "actrices",
+    "ipa": "aktʁˈisz"
+   },
+   {
+    "word": "affaiblies",
+    "ipa": "afɛblˈiz"
+   },
+   {
+    "word": "agnès",
+    "ipa": "aɲˈɛs"
+   },
+   {
+    "word": "ajoncs",
+    "ipa": "aʒˈɔ̃z"
+   },
+   {
+    "word": "allument",
+    "ipa": "alˈymt"
+   },
+   {
+    "word": "amers",
+    "ipa": "amˈez"
+   },
+   {
+    "word": "andrew",
+    "ipa": "ˈandɹuː"
+   },
+   {
+    "word": "antipathiques",
+    "ipa": "ɑ̃tipatˈikz"
+   },
+   {
+    "word": "appesantir",
+    "ipa": "apzɑ̃tˈiʁ"
+   },
+   {
+    "word": "aquavilla",
+    "ipa": "akwavijˈa"
+   },
+   {
+    "word": "arnoult",
+    "ipa": "aʁnˈult"
+   },
+   {
+    "word": "arvillard",
+    "ipa": "aʁvijˈaʁ"
+   },
+   {
+    "word": "assujettissons-la",
+    "ipa": "asyʒɛtisˈɔ̃la-"
+   },
+   {
+    "word": "attentions",
+    "ipa": "atɑ̃sjˈɔ̃z"
+   },
+   {
+    "word": "aurai",
+    "ipa": "oʁˈe"
+   },
+   {
+    "word": "avenu",
+    "ipa": "avnˈy"
+   },
+   {
+    "word": "bach",
+    "ipa": "bˈak"
+   },
+   {
+    "word": "balistes",
+    "ipa": "balˈist"
+   },
+   {
+    "word": "barizien",
+    "ipa": "baʁizjˈɛ̃"
+   },
+   {
+    "word": "baudson",
+    "ipa": "bˈɔːdsən"
+   },
+   {
+    "word": "benzyn",
+    "ipa": "bɑ̃zˈɛ̃"
+   },
+   {
+    "word": "bienvenues",
+    "ipa": "bjɛ̃vənˈy"
+   },
+   {
+    "word": "blason",
+    "ipa": "blazˈɔ̃"
+   },
+   {
+    "word": "boites",
+    "ipa": "bwˈat"
+   },
+   {
+    "word": "bossu",
+    "ipa": "bɔsˈy"
+   },
+   {
+    "word": "boulouvard",
+    "ipa": "buluvˈaʁ"
+   },
+   {
+    "word": "brac",
+    "ipa": "bʁˈak"
+   },
+   {
+    "word": "brillanne",
+    "ipa": "bʁijˈan"
+   },
+   {
+    "word": "brusquets",
+    "ipa": "bʁyskˈɛ"
+   },
+   {
+    "word": "buvat",
+    "ipa": "byvˈa"
+   },
+   {
+    "word": "c'lui-ci",
+    "ipa": "slyisˈi"
+   },
+   {
+    "word": "cake",
+    "ipa": "kˈeɪk"
+   },
+   {
+    "word": "canadiens-français",
+    "ipa": "kanadjˈɛ̃fʁɑ̃sˈɛ"
+   },
+   {
+    "word": "carapace",
+    "ipa": "kaʁapˈas"
+   },
+   {
+    "word": "casanière",
+    "ipa": "kazanjˈɛʁ"
+   },
+   {
+    "word": "cavalières",
+    "ipa": "kavaljˈɛʁ"
+   },
+   {
+    "word": "cessions",
+    "ipa": "sɛsjˈɔ̃"
+   },
+   {
+    "word": "changeantes",
+    "ipa": "ʃɑ̃ʒˈɑ̃t"
+   },
+   {
+    "word": "charny",
+    "ipa": "tʃˈɑːni"
+   },
+   {
+    "word": "chefblanc",
+    "ipa": "ʃɛfblˈɑ̃"
+   },
+   {
+    "word": "chimériques",
+    "ipa": "ʃimeʁˈik"
+   },
+   {
+    "word": "chuter",
+    "ipa": "ʃytˈe"
+   },
+   {
+    "word": "circassiens",
+    "ipa": "siʁkasjˈɛ̃"
+   },
+   {
+    "word": "clavé",
+    "ipa": "klavˈe"
+   },
+   {
+    "word": "coco",
+    "ipa": "kokˈo"
+   },
+   {
+    "word": "colonnes",
+    "ipa": "kolˈɔn"
+   },
+   {
+    "word": "commodore",
+    "ipa": "kɔmodˈɔʁ"
+   },
+   {
+    "word": "comprends-tu",
+    "ipa": "kɔ̃pʁˈɑ̃ty"
+   },
+   {
+    "word": "condamnations",
+    "ipa": "kɔ̃danasjˈɔ̃"
+   },
+   {
+    "word": "congédie",
+    "ipa": "kɔ̃ʒedˈi"
+   },
+   {
+    "word": "consignes",
+    "ipa": "kɔ̃sˈiɲ"
+   },
+   {
+    "word": "contentais",
+    "ipa": "kɔ̃tɑ̃tˈɛ"
+   },
+   {
+    "word": "contribuait",
+    "ipa": "kɔ̃tʁibyˈɛ"
+   },
+   {
+    "word": "coraux",
+    "ipa": "koʁˈo"
+   },
+   {
+    "word": "cotillon",
+    "ipa": "kotijˈɔ̃"
+   },
+   {
+    "word": "couronnement",
+    "ipa": "kuʁɔnmˈɑ̃"
+   },
+   {
+    "word": "crains-je",
+    "ipa": "kʁˈɛ̃ʒ"
+   },
+   {
+    "word": "cro-magnons",
+    "ipa": "kʁˈomaɲˈɔ̃"
+   },
+   {
+    "word": "créerait",
+    "ipa": "kʁeʁˈɛ"
+   },
+   {
+    "word": "cycas",
+    "ipa": "sikˈa"
+   },
+   {
+    "word": "d'accordéon",
+    "ipa": "dakɔʁdeˈɔ̃"
+   },
+   {
+    "word": "d'allure",
+    "ipa": "dalˈyʁ"
+   },
+   {
+    "word": "d'appréciation",
+    "ipa": "dapʁesjasjˈɔ̃"
+   },
+   {
+    "word": "d'attrait",
+    "ipa": "datʁˈɛ"
+   },
+   {
+    "word": "d'employé",
+    "ipa": "dɑ̃plwajˈe"
+   },
+   {
+    "word": "d'exception",
+    "ipa": "dɛksɛpsjˈɔ̃"
+   },
+   {
+    "word": "d'hôtes",
+    "ipa": "dˈoːt"
+   },
+   {
+    "word": "d'installer",
+    "ipa": "dɛ̃stalˈe"
+   },
+   {
+    "word": "d'oliviers",
+    "ipa": "dolivjˈe"
+   },
+   {
+    "word": "d'âmes",
+    "ipa": "dˈaːm"
+   },
+   {
+    "word": "d'équivalence",
+    "ipa": "dekivalˈɑ̃s"
+   },
+   {
+    "word": "darda",
+    "ipa": "daʁdˈa"
+   },
+   {
+    "word": "demeurées",
+    "ipa": "dəmøʁˈe"
+   },
+   {
+    "word": "desquelles",
+    "ipa": "dekˈɛl"
+   },
+   {
+    "word": "dhuicq",
+    "ipa": "dyˈik"
+   },
+   {
+    "word": "diphtérie",
+    "ipa": "difteʁˈi"
+   },
+   {
+    "word": "dispensaire",
+    "ipa": "dispɑ̃sˈɛʁ"
+   },
+   {
+    "word": "divertit",
+    "ipa": "divɛʁtˈi"
+   },
+   {
+    "word": "donne-le",
+    "ipa": "dˈɔnlə-"
+   },
+   {
+    "word": "doutez-vous",
+    "ipa": "dutˈevu"
+   },
+   {
+    "word": "dupray",
+    "ipa": "dypʁˈɛ"
+   },
+   {
+    "word": "débrouillaient",
+    "ipa": "debʁujˈɛ"
+   },
+   {
+    "word": "décoiffe",
+    "ipa": "dekwˈaf"
+   },
+   {
+    "word": "dédramatiser",
+    "ipa": "dedʁamatizˈe"
+   },
+   {
+    "word": "dégoûter",
+    "ipa": "deɡutˈe"
+   },
+   {
+    "word": "démenait",
+    "ipa": "demnˈɛ"
+   },
+   {
+    "word": "dépavé",
+    "ipa": "depavˈe"
+   },
+   {
+    "word": "dérect",
+    "ipa": "deʁˈɛkt"
+   },
+   {
+    "word": "désobéi",
+    "ipa": "dezobeˈi"
+   },
+   {
+    "word": "dévisage",
+    "ipa": "devizˈaʒ"
+   },
+   {
+    "word": "efféminée",
+    "ipa": "efeminˈe"
+   },
+   {
+    "word": "emmenée",
+    "ipa": "emnˈe"
+   },
+   {
+    "word": "encensa",
+    "ipa": "ɑ̃sɑ̃sˈa"
+   },
+   {
+    "word": "engendrer",
+    "ipa": "ɑ̃ʒɑ̃dʁˈe"
+   },
+   {
+    "word": "ensevelissait",
+    "ipa": "ɑ̃səvlisˈɛt"
+   },
+   {
+    "word": "entretenues",
+    "ipa": "ɑ̃tʁətənˈyz"
+   },
+   {
+    "word": "escarpées",
+    "ipa": "ɛskaʁpˈez"
+   },
+   {
+    "word": "etc",
+    "ipa": "ɛtseteʁˈa"
+   },
+   {
+    "word": "examinèrent",
+    "ipa": "ɛɡzaminˈɛʁt"
+   },
+   {
+    "word": "explication",
+    "ipa": "ɛksplikasjˈɔ̃"
+   },
+   {
+    "word": "exécutifs",
+    "ipa": "ɛɡzekytˈifz"
+   },
+   {
+    "word": "familière",
+    "ipa": "familjˈɛʁ"
+   },
+   {
+    "word": "favier",
+    "ipa": "favjˈe"
+   },
+   {
+    "word": "feuillages",
+    "ipa": "fœjˈaʒ"
+   },
+   {
+    "word": "finalités",
+    "ipa": "finalitˈe"
+   },
+   {
+    "word": "flers",
+    "ipa": "flˈe"
+   },
+   {
+    "word": "fonctionnerait",
+    "ipa": "fɔ̃ksjɔnʁˈɛ"
+   },
+   {
+    "word": "fortunées",
+    "ipa": "fɔʁtynˈe"
+   },
+   {
+    "word": "fractionnée",
+    "ipa": "fʁaksjɔnˈe"
+   },
+   {
+    "word": "fringues",
+    "ipa": "fʁˈɛ̃ɡ"
+   },
+   {
+    "word": "fuirent",
+    "ipa": "fyˈiʁ"
+   },
+   {
+    "word": "férocement",
+    "ipa": "feʁosmˈɑ̃"
+   },
+   {
+    "word": "gambettistes",
+    "ipa": "ɡɑ̃bɛtˈist"
+   },
+   {
+    "word": "gaufre",
+    "ipa": "ɡˈofʁ"
+   },
+   {
+    "word": "gigon",
+    "ipa": "ʒiɡˈɔ̃"
+   },
+   {
+    "word": "gogoles",
+    "ipa": "ɡoɡˈol"
+   },
+   {
+    "word": "gracieux",
+    "ipa": "ɡʁasjˈø"
+   },
+   {
+    "word": "greffes",
+    "ipa": "ɡʁˈɛf"
+   },
+   {
+    "word": "grossièretés",
+    "ipa": "ɡʁosjɛʁtˈe"
+   },
+   {
+    "word": "guitrancourt",
+    "ipa": "ɡitʁɑ̃kˈuʁ"
+   },
+   {
+    "word": "géronte",
+    "ipa": "ʒeʁˈɔ̃t"
+   },
+   {
+    "word": "hantises",
+    "ipa": "ɑ̃tˈiz"
+   },
+   {
+    "word": "henriette",
+    "ipa": "ɑ̃ʁjˈɛt"
+   },
+   {
+    "word": "holopherne",
+    "ipa": "olofˈɛʁn"
+   },
+   {
+    "word": "humanoïdes",
+    "ipa": "ymanɔˈidz"
+   },
+   {
+    "word": "hésita",
+    "ipa": "ezitˈa"
+   },
+   {
+    "word": "imaginons",
+    "ipa": "imaʒinˈɔ̃z"
+   },
+   {
+    "word": "impressionant",
+    "ipa": "ɛ̃pʁɛsjonˈɑ̃"
+   },
+   {
+    "word": "incolore",
+    "ipa": "ɛ̃kolˈɔʁ"
+   },
+   {
+    "word": "indéniables",
+    "ipa": "ɛ̃denjˈablz"
+   },
+   {
+    "word": "injonction",
+    "ipa": "ɛ̃ʒɔ̃ksjˈɔ̃"
+   },
+   {
+    "word": "institutionnelle",
+    "ipa": "ɛ̃stitysjɔnˈɛl"
+   },
+   {
+    "word": "intertextuel",
+    "ipa": "ɛ̃tɛʁtɛkstyˈɛl"
+   },
+   {
+    "word": "invrai",
+    "ipa": "ɛ̃vʁˈe"
+   },
+   {
+    "word": "j'aborderais",
+    "ipa": "ʒabɔʁdəʁˈɛ"
+   },
+   {
+    "word": "j'essaierai",
+    "ipa": "ʒesɛʁˈe"
+   },
+   {
+    "word": "jaillissent",
+    "ipa": "ʒajˈis"
+   },
+   {
+    "word": "jeunesse",
+    "ipa": "ʒønˈɛs"
+   },
+   {
+    "word": "judo",
+    "ipa": "ʒydˈo"
+   },
+   {
+    "word": "kart",
+    "ipa": "kˈaʁt"
+   },
+   {
+    "word": "kufstein",
+    "ipa": "kyfʃtˈajn"
+   },
+   {
+    "word": "l'admets",
+    "ipa": "ladmˈɛ"
+   },
+   {
+    "word": "l'alte",
+    "ipa": "lˈalt"
+   },
+   {
+    "word": "l'appliqua",
+    "ipa": "laplikˈa"
+   },
+   {
+    "word": "l'assombrir",
+    "ipa": "lasɔ̃bʁˈiʁ"
+   },
+   {
+    "word": "l'avons",
+    "ipa": "lavˈɔ̃"
+   },
+   {
+    "word": "l'enfant",
+    "ipa": "lɑ̃fˈɑ̃"
+   },
+   {
+    "word": "l'espérait",
+    "ipa": "lɛspeʁˈɛ"
+   },
+   {
+    "word": "l'herbage",
+    "ipa": "lɛʁbˈaʒ"
+   },
+   {
+    "word": "l'importance",
+    "ipa": "lɛ̃pɔʁtˈɑ̃s"
+   },
+   {
+    "word": "l'instant",
+    "ipa": "lɛ̃stˈɑ̃"
+   },
+   {
+    "word": "l'observes",
+    "ipa": "lɔbsˈɛʁv"
+   },
+   {
+    "word": "l'ouvrirons",
+    "ipa": "luvʁiʁˈɔ̃"
+   },
+   {
+    "word": "l'élevait",
+    "ipa": "lelvˈɛ"
+   },
+   {
+    "word": "l'éventail",
+    "ipa": "levɑ̃tˈaj"
+   },
+   {
+    "word": "laitages",
+    "ipa": "lɛtˈaʒ"
+   },
+   {
+    "word": "largement",
+    "ipa": "laʁʒəmˈɑ̃"
+   },
+   {
+    "word": "leloup",
+    "ipa": "ləlˈup"
+   },
+   {
+    "word": "licheur",
+    "ipa": "liʃˈœʁ"
+   },
+   {
+    "word": "littérature",
+    "ipa": "liteʁatˈyʁ"
+   },
+   {
+    "word": "lorraine",
+    "ipa": "loʁˈɛn"
+   },
+   {
+    "word": "lunea",
+    "ipa": "lˈʌniə"
+   },
+   {
+    "word": "lévy",
+    "ipa": "lˈeɪvi"
+   },
+   {
+    "word": "m'arrêter",
+    "ipa": "maʁɛtˈe"
+   },
+   {
+    "word": "m'estropier",
+    "ipa": "mɛstʁopjˈe"
+   },
+   {
+    "word": "m'élançai",
+    "ipa": "melɑ̃sˈe"
+   },
+   {
+    "word": "magny",
+    "ipa": "maɲˈi"
+   },
+   {
+    "word": "maline",
+    "ipa": "malˈin"
+   },
+   {
+    "word": "manosque",
+    "ipa": "manˈɔsk"
+   },
+   {
+    "word": "margoton",
+    "ipa": "maʁɡotˈɔ̃"
+   },
+   {
+    "word": "marxiste",
+    "ipa": "maʁksˈist"
+   },
+   {
+    "word": "mauzé",
+    "ipa": "mozˈe"
+   },
+   {
+    "word": "menu",
+    "ipa": "mənˈy"
+   },
+   {
+    "word": "mezzocane",
+    "ipa": "mɛzzokˈan"
+   },
+   {
+    "word": "mini-stages",
+    "ipa": "minˈistˈaʒ"
+   },
+   {
+    "word": "modernisation",
+    "ipa": "modɛʁnizasjˈɔ̃"
+   },
+   {
+    "word": "monographie",
+    "ipa": "monɔɡʁafˈi"
+   },
+   {
+    "word": "montviguier",
+    "ipa": "mɔ̃tviɡjˈe"
+   },
+   {
+    "word": "motus",
+    "ipa": "motˈys"
+   },
+   {
+    "word": "multimédia",
+    "ipa": "myltimedjˈa"
+   },
+   {
+    "word": "mènera",
+    "ipa": "mɛnʁˈa"
+   },
+   {
+    "word": "méprendrez",
+    "ipa": "mepʁɑ̃dʁˈe"
+   },
+   {
+    "word": "n'admettent",
+    "ipa": "nadmˈɛt"
+   },
+   {
+    "word": "n'emmena",
+    "ipa": "nemnˈa"
+   },
+   {
+    "word": "n'obéis",
+    "ipa": "nobeˈi"
+   },
+   {
+    "word": "nant",
+    "ipa": "nˈɑ̃"
+   },
+   {
+    "word": "nettoyer",
+    "ipa": "nɛtwajˈe"
+   },
+   {
+    "word": "noise",
+    "ipa": "nwˈaz"
+   },
+   {
+    "word": "nouvelle-géorgie",
+    "ipa": "nuvˈɛlʒeɔʁʒˈi"
+   },
+   {
+    "word": "nôtres",
+    "ipa": "nˈoːtʁ"
+   },
+   {
+    "word": "océaniennes",
+    "ipa": "oseanjˈɛnz"
+   },
+   {
+    "word": "onéida",
+    "ipa": "oneidˈa"
+   },
+   {
+    "word": "orifices",
+    "ipa": "oʁifˈisz"
+   },
+   {
+    "word": "ousmane",
+    "ipa": "usmˈan"
+   },
+   {
+    "word": "palikao",
+    "ipa": "palikaˈo"
+   },
+   {
+    "word": "paramatta",
+    "ipa": "paʁamatˈa"
+   },
+   {
+    "word": "parodiant",
+    "ipa": "paʁodjˈɑ̃"
+   },
+   {
+    "word": "passez-le",
+    "ipa": "pasˈelə-"
+   },
+   {
+    "word": "pays-là",
+    "ipa": "pɛˈilˈa"
+   },
+   {
+    "word": "percale",
+    "ipa": "pɛʁkˈal"
+   },
+   {
+    "word": "persistant",
+    "ipa": "pɛʁsistˈɑ̃"
+   },
+   {
+    "word": "phanagorie",
+    "ipa": "fanaɡoʁˈi"
+   },
+   {
+    "word": "pieuvres",
+    "ipa": "pjˈøvʁ"
+   },
+   {
+    "word": "pitourées",
+    "ipa": "pituʁˈe"
+   },
+   {
+    "word": "plaquiste",
+    "ipa": "plakˈist"
+   },
+   {
+    "word": "plâtrière",
+    "ipa": "platʁiˈɛʁ"
+   },
+   {
+    "word": "polypores",
+    "ipa": "polipˈoʁ"
+   },
+   {
+    "word": "porte-t-il",
+    "ipa": "pˈɔʁttil"
+   },
+   {
+    "word": "poulailler",
+    "ipa": "pulajˈe"
+   },
+   {
+    "word": "praie",
+    "ipa": "pʁˈɛ"
+   },
+   {
+    "word": "priorités",
+    "ipa": "pʁioʁitˈe"
+   },
+   {
+    "word": "profiter",
+    "ipa": "pʁofitˈe"
+   },
+   {
+    "word": "proposions",
+    "ipa": "pʁopozjˈɔ̃"
+   },
+   {
+    "word": "préceptes",
+    "ipa": "pʁesˈɛpt"
+   },
+   {
+    "word": "préretraite",
+    "ipa": "pʁeʁtʁˈɛt"
+   },
+   {
+    "word": "psychique",
+    "ipa": "psiʃˈik"
+   },
+   {
+    "word": "puymaret",
+    "ipa": "pyimaʁˈɛ"
+   },
+   {
+    "word": "périodisation",
+    "ipa": "peʁjodizasjˈɔ̃"
+   },
+   {
+    "word": "qu'aujourd'hui",
+    "ipa": "kwˈɔːdʒədhjˌuːi"
+   },
+   {
+    "word": "qu'édouard",
+    "ipa": "kedwˈaʁ"
+   },
+   {
+    "word": "queueleuleu",
+    "ipa": "køəlølˈø"
+   },
+   {
+    "word": "racines",
+    "ipa": "ʁasˈin"
+   },
+   {
+    "word": "ralentissant",
+    "ipa": "ʁalɑ̃tisˈɑ̃"
+   },
+   {
+    "word": "rappelée",
+    "ipa": "ʁaplˈe"
+   },
+   {
+    "word": "ravisseur",
+    "ipa": "ʁavisˈœʁ"
+   },
+   {
+    "word": "recomposées",
+    "ipa": "ʁəkɔ̃pozˈe"
+   },
+   {
+    "word": "redevenir",
+    "ipa": "ʁədəvnˈiʁ"
+   },
+   {
+    "word": "regardera",
+    "ipa": "ʁəɡaʁdəʁˈa"
+   },
+   {
+    "word": "relâche",
+    "ipa": "ʁəlˈaːʃ"
+   },
+   {
+    "word": "remuent",
+    "ipa": "ʁəmˈy"
+   },
+   {
+    "word": "rentrant",
+    "ipa": "ʁɑ̃tʁˈɑ̃"
+   },
+   {
+    "word": "reprenais",
+    "ipa": "ʁəpʁənˈɛ"
+   },
+   {
+    "word": "resserre",
+    "ipa": "ʁəsˈɛʁ"
+   },
+   {
+    "word": "retournées",
+    "ipa": "ʁətuʁnˈe"
+   },
+   {
+    "word": "revêtirent",
+    "ipa": "ʁəvɛtˈiʁ"
+   },
+   {
+    "word": "risquent-ils",
+    "ipa": "ʁˈisktil"
+   },
+   {
+    "word": "rompirent",
+    "ipa": "ʁɔ̃pˈiʁ"
+   },
+   {
+    "word": "roulions",
+    "ipa": "ʁuljˈɔ̃"
+   },
+   {
+    "word": "rué",
+    "ipa": "ʁyˈe"
+   },
+   {
+    "word": "récupérai",
+    "ipa": "ʁekypeʁˈe"
+   },
+   {
+    "word": "réhabiliter",
+    "ipa": "ʁeabilitˈe"
+   },
+   {
+    "word": "répétera",
+    "ipa": "ʁepetʁˈa"
+   },
+   {
+    "word": "réussissait-elle",
+    "ipa": "ʁeysisˈɛtɛl"
+   },
+   {
+    "word": "s'accorde",
+    "ipa": "sakˈɔʁd"
+   },
+   {
+    "word": "s'annonçait",
+    "ipa": "sanɔ̃sˈɛ"
+   },
+   {
+    "word": "s'effacèrent",
+    "ipa": "sefasˈɛʁ"
+   },
+   {
+    "word": "s'entr'égorger",
+    "ipa": "sɑ̃tʁeɡɔʁʒˈe"
+   },
+   {
+    "word": "s'informant",
+    "ipa": "sɛ̃fɔʁmˈɑ̃"
+   },
+   {
+    "word": "s'échelonneront",
+    "ipa": "seʃlɔnʁˈɔ̃"
+   },
+   {
+    "word": "s'étudier",
+    "ipa": "setydjˈe"
+   },
+   {
+    "word": "saint-bernard",
+    "ipa": "sˈɛ̃bɛʁnˈaʁ"
+   },
+   {
+    "word": "saint-pellerin",
+    "ipa": "sˈɛ̃pɛlʁˈɛ̃"
+   },
+   {
+    "word": "salonique",
+    "ipa": "salonˈik"
+   },
+   {
+    "word": "sarre-union",
+    "ipa": "sˈaʁynjˈɔ̃"
+   },
+   {
+    "word": "savoure",
+    "ipa": "savˈuʁ"
+   },
+   {
+    "word": "seconde",
+    "ipa": "səɡˈɔ̃d"
+   },
+   {
+    "word": "senties",
+    "ipa": "sɑ̃tˈi"
+   },
+   {
+    "word": "sfio",
+    "ipa": "sfjˈo"
+   },
+   {
+    "word": "sinatus",
+    "ipa": "sinatˈys"
+   },
+   {
+    "word": "soirée",
+    "ipa": "swaʁˈe"
+   },
+   {
+    "word": "sonores",
+    "ipa": "sonˈoʁ"
+   },
+   {
+    "word": "soulevant",
+    "ipa": "sulvˈɑ̃"
+   },
+   {
+    "word": "souvenaient",
+    "ipa": "suvnˈɛ"
+   },
+   {
+    "word": "stade-là",
+    "ipa": "stˈadlˈa"
+   },
+   {
+    "word": "styliste",
+    "ipa": "stilˈist"
+   },
+   {
+    "word": "suffrages",
+    "ipa": "syfʁˈaʒ"
+   },
+   {
+    "word": "suprématie",
+    "ipa": "sypʁemasˈi"
+   },
+   {
+    "word": "suspectant",
+    "ipa": "syspɛktˈɑ̃"
+   },
+   {
+    "word": "sélectionnée",
+    "ipa": "selɛksjɔnˈe"
+   },
+   {
+    "word": "t'efface",
+    "ipa": "tefˈas"
+   },
+   {
+    "word": "tagines",
+    "ipa": "taʒˈin"
+   },
+   {
+    "word": "tartares",
+    "ipa": "taʁtˈaʁ"
+   },
+   {
+    "word": "tendon",
+    "ipa": "tɑ̃dˈɔ̃"
+   },
+   {
+    "word": "thermidor",
+    "ipa": "tɛʁmidˈɔʁ"
+   },
+   {
+    "word": "tique",
+    "ipa": "tˈik"
+   },
+   {
+    "word": "tools",
+    "ipa": "tˈuːlz"
+   },
+   {
+    "word": "tourneront",
+    "ipa": "tuʁnəʁˈɔ̃"
+   },
+   {
+    "word": "tranquillement",
+    "ipa": "tʁɑ̃kilmˈɑ̃"
+   },
+   {
+    "word": "travestissait",
+    "ipa": "tʁavɛstisˈɛ"
+   },
+   {
+    "word": "trio",
+    "ipa": "tʁiˈo"
+   },
+   {
+    "word": "trouvée",
+    "ipa": "tʁuvˈe"
+   },
+   {
+    "word": "turello",
+    "ipa": "tyʁɛlˈo"
+   },
+   {
+    "word": "têtes-là",
+    "ipa": "tˈɛtlˈa"
+   },
+   {
+    "word": "vacillantes",
+    "ipa": "vasijˈɑ̃t"
+   },
+   {
+    "word": "variantes",
+    "ipa": "vaʁjˈɑ̃t"
+   },
+   {
+    "word": "venons",
+    "ipa": "vənˈɔ̃"
+   },
+   {
+    "word": "veuch",
+    "ipa": "vˈœʃ"
+   },
+   {
+    "word": "vigoureusement",
+    "ipa": "viɡuʁøzmˈɑ̃"
+   },
+   {
+    "word": "virtuel",
+    "ipa": "viʁtyˈɛl"
+   },
+   {
+    "word": "voirà",
+    "ipa": "vwaʁˈa"
+   },
+   {
+    "word": "voyait-il",
+    "ipa": "vwajˈɛtil"
+   },
+   {
+    "word": "wavignies",
+    "ipa": "wˈavɪɡniz"
+   },
+   {
+    "word": "yéddo",
+    "ipa": "jedˈo"
+   },
+   {
+    "word": "écartée",
+    "ipa": "ekaʁtˈe"
+   },
+   {
+    "word": "écoutiez",
+    "ipa": "ekutjˈez"
+   },
+   {
+    "word": "élaguer",
+    "ipa": "elaɡˈe"
+   },
+   {
+    "word": "én",
+    "ipa": "ˈen"
+   },
+   {
+    "word": "éprouvant",
+    "ipa": "epʁuvˈɑ̃"
+   },
+   {
+    "word": "étienne-frédéric",
+    "ipa": "etjˈɛnfʁedeʁˈik"
+   },
+   {
+    "word": "évitez",
+    "ipa": "evitˈez"
+   }
+  ],
+  "unknown": [
+   {
+    "word": "rîwjyaxèré",
+    "ipa": "ʁwʒjaksˈɛʁˈe"
+   },
+   {
+    "word": "ôaÿjçx",
+    "ipa": "ˈoːˈaʒsks"
+   },
+   {
+    "word": "vndûm",
+    "ipa": "vdˈyːm"
+   },
+   {
+    "word": "ëvzf",
+    "ipa": "tˌevzf"
+   },
+   {
+    "word": "dëo",
+    "ipa": "dˈuːˈo"
+   },
+   {
+    "word": "âçhâ",
+    "ipa": "aʃˈaː"
+   },
+   {
+    "word": "ïuÿôk",
+    "ipa": "jˈyk"
+   },
+   {
+    "word": "ôkë",
+    "ipa": "ˈoːk"
+   },
+   {
+    "word": "züàü",
+    "ipa": "zˈa"
+   },
+   {
+    "word": "èüyïbfmqwx",
+    "ipa": "ˈɛnijbfmkwks"
+   },
+   {
+    "word": "thqpvxxëû",
+    "ipa": "θkvksksˈe"
+   },
+   {
+    "word": "byâcî",
+    "ipa": "bjˈaːk"
+   },
+   {
+    "word": "oâc",
+    "ipa": "ɔˈaːk"
+   },
+   {
+    "word": "nügôolerc",
+    "ipa": "nəɡˈoːolˈɛʁk"
+   },
+   {
+    "word": "rêwüœdëéx",
+    "ipa": "ʁˈɛwˈɒɪdʒˈe"
+   },
+   {
+    "word": "vséèèp",
+    "ipa": "vseˈɛˈɛ"
+   },
+   {
+    "word": "éôxlm",
+    "ipa": "eɛɡzlm"
+   },
+   {
+    "word": "üarvlp",
+    "ipa": "kaʁvlp"
+   },
+   {
+    "word": "ëcp",
+    "ipa": "ˈɛsp"
+   },
+   {
+    "word": "xïëj",
+    "ipa": "ksˈidʒ"
+   },
+   {
+    "word": "urœ",
+    "ipa": "ˈyʁ"
+   },
+   {
+    "word": "oîëè",
+    "ipa": "wˈajˈɛ"
+   },
+   {
+    "word": "œwqçkçsÿcr",
+    "ipa": "ɪwkksˈakʁ"
+   },
+   {
+    "word": "ëœçnsîqb",
+    "ipa": "ˈɛˈɛ̃sˈik"
+   },
+   {
+    "word": "biô",
+    "ipa": "bˈi"
+   },
+   {
+    "word": "àipmâèd",
+    "ipa": "ɡzipmˈaːˈɛ"
+   },
+   {
+    "word": "càâùfzm",
+    "ipa": "kˈaˈaːfzm"
+   },
+   {
+    "word": "xœyûkbjb",
+    "ipa": "ksɹˈɪŋkbʒb"
+   },
+   {
+    "word": "eàï",
+    "ipa": "ˈaj"
+   },
+   {
+    "word": "ygwmtr",
+    "ipa": "iɡˈɒmtʁ"
+   },
+   {
+    "word": "ÿÿhnïüzùpe",
+    "ipa": "ɪθnjˈezˈip"
+   },
+   {
+    "word": "wufvjfttl",
+    "ipa": "wˈɒfvʒftl"
+   },
+   {
+    "word": "xlbnêÿçêl",
+    "ipa": "kslbnˈɛsˈɛl"
+   },
+   {
+    "word": "üvé",
+    "ipa": "ivˈe"
+   },
+   {
+    "word": "ugoaxx",
+    "ipa": "yɡwˈaks"
+   },
+   {
+    "word": "mâsoîjë",
+    "ipa": "mazˈaʊʒ"
+   },
+   {
+    "word": "këéyüëpé",
+    "ipa": "kˈeɪeijˈɛpˈe"
+   },
+   {
+    "word": "doàïzîçdgô",
+    "ipa": "dwˈajzisdʒ"
+   },
+   {
+    "word": "wbuêxœt",
+    "ipa": "wbyɛks"
+   },
+   {
+    "word": "ièoïi",
+    "ipa": "jɛoˈi"
+   },
+   {
+    "word": "êcâxsàœ",
+    "ipa": "ˈɛkˈaːˈa"
+   },
+   {
+    "word": "yüujiqc",
+    "ipa": "ijyʒˈik"
+   },
+   {
+    "word": "àâÿqvàyêy",
+    "ipa": "ˈaˈaːkwajˈɛ"
+   },
+   {
+    "word": "lknqhrîdw",
+    "ipa": "lknkɹɪdw"
+   },
+   {
+    "word": "itnbôtc",
+    "ipa": "itbˈoːt"
+   },
+   {
+    "word": "kmk",
+    "ipa": "kmk"
+   },
+   {
+    "word": "smltïb",
+    "ipa": "smltˈib"
+   },
+   {
+    "word": "xêïm",
+    "ipa": "ksˈɛm"
+   },
+   {
+    "word": "gîaizëêœsé",
+    "ipa": "ʒiˈezɛzˈe"
+   },
+   {
+    "word": "œyàîbrbj",
+    "ipa": "dʒijˈibʁbʒ"
+   },
+   {
+    "word": "xgâôzüxeiw",
+    "ipa": "ksɡˈaːˈeozˈɛw"
+   },
+   {
+    "word": "ogâ",
+    "ipa": "ɔɡˈaː"
+   },
+   {
+    "word": "dapb",
+    "ipa": "dˈap"
+   },
+   {
+    "word": "ûÿbù",
+    "ipa": "ˈyːb"
+   },
+   {
+    "word": "ùèœnév",
+    "ipa": "tˌeɛnˈev"
+   },
+   {
+    "word": "ïupzfüvdx",
+    "ipa": "jˈypsfvdks"
+   },
+   {
+    "word": "thêüi",
+    "ipa": "θɛˈi"
+   },
+   {
+    "word": "amohèâv",
+    "ipa": "amoˈɛˈaː"
+   },
+   {
+    "word": "uvüyêvmÿœ",
+    "ipa": "yvwajˈɛvmˈe"
+   },
+   {
+    "word": "eovyrÿûi",
+    "ipa": "ovˈiʁˈe"
+   },
+   {
+    "word": "rqvàghùœêl",
+    "ipa": "ʁkvˈaɡœˈɛl"
+   },
+   {
+    "word": "ôjüÿûryv",
+    "ipa": "ˈoːʒˈeɪɹˈɪv"
+   },
+   {
+    "word": "xwvëüée",
+    "ipa": "kswvˈɛnˈe"
+   },
+   {
+    "word": "ÿznuÿ",
+    "ipa": "eznˈy"
+   },
+   {
+    "word": "ÿwjsvvzc",
+    "ipa": "wˈɒsvvˈak"
+   },
+   {
+    "word": "ïeîgqkêf",
+    "ipa": "jˈɛɡkˈɛf"
+   },
+   {
+    "word": "kçoseom",
+    "ipa": "ksozˈɔm"
+   },
+   {
+    "word": "rœhœnù",
+    "ipa": "ʁʃˈɛ̃"
+   },
+   {
+    "word": "ètéiè",
+    "ipa": "ɛtˈejˈɛ"
+   },
+   {
+    "word": "çéyxrmpùî",
+    "ipa": "seiksʁpˈi"
+   },
+   {
+    "word": "ëÿvwztibes",
+    "ipa": "ˈɛvwstˈib"
+   },
+   {
+    "word": "sèjîàûulq",
+    "ipa": "sˈɛʒˈylk"
+   },
+   {
+    "word": "àdjdçhîtp",
+    "ipa": "ˈadʒdθt"
+   },
+   {
+    "word": "nhôyë",
+    "ipa": "nˈoːij"
+   },
+   {
+    "word": "tüfmjoyîqî",
+    "ipa": "tˈifmʒwajˈik"
+   },
+   {
+    "word": "minôgpqc",
+    "ipa": "minˈoːɡk"
+   },
+   {
+    "word": "gêÿîlûdâtb",
+    "ipa": "ʒɛˈɛlˈyːdˈaːb"
+   },
+   {
+    "word": "ywzfeïîéôô",
+    "ipa": "jwsfəijˈeˈoː"
+   },
+   {
+    "word": "ïaëxàjbve",
+    "ipa": "jaˈɛksˈaʒbv"
+   },
+   {
+    "word": "totàrëz",
+    "ipa": "totˈaʁˈe"
+   },
+   {
+    "word": "csxs",
+    "ipa": "ksks"
+   },
+   {
+    "word": "fhchjeüj",
+    "ipa": "fʃʒdʒ"
+   },
+   {
+    "word": "ëïklô",
+    "ipa": "aˈiklˈoː"
+   },
+   {
+    "word": "ozbjséûé",
+    "ipa": "ˈezbʒseˈyːˈe"
+   },
+   {
+    "word": "kqasâânk",
+    "ipa": "kkazˈaːˈaːk"
+   },
+   {
+    "word": "ÿww",
+    "ipa": "ɪwˈɒ"
+   },
+   {
+    "word": "gÿêxàwu",
+    "ipa": "ɡɛkswˈy"
+   },
+   {
+    "word": "ûtï",
+    "ipa": "ˈyːtˈi"
+   },
+   {
+    "word": "tÿô",
+    "ipa": "tˈoː"
+   },
+   {
+    "word": "idupïnhf",
+    "ipa": "idypinf"
+   },
+   {
+    "word": "ÿlâv",
+    "ipa": "bˌelav"
+   },
+   {
+    "word": "câoxuvd",
+    "ipa": "kaoksvd"
+   },
+   {
+    "word": "ènoÿegèê",
+    "ipa": "ˈɛnoʒˈɛ"
+   },
+   {
+    "word": "ëméïy",
+    "ipa": "imeˈij"
+   },
+   {
+    "word": "miùkîèçj",
+    "ipa": "mˈɪŋktˈɛs"
+   },
+   {
+    "word": "mànl",
+    "ipa": "mˈanl"
+   },
+   {
+    "word": "ÿeuèçîf",
+    "ipa": "ˈøˈɛsˈi"
+   },
+   {
+    "word": "zmkûlûjfï",
+    "ipa": "smkˈyːlˈyːʒfˈi"
+   },
+   {
+    "word": "uœùkc",
+    "ipa": "yijk"
+   },
+   {
+    "word": "èêikfé",
+    "ipa": "aˈɛkfˈe"
+   },
+   {
+    "word": "jêjrîô",
+    "ipa": "ʒɛʒʁˈi"
+   },
+   {
+    "word": "îœqqfz",
+    "ipa": "ˈefz"
+   },
+   {
+    "word": "ôrïûb",
+    "ipa": "ˈoːʁˈiˈyː"
+   },
+   {
+    "word": "ücçîimœâô",
+    "ipa": "bˌeksˈiimˈaː"
+   },
+   {
+    "word": "dbahï",
+    "ipa": "dbˈaˈi"
+   },
+   {
+    "word": "ztônf",
+    "ipa": "stˈɔ̃f"
+   },
+   {
+    "word": "ïfëlsekzbv",
+    "ipa": "ifˈɛlzkzbv"
+   },
+   {
+    "word": "jgf",
+    "ipa": "ʒɡf"
+   },
+   {
+    "word": "rxq",
+    "ipa": "ʁksk"
+   },
+   {
+    "word": "whùkçüg",
+    "ipa": "whˈeɪksəɡ"
+   },
+   {
+    "word": "àxrxgguro",
+    "ipa": "ˈaksʁksɡuʁˈo"
+   },
+   {
+    "word": "qèèvahfz",
+    "ipa": "kɛɛvafz"
+   },
+   {
+    "word": "koç",
+    "ipa": "kˈu"
+   },
+   {
+    "word": "ïzyefküçkç",
+    "ipa": "izjˈɛfkɪŋks"
+   },
+   {
+    "word": "ôtpdamu",
+    "ipa": "ˈɔ̃pdamˈy"
+   },
+   {
+    "word": "zôulieàifÿ",
+    "ipa": "skylijˈef"
+   },
+   {
+    "word": "yauérwet",
+    "ipa": "joeʁwˈɛ"
+   },
+   {
+    "word": "vbgvâprm",
+    "ipa": "vbɡvapʁm"
+   },
+   {
+    "word": "àin",
+    "ipa": "ˈɛ̃"
+   },
+   {
+    "word": "osg",
+    "ipa": "ˈɔzɡ"
+   },
+   {
+    "word": "jbx",
+    "ipa": "ʒbks"
+   },
+   {
+    "word": "xnlâ",
+    "ipa": "kslˈaː"
+   },
+   {
+    "word": "ffôw",
+    "ipa": "fˈɔ̃"
+   },
+   {
+    "word": "liœlêvâglj",
+    "ipa": "lˈijɛvˈaːɡlʒ"
+   },
+   {
+    "word": "çhdbèdd",
+    "ipa": "sdbˈɛd"
+   },
+   {
+    "word": "uatkïà",
+    "ipa": "yˈakjˈa"
+   },
+   {
+    "word": "evhcêgdèâ",
+    "ipa": "ɛvɛɡdˈɛˈaː"
+   },
+   {
+    "word": "îèêâùpô",
+    "ipa": "bˌeˈɛˈaːpˈoː"
+   },
+   {
+    "word": "ziœmùaévko",
+    "ipa": "zˈimaevkˈo"
+   },
+   {
+    "word": "rîüenjlÿbk",
+    "ipa": "ʁˈiɑ̃ʒlˈabk"
+   },
+   {
+    "word": "ôâoüàâklwô",
+    "ipa": "oˈaːˈaʊˈaˈaːklwˈoː"
+   },
+   {
+    "word": "ulçlbïgpüq",
+    "ipa": "ylslbˈiɡpˈik"
+   },
+   {
+    "word": "ûsçvœéâeÿ",
+    "ipa": "ysveˈaː"
+   },
+   {
+    "word": "hœî",
+    "ipa": "ˈɛ"
+   },
+   {
+    "word": "ïëïc",
+    "ipa": "jaˈik"
+   },
+   {
+    "word": "mïdbh",
+    "ipa": "midb"
+   },
+   {
+    "word": "yçÿbÿçycl",
+    "ipa": "isˈabˈeɪsikl"
+   },
+   {
+    "word": "dmzgrœôr",
+    "ipa": "dmzɡʁˈe"
+   },
+   {
+    "word": "ômznupgkn",
+    "ipa": "ˈoːmnypkn"
+   },
+   {
+    "word": "üémkœhïdfû",
+    "ipa": "ɡzemkfˈidfˈyː"
+   },
+   {
+    "word": "âyxhë",
+    "ipa": "ˈaːjks"
+   },
+   {
+    "word": "üôêÿâdojr",
+    "ipa": "ˈoːɛadoʒ"
+   },
+   {
+    "word": "çhvsanpëàÿ",
+    "ipa": "ʃvzˈɑ̃pˈa"
+   },
+   {
+    "word": "fczbë",
+    "ipa": "fkzb"
+   },
+   {
+    "word": "tojcaÿç",
+    "ipa": "toʒkˈa"
+   },
+   {
+    "word": "cwgœalrùÿÿ",
+    "ipa": "kwɡˈalʁˈe"
+   },
+   {
+    "word": "liêxûücgéx",
+    "ipa": "lˈiɛksɛʒˈe"
+   },
+   {
+    "word": "zoûàuhos",
+    "ipa": "zuuˈo"
+   },
+   {
+    "word": "iztœjeoemj",
+    "ipa": "ɪstəʒɔmʒ"
+   },
+   {
+    "word": "hthùgrâèô",
+    "ipa": "θɪɡʁˈaːˈɛ"
+   }
+  ]
+ }
+}
