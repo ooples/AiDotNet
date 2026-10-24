@@ -177,6 +177,12 @@ internal sealed class G2pEn
     private static readonly Regex HasLetter = new("[a-z]", RegexOptions.CultureInvariant);
 
     /// <summary>
+    /// NLTK's CMU Pronouncing Dictionary (<c>cmudict.dict()[word][0]</c>): the word's first pronunciation, ARPAbet with
+    /// stress digits. g2pkk reads English words from the same dictionary.
+    /// </summary>
+    public bool TryGetCmu(string word, out string[] phones) => _cmu.TryGetValue(word, out phones!);
+
+    /// <summary>
     /// <c>G2p()(word)</c> for text that NLTK's word tokenizer keeps as one token or none (MeloTTS's case): the
     /// pronunciation's phones (ARPAbet with stress), or the text itself when it has no letter.
     /// </summary>

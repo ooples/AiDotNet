@@ -48,6 +48,13 @@ CORPUS = [
     "의사의 의견은 무엇인가요?",
     "신라와 백제, 그리고 고구려",
     "",
+    # Spaced particles: here mecab-ko's left-space penalty changes the analysis.
+    "그 가 왔다",
+    "사과 와 배",
+    "철수 가 영희 를 만났다",
+    "물 이 차갑다",
+    "비 가 온다",
+    "우리 들 은",
 ]
 
 

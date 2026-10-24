@@ -79,6 +79,17 @@ namespace AiDotNet.Tokenization.Algorithms
             new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseJapaneseV3Resource, null), "[UNK]"), SpecialTokens.Bert(),
                 lowercase: false);
 
+        private const string BertKorBaseResource = "AiDotNet.Tokenization.bert-kor-base-vocab.txt.gz";
+
+        /// <summary>
+        /// kykim/bert-kor-base's WordPiece tokenizer: its vocabulary, shipped with the library, lowercased with accents
+        /// kept (its tokenizer_config sets strip_accents false, so Hangul stays composed). MeloTTS's Korean front end
+        /// tokenizes with it.
+        /// </summary>
+        public static WordPieceTokenizer BertKorBase() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertKorBaseResource, null), "[UNK]"), SpecialTokens.Bert(),
+                lowercase: true, stripAccents: false);
+
         private const string SimBertChineseResource = "AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz";
 
         /// <summary>
