@@ -114,9 +114,6 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
     /// </summary>
     private readonly SpeakerVerifierOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #endregion
 
     #region Public Properties
@@ -184,6 +181,7 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
         // Copied rather than held by reference: the path is recorded on the instance below, and
         // that must not mutate an options object the caller still holds.
         _options = options is null ? new SpeakerVerifierOptions() : new SpeakerVerifierOptions(options);
+        Options = _options;
         _options.Validate();
 
         _useNativeMode = false;
@@ -233,6 +231,7 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new SpeakerVerifierOptions();
+        Options = _options;
         _options.Validate();
 
         _useNativeMode = true;

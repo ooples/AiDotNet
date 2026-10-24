@@ -102,49 +102,31 @@ public partial class SimSiam<T> : SelfSupervisedLearningMethodBase<T>
         };
     }
 
-    private void UpdateParameters(T learningRate)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Chen and He 2021, Eq. 4: L = D(p1, stopgrad(z2))/2 + D(p2, stopgrad(z1))/2, where z is the projector's output
+    /// and p the predictor's. The stop-gradient on the target branch is what keeps SimSiam from collapsing.
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2)
     {
-        // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
-        var encoderParams = _encoder.GetParameters();
-        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
-
-        // Update projector
-        var projGrads = SymmetricProjector.GetParameterGradients();
-        var projParams = SymmetricProjector.GetParameters();
-        SymmetricProjector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
+        if (Projector is not SymmetricProjector<T> projector)
+            throw new InvalidOperationException("SimSiam needs a SymmetricProjector with a predictor head.");
+        var z1 = projector.Project(EncodeForTraining(view1));
+        var z2 = projector.Project(EncodeForTraining(view2));
+        var p1 = projector.Predict(z1);
+        var p2 = projector.Predict(z2);
+        var d12 = _loss.ComputeLoss(p1, Engine.StopGradient(z2));
+        var d21 = _loss.ComputeLoss(p2, Engine.StopGradient(z1));
+        return Engine.TensorMultiplyScalar(Engine.TensorAdd(d12, d21), NumOps.FromDouble(0.5));
     }
 
-    private T ComputeStd(Tensor<T> tensor)
-    {
-        var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
+    /// <inheritdoc />
+    protected override (Tensor<T> View1, Tensor<T> View2) AugmentViews(
+        SelfSupervisedLearningAugmentationPolicies<T> policies, Tensor<T> batch) => _augmentation.ApplySimCLR(batch);
 
-        // Compute mean
-        T mean = NumOps.Zero;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                mean = NumOps.Add(mean, tensor[b, d]);
-            }
-        }
-        mean = NumOps.Divide(mean, NumOps.FromDouble(batchSize * dim));
-
-        // Compute variance
-        T variance = NumOps.Zero;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                var diff = NumOps.Subtract(tensor[b, d], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(batchSize * dim));
-
-        return NumOps.Sqrt(variance);
-    }
+    /// <inheritdoc />
+    /// <remarks>The paper trains with SGD (momentum 0.9, Sec. 4).</remarks>
+    protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.SGD;
 
     /// <summary>
     /// Creates a SimSiam instance with default configuration.

@@ -48,14 +48,14 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 [ResearchPaper("Distil-Whisper: Robust Knowledge Distillation via Large-Scale Pseudo Labelling", "https://arxiv.org/abs/2311.00430", Year = 2023, Authors = "Gandhi et al.")]
 public partial class KotobaWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly KotobaWhisperOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly KotobaWhisperOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => true;
 
-    public KotobaWhisper(NeuralNetworkArchitecture<T> architecture, string modelPath, KotobaWhisperOptions? options = null) : base(architecture) { _options = options ?? new KotobaWhisperOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "ja", "en" }; InitializeLayers(); }
-    public KotobaWhisper(NeuralNetworkArchitecture<T> architecture, KotobaWhisperOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KotobaWhisperOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "ja", "en" }; InitializeLayers(); }
+    public KotobaWhisper(NeuralNetworkArchitecture<T> architecture, string modelPath, KotobaWhisperOptions? options = null) : base(architecture) { _options = options ?? new KotobaWhisperOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "ja", "en" }; InitializeLayers(); }
+    public KotobaWhisper(NeuralNetworkArchitecture<T> architecture, KotobaWhisperOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KotobaWhisperOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "ja", "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using the Japanese-optimized distilled encoder-decoder.

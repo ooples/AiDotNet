@@ -67,9 +67,6 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly DessurtOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

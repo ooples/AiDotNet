@@ -73,9 +73,6 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     // in declaration order, which is the order this hook used. Removed under AIDN082.
     private readonly ACGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions()
         => new()
         {

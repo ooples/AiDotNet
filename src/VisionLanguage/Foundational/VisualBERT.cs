@@ -64,8 +64,6 @@ public partial class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguage
 {
     private readonly VisualBERTOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -86,6 +84,7 @@ public partial class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguage
         : base(architecture)
     {
         _options = options ?? new VisualBERTOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -108,6 +107,7 @@ public partial class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguage
         : base(architecture)
     {
         _options = options ?? new VisualBERTOptions();
+        Options = _options;
         _useNativeMode = true;
         // VisualBERT fine-tuning uses a maximum learning rate of 2e-5 (Li et al.,
         // 2019, Appendix A). Honor the public options instead of AdamW's generic

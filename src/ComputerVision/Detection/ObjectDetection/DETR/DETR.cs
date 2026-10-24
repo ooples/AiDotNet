@@ -251,8 +251,8 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            using var client = new System.Net.Http.HttpClient();
-            data = await client.GetByteArrayWithCancellationAsync(pathOrUrl, cancellationToken);
+            using var download = AiDotNet.Helpers.SharedHttp.WithTimeout(AiDotNet.Helpers.SharedHttp.DefaultTimeout, cancellationToken);
+            data = await AiDotNet.Helpers.SharedHttp.Downloads.GetByteArrayWithCancellationAsync(pathOrUrl, download.Token);
         }
         else
         {

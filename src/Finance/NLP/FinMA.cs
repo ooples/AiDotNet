@@ -65,9 +65,6 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
     private double _dropout;
     private int _numAgents;
 
-    /// <inheritdoc/>
-    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
-
     #endregion
 
     #region Interface Properties
@@ -166,7 +163,6 @@ public partial class FinMA<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinMALayers(
-                Architecture,
                 vocabularySize: VocabularySize,
                 maxSequenceLength: MaxSequenceLength,
                 hiddenDimension: HiddenDimension,

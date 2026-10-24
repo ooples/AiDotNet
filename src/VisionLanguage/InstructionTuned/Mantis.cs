@@ -79,8 +79,6 @@ public partial class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
 {
     private readonly MantisOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -95,6 +93,7 @@ public partial class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         : base(architecture)
     {
         _options = options ?? new MantisOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -118,6 +117,7 @@ public partial class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         : base(architecture)
     {
         _options = options ?? new MantisOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,

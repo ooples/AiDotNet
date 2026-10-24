@@ -66,7 +66,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 public partial class ViMUNet<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ViMUNetOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only ViMUNet's OWN configuration lives here. _height, _width, _channels, _numClasses,

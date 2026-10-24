@@ -203,12 +203,7 @@ public partial class JEN1Model<T> : AudioDiffusionModelBase<T>
             seed: seed);
 
         // 1D Audio VAE for waveform encoding/decoding
-        _audioVae = audioVae ?? new AudioVAE<T>(
-            melChannels: 128,
-            latentChannels: JEN1_LATENT_CHANNELS,
-            baseChannels: 64,
-            numResBlocks: 2,
-            seed: seed);
+        _audioVae = audioVae ?? new AudioVAE<T>(melBins: 128, latentChannels: JEN1_LATENT_CHANNELS, seed: seed);
     }
 
     #endregion

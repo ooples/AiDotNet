@@ -62,7 +62,6 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     private bool _useNativeMode;
     private bool _disposed;
 
-    public override ModelOptions GetOptions() => _options;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
     public bool SupportsWordTimestamps => false;
@@ -74,6 +73,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new KyutaiMoshiOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -96,6 +96,7 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new KyutaiMoshiOptions();
+        Options = _options;
         _useNativeMode = true;
         // Paper-faithful fine-tuning recipe from Kyutai's official Moshi code:
         // AdamW with max LR=2e-6, betas=(0.9, 0.95), weight decay=0.1,

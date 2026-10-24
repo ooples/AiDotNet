@@ -63,7 +63,6 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly FlashVSROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -99,6 +98,7 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new FlashVSROptions();
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         NumFrames = _options.NumInputFrames;
@@ -113,6 +113,7 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new FlashVSROptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

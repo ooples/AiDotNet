@@ -82,8 +82,6 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
     private readonly A3COptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _globalPolicyNetwork;
@@ -114,6 +112,7 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
             InitialLearningRate = 0.001,

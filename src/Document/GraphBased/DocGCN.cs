@@ -66,9 +66,6 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
 {
     private readonly DocGCNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

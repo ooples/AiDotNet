@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 public partial class BiomedParse<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly BiomedParseOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     // BiomedParse paper defaults: Swin-B backbone (Zhao et al., Nature Methods 2024)
     private static readonly int[] DefaultChannelDims = [96, 192, 384, 768];

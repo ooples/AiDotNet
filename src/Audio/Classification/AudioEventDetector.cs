@@ -72,9 +72,6 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
 
     private readonly AudioEventDetectorOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -128,6 +125,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         : base(architecture)
     {
         _options = options ?? new AudioEventDetectorOptions();
+        Options = _options;
         _useNativeMode = false;
 
         base.SampleRate = _options.SampleRate;
@@ -185,6 +183,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new AudioEventDetectorOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

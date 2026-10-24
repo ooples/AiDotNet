@@ -65,7 +65,6 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly PointTransformerV3Options _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only PointTransformerV3's OWN configuration lives here. _height, _width, _channels,

@@ -150,9 +150,6 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly MOIRAIOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
@@ -467,7 +464,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultMOIRAILayers(
-                Architecture, _contextLength, _forecastHorizon, _numFeatures,
+                _contextLength, _forecastHorizon, _numFeatures,
                 _patchSizes, _hiddenDimension, _numLayers, _numHeads,
                 _intermediateSize, _numMixtures, _dropout));
 
@@ -808,7 +805,7 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> In the MOIRAI model, Forecast produces predictions from input data. This is the main inference step of the MOIRAI architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 

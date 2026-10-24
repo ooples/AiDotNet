@@ -61,12 +61,11 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
     private RMSNormalizationLayer<T>? _finalNorm;
     private DenseLayer<T>? _projection;
 
-    public override ModelOptions GetOptions() => _options;
-
     public E2TTS(NeuralNetworkArchitecture<T> architecture, string modelPath, E2TTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new E2TTSOptions();
+        Options = _options;
         _useNativeMode = false;
         SeedTraining(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
@@ -89,6 +88,7 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
         : base(architecture)
     {
         _options = options ?? new E2TTSOptions();
+        Options = _options;
         if (_options.NumLayers % 2 != 0)
             throw new ArgumentException("The U-Net Transformer pairs its layers; NumLayers must be even.", nameof(options));
         _useNativeMode = true;

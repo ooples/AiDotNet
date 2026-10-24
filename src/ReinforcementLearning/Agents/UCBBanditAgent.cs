@@ -54,8 +54,6 @@ public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     }
     private UCBBanditOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<T> _qValues;
     private Vector<int> _actionCounts;
@@ -67,6 +65,7 @@ public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _random = RandomHelper.CreateSecureRandom();
         _qValues = new Vector<T>(_options.NumArms);
         _actionCounts = new Vector<int>(_options.NumArms);

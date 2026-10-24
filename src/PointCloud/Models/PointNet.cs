@@ -75,9 +75,6 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
 {
     private readonly PointNetModelOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _numClasses;
     private int _inputFeatureDim;
     private int _inputTransformDim;

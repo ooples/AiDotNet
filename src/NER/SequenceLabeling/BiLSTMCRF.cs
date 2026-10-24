@@ -149,18 +149,6 @@ public partial class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     private readonly BiLSTMCRFOptions _options;
 
     /// <summary>
-    /// Returns the model's configuration options.
-    /// </summary>
-    /// <returns>The <see cref="BiLSTMCRFOptions"/> instance controlling this model's behavior.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this to inspect or retrieve the current model settings, such as
-    /// embedding dimensions, hidden size, number of labels, and whether CRF is enabled.
-    /// </para>
-    /// </remarks>
-    public override ModelOptions GetOptions() => _options;
-
-    /// <summary>
     /// The gradient-based optimizer used for updating model weights during training.
     /// </summary>
     /// <remarks>
@@ -306,6 +294,7 @@ public partial class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new BiLSTMCRFOptions();
+        Options = _options;
         ValidateOptions();
         _useNativeMode = false;
         NumLabels = _options.NumLabels;
@@ -368,6 +357,7 @@ public partial class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         : base(architecture)
     {
         _options = options ?? new BiLSTMCRFOptions();
+        Options = _options;
         ValidateOptions();
         _useNativeMode = true;
         // Lample et al. 2016 ("Neural Architectures for Named Entity Recognition", §4)

@@ -83,9 +83,6 @@ public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new MambularOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -123,6 +120,7 @@ public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new MambularOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

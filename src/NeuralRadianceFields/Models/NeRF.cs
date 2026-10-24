@@ -141,9 +141,6 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
 
     private Random SamplingRandom => _seededSamplingRandom ?? Random;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Model Architecture Parameters
 
     /// <summary>

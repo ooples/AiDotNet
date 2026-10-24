@@ -88,8 +88,6 @@ public partial class Informer<T> : ForecastingModelBase<T>
     private readonly Random _random;
     private InformerNetwork<T>? _network;
 
-    public override ModelOptions GetOptions() => _options;
-
     #region IForecastingModel Properties
 
     public override int SequenceLength => _options.LookbackWindow;
@@ -147,7 +145,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _random = RandomHelper.CreateSeededRandom(InformerNetwork<T>.Seeds(_options.Seed).Sampling);
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -176,7 +174,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
         _useNativeMode = true;
         OnnxSession = null;
         OnnxModelPath = null;
-        _numFeatures = architecture.InputSize;
+        _numFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _random = RandomHelper.CreateSeededRandom(InformerNetwork<T>.Seeds(_options.Seed).Sampling);
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -253,7 +251,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
 
     #region IForecastingModel Implementation
 
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));

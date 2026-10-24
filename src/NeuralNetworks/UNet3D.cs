@@ -57,9 +57,6 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
 {
     private readonly UNet3DOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to compute the error between predictions and targets.
     /// </summary>

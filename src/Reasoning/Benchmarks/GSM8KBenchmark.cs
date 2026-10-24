@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
@@ -346,10 +347,10 @@ public class GSM8KBenchmark<T> : IBenchmark<T>
         if (answer1 == null || answer2 == null)
             return false;
 
-        if (!double.TryParse(answer1, out double val1))
+        if (!double.TryParse(answer1, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double val1))
             return false;
 
-        if (!double.TryParse(answer2, out double val2))
+        if (!double.TryParse(answer2, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double val2))
             return false;
 
         // Allow small floating point differences

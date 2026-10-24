@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -304,7 +305,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         int targetSamples = samplesPerClass;
         if (_samplingStrategy.StartsWith("ratio:", StringComparison.OrdinalIgnoreCase))
         {
-            if (double.TryParse(_samplingStrategy.Substring(6), out double ratio) && ratio > 0)
+            if (double.TryParse(_samplingStrategy.Substring(6), NumberStyles.Float, CultureInfo.InvariantCulture, out double ratio) && ratio > 0)
             {
                 targetSamples = (int)(samplesPerClass * ratio);
             }

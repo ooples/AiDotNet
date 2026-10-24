@@ -58,7 +58,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 public partial class MobileSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly MobileSAMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only MobileSAM's OWN configuration lives here. _height, _width, _channels, _numClasses,

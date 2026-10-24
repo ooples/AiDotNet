@@ -74,8 +74,6 @@ public partial class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
 {
     private readonly MayaOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -90,6 +88,7 @@ public partial class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         : base(architecture)
     {
         _options = options ?? new MayaOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -113,6 +112,7 @@ public partial class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         : base(architecture)
     {
         _options = options ?? new MayaOptions();
+        Options = _options;
         _options.ValidateVisualSizing();
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,

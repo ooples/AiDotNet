@@ -394,7 +394,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         _baseUseNativeMode = true;
         _baseSequenceLength = 0;
         _basePredictionHorizon = 0;
-        _baseNumFeatures = architecture.InputSize;
+        _baseNumFeatures = ArchitectureAgreement.SequenceFeatureCount(architecture);
         _lastTrainingLoss = NumOps.Zero;
         Options = new FinancialNeuralNetworkOptions();
     }
@@ -424,6 +424,124 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
 
     #endregion
 
+    #region Forecast Head
+
+    /// <summary>
+    /// The forecast a per-step head made at the last input step: [..., steps, horizon] becomes [..., horizon].
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Several models end with a dense head that maps each step's representation to the whole forecast horizon, so the
+    /// head runs at every input step and returns one forecast per step. The forecast is the one made at the last step,
+    /// whose representation has seen the whole context (a causal convolution or recurrence ends there, and TS2Vec,
+    /// Yue et al. 2022 Sec. 4.2, forecasts from the last timestamp's representation). Returning every step instead gave
+    /// an output as long as the input rather than the horizon.
+    /// </para>
+    /// <para>The narrow is recorded on the gradient tape, so the training forward can use it too.</para>
+    /// </remarks>
+    protected Tensor<T> LastTimeStep(Tensor<T> perStep)
+    {
+        if (perStep is null) throw new ArgumentNullException(nameof(perStep));
+        if (perStep.Rank < 2) return perStep;
+        int axis = perStep.Rank - 2;
+        var shape = perStep._shape;
+        var last = Engine.TensorNarrow(perStep, axis, shape[axis] - 1, 1);
+        var squeezed = new int[shape.Length - 1];
+        for (int i = 0, j = 0; i < shape.Length; i++)
+            if (i != axis) squeezed[j++] = shape[i];
+        return Engine.Reshape(last, squeezed);
+    }
+
+    /// <summary>
+    /// A univariate series in the published [batch, steps, 1] form as the [batch, steps] vector a model whose dense layers
+    /// read the whole series at once expects; any other input is returned unchanged.
+    /// </summary>
+    /// <remarks>
+    /// The base contract publishes [batch, SequenceLength, NumFeatures]. A model that projects the whole context in one
+    /// dense layer, given that rank-3 form, would apply the layer to the one-wide feature axis at every step and return a
+    /// forecast per step. The reshape is recorded on the gradient tape.
+    /// </remarks>
+    protected Tensor<T> SqueezeUnivariateFeatureAxis(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        return input.Rank == 3 && input.Shape[2] == 1
+            ? Engine.Reshape(input, new[] { input.Shape[0], input.Shape[1] })
+            : input;
+    }
+
+    #endregion
+
+    #region Architecture Agreement
+
+    // 0 until the architecture has been checked against the model's own sizes; the check runs once.
+    private int _architectureAgreementChecked;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Checks the architecture against the model's sizes first (see <see cref="RequireArchitectureAgreesWithOptions"/>).
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        RequireArchitectureAgreesWithOptions();
+        return base.Predict(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>A financial model sizes its layers from its options (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
+    /// <inheritdoc/>
+    /// <remarks>A cross-sectional model's architecture may state its feature count (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        NumFeatures > 0 ? new[] { NumFeatures } : null;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A sequence model is checked against its own sequence length and feature count (see
+    /// <see cref="RequireArchitectureAgreesWithOptions"/>); a cross-sectional model, which publishes no sequence split,
+    /// against the sizes it declares (<see cref="NeuralNetworkBase{T}.ArchitectureInputSizesFromOptions"/>).
+    /// </remarks>
+    protected override void RequireArchitectureAgreesWithInput()
+    {
+        if (GetInputShapeConstraint().ExactAxisSizes is { Count: 3 } && SequenceLength > 0 && NumFeatures > 0)
+            RequireArchitectureAgreesWithOptions();
+        else
+            base.RequireArchitectureAgreesWithInput();
+    }
+
+    /// <summary>
+    /// Throws when the architecture states an input size that disagrees with the sequence length and feature count
+    /// this model was built from (#2147).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A financial model sizes its layers from its options. The architecture it is handed was, until #2147, never
+    /// read: one stating 32 features for a model whose options say 7 built the 7-feature network and said nothing,
+    /// so the caller trained a model other than the one they described. Now a disagreement fails here, naming both
+    /// values. An architecture that states no input size is never refused.
+    /// </para>
+    /// <para>
+    /// The rule follows the contract <see cref="GetInputShapeConstraint"/> publishes, [batch, SequenceLength,
+    /// NumFeatures]. A cross-sectional model publishes no sequence split and is not checked here. It runs on the
+    /// first Predict, Forecast or Train rather than in the constructor, because the derived constructor sets the
+    /// sizes after this base constructor has returned.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The architecture's input size disagrees with the model's own sizes.</exception>
+    protected void RequireArchitectureAgreesWithOptions()
+    {
+        if (System.Threading.Volatile.Read(ref _architectureAgreementChecked) != 0) return;
+        // A sequence model (one that publishes an exact rank-3 input) is checked against its own SequenceLength and
+        // NumFeatures, not the contract's axes: those are [batch, steps, features] for the base contract, but a model
+        // may lay its input out otherwise (DCRNN reads [nodes, steps, features per node], and its NumFeatures is
+        // nodes x features per node). Cross-sectional models publish no exact axes and are not checked.
+        if (GetInputShapeConstraint().ExactAxisSizes is { Count: 3 } && SequenceLength > 0 && NumFeatures > 0)
+            ArchitectureAgreement.RequireSequenceInput(Architecture, GetType().Name, SequenceLength, NumFeatures);
+        System.Threading.Volatile.Write(ref _architectureAgreementChecked, 1);
+    }
+
+    #endregion
+
     #region IFinancialModel Implementation
 
     /// <inheritdoc/>
@@ -434,11 +552,26 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// (fast inference) based on how the class was constructed.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
+        // Every forecast passes this check, whichever model computes it: the models override ForecastCore, not
+        // Forecast, so none can return without it (#2147).
+        RequireArchitectureAgreesWithInput();
+        var forecast = ForecastCore(input, quantiles);
+        RequireArchitectureAgreesWithOutput(forecast);
+        return forecast;
+    }
 
+    /// <summary>
+    /// Computes the forecast <see cref="Forecast"/> returns, after the architecture check. Models override this.
+    /// </summary>
+    /// <param name="input">The history, already checked to be non-null.</param>
+    /// <param name="quantiles">Quantiles to forecast, or null for a point forecast.</param>
+    /// <returns>The forecast.</returns>
+    protected virtual Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
+    {
         // Validate input shape
         ValidateInputShape(input);
 
@@ -706,6 +839,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
             throw new ArgumentNullException(nameof(input));
         if (expectedOutput is null)
             throw new ArgumentNullException(nameof(expectedOutput));
+        RequireArchitectureAgreesWithInput();
 
         // Previously this method ran Predict() (NoGrad), computed an
         // eager loss value, and delegated to TrainCore() for the actual

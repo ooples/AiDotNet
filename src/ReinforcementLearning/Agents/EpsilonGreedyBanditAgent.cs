@@ -53,8 +53,6 @@ public partial class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBas
     }
     private EpsilonGreedyBanditOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<T> _qValues;
     private Vector<int> _actionCounts;
@@ -71,6 +69,7 @@ public partial class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBas
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _random = RandomHelper.CreateSecureRandom();
         _qValues = new Vector<T>(_options.NumArms);
         _actionCounts = new Vector<int>(_options.NumArms);

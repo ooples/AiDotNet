@@ -82,8 +82,6 @@ public partial class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
 {
     private readonly DFNCLIPOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -106,6 +104,7 @@ public partial class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         : base(architecture)
     {
         _options = options ?? new DFNCLIPOptions();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -141,6 +140,7 @@ public partial class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         : base(architecture)
     {
         _options = options ?? new DFNCLIPOptions();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         // Paper-faithful CLIP training (Radford et al. 2021 §5.1, §A.1):

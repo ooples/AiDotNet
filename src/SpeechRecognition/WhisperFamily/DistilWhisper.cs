@@ -57,14 +57,14 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
                 Source = "Gandhi et al. 2023, Appendix B: AdamW with beta1 0.9, beta2 0.999, eps 1e-8 and weight decay 0.0, batch 256, 500 warmup steps and linear decay over 80,000 updates, max grad norm 1.0. The zero weight decay is the paper value, not an omission. The table states no peak learning rate, so none is declared.")]
 public partial class DistilWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly DistilWhisperOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly DistilWhisperOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => true;
 
-    public DistilWhisper(NeuralNetworkArchitecture<T> architecture, string modelPath, DistilWhisperOptions? options = null) : base(architecture) { _options = options ?? new DistilWhisperOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public DistilWhisper(NeuralNetworkArchitecture<T> architecture, DistilWhisperOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new DistilWhisperOptions(); _useNativeMode = true; _optimizer = optimizer
+    public DistilWhisper(NeuralNetworkArchitecture<T> architecture, string modelPath, DistilWhisperOptions? options = null) : base(architecture) { _options = options ?? new DistilWhisperOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public DistilWhisper(NeuralNetworkArchitecture<T> architecture, DistilWhisperOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new DistilWhisperOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 

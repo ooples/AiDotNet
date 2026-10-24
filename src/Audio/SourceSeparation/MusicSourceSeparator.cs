@@ -69,9 +69,6 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
 
     private readonly SourceSeparationOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly ShortTimeFourierTransform<T> _stft;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     // Native vs ONNX inference mode. Not readonly: DeserializeNetworkSpecificData
@@ -122,6 +119,7 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         : base(CreateMinimalArchitecture(options))
     {
         _options = options ?? new SourceSeparationOptions();
+        Options = _options;
         _useNativeMode = false;
         _options.ModelPath = modelPath;
 
@@ -148,6 +146,7 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         : base(architecture)
     {
         _options = options ?? new SourceSeparationOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -171,6 +170,7 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         : base(CreateMinimalArchitecture(options))
     {
         _options = options ?? new SourceSeparationOptions();
+        Options = _options;
         _useNativeMode = false;
 
         // Set base class properties

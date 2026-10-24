@@ -56,9 +56,6 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
 {
     private readonly SelfOrganizingMapNNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The neuron codebook: shape [numNeurons, inputDimension]. Row i is the prototype vector of
     /// neuron i (row-major over the [mapHeight, mapWidth] grid, i = y * mapWidth + x).

@@ -69,9 +69,6 @@ public partial class RVM<T> : NeuralNetworkBase<T>
 {
     private readonly RVMOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

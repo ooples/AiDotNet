@@ -53,9 +53,6 @@ public partial class UniMatch<T> : OpticalFlowBase<T>
 {
     private readonly UniMatchOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _numFeatures;
     private int _numLayers;
     private ConvolutionalLayer<T>? _featureExtract;

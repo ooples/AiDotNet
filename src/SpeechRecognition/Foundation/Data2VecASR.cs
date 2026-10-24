@@ -56,14 +56,14 @@ namespace AiDotNet.SpeechRecognition.Foundation;
                         + "ViT-B and ViT-L vision models, not to this speech model.")]
 public partial class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly Data2VecASROptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly Data2VecASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public Data2VecASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Data2VecASROptions? options = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public Data2VecASR(NeuralNetworkArchitecture<T> architecture, Data2VecASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); _useNativeMode = true; _optimizer = optimizer
+    public Data2VecASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Data2VecASROptions? options = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public Data2VecASR(NeuralNetworkArchitecture<T> architecture, Data2VecASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 

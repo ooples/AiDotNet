@@ -204,9 +204,6 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     /// </summary>
     private readonly SpeechEmotionRecognizerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Custom emotion labels if provided.
     /// </summary>
@@ -264,6 +261,7 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
             throw new ArgumentException("Model path cannot be null or whitespace", nameof(modelPath));
 
         _options = options ?? new SpeechEmotionRecognizerOptions();
+        Options = _options;
         _options.Validate();
 
         _isOnnxMode = true;
@@ -340,6 +338,7 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
             throw new ArgumentNullException(nameof(architecture));
 
         _options = options ?? new SpeechEmotionRecognizerOptions();
+        Options = _options;
         _options.Validate();
 
         _isOnnxMode = false;

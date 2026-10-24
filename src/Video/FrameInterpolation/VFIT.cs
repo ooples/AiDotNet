@@ -75,9 +75,6 @@ public partial class VFIT<T> : FrameInterpolationBase<T>
 {
     private readonly VFITOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -95,6 +92,7 @@ public partial class VFIT<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new VFITOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsArbitraryTimestep = false;
         _options.ModelPath = modelPath;
@@ -115,6 +113,7 @@ public partial class VFIT<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new VFITOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

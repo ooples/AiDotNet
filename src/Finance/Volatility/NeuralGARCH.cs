@@ -79,9 +79,6 @@ public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
     private readonly NeuralGARCHOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly int _numAssets;
     private readonly int _lookbackWindow;
     private readonly int _hiddenSize;

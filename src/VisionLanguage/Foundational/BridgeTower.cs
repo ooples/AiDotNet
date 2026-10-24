@@ -63,8 +63,6 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
 {
     private readonly BridgeTowerOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -81,6 +79,7 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
         : base(architecture)
     {
         _options = options ?? new BridgeTowerOptions();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -104,6 +103,7 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
         : base(architecture)
     {
         _options = options ?? new BridgeTowerOptions();
+        Options = _options;
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,

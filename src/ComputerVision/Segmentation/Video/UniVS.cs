@@ -63,7 +63,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 public partial class UniVS<T> : Common.VideoSegmentationBase<T>
 {
     private readonly UniVSOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only UniVS's OWN configuration lives here. _height, _width, _channels, _numClasses,

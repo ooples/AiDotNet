@@ -60,9 +60,6 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
 {
     private readonly NeuralTuringMachineOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (memory usage regularization) should be used during training.
     /// </summary>

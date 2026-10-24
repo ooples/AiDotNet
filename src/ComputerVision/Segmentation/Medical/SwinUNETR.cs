@@ -75,7 +75,6 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
         => SpatialStrideContract(inputRank, 1);
 
     private readonly SwinUNETROptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only SwinUNETR's OWN configuration lives here. _height, _width, _channels, _numClasses,

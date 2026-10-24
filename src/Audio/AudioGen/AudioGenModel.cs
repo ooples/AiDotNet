@@ -109,9 +109,6 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
     private readonly AudioGenOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>

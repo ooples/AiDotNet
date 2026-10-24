@@ -60,7 +60,6 @@ public partial class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageMo
     #region Fields
 
     private readonly Qwen2AudioOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
@@ -90,6 +89,7 @@ public partial class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageMo
         : base(architecture)
     {
         _options = options ?? new Qwen2AudioOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -106,6 +106,7 @@ public partial class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageMo
         : base(architecture)
     {
         _options = options ?? new Qwen2AudioOptions();
+        Options = _options;
         _useNativeMode = true;
         // The paper rate from this model's own options. Built bare, AdamW would use its
         // own 1e-3 default instead and LearningRate would be configuration nobody reads —
@@ -247,7 +248,8 @@ public partial class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageMo
     private Tensor<T> EncodePrompt(string prompt)
     {
         var embedding = new Tensor<T>([_options.LMHiddenDim]);
-        int hash = prompt.GetHashCode();
+        // A stable hash: string.GetHashCode() changes per process, so the same prompt would encode differently each run (#2361).
+        int hash = AiDotNet.Helpers.StableHash.Seed(prompt);
         for (int i = 0; i < _options.LMHiddenDim; i++)
         {
             double val = Math.Sin((hash + i) * 0.1) * 0.5;

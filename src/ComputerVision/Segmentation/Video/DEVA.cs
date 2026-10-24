@@ -76,7 +76,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 public partial class DEVA<T> : Common.VideoSegmentationBase<T>
 {
     private readonly DEVAOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only DEVA's OWN configuration lives here. _height, _width, _channels, _numClasses,

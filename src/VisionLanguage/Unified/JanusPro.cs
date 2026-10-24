@@ -150,8 +150,6 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         _pixelDecoderOut = new DenseLayer<T>(3, identity);
     }
 
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Number of generation-side VQ tokens in the output grid (24×24 for 384px output, matching paper §3.3).</summary>
     public int GenerationTokenCount => _options.NumGenerationTokens;
 
@@ -171,6 +169,7 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         : base(architecture)
     {
         _options = options ?? new JanusProOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -198,6 +197,7 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         : base(architecture)
     {
         _options = options ?? new JanusProOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

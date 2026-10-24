@@ -71,7 +71,6 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly TTVSROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -85,6 +84,7 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new TTVSROptions();
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -98,6 +98,7 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new TTVSROptions();
+        Options = _options;
         _useNativeMode = true;
         // TTVSR (Liu et al., CVPR 2022) trains with Adam at 2e-4, which TTVSROptions.LearningRate
         // already carried as its default -- but building the optimizer bare ignored it and ran on

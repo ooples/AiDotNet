@@ -54,8 +54,6 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MegaTTSOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -68,6 +66,7 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new MegaTTSOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -90,6 +89,7 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new MegaTTSOptions();
+        Options = _options;
         _useNativeMode = true;
         // Honour the configured LearningRate / WeightDecay. Constructing the optimizer bare left it
         // on AdamW's own defaults (InitialLearningRate 0.001), so MegaTTS trained at 10x the 1e-4

@@ -60,9 +60,6 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
 {
     private readonly RestrictedBoltzmannMachineOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <inheritdoc />
     public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.ContrastiveDivergence;
 

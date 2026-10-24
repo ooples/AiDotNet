@@ -50,7 +50,6 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
     #region Fields
 
     private readonly HuBERTSEROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -72,6 +71,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
         : base(architecture)
     {
         _options = options ?? new HuBERTSEROptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -87,6 +87,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
         : base(architecture)
     {
         _options = options ?? new HuBERTSEROptions();
+        Options = _options;
         _useNativeMode = true;
         // HuBERT-SER is a multi-class emotion CLASSIFIER (Hsu et al. fine-tune HuBERT with a softmax head
         // under cross-entropy — Sec. 4). The audio base defaults the loss to MSE, which is wrong for a

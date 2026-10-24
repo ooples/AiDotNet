@@ -43,14 +43,14 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ResearchPaper("Amazon Transcribe", "https://aws.amazon.com/transcribe/")]
 public partial class AWSTranscribe<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly AWSTranscribeOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly AWSTranscribeOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public AWSTranscribe(NeuralNetworkArchitecture<T> architecture, string modelPath, AWSTranscribeOptions? options = null) : base(architecture) { _options = options ?? new AWSTranscribeOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
-    public AWSTranscribe(NeuralNetworkArchitecture<T> architecture, AWSTranscribeOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AWSTranscribeOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
+    public AWSTranscribe(NeuralNetworkArchitecture<T> architecture, string modelPath, AWSTranscribeOptions? options = null) : base(architecture) { _options = options ?? new AWSTranscribeOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
+    public AWSTranscribe(NeuralNetworkArchitecture<T> architecture, AWSTranscribeOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AWSTranscribeOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using AWS Transcribe's cloud ASR architecture.

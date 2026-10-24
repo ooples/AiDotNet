@@ -44,8 +44,6 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MegaTTS2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -58,6 +56,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options is null ? new MegaTTS2Options() : new MegaTTS2Options(options);
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -80,6 +79,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options is null ? new MegaTTS2Options() : new MegaTTS2Options(options);
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;

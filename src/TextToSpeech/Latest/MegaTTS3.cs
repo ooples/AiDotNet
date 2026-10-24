@@ -52,8 +52,6 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MegaTTS3Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -66,6 +64,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new MegaTTS3Options();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -88,6 +87,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new MegaTTS3Options();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)

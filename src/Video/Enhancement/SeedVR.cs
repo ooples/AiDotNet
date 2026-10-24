@@ -59,7 +59,6 @@ public partial class SeedVR<T> : VideoSuperResolutionBase<T>
     #region Fields
 
     private readonly SeedVROptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -75,6 +74,7 @@ public partial class SeedVR<T> : VideoSuperResolutionBase<T>
         if (string.IsNullOrEmpty(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new SeedVROptions();
+        Options = _options;
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -88,6 +88,7 @@ public partial class SeedVR<T> : VideoSuperResolutionBase<T>
         : base(architecture)
     {
         _options = options ?? new SeedVROptions();
+        Options = _options;
         _useNativeMode = true;
         // Paper-faithful LR: SeedVR (Wang et al. 2024) trains the video
         // super-resolution diffusion stack at LR=5e-5 (Sec. 4.1). The

@@ -62,7 +62,6 @@ public partial class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel
     #region Fields
 
     private readonly SALMONNOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
@@ -92,6 +91,7 @@ public partial class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel
         : base(architecture)
     {
         _options = options ?? new SALMONNOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -113,6 +113,7 @@ public partial class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel
         : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SALMONNOptions();
+        Options = _options;
         _useNativeMode = true;
         // READS THE CONFIGURED RATE. The bare AdamWOptimizer(this) ran at Adam's own 1e-3 default while
         // SALMONNOptions.LearningRate sat at 1e-5 -- the property existed and was documented, and setting
@@ -284,7 +285,8 @@ public partial class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel
     private Tensor<T> EncodePrompt(string prompt)
     {
         var embedding = new Tensor<T>([_options.LMHiddenDim]);
-        int hash = prompt.GetHashCode();
+        // A stable hash: string.GetHashCode() changes per process, so the same prompt would encode differently each run (#2361).
+        int hash = AiDotNet.Helpers.StableHash.Seed(prompt);
         for (int i = 0; i < _options.LMHiddenDim; i++)
         {
             double val = Math.Sin((hash + i) * 0.1) * 0.5;

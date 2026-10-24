@@ -55,9 +55,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
 {
     private readonly LayoutGraphOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;

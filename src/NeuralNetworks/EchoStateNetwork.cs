@@ -55,9 +55,6 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly EchoStateNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the reservoir (number of neurons in the hidden layer).
     /// </summary>

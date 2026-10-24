@@ -62,7 +62,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 public partial class SlimSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SlimSAMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only SlimSAM's OWN configuration lives here. _height, _width, _channels, _numClasses,

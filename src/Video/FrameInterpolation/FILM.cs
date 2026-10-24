@@ -65,9 +65,6 @@ public partial class FILM<T> : FrameInterpolationBase<T>
 {
     private readonly FILMOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private int _height;

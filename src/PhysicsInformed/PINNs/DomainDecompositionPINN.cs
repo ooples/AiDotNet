@@ -91,9 +91,6 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
 {
     private readonly DomainDecompositionPINNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Builds nothing: a domain-decomposition model's solution IS its subdomain networks.
     /// </summary>

@@ -59,9 +59,6 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
 {
     private readonly TableTransformerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private bool _useNativeMode;

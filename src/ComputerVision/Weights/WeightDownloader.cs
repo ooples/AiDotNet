@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http;
 using AiDotNet.Data;
 
@@ -197,7 +198,9 @@ public static class PretrainedRegistry
     // Note: These are placeholder URLs. In production, these would point to actual weight files.
     // Users can also provide their own URLs via the options.
 
-    private static readonly Dictionary<string, string> _weightUrls = new()
+    // Register is public and may run while another thread looks a URL up, so the map must tolerate concurrent
+    // writes (#2362).
+    private static readonly ConcurrentDictionary<string, string> _weightUrls = new(new Dictionary<string, string>
     {
         // YOLO weights (placeholder URLs - would need actual hosting)
         ["yolov8n-coco"] = "https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt",
@@ -224,7 +227,7 @@ public static class PretrainedRegistry
 
         // OCR recognition
         ["crnn-english"] = "https://github.com/clovaai/deep-text-recognition-benchmark/releases/download/v1.0/crnn.pth",
-    };
+    });
 
     /// <summary>
     /// Gets the URL for a pretrained model.
@@ -240,9 +243,10 @@ public static class PretrainedRegistry
     /// Gets all available pretrained model keys.
     /// </summary>
     /// <returns>Collection of model keys.</returns>
+    /// <remarks>A snapshot: registering a URL while the caller enumerates it does not invalidate it.</remarks>
     public static IEnumerable<string> GetAvailableModels()
     {
-        return _weightUrls.Keys;
+        return _weightUrls.Keys.ToArray();
     }
 
     /// <summary>

@@ -63,9 +63,6 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
 {
     private readonly VariationalAutoencoderOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the latent space dimension in the Variational Autoencoder.
     /// </summary>

@@ -136,7 +136,7 @@ public class GpuPINNTrainer<T>
 
             if (_options.VerboseLogging)
             {
-                Console.WriteLine($"[GpuPINNTrainer] GPU initialization failed: {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"[GpuPINNTrainer] GPU initialization failed: {ex}");
             }
 
             return false;

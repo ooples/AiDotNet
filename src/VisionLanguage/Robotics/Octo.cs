@@ -74,8 +74,6 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
 {
     private readonly OctoOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -90,6 +88,7 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
         : base(architecture)
     {
         _options = options ?? new OctoOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -112,6 +111,7 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
         : base(architecture)
     {
         _options = options ?? new OctoOptions();
+        Options = _options;
         _useNativeMode = true;
         // Honor the configured (paper-aligned) learning rate. OctoOptions.LearningRate defaults to 1e-4
         // — the AdamW rate Octo (Octo Model Team 2024) and VLA transformers train at — but the optimizer

@@ -81,8 +81,6 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     // The image set by SetImage: its size, the size the encoder saw it at, and the embedding (the base's field).
     private int _originalHeight, _originalWidth, _inputHeight, _inputWidth;
 
-    public override ModelOptions GetOptions() => _options;
-
     internal bool UseNativeMode => _useNativeMode;
     internal SAMModelSize ModelSize => _options.ModelSize;
 

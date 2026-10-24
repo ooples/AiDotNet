@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
@@ -6,7 +8,9 @@ namespace AiDotNet.Augmentation.Image;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public static class PolicyRegistry<T>
 {
-    private static readonly Dictionary<string, Func<AugmentationPolicy<T>>> _policies = new();
+    // Register is public and may run while another thread looks a policy up, so the map must tolerate concurrent
+    // writes (#2362).
+    private static readonly ConcurrentDictionary<string, Func<AugmentationPolicy<T>>> _policies = new();
 
     static PolicyRegistry()
     {
@@ -36,7 +40,8 @@ public static class PolicyRegistry<T>
     /// <summary>
     /// Gets all registered policy names.
     /// </summary>
-    public static IEnumerable<string> GetNames() => _policies.Keys;
+    /// <remarks>A snapshot: registering a policy while the caller enumerates it does not invalidate it.</remarks>
+    public static IEnumerable<string> GetNames() => _policies.Keys.ToArray();
 
     private static AugmentationPolicy<T> CreateLightPolicy()
     {

@@ -66,12 +66,11 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
     private VariancePredictorLayer<T>? _durationPredictor;
     private GradTtsScoreEstimator<T>? _estimator;
 
-    public override ModelOptions GetOptions() => _options;
-
     public VoiceFlow(NeuralNetworkArchitecture<T> architecture, string modelPath, VoiceFlowOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new VoiceFlowOptions();
+        Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
@@ -94,6 +93,7 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         : base(architecture)
     {
         _options = options ?? new VoiceFlowOptions();
+        Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;

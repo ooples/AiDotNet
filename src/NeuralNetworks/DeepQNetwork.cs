@@ -63,9 +63,6 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the number of possible actions the agent can take in the environment.
     /// </summary>

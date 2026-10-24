@@ -66,9 +66,6 @@ public partial class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
     private readonly int _maxResolutionLevel;
     private readonly int _baseFeatureMaps;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Gets the size of the latent (noise) vector input to the generator.</summary>
     public int LatentSize => _latentSize;
 

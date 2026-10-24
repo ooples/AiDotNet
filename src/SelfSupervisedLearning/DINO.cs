@@ -49,6 +49,50 @@ public class DINO<T> : TeacherStudentSSL<T>
     private readonly DINOLoss<T> _loss;
     private readonly int _outputDim;
 
+    // The step's teacher outputs; the center advances once from them after the optimizer has stepped.
+    [Scratch]
+    private Tensor<T>? _pendingTeacherOutputs;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Caron et al. 2021, Alg. 1 with multi-crop (Sec. 3.1): the student's distribution for every crop is matched to the
+    /// teacher's sharpened, centered distribution for each global crop other than itself, averaged over those pairs
+    /// (2 + 2 x local crops of them). The teacher sees only the two global crops and carries no gradient; it follows by
+    /// EMA, and the center advances once per step from the teacher's outputs.
+    /// </remarks>
+    protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2)
+    {
+        var s1 = ForwardStudent(view1);
+        var s2 = ForwardStudent(view2);
+        var t1 = ForwardTeacher(view1);
+        var t2 = ForwardTeacher(view2);
+        _pendingTeacherOutputs = Engine.Concat(new[] { t1, t2 }, 0);
+        var loss = Engine.TensorAdd(
+            _loss.ComputeDifferentiableLoss(s1, t2, updateCenter: false),
+            _loss.ComputeDifferentiableLoss(s2, t1, updateCenter: false));
+        int pairs = 2;
+        foreach (var local in LocalViews)
+        {
+            var s = ForwardStudent(local);
+            loss = Engine.TensorAdd(loss, Engine.TensorAdd(
+                _loss.ComputeDifferentiableLoss(s, t1, updateCenter: false),
+                _loss.ComputeDifferentiableLoss(s, t2, updateCenter: false)));
+            pairs += 2;
+        }
+        return Engine.TensorMultiplyScalar(loss, NumOps.FromDouble(1.0 / pairs));
+    }
+
+    /// <inheritdoc />
+    protected override void AfterOptimizerStep()
+    {
+        base.AfterOptimizerStep();
+        if (_pendingTeacherOutputs is { } teacherOutputs)
+        {
+            _loss.UpdateCenter(teacherOutputs);
+            _pendingTeacherOutputs = null;
+        }
+    }
+
     /// <inheritdoc />
     public override string Name => "DINO";
 
@@ -83,9 +127,14 @@ public class DINO<T> : TeacherStudentSSL<T>
 
         _loss = new DINOLoss<T>(outputDim, studentTemp, teacherTemp, centerMomentum);
 
-        // Configure multi-crop
+        // Multi-crop: the paper's two global crops (the views a training step compares) and any number of local ones.
         NumGlobalCrops = dinoConfig.NumGlobalCrops ?? 2;
-        NumLocalCrops = dinoConfig.NumLocalCrops ?? 0;
+        if (NumGlobalCrops != 2)
+            throw new ArgumentException($"DINO trains on two global crops; NumGlobalCrops is {NumGlobalCrops}.", nameof(config));
+        // DINOConfig's documented default, the official recipe's local_crops_number of 8.
+        NumLocalCrops = dinoConfig.NumLocalCrops ?? 8;
+        if (NumLocalCrops < 0)
+            throw new ArgumentException($"NumLocalCrops must be non-negative; got {NumLocalCrops}.", nameof(config));
     }
 
     /// <summary>

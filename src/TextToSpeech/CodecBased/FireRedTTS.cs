@@ -44,8 +44,6 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FireRedTTSOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -58,6 +56,7 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new FireRedTTSOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
@@ -81,6 +80,7 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new FireRedTTSOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

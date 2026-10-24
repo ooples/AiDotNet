@@ -69,7 +69,6 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly MaskAdapterOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only MaskAdapter's OWN configuration lives here. _height, _width, _channels, _numClasses,

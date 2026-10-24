@@ -54,14 +54,14 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
                         + "floor cannot be stated without it.")]
 public partial class OLMoASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly OLMoASROptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly OLMoASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public OLMoASR(NeuralNetworkArchitecture<T> architecture, string modelPath, OLMoASROptions? options = null) : base(architecture) { _options = options ?? new OLMoASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
-    public OLMoASR(NeuralNetworkArchitecture<T> architecture, OLMoASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OLMoASROptions(); _useNativeMode = true; _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+    public OLMoASR(NeuralNetworkArchitecture<T> architecture, string modelPath, OLMoASROptions? options = null) : base(architecture) { _options = options ?? new OLMoASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
+    public OLMoASR(NeuralNetworkArchitecture<T> architecture, OLMoASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OLMoASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0002 })); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayersCore(); }
 
     /// <summary>

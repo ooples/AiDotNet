@@ -55,7 +55,6 @@ internal partial class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     #region Fields
 
     private readonly NeuralFPOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private MelSpectrogram<T>? _melSpectrogram;
     private bool _useNativeMode;
@@ -96,6 +95,7 @@ internal partial class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new NeuralFPOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -113,6 +113,7 @@ internal partial class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         : base(architecture)
     {
         _options = options ?? new NeuralFPOptions();
+        Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that

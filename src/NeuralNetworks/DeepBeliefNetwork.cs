@@ -63,9 +63,6 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
     private readonly DeepBeliefNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the list of RBM layers for greedy layer-wise pre-training.
     /// </summary>

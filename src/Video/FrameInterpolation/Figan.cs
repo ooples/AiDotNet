@@ -90,9 +90,6 @@ public partial class Figan<T> : FrameInterpolationBase<T>
 
     private readonly FiganOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -126,6 +123,7 @@ public partial class Figan<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new FiganOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
         _options.ModelPath = modelPath;
@@ -140,6 +138,7 @@ public partial class Figan<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new FiganOptions();
+        Options = _options;
         _useNativeMode = true;
         SupportsArbitraryTimestep = true;
         _flow = new FiganMultiScaleFlow<T>(_options.NumScales);

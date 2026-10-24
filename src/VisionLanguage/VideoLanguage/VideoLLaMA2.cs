@@ -75,8 +75,6 @@ public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguage
 {
     private readonly VideoLLaMA2Options _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -97,6 +95,7 @@ public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguage
         : base(architecture)
     {
         _options = options ?? new VideoLLaMA2Options();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
@@ -120,6 +119,7 @@ public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguage
         : base(architecture)
     {
         _options = options ?? new VideoLLaMA2Options();
+        Options = _options;
         if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0)
         {
             if (architecture.InputWidth > 0 && architecture.InputWidth != architecture.InputHeight)
@@ -133,6 +133,7 @@ public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguage
                     nameof(architecture)
                 );
             _options = new VideoLLaMA2Options(_options) { ImageSize = architecture.InputHeight };
+            Options = _options;
         }
         ValidateOptions(_options);
         _useNativeMode = true;

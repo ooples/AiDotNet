@@ -111,9 +111,6 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     private readonly Random _trainingRandom;
 
     /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
-    /// <inheritdoc/>
     public string Name => _useNativeMode ? "CLAP-Native" : "CLAP-ONNX";
 
     /// <inheritdoc/>
@@ -135,6 +132,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        // Through the base, so Options.Seed seeds the layers' weights and their stochastic streams (SpecAugment,
+        // drop-path, dropout); held only in _options, the seed reached nothing but the crop generator.
+        Options = _options;
         if (string.IsNullOrWhiteSpace(audioEncoderPath))
             throw new ArgumentException("Audio encoder path is required for ONNX mode.", nameof(audioEncoderPath));
         if (!File.Exists(audioEncoderPath))
@@ -182,6 +182,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        // Through the base, so Options.Seed seeds the layers' weights and their stochastic streams (SpecAugment,
+        // drop-path, dropout); held only in _options, the seed reached nothing but the crop generator.
+        Options = _options;
         _options.Validate();
         // Before the towers are built: Options.Seed seeds their initial weights and every stochastic layer's stream
         // (dropout, drop-path, SpecAugment stripes, the fusion branch's random "longer" clip). It used to reach only the

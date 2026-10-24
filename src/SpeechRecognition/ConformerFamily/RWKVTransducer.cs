@@ -57,7 +57,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
     Authors = "Keyu An, Shiliang Zhang")]
 public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly RWKVTransducerOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly RWKVTransducerOptions _options;
     private RwkvTimeMixing<T>? _timeMixing;
 
     /// <summary>
@@ -85,8 +85,8 @@ public partial class RWKVTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     /// </remarks>
     public bool SupportsWordTimestamps => false;
 
-    public RWKVTransducer(NeuralNetworkArchitecture<T> architecture, string modelPath, RWKVTransducerOptions? options = null) : base(architecture) { _options = options ?? new RWKVTransducerOptions(); if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.Validate(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
-    public RWKVTransducer(NeuralNetworkArchitecture<T> architecture, RWKVTransducerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RWKVTransducerOptions(); _options.Validate(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate }); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public RWKVTransducer(NeuralNetworkArchitecture<T> architecture, string modelPath, RWKVTransducerOptions? options = null) : base(architecture) { _options = options ?? new RWKVTransducerOptions(); Options = _options; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.Validate(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public RWKVTransducer(NeuralNetworkArchitecture<T> architecture, RWKVTransducerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RWKVTransducerOptions(); Options = _options; _options.Validate(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate }); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using RWKVTransducer's RWKV-enhanced parallel branches.

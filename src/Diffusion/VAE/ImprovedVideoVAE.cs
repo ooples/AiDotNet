@@ -80,6 +80,14 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => VIDEO_LATENT_SCALE;
 
     /// <inheritdoc />
+    /// <remarks>Revision 2: the deepest encoder and decoder blocks keep the resolution (8x, not 16x).</remarks>
+    protected override int ArchitectureRevision => 2;
+
+    /// <inheritdoc />
+    protected override string ArchitectureRevisionNote =>
+        "Revision 2 keeps the resolution in the deepest encoder and decoder blocks (a 3x3 stride-1 convolution where " +
+        "revision 1 had a stride-2 one and a 4x4 stride-2 deconvolution), so the VAE compresses 8x as it reports.";
+
     /// <inheritdoc />
     public override bool SupportsTiling => true;
 

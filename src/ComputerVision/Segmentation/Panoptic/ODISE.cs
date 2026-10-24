@@ -76,7 +76,6 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
         => SpatialStrideContract(inputRank, 1);
 
     private readonly ODISEOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only ODISE's OWN configuration lives here. _height, _width, _channels, _numClasses,

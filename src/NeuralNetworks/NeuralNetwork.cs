@@ -62,9 +62,6 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
     private readonly NeuralNetworkDefaultOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Indicates whether this network supports training (learning from data).
     /// </summary>

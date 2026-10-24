@@ -130,9 +130,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly DCRNNOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Uses the configured DCRNN Adam recipe in the shared tape trainer.</summary>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
@@ -758,7 +755,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the DCRNN model, Forecast produces predictions from input data. This is the main inference step of the DCRNN architecture.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {

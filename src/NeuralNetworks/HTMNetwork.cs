@@ -58,9 +58,6 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HTMNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the input vector.
     /// </summary>

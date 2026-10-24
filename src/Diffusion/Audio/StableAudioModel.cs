@@ -196,11 +196,7 @@ public partial class StableAudioModel<T> : AudioDiffusionModelBase<T>
             patchSize: 1,
             contextDim: CONTEXT_DIM);
 
-        _audioVAE = audioVAE ?? new AudioVAE<T>(
-            melChannels: STABLE_AUDIO_MEL_CHANNELS,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            numResBlocks: 2);
+        _audioVAE = audioVAE ?? new AudioVAE<T>(melBins: STABLE_AUDIO_MEL_CHANNELS, latentChannels: LATENT_CHANNELS);
     }
 
     #endregion

@@ -81,9 +81,6 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
 {
     private readonly DepthAnythingV2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
 
     #region Fields
 

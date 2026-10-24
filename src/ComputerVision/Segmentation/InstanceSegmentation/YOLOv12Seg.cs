@@ -68,7 +68,6 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 public partial class YOLOv12Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLOv12SegOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only YOLOv12Seg's OWN configuration lives here. _height, _width, _channels, _numClasses,

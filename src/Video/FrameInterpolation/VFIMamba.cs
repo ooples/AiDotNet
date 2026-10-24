@@ -76,9 +76,6 @@ public partial class VFIMamba<T> : FrameInterpolationBase<T>
 {
     private readonly VFIMambaOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -96,6 +93,7 @@ public partial class VFIMamba<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new VFIMambaOptions();
+        Options = _options;
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
         _options.ModelPath = modelPath;
@@ -116,6 +114,7 @@ public partial class VFIMamba<T> : FrameInterpolationBase<T>
         : base(architecture)
     {
         _options = options ?? new VFIMambaOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,

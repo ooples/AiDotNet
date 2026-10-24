@@ -58,9 +58,6 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly DCCRNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Model Architecture Parameters
 
     /// <summary>

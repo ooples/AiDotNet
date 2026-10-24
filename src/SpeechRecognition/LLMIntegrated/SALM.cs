@@ -52,19 +52,19 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
                         + "gradients clipped to 5.0.")]
 public partial class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly SALMOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly SALMOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public SALM(NeuralNetworkArchitecture<T> architecture, string modelPath, SALMOptions? options = null) : base(architecture) { _options = options ?? new SALMOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public SALM(NeuralNetworkArchitecture<T> architecture, string modelPath, SALMOptions? options = null) : base(architecture) { _options = options ?? new SALMOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
     // SALM (Chen et al., "SALM: Speech-Augmented Language Model", arXiv 2310.09424) trains the
     // speech-augmented LLM head with CROSS-ENTROPY over text tokens. AudioNeuralNetworkBase defaults
     // to MeanSquaredErrorLoss, which this model silently inherited, so it was descending MSE on token
     // LOGITS — an objective the paper never uses. The head emits raw logits, so use the fused
     // log-softmax/NLL form, as the other logit-head models here do.
-    public SALM(NeuralNetworkArchitecture<T> architecture, SALMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SALMOptions(); _useNativeMode = true; _optimizer = optimizer
+    public SALM(NeuralNetworkArchitecture<T> architecture, SALMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>()) { _options = options ?? new SALMOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 

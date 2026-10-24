@@ -43,14 +43,14 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ResearchPaper("Sarvam AI ASR", "https://sarvam.ai")]
 public partial class SarvamASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly SarvamASROptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly SarvamASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public SarvamASR(NeuralNetworkArchitecture<T> architecture, string modelPath, SarvamASROptions? options = null) : base(architecture) { _options = options ?? new SarvamASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "hi", "ta", "te", "kn", "ml", "bn", "mr", "gu", "en" }; InitializeLayers(); }
-    public SarvamASR(NeuralNetworkArchitecture<T> architecture, SarvamASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SarvamASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "hi", "ta", "te", "kn", "ml", "bn", "mr", "gu", "en" }; InitializeLayers(); }
+    public SarvamASR(NeuralNetworkArchitecture<T> architecture, string modelPath, SarvamASROptions? options = null) : base(architecture) { _options = options ?? new SarvamASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "hi", "ta", "te", "kn", "ml", "bn", "mr", "gu", "en" }; InitializeLayers(); }
+    public SarvamASR(NeuralNetworkArchitecture<T> architecture, SarvamASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SarvamASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "hi", "ta", "te", "kn", "ml", "bn", "mr", "gu", "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Sarvam AI's India-optimized ASR architecture.

@@ -50,8 +50,6 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeechOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -64,6 +62,7 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new NaturalSpeechOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -86,6 +85,7 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new NaturalSpeechOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
             optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(

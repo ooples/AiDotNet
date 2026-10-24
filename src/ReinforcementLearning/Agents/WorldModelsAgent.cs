@@ -72,9 +72,6 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
     private WorldModelsOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     // V: VAE for spatial compression
     private INeuralNetwork<T> _vaeEncoder;
     private INeuralNetwork<T> _vaeDecoder;
@@ -112,6 +109,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     public WorldModelsAgent(WorldModelsOptions<T> options) : base(options)
     {
         _options = options;
+        Options = _options;
         _updateCount = 0;
         _random = RandomHelper.CreateSecureRandom();
 

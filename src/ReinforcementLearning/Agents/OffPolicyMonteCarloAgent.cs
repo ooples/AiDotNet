@@ -45,8 +45,6 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
 {
     private OffPolicyMonteCarloOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, T>> _cTable;  // Cumulative weights
     private List<(Vector<T> state, int action, T reward)> _episode;
@@ -69,6 +67,7 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
         }
 
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _cTable = new Dictionary<string, Dictionary<int, T>>();
         _episode = new List<(Vector<T>, int, T)>();

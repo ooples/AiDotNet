@@ -95,9 +95,6 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
 
     private readonly NeuralNoiseReducerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>
