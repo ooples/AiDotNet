@@ -51,6 +51,7 @@ internal class InferenceOptimizer<T>
     private IDraftModel<T>? _draftModel;
     private SpeculativeDecoder<T>? _speculativeDecoder;
     private bool _isInitialized;
+    private (int Layers, long QuantizedBytes, long OriginalBytes) _int8Storage;
 
     /// <summary>
     /// Gets the configuration being used.
@@ -142,6 +143,7 @@ internal class InferenceOptimizer<T>
         anyApplied |= ApplyAttentionOptimizations(workingModel);
         InferenceDiagnostics.RecordDecision("InferenceOptimizer", "AttentionRewrites", enabled: anyApplied, reason: anyApplied ? "Applied" : "NoApplicableLayersOrDisabled");
         anyApplied |= ApplyWeightOnlyQuantization(workingModel);
+        _int8Storage = MeasureInt8Storage(workingModel);
         anyApplied |= Initialize(workingModel);
 
         return (workingModel, anyApplied);
@@ -671,8 +673,9 @@ internal class InferenceOptimizer<T>
                     continue;
                 }
 
-                int seqLen = inputShape[0];
-                int embDim = inputShape[1];
+                // Last two axes: a layer resolved from a batched forward reports [batch, seq, emb].
+                int seqLen = inputShape[inputShape.Length - 2];
+                int embDim = inputShape[inputShape.Length - 1];
                 int headCount = flash.HeadCount;
                 var activation = flash.ScalarActivation;
 
@@ -773,8 +776,9 @@ internal class InferenceOptimizer<T>
         if (inputShape.Length < 2)
             return null;
 
-        int seqLen = inputShape[0];
-        int embDim = inputShape[1];
+        // Last two axes: a layer resolved from a batched forward reports [batch, seq, emb].
+        int seqLen = inputShape[inputShape.Length - 2];
+        int embDim = inputShape[inputShape.Length - 1];
 
         var cachedGqa = new CachedGroupedQueryAttention<T>(
             sequenceLength: seqLen,
@@ -826,8 +830,9 @@ internal class InferenceOptimizer<T>
             return null;
         }
 
-        int seqLen = inputShape[0];
-        int embDim = inputShape[1];
+        // Last two axes: a layer resolved from a batched forward reports [batch, seq, emb].
+        int seqLen = inputShape[inputShape.Length - 2];
+        int embDim = inputShape[inputShape.Length - 1];
 
         var paged = new PagedCachedMultiHeadAttention<T>(
             sequenceLength: seqLen,
@@ -1133,8 +1138,11 @@ internal class InferenceOptimizer<T>
             return null;
         }
 
-        int seqLen = inputShape[0];
-        int embDim = inputShape[1];
+        // The last two axes, whatever the rank: a layer resolved from a batched forward reports [batch, seq, emb],
+        // and reading [0]/[1] there sized the replacement with the sequence length as its embedding width (a
+        // 16-wide, 4-head layer fed six tokens became a 6-wide FlashAttention and threw on the head count).
+        int seqLen = inputShape[inputShape.Length - 2];
+        int embDim = inputShape[inputShape.Length - 1];
         int headCount = mha.HeadCount;
         var activation = mha.ScalarActivation;
 
@@ -1225,8 +1233,9 @@ internal class InferenceOptimizer<T>
         if (inputShape.Length < 2)
             return null;
 
-        int seqLen = inputShape[0];
-        int embDim = inputShape[1];
+        // Last two axes: a layer resolved from a batched forward reports [batch, seq, emb].
+        int seqLen = inputShape[inputShape.Length - 2];
+        int embDim = inputShape[inputShape.Length - 1];
         if (seqLen <= 0 || embDim <= 0)
             return null;
 
@@ -1299,14 +1308,18 @@ internal class InferenceOptimizer<T>
 
     private bool InferCausalFromModel(NeuralNetworkBase<T> model)
     {
-        // Default to causal when the user enables generation-oriented inference features.
-        // This matches industry-standard expectations for autoregressive decoding and avoids
-        // relying on users to set TaskType explicitly.
-        if (_config.EnableKVCache || _config.SpeculativeDecoding.Enabled)
+        // Speculative decoding is opt-in and only exists for autoregressive generation, so asking for it says the
+        // model decodes causally.
+        if (_config.SpeculativeDecoding.Enabled)
             return true;
 
-        // Otherwise, keep heuristics conservative to avoid changing semantics for non-generative models.
-        return model.Architecture.TaskType == NeuralNetworkTaskType.TextGeneration;
+        // EnableKVCache is NOT evidence: it is on in InferenceOptimizationConfig.Default, which the builder applies
+        // to every model (#1632). Counting it made every attention model "causal", so encoders and regression or
+        // classification transformers were rewritten onto KV-cached attention that a full-sequence Predict gains
+        // nothing from: a 16x64 one-layer transformer went from 1.6 ms to 65 ms per Predict. Infer from the task.
+        return model.Architecture.TaskType is NeuralNetworkTaskType.TextGeneration
+            or NeuralNetworkTaskType.SequenceToSequence
+            or NeuralNetworkTaskType.Translation;
     }
 
     /// <summary>
@@ -1525,6 +1538,46 @@ internal class InferenceOptimizer<T>
     }
 
     /// <summary>
+    /// The INT8 weight storage the last <see cref="OptimizeForInference"/> produced: how many layers hold INT8
+    /// weights, the bytes those weights occupy (sbyte weights plus FP32 per-row scales and biases), and the bytes the
+    /// same weights take in FP32. Walks registered sublayers too, since the quantization pass rewrites the attention
+    /// and feed-forward layers inside composite blocks as well as top-level ones.
+    /// </summary>
+    private static (int Layers, long QuantizedBytes, long OriginalBytes) MeasureInt8Storage(NeuralNetworkBase<T> model)
+    {
+        int layers = 0;
+        long quantized = 0, original = 0;
+        var visited = new HashSet<ILayer<T>>();
+        var pending = new Stack<ILayer<T>>(model.Layers);
+        while (pending.Count > 0)
+        {
+            var layer = pending.Pop();
+            if (!visited.Add(layer)) continue;
+
+            (long Quantized, long Original)? bytes = layer switch
+            {
+                QuantizedDenseLayer d when d.QuantizationFormat == InferenceQuantizationMode.WeightOnlyInt8
+                    => QuantizedLayerStats.GetBytes(d),
+                QuantizedAttentionLayer a when a.QuantizationFormat == InferenceQuantizationMode.WeightOnlyInt8
+                    => QuantizedLayerStats.GetBytes(a),
+                _ => null
+            };
+            if (bytes is { } b)
+            {
+                layers++;
+                quantized += b.Quantized;
+                original += b.Original;
+            }
+
+            if (layer is LayerBase<T> composite)
+                foreach (var sub in composite.GetSubLayers())
+                    pending.Push(sub);
+        }
+
+        return (layers, quantized, original);
+    }
+
+    /// <summary>
     /// Gets statistics about the inference optimizer's state.
     /// </summary>
     /// <returns>Dictionary of statistics.</returns>
@@ -1540,7 +1593,10 @@ internal class InferenceOptimizer<T>
             ["PagedAttentionLayerCount"] = _pagedAttentionLayers?.Count ?? 0,
             ["PagedAttentionWeightOnlyQuantizationEnabled"] = _pagedAttentionLayers?.Any(l => l.EnableWeightOnlyQuantization) ?? false,
             ["InferenceQuantizationMode"] = _config.InferenceQuantization.ToString(),
-            ["PositionalEncoding"] = _config.PositionalEncoding.ToString()
+            ["PositionalEncoding"] = _config.PositionalEncoding.ToString(),
+            ["Int8QuantizedLayerCount"] = _int8Storage.Layers,
+            ["Int8QuantizedWeightBytes"] = _int8Storage.QuantizedBytes,
+            ["Int8OriginalWeightBytes"] = _int8Storage.OriginalBytes
         };
 
         if (_kvCache != null)
