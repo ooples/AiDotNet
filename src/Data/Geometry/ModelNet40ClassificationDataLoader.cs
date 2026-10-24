@@ -370,7 +370,8 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
                 response.EnsureSuccessStatusCode();
 
                 using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fileStream);
+                // The timeout must bound the body too: ResponseHeadersRead completes the request at the headers (#2363).
+                await AiDotNet.Helpers.SharedHttp.CopyBodyAsync(response, fileStream, download.Token);
             }
 
             SafeZipExtractor.ExtractToDirectory(tempFile, dataPath);

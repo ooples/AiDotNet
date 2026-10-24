@@ -107,7 +107,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
             }
 
             // Otherwise, it's a constant
-            return double.Parse(node.Value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
+            return double.Parse(node.Value, NumberStyles.Float, CultureInfo.InvariantCulture);
         }
         else
         {
@@ -213,7 +213,8 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
         {
             // For simplicity, this assumes all terminals are variables or constants
             // In a real implementation, you'd need to handle different terminal types
-            node.Value = _random.NextDouble().ToString("F2");
+            // Written in the invariant culture, as the terminal parse reads it: "0,37" would read back as 37 (#2359).
+            node.Value = _random.NextDouble().ToString("F2", CultureInfo.InvariantCulture);
         }
         else
         {

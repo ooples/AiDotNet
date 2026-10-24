@@ -113,7 +113,7 @@ public partial class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
                 bool validLine = true;
                 for (int i = 0; i < dimension; i++)
                 {
-                    if (double.TryParse(parts[i + 1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double val))
+                    if (double.TryParse(parts[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
                     {
                         values[i] = numOps.FromDouble(val);
                     }

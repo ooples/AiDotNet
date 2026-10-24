@@ -353,7 +353,7 @@ public class NSGAII<T, TInput, TOutput> :
         {
             if (objValue is string fitnessStr)
             {
-                return MathHelper.GetNumericOperations<T>().FromDouble(double.Parse(fitnessStr, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture));
+                return MathHelper.GetNumericOperations<T>().FromDouble(double.Parse(fitnessStr, NumberStyles.Float, CultureInfo.InvariantCulture));
             }
         }
 

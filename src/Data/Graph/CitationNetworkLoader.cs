@@ -222,7 +222,8 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
                 response.EnsureSuccessStatusCode();
 
                 using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fileStream);
+                // The timeout must bound the body too: ResponseHeadersRead completes the request at the headers (#2363).
+                await AiDotNet.Helpers.SharedHttp.CopyBodyAsync(response, fileStream, download.Token);
             }
 
             // Extract the archive
@@ -442,7 +443,7 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
             var featureValues = new double[parts.Length - 2];
             for (int i = 1; i < parts.Length - 1; i++)
             {
-                if (double.TryParse(parts[i], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double value))
+                if (double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                 {
                     featureValues[i - 1] = value;
                 }

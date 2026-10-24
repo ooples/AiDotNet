@@ -86,7 +86,7 @@ internal static class DatasetDownloader
                 await response.Content.CopyToAsync(fileStream, cancellationToken);
                 await fileStream.FlushAsync(cancellationToken);
 #else
-                await response.Content.CopyToAsync(fileStream);
+                await AiDotNet.Helpers.SharedHttp.CopyBodyAsync(response, fileStream, cancellationToken);
                 fileStream.Flush();
 #endif
             }
@@ -404,7 +404,7 @@ internal static class DatasetDownloader
 #if NET6_0_OR_GREATER
                 await response.Content.CopyToAsync(fileStream, cancellationToken);
 #else
-                await response.Content.CopyToAsync(fileStream);
+                await AiDotNet.Helpers.SharedHttp.CopyBodyAsync(response, fileStream, cancellationToken);
 #endif
             }
 

@@ -1150,7 +1150,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             switch (Type)
             {
                 case SymbolicExpressionType.Constant:
-                    return Constant is null ? "0" : Constant.ToString() ?? "0";
+                    // Invariant, as ParseExpression reads it, so a constant survives the round trip on any culture (#2359).
+                    return Constant is null ? "0" : Convert.ToString(Constant, CultureInfo.InvariantCulture) ?? "0";
                 case SymbolicExpressionType.Variable:
                     return $"x{VariableIndex + 1}";
                 case SymbolicExpressionType.UnaryOperation:
@@ -1255,7 +1256,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             var numOps = MathHelper.GetNumericOperations<T>();
 
-            if (type == SymbolicExpressionType.Constant && double.TryParse(expression, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double constant))
+            if (type == SymbolicExpressionType.Constant && double.TryParse(expression, NumberStyles.Float, CultureInfo.InvariantCulture, out double constant))
             {
                 return new SymbolicExpressionNode<T>(numOps.FromDouble(constant));
             }

@@ -816,7 +816,7 @@ public class ExperimentTracker : IExperimentTracker
         if (field.StartsWith("metrics."))
         {
             var metricKey = field.Substring(8);
-            if (double.TryParse(valueStr, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value))
+            if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
             {
                 query = op switch
                 {

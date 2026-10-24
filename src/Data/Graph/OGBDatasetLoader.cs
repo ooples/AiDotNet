@@ -272,7 +272,8 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
                 response.EnsureSuccessStatusCode();
 
                 using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fileStream);
+                // The timeout must bound the body too: ResponseHeadersRead completes the request at the headers (#2363).
+                await AiDotNet.Helpers.SharedHttp.CopyBodyAsync(response, fileStream, download.Token);
             }
 
             // Extract the archive (delete existing directory first for net471 compatibility)
@@ -476,7 +477,7 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
         }
 
         string[] lines = await FilePolyfill.ReadAllLinesAsync(filePath, cancellationToken);
-        bool hasHeader = lines.Length > 0 && !double.TryParse(lines[0].Split(',')[0], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out _);
+        bool hasHeader = lines.Length > 0 && !double.TryParse(lines[0].Split(',')[0], NumberStyles.Float, CultureInfo.InvariantCulture, out _);
 
         for (int i = hasHeader ? 1 : 0; i < lines.Length; i++)
         {
@@ -490,7 +491,7 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
             var featureVector = new double[parts.Length];
             for (int j = 0; j < parts.Length; j++)
             {
-                double.TryParse(parts[j], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out featureVector[j]);
+                double.TryParse(parts[j], NumberStyles.Float, CultureInfo.InvariantCulture, out featureVector[j]);
             }
             features.Add(featureVector);
         }

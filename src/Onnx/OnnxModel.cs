@@ -518,10 +518,11 @@ public class OnnxModel<T> : IOnnxModel<T>
             // Download model from URL. The shared client's timeout bounds the request, as a client's own default
             // did; the body below streams under the caller's token alone, so a large model is not cut off.
             using var download = AiDotNet.Helpers.SharedHttp.WithTimeout(AiDotNet.Helpers.SharedHttp.DefaultTimeout, cancellationToken);
+            // Disposed on every path, an error status included: the shared client outlives this call (#2363).
 #if NET6_0_OR_GREATER
-            var response = await AiDotNet.Helpers.SharedHttp.Downloads.GetAsync(modelPath, HttpCompletionOption.ResponseHeadersRead, download.Token);
+            using var response = await AiDotNet.Helpers.SharedHttp.Downloads.GetAsync(modelPath, HttpCompletionOption.ResponseHeadersRead, download.Token);
 #else
-            var response = await AiDotNet.Helpers.SharedHttp.Downloads.GetAsync(modelPath, download.Token);
+            using var response = await AiDotNet.Helpers.SharedHttp.Downloads.GetAsync(modelPath, download.Token);
 #endif
             response.EnsureSuccessStatusCode();
 

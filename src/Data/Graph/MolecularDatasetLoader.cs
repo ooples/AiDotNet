@@ -260,7 +260,8 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
                 response.EnsureSuccessStatusCode();
 
                 using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None);
-                await response.Content.CopyToAsync(fileStream);
+                // The timeout must bound the body too: ResponseHeadersRead completes the request at the headers (#2363).
+                await AiDotNet.Helpers.SharedHttp.CopyBodyAsync(response, fileStream, download.Token);
             }
 
             // Extract or copy based on file type
@@ -574,13 +575,18 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             {
                 string atomLine = lines[lineIdx];
                 string[] atomParts = atomLine.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                if (atomParts.Length >= 4)
+                // A row without x, y, z and a symbol makes the molecule short of atoms: skip the molecule (#2359).
+                if (atomParts.Length < 4)
+                {
+                    malformed = true;
+                    continue;
+                }
                 {
                     // A coordinate that does not parse makes the molecule malformed, and it is skipped; it used to
                     // become 0 silently (#2359).
-                    if (!double.TryParse(atomParts[0], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double x) ||
-                        !double.TryParse(atomParts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double y) ||
-                        !double.TryParse(atomParts[2], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double z))
+                    if (!double.TryParse(atomParts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double x) ||
+                        !double.TryParse(atomParts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double y) ||
+                        !double.TryParse(atomParts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double z))
                     {
                         malformed = true;
                         continue;
@@ -618,7 +624,8 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             lineIdx++; // Skip $$$$
 
             // Build graph if we have valid data
-            if (atomTypes.Count > 0 && !malformed)
+            // A file that ends inside the atom block also leaves the molecule short of the atoms its counts line declares.
+            if (atomTypes.Count > 0 && atomTypes.Count == numAtoms && !malformed)
             {
                 var graph = BuildMolecularGraph(atomTypes, edges, atomPositions);
                 graphs.Add(graph);
@@ -655,13 +662,17 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
         for (int i = 2; i < Math.Min(2 + numAtoms, lines.Length); i++)
         {
             string[] parts = lines[i].Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 4)
+            // A row without a symbol and x, y, z leaves the molecule short of atoms: do not load it (#2359).
+            if (parts.Length < 4)
+            {
+                return null;
+            }
             {
                 string atomSymbol = parts[0];
                 // A coordinate that does not parse makes the record malformed; it used to become 0 silently (#2359).
-                if (!double.TryParse(parts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double x) ||
-                    !double.TryParse(parts[2], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double y) ||
-                    !double.TryParse(parts[3], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double z))
+                if (!double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double x) ||
+                    !double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double y) ||
+                    !double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out double z))
                 {
                     return null;
                 }
@@ -671,7 +682,8 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             }
         }
 
-        if (atomTypes.Count == 0)
+        // Every atom the header declares, or none: a truncated file is not a smaller molecule.
+        if (atomTypes.Count == 0 || atomTypes.Count != numAtoms)
         {
             return null;
         }

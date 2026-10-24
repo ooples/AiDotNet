@@ -139,8 +139,13 @@ public static class LossFunctionFactory<T>
             float f => f,
             int i => i,
             long l => l,
-            string s when double.TryParse(s, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed) => parsed,
-            _ => Convert.ToDouble(value)
+            // A string is read with a '.' decimal point and nothing else: "0,25" is ambiguous (0.25 or 25) and is
+            // refused rather than guessed, and Convert.ToDouble below would read it in the current culture (#2359).
+            string s => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : throw new ArgumentException(
+                    $"Loss parameter '{key}' is \"{s}\", which is not a number written with a '.' decimal point.", nameof(parameters)),
+            _ => Convert.ToDouble(value, CultureInfo.InvariantCulture)
         };
     }
 

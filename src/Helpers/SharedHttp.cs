@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Net.Http;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace AiDotNet.Helpers;
 
@@ -46,5 +48,27 @@ internal static class SharedHttp
         var source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         source.CancelAfter(timeout);
         return source;
+    }
+
+    /// <summary>
+    /// Copies <paramref name="response"/>'s body to <paramref name="destination"/>, stopping when
+    /// <paramref name="cancellationToken"/> is cancelled, on every target framework.
+    /// </summary>
+    /// <remarks>
+    /// With <see cref="HttpCompletionOption.ResponseHeadersRead"/> the request completes at the headers, so a timeout
+    /// that bounds only the request leaves a stalled body unbounded. <c>HttpContent.CopyToAsync</c> takes a token only
+    /// from .NET 5, and a network read on .NET Framework may not observe one, so cancellation also disposes the
+    /// response, which aborts a read in progress.
+    /// </remarks>
+    internal static async Task CopyBodyAsync(HttpResponseMessage response, Stream destination, CancellationToken cancellationToken)
+    {
+        if (response is null) throw new ArgumentNullException(nameof(response));
+        if (destination is null) throw new ArgumentNullException(nameof(destination));
+        using (cancellationToken.Register(response.Dispose))
+        using (var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+        {
+            await body.CopyToAsync(destination, 81920, cancellationToken).ConfigureAwait(false);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 }

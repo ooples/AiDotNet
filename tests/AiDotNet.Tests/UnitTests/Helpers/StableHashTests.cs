@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Helpers;
 using AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 using Xunit;
@@ -54,8 +55,18 @@ public class StableHashTests
         for (int i = 0; i < 200; i++)
         {
             // "find" reaches the synonym table too, the second site that indexed by the raw hash.
-            var expanded = expansion.ExpandQuery("find a fast model number " + i);
-            Assert.NotEmpty(expanded);
+            string query = "find a fast model number " + i;
+            var expanded = expansion.ExpandQuery(query);
+
+            // The query itself always comes first, so a non-empty result proves nothing: check the two variations that
+            // index a table by the hash were produced.
+            Assert.Contains(expanded, v => v.StartsWith("details about ", StringComparison.Ordinal)
+                || v.StartsWith("information regarding ", StringComparison.Ordinal)
+                || v.StartsWith("explain ", StringComparison.Ordinal)
+                || v.StartsWith("describe ", StringComparison.Ordinal));
+            Assert.Contains(expanded, v => v.StartsWith("search a fast", StringComparison.Ordinal)
+                || v.StartsWith("locate a fast", StringComparison.Ordinal)
+                || v.StartsWith("discover a fast", StringComparison.Ordinal));
         }
     }
 }

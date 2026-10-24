@@ -96,7 +96,7 @@ public class SkinLesionDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
 
             for (int j = 0; j < NumClasses; j++)
             {
-                if (j + 1 < parts.Length && double.TryParse(parts[j + 1].Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double val))
+                if (j + 1 < parts.Length && double.TryParse(parts[j + 1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
                 {
                     labels[j] = val;
                 }

@@ -118,10 +118,10 @@ public class OpenImagesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
 
             if (!classMap.TryGetValue(labelName, out int classIdx)) continue;
 
-            if (!double.TryParse(parts[4], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double xmin) ||
-                !double.TryParse(parts[5], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double xmax) ||
-                !double.TryParse(parts[6], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double ymin) ||
-                !double.TryParse(parts[7], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double ymax))
+            if (!double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out double xmin) ||
+                !double.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out double xmax) ||
+                !double.TryParse(parts[6], NumberStyles.Float, CultureInfo.InvariantCulture, out double ymin) ||
+                !double.TryParse(parts[7], NumberStyles.Float, CultureInfo.InvariantCulture, out double ymax))
                 continue;
 
             double w = xmax - xmin;

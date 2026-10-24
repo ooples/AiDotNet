@@ -422,7 +422,7 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
                 var valueStr = parts[j].Trim();
                 if (string.IsNullOrEmpty(valueStr) || valueStr == "NA") break;
 
-                if (double.TryParse(valueStr, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double value))
+                if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                 {
                     values.Add(NumOps.FromDouble(value));
                 }
