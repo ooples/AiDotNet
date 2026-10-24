@@ -52,4 +52,13 @@ public enum RecipeProvenance
     /// a later official release can replace it.
     /// </remarks>
     NamedReproduction,
+
+    /// <summary>
+    /// The paper does not state this value; the authors' released code and training configuration do.
+    /// </summary>
+    /// <remarks>
+    /// Used where the first-party source is the code — CosyVoice's paper names no optimizer, and its recipe is the
+    /// official repository's <c>train_conf</c>. The <c>Source</c> must name the file, and say the paper is silent.
+    /// </remarks>
+    ReleasedCode,
 }
