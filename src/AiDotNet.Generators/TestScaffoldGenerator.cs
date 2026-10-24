@@ -5016,11 +5016,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return null;
     }
 
+    // The whole argument value, up to the comma or parenthesis that ends it. Matching only `\d+` removed the first
+    // number of an expression: `inputDepth: 3, outputSize: 256 * 256 * 3)` became `inputDepth: 3 * 256 * 3)`, so
+    // OpenSora's fixture declared 2304 input channels and every training test threw (#2365). A value containing a
+    // parenthesis or comma (a call, a nested expression) is not matched at all, so nothing is ever cut in half.
     private static readonly System.Text.RegularExpressions.Regex StatedOutputSize =
-        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*\d+|outputSize:\s*\d+,\s*",
+        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*[^,()]+?(?=\s*[,)])|outputSize:\s*[^,()]+?,\s*",
             System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
 
-    /// <summary>Removes every <c>outputSize: n</c> argument from a generated constructor expression (#2147).</summary>
+    /// <summary>Removes every <c>outputSize: value</c> argument from a generated constructor expression (#2147).</summary>
     private static string OmitStatedOutputSize(string expression) => StatedOutputSize.Replace(expression, string.Empty);
 
     private static bool InheritsFromAnyExcludedBase(INamedTypeSymbol type)

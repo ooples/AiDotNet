@@ -44,6 +44,14 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
 {
     private readonly AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T> _detectionLoss;
 
+    /// <summary>
+    /// The reference optimizer (Cai and Vasconcelos 2018, trained with the Detectron recipe): SGD with momentum 0.9
+    /// at 0.02 for 16 images per batch, scaled linearly to the one image this model trains on per step (0.00125).
+    /// The recipe's weight decay (0.0001) is not applied.
+    /// </summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperSgdMomentum(0.02 / 16, 0.9);
+
     [AiDotNet.Attributes.Scratch]
     private Random? _trainingRandom;
     private readonly RPN<T> _rpn;
@@ -90,7 +98,24 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
 
         _nms = new NMS<T>();
         _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T>(options.NumClasses, numStages,
-            options.TwoStageLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions());
+            options.TwoStageLoss ?? ReferenceLossOptions(numStages));
+    }
+
+    /// <summary>
+    /// The reference cascade recipe (Cai and Vasconcelos 2018, as trained with Detectron's CASCADE_RCNN settings and
+    /// mmdetection's cascade config): stage loss weights 1, 0.5, 0.25 and box-regression target weights (10, 10, 5, 5),
+    /// (20, 20, 10, 10), (30, 30, 15, 15). A cascade of another depth has no reference values and keeps the defaults.
+    /// </summary>
+    private static AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions ReferenceLossOptions(int numStages)
+    {
+        var options = new AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions();
+        if (numStages > 3) return options;
+        options.StageLossWeights = new[] { 1.0, 0.5, 0.25 }.Take(numStages).ToArray();
+        options.StageBoxRegressionWeights = new[]
+        {
+            new[] { 10.0, 10.0, 5.0, 5.0 }, new[] { 20.0, 20.0, 10.0, 10.0 }, new[] { 30.0, 30.0, 15.0, 15.0 }
+        }.Take(numStages).ToArray();
+        return options;
     }
 
     private static (int hiddenDim, int roiOutputSize) GetSizeConfig(ModelSize size) => size switch
@@ -133,7 +158,7 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
             return new List<Tensor<T>>
             {
                 new Tensor<T>(new[] { 0, Options.NumClasses + 1 }),
-                new Tensor<T>(new[] { 0, (Options.NumClasses + 1) * 4 }),
+                new Tensor<T>(new[] { 0, 4 }),
                 new Tensor<T>(new[] { 0, 4 }),
                 objectness,
                 bboxDeltas
@@ -273,7 +298,8 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
             // Refine boxes for the next stage. The boxes are constants to RoIAlign, so refinement carries no
             // gradient; each stage trains through its own logits and deltas above.
             if (stageIdx < _numStages - 1)
-                currentBoxes = RefineBoxes(currentBoxes, boxDeltas, imageWidth, imageHeight);
+                currentBoxes = RefineBoxes(currentBoxes, boxDeltas, imageWidth, imageHeight,
+                    _detectionLoss.StageBoxRegressionWeights(stageIdx));
         }
         return stages;
     }
@@ -313,28 +339,33 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         int numProposals = classLogits.Shape[0];
         int numClasses = Options.NumClasses + 1;
 
+        // The cascade's score is the ensemble of its stages: each RoI's class probabilities averaged over every
+        // stage's classifier (Cai and Vasconcelos 2018; detectron2 CascadeROIHeads averages
+        // scores_per_stage). The earlier stages' logits follow the last stage's three entries (see Forward).
+        var stageLogits = new List<Tensor<T>> { classLogits };
+        for (int index = 3; index + 1 < outputs.Count && stageLogits.Count < _numStages; index += 2)
+            if (outputs[index].Rank == 2 && outputs[index].Shape[0] == numProposals && outputs[index].Shape[1] == numClasses)
+                stageLogits.Add(outputs[index]);
+
         var candidateDetections = new List<Detection<T>>();
 
         for (int i = 0; i < numProposals; i++)
         {
-            // Apply softmax
-            double maxLogit = double.NegativeInfinity;
-            for (int c = 0; c < numClasses; c++)
-            {
-                maxLogit = Math.Max(maxLogit, NumOps.ToDouble(classLogits[i, c]));
-            }
-
-            double sumExp = 0;
             var probs = new double[numClasses];
-            for (int c = 0; c < numClasses; c++)
+            foreach (var logits in stageLogits)
             {
-                probs[c] = Math.Exp(NumOps.ToDouble(classLogits[i, c]) - maxLogit);
-                sumExp += probs[c];
-            }
-
-            for (int c = 0; c < numClasses; c++)
-            {
-                probs[c] /= sumExp;
+                double maxLogit = double.NegativeInfinity;
+                for (int c = 0; c < numClasses; c++)
+                    maxLogit = Math.Max(maxLogit, NumOps.ToDouble(logits[i, c]));
+                double sumExp = 0;
+                var stageProbs = new double[numClasses];
+                for (int c = 0; c < numClasses; c++)
+                {
+                    stageProbs[c] = Math.Exp(NumOps.ToDouble(logits[i, c]) - maxLogit);
+                    sumExp += stageProbs[c];
+                }
+                for (int c = 0; c < numClasses; c++)
+                    probs[c] += stageProbs[c] / sumExp / stageLogits.Count;
             }
 
             // Find best non-background class
@@ -351,8 +382,8 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
 
             if (bestScore < confidenceThreshold) continue;
 
-            // The boxes have already been refined through cascade stages
-            // Apply final delta for this class
+            // The boxes have already been refined through the earlier stages; apply the last stage's
+            // class-agnostic delta.
             double px1 = NumOps.ToDouble(proposalBoxes[i, 0]);
             double py1 = NumOps.ToDouble(proposalBoxes[i, 1]);
             double px2 = NumOps.ToDouble(proposalBoxes[i, 2]);
@@ -363,11 +394,12 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
             double pcx = px1 + pw / 2;
             double pcy = py1 + ph / 2;
 
-            int deltaOffset = bestClass * 4;
-            double dx = NumOps.ToDouble(boxDeltas[i, deltaOffset]);
-            double dy = NumOps.ToDouble(boxDeltas[i, deltaOffset + 1]);
-            double dw = NumOps.ToDouble(boxDeltas[i, deltaOffset + 2]);
-            double dh = NumOps.ToDouble(boxDeltas[i, deltaOffset + 3]);
+            // The last stage regressed targets scaled by its box-regression weights; undo them to decode.
+            var lastWeights = _detectionLoss.StageBoxRegressionWeights(_numStages - 1);
+            double dx = NumOps.ToDouble(boxDeltas[i, 0]) / lastWeights[0];
+            double dy = NumOps.ToDouble(boxDeltas[i, 1]) / lastWeights[1];
+            double dw = NumOps.ToDouble(boxDeltas[i, 2]) / lastWeights[2];
+            double dh = NumOps.ToDouble(boxDeltas[i, 3]) / lastWeights[3];
 
             double predCx = pcx + dx * pw;
             double predCy = pcy + dy * ph;
@@ -510,10 +542,11 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
     /// Applies one stage's box deltas to its input boxes, giving the next stage's boxes.
     /// </summary>
     /// <param name="boxes">Input boxes <c>[N, 4]</c> as (x1, y1, x2, y2) in network-input coordinates.</param>
-    /// <param name="deltas">The stage's regression output <c>[N, 4 * numClasses]</c>; the first
-    /// foreground class's (dx, dy, dw, dh) are applied.</param>
+    /// <param name="deltas">The stage's class-agnostic regression output <c>[N, 4]</c>: (dx, dy, dw, dh) per box.</param>
     /// <param name="imageWidth">Right clip bound.</param>
     /// <param name="imageHeight">Bottom clip bound.</param>
+    /// <param name="regressionWeights">The stage's (wx, wy, ww, wh) target weights, divided out of the deltas; null
+    /// for raw deltas.</param>
     /// <returns>The refined boxes <c>[N, 4]</c>, still in network-input coordinates.</returns>
     /// <remarks>
     /// Engine ops over whole columns rather than a per-box scalar loop. The refined boxes only tell
@@ -522,7 +555,8 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
     /// (2018) and detectron2's cascade head. The deltas themselves still reach the loss through the
     /// stage outputs <see cref="Forward"/> returns.
     /// </remarks>
-    internal static Tensor<T> RefineBoxes(Tensor<T> boxes, Tensor<T> deltas, int imageWidth, int imageHeight)
+    internal static Tensor<T> RefineBoxes(Tensor<T> boxes, Tensor<T> deltas, int imageWidth, int imageHeight,
+        double[]? regressionWeights = null)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
@@ -537,9 +571,26 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         var pcx = engine.TensorAdd(px1, engine.TensorMultiplyScalar(pw, half));
         var pcy = engine.TensorAdd(py1, engine.TensorMultiplyScalar(ph, half));
 
-        // Deltas of the first foreground class (columns 4..7; class 0 is background). The scale
-        // deltas are capped at 4 before exponentiating, as in the per-box version this replaces.
-        const int deltaOffset = 4;
+        // Class-agnostic deltas, one (dx, dy, dw, dh) per box, as the reference cascade regresses
+        // (Detectron's CLS_AGNOSTIC_BBOX_REG for Cascade R-CNN). Reading one class's columns for
+        // every box refined boxes of every other class with a regressor never trained on them, so
+        // the later stages drifted off their objects (#2170). The scale deltas are capped at 4
+        // before exponentiating.
+        if (deltas.Rank != 2 || deltas.Shape[1] != 4 || deltas.Shape[0] != boxes.Shape[0])
+            throw new ArgumentException($"Cascade stage deltas must be class-agnostic [N, 4]; got [{string.Join(", ", deltas.Shape.ToArray())}].", nameof(deltas));
+        if (regressionWeights is { } weights)
+        {
+            // The stage regressed targets scaled by (wx, wy, ww, wh); divide them back out before decoding.
+            if (weights.Length != 4) throw new ArgumentException("Box-regression weights are (wx, wy, ww, wh).", nameof(regressionWeights));
+            deltas = engine.TensorConcatenate(new[]
+            {
+                engine.TensorMultiplyScalar(Column(deltas, 0), ops.FromDouble(1.0 / weights[0])),
+                engine.TensorMultiplyScalar(Column(deltas, 1), ops.FromDouble(1.0 / weights[1])),
+                engine.TensorMultiplyScalar(Column(deltas, 2), ops.FromDouble(1.0 / weights[2])),
+                engine.TensorMultiplyScalar(Column(deltas, 3), ops.FromDouble(1.0 / weights[3])),
+            }, 1);
+        }
+        const int deltaOffset = 0;
         var predCx = engine.TensorAdd(pcx, engine.TensorMultiply(Column(deltas, deltaOffset), pw));
         var predCy = engine.TensorAdd(pcy, engine.TensorMultiply(Column(deltas, deltaOffset + 1), ph));
         var cap = ops.FromDouble(4.0);
@@ -581,9 +632,11 @@ internal class CascadeStage<T> : CvParameterModule<T>
         _fc1 = new Dense<T>(inputSize, hiddenDim);
         _fc2 = new Dense<T>(hiddenDim, hiddenDim);
 
-        // Heads
+        // Heads. Box regression is class-agnostic, one (dx, dy, dw, dh) per RoI, as in the reference cascade
+        // (Detectron CLS_AGNOSTIC_BBOX_REG; detectron2 and mmdetection cascade heads): every stage refines every RoI
+        // whatever its class, so a per-class regressor would refine most boxes with columns it never trained (#2170).
         _clsHead = new Dense<T>(hiddenDim, numClasses);
-        _regHead = new Dense<T>(hiddenDim, numClasses * 4);
+        _regHead = new Dense<T>(hiddenDim, 4);
     }
 
     public (Tensor<T> classLogits, Tensor<T> boxDeltas) Forward(Tensor<T> features)

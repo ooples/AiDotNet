@@ -351,8 +351,14 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
     /// <summary>Distribution bins predicted per box side.</summary>
     internal int RegMax => _regMax;
 
-    public YOLOv8Head(int[] inputChannels, int numClasses, int regMax = 16)
+    public YOLOv8Head(int[] inputChannels, int numClasses, int regMax = 16, int[]? strides = null)
     {
+        // P3-P5 at strides 8, 16, 32 unless stated: the levels every YOLO in this library feeds the head.
+        strides ??= Enumerable.Range(0, inputChannels.Length).Select(level => 8 << level).ToArray();
+        if (strides.Length != inputChannels.Length)
+            throw new ArgumentException(
+                $"One stride per feature level is required: {inputChannels.Length} levels, {strides.Length} strides.",
+                nameof(strides));
         _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _numClasses = numClasses;
         _regMax = regMax;
@@ -374,6 +380,14 @@ internal class YOLOv8Head<T> : CvParameterModule<T>
             // Regression branch (predicts distribution over regMax values for each of 4 box sides)
             _regConvs.Add(new Conv2D<T>(inputChannels[i], hiddenChannels, kernelSize: 3, padding: 1));
             _regHeads.Add(new Conv2D<T>(hiddenChannels, 4 * regMax, kernelSize: 1));
+
+            // Detect.bias_init (ultralytics/nn/modules/head.py; YOLOv9's DDetect is the same): box bias 1.0, class
+            // bias log(5 / nc / (640 / s)^2), the prior of ~5 objects per 640-pixel image spread over the level's
+            // cells. Without it every class score starts near 0.5, the background BCE over every anchor swamps the
+            // few positives, and training drives all scores to zero before the boxes have learned to overlap their
+            // objects: on one 64x64 image of two objects, YOLOv8/9/10/11 trained to a near-zero loss at mAP 0 (#2170).
+            _regHeads[i].InitializeBias(1.0);
+            _clsHeads[i].InitializeBias(Math.Log(5.0 / numClasses / Math.Pow(640.0 / strides[i], 2)));
         }
     }
 

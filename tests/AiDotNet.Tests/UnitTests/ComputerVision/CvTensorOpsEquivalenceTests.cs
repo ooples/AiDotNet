@@ -644,7 +644,8 @@ public class CvTensorOpsEquivalenceTests
 
     // ---- model-local rewrites ----
 
-    // Verbatim copy of CascadeRCNN.RefineBoxes before the rewrite.
+    // Copy of CascadeRCNN.RefineBoxes before the rewrite, reading the class-agnostic deltas the stages now
+    // regress (#2170; it used to read the first foreground class's columns 4..7 for every box).
     private static Tensor<double> RefRefineBoxes(Tensor<double> boxes, Tensor<double> deltas, int imageWidth, int imageHeight)
     {
         int numBoxes = boxes.Shape[0];
@@ -661,7 +662,7 @@ public class CvTensorOpsEquivalenceTests
             double pcx = px1 + pw / 2;
             double pcy = py1 + ph / 2;
 
-            int deltaOffset = 4; // Skip background class
+            const int deltaOffset = 0; // Class-agnostic: one (dx, dy, dw, dh) per box
             double dx = deltas[i, deltaOffset];
             double dy = deltas[i, deltaOffset + 1];
             double dw = deltas[i, deltaOffset + 2];
@@ -691,7 +692,7 @@ public class CvTensorOpsEquivalenceTests
         await Task.Yield();
         var r = new Random(7001);
         foreach (int numBoxes in new[] { 1, 5, 17 })
-        foreach (int numClasses in new[] { 2, 4 })
+        foreach (int draw in new[] { 0, 1 })
         {
             const int imageWidth = 96, imageHeight = 64;
             var boxes = new Tensor<double>(new[] { numBoxes, 4 });
@@ -705,10 +706,10 @@ public class CvTensorOpsEquivalenceTests
             }
 
             // Wide enough to exceed the exp cap (4) and to push boxes off the image on every side.
-            var deltas = Rand(new[] { numBoxes, 4 * numClasses }, r.Next());
+            var deltas = Rand(new[] { numBoxes, 4 }, r.Next());
             for (int i = 0; i < deltas.Length; i++) deltas[i] *= 3;
 
-            Compare($"RefineBoxes n{numBoxes} c{numClasses}", RefRefineBoxes(boxes, deltas, imageWidth, imageHeight),
+            Compare($"RefineBoxes n{numBoxes} draw{draw}", RefRefineBoxes(boxes, deltas, imageWidth, imageHeight),
                 CascadeRCNN<double>.RefineBoxes(boxes, deltas, imageWidth, imageHeight), 1e-12);
         }
 
@@ -791,7 +792,7 @@ public class CvTensorOpsEquivalenceTests
         ["RoIAlignFeatures"] = (new[] { 2, 3, 6, 5 }, x => CvTensorOps<double>.RoIAlign(
             x, new double[] { 5, 7, 60, 70, -10, 3, 40, 50, 20, 20, 21, 90 }, new[] { 0, 1, 1 }, 1.0 / 16.0, 3, 2)),
         ["RpnOutputReshape"] = (new[] { 2, 12, 3, 4 }, x => RPN<double>.ReshapeRPNOutput(x, 2, 3, 4, 4)),
-        ["CascadeRefineBoxesDeltas"] = (new[] { 3, 8 }, d => CascadeRCNN<double>.RefineBoxes(CascadeInputBoxes(), d, 96, 64)),
+        ["CascadeRefineBoxesDeltas"] = (new[] { 3, 4 }, d => CascadeRCNN<double>.RefineBoxes(CascadeInputBoxes(), d, 96, 64)),
         ["DbBinarizationProbability"] = (new[] { 1, 1, 4, 5 }, p => DBNet<double>.ApplyDifferentiableBinarization(p, Const(new[] { 1, 1, 4, 5 }, 41), 5.0)),
         ["DbBinarizationThreshold"] = (new[] { 1, 1, 4, 5 }, t => DBNet<double>.ApplyDifferentiableBinarization(Const(new[] { 1, 1, 4, 5 }, 42), t, 5.0)),
         // CRNN's CTC objective: CTCLoss over log-softmax logits [batch, columns, classes]; targets
