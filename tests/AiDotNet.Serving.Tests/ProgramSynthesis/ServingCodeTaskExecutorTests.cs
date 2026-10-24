@@ -75,7 +75,7 @@ public sealed class ServingCodeTaskExecutorTests
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
             executor.ExecuteAsync(
-                null,
+                global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Requests.CodeTaskRequestBase>(),
                 new ServingRequestContext { Tier = ServingTier.Free, IsAuthenticated = false },
                 CancellationToken.None));
     }

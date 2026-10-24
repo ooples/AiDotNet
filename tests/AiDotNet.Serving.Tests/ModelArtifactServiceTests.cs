@@ -14,7 +14,7 @@ public class ModelArtifactServiceTests
     {
         var service = CreateService(modelDirectory: "models");
 
-        Assert.Throws<ArgumentNullException>(() => service.CreateKeyResponse(artifact: null));
+        Assert.Throws<ArgumentNullException>(() => service.CreateKeyResponse(artifact: global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.Serving.Services.ProtectedModelArtifact>()));
     }
 
     [Fact(Timeout = 60000)]

@@ -36,7 +36,8 @@ internal static class ShapeConformanceWorker
 
     private static ShapeProbeMeasurement Probe(string assemblyQualifiedType, int extent, int classes)
     {
-        var type = Type.GetType(assemblyQualifiedType, throwOnError: true);
+        var type = Type.GetType(assemblyQualifiedType, throwOnError: true)
+            ?? throw new InvalidOperationException($"Type {assemblyQualifiedType} could not be loaded.");
         object? model = null;
         int[]? inputShape = null;
         int[]? predictedShape = null;
