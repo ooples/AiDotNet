@@ -68,6 +68,17 @@ namespace AiDotNet.Tokenization.Algorithms
             new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseFrenchEuropeanaCasedResource, null), "[UNK]"), SpecialTokens.Bert(),
                 lowercase: false);
 
+        private const string BertBaseJapaneseV3Resource = "AiDotNet.Tokenization.bert-base-japanese-v3-vocab.txt.gz";
+
+        /// <summary>
+        /// The WordPiece half of tohoku-nlp/bert-base-japanese-v3's tokenizer (Apache-2.0): its 32,768-token vocabulary,
+        /// shipped with the library, case kept. The words it splits come from MeCab with unidic-lite
+        /// (the library's MeCab port); pass them to <see cref="TokenizeWords"/>.
+        /// </summary>
+        public static WordPieceTokenizer BertBaseJapaneseV3() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseJapaneseV3Resource, null), "[UNK]"), SpecialTokens.Bert(),
+                lowercase: false);
+
         private const string SimBertChineseResource = "AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz";
 
         /// <summary>
@@ -303,6 +314,19 @@ namespace AiDotNet.Tokenization.Algorithms
             var outputTokens = new List<string>();
             foreach (var word in BasicTokenize(text, _lowercase, _stripAccents))
                 outputTokens.AddRange(TokenizeWord(word));
+            return outputTokens;
+        }
+
+        /// <summary>
+        /// WordPiece over words another tokenizer produced, as Hugging Face's <c>WordpieceTokenizer.tokenize</c> runs
+        /// on each (BertJapaneseTokenizer feeds it MeCab's words): each split on whitespace, then matched greedily.
+        /// </summary>
+        public List<string> TokenizeWords(IEnumerable<string> words)
+        {
+            var outputTokens = new List<string>();
+            foreach (var word in words)
+                foreach (var piece in word.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                    outputTokens.AddRange(TokenizeWord(piece));
             return outputTokens;
         }
 

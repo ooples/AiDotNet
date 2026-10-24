@@ -6,11 +6,12 @@ using Newtonsoft.Json.Linq;
 namespace AiDotNet.TextToSpeech.FrontEnd;
 
 /// <summary>
-/// num2words 0.5.12 (LGPL-2.1) as gruut calls it for Spanish and French: <c>Num2Word_Base</c>/<c>Num2Word_EU</c>'s
-/// cardinal machinery (the card table, <c>splitnum</c>'s nested split and <c>clean</c>'s pairwise merge), the year and
-/// currency forms, and each language's <c>merge</c>. Values are arbitrary-precision, as Python's integers are.
+/// num2words 0.5.12 (LGPL-2.1) for the languages MeloTTS's front ends reach: <c>Num2Word_Base</c>'s cardinal machinery
+/// (the card table, <c>splitnum</c>'s nested split and <c>clean</c>'s pairwise merge, <c>to_cardinal_float</c>), the
+/// year and currency forms, and each language's cards and <c>merge</c>. Values are arbitrary-precision, as Python's
+/// integers are.
 /// </summary>
-internal abstract class Num2WordsEuropean
+internal abstract class Num2WordsBase
 {
     private sealed class Pair
     {
@@ -26,31 +27,43 @@ internal abstract class Num2WordsEuropean
 
     private readonly List<BigInteger> _cardOrder = new();
     private readonly Dictionary<BigInteger, string> _cards = new();
-    private readonly Dictionary<string, (string[] Units, string[] Cents)> _currencyForms;
+    private readonly Dictionary<string, (string[] Units, string[] Cents)> _currencyForms = new(StringComparer.Ordinal);
+    private readonly string _floatJoiner;
 
-    protected Num2WordsEuropean(IReadOnlyList<string> high, string? gigaSuffix, string? megaSuffix,
-        IReadOnlyList<(int Value, string Word)> mid, IReadOnlyList<string> low, string negWord, string pointWord, string currencyKey)
+    /// <param name="cards">The cards in the order <c>set_numwords</c> assigns them (high, mid, then low).</param>
+    /// <param name="negWord">negword.</param>
+    /// <param name="pointWord">pointword (its text form).</param>
+    /// <param name="floatJoiner">What <c>to_cardinal_float</c> joins its parts with.</param>
+    /// <param name="currencyKey">The language's CURRENCY_FORMS in num2words_currency.json, or null.</param>
+    protected Num2WordsBase(IEnumerable<(BigInteger Value, string Word)> cards, string negWord, string pointWord,
+        string floatJoiner, string? currencyKey)
     {
         NegWord = negWord;
         PointWord = pointWord;
-        int cap = 3 + 6 * high.Count;
-        for (int i = 0; i < high.Count; i++)
-        {
-            int n = cap - 6 * i;
-            if (!string.IsNullOrEmpty(gigaSuffix)) SetCard(BigInteger.Pow(10, n), high[i] + gigaSuffix);
-            if (!string.IsNullOrEmpty(megaSuffix)) SetCard(BigInteger.Pow(10, n - 3), high[i] + megaSuffix);
-        }
-        foreach (var (value, word) in mid) SetCard(value, word);
-        for (int i = 0; i < low.Count; i++) SetCard(low.Count - 1 - i, low[i]);
+        _floatJoiner = floatJoiner;
+        foreach (var (value, word) in cards) SetCard(value, word);
         MaxValue = 1000 * _cardOrder[0];
-
-        var data = CurrencyData.Value;
-        _currencyForms = new Dictionary<string, (string[], string[])>(StringComparer.Ordinal);
-        foreach (var entry in (JObject)data[currencyKey]!)
+        if (currencyKey is null) return;
+        foreach (var entry in (JObject)CurrencyData.Value[currencyKey]!)
         {
             var forms = (JArray)entry.Value!;
             _currencyForms[entry.Key] = (((JArray)forms[0]).Select(t => (string)t!).ToArray(), ((JArray)forms[1]).Select(t => (string)t!).ToArray());
         }
+    }
+
+    /// <summary>Num2Word_EU's cards: each high word with its -illiard and -illion powers, then mid, then low.</summary>
+    protected static IEnumerable<(BigInteger, string)> EuropeanCards(IReadOnlyList<string> high, string? gigaSuffix,
+        string? megaSuffix, IReadOnlyList<(int Value, string Word)> mid, IReadOnlyList<string> low)
+    {
+        int cap = 3 + 6 * high.Count;
+        for (int i = 0; i < high.Count; i++)
+        {
+            int n = cap - 6 * i;
+            if (!string.IsNullOrEmpty(gigaSuffix)) yield return (BigInteger.Pow(10, n), high[i] + gigaSuffix);
+            if (!string.IsNullOrEmpty(megaSuffix)) yield return (BigInteger.Pow(10, n - 3), high[i] + megaSuffix);
+        }
+        foreach (var (value, word) in mid) yield return (value, word);
+        for (int i = 0; i < low.Count; i++) yield return (low.Count - 1 - i, low[i]);
     }
 
     internal static readonly Lazy<JObject> CurrencyData = new(
@@ -156,7 +169,7 @@ internal abstract class Num2WordsEuropean
         var output = new List<string> { ToCardinal(pre) };
         if (precision != 0) output.Add(PointWord);
         for (int i = 0; i < precision; i++) output.Add(ToCardinal(new BigInteger(postText[i] - '0')));
-        return string.Join(" ", output);
+        return string.Join(_floatJoiner, output);
     }
 
     // float2tuple: the integer part, and the fraction scaled by 10^precision, precision being the digits after the
@@ -240,7 +253,7 @@ internal abstract class Num2WordsEuropean
 }
 
 /// <summary>num2words' <c>Num2Word_ES</c>.</summary>
-internal sealed class Num2WordsSpanish : Num2WordsEuropean
+internal sealed class Num2WordsSpanish : Num2WordsBase
 {
     private static readonly Lazy<Num2WordsSpanish> SharedInstance = new(() => new Num2WordsSpanish(), isThreadSafe: true);
     private readonly HashSet<string> _currenciesUna;
@@ -249,14 +262,14 @@ internal sealed class Num2WordsSpanish : Num2WordsEuropean
     public static Num2WordsSpanish Default => SharedInstance.Value;
 
     private Num2WordsSpanish()
-        : base(new[] { "cuatr", "tr", "b", "m" }, null, "illón",
+        : base(EuropeanCards(new[] { "cuatr", "tr", "b", "m" }, null, "illón",
             new[] { (1000, "mil"), (100, "cien"), (90, "noventa"), (80, "ochenta"), (70, "setenta"), (60, "sesenta"),
                 (50, "cincuenta"), (40, "cuarenta"), (30, "treinta") },
             new[] { "veintinueve", "veintiocho", "veintisiete", "veintiséis", "veinticinco", "veinticuatro", "veintitrés",
                 "veintidós", "veintiuno", "veinte", "diecinueve", "dieciocho", "diecisiete", "dieciséis", "quince",
                 "catorce", "trece", "doce", "once", "diez", "nueve", "ocho", "siete", "seis", "cinco", "cuatro", "tres",
-                "dos", "uno", "cero" },
-            "menos ", "punto", "es")
+                "dos", "uno", "cero" }),
+            "menos ", "punto", " ", "es")
     {
         _currenciesUna = new HashSet<string>(((JArray)CurrencyData.Value["es_currencies_una"]!).Select(t => (string)t!), StringComparer.Ordinal);
         _centsUna = new HashSet<string>(((JArray)CurrencyData.Value["es_cents_una"]!).Select(t => (string)t!), StringComparer.Ordinal);
@@ -320,7 +333,7 @@ internal sealed class Num2WordsSpanish : Num2WordsEuropean
 }
 
 /// <summary>num2words' <c>Num2Word_FR</c>.</summary>
-internal sealed class Num2WordsFrench : Num2WordsEuropean
+internal sealed class Num2WordsFrench : Num2WordsBase
 {
     private static readonly Lazy<Num2WordsFrench> SharedInstance = new(() => new Num2WordsFrench(), isThreadSafe: true);
 
@@ -342,12 +355,12 @@ internal sealed class Num2WordsFrench : Num2WordsEuropean
     }
 
     private Num2WordsFrench()
-        : base(HighNumwords(), "illiard", "illion",
+        : base(EuropeanCards(HighNumwords(), "illiard", "illion",
             new[] { (1000, "mille"), (100, "cent"), (80, "quatre-vingts"), (60, "soixante"), (50, "cinquante"),
                 (40, "quarante"), (30, "trente") },
             new[] { "vingt", "dix-neuf", "dix-huit", "dix-sept", "seize", "quinze", "quatorze", "treize", "douze",
-                "onze", "dix", "neuf", "huit", "sept", "six", "cinq", "quatre", "trois", "deux", "un", "zéro" },
-            "moins ", "virgule", "fr")
+                "onze", "dix", "neuf", "huit", "sept", "six", "cinq", "quatre", "trois", "deux", "un", "zéro" }),
+            "moins ", "virgule", " ", "fr")
     {
     }
 
@@ -391,5 +404,47 @@ internal sealed class Num2WordsFrench : Num2WordsEuropean
                 return word.Substring(0, word.Length - source.Length) + replacement;
         if (word[word.Length - 1] == 'e') word = word.Substring(0, word.Length - 1);
         return word + "ième";
+    }
+}
+
+/// <summary>
+/// num2words' <c>Num2Word_JA</c> as MeloTTS calls it (<c>num2words(text, lang="ja")</c>): kanji numerals with 10⁴-step
+/// large units, every card in its text (not kana) form, so 0 is 零 and 7 is 七.
+/// </summary>
+internal sealed class Num2WordsJapanese : Num2WordsBase
+{
+    private static readonly Lazy<Num2WordsJapanese> SharedInstance = new(() => new Num2WordsJapanese(), isThreadSafe: true);
+
+    public static Num2WordsJapanese Default => SharedInstance.Value;
+
+    private static IEnumerable<(BigInteger, string)> Cards()
+    {
+        string[] high = { "極", "載", "正", "澗", "溝", "穣", "秭", "垓", "京", "兆", "億", "万" };
+        for (int i = 0; i < high.Length; i++) yield return (BigInteger.Pow(10, 4 * (high.Length - i)), high[i]);
+        yield return (1000, "千");
+        yield return (100, "百");
+        string[] low = { "十", "九", "八", "七", "六", "五", "四", "三", "二", "一", "零" };
+        for (int i = 0; i < low.Length; i++) yield return (low.Length - 1 - i, low[i]);
+    }
+
+    private Num2WordsJapanese() : base(Cards(), "マイナス", "点", "", null)
+    {
+    }
+
+    protected override (string Text, BigInteger Number) Merge(string ctext, BigInteger cnum, string ntext, BigInteger nnum)
+    {
+        if (cnum.IsOne && nnum < 10000) return (ntext, nnum);
+        if (cnum > nnum) return (ctext + ntext, cnum + nnum);
+        // rendaku_merge_pairs only rewrites kana readings; the text form is the two parts joined.
+        if (cnum < nnum) return (ctext + ntext, cnum * nnum);
+        throw new InvalidOperationException("Num2Word_JA.merge returns None for two equal parts.");
+    }
+
+    /// <summary><c>num2words(text, lang="ja")</c> of digits with an optional fractional part.</summary>
+    public string Convert(string number)
+    {
+        if (!PythonDecimal.TryParse(number, out var value) || !value.IsFinite)
+            throw new ArgumentException($"'{number}' is not a finite number.", nameof(number));
+        return value.HasFraction ? ToCardinal(value.ToDouble()) : ToCardinal(value.Truncate());
     }
 }
