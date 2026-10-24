@@ -477,7 +477,10 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         if (trainingStep is null) training.TrainDetections(input, batch);
         else trainingStep(input, batch);
 
-        const double learningRate = 0.001;
+        // DETR trains with AdamW (lr 1e-4, weight decay 1e-4, eps 1e-8). On the first step m-hat = g and
+        // v-hat = g^2, so each parameter moves by lr * g / (|g| + eps) plus the decoupled decay lr * wd * p0.
+        const double learningRate = 1e-4, weightDecay = 1e-4, adamEpsilon = 1e-8;
+        static double AdamWFirstStep(double p0, double g) => p0 - learningRate * g / (Math.Abs(g) + adamEpsilon) - learningRate * weightDecay * p0;
         double denominator = emptyTargets ? 5 : 1 + 49 * 0.1;
         double expectedLoss = Math.Log(3) + (emptyTargets ? 0 : IndependentDetrBoxObjective(
             Enumerable.Repeat(boxCoordinate, 4).ToArray(), targetBox));
@@ -487,7 +490,7 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         for (int label = 0; label < 3; label++)
         {
             double targetMass = label == 2 ? (emptyTargets ? 50 : 49) * 0.1 : (label == 0 && !emptyTargets ? 1 : 0);
-            double expected = -learningRate * (1.0 / 3 - targetMass / denominator);
+            double expected = AdamWFirstStep(0, 1.0 / 3 - targetMass / denominator);
             Assert.InRange(Math.Abs(expected - ops.ToDouble(classBias[label])), 0, parameterTolerance);
         }
         for (int coordinate = 0; coordinate < 4; coordinate++)
@@ -502,7 +505,7 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
             if (!emptyTargets) Assert.True(Math.Abs(derivative) > 0.1);
             // Semantic training applies sigmoid to the real RAW head. The derivative at bias
             // zero is 1/4; the nonzero-logit control also rejects accidentally applying it twice.
-            double expected = actualLogit - learningRate * boxCoordinate * (1 - boxCoordinate) * derivative;
+            double expected = AdamWFirstStep(actualLogit, boxCoordinate * (1 - boxCoordinate) * derivative);
             Assert.InRange(Math.Abs(expected - ops.ToDouble(boxBias[coordinate])), 0, parameterTolerance);
         }
     }
@@ -522,6 +525,88 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         double giou = 1 - intersection / (union + stabilityEpsilon) + (enclosure - union) / (enclosure + stabilityEpsilon);
         double l1 = predicted.Zip(target, (left, right) => Math.Abs(left - right)).Sum();
         return 5 * l1 + 2 * giou;
+    }
+
+    /// <summary>Training steps the overfit test may take before it must reach <see cref="OverfitMapFloor"/>.</summary>
+    protected virtual int OverfitStepBudget => 100;
+
+    /// <summary>The mAP at IoU 0.5 the overfit test requires after training.</summary>
+    protected virtual double OverfitMapFloor => 0.99;
+
+    /// <summary>
+    /// The paper objective has to fit (#2170). Trained through <c>TrainDetections</c> on one image of two objects of
+    /// different classes, the detector must come to find exactly those objects: mAP 1.0 at IoU 0.5, measured with
+    /// <see cref="AiDotNet.Metrics.ObjectDetectionMetrics{T}"/> on the decoded detections, from a start that does not
+    /// already find them. A loss with the wrong sign, targets assigned to the wrong anchors or queries, boxes encoded
+    /// in the wrong frame, or a head the update never reaches cannot pass. Neither can a loss that only shrinks,
+    /// because the score is read from <c>Detect</c>, not from the loss.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task TrainDetections_OverfitsOneImage_ToFullMeanAveragePrecision()
+    {
+        await Task.Yield();
+        // No TensorArena: an arena returns nothing until it is disposed, so one held across a hundred training steps
+        // keeps every step's tensors. Measured on Cascade R-CNN: 1.2 GB more live heap per step inside an arena (26 GB
+        // by step 20, then OutOfMemory), against a flat ~3.9 GB without one.
+        using var detector = CreatePositiveObjectDetector(ObjectDetectionPositiveFixture<T>.CreateOptions());
+        if (detector is not AiDotNet.Interfaces.IDetectionTrainingModel<T> training) return;
+        var ops = MathHelper.GetNumericOperations<T>();
+        const int size = 64;
+
+        // Two solid rectangles on a dark background, each in a colour of its own, so the class is visible in the
+        // pixels: class 0 red at (6, 8)-(26, 30), class 1 green at (34, 30)-(58, 58). Detect reads [0, 255] pixels
+        // and normalizes them; TrainDetections reads network input, the same image in [0, 1].
+        var objects = new[] { (Class: 0, Left: 6, Top: 8, Right: 26, Bottom: 30), (Class: 1, Left: 34, Top: 30, Right: 58, Bottom: 58) };
+        var pixels = new Tensor<T>(new[] { 1, 3, size, size });
+        var network = new Tensor<T>(new[] { 1, 3, size, size });
+        foreach (var o in objects)
+            for (int y = o.Top; y < o.Bottom; y++)
+                for (int x = o.Left; x < o.Right; x++)
+                {
+                    pixels[0, o.Class, y, x] = ops.FromDouble(255);
+                    network[0, o.Class, y, x] = ops.One;
+                }
+
+        var batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+        {
+            objects.Select(o => new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(o.Class,
+                ops.FromDouble((o.Left + o.Right) / 2.0 / size), ops.FromDouble((o.Top + o.Bottom) / 2.0 / size),
+                ops.FromDouble((o.Right - o.Left) / (double)size), ops.FromDouble((o.Bottom - o.Top) / (double)size))).ToArray()
+        });
+        var groundTruth = objects.Select(o => new AiDotNet.ComputerVision.Detection.ObjectDetection.Detection<T>(
+            new AiDotNet.Augmentation.Image.BoundingBox<T>(ops.FromDouble(o.Left), ops.FromDouble(o.Top),
+                ops.FromDouble(o.Right), ops.FromDouble(o.Bottom)), o.Class, ops.One)).ToList();
+        var metrics = new AiDotNet.Metrics.ObjectDetectionMetrics<T>();
+        double MeanAveragePrecision()
+        {
+            detector.SetTrainingMode(false);
+            // update_bn: eval-mode statistics for the current weights, not the momentum average of earlier ones.
+            BatchNormRecalibration.Recalibrate<T>(detector, () => detector.Predict(network));
+            // COCO-style evaluation keeps low-confidence detections (they only extend the ranking).
+            var found = detector.Detect(pixels, 0.05, 0.45).Detections;
+            return metrics.MeanAveragePrecision(new[] { (IReadOnlyList<AiDotNet.ComputerVision.Detection.ObjectDetection.Detection<T>>)found },
+                new[] { (IReadOnlyList<AiDotNet.ComputerVision.Detection.ObjectDetection.Detection<T>>)groundTruth }, 0.5);
+        }
+
+        double initial = MeanAveragePrecision();
+        var trajectory = new List<string> { $"0: mAP {initial:F3}" };
+        double final = initial;
+        for (int step = 1; step <= OverfitStepBudget && final < OverfitMapFloor; step++)
+        {
+            training.TrainDetections(network, batch);
+            double loss = ops.ToDouble(detector.GetLastLoss());
+            Assert.False(double.IsNaN(loss) || double.IsInfinity(loss), $"Step {step} reported a non-finite loss {loss}.");
+            if (step % 5 == 0 || step == OverfitStepBudget)
+            {
+                final = MeanAveragePrecision();
+                trajectory.Add($"{step}: loss {loss:G4} mAP {final:F3}");
+            }
+        }
+
+        Assert.True(initial < OverfitMapFloor,
+            $"The untrained detector already scores mAP {initial:F3}, so this fixture cannot show learning.");
+        Assert.True(final >= OverfitMapFloor,
+            $"After {OverfitStepBudget} steps mAP@0.5 is {final:F3}, below {OverfitMapFloor}. " + string.Join("; ", trajectory));
     }
 
     /// <summary>Checks real forward, decode, confidence ordering, and suppression with known live heads.</summary>

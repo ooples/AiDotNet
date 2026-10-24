@@ -45,6 +45,13 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
 {
     private readonly AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T> _detectionLoss;
 
+    /// <summary>
+    /// The paper's optimizer (Ren et al. 2015, Section 3.1.3): SGD with momentum 0.9 at learning rate 0.001, one
+    /// image per mini-batch as here. The paper's weight decay (0.0005) is not applied.
+    /// </summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperSgdMomentum(0.001, 0.9);
+
     [AiDotNet.Attributes.Scratch]
     private Random? _trainingRandom;
     private readonly RPN<T> _rpn;

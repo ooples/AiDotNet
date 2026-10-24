@@ -57,6 +57,13 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
     private readonly int[] _backboneTaps;
     private readonly NMS<T> _nms;
     private readonly AiDotNet.ComputerVision.Detection.Losses.DETRSetLoss<T> _detectionLoss;
+
+    /// <summary>
+    /// The paper's optimizer (Zhang et al. 2023, implementation details, following DN-DETR): AdamW at learning rate 1e-4 with
+    /// weight decay 1e-4. The backbone's lower rate (1e-5) is not separated here.
+    /// </summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperAdamW(1e-4, 1e-4);
     private readonly int _trainingClassCount;
     private readonly Random _denoisingRandom;
 
