@@ -9,6 +9,7 @@ using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.CodecBased;
+using AiDotNet.TextToSpeech.FrontEnd;
 using AiDotNet.TextToSpeech.Interfaces;
 using AiDotNet.TextToSpeech.Vocoders;
 using AiDotNet.Tokenization.Algorithms;
@@ -381,6 +382,18 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <summary>A voice: a speaker of the released list and an emotion prompt such as "开心" or "非常开心".</summary>
     public TtsVoice<T> CreateVoice(int speaker, string prompt) =>
         new() { SpeakerId = speaker, Description = Ids(StyleTokens(prompt)) };
+
+    /// <summary>A voice: a speaker of the released list by name (such as "8051") and an emotion prompt.</summary>
+    public TtsVoice<T> CreateVoice(string speaker, string prompt) => CreateVoice(EmotiVoiceFrontEnd.Default.SpeakerId(speaker), prompt);
+
+    /// <inheritdoc />
+    /// <remarks>EmotiVoice's own front end (<see cref="EmotiVoiceFrontEnd"/>): Chinese and English text to the released
+    /// token ids.</remarks>
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        if (!HasPaperLayers) return base.PreprocessText(text);
+        return Ids(EmotiVoiceFrontEnd.Default.TokenIds(text));
+    }
 
     // ---------------------------------------------------------------- synthesis entry points
 
