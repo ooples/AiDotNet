@@ -26,7 +26,7 @@ internal sealed class TorchaudioResample<T>
         _orig = originalRate / gcd;
         _new = newRate / gcd;
         double baseFrequency = Math.Min(_orig, _new) * rolloff;
-        _width = (int)Math.Ceiling(lowpassFilterWidth * _orig / baseFrequency);
+        _width = (int)Math.Ceiling((double)lowpassFilterWidth * _orig / baseFrequency);
         int taps = 2 * _width + _orig;
         _kernel = new Tensor<T>(new[] { _new, 1, 1, taps });
         double scale = baseFrequency / _orig;

@@ -527,7 +527,7 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
             {
                 var logProbabilities = Engine.TensorLogSoftmax(CodeLogits(q, predicting), axis: -1);           // [targets, V]
                 var picks = new Tensor<T>(logProbabilities._shape);
-                for (int t = 0; t < targets; t++) picks[t, rows[firstFrame + t][q]] = NumOps.FromDouble(-1.0 / (targets * vq));
+                for (int t = 0; t < targets; t++) picks[t, rows[firstFrame + t][q]] = NumOps.FromDouble(-1.0 / ((double)targets * vq));
                 return Engine.ReduceSum(Engine.TensorMultiply(logProbabilities, picks), new[] { 0, 1 }, keepDims: false);
             }
             var total = Term(0);
