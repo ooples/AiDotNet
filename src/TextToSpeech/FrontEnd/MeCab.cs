@@ -1,3 +1,4 @@
+using System.Linq;
 using System.IO.Compression;
 using System.Text;
 
@@ -6,7 +7,9 @@ namespace AiDotNet.TextToSpeech.FrontEnd;
 /// <summary>
 /// MeCab 0.996's morphological segmentation (<c>MeCab.Tagger("-Owakati")</c>) with the unidic-lite 1.0.8 dictionary:
 /// a lattice of the dictionary's words and the unknown-word candidates of each character category over the text's UTF-8
-/// bytes, and the Viterbi path by connection and word costs.
+/// bytes, and the Viterbi path by connection and word costs. <see cref="KoDic"/> is mecab-ko 0.996-ko-0.9.2 with
+/// mecab-ko-dic 2.1.1 (python-mecab-ko's <c>MeCab().pos</c>): the same lattice, mecab-ko's left-space penalty added to
+/// the connection cost, and each word's part-of-speech tag.
 /// </summary>
 /// <remarks>
 /// <para>The dictionary's segmentation data (surfaces, context ids, word costs, the connection matrix, character
@@ -17,10 +20,14 @@ namespace AiDotNet.TextToSpeech.FrontEnd;
 /// </remarks>
 internal sealed class MeCab
 {
-    private static readonly Lazy<MeCab> SharedInstance = new(() => new MeCab(), isThreadSafe: true);
+    private static readonly Lazy<MeCab> SharedInstance = new(() => new MeCab("mecab_unidic_lite.gz"), isThreadSafe: true);
+    private static readonly Lazy<MeCab> KoDicInstance = new(() => new MeCab("mecab_ko_dic.gz"), isThreadSafe: true);
 
     /// <summary>The shared instance (the dictionary loads once, on first use).</summary>
     public static MeCab UnidicLite => SharedInstance.Value;
+
+    /// <summary>mecab-ko with mecab-ko-dic (exported by <c>tools/reference-data/mecab_ko_reference.py</c>).</summary>
+    public static MeCab KoDic => KoDicInstance.Value;
 
     private const int MaxGroupingSize = 24;   // DEFAULT_MAX_GROUPING_SIZE; unidic-lite's dicrc leaves it unset
 
@@ -31,6 +38,8 @@ internal sealed class MeCab
         public ushort[] Left = Array.Empty<ushort>();
         public ushort[] Right = Array.Empty<ushort>();
         public short[] Cost = Array.Empty<short>();
+        public ushort[] PosId = Array.Empty<ushort>();
+        public ushort[] Tag = Array.Empty<ushort>();
     }
 
     private readonly Lexicon _system;
@@ -40,16 +49,20 @@ internal sealed class MeCab
     private readonly short[] _matrix;
     private readonly uint[] _charMap;
     private readonly uint _space;
+    private readonly string[] _tags = Array.Empty<string>();
+    private readonly Dictionary<int, int> _leftSpacePenalty = new();
 
-    private MeCab()
+    private MeCab(string resource)
     {
-        using var stream = typeof(MeCab).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.mecab_unidic_lite.gz")
-            ?? throw new InvalidDataException("The embedded resource mecab_unidic_lite.gz is missing.");
+        using var stream = typeof(MeCab).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd." + resource)
+            ?? throw new InvalidDataException($"The embedded resource {resource} is missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new BinaryReader(new BufferedStream(gzip, 1 << 20));
-        if (Encoding.ASCII.GetString(reader.ReadBytes(4)) != "MCB1") throw new InvalidDataException("Unknown MeCab data format.");
-        _system = ReadLexicon(reader);
-        _unknown = ReadLexicon(reader);
+        string format = Encoding.ASCII.GetString(reader.ReadBytes(4));
+        if (format != "MCB1" && format != "MCB2") throw new InvalidDataException("Unknown MeCab data format.");
+        bool tagged = format == "MCB2";
+        _system = ReadLexicon(reader, tagged);
+        _unknown = ReadLexicon(reader, tagged);
         int categories = reader.ReadInt32();
         var names = new string[categories];
         for (int i = 0; i < categories; i++) names[i] = Latin1(reader.ReadBytes(reader.ReadByte()));
@@ -75,6 +88,16 @@ internal sealed class MeCab
         _charMap = new uint[0xffff];
         for (int i = 0; i < _charMap.Length; i++) _charMap[i] = reader.ReadUInt32();
         _space = _charMap[0x20];
+        if (!tagged) return;
+        _tags = new string[reader.ReadUInt16()];
+        for (int i = 0; i < _tags.Length; i++) _tags[i] = Encoding.UTF8.GetString(reader.ReadBytes(reader.ReadByte()));
+        // left-space-penalty-factor: the first listed cost for a posid applies.
+        int penalties = reader.ReadUInt16();
+        for (int i = 0; i < penalties; i++)
+        {
+            int posid = reader.ReadUInt16(), cost = reader.ReadInt32();
+            if (!_leftSpacePenalty.ContainsKey(posid)) _leftSpacePenalty[posid] = cost;
+        }
     }
 
     private static string Latin1(byte[] bytes)
@@ -84,7 +107,7 @@ internal sealed class MeCab
         return new string(chars);
     }
 
-    private static Lexicon ReadLexicon(BinaryReader reader)
+    private static Lexicon ReadLexicon(BinaryReader reader, bool tagged)
     {
         var lexicon = new Lexicon();
         int count = reader.ReadInt32();
@@ -106,6 +129,11 @@ internal sealed class MeCab
         for (int i = 0; i < tokens; i++) lexicon.Left[i] = reader.ReadUInt16();
         for (int i = 0; i < tokens; i++) lexicon.Right[i] = reader.ReadUInt16();
         for (int i = 0; i < tokens; i++) lexicon.Cost[i] = reader.ReadInt16();
+        if (!tagged) return lexicon;
+        lexicon.PosId = new ushort[tokens];
+        lexicon.Tag = new ushort[tokens];
+        for (int i = 0; i < tokens; i++) lexicon.PosId[i] = reader.ReadUInt16();
+        for (int i = 0; i < tokens; i++) lexicon.Tag[i] = reader.ReadUInt16();
         return lexicon;
     }
 
@@ -155,6 +183,7 @@ internal sealed class MeCab
     {
         public int Surface, Length, RLength;
         public int Left, Right, WordCost;
+        public int PosId, Tag = -1;
         public long Cost;
         public Node? Previous, BNext, ENext;
     }
@@ -182,6 +211,8 @@ internal sealed class MeCab
                 {
                     Surface = begin2, Length = length, RLength = begin2 - begin + length, Left = _system.Left[token + j],
                     Right = _system.Right[token + j], WordCost = _system.Cost[token + j], BNext = result,
+                    PosId = _system.PosId.Length > 0 ? _system.PosId[token + j] : 0,
+                    Tag = _system.Tag.Length > 0 ? _system.Tag[token + j] : -1,
                 };
         }
         if (result is not null && !Invoke(cinfo)) return result;
@@ -194,6 +225,8 @@ internal sealed class MeCab
                 {
                     Surface = begin2, Length = begin3 - begin2, RLength = begin3 - begin, Left = _unknown.Left[token + k],
                     Right = _unknown.Right[token + k], WordCost = _unknown.Cost[token + k], BNext = result,
+                    PosId = _unknown.PosId.Length > 0 ? _unknown.PosId[token + k] : 0,
+                    Tag = _unknown.Tag.Length > 0 ? _unknown.Tag[token + k] : -1,
                 };
         }
 
@@ -231,9 +264,11 @@ internal sealed class MeCab
         {
             long best = int.MaxValue;
             Node? bestNode = null;
+            // mecab-ko's Connector::get_space_penalty_cost: a node with leading space pays its posid's penalty.
+            int penalty = right.RLength != right.Length && _leftSpacePenalty.TryGetValue(right.PosId, out int p) ? p : 0;
             for (var left = endNodes[position]; left is not null; left = left.ENext)
             {
-                long cost = left.Cost + _matrix[left.Right + _leftSize * right.Left] + right.WordCost;
+                long cost = left.Cost + _matrix[left.Right + _leftSize * right.Left] + right.WordCost + penalty;
                 if (cost < best)
                 {
                     best = cost;
@@ -250,7 +285,10 @@ internal sealed class MeCab
     }
 
     /// <summary>The best path's surfaces, in order.</summary>
-    public IReadOnlyList<string> Segment(string text)
+    public IReadOnlyList<string> Segment(string text) => Parse(text).Select(w => w.Surface).ToList();
+
+    /// <summary>The best path's words and their part-of-speech tags (empty for a dictionary without tags).</summary>
+    public IReadOnlyList<(string Surface, string Tag)> Parse(string text)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
         int nul = text.IndexOf('\0');
@@ -269,9 +307,10 @@ internal sealed class MeCab
                 Connect(position, eos, endNodes);
                 break;
             }
-        var words = new List<string>();
+        var words = new List<(string, string)>();
         for (var node = eos.Previous; node is not null && node.Previous is not null; node = node.Previous)
-            words.Add(Encoding.UTF8.GetString(s, node.Surface, Math.Min(node.Length, len - node.Surface)));
+            words.Add((Encoding.UTF8.GetString(s, node.Surface, Math.Min(node.Length, len - node.Surface)),
+                node.Tag >= 0 ? _tags[node.Tag] : ""));
         words.Reverse();
         return words;
     }

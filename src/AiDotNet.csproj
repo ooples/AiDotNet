@@ -399,6 +399,22 @@
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-chinese-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-multilingual-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-multilingual-uncased-vocab.txt.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\bert-base-spanish-wwm-uncased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-spanish-wwm-uncased-vocab.txt.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\bert-base-french-europeana-cased-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-french-europeana-cased-vocab.txt.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gruut_es_lexicon.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gruut_es_lexicon.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gruut_fr_lexicon.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gruut_fr_lexicon.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gruut_es_g2p.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gruut_es_g2p.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gruut_fr_g2p.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gruut_fr_g2p.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gruut_fr_pos.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gruut_fr_pos.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gruut_locales.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gruut_locales.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\num2words_currency.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.num2words_currency.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\mecab_ko_dic.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.mecab_ko_dic.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pkk012_idioms.txt.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pkk012_idioms.txt.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pkk012_table.csv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pkk012_table.csv.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\bert-kor-base-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-kor-base-vocab.txt.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi221_kanwa.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi221_kanwa.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi221_itaiji.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi221_itaiji.tsv.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\bert-base-japanese-v3-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-japanese-v3-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\simbert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\whisper-multilingual.tiktoken.gz" LogicalName="AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\qwen2-vocab.json.gz" LogicalName="AiDotNet.Tokenization.qwen2-vocab.json.gz" />

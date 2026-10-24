@@ -17,6 +17,7 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly string _continuingSubwordPrefix;
         private readonly int _maxInputCharsPerWord;
         private readonly bool _lowercase;
+        private readonly bool _stripAccents;
 
         private const string BertBaseUncasedResource = "AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz";
         private const string BertBaseChineseResource = "AiDotNet.Tokenization.bert-base-chinese-vocab.txt.gz";
@@ -45,6 +46,49 @@ namespace AiDotNet.Tokenization.Algorithms
         /// </summary>
         public static WordPieceTokenizer BertBaseMultilingualUncased() =>
             new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseMultilingualUncasedResource, null), "[UNK]"), SpecialTokens.Bert());
+
+        private const string BertBaseSpanishWwmUncasedResource = "AiDotNet.Tokenization.bert-base-spanish-wwm-uncased-vocab.txt.gz";
+        private const string BertBaseFrenchEuropeanaCasedResource = "AiDotNet.Tokenization.bert-base-french-europeana-cased-vocab.txt.gz";
+
+        /// <summary>
+        /// BETO's WordPiece tokenizer (dccuchile/bert-base-spanish-wwm-uncased, CC BY 4.0): its 31,002-token vocabulary,
+        /// shipped with the library, lowercased with accents kept (its tokenizer_config sets strip_accents false).
+        /// MeloTTS's Spanish front end tokenizes with it.
+        /// </summary>
+        public static WordPieceTokenizer BertBaseSpanishWwmUncased() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseSpanishWwmUncasedResource, null), "[UNK]"), SpecialTokens.Bert(),
+                lowercase: true, stripAccents: false);
+
+        /// <summary>
+        /// dbmdz's cased French Europeana BERT WordPiece tokenizer (dbmdz/bert-base-french-europeana-cased, MIT): its
+        /// 32,000-token vocabulary, shipped with the library, neither lowercased nor accent-stripped. MeloTTS's French
+        /// front end tokenizes with it.
+        /// </summary>
+        public static WordPieceTokenizer BertBaseFrenchEuropeanaCased() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseFrenchEuropeanaCasedResource, null), "[UNK]"), SpecialTokens.Bert(),
+                lowercase: false);
+
+        private const string BertBaseJapaneseV3Resource = "AiDotNet.Tokenization.bert-base-japanese-v3-vocab.txt.gz";
+
+        /// <summary>
+        /// The WordPiece half of tohoku-nlp/bert-base-japanese-v3's tokenizer (Apache-2.0): its 32,768-token vocabulary,
+        /// shipped with the library, case kept. The words it splits come from MeCab with unidic-lite
+        /// (the library's MeCab port); pass them to <see cref="TokenizeWords"/>.
+        /// </summary>
+        public static WordPieceTokenizer BertBaseJapaneseV3() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertBaseJapaneseV3Resource, null), "[UNK]"), SpecialTokens.Bert(),
+                lowercase: false);
+
+        private const string BertKorBaseResource = "AiDotNet.Tokenization.bert-kor-base-vocab.txt.gz";
+
+        /// <summary>
+        /// kykim/bert-kor-base's WordPiece tokenizer: its vocabulary, shipped with the library, lowercased with accents
+        /// kept (its tokenizer_config sets strip_accents false, so Hangul stays composed). MeloTTS's Korean front end
+        /// tokenizes with it.
+        /// </summary>
+        public static WordPieceTokenizer BertKorBase() =>
+            new WordPieceTokenizer(new Vocabulary.Vocabulary(LoadVocabulary(BertKorBaseResource, null), "[UNK]"), SpecialTokens.Bert(),
+                lowercase: true, stripAccents: false);
 
         private const string SimBertChineseResource = "AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz";
 
@@ -83,13 +127,17 @@ namespace AiDotNet.Tokenization.Algorithms
         /// <param name="specialTokens">The special tokens.</param>
         /// <param name="continuingSubwordPrefix">The prefix for continuing subwords (default: "##").</param>
         /// <param name="maxInputCharsPerWord">Maximum characters per word (default: 100).</param>
+        /// <param name="lowercase">Lowercase the text first (uncased models).</param>
+        /// <param name="stripAccents">Strip accents (Hugging Face's strip_accents); null follows
+        /// <paramref name="lowercase"/>, as BERT's tokenizer does.</param>
         /// <exception cref="ArgumentOutOfRangeException">Thrown if maxInputCharsPerWord is less than 1.</exception>
         public WordPieceTokenizer(
             IVocabulary vocabulary,
             SpecialTokens? specialTokens = null,
             string continuingSubwordPrefix = "##",
             int maxInputCharsPerWord = 100,
-            bool lowercase = true)
+            bool lowercase = true,
+            bool? stripAccents = null)
             : base(vocabulary, specialTokens ?? SpecialTokens.Bert())
         {
             if (maxInputCharsPerWord < 1)
@@ -98,6 +146,7 @@ namespace AiDotNet.Tokenization.Algorithms
             _continuingSubwordPrefix = continuingSubwordPrefix;
             _maxInputCharsPerWord = maxInputCharsPerWord;
             _lowercase = lowercase;
+            _stripAccents = stripAccents ?? lowercase;
         }
 
         /// <summary>
@@ -105,7 +154,7 @@ namespace AiDotNet.Tokenization.Algorithms
         /// normalized, each CJK character made its own word, words split on whitespace, lowercased with accents
         /// stripped (uncased models), and every punctuation character split off as its own word.
         /// </summary>
-        internal static List<string> BasicTokenize(string text, bool lowercase)
+        internal static List<string> BasicTokenize(string text, bool lowercase, bool? stripAccents = null)
         {
             var cleaned = new StringBuilder(text.Length);
             foreach (char c in text)
@@ -119,9 +168,10 @@ namespace AiDotNet.Tokenization.Algorithms
             foreach (var token in cleaned.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 string word = token;
-                if (lowercase)
+                if (lowercase) word = word.ToLowerInvariant();
+                if (stripAccents ?? lowercase)
                 {
-                    var decomposed = word.ToLowerInvariant().Normalize(NormalizationForm.FormD);
+                    var decomposed = word.Normalize(NormalizationForm.FormD);
                     word = new string(decomposed.Where(ch => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch)
                         != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
                 }
@@ -273,8 +323,21 @@ namespace AiDotNet.Tokenization.Algorithms
                 return new List<string>();
 
             var outputTokens = new List<string>();
-            foreach (var word in BasicTokenize(text, _lowercase))
+            foreach (var word in BasicTokenize(text, _lowercase, _stripAccents))
                 outputTokens.AddRange(TokenizeWord(word));
+            return outputTokens;
+        }
+
+        /// <summary>
+        /// WordPiece over words another tokenizer produced, as Hugging Face's <c>WordpieceTokenizer.tokenize</c> runs
+        /// on each (BertJapaneseTokenizer feeds it MeCab's words): each split on whitespace, then matched greedily.
+        /// </summary>
+        public List<string> TokenizeWords(IEnumerable<string> words)
+        {
+            var outputTokens = new List<string>();
+            foreach (var word in words)
+                foreach (var piece in word.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                    outputTokens.AddRange(TokenizeWord(piece));
             return outputTokens;
         }
 
