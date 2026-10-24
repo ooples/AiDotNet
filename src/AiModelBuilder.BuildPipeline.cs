@@ -596,8 +596,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var teacherForward = ResolveTeacherForward((kd ?? throw new InvalidOperationException("kd is null where it is required.")));
-        var strategy = kd.Strategy
-            ?? KnowledgeDistillation.DistillationStrategyFactory<T>.CreateResponseBasedStrategy(
+        var strategy = kd.Strategy is { } configuredStrategy
+            ? configuredStrategy
+            : KnowledgeDistillation.DistillationStrategyFactory<T>.CreateResponseBasedStrategy(
                 kd.Temperature, kd.Alpha);
         var lossAdapter = new KnowledgeDistillation.DistillationLossAdapter<T>(strategy);
 
@@ -2151,8 +2152,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             innerX = inner.XTrain;
             innerY = inner.yTrain;
-            valX = inner.XValidation ?? inner.XTest;
-            valY = inner.yValidation ?? inner.yTest;
+            valX = inner.XValidation is { } validationX ? validationX : inner.XTest;
+            valY = inner.yValidation is { } validationY ? validationY : inner.yTest;
             return true;
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -2198,8 +2199,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             innerX = inner.XTrain;
             innerY = inner.yTrain;
-            valX = inner.XValidation ?? inner.XTest;
-            valY = inner.yValidation ?? inner.yTest;
+            valX = inner.XValidation is { } validationX ? validationX : inner.XTest;
+            valY = inner.yValidation is { } validationY ? validationY : inner.yTest;
             return true;
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
@@ -3542,7 +3543,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (!concreteModelPinned)
         {
             _autoMLModel ??= (_model as IAutoMLModel<T, TInput, TOutput>)
-                ?? CreateBuiltInAutoMLModel(_autoMLOptions?.SearchStrategy ?? AutoMLSearchStrategy.RandomSearch);
+                ?? CreateBuiltInAutoMLModel((_autoMLOptions?.SearchStrategy).GetValueOrDefault(AutoMLSearchStrategy.RandomSearch));
             Console.WriteLine("AutoML configured - starting model search...");
             var searchStartedUtc = DateTimeOffset.UtcNow;
 
@@ -4496,8 +4497,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var optimizerOptions = finalOptimizer.GetOptions();
             experimentRun.LogParameters(new Dictionary<string, object>
             {
-                ["model_type"] = model.GetType().FullName ?? model.GetType().Name,
-                ["optimizer_type"] = finalOptimizer.GetType().FullName ?? finalOptimizer.GetType().Name,
+                ["model_type"] = model.GetType() is { FullName: { } modelTypeName } ? modelTypeName : model.GetType().Name,
+                ["optimizer_type"] = finalOptimizer.GetType() is { FullName: { } optimizerTypeName } ? optimizerTypeName : finalOptimizer.GetType().Name,
                 ["max_iterations"] = optimizerOptions.MaxIterations,
                 ["use_early_stopping"] = optimizerOptions.UseEarlyStopping,
                 ["early_stopping_patience"] = optimizerOptions.EarlyStoppingPatience,
@@ -5657,7 +5658,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     // CRITICAL: Use the quantized model instead of the original
                     optimizationResult.BestSolution = quantizedModel;
                     quantizationInfo = quantizationInfoResult;
-                    var strategy = _quantizationConfig?.Strategy ?? QuantizationStrategy.Dynamic;
+                    var strategy = (_quantizationConfig?.Strategy).GetValueOrDefault(QuantizationStrategy.Dynamic);
                     Console.WriteLine($"Quantization applied: {strategy} strategy, " +
                         $"{quantizationInfo.BitWidth}-bit, compression ratio: {quantizationInfo.CompressionRatio:F2}x");
                 }

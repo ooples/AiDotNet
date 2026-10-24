@@ -69,7 +69,7 @@ internal static class LeafFederatedBenchmarkSuiteRunner
             await loader.LoadAsync(cancellationToken).ConfigureAwait(false);
 
             var trainClientData = loader.TrainSplit.ToClientIdDictionary(out _);
-            var testSplit = loader.TestSplit ?? loader.TrainSplit;
+            var testSplit = loader.TestSplit is { } heldOut ? heldOut : loader.TrainSplit;
             var testClientData = testSplit.ToClientIdDictionary(out _);
 
             var sampledTrainClientData = maxSamplesPerUser.HasValue

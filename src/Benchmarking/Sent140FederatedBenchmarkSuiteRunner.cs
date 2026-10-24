@@ -71,7 +71,7 @@ internal static class Sent140FederatedBenchmarkSuiteRunner
         var dataset = leafLoader.LoadDatasetFromFiles((sent140.TrainFilePath ?? throw new InvalidOperationException("sent140.TrainFilePath is null where it is required.")), sent140.TestFilePath, loadOptions);
 
         var trainClientData = dataset.Train.ToClientIdDictionary(out _);
-        var testSplit = dataset.Test ?? dataset.Train;
+        var testSplit = dataset.Test is { } heldOut ? heldOut : dataset.Train;
         var testClientData = testSplit.ToClientIdDictionary(out _);
 
         var sampledTrainClientData = maxSamplesPerUser.HasValue

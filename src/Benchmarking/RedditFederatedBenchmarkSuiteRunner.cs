@@ -68,7 +68,7 @@ internal static class RedditFederatedBenchmarkSuiteRunner
         var dataset = leafLoader.LoadDatasetFromFiles((reddit.TrainFilePath ?? throw new InvalidOperationException("reddit.TrainFilePath is null where it is required.")), reddit.TestFilePath, loadOptions);
 
         var trainClientData = dataset.Train.ToClientIdDictionary(out _);
-        var testSplit = dataset.Test ?? dataset.Train;
+        var testSplit = dataset.Test is { } heldOut ? heldOut : dataset.Train;
         var testClientData = testSplit.ToClientIdDictionary(out _);
 
         var sampledTrainClientData = maxSamplesPerUser.HasValue

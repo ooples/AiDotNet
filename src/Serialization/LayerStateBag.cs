@@ -402,7 +402,7 @@ public readonly struct LayerStateBag
             Type definition = runtimeType.IsGenericType
                 ? runtimeType.GetGenericTypeDefinition()
                 : runtimeType;
-            writer.Write(definition.FullName ?? definition.Name);
+            writer.Write(definition.FullName is { } definitionName ? definitionName : definition.Name);
             WriteShape(writer, inputShape);
             WriteShape(writer, outputShape);
             writer.Write(metadata.Count);
@@ -1273,7 +1273,7 @@ public readonly struct LayerStateBag
         if (value is null) return string.Empty;
 
         Type type = value.GetType();
-        string assemblyQualified = type.AssemblyQualifiedName ?? type.FullName ?? string.Empty;
+        string assemblyQualified = type.AssemblyQualifiedName is { } qualifiedName ? qualifiedName : type.FullName ?? string.Empty;
         if (assemblyQualified.Length == 0) return string.Empty;
 
         // THE TYPE ALONE IS NOT THE COMPONENT. This class already refuses to rebuild a component

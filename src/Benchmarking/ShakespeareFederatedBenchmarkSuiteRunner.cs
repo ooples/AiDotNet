@@ -71,7 +71,7 @@ internal static class ShakespeareFederatedBenchmarkSuiteRunner
         var dataset = leafLoader.LoadDatasetFromFiles((shakespeare.TrainFilePath ?? throw new InvalidOperationException("shakespeare.TrainFilePath is null where it is required.")), shakespeare.TestFilePath, loadOptions);
 
         var trainClientData = dataset.Train.ToClientIdDictionary(out _);
-        var testSplit = dataset.Test ?? dataset.Train;
+        var testSplit = dataset.Test is { } heldOut ? heldOut : dataset.Train;
         var testClientData = testSplit.ToClientIdDictionary(out _);
 
         var sampledTrainClientData = maxSamplesPerUser.HasValue

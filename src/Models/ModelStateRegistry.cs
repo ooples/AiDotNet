@@ -2162,7 +2162,7 @@ public sealed class ModelStateRegistry<T>
         {
             w.Write(true);
             var concrete = node.LinearModel.GetType();
-            w.Write(concrete.AssemblyQualifiedName ?? concrete.FullName ?? concrete.Name);
+            w.Write(concrete.AssemblyQualifiedName is { } qualifiedName ? qualifiedName : concrete.FullName is { } fullName ? fullName : concrete.Name);
             var payload = node.LinearModel.Serialize();
             w.Write(payload.Length);
             w.Write(payload);

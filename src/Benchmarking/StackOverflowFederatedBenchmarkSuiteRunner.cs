@@ -68,7 +68,7 @@ internal static class StackOverflowFederatedBenchmarkSuiteRunner
         var dataset = leafLoader.LoadDatasetFromFiles((stackOverflow.TrainFilePath ?? throw new InvalidOperationException("stackOverflow.TrainFilePath is null where it is required.")), stackOverflow.TestFilePath, loadOptions);
 
         var trainClientData = dataset.Train.ToClientIdDictionary(out _);
-        var testSplit = dataset.Test ?? dataset.Train;
+        var testSplit = dataset.Test is { } heldOut ? heldOut : dataset.Train;
         var testClientData = testSplit.ToClientIdDictionary(out _);
 
         var sampledTrainClientData = maxSamplesPerUser.HasValue

@@ -325,7 +325,7 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
             int totalEvents = leftEvents + rightEvents;
 
             // Expected events in left group under null
-            double expectedLeft = (double)(leftAtRisk * totalEvents) / totalAtRisk;
+            double expectedLeft = (double)leftAtRisk * totalEvents / totalAtRisk;
 
             observed += leftEvents;
             expected += expectedLeft;

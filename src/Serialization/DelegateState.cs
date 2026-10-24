@@ -111,7 +111,7 @@ public static class DelegateState
         if (string.IsNullOrEmpty(owner)) return null;
 
         var parameters = string.Join(";", method.GetParameters()
-            .Select(p => p.ParameterType.AssemblyQualifiedName ?? p.ParameterType.FullName ?? string.Empty));
+            .Select(p => p.ParameterType.AssemblyQualifiedName is { } qualifiedName ? qualifiedName : p.ParameterType.FullName ?? string.Empty));
 
         return MethodScheme + owner + "|" + method.Name + "|" + parameters;
     }

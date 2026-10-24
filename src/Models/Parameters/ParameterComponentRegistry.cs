@@ -896,8 +896,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
         return registered is ComponentCollectionParameterSource<T> collection && collection.ContainsCurrent(candidateCurrent)
             || registered is ComponentAccessorParameterSource<T> accessor
-               && accessor.Current is not null && ReferenceEquals(accessor.Current, candidateCurrent)
-            || candidate is ComponentAccessorParameterSource<T> && ReferenceEquals(candidateCurrent, registered);
+               && accessor.Current is not null && ReferenceEquals((object)accessor.Current, candidateCurrent)
+            || candidate is ComponentAccessorParameterSource<T> && ReferenceEquals((object)candidateCurrent, registered);
     }
 
     private static bool TryGetNetwork(

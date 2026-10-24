@@ -118,7 +118,7 @@ internal static class LearningRateSchedulerCheckpointFactory
 
     private static readonly IReadOnlyDictionary<string, Func<Dictionary<string, object>, ILearningRateScheduler>>
         BuiltInFactoriesByTypeName = BuiltInFactories.ToDictionary(
-            pair => pair.Key.FullName ?? pair.Key.Name,
+            pair => pair.Key.FullName is { } fullName ? fullName : pair.Key.Name,
             pair => pair.Value,
             StringComparer.Ordinal);
 

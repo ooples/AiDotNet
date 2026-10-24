@@ -332,7 +332,7 @@ public static class GraphTrace
     {
         internal static readonly ReferenceComparer<T> Instance = new();
 
-        public bool Equals(ComputationNode<T>? x, ComputationNode<T>? y) => ReferenceEquals(x, y);
+        public bool Equals(ComputationNode<T>? x, ComputationNode<T>? y) => ReferenceEquals((object?)x, y);
 
         public int GetHashCode(ComputationNode<T> obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
