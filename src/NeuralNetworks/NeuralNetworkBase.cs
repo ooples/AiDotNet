@@ -301,8 +301,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // would hand later layers the seeds earlier ones already used, so they would initialise alike.
             if (!HasBuiltLayers())
                 ApplyOptionsSeed(value?.Seed);
+            else
+                KeepOptionsSeedForWiring(value?.Seed);
         }
     }
+
+    /// <summary>
+    /// Keeps an options seed that arrived after layers were built, for the layers' seed wiring to apply.
+    /// </summary>
+    /// <remarks>
+    /// Restarting the construction scope now would hand later layers the seeds earlier ones already used, so the seed
+    /// is not applied that way; dropping it was the defect. NeuralNetwork&lt;T&gt; builds its layers in its own
+    /// constructor, so every subclass that assigns Options in its constructor body (BayesianNeuralNetwork among them)
+    /// ignored Options.Seed: two models with the same seed started from different weights. The seed now reaches the
+    /// layers when they are first used (<see cref="CompleteOwnOptionsSeedDeferral"/>) or trained.
+    /// </remarks>
+    private void KeepOptionsSeedForWiring(int? seed)
+    {
+        if (Architecture is { HasExplicitRandomSeed: true } || seed == _optionsSeed)
+            return;
+        _optionsSeed = seed;
+        _optionsSeedAwaitsWiring = !_layerRandomSeedsWired;
+    }
+
+    // Set when an options seed arrived after the layers were built and has not been wired into them yet.
+    private bool _optionsSeedAwaitsWiring;
 
     /// <summary>
     /// Whether this model has built a layer yet: one in <see cref="Layers"/>, or one kept anywhere else (a field, a
@@ -321,6 +344,39 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     // The construction scope's position right after this model reset it and seeded its caller-built layers.
     private (int Generation, int SeedsDrawn) _constructionScopePosition;
+
+    // The seed sequence this model's construction armed; layers it builds on first use continue it.
+    private Random? _constructionSequence;
+
+    private void RecordConstructionScope()
+    {
+        _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
+        _constructionSequence = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CurrentSequence;
+    }
+
+    /// <summary>
+    /// Builds the layers on first use, drawing their seeds from this model's own construction sequence rather than
+    /// whatever sequence the thread's scope holds by then.
+    /// </summary>
+    /// <remarks>
+    /// A model whose constructor leaves <see cref="InitializeLayers"/> to the first use drew its layer seeds from the
+    /// model constructed last on the thread: a BayesianNeuralNetwork with Options.Seed = 7 got different weights from
+    /// another with the same seed built right after it. Continuing the model's own sequence gives exactly the seeds
+    /// it would have drawn had nothing been constructed in between.
+    /// </remarks>
+    private void InitializeLayersFromConstructionSequence()
+    {
+        var enclosing = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResumeSequence(_constructionSequence);
+        try
+        {
+            InitializeLayers();
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(enclosing);
+        }
+    }
 
     private ModelOptions _modelOptions = new NeuralNetworkOptions();
 
@@ -688,7 +744,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
         SeedCallerBuiltLayers();
-        _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
+        RecordConstructionScope();
         // Most models keep their options in a field of their own and expose them only through GetOptions(), which
         // the derived constructor fills after this one returns, so their Options.Seed reached nothing. The first
         // layer to ask for a seed once those options exist applies their seed (see TryApplyConstructionOptionsSeed).
@@ -5274,7 +5330,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // double up the entire network.
             if (!_layerOnlyInitialized && Layers.Count == 0)
             {
-                InitializeLayers();
+                InitializeLayersFromConstructionSequence();
                 BindLayerGraphReferences();
                 ReconcileCanonicalNestedNetworkLayerViews();
                 ReportLayerContractMismatches();
@@ -5297,7 +5353,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Architecture.InitializeFromCachedData();
 
             // Initialize network-specific layers
-            InitializeLayers();
+            InitializeLayersFromConstructionSequence();
             BindLayerGraphReferences();
             ReconcileCanonicalNestedNetworkLayerViews();
             ReportLayerContractMismatches();
@@ -7583,6 +7639,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private void CompleteOwnOptionsSeedDeferral()
     {
+        if (_optionsSeedAwaitsWiring)
+        {
+            _optionsSeedAwaitsWiring = false;
+            EnsureLayerRandomSeedsWired();
+            return;
+        }
+
         if (_ownOptionsSeedCompleted || _optionsSeed is not null || _layerRandomSeedsWired)
             return;
 
@@ -7664,14 +7727,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _optionsSeed = null;
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
             SeedCallerBuiltLayers();
-            _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
+            RecordConstructionScope();
             return;
         }
 
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
         SeedCallerBuiltLayers();
-        _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
+        RecordConstructionScope();
     }
 
     // The caller-built layers this model gave a seed, so a later options seed can replace those seeds and no others.

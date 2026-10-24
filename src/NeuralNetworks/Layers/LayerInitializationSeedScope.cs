@@ -191,6 +191,27 @@ internal static class LayerInitializationSeedScope
         return NextSeedOrNull();
     }
 
+    /// <summary>
+    /// The seed sequence this thread's scope draws from. A model keeps the one its constructor armed, so layers it
+    /// builds after the constructor returned can continue it (<see cref="ResumeSequence"/>).
+    /// </summary>
+    internal static Random? CurrentSequence => _rng;
+
+    /// <summary>
+    /// Makes <paramref name="sequence"/> the one layers draw from, with no seed deferred to any model. Capture the
+    /// scope first and restore it in a <c>finally</c>.
+    /// </summary>
+    /// <remarks>
+    /// The scope stays armed after a model finishes constructing, so a model that builds its layers on first use drew
+    /// them from whichever model was constructed last on the thread: two models with the same seed got different
+    /// weights whenever another was built between the constructor and the first use.
+    /// </remarks>
+    internal static void ResumeSequence(Random? sequence)
+    {
+        _rng = sequence;
+        _pendingModelSeed = null;
+    }
+
     /// <summary>Restores a scope captured by <see cref="CaptureScope"/>, including its deferred seed.</summary>
     internal static void RestoreScope(ScopeSnapshot capturedScope)
     {

@@ -35,8 +35,8 @@ public class BayesianDenseLayerSeedTests
 
         Assert.Equal(first.GetParameters().ToArray(), second.GetParameters().ToArray());
         Assert.Equal(
-            first.PredictWithUncertainty(Input()).Mean.ToVector().ToArray(),
-            second.PredictWithUncertainty(Input()).Mean.ToVector().ToArray());
+            first.PredictWithUncertainty(Input()).Prediction.ToVector().ToArray(),
+            second.PredictWithUncertainty(Input()).Prediction.ToVector().ToArray());
     }
 
     [Fact]
