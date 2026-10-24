@@ -162,6 +162,26 @@ internal static class OuteTTSPrompts
         return Regex.Replace(Regex.Replace(text, "^" + s + "+", ""), s + "+$", "");
     }
 
+    private static readonly Regex TranscriptQuotes = new("[“”]", RegexOptions.CultureInvariant);
+    private static readonly Regex TranscriptApostrophes = new("[‘’]", RegexOptions.CultureInvariant);
+    private static readonly Regex TranscriptDashes = new("[–—]", RegexOptions.CultureInvariant);
+    private static readonly Regex TranscriptControls = new("[\u0000-\u001f\u007f-\u009f]", RegexOptions.CultureInvariant);
+
+    /// <summary><c>utils/preprocessing.text_normalizations</c>, applied to a speaker's transcript: whitespace runs to
+    /// one space, the ellipsis character to three dots, stripped, curly quotes and dashes to ASCII, control characters
+    /// removed.</summary>
+    public static string NormalizeTranscript(string text)
+    {
+        BuildRegexes();
+        text = _spaces!.Replace(text, " ");
+        text = text.Replace("…", "...");
+        text = PythonStrip(text);
+        text = TranscriptQuotes.Replace(text, "\"");
+        text = TranscriptApostrophes.Replace(text, "'");
+        text = TranscriptDashes.Replace(text, "-");
+        return TranscriptControls.Replace(text, "");
+    }
+
     // _get_separator
     private static string Separator(string text)
     {
@@ -236,7 +256,7 @@ internal static class OuteTTSPrompts
     internal static string FormatFixed(double value, int digits)
     {
         if (double.IsNaN(value) || double.IsInfinity(value)) return value.ToString(CultureInfo.InvariantCulture);
-        bool negative = value < 0 || (value == 0 && double.IsNegative(value));
+        bool negative = value < 0 || (value == 0 && BitConverter.DoubleToInt64Bits(value) < 0);
         long bits = BitConverter.DoubleToInt64Bits(Math.Abs(value));
         int exponent = (int)((bits >> 52) & 0x7ff);
         long mantissa = bits & 0xfffffffffffffL;

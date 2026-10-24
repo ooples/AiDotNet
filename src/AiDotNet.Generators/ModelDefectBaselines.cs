@@ -258,7 +258,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.Latest.KaniTTS<T>",
             "AiDotNet.TextToSpeech.Latest.KaniTTS2<T>",
             "AiDotNet.TextToSpeech.Latest.MegaTTS3<T>",
-            "AiDotNet.TextToSpeech.Latest.OuteTTS<T>",
             "AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>",
             "AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T>",
             "AiDotNet.TextToSpeech.MultiModal.LlamaOmni<T>",

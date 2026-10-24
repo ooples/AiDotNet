@@ -140,7 +140,7 @@ public class OuteTTSComponentTests
         codec.LoadDescriptWeights(name => weights.TryGetValue(name, out var t) ? t.ToVector().Select(v => (double)v).ToArray() : null);
         Assert.Empty(weights.Keys.Where(k => !codec.UsedDescriptNames.Contains(k)));
         var dac = fixture["dac"]!;
-        var codes = OuteTTSAudio.Encode(codec, Values(dac["input"]!), 24000);
+        var codes = OuteTTSAudio.Encode<double>(codec.Encode, codec.HopLength, Values(dac["input"]!), 24000);
         var expected = dac["codes"]!.Select(r => r.Select(v => (int)v).ToArray()).ToArray();
         Assert.Equal(expected.Length, codes.GetLength(0));
         Assert.Equal(expected[0].Length, codes.GetLength(1));
@@ -152,6 +152,6 @@ public class OuteTTSComponentTests
         var exact = new int[expected.Length, expected[0].Length];
         for (int q = 0; q < expected.Length; q++)
             for (int t = 0; t < expected[q].Length; t++) exact[q, t] = expected[q][t];
-        Close(Values(dac["decoded"]!), OuteTTSAudio.Decode(codec, exact, 24000), "decoded", 1e-7);
+        Close(Values(dac["decoded"]!), OuteTTSAudio.Decode<double>(codec.Decode, exact, 24000), "decoded", 1e-7);
     }
 }
