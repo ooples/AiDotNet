@@ -1,3 +1,12 @@
+// The sub-layers below are declared non-nullable and built lazily in EnsureInitialized, once the
+// embedding size is known. The annotation is load-bearing rather than cosmetic: the trainable-parameter
+// generator reads it to tell a child that is not built YET from a child that is genuinely OPTIONAL.
+// A non-nullable child that is still null makes DeclaredSubLayerShapes bail and retry; a nullable one is
+// skipped as configuration and the result is cached, so annotating these as nullable permanently drops
+// them from the declared surface and they report zero parameters. That is what made a deserialize size
+// this layer against its own parameters only and reject the full payload.
+#pragma warning disable CS8618 // Lazily built in EnsureInitialized; see the note above.
+
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -205,7 +214,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("1, _embeddingSize")]
-    private MultiHeadAttentionLayer<T>? _selfAttention;
+    private MultiHeadAttentionLayer<T> _selfAttention;
 
     /// <summary>
     /// The layer normalization applied after self-attention.
@@ -227,7 +236,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("_embeddingSize")]
-    private LayerNormalizationLayer<T>? _norm1;
+    private LayerNormalizationLayer<T> _norm1;
 
     /// <summary>
     /// The cross-attention mechanism for attending to the encoder output.
@@ -249,7 +258,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("1, _embeddingSize")]
-    private MultiHeadAttentionLayer<T>? _crossAttention;
+    private MultiHeadAttentionLayer<T> _crossAttention;
 
     /// <summary>
     /// The layer normalization applied after cross-attention.
@@ -271,7 +280,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("_embeddingSize")]
-    private LayerNormalizationLayer<T>? _norm2;
+    private LayerNormalizationLayer<T> _norm2;
 
     /// <summary>
     /// The feed-forward network for additional transformation of the sequence.
@@ -292,7 +301,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("_embeddingSize")]
-    private FeedForwardLayer<T>? _feedForward;
+    private FeedForwardLayer<T> _feedForward;
 
     /// <summary>
     /// The projection layer that maps back from the feed-forward hidden dimension to the embedding size.
@@ -313,7 +322,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("_feedForwardDim")]
-    private FeedForwardLayer<T>? _feedForwardProjection;
+    private FeedForwardLayer<T> _feedForwardProjection;
 
     /// <summary>
     /// The layer normalization applied after the feed-forward network.
@@ -335,28 +344,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     [SubLayerInput("_embeddingSize")]
-    private LayerNormalizationLayer<T>? _norm3;
-
-    private MultiHeadAttentionLayer<T> SelfAttentionLayer => _selfAttention ?? throw new InvalidOperationException(
-        "TransformerDecoderLayer._selfAttention is used before the layer has built its sublayers.");
-
-    private LayerNormalizationLayer<T> Norm1Layer => _norm1 ?? throw new InvalidOperationException(
-        "TransformerDecoderLayer._norm1 is used before the layer has built its sublayers.");
-
-    private MultiHeadAttentionLayer<T> CrossAttentionLayer => _crossAttention ?? throw new InvalidOperationException(
-        "TransformerDecoderLayer._crossAttention is used before the layer has built its sublayers.");
-
-    private LayerNormalizationLayer<T> Norm2Layer => _norm2 ?? throw new InvalidOperationException(
-        "TransformerDecoderLayer._norm2 is used before the layer has built its sublayers.");
-
-    private FeedForwardLayer<T> FeedForwardLayer => _feedForward ?? throw new InvalidOperationException(
-        "TransformerDecoderLayer._feedForward is used before the layer has built its sublayers.");
-
-    private FeedForwardLayer<T> FeedForwardProjectionLayer => _feedForwardProjection ?? throw new InvalidOperationException(
-        "TransformerDecoderLayer._feedForwardProjection is used before the layer has built its sublayers.");
-
-    private LayerNormalizationLayer<T> Norm3Layer => _norm3 ?? throw new InvalidOperationException(
-        "TransformerDecoderLayer._norm3 is used before the layer has built its sublayers.");
+    private LayerNormalizationLayer<T> _norm3;
 
     /// <summary>
     /// The input tensor from the last forward pass.
@@ -541,9 +529,9 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         base.ClearGradients();
         // Sublayers do not exist on a lazy decoder until first Forward; nothing to clear.
         if (!_isInitialized) return;
-        SelfAttentionLayer.ClearGradients(); Norm1Layer.ClearGradients();
-        CrossAttentionLayer.ClearGradients(); Norm2Layer.ClearGradients();
-        FeedForwardLayer.ClearGradients(); FeedForwardProjectionLayer.ClearGradients(); Norm3Layer.ClearGradients();
+        _selfAttention.ClearGradients(); _norm1.ClearGradients();
+        _crossAttention.ClearGradients(); _norm2.ClearGradients();
+        _feedForward.ClearGradients(); _feedForwardProjection.ClearGradients(); _norm3.ClearGradients();
     }
 
     /// <summary>
@@ -577,13 +565,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _lazyFfnActivation = ffnActivation;
         _causal = causal;
 
-        _selfAttention = null;
-        _norm1 = null;
-        _crossAttention = null;
-        _norm2 = null;
-        _feedForward = null;
-        _feedForwardProjection = null;
-        _norm3 = null;
 
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
@@ -683,13 +664,13 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);
                 _norm3 = new LayerNormalizationLayer<T>();
 
-                RegisterSubLayer(SelfAttentionLayer);
-                RegisterSubLayer(Norm1Layer);
-                RegisterSubLayer(CrossAttentionLayer);
-                RegisterSubLayer(Norm2Layer);
-                RegisterSubLayer(FeedForwardLayer);
-                RegisterSubLayer(FeedForwardProjectionLayer);
-                RegisterSubLayer(Norm3Layer);
+                RegisterSubLayer(_selfAttention);
+                RegisterSubLayer(_norm1);
+                RegisterSubLayer(_crossAttention);
+                RegisterSubLayer(_norm2);
+                RegisterSubLayer(_feedForward);
+                RegisterSubLayer(_feedForwardProjection);
+                RegisterSubLayer(_norm3);
 
                 // Lazy children are created after the model-construction seed scope has ended, and
                 // compiled first-forward execution may occur on another thread. Derive their seeds from
@@ -697,13 +678,13 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 if (RandomSeed.HasValue)
                 {
                     var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value);
-                    SelfAttentionLayer.RandomSeed = subSeedRng.Next();
-                    Norm1Layer.RandomSeed = subSeedRng.Next();
-                    CrossAttentionLayer.RandomSeed = subSeedRng.Next();
-                    Norm2Layer.RandomSeed = subSeedRng.Next();
-                    FeedForwardLayer.RandomSeed = subSeedRng.Next();
-                    FeedForwardProjectionLayer.RandomSeed = subSeedRng.Next();
-                    Norm3Layer.RandomSeed = subSeedRng.Next();
+                    _selfAttention.RandomSeed = subSeedRng.Next();
+                    _norm1.RandomSeed = subSeedRng.Next();
+                    _crossAttention.RandomSeed = subSeedRng.Next();
+                    _norm2.RandomSeed = subSeedRng.Next();
+                    _feedForward.RandomSeed = subSeedRng.Next();
+                    _feedForwardProjection.RandomSeed = subSeedRng.Next();
+                    _norm3.RandomSeed = subSeedRng.Next();
                 }
 
             }
@@ -839,24 +820,24 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastEncoderOutput = encoderOutput;
 
-        _lastSelfAttentionOutput = SelfAttentionLayer.Forward(input);
+        _lastSelfAttentionOutput = _selfAttention.Forward(input);
 
         // residual1 = input + selfAttentionOutput
         var residual1 = Engine.TensorAdd(input, _lastSelfAttentionOutput);
-        _lastNormalized1 = Norm1Layer.Forward(residual1);
+        _lastNormalized1 = _norm1.Forward(residual1);
 
-        _lastCrossAttentionOutput = CrossAttentionLayer.Forward(_lastNormalized1, encoderOutput);
+        _lastCrossAttentionOutput = _crossAttention.Forward(_lastNormalized1, encoderOutput);
 
         // residual2 = normalized1 + crossAttentionOutput
         var residual2 = Engine.TensorAdd(_lastNormalized1, _lastCrossAttentionOutput);
-        _lastNormalized2 = Norm2Layer.Forward(residual2);
+        _lastNormalized2 = _norm2.Forward(residual2);
 
-        var feedForwardHidden = FeedForwardLayer.Forward(_lastNormalized2);
-        _lastFeedForwardOutput = FeedForwardProjectionLayer.Forward(feedForwardHidden);
+        var feedForwardHidden = _feedForward.Forward(_lastNormalized2);
+        _lastFeedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
 
         // residual3 = normalized2 + feedForwardOutput
         var residual3 = Engine.TensorAdd(_lastNormalized2, _lastFeedForwardOutput);
-        var output = Norm3Layer.Forward(residual3);
+        var output = _norm3.Forward(residual3);
 
         return output;
     }
@@ -891,22 +872,22 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _lastEncoderOutput = null;
 
-        _lastSelfAttentionOutput = SelfAttentionLayer.Forward(input);
+        _lastSelfAttentionOutput = _selfAttention.Forward(input);
 
         // residual1 = input + selfAttentionOutput
         var residual1 = Engine.TensorAdd(input, _lastSelfAttentionOutput);
-        _lastNormalized1 = Norm1Layer.Forward(residual1);
+        _lastNormalized1 = _norm1.Forward(residual1);
 
         // No cross-attention sublayer on this path, so nothing of it is cached.
         _lastCrossAttentionOutput = null;
         _lastNormalized2 = null;
 
-        var feedForwardHidden = FeedForwardLayer.Forward(_lastNormalized1);
-        _lastFeedForwardOutput = FeedForwardProjectionLayer.Forward(feedForwardHidden);
+        var feedForwardHidden = _feedForward.Forward(_lastNormalized1);
+        _lastFeedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
 
         // residual = normalized1 + feedForwardOutput
         var residual = Engine.TensorAdd(_lastNormalized1, _lastFeedForwardOutput);
-        return Norm3Layer.Forward(residual);
+        return _norm3.Forward(residual);
     }
 
     /// <summary>
@@ -935,13 +916,13 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         // Sublayers do not exist on a lazy decoder until first Forward.
         if (!_isInitialized) return;
-        SelfAttentionLayer.UpdateParameters(learningRate);
-        Norm1Layer.UpdateParameters(learningRate);
-        CrossAttentionLayer.UpdateParameters(learningRate);
-        Norm2Layer.UpdateParameters(learningRate);
-        FeedForwardLayer.UpdateParameters(learningRate);
-        FeedForwardProjectionLayer.UpdateParameters(learningRate);
-        Norm3Layer.UpdateParameters(learningRate);
+        _selfAttention.UpdateParameters(learningRate);
+        _norm1.UpdateParameters(learningRate);
+        _crossAttention.UpdateParameters(learningRate);
+        _norm2.UpdateParameters(learningRate);
+        _feedForward.UpdateParameters(learningRate);
+        _feedForwardProjection.UpdateParameters(learningRate);
+        _norm3.UpdateParameters(learningRate);
     }
 
     /// <summary>
@@ -960,13 +941,13 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (!_isInitialized) return;
 
         // Update parameters for each sub-layer using GPU optimizer
-        SelfAttentionLayer.UpdateParametersGpu(config);
-        Norm1Layer.UpdateParametersGpu(config);
-        CrossAttentionLayer.UpdateParametersGpu(config);
-        Norm2Layer.UpdateParametersGpu(config);
-        FeedForwardLayer.UpdateParametersGpu(config);
-        FeedForwardProjectionLayer.UpdateParametersGpu(config);
-        Norm3Layer.UpdateParametersGpu(config);
+        _selfAttention.UpdateParametersGpu(config);
+        _norm1.UpdateParametersGpu(config);
+        _crossAttention.UpdateParametersGpu(config);
+        _norm2.UpdateParametersGpu(config);
+        _feedForward.UpdateParametersGpu(config);
+        _feedForwardProjection.UpdateParametersGpu(config);
+        _norm3.UpdateParametersGpu(config);
     }
 
     /// <summary>
@@ -1000,13 +981,13 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (!_isInitialized) return;
 
         // Reset all sublayers
-        SelfAttentionLayer.ResetState();
-        Norm1Layer.ResetState();
-        CrossAttentionLayer.ResetState();
-        Norm2Layer.ResetState();
-        FeedForwardLayer.ResetState();
-        FeedForwardProjectionLayer.ResetState();
-        Norm3Layer.ResetState();
+        _selfAttention.ResetState();
+        _norm1.ResetState();
+        _crossAttention.ResetState();
+        _norm2.ResetState();
+        _feedForward.ResetState();
+        _feedForwardProjection.ResetState();
+        _norm3.ResetState();
 
         // Clear cached tensors
         _lastInput = null;
@@ -1296,8 +1277,8 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         // Apply projection layer (second layer: project back to embedding size)
-        var projWeightsTensor = FeedForwardProjectionLayer.GetWeightsTensor();
-        var projBiasTensor = FeedForwardProjectionLayer.GetBiasesTensor();
+        var projWeightsTensor = _feedForwardProjection.GetWeightsTensor();
+        var projBiasTensor = _feedForwardProjection.GetBiasesTensor();
 
         if (projWeightsTensor == null || projBiasTensor == null)
             throw new InvalidOperationException("Feed-forward projection layer weights not initialized.");
