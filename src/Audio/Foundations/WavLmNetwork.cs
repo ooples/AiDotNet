@@ -19,6 +19,14 @@ internal sealed record WavLmConfiguration
     public int RelativePositionBuckets { get; init; } = 320;
     public int RelativePositionMaxDistance { get; init; } = 800;
     public double LayerNormEpsilon { get; init; } = 1e-5;
+
+    /// <summary>transformers' <c>feat_extract_norm == "layer"</c> (WavLM-Large): a layer norm over the channels after
+    /// every feature-encoder convolution, rather than the first one's group norm.</summary>
+    public bool LayerNormFeatureEncoder { get; init; }
+
+    /// <summary>transformers' <c>do_stable_layer_norm</c> (WavLM-Large): pre-norm encoder layers and the encoder's layer
+    /// norm after the last layer, rather than post-norm layers after it.</summary>
+    public bool StableLayerNorm { get; init; }
 }
 
 /// <summary>
@@ -28,8 +36,10 @@ internal sealed record WavLmConfiguration
 /// Transformer layers whose attention adds a gated relative position bias — the first layer's bucketed bias table, gated
 /// per head and query by <c>a (b · c − 1) + 2</c> with <c>a, b</c> sigmoids of a linear map of the head's input.
 /// </summary>
-/// <remarks>For frozen use (StyleTTS 2's speech language model): no masking, dropout or LayerDrop. Its layers are added
-/// to the owner's list.</remarks>
+/// <remarks>For frozen use (StyleTTS 2's speech language model, KaniTTS 2's speaker embedder): no masking, dropout or
+/// LayerDrop. WavLM-Large's layout (<see cref="WavLmConfiguration.LayerNormFeatureEncoder"/>,
+/// <see cref="WavLmConfiguration.StableLayerNorm"/>) is transformers' <c>WavLMEncoderStableLayerNorm</c>. Its layers are
+/// added to the owner's list.</remarks>
 internal sealed class WavLmNetwork<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -55,7 +65,10 @@ internal sealed class WavLmNetwork<T>
             int inputs = i == 0 ? 1 : c.ConvDims[i - 1];
             Convs.Add(Own(new BiasFreeLinearLayer<T>(c.ConvKernels[i] * inputs, c.ConvDims[i])));
         }
-        FirstNorm = Own(new GroupNormalizationLayer<T>(c.ConvDims[0], c.ConvDims[0], 1e-5));
+        if (c.LayerNormFeatureEncoder)
+            foreach (int width in c.ConvDims) ConvNorms.Add(Norm(width));
+        else
+            FirstNorm = Own(new GroupNormalizationLayer<T>(c.ConvDims[0], c.ConvDims[0], 1e-5));
         ProjectionNorm = Norm(c.ConvDims[^1]);
         Projection = Linear(c.HiddenSize);
         PositionalConv = Own(new Wav2Vec2PositionalConvLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups));
@@ -78,7 +91,11 @@ internal sealed class WavLmNetwork<T>
 
     public WavLmConfiguration Configuration { get; }
     public List<BiasFreeLinearLayer<T>> Convs { get; } = new();
-    public GroupNormalizationLayer<T> FirstNorm { get; }
+    /// <summary>The first convolution's group norm; null with <see cref="WavLmConfiguration.LayerNormFeatureEncoder"/>.</summary>
+    public GroupNormalizationLayer<T>? FirstNorm { get; }
+
+    /// <summary>Each convolution's layer norm with <see cref="WavLmConfiguration.LayerNormFeatureEncoder"/>; empty otherwise.</summary>
+    public List<LayerNormalizationLayer<T>> ConvNorms { get; } = new();
     public LayerNormalizationLayer<T> ProjectionNorm { get; }
     public DenseLayer<T> Projection { get; }
     public Wav2Vec2PositionalConvLayer<T> PositionalConv { get; }
@@ -95,9 +112,10 @@ internal sealed class WavLmNetwork<T>
         return length;
     }
 
-    /// <summary>The hidden states <c>[frames, hidden]</c> of a 16 kHz waveform <c>[samples]</c>: the encoder's input
-    /// (after the position embedding and layer norm) and every layer's output (transformers'
-    /// <c>output_hidden_states</c>).</summary>
+    /// <summary>The hidden states <c>[frames, hidden]</c> of a 16 kHz waveform <c>[samples]</c>, as transformers'
+    /// <c>output_hidden_states</c> lists them: the encoder's input (after the position embedding and layer norm) and
+    /// every layer's output; with <see cref="WavLmConfiguration.StableLayerNorm"/>, each layer's input and, last, the
+    /// final layer's output after the encoder's layer norm (<c>last_hidden_state</c>).</summary>
     public IReadOnlyList<Tensor<T>> HiddenStates(Tensor<T> audio)
     {
         var c = Configuration;
@@ -110,9 +128,21 @@ internal sealed class WavLmNetwork<T>
         int length = hidden.Shape[0];
         var batched = _engine.Reshape(hidden, new[] { 1, length, c.HiddenSize });
         batched = _engine.TensorAdd(batched, ActivationHelper.ExactGelu(PositionalConv.Forward(batched), _engine));
-        hidden = EncoderNorm.Forward(_engine.Reshape(batched, new[] { length, c.HiddenSize }));
-        var states = new List<Tensor<T>> { hidden };
+        hidden = _engine.Reshape(batched, new[] { length, c.HiddenSize });
         var bias = PositionBias(length);
+        if (c.StableLayerNorm)
+        {
+            var stable = new List<Tensor<T>>();
+            foreach (var layer in EncoderLayers)
+            {
+                stable.Add(hidden);
+                hidden = EncodeStable(layer, hidden, bias);
+            }
+            stable.Add(EncoderNorm.Forward(hidden));
+            return stable;
+        }
+        hidden = EncoderNorm.Forward(hidden);
+        var states = new List<Tensor<T>> { hidden };
         foreach (var layer in EncoderLayers)
         {
             hidden = Encode(layer, hidden, bias);
@@ -122,7 +152,7 @@ internal sealed class WavLmNetwork<T>
     }
 
     // A feature-encoder layer on [L, Cin]: the strided kernel windows through the conv's linear map, the first layer's
-    // group norm (one group per channel, over time), GELU.
+    // group norm (one group per channel, over time) or every layer's layer norm (over the channels), GELU.
     private Tensor<T> ConvBlock(int index, Tensor<T> x)
     {
         var c = Configuration;
@@ -134,10 +164,11 @@ internal sealed class WavLmNetwork<T>
         var windows = _engine.Reshape(_engine.TensorGather(x, new Tensor<int>(new[] { indices.Length }, new Vector<int>(indices)), axis: 0),
             new[] { frames, kernel * channels });
         var y = Convs[index].Forward(windows);
-        if (index == 0)
+        if (c.LayerNormFeatureEncoder) y = ConvNorms[index].Forward(y);
+        else if (index == 0)
         {
             int width = y.Shape[1];
-            var normed = FirstNorm.Forward(_engine.Reshape(_engine.TensorTranspose(y), new[] { 1, width, frames, 1 }));
+            var normed = FirstNorm!.Forward(_engine.Reshape(_engine.TensorTranspose(y), new[] { 1, width, frames, 1 }));
             y = _engine.TensorTranspose(_engine.Reshape(normed, new[] { width, frames }));
         }
         return ActivationHelper.ExactGelu(y, _engine);
@@ -202,6 +233,14 @@ internal sealed class WavLmNetwork<T>
         return l.FinalNorm.Forward(_engine.TensorAdd(x, hidden));
     }
 
+    // WavLMEncoderLayerStableLayerNorm: pre-norm attention and feed-forward, each added to its input.
+    private Tensor<T> EncodeStable(Layer l, Tensor<T> x, Tensor<T> bias)
+    {
+        x = _engine.TensorAdd(x, Attention(l, l.AttentionNorm.Forward(x), bias));
+        var hidden = l.FeedForwardOutput.Forward(ActivationHelper.ExactGelu(l.Intermediate.Forward(l.FinalNorm.Forward(x)), _engine));
+        return _engine.TensorAdd(x, hidden);
+    }
+
     /// <summary>Loads a transformers <c>WavLMModel</c> state dict (the position convolution's weight norm under its old
     /// <c>weight_g</c>/<c>weight_v</c> names or the parametrized ones).</summary>
     public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has)
@@ -223,17 +262,21 @@ internal sealed class WavLmNetwork<T>
                     for (int k = 0; k < kernel; k++) unfolded[o * kernel * inputs + k * inputs + ch] = w[(o * inputs + ch) * kernel + k];
             TorchParameters.Linear(Convs[i], kernel * inputs, outputs, unfolded);
         }
-        var gamma = read("feature_extractor.conv_layers.0.layer_norm.weight", new[] { c.ConvDims[0] });
-        var beta = read("feature_extractor.conv_layers.0.layer_norm.bias", new[] { c.ConvDims[0] });
-        var gt = FirstNorm.GetGammaTensor();
-        var bt = FirstNorm.GetBetaTensor();
-        for (int j = 0; j < gamma.Length; j++)
+        if (FirstNorm is not null)
         {
-            gt[j] = NumOps.FromDouble(gamma[j]);
-            bt[j] = NumOps.FromDouble(beta[j]);
+            var gamma = read("feature_extractor.conv_layers.0.layer_norm.weight", new[] { c.ConvDims[0] });
+            var beta = read("feature_extractor.conv_layers.0.layer_norm.bias", new[] { c.ConvDims[0] });
+            var gt = FirstNorm.GetGammaTensor();
+            var bt = FirstNorm.GetBetaTensor();
+            for (int j = 0; j < gamma.Length; j++)
+            {
+                gt[j] = NumOps.FromDouble(gamma[j]);
+                bt[j] = NumOps.FromDouble(beta[j]);
+            }
+            _engine.InvalidatePersistentTensor(gt);
+            _engine.InvalidatePersistentTensor(bt);
         }
-        _engine.InvalidatePersistentTensor(gt);
-        _engine.InvalidatePersistentTensor(bt);
+        for (int i = 0; i < ConvNorms.Count; i++) Norm(ConvNorms[i], $"feature_extractor.conv_layers.{i}.layer_norm", c.ConvDims[i]);
         Norm(ProjectionNorm, "feature_projection.layer_norm", c.ConvDims[^1]);
         Lin(Projection, "feature_projection.projection", c.ConvDims[^1], h);
         int perGroup = h / c.PositionalConvGroups, kernelLength = c.PositionalConvKernel;
