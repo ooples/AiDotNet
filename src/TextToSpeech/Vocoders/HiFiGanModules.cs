@@ -203,8 +203,11 @@ internal sealed class HiFiGanDiscriminators<T>
     /// <param name="slope">The leaky ReLU slope (HiFi-GAN 0.1; UnivNet 0.2).</param>
     /// <param name="padFullPeriod">Whether a length already divisible by the period still gets a full period of reflect
     /// padding (DAC's reference pads <c>period − t mod period</c> unconditionally; HiFi-GAN pads only when needed).</param>
+    /// <param name="vitsScale">Build VITS's scale discriminator (jaywalnut310/vits <c>DiscriminatorS</c>, also MeloTTS's):
+    /// MelGAN's widths 16, 64, 256, 1024, 1024, 1024 with stride-4 grouped convolutions (groups 4, 16, 64, 256), in place
+    /// of HiFi-GAN's 128-to-1024 layout.</param>
     public HiFiGanDiscriminators(IEngine engine, int[] periods, int scales, bool useScaleDiscriminator = true, int widthDivisor = 1,
-        bool spectralFirstScale = true, int[]? periodChannels = null, double slope = 0.1, bool padFullPeriod = false)
+        bool spectralFirstScale = true, int[]? periodChannels = null, double slope = 0.1, bool padFullPeriod = false, bool vitsScale = false)
     {
         _engine = engine;
         _padFullPeriod = padFullPeriod;
@@ -224,6 +227,20 @@ internal sealed class HiFiGanDiscriminators<T>
         for (int s = 0; s < scales; s++)
         {
             var norm = s == 0 && spectralFirstScale ? ConvolutionNormalization.Spectral : ConvolutionNormalization.Weight;
+            if (vitsScale)
+            {
+                var vits = new List<NormedConv1DLayer<T>>
+                {
+                    Add(new NormedConv1DLayer<T>(1, W(16), 15, 1, 1, 1, 7, false, norm)),
+                    Add(new NormedConv1DLayer<T>(W(16), W(64), 41, 4, 1, Groups(W(16), 4), 20, false, norm)),
+                    Add(new NormedConv1DLayer<T>(W(64), W(256), 41, 4, 1, Groups(W(64), 16), 20, false, norm)),
+                    Add(new NormedConv1DLayer<T>(W(256), W(1024), 41, 4, 1, Groups(W(256), 64), 20, false, norm)),
+                    Add(new NormedConv1DLayer<T>(W(1024), W(1024), 41, 4, 1, Groups(W(1024), 256), 20, false, norm)),
+                    Add(new NormedConv1DLayer<T>(W(1024), W(1024), 5, 1, 1, 1, 2, false, norm)),
+                };
+                _scales.Add((vits, Add(new NormedConv1DLayer<T>(W(1024), 1, 3, 1, 1, 1, 1, false, norm))));
+                continue;
+            }
             var convs = new List<NormedConv1DLayer<T>>
             {
                 Add(new NormedConv1DLayer<T>(1, W(128), 15, 1, 1, 1, 7, false, norm)),
@@ -239,6 +256,41 @@ internal sealed class HiFiGanDiscriminators<T>
     }
 
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
+
+    /// <summary>
+    /// Loads a PyTorch state dictionary of weight-normalized discriminators (<c>discriminators.{k}.convs.{i}</c> and
+    /// <c>.conv_post</c>, each <c>weight_g</c>, <c>weight_v</c>, <c>bias</c>). VITS's and MeloTTS's
+    /// <c>MultiPeriodDiscriminator</c> list the scale discriminator first (<paramref name="scalesFirst"/>); HiFi-GAN's keeps
+    /// separate period and scale modules, which callers address with <paramref name="prefix"/>.
+    /// </summary>
+    internal void LoadTorch(Func<string, double[]?> read, string prefix = "", bool scalesFirst = true)
+    {
+        double[] Require(string name) => read(name) ?? throw new KeyNotFoundException(name);
+        void Load(NormedConv1DLayer<T> conv, string name)
+        {
+            var v = read(name + ".weight_v");
+            if (v is null) throw new KeyNotFoundException(name + ".weight_v (only weight-normalized discriminators load)");
+            conv.LoadTorchWeights(v, Require(name + ".weight_g"), Require(name + ".bias"));
+        }
+        int k = 0;
+        void Scales()
+        {
+            foreach (var (convs, post) in _scales)
+            {
+                for (int i = 0; i < convs.Count; i++) Load(convs[i], $"{prefix}discriminators.{k}.convs.{i}");
+                Load(post, $"{prefix}discriminators.{k}.conv_post");
+                k++;
+            }
+        }
+        if (scalesFirst) Scales();
+        foreach (var (_, convs, post) in _periods)
+        {
+            for (int i = 0; i < convs.Count; i++) Load(convs[i], $"{prefix}discriminators.{k}.convs.{i}");
+            Load(post, $"{prefix}discriminators.{k}.conv_post");
+            k++;
+        }
+        if (!scalesFirst) Scales();
+    }
 
     // The paper's group count, reduced to the largest divisor of a narrowed channel count.
     private static int Groups(int channels, int groups)

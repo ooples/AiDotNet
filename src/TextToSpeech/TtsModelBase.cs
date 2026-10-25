@@ -386,6 +386,8 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             throw new ArgumentException(
                 $"{GetType().Name} trains on a description of how each recording sounds; set {nameof(sample.Description)}.",
                 nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.Text) != 0 && string.IsNullOrWhiteSpace(sample.Text))
+            throw new ArgumentException($"{GetType().Name} trains on the utterance's text; set the sample's {nameof(sample.Text)}.", nameof(sample));
         if ((RequiredSupervision & TtsSupervision.ReferenceRecording) != 0 && sample.SpeakerReference is null && sample.Audio is null)
             throw new ArgumentException(
                 $"{GetType().Name} reads the speaker from a recording; set {nameof(sample.SpeakerReference)} or {nameof(sample.Audio)}.",

@@ -147,8 +147,10 @@ internal sealed class BertNetwork<T>
     /// <param name="prefix">Per-layer key and value prefixes <c>[prefixLength, Hidden]</c> that every query also attends
     /// to, as Hugging Face's <c>past_key_values</c> carry them (P-tuning v2's deep prompts, Liu et al. 2022); the
     /// default positions then start after the prefix, as there.</param>
+    /// <param name="layerCount">How many layers to run (null: all): <c>hidden_states[k]</c> of Hugging Face's
+    /// <c>output_hidden_states</c> is the output after k layers.</param>
     public Tensor<T> Encode(int[,] inputIds, int[,]? tokenTypeIds = null, int[,]? positionIds = null, bool[,,]? attentionMask = null,
-        IReadOnlyList<(Tensor<T> Key, Tensor<T> Value)>? prefix = null)
+        IReadOnlyList<(Tensor<T> Key, Tensor<T> Value)>? prefix = null, int? layerCount = null)
     {
         var c = Configuration;
         int b = inputIds.GetLength(0), l = inputIds.GetLength(1);
@@ -179,7 +181,9 @@ internal sealed class BertNetwork<T>
                         for (int k = 0; k < l; k++)
                             if (!attentionMask[i, q, k]) bias[(i * c.Heads) + h, q, prefixLength + k] = blocked;
         }
-        for (int i = 0; i < Layers.Count; i++) x = Run(Layers[i], x, bias, prefix?[i]);
+        int run = layerCount ?? Layers.Count;
+        if (run < 0 || run > Layers.Count) throw new ArgumentOutOfRangeException(nameof(layerCount));
+        for (int i = 0; i < run; i++) x = Run(Layers[i], x, bias, prefix?[i]);
         return x;
     }
 

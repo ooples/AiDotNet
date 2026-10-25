@@ -52,4 +52,10 @@ public enum TtsSupervision
     /// (Parler-TTS cross-attends to the Flan-T5 encoding of it, Lyth &amp; King 2024 §3).
     /// </summary>
     Description = 256,
+
+    /// <summary>
+    /// The utterance's text (<see cref="TtsTrainingSample{T}.Text"/>), for a model that runs its own front end and text
+    /// encoders on the sentence in training (MeloTTS).
+    /// </summary>
+    Text = 512,
 }
