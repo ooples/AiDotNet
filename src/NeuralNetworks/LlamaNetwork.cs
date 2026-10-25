@@ -425,24 +425,8 @@ internal sealed class LlamaNetwork<T>
     /// <param name="logits">Logits <c>[B, L, V]</c>.</param>
     /// <param name="labels">Labels <c>[B, L]</c>, aligned with the inputs (position t's logits score label t + 1).</param>
     /// <param name="ignoreIndex">The label that is not scored (-100).</param>
-    public Tensor<T> CausalLmLoss(Tensor<T> logits, int[,] labels, int ignoreIndex = -100)
-    {
-        int b = logits.Shape[0], l = logits.Shape[1], v = logits.Shape[2];
-        var picks = new List<int>();
-        for (int i = 0; i < b; i++)
-            for (int t = 0; t + 1 < l; t++)
-            {
-                int label = labels[i, t + 1];
-                if (label == ignoreIndex) continue;
-                if (label < 0 || label >= v) throw new ArgumentOutOfRangeException(nameof(labels), $"Label {label} is outside [0, {v}).");
-                picks.Add((i * l + t) * v + label);
-            }
-        if (picks.Count == 0) return _engine.TensorMultiplyScalar(_engine.ReduceSum(logits, null), NumOps.Zero);
-        var logProbabilities = _engine.Reshape(_engine.TensorLogSoftmax(logits, axis: 2), new[] { b * l * v, 1 });
-        var index = new Tensor<int>(new[] { picks.Count }, new Vector<int>(picks.ToArray()));
-        var picked = _engine.TensorIndexSelect(logProbabilities, index, 0);
-        return _engine.TensorMultiplyScalar(_engine.ReduceSum(picked, null), NumOps.FromDouble(-1.0 / picks.Count));
-    }
+    public Tensor<T> CausalLmLoss(Tensor<T> logits, int[,] labels, int ignoreIndex = -100) =>
+        CausalLanguageModelLoss.Compute(_engine, logits, labels, ignoreIndex);
 
     /// <summary>Loads a Hugging Face <c>LlamaForCausalLM</c> state dict (names after an optional <paramref name="prefix"/>
     /// for the decoder; the head is read as <paramref name="headName"/>).</summary>

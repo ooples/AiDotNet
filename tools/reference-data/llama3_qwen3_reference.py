@@ -50,7 +50,7 @@ def patch_float64(module, prefix):
     def rotary_forward(self, x, position_ids):
         rp = getattr(self.config, "rope_parameters", None)
         if rp is None:  # transformers 4.x: rope_theta and rope_scaling
-            rp = {"rope_theta": self.config.rope_theta, **(self.config.rope_scaling or {})}
+            rp = {"rope_theta": self.config.rope_theta, **(getattr(self.config, "rope_scaling", None) or {})}
         scaling = LLAMA3 if rp.get("rope_type") == "llama3" else None
         inv = inverse_frequencies(self.inv_freq.shape[0] * 2, rp["rope_theta"], scaling)
         assert torch.allclose(inv.float(), self.inv_freq.float().cpu(), rtol=1e-6), "the float64 frequencies differ from the reference's"

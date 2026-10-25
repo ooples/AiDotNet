@@ -43,7 +43,8 @@ public class WeightLoader
 
         return extension switch
         {
-            ".pt" or ".pth" => LoadPyTorchWeights(filePath),
+            // Lightning and NeMo save .ckpt files with torch.save, the same format.
+            ".pt" or ".pth" or ".ckpt" => LoadPyTorchWeights(filePath),
             ".safetensors" => LoadSafeTensors(filePath),
             ".npy" => LoadNumPySingle(filePath),
             ".npz" => LoadNumPyArchive(filePath),
