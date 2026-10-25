@@ -215,6 +215,9 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             PromptCodecTokens = promptCodecTokens,
             Description = network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Description) != 0
                 ? SyntheticDescription() : null,
+            // A model that reads the sentence itself (MeloTTS's front end and BERT) gets a short one.
+            Text = network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Text) != 0
+                ? "Hello world." : null,
         };
     }
 

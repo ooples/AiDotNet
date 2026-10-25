@@ -81,4 +81,10 @@ public sealed class TtsTrainingSample<T>
     /// that embed the text itself as well as its phonemes (EmotiVoice's SimBERT content embedding).
     /// </summary>
     public Tensor<T>? Transcript { get; init; }
+
+    /// <summary>
+    /// The utterance's text, for models that run their own front end and text encoders on it during training (MeloTTS
+    /// reads its phonemes, tones and BERT features from the sentence); models trained on token ids ignore it.
+    /// </summary>
+    public string? Text { get; init; }
 }
