@@ -1481,6 +1481,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedHeavyFixtureRuntimeTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedLayerScaffoldPrecisionTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedMgieFixtureContractTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.OmitStatedOutputSizeTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedSequenceFixtureContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedTextDetectionPositiveFixtureTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedVisionLanguageFixtureContractTests.|
