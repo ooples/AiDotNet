@@ -287,7 +287,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         manager.UpdateAutoSaveState(step: 1, metricValue: 0.5);
 
         var state = manager.GetAutoCheckpointState();
-        Assert.Equal(0.5, state.BestMetricValue!.Value, Tolerance);
+        Assert.Equal(0.5, (state.BestMetricValue ?? throw new InvalidOperationException("state.BestMetricValue is null where it is required.")), Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -303,7 +303,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         manager.UpdateAutoSaveState(step: 2, metricValue: 0.3, shouldMinimize: true);
 
         var state = manager.GetAutoCheckpointState();
-        Assert.Equal(0.3, state.BestMetricValue!.Value, Tolerance);
+        Assert.Equal(0.3, (state.BestMetricValue ?? throw new InvalidOperationException("state.BestMetricValue is null where it is required.")), Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -319,7 +319,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         manager.UpdateAutoSaveState(step: 2, metricValue: 0.7, shouldMinimize: true);
 
         var state = manager.GetAutoCheckpointState();
-        Assert.Equal(0.5, state.BestMetricValue!.Value, Tolerance); // Should still be 0.5
+        Assert.Equal(0.5, (state.BestMetricValue ?? throw new InvalidOperationException("state.BestMetricValue is null where it is required.")), Tolerance); // Should still be 0.5
     }
 
     [Fact(Timeout = 120000)]
@@ -335,7 +335,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         manager.UpdateAutoSaveState(step: 2, metricValue: 0.8, shouldMinimize: false);
 
         var state = manager.GetAutoCheckpointState();
-        Assert.Equal(0.8, state.BestMetricValue!.Value, Tolerance);
+        Assert.Equal(0.8, (state.BestMetricValue ?? throw new InvalidOperationException("state.BestMetricValue is null where it is required.")), Tolerance);
     }
 
     #endregion
@@ -399,7 +399,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Equal(10, state.KeepLast);
         Assert.Equal("accuracy", state.MetricName);
         Assert.Equal(300, state.LastSaveStep);
-        Assert.Equal(0.95, state.BestMetricValue!.Value, Tolerance);
+        Assert.Equal(0.95, (state.BestMetricValue ?? throw new InvalidOperationException("state.BestMetricValue is null where it is required.")), Tolerance);
     }
 
     #endregion
@@ -631,7 +631,7 @@ public class CheckpointManagementIntegrationTests : IDisposable
 
         var state = manager.GetAutoCheckpointState();
         Assert.Equal(50, state.LastSaveStep);
-        Assert.Equal(0.5, state.BestMetricValue!.Value, Tolerance); // Should remain unchanged
+        Assert.Equal(0.5, (state.BestMetricValue ?? throw new InvalidOperationException("state.BestMetricValue is null where it is required.")), Tolerance); // Should remain unchanged
     }
 
     [Fact(Timeout = 120000)]

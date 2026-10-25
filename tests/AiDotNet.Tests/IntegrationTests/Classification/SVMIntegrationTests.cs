@@ -311,7 +311,7 @@ public class SVMIntegrationTests
         var x = new Matrix<double>(100, 5);
         var y = new Vector<double>(100);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 100; i++)
         {
             // Class determined by first feature

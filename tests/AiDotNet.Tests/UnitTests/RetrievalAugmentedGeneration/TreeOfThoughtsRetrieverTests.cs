@@ -83,7 +83,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new TreeOfThoughtsRetriever<double>(null!, mockRetriever));
+                new TreeOfThoughtsRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IGenerator<double>>(), mockRetriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new TreeOfThoughtsRetriever<double>(generator, null!));
+                new TreeOfThoughtsRetriever<double>(generator, global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                totRetriever.Retrieve(null!, 10));
+                totRetriever.Retrieve(global::AiDotNet.Tests.TestNull.Of<string>(), 10));
         }
 
         [Fact(Timeout = 60000)]

@@ -185,7 +185,7 @@ public class RagAsyncCancellationTests
 
         var byId = await store.GetByIdAsync("d2");
         Assert.NotNull(byId);
-        Assert.Equal("d2", byId!.Id);
+        Assert.Equal("d2", byId.Id);
 
         var all = (await store.GetAllAsync()).ToList();
         Assert.Equal(3, all.Count);

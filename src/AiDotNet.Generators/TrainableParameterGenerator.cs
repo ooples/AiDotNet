@@ -874,7 +874,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             string tp = GetTypeParamName(classSymbol);
             foreach (var sl in shapedSubLayers)
             {
-                var axes = string.Join(", ", sl.InputShape!.Split(',').Select(a => a.Trim()).Where(a => a.Length > 0));
+                var axes = string.Join(", ", (sl.InputShape ?? throw new System.InvalidOperationException("sl.InputShape is null where it is required.")).Split(',').Select(a => a.Trim()).Where(a => a.Length > 0));
                 if (sl.IsCollection)
                 {
                     // Every element gets the declared width. Elements are filtered by type because a
@@ -954,7 +954,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var sentinelRoots = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var pf in shapedFields)
             {
-                var declaredAxes = pf.Shape!.Split(',')
+                var declaredAxes = (pf.Shape ?? throw new System.InvalidOperationException("pf.Shape is null where it is required.")).Split(',')
                     .Select(axis => axis.Trim())
                     .Where(axis => axis.Length > 0 && axis != "*")
                     .Select(axis => TryGetAdaptiveAxisBinding(axis, out string bound) ? bound : axis);
@@ -995,7 +995,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"        var __declared = new System.Collections.Generic.List<{tupleType}>({shapedFields.Count});");
             foreach (var pf in shapedFields)
             {
-                var axes = pf.Shape!.Split(',')
+                var axes = (pf.Shape ?? throw new System.InvalidOperationException("pf.Shape is null where it is required.")).Split(',')
                     .Select(a => a.Trim())
                     .Where(a => a.Length > 0)
                     .Select(ToValidationShapeAxis);
@@ -1088,7 +1088,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // supplies the manifest with its current allocation-free size. Emit an aligned shape list
         // only when one is present; ordinary declarations keep the zero-overhead default.
         bool hasBoundAdaptiveAxes = shapedFields.Any(field =>
-            field.Shape!.Split(',').Any(axis => TryGetAdaptiveAxisBinding(axis.Trim(), out _)));
+            (field.Shape ?? throw new System.InvalidOperationException("field.Shape is null where it is required.")).Split(',').Any(axis => TryGetAdaptiveAxisBinding(axis.Trim(), out _)));
         if (hasBoundAdaptiveAxes)
         {
             const string countShapeType = "AiDotNet.Tensors.LinearAlgebra.TensorShape";
@@ -1099,7 +1099,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"        var __declared = new System.Collections.Generic.List<{countShapeType}>({shapedFields.Count});");
             foreach (var pf in shapedFields)
             {
-                var countAxes = pf.Shape!.Split(',')
+                var countAxes = (pf.Shape ?? throw new System.InvalidOperationException("pf.Shape is null where it is required.")).Split(',')
                     .Select(a => a.Trim())
                     .Where(a => a.Length > 0)
                     .Select(ToCountingShapeAxis);
@@ -1817,14 +1817,16 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             && paramFields.All(field => field.CollectionKind == ParameterCollectionKind.Direct
                 && !field.Optional
                 && !string.IsNullOrWhiteSpace(field.Shape)
-                && !field.Shape!.Contains("*"));
+                && !(field.Shape ?? throw new System.InvalidOperationException("field.Shape is null where it is required.")).Contains("*"));
         if (!completeLocalFormula) return;
 
         var referencedAxes = new SortedSet<int>();
         foreach (var parameter in paramFields)
         {
+            // A parameter with no declared shape references no input axis.
             foreach (Match match in Regex.Matches(
-                         parameter.Shape!, @"InputShape\s*\[\s*(\d+)\s*\]"))
+                         parameter.Shape ?? string.Empty, @"InputShape\s*\[\s*(\d+)\s*\]",
+                         RegexOptions.None, System.TimeSpan.FromSeconds(1)))
             {
                 if (int.TryParse(match.Groups[1].Value, out int axis)) referencedAxes.Add(axis);
             }
@@ -1871,8 +1873,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             foreach (var parameter in paramFields)
             {
                 string gate = parameter.Condition is null ? "" : $"if ({parameter.Condition}) ";
-                sb.AppendLine($"                        {gate}__atOne += {ShapeProduct(parameter.Shape!, axis, "1")};");
-                sb.AppendLine($"                        {gate}__atTwo += {ShapeProduct(parameter.Shape!, axis, "2")};");
+                sb.AppendLine($"                        {gate}__atOne += {ShapeProduct((parameter.Shape ?? throw new System.InvalidOperationException("parameter.Shape is null where it is required.")), axis, "1")};");
+                sb.AppendLine($"                        {gate}__atTwo += {ShapeProduct(parameter.Shape, axis, "2")};");
             }
             sb.AppendLine("                    }");
             sb.AppendLine("                    long __slope = __atTwo - __atOne;");
@@ -1888,7 +1890,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             foreach (var parameter in paramFields)
             {
                 string gate = parameter.Condition is null ? "" : $"if ({parameter.Condition}) ";
-                sb.AppendLine($"                            {gate}__verified += {ShapeProduct(parameter.Shape!, axis, "__candidate")};");
+                sb.AppendLine($"                            {gate}__verified += {ShapeProduct((parameter.Shape ?? throw new System.InvalidOperationException("parameter.Shape is null where it is required.")), axis, "__candidate")};");
             }
             sb.AppendLine("                        }");
             sb.AppendLine("                        if (__verified == parameterCount)");
@@ -1969,7 +1971,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                         rendered,
                         @"\b_?inputDepth\b",
                         inputChannels,
-                        RegexOptions.IgnoreCase);
+                        RegexOptions.IgnoreCase,
+                        System.TimeSpan.FromSeconds(1));
                 }
                 int score = axes.Sum(axis =>
                     axis.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Count() * 10
@@ -2103,7 +2106,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             .Select(axis => Regex.Replace(
                 axis,
                 $@"InputShape\s*\[\s*{inputAxis}\s*\]",
-                replacement))
+                replacement,
+                RegexOptions.None,
+                System.TimeSpan.FromSeconds(1)))
             .Select(axis => $"(long)({axis})")
             .ToArray();
         return axes.Length == 0 ? "0L" : string.Join(" * ", axes);

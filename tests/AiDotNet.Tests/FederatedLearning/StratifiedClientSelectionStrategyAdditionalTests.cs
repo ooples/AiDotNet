@@ -13,7 +13,7 @@ public class StratifiedClientSelectionStrategyAdditionalTests
     {
         var strategy = new StratifiedClientSelectionStrategy();
 
-        Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(request: null!));
+        Assert.Throws<ArgumentNullException>(() => strategy.SelectClients(request: global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.ClientSelectionRequest>()));
     }
 
     [Fact(Timeout = 60000)]

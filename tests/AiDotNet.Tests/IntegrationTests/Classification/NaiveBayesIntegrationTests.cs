@@ -346,7 +346,7 @@ public class NaiveBayesIntegrationTests
         testPoint[0, 0] = 0.5; testPoint[0, 1] = 0.5;
 
         var originalProbs = gnb.PredictProbabilities(testPoint);
-        var cloneProbs = clone!.PredictProbabilities(testPoint);
+        var cloneProbs = clone.PredictProbabilities(testPoint);
 
         Assert.Equal(originalProbs[0, 0], cloneProbs[0, 0], Tolerance);
         Assert.Equal(originalProbs[0, 1], cloneProbs[0, 1], Tolerance);
@@ -741,7 +741,7 @@ public class NaiveBayesIntegrationTests
         var x = new Matrix<double>(numSamples, numFeatures);
         var y = new Vector<double>(numSamples);
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < numSamples; i++)
         {
             int classLabel = i < numSamples / 2 ? 0 : 1;
@@ -975,7 +975,7 @@ public class NaiveBayesIntegrationTests
         testPoint[0, 0] = 0; testPoint[0, 1] = 0;
 
         var origProbs = cnb.PredictProbabilities(testPoint);
-        var cloneProbs = clone!.PredictProbabilities(testPoint);
+        var cloneProbs = clone.PredictProbabilities(testPoint);
 
         Assert.Equal(origProbs[0, 0], cloneProbs[0, 0], Tolerance);
         Assert.Equal(origProbs[0, 1], cloneProbs[0, 1], Tolerance);

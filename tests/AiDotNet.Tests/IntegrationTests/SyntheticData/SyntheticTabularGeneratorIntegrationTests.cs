@@ -38,7 +38,7 @@ public class SyntheticTabularGeneratorIntegrationTests
     /// </summary>
     private static (Matrix<double> data, List<ColumnMetadata> columns) CreateTestData(int rows = Rows)
     {
-        var random = new Random(Seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         var data = new Matrix<double>(rows, TotalCols);
 
         for (int i = 0; i < rows; i++)
@@ -71,7 +71,7 @@ public class SyntheticTabularGeneratorIntegrationTests
     /// </summary>
     private static (Matrix<double> data, List<ColumnMetadata> columns) CreateImbalancedData()
     {
-        var random = new Random(Seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         int rows = 100;
         var data = new Matrix<double>(rows, 4);
 
@@ -107,7 +107,7 @@ public class SyntheticTabularGeneratorIntegrationTests
     {
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(instance.GetType().Name, fieldName);
-        return (TField)field.GetValue(instance)!;
+        return (TField)(field.GetValue(instance) ?? throw new InvalidOperationException("(TField)field.GetValue(instance) is null where it is required."));
     }
 
     /// <summary>
@@ -1144,7 +1144,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         generator.Fit(data, columns, timeGanTrainingEpochs);
 
         Assert.True(generator.IsFitted);
-        Assert.Throws<ArgumentNullException>(() => generator.GetNamedLayerActivations(null!));
+        Assert.Throws<ArgumentNullException>(() => generator.GetNamedLayerActivations(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
 
         // Once fitted, the synthesis path consumes latent noise of HiddenDimension width. Exercise
         // both public entry points with that exact width and verify all real stages are exposed.
@@ -1460,7 +1460,7 @@ public class SyntheticTabularGeneratorIntegrationTests
     public async Task SMOTENCGenerator_WithNoMinority_UsesAllData()
     {
         // All rows are class 0, no minority class 1
-        var random = new Random(Seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         int rows = 50;
         var data = new Matrix<double>(rows, 3);
         for (int i = 0; i < rows; i++)

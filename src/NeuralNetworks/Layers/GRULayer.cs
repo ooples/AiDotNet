@@ -1273,15 +1273,15 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
                 _bhVelocity = new Tensor<T>(_bh._shape); _bhVelocity.Fill(NumOps.Zero); gpuEngine.RegisterPersistentTensor(_bhVelocity, PersistentTensorRole.OptimizerState);
             }
 
-            gpuEngine.SgdMomentumUpdateGpu(_Wz, _dWz, _WzVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Wr, _dWr, _WrVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Wh, _dWh, _WhVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Uz, _dUz, _UzVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Ur, _dUr, _UrVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_Uh, _dUh, _UhVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_bz, _dbz, _bzVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_br, _dbr, _brVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_bh, _dbh, _bhVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Wz, _dWz, _WzVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Wr, _dWr, (_WrVelocity ?? throw new InvalidOperationException("_WrVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Wh, _dWh, (_WhVelocity ?? throw new InvalidOperationException("_WhVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Uz, _dUz, (_UzVelocity ?? throw new InvalidOperationException("_UzVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Ur, _dUr, (_UrVelocity ?? throw new InvalidOperationException("_UrVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_Uh, _dUh, (_UhVelocity ?? throw new InvalidOperationException("_UhVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_bz, _dbz, (_bzVelocity ?? throw new InvalidOperationException("_bzVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_br, _dbr, (_brVelocity ?? throw new InvalidOperationException("_brVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_bh, _dbh, (_bhVelocity ?? throw new InvalidOperationException("_bhVelocity is null where it is required.")), lr, 0.0f, 0.0f);
         }
         else
         {

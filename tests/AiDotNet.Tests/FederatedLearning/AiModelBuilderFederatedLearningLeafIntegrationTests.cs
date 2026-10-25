@@ -74,7 +74,7 @@ public class AiModelBuilderFederatedLearningLeafIntegrationTests
 
             var metadata = result.GetFederatedLearningMetadata();
             Assert.NotNull(metadata);
-            Assert.True(metadata!.DifferentialPrivacyEnabled);
+            Assert.True(metadata.DifferentialPrivacyEnabled);
             Assert.Equal("Basic", metadata.PrivacyAccountantUsed);
             Assert.True(metadata.TotalPrivacyBudgetConsumed > 0.0);
             Assert.True(metadata.RoundsCompleted >= 1);

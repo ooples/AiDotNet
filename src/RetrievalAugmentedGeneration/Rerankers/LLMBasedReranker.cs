@@ -22,6 +22,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         private readonly string _apiKey;
         private readonly ITextGenerator? _generator;
 
+        /// <summary>Bounds the regex that reads the score from a generator reply (ReDoS).</summary>
+        private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
         /// <summary>
         /// Gets a value indicating whether this reranker modifies relevance scores.
         /// </summary>
@@ -88,8 +91,18 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
                     $"On a scale of 0 to 10, how relevant is the document to the query? " +
                     $"Reply with only a single number.\n\nQuery: {query}\n\nDocument: {doc}\n\nRelevance (0-10):";
                 var reply = _generator.Generate(prompt);
-                var match = Regex.Match(reply ?? string.Empty, @"\d+(\.\d+)?");
-                if (match.Success && double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double raw))
+                Match? match = null;
+                try
+                {
+                    match = Regex.Match(reply ?? string.Empty, @"\d+(\.\d+)?", RegexOptions.None, RegexTimeout);
+                }
+                catch (RegexMatchTimeoutException ex)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"LLMBasedReranker: reading the relevance score timed out; using the lexical heuristic. {ex.Message}");
+                }
+                if (match is not null && match.Success
+                    && double.TryParse(match.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double raw))
                 {
                     var normalized = Math.Min(1.0, Math.Max(0.0, raw / 10.0));
                     return NumOps.FromDouble(normalized);

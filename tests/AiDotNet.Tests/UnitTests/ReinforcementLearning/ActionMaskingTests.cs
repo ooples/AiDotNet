@@ -211,7 +211,7 @@ public class ActionMaskingTests
     [Trait("category", "unit")]
     public void Random_exploration_never_selects_an_illegal_action()
     {
-        var random = new Random(17);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
         bool[] mask = [false, true, false, false, true];
 
         for (var i = 0; i < 2000; i++)
@@ -229,7 +229,7 @@ public class ActionMaskingTests
     [Trait("category", "unit")]
     public void Random_exploration_still_covers_the_whole_legal_set()
     {
-        var random = new Random(17);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
         bool[] mask = [false, true, false, false, true];
         var seen = new bool[mask.Length];
 
@@ -246,7 +246,7 @@ public class ActionMaskingTests
     [Trait("category", "unit")]
     public void Unmasked_exploration_covers_the_whole_action_space()
     {
-        var random = new Random(17);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
         var seen = new bool[4];
 
         for (var i = 0; i < 2000; i++)
@@ -277,7 +277,7 @@ public class ActionMaskingTests
         Assert.Throws<InvalidOperationException>(() => ActionMasking.ArgMaxLegal(Vec(1.0, 2.0, 3.0), none, Ops));
         Assert.Throws<InvalidOperationException>(() => ActionMasking.MaskLogits(Vec(1.0, 2.0, 3.0), none, Ops));
         Assert.Throws<InvalidOperationException>(() => ActionMasking.MaskProbabilities(Vec(0.2, 0.3, 0.5), none, Ops));
-        Assert.Throws<InvalidOperationException>(() => ActionMasking.RandomLegal(new Random(1), none, 3));
+        Assert.Throws<InvalidOperationException>(() => ActionMasking.RandomLegal(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1), none, 3));
     }
 
     /// <summary>
@@ -295,7 +295,7 @@ public class ActionMaskingTests
         Assert.Throws<ArgumentException>(() => ActionMasking.ArgMaxLegal(Vec(1.0, 2.0, 3.0), tooShort, Ops));
         Assert.Throws<ArgumentException>(() => ActionMasking.MaskLogits(Vec(1.0, 2.0, 3.0), tooShort, Ops));
         Assert.Throws<ArgumentException>(() => ActionMasking.MaskProbabilities(Vec(0.2, 0.3, 0.5), tooShort, Ops));
-        Assert.Throws<ArgumentException>(() => ActionMasking.RandomLegal(new Random(1), tooShort, 3));
+        Assert.Throws<ArgumentException>(() => ActionMasking.RandomLegal(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1), tooShort, 3));
     }
 
     /// <summary>
@@ -311,7 +311,7 @@ public class ActionMaskingTests
         Assert.Equal(1, ActionMasking.ArgMaxLegal(logits, null, Ops));
         Assert.Same(logits, ActionMasking.MaskLogits(logits, null, Ops));
         Assert.Same(logits, ActionMasking.MaskProbabilities(logits, null, Ops));
-        Assert.InRange(ActionMasking.RandomLegal(new Random(3), null, 3), 0, 2);
+        Assert.InRange(ActionMasking.RandomLegal(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3), null, 3), 0, 2);
     }
 
     // ---- helpers -------------------------------------------------------------------------------

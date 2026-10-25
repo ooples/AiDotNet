@@ -58,8 +58,8 @@ public class CnnStemOpBreakdownBench
         var b2 = new Tensor<float>(new[] { batch, 16, 14, 14 });   // pool1 out
         var b3 = new Tensor<float>(new[] { batch, 32, 14, 14 });   // conv2 out
         var b4 = new Tensor<float>(new[] { batch, 32, 7, 7 });     // pool2 out
-        var k1 = conv1.GetFilters(); var bias1 = (float[])(object)conv1.GetBiases().GetDataArray();
-        var k2 = conv2.GetFilters(); var bias2 = (float[])(object)conv2.GetBiases().GetDataArray();
+        var k1 = conv1.GetFilters(); var bias1 = (float[])(object)(conv1.GetBiases() ?? throw new InvalidOperationException("conv1.GetBiases() is null where it is required.")).GetDataArray();
+        var k2 = conv2.GetFilters(); var bias2 = (float[])(object)(conv2.GetBiases() ?? throw new InvalidOperationException("conv2.GetBiases() is null where it is required.")).GetDataArray();
         var w = dense.GetWeights(); var db = dense.GetBiases();
         var b1d = (float[])(object)b1.GetDataArray();
         var b3d = (float[])(object)b3.GetDataArray();
@@ -146,7 +146,7 @@ public class CnnStemOpBreakdownBench
 
     private static Tensor<float> Rand(int[] shape, int seed)
     {
-        var rng = new Random(seed); var t = new Tensor<float>(shape); var s = t.AsWritableSpan();
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed); var t = new Tensor<float>(shape); var s = t.AsWritableSpan();
         for (int i = 0; i < s.Length; i++) s[i] = (float)(rng.NextDouble() - 0.5);
         return t;
     }

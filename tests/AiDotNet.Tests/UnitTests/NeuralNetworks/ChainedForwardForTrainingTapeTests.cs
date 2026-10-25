@@ -97,7 +97,7 @@ public class ChainedForwardForTrainingTapeTests
         Assert.True(pass is not null, "The trained network ran no backward pass.");
 
         Assert.True(
-            CountReached(pass!.Reached, trainedTensors) > 0,
+            CountReached(pass.Reached, trainedTensors) > 0,
             $"SINGLE cross-network forward: none of the trained network's {trainedTensors.Count} "
             + "tensors were reachable. This is the shape SAC uses successfully, so a failure here "
             + "means the probe or the engine op is at fault rather than any chaining.");
@@ -134,7 +134,7 @@ public class ChainedForwardForTrainingTapeTests
         var pass = probe.Observations.LastOrDefault(o => ReferenceEquals(o.Owner, trained));
         Assert.True(pass is not null, "The trained network ran no backward pass.");
 
-        int trainedReached = CountReached(pass!.Reached, trainedTensors);
+        int trainedReached = CountReached(pass.Reached, trainedTensors);
         int middleReached = CountReached(pass.Reached, middleTensors);
         int headReached = CountReached(pass.Reached, headTensors);
 

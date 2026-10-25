@@ -45,7 +45,7 @@ public class BatchedTimeEmbeddingTests
         var batchShape = new int[sampleShape.Length + 1];
         batchShape[0] = batch;
         Array.Copy(sampleShape, 0, batchShape, 1, sampleShape.Length);
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var x = new Tensor<double>(batchShape);
         for (int i = 0; i < x.Length; i++) x[i] = rng.NextDouble() * 2 - 1;
 

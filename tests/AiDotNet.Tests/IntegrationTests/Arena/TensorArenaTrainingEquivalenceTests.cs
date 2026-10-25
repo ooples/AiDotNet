@@ -51,10 +51,10 @@ public class TensorArenaTrainingEquivalenceTests
 
     private static void ResetGlobalTrainingState()
     {
-        try { AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate(); } catch { }
-        try { AiDotNet.Training.CompiledTapeTrainingStep<float>.Invalidate(); } catch { }
-        try { WeightRegistry.Reset(); } catch { }
-        try { InferenceWeightCache.InvalidateAll(); } catch { }
+        try { AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate(); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"TensorArenaTrainingEquivalenceTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
+        try { AiDotNet.Training.CompiledTapeTrainingStep<float>.Invalidate(); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"TensorArenaTrainingEquivalenceTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
+        try { WeightRegistry.Reset(); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"TensorArenaTrainingEquivalenceTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
+        try { InferenceWeightCache.InvalidateAll(); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"TensorArenaTrainingEquivalenceTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
         // Drop any cross-arena persistent buffers so a prior run's pool
         // state can't leak into the next run's warmup.
         TensorArena.ClearPersistentPool();
@@ -89,7 +89,7 @@ public class TensorArenaTrainingEquivalenceTests
 
     private static (Matrix<double> X, Vector<double> Y) FixedSeries(int length)
     {
-        var rng = new Random(7); // local + fixed -> identical across runs
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7); // local + fixed -> identical across runs
         var x = new Matrix<double>(length, 1);
         var y = new Vector<double>(length);
         for (int i = 0; i < length; i++)
@@ -381,8 +381,8 @@ public class TensorArenaTrainingEquivalenceTests
         Assert.NotNull(r1);
         Assert.NotNull(r2);
 
-        double d1 = MaxAbsDelta(reference, r1!);
-        double d2 = MaxAbsDelta(reference, r2!);
+        double d1 = MaxAbsDelta(reference, r1);
+        double d2 = MaxAbsDelta(reference, r2);
         Assert.True(d1 <= EquivTol, $"Thread 1 arena result diverged from reference: {d1:E3}");
         Assert.True(d2 <= EquivTol, $"Thread 2 arena result diverged from reference: {d2:E3}");
     }

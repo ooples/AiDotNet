@@ -90,7 +90,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private Vector<T>? _lastActionVector;
     [Scratch]
     private Vector<T>? _lastStoredNextRawState;
-    private T _lastActionLogProb = default!;
+    // Meaningful only while _hasLastActionLogProb is set.
+    private T _lastActionLogProb = MathHelper.GetNumericOperations<T>().Zero;
     private bool _hasLastActionLogProb;
 
     /// <summary>
@@ -274,10 +275,10 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         for (int i = 0; i < state.Length; i++)
         {
             double value = NumOps.ToDouble(state[i]);
-            double delta = value - _observationMean![i];
+            double delta = value - (_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i];
             _observationMean[i] += delta / _observationCount;
             double delta2 = value - _observationMean[i];
-            _observationM2![i] += delta * delta2;
+            (_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i] += delta * delta2;
         }
     }
 
@@ -315,7 +316,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private bool TryGetCachedPolicyState(
         Vector<T> state,
         Vector<T> action,
-        out Vector<T> normalizedState,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Vector<T>? normalizedState,
         out T logProb,
         out bool[]? mask)
     {
@@ -326,7 +327,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             !VectorsApproximatelyEqual(_lastActionRawState, state) ||
             !VectorsApproximatelyEqual(_lastActionVector, action))
         {
-            normalizedState = null!;
+            normalizedState = null;
             logProb = NumOps.Zero;
             mask = null;
             return false;
@@ -934,9 +935,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         MarkHiddenEpisodeBoundaryIfNeeded(state);
 
-        bool usedCachedPolicy = TryGetCachedPolicyState(
-            state, action, out var normalizedState, out var logProb, out var mask);
-        if (!usedCachedPolicy)
+        if (!TryGetCachedPolicyState(state, action, out var normalizedState, out var logProb, out var mask))
         {
             // Refused rather than degraded, for the reason IMaskableAgent gives. The cache is the only
             // record of which actions were legal when this action was chosen; without it the old
@@ -980,8 +979,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         for (int i = 0; i < length; i++)
         {
-            writer.Write(_observationMean![i]);
-            writer.Write(_observationM2![i]);
+            writer.Write((_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i]);
+            writer.Write((_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i]);
         }
     }
 
@@ -995,8 +994,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
         for (int i = 0; i < length; i++)
         {
-            _observationMean![i] = reader.ReadDouble();
-            _observationM2![i] = reader.ReadDouble();
+            (_observationMean ?? throw new InvalidOperationException("_observationMean is null where it is required."))[i] = reader.ReadDouble();
+            (_observationM2 ?? throw new InvalidOperationException("_observationM2 is null where it is required."))[i] = reader.ReadDouble();
         }
     }
 

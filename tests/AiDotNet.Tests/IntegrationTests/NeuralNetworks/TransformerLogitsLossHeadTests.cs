@@ -44,7 +44,7 @@ public class TransformerLogitsLossHeadTests
 
     private static (Tensor<float> x, Tensor<float> y) Data()
     {
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var x = new Tensor<float>(new[] { N, Ctx });
         var y = new Tensor<float>(new[] { N, V });
         for (int i = 0; i < N; i++)
@@ -92,7 +92,7 @@ public class TransformerLogitsLossHeadTests
     [Fact]
     public void LogitsLoss_CE_Matches_ProbabilityCE()
     {
-        var rng = new Random(5);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
         int B = 12;
         var logits = new Tensor<float>(new[] { B, V });
         var target = new Tensor<float>(new[] { B, V });

@@ -77,7 +77,7 @@ internal static class StructuredOutputFactory
                     throw new ArgumentException("'response_format.regex' is required for type 'regex'.");
                 }
                 var vocab = GetVocabStrings(tokenizer);
-                return BuildOrThrow(() => new RegexTokenConstraint(pattern!, vocab, eosTokenId), "regex");
+                return BuildOrThrow(() => new RegexTokenConstraint(pattern, vocab, eosTokenId), "regex");
             }
 
             default:

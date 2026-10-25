@@ -52,7 +52,7 @@ public class BuilderJitValueStabilityTests
 
         private void Add(string? message)
         {
-            if (!string.IsNullOrEmpty(message)) Messages.Add(message!);
+            if (!string.IsNullOrEmpty(message)) Messages.Add(message);
         }
 
         public int JitDisabledCountFor(Type modelType)
@@ -159,7 +159,7 @@ public class BuilderJitValueStabilityTests
         const int samples = 64;
         var features = new Tensor<float>([samples, SeqLen]);
         var labels = new Tensor<float>([samples, outputSize]);
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
 
         for (int n = 0; n < samples; n++)
         {

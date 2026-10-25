@@ -953,7 +953,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
             _layerNormBeta = new Tensor<T>(normalizedShape);
         }
 
-        return Engine.LayerNorm(input, _layerNormGamma, _layerNormBeta!, 1e-5, out _, out _);
+        return Engine.LayerNorm(input, _layerNormGamma, (_layerNormBeta ?? throw new InvalidOperationException("_layerNormBeta is null where it is required.")), 1e-5, out _, out _);
     }
 
     /// <summary>

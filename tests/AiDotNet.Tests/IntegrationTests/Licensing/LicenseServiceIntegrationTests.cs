@@ -252,11 +252,11 @@ public class LicenseServiceIntegrationTests : IDisposable
             // instead of offline-rejecting the key.
             ModelLoader.SaveEncrypted(model, tempFile, createResponse.LicenseKey,
                 model.GetInputShape(), model.GetOutputShape(),
-                decryptionToken: System.Text.Encoding.UTF8.GetBytes(validateResponse.DecryptionToken!));
+                decryptionToken: System.Text.Encoding.UTF8.GetBytes(validateResponse.DecryptionToken));
 
             // Step 4: Client-side — decrypt with the same license key
             var loaded = ModelLoader.Load<double>(tempFile, createResponse.LicenseKey,
-                decryptionToken: System.Text.Encoding.UTF8.GetBytes(validateResponse.DecryptionToken!));
+                decryptionToken: System.Text.Encoding.UTF8.GetBytes(validateResponse.DecryptionToken));
             Assert.NotNull(loaded);
             Assert.IsType<StubModelSerializer>(loaded);
             Assert.Equal(payload, ((StubModelSerializer)loaded).GetDeserializedData());

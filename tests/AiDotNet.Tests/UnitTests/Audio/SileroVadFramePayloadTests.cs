@@ -35,7 +35,7 @@ public class SileroVadFramePayloadTests
     {
         var t = new Tensor<double>([frames * FrameSize]);
         var span = t.Data.Span;
-        var rng = new System.Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < span.Length; i++)
             span[i] = amplitude * ((rng.NextDouble() * 2.0) - 1.0);
         return t;

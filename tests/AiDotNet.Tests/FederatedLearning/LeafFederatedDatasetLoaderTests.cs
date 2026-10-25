@@ -133,7 +133,7 @@ public class LeafFederatedDatasetLoaderTests
             Assert.NotNull(dataset.Train);
             Assert.NotNull(dataset.Test);
             Assert.Equal(2, dataset.Train.ClientCount);
-            Assert.Equal(2, dataset.Test!.ClientCount);
+            Assert.Equal(2, dataset.Test.ClientCount);
         }
         finally
         {

@@ -143,7 +143,7 @@ public class FusedConvolutionalStepParityTests
 
     private static Tensor<float> RandomTensor(int[] shape, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new float[shape.Aggregate(1, (a, b) => a * b)];
         for (int i = 0; i < data.Length; i++) data[i] = (float)random.NextDouble();
         return new Tensor<float>(data, shape);

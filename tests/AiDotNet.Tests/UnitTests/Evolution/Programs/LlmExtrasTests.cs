@@ -140,7 +140,7 @@ public sealed class LlmExtrasTests
     public void TheProcessClientRefusesSettingsThatCannotProduceARunnableCommand()
     {
 #pragma warning disable CS8625 // Exercise the public null guard without a null-forgiving operator.
-        Assert.Throws<ArgumentNullException>(() => new ProcessChatClient<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new ProcessChatClient<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Configuration.ProcessChatClientOptions>()));
 #pragma warning restore CS8625
         Assert.Throws<ArgumentException>(() =>
             new ProcessChatClient<double>(new ProcessChatClientOptions { FileName = "  " }));

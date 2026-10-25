@@ -196,7 +196,7 @@ public class ConditioningModuleTests
             var attr = (ResearchPaperAttribute?)Attribute.GetCustomAttribute(
                 t, typeof(ResearchPaperAttribute));
             Assert.NotNull(attr);
-            Assert.False(string.IsNullOrWhiteSpace(attr!.Title),
+            Assert.False(string.IsNullOrWhiteSpace(attr.Title),
                 $"{t.Name}.ResearchPaper.Title must be non-empty.");
             Assert.True(attr.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase),
                 $"{t.Name}.ResearchPaper.Url ('{attr.Url}') must be a valid https:// link.");
@@ -337,7 +337,7 @@ public class ConditioningModuleTests
         var initialEmbeddings = t5.EncodeText(tokens);
         Assert.Equal(3, initialEmbeddings.Shape.Length);
 
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var target = new Tensor<double>(initialEmbeddings._shape);
         for (int i = 0; i < target.Length; i++)
             target[i] = (rng.NextDouble() - 0.5) * 0.1;
@@ -376,7 +376,7 @@ public class ConditioningModuleTests
         var initialEmbeddings = clip.EncodeText(tokens);
         Assert.Equal(3, initialEmbeddings.Shape.Length);
 
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var target = new Tensor<double>(initialEmbeddings._shape);
         for (int i = 0; i < target.Length; i++)
             target[i] = (rng.NextDouble() - 0.5) * 0.1;

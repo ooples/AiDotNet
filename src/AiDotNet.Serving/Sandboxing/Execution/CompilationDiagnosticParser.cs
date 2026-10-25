@@ -152,7 +152,7 @@ public static class CompilationDiagnosticParser
         yield return new CompilationDiagnostic
         {
             Severity = severity,
-            Message = message!,
+            Message = message,
             Code = code,
             FilePath = filePath,
             Line = line,
@@ -228,7 +228,7 @@ public static class CompilationDiagnosticParser
             diagnostics.Add(new CompilationDiagnostic
             {
                 Severity = severity,
-                Message = messageProp.GetString()!,
+                Message = (messageProp.GetString() ?? throw new System.InvalidOperationException("messageProp.GetString() is null where it is required.")),
                 Code = code,
                 FilePath = filePath,
                 Line = line,

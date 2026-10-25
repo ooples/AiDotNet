@@ -113,7 +113,7 @@ public class HellaswagDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
             }
             else if (obj["label"]?.Type == JTokenType.Integer)
             {
-                label = obj["label"]!.Value<int>();
+                label = (obj["label"] ?? throw new InvalidOperationException("obj[\"label\"] is null where it is required.")).Value<int>();
                 if (label < 0 || label > 3)
                     throw new InvalidDataException(
                         $"Invalid label {label} in HellaSwag file '{filePath}' at line {lineNum}. Expected 0..3.");
@@ -124,7 +124,7 @@ public class HellaswagDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
                     $"Missing or non-integer label in HellaSwag file '{filePath}' at line {lineNum} for non-test split.");
             }
 
-            contexts.Add(ctx!);
+            contexts.Add((ctx ?? throw new InvalidOperationException("ctx is null where it is required.")));
             endings.Add(endingsStrs);
             labels.Add(label);
         }

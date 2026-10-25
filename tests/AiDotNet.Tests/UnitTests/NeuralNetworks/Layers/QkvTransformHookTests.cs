@@ -56,7 +56,7 @@ public class QkvTransformHookTests
     private static Tensor<double> Input(int seed)
     {
         var t = new Tensor<double>(new[] { Batch, Seq, Embed });
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 2.0) - 1.0;
         return t;
     }

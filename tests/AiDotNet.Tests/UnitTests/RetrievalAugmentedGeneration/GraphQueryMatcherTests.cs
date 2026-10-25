@@ -150,7 +150,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public async Task FindNodes_InvalidLabel_ThrowsException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => _matcher.FindNodes(null!));
+            Assert.Throws<ArgumentException>(() => _matcher.FindNodes(global::AiDotNet.Tests.TestNull.Of<string>()));
             Assert.Throws<ArgumentException>(() => _matcher.FindNodes(""));
             Assert.Throws<ArgumentException>(() => _matcher.FindNodes("   "));
         }
@@ -169,9 +169,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(2, paths.Count); // Alice->Bob and Bob->Charlie
             Assert.All(paths, p =>
             {
-                Assert.Equal("Person", p.SourceNode.Label);
-                Assert.Equal("KNOWS", p.Edge.RelationType);
-                Assert.Equal("Person", p.TargetNode.Label);
+                Assert.Equal("Person", (p.SourceNode ?? throw new InvalidOperationException("p.SourceNode is null where it is required.")).Label);
+                Assert.Equal("KNOWS", (p.Edge ?? throw new InvalidOperationException("p.Edge is null where it is required.")).RelationType);
+                Assert.Equal("Person", (p.TargetNode ?? throw new InvalidOperationException("p.TargetNode is null where it is required.")).Label);
             });
         }
 
@@ -186,8 +186,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(paths); // Only Alice->Bob
-            Assert.Equal("alice", paths[0].SourceNode.Id);
-            Assert.Equal("bob", paths[0].TargetNode.Id);
+            Assert.Equal("alice", (paths[0].SourceNode ?? throw new InvalidOperationException("paths[0].SourceNode is null where it is required.")).Id);
+            Assert.Equal("bob", (paths[0].TargetNode ?? throw new InvalidOperationException("paths[0].TargetNode is null where it is required.")).Id);
         }
 
         [Fact(Timeout = 60000)]
@@ -201,8 +201,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(paths); // Only Bob->Charlie
-            Assert.Equal("bob", paths[0].SourceNode.Id);
-            Assert.Equal("charlie", paths[0].TargetNode.Id);
+            Assert.Equal("bob", (paths[0].SourceNode ?? throw new InvalidOperationException("paths[0].SourceNode is null where it is required.")).Id);
+            Assert.Equal("charlie", (paths[0].TargetNode ?? throw new InvalidOperationException("paths[0].TargetNode is null where it is required.")).Id);
         }
 
         [Fact(Timeout = 60000)]
@@ -215,9 +215,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             Assert.Equal(3, paths.Count); // Alice->Google, Bob->Microsoft, Charlie->Google
             Assert.All(paths, p =>
             {
-                Assert.Equal("Person", p.SourceNode.Label);
-                Assert.Equal("WORKS_AT", p.Edge.RelationType);
-                Assert.Equal("Company", p.TargetNode.Label);
+                Assert.Equal("Person", (p.SourceNode ?? throw new InvalidOperationException("p.SourceNode is null where it is required.")).Label);
+                Assert.Equal("WORKS_AT", (p.Edge ?? throw new InvalidOperationException("p.Edge is null where it is required.")).RelationType);
+                Assert.Equal("Company", (p.TargetNode ?? throw new InvalidOperationException("p.TargetNode is null where it is required.")).Label);
             });
         }
 
@@ -233,8 +233,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(paths);
-            Assert.Equal("alice", paths[0].SourceNode.Id);
-            Assert.Equal("google", paths[0].TargetNode.Id);
+            Assert.Equal("alice", (paths[0].SourceNode ?? throw new InvalidOperationException("paths[0].SourceNode is null where it is required.")).Id);
+            Assert.Equal("google", (paths[0].TargetNode ?? throw new InvalidOperationException("paths[0].TargetNode is null where it is required.")).Id);
         }
 
         [Fact(Timeout = 60000)]
@@ -242,13 +242,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindPaths(null!, "KNOWS", "Person"));
+                _matcher.FindPaths(global::AiDotNet.Tests.TestNull.Of<string>(), "KNOWS", "Person"));
 
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindPaths("Person", null!, "Person"));
+                _matcher.FindPaths("Person", global::AiDotNet.Tests.TestNull.Of<string>(), "Person"));
 
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindPaths("Person", "KNOWS", null!));
+                _matcher.FindPaths("Person", "KNOWS", global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         #endregion
@@ -311,7 +311,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindPathsOfLength(null!, 1));
+                _matcher.FindPathsOfLength(global::AiDotNet.Tests.TestNull.Of<string>(), 1));
 
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 _matcher.FindPathsOfLength("alice", 0));
@@ -380,10 +380,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindShortestPaths(null!, "bob"));
+                _matcher.FindShortestPaths(global::AiDotNet.Tests.TestNull.Of<string>(), "bob"));
 
             Assert.Throws<ArgumentException>(() =>
-                _matcher.FindShortestPaths("alice", null!));
+                _matcher.FindShortestPaths("alice", global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -418,7 +418,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(paths);
-            Assert.Equal("alice", paths[0].SourceNode.Id);
+            Assert.Equal("alice", (paths[0].SourceNode ?? throw new InvalidOperationException("paths[0].SourceNode is null where it is required.")).Id);
         }
 
         [Fact(Timeout = 60000)]
@@ -429,7 +429,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Equal(2, paths.Count); // Alice and Charlie work at Google
-            Assert.All(paths, p => Assert.Equal("google", p.TargetNode.Id));
+            Assert.All(paths, p => Assert.Equal("google", (p.TargetNode ?? throw new InvalidOperationException("p.TargetNode is null where it is required.")).Id));
         }
 
         [Fact(Timeout = 60000)]
@@ -440,8 +440,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(paths);
-            Assert.Equal("alice", paths[0].SourceNode.Id);
-            Assert.Equal("google", paths[0].TargetNode.Id);
+            Assert.Equal("alice", (paths[0].SourceNode ?? throw new InvalidOperationException("paths[0].SourceNode is null where it is required.")).Id);
+            Assert.Equal("google", (paths[0].TargetNode ?? throw new InvalidOperationException("paths[0].TargetNode is null where it is required.")).Id);
         }
 
         [Fact(Timeout = 60000)]
@@ -455,7 +455,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 _matcher.ExecutePattern("(Person)"));
 
             Assert.Throws<ArgumentException>(() =>
-                _matcher.ExecutePattern(null!));
+                _matcher.ExecutePattern(global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         #endregion
@@ -492,7 +492,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(paths); // Only Bob (age 35) works at Microsoft (Tech)
-            Assert.Equal("bob", paths[0].SourceNode.Id);
+            Assert.Equal("bob", (paths[0].SourceNode ?? throw new InvalidOperationException("paths[0].SourceNode is null where it is required.")).Id);
         }
 
         [Fact(Timeout = 60000)]
@@ -534,7 +534,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Assert
             Assert.Single(paths);
-            Assert.Equal("alice", paths[0].SourceNode.Id);
+            Assert.Equal("alice", (paths[0].SourceNode ?? throw new InvalidOperationException("paths[0].SourceNode is null where it is required.")).Id);
         }
 
         #endregion

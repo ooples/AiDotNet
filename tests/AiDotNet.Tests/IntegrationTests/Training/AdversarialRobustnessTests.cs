@@ -70,7 +70,7 @@ public class AdversarialRobustnessTests
         Assert.NotNull(report);
         Assert.True((report?.RobustnessCurve.Count ?? 0) >= 1, "no robustness curve produced");
         // Attacking should not improve accuracy; a shift attack should cost some accuracy.
-        Assert.True(report.RobustAccuracy <= report.CleanAccuracy + 1e-9);
+        Assert.True((report ?? throw new InvalidOperationException("report is null where it is required.")).RobustAccuracy <= report.CleanAccuracy + 1e-9);
         // Higher budgets should be at least as damaging as lower ones (monotone non-increasing accuracy).
         for (int k = 1; k < report.RobustnessCurve.Count; k++)
             Assert.True(report.RobustnessCurve[k].RobustAccuracy <= report.RobustnessCurve[k - 1].RobustAccuracy + 1e-9);

@@ -527,7 +527,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         var vSpan = _v.AsWritableSpan();
         var outSpan = updatedParameters.AsWritableSpan();
         bool amsGrad = _options.UseAMSGrad && _vMax != null;
-        var vMaxSpan = amsGrad ? _vMax!.AsWritableSpan() : default;
+        var vMaxSpan = amsGrad ? (_vMax ?? throw new InvalidOperationException("_vMax is null where it is required.")).AsWritableSpan() : default;
         // Empty when no mask is configured, which keeps the per-element branch off the common path.
         var maskSpan = configuredMask is { } wdMask ? wdMask.AsSpan() : default;
         T learningRate = CurrentLearningRate;
@@ -1113,8 +1113,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         backend.AdamWUpdate(
             parameters,
             gradients,
-            _gpuM!,
-            _gpuV!,
+            (_gpuM ?? throw new InvalidOperationException("_gpuM is null where it is required.")),
+            (_gpuV ?? throw new InvalidOperationException("_gpuV is null where it is required.")),
             (float)_options.InitialLearningRate,
             (float)_options.Beta1,
             (float)_options.Beta2,

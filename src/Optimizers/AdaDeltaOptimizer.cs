@@ -557,8 +557,8 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         backend.AdadeltaUpdate(
             parameters,
             gradients,
-            _gpuAccumulatedGrad!,
-            _gpuAccumulatedUpdate!,
+            (_gpuAccumulatedGrad ?? throw new InvalidOperationException("_gpuAccumulatedGrad is null where it is required.")),
+            (_gpuAccumulatedUpdate ?? throw new InvalidOperationException("_gpuAccumulatedUpdate is null where it is required.")),
             (float)_options.Rho,
             (float)_options.Epsilon,
             0.0f, // AdaDelta doesn't have weight decay in these options

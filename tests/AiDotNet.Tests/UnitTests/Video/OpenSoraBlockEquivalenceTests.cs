@@ -36,7 +36,7 @@ public class OpenSoraBlockEquivalenceTests
 
     private static Tensor<double> Random(int[] shape, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var tensor = new Tensor<double>(shape);
         for (int i = 0; i < tensor.Length; i++) tensor[i] = rng.NextDouble() * 4.0 - 2.0;
         return tensor;

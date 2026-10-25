@@ -84,7 +84,7 @@ public class TransformerNoamPerCallLRIssue1470Tests
 
         // The schedule must ramp during warmup: lr(warmup) is the peak, far above
         // lr(1). A constant/frozen schedule (the #1470 symptom) would make these equal.
-        double lrStart = schedule!.GetLr(1);
+        double lrStart = schedule.GetLr(1);
         double lrPeak = schedule.GetLr(warmup);
         _output.WriteLine($"fused Noam schedule: GetLr(1)={lrStart:E4}, GetLr({warmup})={lrPeak:E4}, ratio={lrPeak / lrStart:F1}x");
         Assert.True(lrPeak > lrStart * 10,
@@ -125,7 +125,7 @@ public class TransformerNoamPerCallLRIssue1470Tests
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             });
         Assert.True(((IFusedOptimizerSpec)adam).TryGetFusedOptimizerConfig(out var cfg));
-        var fused = cfg.Schedule!;
+        var fused = cfg.Schedule;
 
         // Eager batch N uses lr(t=N): the ctor sets lr(t=1) for batch 1, and each
         // OnBatchEnd Step() advances to the next. Replay that sequence and compare
@@ -133,7 +133,7 @@ public class TransformerNoamPerCallLRIssue1470Tests
         double eagerLr = eager.CurrentLearningRate;     // batch 1 (t=1), set in ctor
         for (int n = 1; n <= 3 * warmup; n++)
         {
-            Assert.Equal(eagerLr, fused.GetLr(n), 9);
+            Assert.Equal(eagerLr, (fused ?? throw new InvalidOperationException("fused is null where it is required.")).GetLr(n), 9);
             eagerLr = eager.Step();                     // advance to batch n+1's lr
         }
     }

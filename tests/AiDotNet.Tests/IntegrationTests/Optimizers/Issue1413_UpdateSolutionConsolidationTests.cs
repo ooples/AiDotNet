@@ -98,7 +98,7 @@ public class Issue1413_UpdateSolutionConsolidationTests
         // Call UpdateSolution(model, flatGrad). With #1413's consolidation
         // this routes through base.UpdateSolution → SynthesizeTapeStepContext
         // → Step, the same path the per-sample bypass uses.
-        updateSolutionMethod!.Invoke(optimizer, new object[] { model, flatGrad });
+        updateSolutionMethod.Invoke(optimizer, new object[] { model, flatGrad });
 
         var finalParams = model.GetParameters();
         double finalL2 = ComputeL2(finalParams);

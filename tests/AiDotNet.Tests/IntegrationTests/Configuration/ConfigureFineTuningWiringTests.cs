@@ -84,7 +84,7 @@ public class ConfigureFineTuningWiringTests
 
     private static (Matrix<double> x, Vector<double> y) BuildDataset(int rows = 30, int features = 3)
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var xData = new double[rows, features];
         var yData = new double[rows];
         for (int r = 0; r < rows; r++)

@@ -83,7 +83,7 @@ public class ContextCoverageMetric<T> : RAGMetricBase<T>
 
         if (!string.IsNullOrWhiteSpace(groundTruth))
         {
-            return EvaluateWithGroundTruth(answer, groundTruth!);
+            return EvaluateWithGroundTruth(answer, (groundTruth ?? throw new InvalidOperationException("groundTruth is null where it is required.")));
         }
 
         return EvaluateWithoutGroundTruth(answer);

@@ -76,7 +76,7 @@ public class SSMStateCacheTests
     public async Task CacheSSMState_ThrowsOnNull()
     {
         var cache = new SSMStateCache<float>();
-        Assert.Throws<ArgumentNullException>(() => cache.CacheSSMState(0, null!));
+        Assert.Throws<ArgumentNullException>(() => cache.CacheSSMState(0, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -97,10 +97,10 @@ public class SSMStateCacheTests
         cache.CacheSSMState(0, state);
 
         var retrieved1 = cache.GetSSMState(0);
-        retrieved1![0] = 999.0f;
+        (retrieved1 ?? throw new InvalidOperationException("retrieved1 is null where it is required."))[0] = 999.0f;
 
         var retrieved2 = cache.GetSSMState(0);
-        Assert.Equal(1.0f, retrieved2![0]);
+        Assert.Equal(1.0f, (retrieved2 ?? throw new InvalidOperationException("retrieved2 is null where it is required."))[0]);
     }
 
     [Fact(Timeout = 120000)]
@@ -124,7 +124,7 @@ public class SSMStateCacheTests
     public async Task CacheConvBuffer_ThrowsOnNull()
     {
         var cache = new SSMStateCache<float>();
-        Assert.Throws<ArgumentNullException>(() => cache.CacheConvBuffer(0, null!));
+        Assert.Throws<ArgumentNullException>(() => cache.CacheConvBuffer(0, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -193,7 +193,7 @@ public class SSMStateCacheTests
 
         // Original should be unchanged
         var originalState = cache.GetSSMState(0);
-        Assert.Equal(3.0f, originalState![0]);
+        Assert.Equal(3.0f, (originalState ?? throw new InvalidOperationException("originalState is null where it is required."))[0]);
     }
 
     [Fact(Timeout = 120000)]
@@ -253,7 +253,7 @@ public class SSMStateCacheTests
     {
         var cache = new SSMStateCache<double>();
         var state = new Tensor<double>(new[] { 1, 4, 2 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < state.Length; i++)
         {
             state[i] = random.NextDouble() * 2 - 1;
@@ -274,7 +274,7 @@ public class SSMStateCacheTests
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1);

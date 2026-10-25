@@ -33,7 +33,7 @@ public class CvTensorOpsEquivalenceTests
 
     private static Tensor<double> Rand(int[] shape, int seed)
     {
-        var r = new Random(seed); var t = new Tensor<double>(shape);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed); var t = new Tensor<double>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = r.NextDouble() * 4 - 2;
         return t;
     }
@@ -567,7 +567,7 @@ public class CvTensorOpsEquivalenceTests
             {
                 var q = Rand(new[] { nw, area, c }, ++seed); var k = Rand(new[] { nw, area, c }, ++seed); var v = Rand(new[] { nw, area, c }, ++seed);
                 int R = 2 * area; var table = Rand(new[] { R, heads }, ++seed);
-                var idx = new int[area, area]; var r = new Random(++seed);
+                var idx = new int[area, area]; var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(++seed);
                 for (int i = 0; i < area; i++) for (int j = 0; j < area; j++) idx[i, j] = r.Next(R);
                 var bias = CvTensorOps<double>.RelativePositionBias(table, idx);
                 Compare($"BiasedAttention nw{nw} a{area} c{c} h{heads}", RefBiasedAttention(q, k, v, heads, table, idx),
@@ -600,7 +600,7 @@ public class CvTensorOpsEquivalenceTests
         await Task.Yield();
         int seed = 6000;
             {
-                var rr = new Random(++seed);
+                var rr = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(++seed);
                 foreach (int nb in new[] { 1, 2 })
                 foreach (var (fh, fw) in new[] { (8, 8), (5, 7), (16, 12) })
                 foreach (var (ps, sr) in new[] { (2, 2), (7, 2), (3, 1) })
@@ -689,7 +689,7 @@ public class CvTensorOpsEquivalenceTests
     public async Task CascadeBoxRefinement_MatchesTheLoopItReplaced()
     {
         await Task.Yield();
-        var r = new Random(7001);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7001);
         foreach (int numBoxes in new[] { 1, 5, 17 })
         foreach (int numClasses in new[] { 2, 4 })
         {
@@ -751,7 +751,7 @@ public class CvTensorOpsEquivalenceTests
 
     private static Tensor<double> Const(int[] shape, int seed)
     {
-        var r = new Random(seed); var t = new Tensor<double>(shape);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed); var t = new Tensor<double>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = r.NextDouble() * 2 - 1;
         return t;
     }

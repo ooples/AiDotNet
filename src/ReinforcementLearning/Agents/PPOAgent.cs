@@ -513,7 +513,7 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 int actSize = _ppoOptions.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [batchCount, actSize]);
                 var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [batchCount, actSize * 2]);
-                newLogProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, actionsTensor!);
+                newLogProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, (actionsTensor ?? throw new InvalidOperationException("actionsTensor is null where it is required.")));
             }
             else
             {

@@ -274,7 +274,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         // lookahead = params - momentum * velocity
 
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
-        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
+        var momentumVelocity = (Vector<T>)Engine.Multiply((_velocity ?? throw new InvalidOperationException("_velocity is null where it is required.")), CurrentMomentum);
         var lookaheadCoefficients = (Vector<T>)Engine.Subtract(parameters, momentumVelocity);
 
         return InterfaceGuard.Parameterizable(currentSolution).WithParameters(lookaheadCoefficients);
@@ -299,7 +299,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         // === Vectorized NAG Velocity Update using IEngine (Phase B: US-GPU-015) ===
         // velocity = momentum * velocity + learningRate * gradient
 
-        var momentumVelocity = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
+        var momentumVelocity = (Vector<T>)Engine.Multiply((_velocity ?? throw new InvalidOperationException("_velocity is null where it is required.")), CurrentMomentum);
         var scaledGradient = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
         _velocity = (Vector<T>)Engine.Add(momentumVelocity, scaledGradient);
 
@@ -619,7 +619,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         backend.NagUpdate(
             parameters,
             gradients,
-            _gpuVelocity!,
+            (_gpuVelocity ?? throw new InvalidOperationException("_gpuVelocity is null where it is required.")),
             (float)NumOps.ToDouble(CurrentLearningRate),
             (float)NumOps.ToDouble(CurrentMomentum),
             0.0f, // NAG doesn't have weight decay in these options

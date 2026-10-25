@@ -272,7 +272,7 @@ public class ReasoningDeepMathIntegrationTests
     public async Task ReasoningChain_AddStep_NullThrows()
     {
         var chain = new ReasoningChain<double>();
-        Assert.Throws<ArgumentNullException>(() => chain.AddStep(null!));
+        Assert.Throws<ArgumentNullException>(() => chain.AddStep(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Reasoning.Models.ReasoningStep<double>>()));
     }
 
     [Fact(Timeout = 120000)]

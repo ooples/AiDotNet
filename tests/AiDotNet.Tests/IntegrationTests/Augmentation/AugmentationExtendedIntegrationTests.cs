@@ -480,7 +480,7 @@ public class AugmentationExtendedIntegrationTests
     {
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>();
 
-        Assert.Throws<ArgumentNullException>(() => pipeline.Add(null!));
+        Assert.Throws<ArgumentNullException>(() => pipeline.Add(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Augmentation.IAugmentation<double, AiDotNet.Augmentation.Image.ImageTensor<double>>>()));
     }
 
     [Fact(Timeout = 120000)]

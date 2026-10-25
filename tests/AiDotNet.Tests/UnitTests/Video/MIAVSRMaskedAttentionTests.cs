@@ -34,7 +34,7 @@ public class MIAVSRMaskedAttentionTests
 
     private static Tensor<double> CreateClip(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var clip = new Tensor<double>(new[] { 1, Frames, Channels, Side, Side });
         for (int i = 0; i < clip.Length; i++) clip[i] = rng.NextDouble();
         return clip;
@@ -78,7 +78,7 @@ public class MIAVSRMaskedAttentionTests
         var withoutLoss = CreateModel(maskLossWeight: 0.0);
         var clip = CreateClip(3);
         var target = new Tensor<double>(new[] { 1, Frames, Channels, Side * 2, Side * 2 });
-        var rng = new Random(4);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4);
         for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
 
         withLoss.Predict(clip);

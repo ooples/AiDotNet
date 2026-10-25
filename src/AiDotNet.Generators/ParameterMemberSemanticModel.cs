@@ -54,7 +54,7 @@ internal static class ParameterMemberSemanticModel
         {
             string? name = attribute.AttributeClass?.ToDisplayString();
             _ = TryGetKind(attribute, out Kind kind);
-            if (kind != Kind.Unclassified) declarations.Add((kind, name!));
+            if (kind != Kind.Unclassified) declarations.Add((kind, name ?? attribute.ToString() ?? string.Empty));
         }
 
         if (declarations.Count == 0)

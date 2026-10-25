@@ -134,7 +134,7 @@ public class MpcIntegrationTests
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
 
-        Assert.Throws<ArgumentNullException>(() => ss.Share(null, 2));
+        Assert.Throws<ArgumentNullException>(() => ss.Share(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), 2));
     }
 
     [Fact(Timeout = 120000)]
@@ -142,7 +142,7 @@ public class MpcIntegrationTests
     {
         var ss = new ArithmeticSecretSharing<double>(numberOfParties: 2, seed: 42);
 
-        Assert.Throws<ArgumentException>(() => ss.Reconstruct(null));
+        Assert.Throws<ArgumentException>(() => ss.Reconstruct(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>[]>()));
     }
 
     // ========== BooleanSecretSharing Tests ==========
@@ -238,7 +238,7 @@ public class MpcIntegrationTests
     {
         var ss = new BooleanSecretSharing(numberOfParties: 2);
 
-        Assert.Throws<ArgumentException>(() => ss.Share(null));
+        Assert.Throws<ArgumentException>(() => ss.Share(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     // ========== BaseObliviousTransfer Tests ==========
@@ -498,7 +498,7 @@ public class MpcIntegrationTests
     public async Task SecureComparison_NullProtocol_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new SecureComparisonProtocol<double>(null));
+            new SecureComparisonProtocol<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.MPC.ISecureComputationProtocol<double>>()));
     }
 
     // ========== SecureClippingProtocol Tests ==========
@@ -562,7 +562,7 @@ public class MpcIntegrationTests
     public async Task SecureClipping_NullProtocol_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new SecureClippingProtocol<double>(null));
+            new SecureClippingProtocol<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.MPC.ISecureComputationProtocol<double>>()));
     }
 
     // ========== HybridMpcProtocol Tests ==========

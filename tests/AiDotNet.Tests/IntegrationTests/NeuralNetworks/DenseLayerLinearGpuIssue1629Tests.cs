@@ -45,7 +45,7 @@ public class DenseLayerLinearGpuIssue1629Tests
             // Linear output head — the exact trigger: no activation → FusedActivationType.None.
             var layer = new DenseLayer<float>(outFeat, activationFunction: null);
 
-            var rng = new Random(1629);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1629);
             var input = new Tensor<float>(new[] { batch, inFeat });
             for (int i = 0; i < input.Length; i++) input[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
 

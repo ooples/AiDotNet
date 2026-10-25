@@ -102,7 +102,7 @@ public class ContinualLearningIntegrationTests
     {
         var ewc = new ElasticWeightConsolidation<double>();
 
-        Assert.Throws<ArgumentNullException>(() => ewc.BeforeTask(null!, taskId: 0));
+        Assert.Throws<ArgumentNullException>(() => ewc.BeforeTask(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.INeuralNetwork<double>>(), taskId: 0));
     }
 
     [Fact(Timeout = 120000)]
@@ -706,8 +706,8 @@ public class ContinualLearningIntegrationTests
 
         foreach (var strategy in strategies)
         {
-            Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(null!, 0));
-            Assert.Throws<ArgumentNullException>(() => strategy.ComputeLoss(null!));
+            Assert.Throws<ArgumentNullException>(() => strategy.BeforeTask(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.INeuralNetwork<double>>(), 0));
+            Assert.Throws<ArgumentNullException>(() => strategy.ComputeLoss(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.INeuralNetwork<double>>()));
         }
     }
 
@@ -722,7 +722,7 @@ public class ContinualLearningIntegrationTests
 
         foreach (var strategy in strategies)
         {
-            Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(network, null!));
+            Assert.Throws<ArgumentNullException>(() => strategy.ModifyGradients(network, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         }
     }
 

@@ -18,7 +18,7 @@ public sealed class NeuralProgramSynthesizerCoverageTests
     {
         var synthesizer = CreateSynthesizer(executionEngine: null, maxProgramLength: 2);
 
-        Assert.Throws<ArgumentNullException>(() => synthesizer.ValidateProgram(null!));
+        Assert.Throws<ArgumentNullException>(() => synthesizer.ValidateProgram(global::AiDotNet.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Models.Program<double>>()));
 
         var empty = new Program<double>("", ProgramLanguage.Generic, isValid: false, fitnessScore: 0.0, complexity: 0);
         Assert.False(synthesizer.ValidateProgram(empty));
@@ -99,7 +99,7 @@ public sealed class NeuralProgramSynthesizerCoverageTests
             .GetMethod("BuildFeedbackInput", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
 
-        var feedback = method!.Invoke(synthesizer, new object[] { program, input });
+        var feedback = method.Invoke(synthesizer, new object[] { program, input });
         Assert.Null(feedback);
     }
 

@@ -299,8 +299,82 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _modelOptions = value;
             // Only while no layer exists yet: restarting the construction scope after layers were built
             // would hand later layers the seeds earlier ones already used, so they would initialise alike.
-            if (_layers is null || _layers.Count == 0)
+            if (!HasBuiltLayers())
                 ApplyOptionsSeed(value?.Seed);
+            else
+                KeepOptionsSeedForWiring(value?.Seed);
+        }
+    }
+
+    /// <summary>
+    /// Keeps an options seed that arrived after layers were built, for the layers' seed wiring to apply.
+    /// </summary>
+    /// <remarks>
+    /// Restarting the construction scope now would hand later layers the seeds earlier ones already used, so the seed
+    /// is not applied that way; dropping it was the defect. NeuralNetwork&lt;T&gt; builds its layers in its own
+    /// constructor, so every subclass that assigns Options in its constructor body (BayesianNeuralNetwork among them)
+    /// ignored Options.Seed: two models with the same seed started from different weights. The seed now reaches the
+    /// layers when they are first used (<see cref="CompleteOwnOptionsSeedDeferral"/>) or trained.
+    /// </remarks>
+    private void KeepOptionsSeedForWiring(int? seed)
+    {
+        if (Architecture is { HasExplicitRandomSeed: true } || seed == _optionsSeed)
+            return;
+        _optionsSeed = seed;
+        _optionsSeedAwaitsWiring = !_layerRandomSeedsWired;
+    }
+
+    // Set when an options seed arrived after the layers were built and has not been wired into them yet.
+    private bool _optionsSeedAwaitsWiring;
+
+    /// <summary>
+    /// Whether this model has built a layer yet: one in <see cref="Layers"/>, or one kept anywhere else (a field, a
+    /// generated group, a text encoder) that already drew its seed from this model's construction scope.
+    /// </summary>
+    /// <remarks>
+    /// The scope's own count answers the second half, so nothing walks the model's members. Enumerating
+    /// <see cref="GetExtraTrainableLayers"/> here broke construction: the setter runs inside the derived constructor,
+    /// and generated enumerations read properties that throw until assigned (every native Florence-2 and GOT-OCR2).
+    /// Caller-built layers are excluded: the position is recorded after they are seeded, and an options seed is meant
+    /// to re-seed them.
+    /// </remarks>
+    private bool HasBuiltLayers()
+        => _layers is { Count: > 0 }
+            || AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.HasDrawnSince(_constructionScopePosition);
+
+    // The construction scope's position right after this model reset it and seeded its caller-built layers.
+    private (int Generation, int SeedsDrawn) _constructionScopePosition;
+
+    // The seed sequence this model's construction armed; layers it builds on first use continue it.
+    private Random? _constructionSequence;
+
+    private void RecordConstructionScope()
+    {
+        _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
+        _constructionSequence = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CurrentSequence;
+    }
+
+    /// <summary>
+    /// Builds the layers on first use, drawing their seeds from this model's own construction sequence rather than
+    /// whatever sequence the thread's scope holds by then.
+    /// </summary>
+    /// <remarks>
+    /// A model whose constructor leaves <see cref="InitializeLayers"/> to the first use drew its layer seeds from the
+    /// model constructed last on the thread: a BayesianNeuralNetwork with Options.Seed = 7 got different weights from
+    /// another with the same seed built right after it. Continuing the model's own sequence gives exactly the seeds
+    /// it would have drawn had nothing been constructed in between.
+    /// </remarks>
+    private void InitializeLayersFromConstructionSequence()
+    {
+        var enclosing = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResumeSequence(_constructionSequence);
+        try
+        {
+            InitializeLayers();
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(enclosing);
         }
     }
 
@@ -371,7 +445,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private Interfaces.ICreditRule<T>? _creditRule;
 
     /// <summary>Deterministic RNG seeding the credit rule's fixed feedback matrices (allocated once).</summary>
-    private Random _creditRuleRandom = new(12345);
+    /// <remarks>
+    /// Built through RandomHelper like the seeded assignment in <see cref="SetCreditRule"/>, so both paths
+    /// produce the same runtime type. Constructing Random directly here made a model saved after
+    /// SetCreditRule carry a different random type than a freshly constructed one, and the state registry
+    /// rejects that mismatch when the model is deserialized.
+    /// </remarks>
+    private Random _creditRuleRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(12345);
 
     /// <summary>
     /// Selects a pluggable credit-assignment rule for training. Passing <c>null</c> restores the default
@@ -384,7 +464,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _creditRule = rule;
         if (seed.HasValue)
         {
-            _creditRuleRandom = new Random(seed.Value);
+            _creditRuleRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value);
         }
     }
 
@@ -664,6 +744,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
         SeedCallerBuiltLayers();
+        RecordConstructionScope();
         // Most models keep their options in a field of their own and expose them only through GetOptions(), which
         // the derived constructor fills after this one returns, so their Options.Seed reached nothing. The first
         // layer to ask for a seed once those options exist applies their seed (see TryApplyConstructionOptionsSeed).
@@ -1224,10 +1305,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             long total = Layers.Sum(layer => (long)ActualLayerLength(layer));
             total += GetExtraTrainableLayers()
                 .Where(layer => layer is not null)
-                .Sum(layer => (long)ActualLayerLength(layer!));
+                .Sum(layer => (long)ActualLayerLength((layer ?? throw new InvalidOperationException("layer is null where it is required."))));
             total += GetExtraTrainableTensors()
                 .Where(tensor => tensor is not null)
-                .Sum(tensor => (long)tensor!.Length);
+                .Sum(tensor => (long)tensor.Length);
             total += ParameterComponents.Sum(component => (long)component.GetParameters().Length);
             return ParameterCountHelper.ToFlatVectorSize(total);
         }
@@ -4138,7 +4219,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (IsDeferredOrAgnosticShape(architectureInputShape))
             return true;
 
-        if (AreShapesCompatible(architectureInputShape!, layerInputShape!))
+        if (AreShapesCompatible((architectureInputShape ?? throw new InvalidOperationException("architectureInputShape is null where it is required.")), (layerInputShape ?? throw new InvalidOperationException("layerInputShape is null where it is required."))))
             return true;
 
         // Flat-reshape boundary: architecture may declare a structured
@@ -4159,7 +4240,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // layer declaring [2, 8] fed by a flat [16]) must use an explicit
         // ReshapeLayer, mirroring the layer-to-layer "no implicit flatten"
         // contract — so it is NOT accepted here.
-        if (layerInputShape!.Length == 1 && TotalElementsMatch(architectureInputShape!, layerInputShape!))
+        if (layerInputShape.Length == 1 && TotalElementsMatch(architectureInputShape, layerInputShape))
             return true;
 
         return false;
@@ -4197,7 +4278,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return true;
         }
 
-        int[] outputShape = layerOutputShape!;
+        int[] outputShape = (layerOutputShape ?? throw new InvalidOperationException("layerOutputShape is null where it is required."));
 
         // Partially-deferred shapes — e.g. a transposed-conv generator that
         // emits [3, -1, -1] until first Forward resolves H/W from runtime
@@ -4223,7 +4304,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // keeps the surface narrow: any future "d > 0 but doesn't
         // match" path still gets the clear "output shape ... must match
         // architecture output size" error.
-        if (outputShape.Any(d => d < 0))
+        if ((outputShape ?? throw new InvalidOperationException("outputShape is null where it is required.")).Any(d => d < 0))
         {
             error = string.Empty;
             return true;
@@ -4587,7 +4668,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         bool currentIsLazy = IsDeferredOrAgnosticShape(currentInputShape);
         if (!currentIsLazy
             && !IsDeferredOrAgnosticShape(prevOutputShape)
-            && !AreShapesCompatible(prevOutputShape!, currentInputShape!))
+            && !AreShapesCompatible((prevOutputShape ?? throw new InvalidOperationException("prevOutputShape is null where it is required.")), (currentInputShape ?? throw new InvalidOperationException("currentInputShape is null where it is required."))))
             return false;
 
         // Special checks for specific layer combinations
@@ -4616,7 +4697,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // leading dims <= 1, which silently strips a leading -1 too —
             // turning [-1, 32] into [32] and breaking the product check.
             // Closes the #1330 InferenceOptimizerIntegrationTests cluster.
-            if (AreShapesCompatible(reshapeLayer.GetOutputShape(), currentInputShape!))
+            if (AreShapesCompatible(reshapeLayer.GetOutputShape(), (currentInputShape ?? throw new InvalidOperationException("currentInputShape is null where it is required."))))
                 return true;
 
             // Fall back to product-of-known-dims for the implicit-flatten
@@ -4626,7 +4707,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // a -1 in any non-leading position still survives and short-
             // circuits the comparison.
             var reshapeOutputShape = TrimLeadingBatchLikeDimensions(reshapeLayer.GetOutputShape());
-            var normalizedCurrentInputShape = TrimLeadingBatchLikeDimensions(currentInputShape!);
+            var normalizedCurrentInputShape = TrimLeadingBatchLikeDimensions(currentInputShape);
 
             if (reshapeOutputShape.Any(d => d <= 0) || normalizedCurrentInputShape.Any(d => d <= 0))
                 return true;
@@ -5249,7 +5330,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // double up the entire network.
             if (!_layerOnlyInitialized && Layers.Count == 0)
             {
-                InitializeLayers();
+                InitializeLayersFromConstructionSequence();
                 BindLayerGraphReferences();
                 ReconcileCanonicalNestedNetworkLayerViews();
                 ReportLayerContractMismatches();
@@ -5272,7 +5353,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Architecture.InitializeFromCachedData();
 
             // Initialize network-specific layers
-            InitializeLayers();
+            InitializeLayersFromConstructionSequence();
             BindLayerGraphReferences();
             ReconcileCanonicalNestedNetworkLayerViews();
             ReportLayerContractMismatches();
@@ -5599,7 +5680,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // across ALL model families, not just whichever layer breaks first.
         int[] lastGoodShape = currentShape;
 
-        for (int i = 0; hasOwnLayers && i < Layers!.Count; i++)
+        for (int i = 0; hasOwnLayers && i < (Layers ?? throw new InvalidOperationException("Layers is null where it is required.")).Count; i++)
         {
             var layer = Layers[i];
             if (layer is null) continue;
@@ -5612,7 +5693,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 int[]? rootOutput = null;
                 try { rootOutput = layer.GetOutputShape(); }
-                catch { }
+                catch (Exception ex)
+                {
+                    // A root whose shape waits for its first input stops the walk below, as an unknown shape does.
+                    System.Diagnostics.Trace.TraceInformation(
+                        $"Shape walk: {layer.GetType().Name} could not report its output shape yet " +
+                        $"({ex.GetType().Name}: {ex.Message}).");
+                }
 
                 if (rootOutput is null
                     || rootOutput.Length == 0
@@ -7552,6 +7639,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private void CompleteOwnOptionsSeedDeferral()
     {
+        if (_optionsSeedAwaitsWiring)
+        {
+            _optionsSeedAwaitsWiring = false;
+            EnsureLayerRandomSeedsWired();
+            return;
+        }
+
         if (_ownOptionsSeedCompleted || _optionsSeed is not null || _layerRandomSeedsWired)
             return;
 
@@ -7583,10 +7677,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private bool TryApplyConstructionOptionsSeed()
     {
-        // The Options setter's rule: a seed applies only while no layer exists yet. A model that already holds layers
+        // The Options setter's rule (HasBuiltLayers): a seed applies only while no layer exists yet. A model that already holds layers
         // has finished building them, and a layer asking now belongs to something constructed after it on this
         // thread (a standalone backbone after a detector), which must not inherit this model's seed.
-        if (_optionsSeed is not null || _layers is { Count: > 0 })
+        if (_optionsSeed is not null || HasBuiltLayers())
             return true;
         var own = GetOptions();
         // A layer asking before the model's own options exist is one the model built first, wherever it keeps it
@@ -7633,12 +7727,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _optionsSeed = null;
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
             SeedCallerBuiltLayers();
+            RecordConstructionScope();
             return;
         }
 
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
         SeedCallerBuiltLayers();
+        RecordConstructionScope();
     }
 
     // The caller-built layers this model gave a seed, so a later options seed can replace those seeds and no others.
@@ -12215,8 +12311,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                             : MixedPrecision.BitConverterHelper.Bf16RoundTrip(fp32Value);
                         fp32Span[i] = rounded;
                     }
-                    mpFp32Snapshots!.Add(snapshot);
-                    mpSnapshotTargets!.Add(param);
+                    mpFp32Snapshots.Add(snapshot);
+                    mpSnapshotTargets.Add(param);
                 }
 
                 for (int p = 0; p < trainableParams.Count; p++)
@@ -14835,8 +14931,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var pairType = GetGenericEnumerableElementTypes(value.GetType()).FirstOrDefault(IsKeyValuePair);
         if (pairType is null) return sequence;
 
-        var valueProperty = pairType.GetProperty(nameof(KeyValuePair<object, object>.Value))!;
-        return sequence.Cast<object>().Select(pair => valueProperty.GetValue(pair));
+        var valueProperty = pairType.GetProperty(nameof(KeyValuePair<object, object>.Value));
+        return sequence.Cast<object>().Select(pair => (valueProperty ?? throw new InvalidOperationException("valueProperty is null where it is required.")).GetValue(pair));
     }
 
     private static void ResetIfOptimizer(object? value, HashSet<object> resetOptimizers)
@@ -16199,7 +16295,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 Dictionary<string, object>? metadata = metadataCount == 0
                     ? null
                     : new Dictionary<string, object>(metadataCount, StringComparer.Ordinal);
-                for (int m = 0; m < metadataCount; m++) metadata![reader.ReadString()] = reader.ReadString();
+                for (int m = 0; m < metadataCount; m++) (metadata ?? throw new InvalidOperationException("metadata is null where it is required."))[reader.ReadString()] = reader.ReadString();
                 int stateLength = reader.ReadInt32();
                 byte[] state = reader.ReadBytes(stateLength);
                 if (state.Length != stateLength)
@@ -16256,9 +16352,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 replacements.Add(layer);
             }
             if (savedPartitionSizes is not null)
-                targetGroup.ReplacePartitioned!(replacements, savedPartitionSizes);
+                (targetGroup.ReplacePartitioned ?? throw new InvalidOperationException("targetGroup.ReplacePartitioned is null where it is required."))(replacements, savedPartitionSizes);
             else
-                targetGroup.Replace!(replacements);
+                (targetGroup.Replace ?? throw new InvalidOperationException("targetGroup.Replace is null where it is required."))(replacements);
         }
 
         InvalidateParameterCountCache();
@@ -18627,9 +18723,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     : layer.GetParameters().Length;
 
             var layerCounts = restoreLayers.Select(ActualParameterLength).ToList();
-            var extraLayerCounts = restoreExtraLayers.Select(layer => ActualParameterLength(layer!)).ToList();
+            var extraLayerCounts = restoreExtraLayers.Select(layer => ActualParameterLength((layer ?? throw new InvalidOperationException("layer is null where it is required.")))).ToList();
             int extraTensorCount = ParameterCountHelper.ToFlatVectorSize(
-                restoreExtraTensors.Sum(tensor => (long)tensor!.Length));
+                restoreExtraTensors.Sum(tensor => (long)tensor.Length));
             int componentCount = ParameterCountHelper.ToFlatVectorSize(
                 restoreComponents.Sum(component => (long)component.GetParameters().Length));
             long total = layerCounts.Sum(count => (long)count)
@@ -18697,12 +18793,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (extraCount == 0) continue;
             var extraParameters = new Vector<T>(extraCount);
             srcSpan.Slice(currentIndex, extraCount).CopyTo(extraParameters.AsWritableSpan());
-            restoreExtraLayers[i]!.SetParameters(extraParameters);
+            (restoreExtraLayers[i] ?? throw new InvalidOperationException("restoreExtraLayers[i] is null where it is required.")).SetParameters(extraParameters);
             currentIndex += extraCount;
         }
         foreach (var tensor in restoreExtraTensors)
         {
-            if (tensor!.Length == 0) continue;
+            if (tensor.Length == 0) continue;
             srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
             currentIndex += tensor.Length;
         }

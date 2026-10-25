@@ -48,7 +48,7 @@ public sealed class RagPipelineEndToEndTests
         Assert.Equal("france", result.Contexts[0].Id);
         Assert.True(result.Contexts[0].HasRelevanceScore);
         Assert.NotNull(result.Answer);
-        Assert.Equal("Paris is the capital of France [1].", result.Answer!.Answer);
+        Assert.Equal("Paris is the capital of France [1].", result.Answer.Answer);
         Assert.Equal(new[] { "france" }, result.Answer.Citations);
         Assert.Equal(result.Contexts.Select(document => document.Id),
             result.Answer.SourceDocuments.Select(document => document.Id));

@@ -18,7 +18,7 @@ public sealed class MultipleRegressionConditioningTests
     [Trait("category", "unit")]
     public void Near_collinear_features_do_not_blow_up_predictions()
     {
-        var rng = new Random(3);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
         const int n = 60;
         var x = new Matrix<double>(n, 3);
         var y = new Vector<double>(n);
