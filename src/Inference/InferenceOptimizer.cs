@@ -110,6 +110,10 @@ internal class InferenceOptimizer<T>
 
         _config.Validate();
 
+        // Cleared first: the clone below can fail and return early, and the statistics must not keep describing
+        // the model a previous call optimized.
+        _int8Storage = default;
+
         // Clone only when we might mutate layers; otherwise keep original reference.
         // Layer fusion (BatchNorm folding) rewrites conv weights in place and drops
         // the BN layer, so it also requires a clone to avoid mutating the user's model.
@@ -1146,6 +1150,12 @@ internal class InferenceOptimizer<T>
         int headCount = mha.HeadCount;
         var activation = mha.ScalarActivation;
 
+        // Auto keeps a mask the source layer was built with: inferring "not causal" from the task type would turn a
+        // causal layer in, say, a regression transformer into a replacement that attends to future positions.
+        // Causal and Disabled still override the layer either way.
+        if (_config.AttentionMasking is not (AttentionMaskingMode.Causal or AttentionMaskingMode.Disabled))
+            useCausalMask |= mha.UseCausalMask;
+
         if (enableKVCache)
         {
             if (enablePagedKVCache)
@@ -1543,6 +1553,11 @@ internal class InferenceOptimizer<T>
     /// same weights take in FP32. Walks registered sublayers too, since the quantization pass rewrites the attention
     /// and feed-forward layers inside composite blocks as well as top-level ones.
     /// </summary>
+    /// <remarks>
+    /// These totals cover the quantized weight storage only. Each quantized layer still holds the FP32 layer it was
+    /// built from, and neither total counts that, so they are not the optimized model's memory footprint: the ratio
+    /// of the two compares INT8 weight storage with FP32 weight storage, not process memory before and after.
+    /// </remarks>
     private static (int Layers, long QuantizedBytes, long OriginalBytes) MeasureInt8Storage(NeuralNetworkBase<T> model)
     {
         int layers = 0;

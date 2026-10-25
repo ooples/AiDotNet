@@ -44,6 +44,10 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
 {
     private readonly AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T> _detectionLoss;
 
+    // Version 2: each stage's box-regression head is class-agnostic, 4 outputs instead of 4 per class, so a version-1
+    // file holds heads of the wrong width and is rejected rather than read into them.
+    private const int WeightFileVersion = 2;
+
     /// <summary>
     /// The reference optimizer (Cai and Vasconcelos 2018, trained with the Detectron recipe): SGD with momentum 0.9
     /// at 0.02 for 16 images per batch, scaled linearly to the one image this model trains on per step (0.00125).
@@ -348,6 +352,8 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
                 stageLogits.Add(outputs[index]);
 
         var candidateDetections = new List<Detection<T>>();
+        // The last stage regressed targets scaled by its box-regression weights; its deltas are divided by them below.
+        var lastWeights = _detectionLoss.StageBoxRegressionWeights(_numStages - 1);
 
         for (int i = 0; i < numProposals; i++)
         {
@@ -394,8 +400,6 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
             double pcx = px1 + pw / 2;
             double pcy = py1 + ph / 2;
 
-            // The last stage regressed targets scaled by its box-regression weights; undo them to decode.
-            var lastWeights = _detectionLoss.StageBoxRegressionWeights(_numStages - 1);
             double dx = NumOps.ToDouble(boxDeltas[i, 0]) / lastWeights[0];
             double dy = NumOps.ToDouble(boxDeltas[i, 1]) / lastWeights[1];
             double dw = NumOps.ToDouble(boxDeltas[i, 2]) / lastWeights[2];
@@ -469,9 +473,10 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != WeightFileVersion)
         {
-            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+            throw new InvalidDataException(
+                $"Unsupported weight file version: {version}; this build reads version {WeightFileVersion}.");
         }
 
         // Read model configuration
@@ -512,7 +517,7 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
 
         // Write magic number and version for identification
         writer.Write(0x43524E4E); // "CRNN" in ASCII (Cascade RCNN)
-        writer.Write(1); // Version 1
+        writer.Write(WeightFileVersion);
 
         // Write model configuration
         writer.Write(Name);

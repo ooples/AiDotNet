@@ -17761,6 +17761,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
             sb.AppendLine("        VerifySemanticDetectionTraining();");
             sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact(Timeout = 300000)]");
+            sb.AppendLine("    public System.Threading.Tasks.Task TrainDetections_OverfitsOneImage_ToFullMeanAveragePrecision()");
+            sb.AppendLine("        => VerifyOverfitsOneImageToFullMeanAveragePrecision();");
         }
         if (model.HasVectorOnlyConstructor)
         {

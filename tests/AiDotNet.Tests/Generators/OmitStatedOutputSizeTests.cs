@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using System.Threading.Tasks;
 using AiDotNet.Generators;
@@ -14,9 +15,12 @@ namespace AiDotNet.Tests.Generators;
 public sealed class OmitStatedOutputSizeTests
 {
     private static string Omit(string expression)
-        => (string)typeof(TestScaffoldGenerator)
-            .GetMethod("OmitStatedOutputSize", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, new object[] { expression })!;
+    {
+        var omit = typeof(TestScaffoldGenerator).GetMethod("OmitStatedOutputSize", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("TestScaffoldGenerator.OmitStatedOutputSize was not found.");
+        return omit.Invoke(null, new object[] { expression }) as string
+            ?? throw new InvalidOperationException("OmitStatedOutputSize did not return a string.");
+    }
 
     [Theory(Timeout = 60000)]
     [InlineData("new A(inputDepth: 3, outputSize: 256 * 256 * 3), options)", "new A(inputDepth: 3), options)")]
@@ -50,9 +54,11 @@ public sealed class OmitStatedOutputSizeTests
     {
         await Task.Yield();
         var fixture = new AiDotNet.Tests.ModelFamilyTests.Generated.OpenSoraTests();
-        using var network = (AiDotNet.NeuralNetworks.NeuralNetworkBase<float>)typeof(AiDotNet.Tests.ModelFamilyTests.Generated.OpenSoraTests)
-            .GetMethod("CreateNetwork", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)!
-            .Invoke(fixture, null)!;
+        var create = typeof(AiDotNet.Tests.ModelFamilyTests.Generated.OpenSoraTests)
+            .GetMethod("CreateNetwork", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("OpenSoraTests.CreateNetwork was not found.");
+        using var network = create.Invoke(fixture, null) as AiDotNet.NeuralNetworks.NeuralNetworkBase<float>
+            ?? throw new InvalidOperationException("OpenSoraTests.CreateNetwork did not return a float network.");
         Assert.Equal(3, network.GetArchitecture().InputDepth);
     }
 }

@@ -541,15 +541,19 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
     /// in the wrong frame, or a head the update never reaches cannot pass. Neither can a loss that only shrinks,
     /// because the score is read from <c>Detect</c>, not from the loss.
     /// </summary>
-    [Fact(Timeout = 300000)]
-    public async Task TrainDetections_OverfitsOneImage_ToFullMeanAveragePrecision()
+    /// <remarks>
+    /// Not a test of its own: the generator emits <c>TrainDetections_OverfitsOneImage_ToFullMeanAveragePrecision</c>
+    /// only for detectors that implement typed training, so a detector that loses it fails here instead of passing
+    /// without training, and a family that never had it does not inherit a test that would count it as covered.
+    /// </remarks>
+    protected async Task VerifyOverfitsOneImageToFullMeanAveragePrecision()
     {
         await Task.Yield();
         // No TensorArena: an arena returns nothing until it is disposed, so one held across a hundred training steps
         // keeps every step's tensors. Measured on Cascade R-CNN: 1.2 GB more live heap per step inside an arena (26 GB
         // by step 20, then OutOfMemory), against a flat ~3.9 GB without one.
         using var detector = CreatePositiveObjectDetector(ObjectDetectionPositiveFixture<T>.CreateOptions());
-        if (detector is not AiDotNet.Interfaces.IDetectionTrainingModel<T> training) return;
+        var training = Assert.IsAssignableFrom<AiDotNet.Interfaces.IDetectionTrainingModel<T>>(detector);
         var ops = MathHelper.GetNumericOperations<T>();
         const int size = 64;
 

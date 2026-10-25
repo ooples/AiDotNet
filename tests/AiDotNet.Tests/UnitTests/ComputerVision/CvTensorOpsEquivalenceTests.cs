@@ -716,6 +716,46 @@ public class CvTensorOpsEquivalenceTests
         AssertNoFailures();
     }
 
+    /// <summary>
+    /// The weighted refinement every stage runs in production: the deltas regressed targets multiplied by the stage's
+    /// (wx, wy, ww, wh), so refining with those weights must equal refining with the deltas divided by them.
+    /// </summary>
+    [Fact]
+    public async Task CascadeBoxRefinement_WithRegressionWeights_DividesTheDeltasByThem()
+    {
+        await Task.Yield();
+        var r = RandomHelper.CreateSeededRandom(7002);
+        const int numBoxes = 9, imageWidth = 96, imageHeight = 64;
+        var boxes = new Tensor<double>(new[] { numBoxes, 4 });
+        for (int i = 0; i < numBoxes; i++)
+        {
+            double x1 = r.NextDouble() * imageWidth, y1 = r.NextDouble() * imageHeight;
+            boxes[i, 0] = x1;
+            boxes[i, 1] = y1;
+            boxes[i, 2] = x1 + 1 + r.NextDouble() * 40;
+            boxes[i, 3] = y1 + 1 + r.NextDouble() * 40;
+        }
+
+        // The second stage's reference weights, with deltas large enough that the scale cap still binds after
+        // dividing by 5.
+        var weights = new[] { 20.0, 20.0, 10.0, 10.0 };
+        var deltas = Rand(new[] { numBoxes, 4 }, r.Next());
+        var divided = new Tensor<double>(new[] { numBoxes, 4 });
+        for (int i = 0; i < numBoxes; i++)
+            for (int k = 0; k < 4; k++)
+            {
+                deltas[i, k] *= 60;
+                divided[i, k] = deltas[i, k] / weights[k];
+            }
+
+        Compare("RefineBoxes weighted", RefRefineBoxes(boxes, divided, imageWidth, imageHeight),
+            CascadeRCNN<double>.RefineBoxes(boxes, deltas, imageWidth, imageHeight, weights), 1e-12);
+        AssertNoFailures();
+
+        Assert.Throws<ArgumentException>(() =>
+            CascadeRCNN<double>.RefineBoxes(boxes, deltas, imageWidth, imageHeight, new[] { 10.0, 10.0, 5.0 }));
+    }
+
     // Verbatim copy of DBNet.ApplyDifferentiableBinarization before the rewrite.
     private static Tensor<double> RefDbBinarization(Tensor<double> prob, Tensor<double> thresh, double k)
     {
