@@ -96,8 +96,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException($"Groups ({groups}) must divide the input ({inChannels}) and output ({outChannels}) channels.", nameof(groups));
         if (kernelSize <= 0 || stride <= 0 || dilation <= 0 || padding < 0)
             throw new ArgumentOutOfRangeException(nameof(kernelSize));
-        if (transposed && (dilation != 1 || (groups != 1 && (groups != inChannels || groups != outChannels))))
-            throw new ArgumentException("A transposed convolution here has dilation 1 and one group, or is depthwise (groups = channels).", nameof(transposed));
+        if (transposed && (dilation != 1 || (groups != 1 && groups != outChannels)))
+            throw new ArgumentException("A transposed convolution here has dilation 1 and either one group or one output channel per group (depthwise when the input has as many channels).", nameof(transposed));
         _in = inChannels;
         _out = outChannels;
         _kernel = kernelSize;
@@ -322,8 +322,12 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> y;
         if (_transposed && _groups > 1)
         {
+            // One output channel per group: each input channel's own transposed convolution, summed over its group.
             var depthwise = DepthwiseTransposed(input, kernel);
-            y = Engine.Reshape(depthwise, new[] { batch, _out, 1, depthwise.Shape[2] });
+            int length = depthwise.Shape[2], inPer = _in / _groups;
+            if (inPer > 1)
+                depthwise = Engine.ReduceSum(Engine.Reshape(depthwise, new[] { batch, _out, inPer, length }), new[] { 2 }, keepDims: false);
+            y = Engine.Reshape(depthwise, new[] { batch, _out, 1, length });
         }
         else if (_transposed)
         {
@@ -350,8 +354,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// A depthwise transposed convolution (PyTorch's <c>ConvTranspose1d(C, C, k, stride, padding, output_padding,
-    /// groups=C)</c>): the input zero-stuffed by the stride, padded by <c>k − 1 − padding</c> on the left and that plus the
+    /// Each input channel's transposed convolution with its own kernel (PyTorch's <c>ConvTranspose1d(C, C, k, stride,
+    /// padding, output_padding, groups=C)</c>, <c>[batch, in, time']</c>): the input zero-stuffed by the stride, padded by <c>k − 1 − padding</c> on the left and that plus the
     /// output padding on the right, convolved per channel with the flipped kernel.
     /// </summary>
     private Tensor<T> DepthwiseTransposed(Tensor<T> input, Tensor<T> kernel)

@@ -253,7 +253,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>",
             "AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T>",
             "AiDotNet.TextToSpeech.Latest.IndexTTS2<T>",
-            "AiDotNet.TextToSpeech.Latest.KaniTTS<T>",
             "AiDotNet.TextToSpeech.Latest.KaniTTS2<T>",
             "AiDotNet.TextToSpeech.Latest.MegaTTS3<T>",
             "AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>",
