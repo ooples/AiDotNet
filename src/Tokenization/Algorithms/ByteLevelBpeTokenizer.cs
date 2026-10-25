@@ -14,7 +14,7 @@ namespace AiDotNet.Tokenization.Algorithms
     /// Llama 3 and Qwen use): added tokens split out first (leftmost-longest, unnormalized), then the optional NFC
     /// normalizer, the <c>Split</c> pre-tokenizer's regular expression (isolated pieces) or ByteLevel's own, the GPT-2
     /// byte alphabet, and BPE by merge rank (with <c>ignore_merges</c>, a piece that is itself in the vocabulary is
-    /// kept whole).
+    /// kept whole); with special tokens, the <c>TemplateProcessing</c> post-processor's single-sequence template.
     /// </summary>
     internal sealed class ByteLevelBpeTokenizer
     {
@@ -32,10 +32,15 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly Dictionary<byte, char> _byteToChar = BpeTokenizer.BuildByteToUnicode();
         private readonly Dictionary<char, byte> _charToByte;
         private readonly ConcurrentDictionary<string, int[]> _cache = new(StringComparer.Ordinal);
+        private readonly int[] _templatePrefix;
+        private readonly int[] _templateSuffix;
 
         public ByteLevelBpeTokenizer(Dictionary<string, int> vocabulary, Dictionary<string, int> merges,
-            IEnumerable<(string Content, int Id, bool Special)> addedTokens, string? splitPattern, bool nfc, bool ignoreMerges)
+            IEnumerable<(string Content, int Id, bool Special)> addedTokens, string? splitPattern, bool nfc, bool ignoreMerges,
+            int[]? templatePrefix = null, int[]? templateSuffix = null)
         {
+            _templatePrefix = templatePrefix ?? Array.Empty<int>();
+            _templateSuffix = templateSuffix ?? Array.Empty<int>();
             _vocabulary = vocabulary ?? throw new ArgumentNullException(nameof(vocabulary));
             _merges = merges ?? throw new ArgumentNullException(nameof(merges));
             foreach (var pair in vocabulary) _tokens[pair.Value] = pair.Key;
@@ -85,19 +90,20 @@ namespace AiDotNet.Tokenization.Algorithms
                 rank++;
             }
             bool ignoreMerges = (bool?)model["ignore_merges"] ?? false;
-            var added = new List<(string, int, bool)>();
-            foreach (var token in (JArray?)root["added_tokens"] ?? new JArray())
-            {
-                if ((bool?)token["normalized"] == true || (bool?)token["lstrip"] == true || (bool?)token["rstrip"] == true || (bool?)token["single_word"] == true)
-                    throw new NotSupportedException($"Added token '{(string?)token["content"]}' uses normalization or stripping, which this reader does not support.");
-                added.Add(((string)token["content"]!, (int)token["id"]!, (bool?)token["special"] ?? false));
-            }
             bool nfc = false;
             var normalizer = root["normalizer"];
             if (normalizer is JObject n)
             {
                 if ((string?)n["type"] == "NFC") nfc = true;
                 else throw new NotSupportedException($"Normalizer {(string?)n["type"]} is not supported.");
+            }
+            var added = new List<(string, int, bool)>();
+            foreach (var token in (JArray?)root["added_tokens"] ?? new JArray())
+            {
+                // A normalized added token is matched in the normalized text, which is the text itself without a normalizer.
+                if (((bool?)token["normalized"] == true && nfc) || (bool?)token["lstrip"] == true || (bool?)token["rstrip"] == true || (bool?)token["single_word"] == true)
+                    throw new NotSupportedException($"Added token '{(string?)token["content"]}' uses normalization or stripping, which this reader does not support.");
+                added.Add(((string)token["content"]!, (int)token["id"]!, (bool?)token["special"] ?? false));
             }
             string? pattern = null;
             var pre = root["pre_tokenizer"] as JObject;
@@ -119,7 +125,36 @@ namespace AiDotNet.Tokenization.Algorithms
                         throw new NotSupportedException($"Pre-tokenizer {(string?)step["type"]} is not supported.");
                 }
             }
-            return new ByteLevelBpeTokenizer(vocabulary, merges, added, pattern, nfc, ignoreMerges);
+            // The post-processor: ByteLevel (offsets only) and TemplateProcessing's single-sequence template.
+            var prefix = new List<int>();
+            var suffix = new List<int>();
+            var post = root["post_processor"] as JObject;
+            var processors = (string?)post?["type"] == "Sequence" ? ((JArray)post!["processors"]!).OfType<JObject>().ToList() : post is null ? new List<JObject>() : new List<JObject> { post };
+            foreach (var processor in processors)
+            {
+                switch ((string?)processor["type"])
+                {
+                    case "ByteLevel":
+                        break;
+                    case "TemplateProcessing":
+                        bool sequenceSeen = false;
+                        foreach (var item in (JArray)processor["single"]!)
+                        {
+                            if (item["Sequence"] is not null)
+                            {
+                                sequenceSeen = true;
+                                continue;
+                            }
+                            string id = (string?)item["SpecialToken"]?["id"] ?? throw new NotSupportedException("Unknown template item.");
+                            var ids = ((JArray)processor["special_tokens"]![id]!["ids"]!).Select(v => (int)v).ToArray();
+                            (sequenceSeen ? suffix : prefix).AddRange(ids);
+                        }
+                        break;
+                    default:
+                        throw new NotSupportedException($"Post-processor {(string?)processor["type"]} is not supported.");
+                }
+            }
+            return new ByteLevelBpeTokenizer(vocabulary, merges, added, pattern, nfc, ignoreMerges, prefix.ToArray(), suffix.ToArray());
         }
 
         /// <summary>The largest token id plus one.</summary>
@@ -130,6 +165,10 @@ namespace AiDotNet.Tokenization.Algorithms
             _added.TryGetValue(token, out int id) ? id
             : _vocabulary.TryGetValue(token, out id) ? id
             : throw new KeyNotFoundException($"'{token}' is not a token.");
+
+        /// <summary>The ids of <paramref name="text"/> with the post-processor's special tokens
+        /// (<c>encode(text, add_special_tokens=True)</c>): the template's tokens around the text's.</summary>
+        public int[] EncodeWithSpecialTokens(string text) => _templatePrefix.Concat(Encode(text)).Concat(_templateSuffix).ToArray();
 
         /// <summary>The ids of <paramref name="text"/> without the post-processor's special tokens
         /// (<c>encode(text, add_special_tokens=False)</c>).</summary>
