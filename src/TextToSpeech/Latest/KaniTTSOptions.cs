@@ -78,6 +78,15 @@ public class KaniTTSOptions : TtsModelOptions
         TrainingSteps = other.TrainingSteps;
         GradientAccumulationSteps = other.GradientAccumulationSteps;
         RemoveRepeatedFrames = other.RemoveRepeatedFrames;
+        FrameLevelPositions = other.FrameLevelPositions;
+        AudioStep = other.AudioStep;
+        LearnableRope = other.LearnableRope;
+        RopeAlphaMin = other.RopeAlphaMin;
+        RopeAlphaMax = other.RopeAlphaMax;
+        RopeAlphaLearningRateRatio = other.RopeAlphaLearningRateRatio;
+        SpeakerEmbeddingDim = other.SpeakerEmbeddingDim;
+        WarmupSteps = other.WarmupSteps;
+        ReleaseSpeakerCachePosition = other.ReleaseSpeakerCachePosition;
         SamplingSeed = other.SamplingSeed;
     }
 
@@ -225,6 +234,41 @@ public class KaniTTSOptions : TtsModelOptions
     /// <summary>Whether a training recording's consecutive identical frames are kept once (the release's
     /// <c>remove_consecutive_duplicates</c>, on).</summary>
     public bool RemoveRepeatedFrames { get; set; } = true;
+
+    /// <summary>KaniTTS 2's frame-level positions: the four tokens of an audio frame share one rotary position, each
+    /// frame <see cref="AudioStep"/> after the last (off for Kani 1).</summary>
+    public bool FrameLevelPositions { get; set; }
+
+    /// <summary>How far each audio frame's position advances (<c>audio_step</c>, 1).</summary>
+    public double AudioStep { get; set; } = 1.0;
+
+    /// <summary>KaniTTS 2's learnable rotary scale per attention layer (off for Kani 1).</summary>
+    public bool LearnableRope { get; set; }
+
+    /// <summary>The learnable rotary scale's least value (<c>alpha_min</c>, 0.1).</summary>
+    public double RopeAlphaMin { get; set; } = 0.1;
+
+    /// <summary>The learnable rotary scale's greatest value (<c>alpha_max</c>, 2).</summary>
+    public double RopeAlphaMax { get; set; } = 2.0;
+
+    /// <summary>The learnable rotary scales' learning rate as a multiple of <see cref="ModelOptions"/>'s
+    /// (<c>alpha_lr_ratio</c>, 1.5), with no weight decay.</summary>
+    public double RopeAlphaLearningRateRatio { get; set; } = 1.5;
+
+    /// <summary>KaniTTS 2's speaker embedding width (128), projected and inserted after the first token; 0 for none
+    /// (Kani 1).</summary>
+    public int SpeakerEmbeddingDim { get; set; }
+
+    /// <summary>
+    /// Whether generation with a speaker embedding keeps the release's cache position (on): KaniTTS2ForCausalLM inserts
+    /// the speaker after the first token, but transformers' generate() keeps counting cache positions without it, so from
+    /// the second step on the causal mask it builds hides each new token from its own key. Off attends as the training
+    /// forward does.
+    /// </summary>
+    public bool ReleaseSpeakerCachePosition { get; set; } = true;
+
+    /// <summary>Linear warm-up steps (KaniTTS 2's 2000); 0 to warm up over <see cref="WarmupRatio"/> of the steps.</summary>
+    public int WarmupSteps { get; set; }
 
     /// <summary>Seed of sampling and of LoRA's dropout.</summary>
     public int SamplingSeed { get; set; }

@@ -212,7 +212,14 @@ internal sealed class LlamaNetwork<T>
 
     // A value holder's parameter [1, N], read directly (the gradient tape records it as the layer's own forward does)
     // rather than as a product with a one, which copies the whole token table on every call.
-    private static Tensor<T> Value(BiasFreeLinearLayer<T> holder) => holder.Weights;
+    private static Tensor<T> Value(BiasFreeLinearLayer<T> holder) => Paged(holder.Weights);
+
+    // A streamed weight has its shape but no storage until paged in; compute ops page it in, view ops do not.
+    internal static Tensor<T> Paged(Tensor<T> weight)
+    {
+        if (weight.Lifetime == WeightLifetime.Streaming) WeightRegistry.Materialize(weight);
+        return weight;
+    }
 
     private Tensor<T> Rows(LayerBase<T> layer, Tensor<T> x)
     {
