@@ -1688,7 +1688,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // the 16 GB runner while its training tests were executing. Precision is the first,
         // architecture-preserving mitigation: production paper defaults and all user options remain
         // unchanged, while the generated invariant fixtures run with half-width values and activations.
-        "CIFEncoder", "BasicVSR", "OuteTTS",
+        "CIFEncoder", "BasicVSR",
         // The generated fixtures below all exhausted the runner at paper scale. Precision was applied
         // first; Dia's exact failing test still timed out locally at 120 s in <float>, while A-C and
         // J-M reached 50-166 MB available memory before runner shutdown. Their generated constructors
@@ -10379,20 +10379,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1))";
             }
-            else if (model.ClassName == "OuteTTS" && model.TypeParameterCount == 1)
+            else if (model.ClassName == "OuteTTS" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.Latest.", System.StringComparison.Ordinal))
             {
-                // OuteTTS defaults to a 1024-wide, 12-layer codec LM with a 4096-token acoustic head.
-                // Float was applied first, but the full generated fixture still consumed several GB and
-                // did not complete. Build the same embedding -> text transformer -> codec-LM transformer
-                // -> token-head structure at CI scale only. Production defaults and user options are
-                // untouched; NumHeads=2 divides both 32-wide stages.
+                // OuteTTS 1.0 is a 1B (or 0.6B) language model, DAC speech v1.0 and Whisper large-v3-turbo for speaker
+                // profiles; keep each at a tiny width: the Qwen3 backbone (its tokenizer is built in) at width 16 with one
+                // layer, a DAC of widths 2-16 that still hops 320 samples (75 frames a second, which the release's
+                // speaker profiles assume), a one-layer 16-wide Whisper and one transcription temperature. An untrained
+                // model's tokens are near-uniform over its 157,760, of which 2 x 1025 are codes; a synthesis needs a code
+                // of each codebook, so generation runs to 600 tokens (about four of each expected).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.Latest.OuteTTSOptions { TextEncoderDim = 32, LLMDim = 32, " +
-                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 1, " +
-                    "CodebookSize = 16, DropoutRate = 0.0 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.Latest.OuteTTSOptions { Backbone = AiDotNet.TextToSpeech.Latest.OuteTTSBackbone.Qwen3_0_6B, " +
+                    "VocabSize = 157760, HiddenDim = 16, Layers = 1, Heads = 2, KeyValueHeads = 1, HeadDim = 8, Intermediate = 32, RmsEpsilon = 1e-6, " +
+                    "RopeTheta = 1000000, RopeScalingFactor = 0, QueryKeyNorm = true, MaxLength = 600, " +
+                    "CodecEncoderDim = 2, CodecEncoderRates = [4, 8, 10], CodecLatentDim = 16, CodecDecoderDim = 8, CodecDecoderRates = [10, 8, 4], " +
+                    "CodecCodebookDim = 4, AlignerMels = 80, AlignerWidth = 16, AlignerHeads = 2, AlignerEncoderLayers = 1, AlignerDecoderLayers = 1, " +
+                    "AlignerTemperatures = [0.0] })";
             }
             else if (model.ClassName == "SpiritLM" && model.TypeParameterCount == 1)
             {
@@ -16285,6 +16290,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "OuteTTS")
+                {
+                    // OuteTTS reads a text's token ids and trains on a recording: eight ids, and 4800 samples (0.2 s at
+                    // 24 kHz, 15 codec frames). An untrained language model writes few codes, and its sampled length varies
+                    // with the text, so the text-sensitivity probes compare the deterministic training objective.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 4800 };");
+                    // OuteTTS trains at TRL SFTTrainer's AdamW 2e-5 (the release names no recipe): fifteen steps lower the
+                    // tiny model's completion loss from 11.968797 to 11.961940, a steady descent of 5.7e-4 of itself, nearly
+                    // six times the threshold below but far from 1%.
+                    sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.9999;");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                        ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "EmotiVoice")
                 {
                     // EmotiVoice reads phoneme ids and trains on the recording (its mel spectrogram for the aligner, a segment
@@ -16385,8 +16410,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
-                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice")
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
                         // random choice of soft or hard alignment, so its training loss is one draw too.
@@ -21804,7 +21829,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "UniAudio" or "Zonos" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
-            or "IndexTTS" or "IndexTTS2" or "OuteTTS"
+            or "IndexTTS" or "IndexTTS2"
             or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
             or "SpeechGPT" or "SpiritLM"
             or "Amphion" or "Dia" or "GLM4Voice" or "WhisperSpeech"
@@ -21826,7 +21851,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VALLEXClone" => 16,
             "IndexTTS" => 16,
             "IndexTTS2" => 80,
-            "OuteTTS" => 16,
             "KaniTTS" => 16,
             "KaniTTS2" => 16,
             "SeedTTS" => 16,
@@ -21870,7 +21894,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return IsValleCodecLMModel(className)
             || className is "Bark" or "BarkModel"
-            || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2" or "OuteTTS"
+            || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2"
                 or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM" or "Zonos"
                 or "Llasa" or "MegaTTS3" ? 64 : 256;

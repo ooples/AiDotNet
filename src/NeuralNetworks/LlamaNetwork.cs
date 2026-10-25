@@ -205,12 +205,14 @@ internal sealed class LlamaNetwork<T>
         var table = _engine.Reshape(Value(Embeddings!), new[] { c.VocabSize, c.Hidden });
         var shape = hidden.Shape.ToArray();
         int rows = hidden.Length / c.Hidden;
-        var logits = _engine.TensorMatMul(_engine.Reshape(hidden, new[] { rows, c.Hidden }), _engine.TensorTranspose(table));
+        var logits = _engine.TensorMatMulTransposed(_engine.Reshape(hidden, new[] { rows, c.Hidden }), table);
         shape[^1] = c.VocabSize;
         return _engine.Reshape(logits, shape);
     }
 
-    private Tensor<T> Value(BiasFreeLinearLayer<T> holder) => holder.Forward(new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.One })));
+    // A value holder's parameter [1, N], read directly (the gradient tape records it as the layer's own forward does)
+    // rather than as a product with a one, which copies the whole token table on every call.
+    private static Tensor<T> Value(BiasFreeLinearLayer<T> holder) => holder.Weights;
 
     private Tensor<T> Rows(LayerBase<T> layer, Tensor<T> x)
     {
