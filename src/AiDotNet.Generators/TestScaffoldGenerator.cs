@@ -1956,7 +1956,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // EVACLIP and KaniTTS remained over budget in exact local measurements, while SeedTTSClone uses
         // the same measured-insufficient codec stack as Kani; their generated factories therefore use
         // public-options smoke scale below. Production paper defaults and customization remain unchanged.
-        "BiomedParse", "DKM", "EVACLIP", "KaniTTS2", "SeedTTSClone", "VoxtLM",
+        "BiomedParse", "DKM", "EVACLIP", "SeedTTSClone", "VoxtLM",
         // The completed N-P shard added two resource-heavy failures. OWLv2's paper-scale ViT-L
         // memorization probe showed a first-step warm-up rise while repeatedly driving available
         // memory below 1 GB. NemotronSpeech's first 24-layer encoder + 32-layer LLM forward consumed
@@ -11122,28 +11122,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // speech span (tools/reference-data/kanitts_speaking_fixture.py). Greedy, and one sample per step.
                 constructorExpr = "AiDotNet.Tests.TextToSpeech.KaniTTSFixture.Create<double>()";
             }
-            else if (model.ClassName == "KaniTTS2"
-                     && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.TextToSpeech.Latest.", System.StringComparison.Ordinal))
+            else if (model.ClassName == "KaniTTS2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.Latest.", System.StringComparison.Ordinal))
             {
-                // Both Kani releases use the same paper-scale codec LM (256-wide text encoder,
-                // 1024-wide 12-layer decoder, 8x1024 codec head). KaniTTS<float> was measured first
-                // with the audio iteration caps and still exceeded 120 seconds in the exact
-                // post-training comparison. Exercise the identical embedding -> text transformer ->
-                // codec transformer -> logits architecture at test scale through its public options.
-                // KaniTTS2 shares that implementation and defaults, so keeping both fixtures aligned
-                // prevents the same resource failure from simply moving to the next class in J-M.
-                pinInitSeed = true;
-                string kaniOptionsType = "KaniTTS2Options";
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    $"new AiDotNet.TextToSpeech.Latest.{kaniOptionsType} {{ TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
-                    "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                // KaniTTS 2 is KaniTTS's LFM2 and NanoCodec with frame-level positions, learnable rotary scales and a
+                // WavLM-Large speaker embedder. As for KaniTTS, an untrained model writes no speech span, so the fixture is
+                // the same tiny configuration in Kani 2's form with a language model trained to speak
+                // (tools/reference-data/kanitts2_speaking_fixture.py). Greedy, and one sample per step.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.KaniTTSFixture.Create2<double>()";
             }
             else if (model.ClassName == "SeedTTSClone" && model.TypeParameterCount == 1)
             {
@@ -16301,7 +16287,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
-                else if (model.ClassName == "KaniTTS")
+                else if (model.ClassName is "KaniTTS" or "KaniTTS2")
                 {
                     // KaniTTS reads a text's token ids and trains on a 22.05 kHz recording: eight ids, and 60 samples (ten
                     // frames of the fixture's 6-sample codec). The fixture's language model answers every prompt with the same
@@ -16310,8 +16296,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 60 };");
                     // KaniTTS fine-tunes rank-stabilized LoRA adapters at the release's AdamW 5e-5: fifteen steps lower the
                     // fixture's loss from 9.499775 to 9.475180, a steady descent of 0.26% of itself, more than twice the
-                    // threshold below but under 1%.
-                    sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.999;");
+                    // threshold below but under 1%. KaniTTS 2 trains every weight at 9e-4 and keeps the 1% bar.
+                    if (model.ClassName == "KaniTTS")
+                        sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.999;");
                     AppendObjectiveSensitivityProbes(sb, new[]
                     {
                         ("DifferentText_DifferentAudio", false, "constant"),
@@ -16460,8 +16447,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "OrpheusTTS" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
-                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS")
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
                         // random choice of soft or hard alignment, so its training loss is one draw too.
@@ -21880,7 +21867,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "IndexTTS" or "IndexTTS2"
-            or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
+            or "SeedTTS" or "SeedTTSClone"
             or "SpeechGPT" or "SpiritLM"
             or "Amphion" or "Dia" or "GLM4Voice" or "WhisperSpeech"
             // SparkTTS exposes the same discrete codec-token contract.
@@ -21901,7 +21888,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VALLEXClone" => 16,
             "IndexTTS" => 16,
             "IndexTTS2" => 80,
-            "KaniTTS2" => 16,
             "SeedTTS" => 16,
             "SeedTTSClone" => 16,
             "SpeechGPT" => 16,
@@ -21943,7 +21929,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return IsValleCodecLMModel(className)
             || className is "Bark" or "BarkModel"
             || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2"
-                or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
+                or "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM" or "Zonos"
                 or "Llasa" or "MegaTTS3" ? 64 : 256;
     }
