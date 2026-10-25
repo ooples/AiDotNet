@@ -18,6 +18,12 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// so the model's seed cannot reach a layer that draws its weights in its constructor. MambaBlock and RWKV7Block
 /// did exactly that; they now draw on first use, and the model seeds caller-built layers at construction, so equal
 /// model seeds reproduce the stack's initial weights.
+///
+/// <para>
+/// The same shape reaches any layer that fixes its STREAM in its constructor, even one whose weights are
+/// allocated lazily: T5RelativeBiasAttentionLayer keeps Q/K/V/O as [0, 0] placeholders but draws its bias table
+/// up front, so the stream the projections later continue was opened before any seed existed.
+/// </para>
 /// </summary>
 public class CallerBuiltLayerSeedingTests
 {
@@ -65,6 +71,40 @@ public class CallerBuiltLayerSeedingTests
         var model = new SuppliedStack(architecture);
         model.MaterializeParameters();
         return model.GetParameters().ToArray();
+    }
+
+    private static double[] InitialT5Weights(int seed)
+    {
+        // Built by the caller before any model or seed exists, exactly as the SSM stack above is.
+        var layers = new List<ILayer<double>>
+        {
+            new T5RelativeBiasAttentionLayer<double>(hiddenSize: Width, numHeads: 2),
+        };
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.SequenceToSequence,
+            inputHeight: 1, inputWidth: Width, outputSize: Width, layers: layers)
+        {
+            RandomSeed = seed,
+        };
+
+        var model = new SuppliedStack(architecture);
+        model.MaterializeParameters();
+        return model.GetParameters().ToArray();
+    }
+
+    [Fact]
+    public void EqualModelSeeds_GiveEqualInitialWeights_ForACallerBuiltT5Stack()
+    {
+        var first = InitialT5Weights(2290);
+
+        Assert.NotEmpty(first);
+        Assert.Equal(first, InitialT5Weights(2290));
+    }
+
+    [Fact]
+    public void DifferentModelSeeds_GiveDifferentInitialWeights_ForACallerBuiltT5Stack()
+    {
+        Assert.NotEqual(InitialT5Weights(2290), InitialT5Weights(2291));
     }
 
     [Fact]

@@ -85,7 +85,10 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     private readonly int _maxDistance;
     private readonly bool _bidirectional;
     private readonly bool _ownsBiasTable;
-    private readonly Random _rng;
+    // Not readonly: a caller who builds this layer into Architecture.Layers constructs it before the model
+    // exists, so the stream opened here came from a scope armed by whichever model was built last on the
+    // thread -- or, with no scope at all, from the SECURE fallback. OnRandomSeedAssigned restarts it.
+    private Random _rng;
 
     // T5 has NO biases on Q/K/V/O projections (Raffel 2020 §2.1).
     // Allocated on first use (EnsureWeightsAllocated): a conditioner now builds its whole stack at
@@ -287,6 +290,53 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
             // Registered with the projections in EnsureWeightsAllocated, so the registered order
             // stays Q, K, V, O, bias - the order the generated parameter surface declares.
         }
+
+        NoteConstructorInitialization();
+    }
+
+    [AiDotNet.Attributes.Scratch]
+    private bool _initializedWithoutSeed;
+
+    [AiDotNet.Attributes.Scratch]
+    private long _unseededInitFingerprint;
+
+    /// <summary>
+    /// Records a constructor initialisation that ran without a seed of this layer's own, so a seed assigned
+    /// later can redo it.
+    /// </summary>
+    private void NoteConstructorInitialization()
+    {
+        // A seed drawn from a construction scope an earlier model left armed was chosen by nobody; the model
+        // that adopts this layer replaces it, and that replacement must redo the draw like a first seed does.
+        if (RandomSeed.HasValue && !RandomSeedCameFromConstructionScope) return;
+        _initializedWithoutSeed = true;
+        _unseededInitFingerprint = ComputeParameterFingerprint(new[] { _relativeBiasTable });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The bias table is drawn in the constructor, which fixes this layer's stream there. Built by a caller into
+    /// an explicit <see cref="NeuralNetworkArchitecture{T}.Layers"/> list, that happens before the model exists,
+    /// so the stream came from a scope another model had armed, or from the secure fallback -- and the seed the
+    /// model wires on afterwards reached neither the table nor the Q/K/V/O projections that draw from the same
+    /// stream later. Two models with the same seed got different weights. The stream is restarted from the seed
+    /// here and the table redrawn into its existing tensor, so the projections allocated later continue the
+    /// seeded stream in the same order as before (table, then Q, K, V, O). Weights that were trained, loaded or
+    /// set since construction are left alone, and so is an allocation that has already happened.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        if (!_initializedWithoutSeed) return;
+        _initializedWithoutSeed = false;
+        if (RandomSeed is not int assigned) return;
+        // A shared or external table is not ours to redraw, and once the projections exist the stream has
+        // already been consumed past the point a restart could reproduce.
+        if (!_ownsBiasTable || _projectionsAllocated) return;
+        if (ComputeParameterFingerprint(new[] { _relativeBiasTable }) != _unseededInitFingerprint) return;
+
+        _rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(assigned);
+        var redrawn = SampleNormalTensor(new[] { _numBuckets, _numHeads }, std: 1.0 / Math.Sqrt(_hiddenSize));
+        redrawn.AsSpan().CopyTo(_relativeBiasTable.AsWritableSpan());
     }
 
     /// <inheritdoc />
