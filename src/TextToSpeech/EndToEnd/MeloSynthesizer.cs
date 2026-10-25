@@ -12,7 +12,8 @@ internal sealed record MeloConfiguration(
     int HiddenChannels = 192, int FilterChannels = 768, int Heads = 2, int Layers = 6, int KernelSize = 3, double Dropout = 0.1,
     int[]? ResblockKernels = null, int[][]? ResblockDilations = null, int[]? UpsampleRates = null, int UpsampleInitialChannels = 512,
     int[]? UpsampleKernels = null, int Speakers = 256, int SpeakerChannels = 256, int FlowCouplings = 4, int FlowLayers = 3,
-    double DurationDropout = 0.5, double MasNoiseInitial = 0.01, double MasNoiseDecay = 2e-6)
+    double DurationDropout = 0.5, double MasNoiseInitial = 0.01, double MasNoiseDecay = 2e-6, int BertChannels = 1024,
+    int JaBertChannels = 768)
 {
     public int[] Kernels => ResblockKernels ?? new[] { 3, 7, 11 };
     public int[][] Dilations => ResblockDilations ?? new[] { new[] { 1, 3, 5 }, new[] { 1, 3, 5 }, new[] { 1, 3, 5 } };
@@ -43,7 +44,7 @@ internal sealed class MeloSynthesizer<T>
         Configuration = configuration;
         var c = configuration;
         TextEncoder = new MeloTextEncoder<T>(engine, layers, c.Vocabulary, c.Tones, c.Languages, c.InterChannels, c.HiddenChannels,
-            c.FilterChannels, c.Heads, c.Layers, c.KernelSize, c.Dropout, c.SpeakerChannels);
+            c.FilterChannels, c.Heads, c.Layers, c.KernelSize, c.Dropout, c.SpeakerChannels, c.BertChannels, c.JaBertChannels);
         Generator = new HiFiGanGenerator<T>(engine, c.InterChannels, c.UpsampleInitialChannels, c.Rates, c.UpKernels, c.Kernels, c.Dilations,
             resblockType1: true, conditionChannels: c.SpeakerChannels, plainEnds: true);
         layers.AddRange(Generator.Layers);
