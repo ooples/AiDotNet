@@ -896,9 +896,12 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
         return registered is ComponentCollectionParameterSource<T> collection && collection.ContainsCurrent(candidateCurrent)
             || registered is ComponentAccessorParameterSource<T> accessor
-               && accessor.Current is not null && ReferenceEquals((object)accessor.Current, candidateCurrent)
-            || candidate is ComponentAccessorParameterSource<T> && ReferenceEquals((object)candidateCurrent, registered);
+               && accessor.Current is not null && SameReference(accessor.Current, candidateCurrent)
+            || candidate is ComponentAccessorParameterSource<T> && SameReference(candidateCurrent, registered);
     }
+
+    // Identity through object-typed parameters, so the comparison is by reference for any source type.
+    private static bool SameReference(object? left, object? right) => ReferenceEquals(left, right);
 
     private static bool TryGetNetwork(
         IParameterSource<T>? source,
