@@ -27,7 +27,8 @@ public class ZlibDeflateTests
             var input = Convert.FromBase64String((string)c["input"]!);
             var expected = Convert.FromBase64String((string)c["output"]!);
             var actual = ZlibDeflate.Compress(input);
-            int first = Enumerable.Range(0, Math.Min(expected.Length, actual.Length)).FirstOrDefault(i => expected[i] != actual[i], -1);
+            // FirstOrDefault(predicate, default) is .NET 6+; net471 builds this test too.
+            int first = Enumerable.Range(0, Math.Min(expected.Length, actual.Length)).Where(i => expected[i] != actual[i]).Select(i => (int?)i).FirstOrDefault() ?? -1;
             Assert.True(expected.SequenceEqual(actual), $"case {index} ({input.Length} bytes): zlib {expected.Length} bytes, port {actual.Length}, first difference at {first}");
             index++;
         }
