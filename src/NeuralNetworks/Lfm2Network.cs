@@ -66,6 +66,20 @@ internal sealed record Lfm2Configuration
     /// <c>out_proj</c> (both the attention's and the convolution's), <c>in_proj</c>, <c>w1</c>, <c>w2</c>, <c>w3</c>.</summary>
     public string[] LoraTargets { get; init; } = { "q_proj", "w1", "w2" };
 
+    /// <summary>KaniTTS 2's learnable rotary scale: each attention layer multiplies its rotary frequencies by
+    /// <c>α = α_min + (α_max − α_min) · σ(w)</c> with its own trained <c>w</c> (starting at 0).</summary>
+    public bool LearnableRope { get; init; }
+
+    /// <summary>The learnable rotary scale's least value (0.1).</summary>
+    public double RopeAlphaMin { get; init; } = 0.1;
+
+    /// <summary>The learnable rotary scale's greatest value (2).</summary>
+    public double RopeAlphaMax { get; init; } = 2.0;
+
+    /// <summary>KaniTTS 2's speaker embedding width, projected to the model width (<c>speaker_emb_projection</c>,
+    /// no bias) and inserted after the first token; 0 for none.</summary>
+    public int SpeakerEmbeddingDim { get; init; }
+
     /// <summary>The width of one attention head.</summary>
     internal int HeadDim => Hidden / Heads;
 
@@ -132,6 +146,10 @@ internal sealed class Lfm2Network<T>
         /// <summary>The depthwise kernel <c>[Hidden, kernel]</c> (<c>conv.conv.weight [Hidden, 1, kernel]</c>).</summary>
         public BiasFreeLinearLayer<T>? ConvKernel { get; init; }
         public BiasFreeLinearLayer<T>? ConvKernelBias { get; init; }
+
+        /// <summary>The learnable rotary scale's parameter <c>w</c> (<c>alpha_weight</c>), null without
+        /// <see cref="Lfm2Configuration.LearnableRope"/>.</summary>
+        public BiasFreeLinearLayer<T>? RopeAlpha { get; init; }
     }
 
     public Lfm2Network(IEngine engine, List<LayerBase<T>> layers, Lfm2Configuration configuration)
@@ -183,9 +201,10 @@ internal sealed class Lfm2Network<T>
                 var output = Project("out_proj", c.Heads * hd, h, false);
                 var queryNorm = Values(hd);
                 var keyNorm = Values(hd);
+                var alpha = c.LearnableRope ? Values(1) : null;
                 layer = new Layer(true, operatorNorm, Values(h), Project("w1", h, ff, false), Project("w2", ff, h, false), Project("w3", h, ff, false))
                 {
-                    Query = query, Key = key, Value = value, Output = output, QueryNorm = queryNorm, KeyNorm = keyNorm,
+                    Query = query, Key = key, Value = value, Output = output, QueryNorm = queryNorm, KeyNorm = keyNorm, RopeAlpha = alpha,
                 };
             }
             else
@@ -203,6 +222,24 @@ internal sealed class Lfm2Network<T>
         }
         FinalNorm = Values(h);
         LmHead = c.TieWordEmbeddings ? null : Linear(h, c.VocabSize);
+        SpeakerProjection = c.SpeakerEmbeddingDim > 0 ? Linear(c.SpeakerEmbeddingDim, h) : null;
+    }
+
+    /// <summary>KaniTTS 2's speaker projection; null without <see cref="Lfm2Configuration.SpeakerEmbeddingDim"/>.</summary>
+    public BiasFreeLinearLayer<T>? SpeakerProjection { get; }
+
+    /// <summary>The token embeddings of ids <c>[B, L]</c> with each row's projected speaker embedding
+    /// (<paramref name="speakers"/> <c>[B, SpeakerEmbeddingDim]</c>) inserted after the first token: <c>[B, L + 1, Hidden]</c>.</summary>
+    public Tensor<T> EmbedWithSpeaker(int[,] ids, Tensor<T> speakers)
+    {
+        var projection = SpeakerProjection ?? throw new InvalidOperationException("This decoder has no speaker projection.");
+        int b = ids.GetLength(0), l = ids.GetLength(1), h = Configuration.Hidden;
+        var tokens = Embed(ids);
+        var speaker = _engine.Reshape(projection.Forward(_engine.Reshape(speakers, new[] { b, Configuration.SpeakerEmbeddingDim })), new[] { b, 1, h });
+        var first = _engine.TensorSlice(tokens, new[] { 0, 0, 0 }, new[] { b, 1, h });
+        if (l == 1) return _engine.TensorConcatenate(new[] { first, speaker }, 1);
+        var rest = _engine.TensorSlice(tokens, new[] { 0, 1, 0 }, new[] { b, l - 1, h });
+        return _engine.TensorConcatenate(new[] { first, speaker, rest }, 1);
     }
 
     public Lfm2Configuration Configuration { get; }
@@ -239,7 +276,14 @@ internal sealed class Lfm2Network<T>
         .Where(p => p?.LoraA is not null).SelectMany(p => new[] { p!.LoraA!, p.LoraB! });
 
     // A value holder's parameter [1, N], read directly (the gradient tape records it as the layer's own forward does).
-    private static Tensor<T> Value(BiasFreeLinearLayer<T> holder) => holder.Weights;
+    private static Tensor<T> Value(BiasFreeLinearLayer<T> holder) => Paged(holder.Weights);
+
+    // A streamed weight has its shape but no storage until paged in; compute ops page it in, view ops do not.
+    internal static Tensor<T> Paged(Tensor<T> weight)
+    {
+        if (weight.Lifetime == WeightLifetime.Streaming) WeightRegistry.Materialize(weight);
+        return weight;
+    }
 
     private Tensor<T> Rows(LayerBase<T> layer, Tensor<T> x)
     {
@@ -308,19 +352,30 @@ internal sealed class Lfm2Network<T>
     /// position, or with <paramref name="lastLogitsOnly"/> only the last (<c>[B, 1, VocabSize]</c>), as generation reads
     /// them. The cache takes what these positions add.
     /// </summary>
-    public (Tensor<T> Hidden, Tensor<T> Logits) Forward(Tensor<T> embeddings, Lfm2Cache<T>? cache = null, bool lastLogitsOnly = false)
+    /// <param name="positions">The rotary positions of these positions (KaniTTS 2's frame-level positions, which may be
+    /// fractional); null for the cache's length onward.</param>
+    /// <param name="maskLag">How many of the latest keys the causal mask hides from each query (0: none). KaniTTS 2's
+    /// generation with a speaker embedding passes transformers a cache position one behind the cache, so its causal mask
+    /// hides each new token's own key.</param>
+    public (Tensor<T> Hidden, Tensor<T> Logits) Forward(Tensor<T> embeddings, Lfm2Cache<T>? cache = null, bool lastLogitsOnly = false,
+        IReadOnlyList<double>? positions = null, int maskLag = 0)
     {
         var c = Configuration;
         int b = embeddings.Shape[0], l = embeddings.Shape[1], hd = c.HeadDim, half = hd / 2;
         int past = cache?.Length ?? 0, total = past + l;
+        if (positions is not null && positions.Count != l) throw new ArgumentException($"Expected {l} positions.", nameof(positions));
+        double Position(int j) => positions?[j] ?? past + j;
 
         // Rotary tables per position: cos and sin of position times the inverse frequencies, repeated for both halves.
         var cos = new Tensor<T>(new[] { 1, 1, l, hd });
         var sin = new Tensor<T>(new[] { 1, 1, l, hd });
+        // Position times inverse frequency [L, half], for the learnable scale.
+        var angles = new Tensor<T>(new[] { l, half });
         for (int j = 0; j < l; j++)
             for (int k = 0; k < half; k++)
             {
-                double angle = (past + j) * (1.0 / Math.Pow(c.RopeTheta, 2.0 * k / hd));
+                double angle = Position(j) * (1.0 / Math.Pow(c.RopeTheta, 2.0 * k / hd));
+                angles[j, k] = NumOps.FromDouble(angle);
                 cos[0, 0, j, k] = cos[0, 0, j, k + half] = NumOps.FromDouble(Math.Cos(angle));
                 sin[0, 0, j, k] = sin[0, 0, j, k + half] = NumOps.FromDouble(Math.Sin(angle));
             }
@@ -328,7 +383,7 @@ internal sealed class Lfm2Network<T>
         var bias = new Tensor<T>(new[] { 1, 1, l, total });
         var blocked = NumOps.FromDouble(typeof(T) == typeof(float) ? float.MinValue : double.MinValue);
         for (int q = 0; q < l; q++)
-            for (int k = past + q + 1; k < total; k++) bias[0, 0, q, k] = blocked;
+            for (int k = Math.Max(0, past + q + 1 - maskLag); k < total; k++) bias[0, 0, q, k] = blocked;
 
         if (cache is not null)
         {
@@ -340,7 +395,14 @@ internal sealed class Lfm2Network<T>
         {
             var layer = Layers[i];
             var normed = RmsNorm(layer.OperatorNorm, x);
-            var mixed = layer.IsAttention ? Attend(layer, normed, cos, sin, bias, cache, i) : Convolve(layer, normed, cache, i);
+            Tensor<T> mixed;
+            if (!layer.IsAttention) mixed = Convolve(layer, normed, cache, i);
+            else if (layer.RopeAlpha is null) mixed = Attend(layer, normed, cos, sin, bias, cache, i);
+            else
+            {
+                var (scaledCos, scaledSin) = ScaledRotary(layer.RopeAlpha, angles);
+                mixed = Attend(layer, normed, scaledCos, scaledSin, bias, cache, i);
+            }
             x = _engine.TensorAdd(mixed, x);
             var post = RmsNorm(layer.FeedForwardNorm, x);
             var gated = _engine.TensorMultiply(_engine.Swish(Apply(layer.W1, post)), Apply(layer.W3, post));
@@ -350,6 +412,18 @@ internal sealed class Lfm2Network<T>
         var hidden = RmsNorm(FinalNorm, x);
         var read = lastLogitsOnly ? _engine.TensorSlice(hidden, new[] { 0, l - 1, 0 }, new[] { b, 1, c.Hidden }) : hidden;
         return (hidden, Head(read));
+    }
+
+    // The learnable rotary scale (LearnableRotaryEmbedding): the angles times α = α_min + (α_max − α_min) σ(w), on the tape.
+    private (Tensor<T> Cos, Tensor<T> Sin) ScaledRotary(BiasFreeLinearLayer<T> alphaWeight, Tensor<T> angles)
+    {
+        var c = Configuration;
+        int l = angles.Shape[0], half = angles.Shape[1];
+        var alpha = _engine.TensorAddScalar(_engine.TensorMultiplyScalar(_engine.Sigmoid(Value(alphaWeight)), NumOps.FromDouble(c.RopeAlphaMax - c.RopeAlphaMin)),
+            NumOps.FromDouble(c.RopeAlphaMin));
+        var scaled = _engine.TensorMultiply(angles, _engine.TensorBroadcastTo(_engine.Reshape(alpha, new[] { 1, 1 }), new[] { l, half }));
+        var both = _engine.TensorConcatenate(new[] { scaled, scaled }, 1);
+        return (_engine.Reshape(_engine.TensorCos(both), new[] { 1, 1, l, 2 * half }), _engine.Reshape(_engine.TensorSin(both), new[] { 1, 1, l, 2 * half }));
     }
 
     private Tensor<T> Rotate(Tensor<T> x, Tensor<T> cos, Tensor<T> sin)
@@ -471,6 +545,7 @@ internal sealed class Lfm2Network<T>
                 Project(layer.Output!, $"{n}.self_attn.out_proj", c.Heads * hd, h);
                 Vector(layer.QueryNorm!, $"{n}.self_attn.q_layernorm.weight", new[] { hd });
                 Vector(layer.KeyNorm!, $"{n}.self_attn.k_layernorm.weight", new[] { hd });
+                if (layer.RopeAlpha is not null) Vector(layer.RopeAlpha, $"model.learnable_rope_layers.{i}.alpha_weight", new[] { 1 });
             }
             else
             {
@@ -484,6 +559,8 @@ internal sealed class Lfm2Network<T>
             Project(layer.W3, $"{n}.feed_forward.w3", h, ff);
         }
         Vector(FinalNorm, "model.embedding_norm.weight", new[] { h });
+        if (SpeakerProjection is not null)
+            TorchParameters.Linear(SpeakerProjection, c.SpeakerEmbeddingDim, h, read("model.speaker_emb_projection.weight", new[] { h, c.SpeakerEmbeddingDim }));
         if (LmHead is not null) TorchParameters.Linear(LmHead, h, c.VocabSize, read("lm_head.weight", new[] { c.VocabSize, h }));
     }
 
@@ -500,7 +577,9 @@ internal sealed class Lfm2Network<T>
         {
             int count = shape.Aggregate(1, (a, s) => a * s);
             var values = new double[count];
-            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal) || name.EndsWith(".bias", StringComparison.Ordinal)) return values;
+            // lora_B, biases and the learnable rotary scale's w (σ(0) puts α midway) start at zero.
+            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal) || name.EndsWith(".bias", StringComparison.Ordinal)
+                || name.EndsWith("alpha_weight", StringComparison.Ordinal)) return values;
             if (name.EndsWith("lora_A.weight", StringComparison.Ordinal))
             {
                 double bound = 1.0 / Math.Sqrt(shape[^1]);

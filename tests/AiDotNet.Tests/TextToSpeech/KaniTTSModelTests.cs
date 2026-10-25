@@ -108,7 +108,7 @@ public class KaniTTSModelTests
         var ids = model.ExampleIds((string)f["text"]!, (string)f["speaker"]!, codes);
         Assert.Equal(Ints(f["training_ids"]!), ids);
         double loss;
-        using (new NoGradScope<double>()) loss = model.Loss(new[] { (ids, ids) })[0];
+        using (new NoGradScope<double>()) loss = model.Loss(new[] { new KaniTTSBase<double>.KaniExample(ids, ids, null) })[0];
         double reference = (double)f["loss"]!;
         Assert.True(Math.Abs(reference - loss) <= 1e-10 * Math.Abs(reference), $"loss {reference:R} vs {loss:R}");
     }
