@@ -244,7 +244,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1, gin, plainEnds: true,
             initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
         _acousticComponents.AddRange(_decoder.Layers);
-        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 1, true, o.DiscriminatorWidthDivisor, spectralFirstScale: false);
+        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 1, true, o.DiscriminatorWidthDivisor, spectralFirstScale: false, vitsScale: true);
         _spectrogram = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, Hop, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);
         _durationComponents.AddRange(CreateDurationModel(width, gin, LanguageChannels));
 

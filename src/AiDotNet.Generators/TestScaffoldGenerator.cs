@@ -6249,24 +6249,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "MeloTTS" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.EndToEnd.", System.StringComparison.Ordinal))
             {
-                // Shard M MedS-Meta. MeloTTS is already <float> (TTSModelTestBase<float>) and its family
-                // branch already caps MoreData (3/10), yet LossStrictlyDecreasesOnMemorizationTask still
-                // overran the 180 s gate — so per float -> cap -> shrink, the shrink is what is left.
-                // Its emitted fixture is ALREADY tiny (InputShape {8, 80}), so the cost is internal, not
-                // in the probe: MeloTTS builds the full VITS stack via CreateDefaultVITSLayers, and
-                // NumFlowSteps dominates it (each normalizing-flow step is a full coupling pass).
-                // Only properties verified to exist on EndToEndTtsOptions are set here — HiddenDim /
-                // NumEncoderLayers / NumDecoderLayers / NumHeads are NOT declared on it, and setting an
-                // undeclared property is a CS0117 in the generated fixture.
-                // Production paper defaults in MeloTTSOptions are untouched.
+                // MeloTTS is a Bert-VITS2 with a frozen per-language BERT; at its released sizes (a 44.1 kHz decoder,
+                // BERT-base) one generated test would take minutes. The fixture keeps the whole topology — text
+                // encoder with tone/language/BERT inputs, transformer flow, both duration predictors, the HiFi-GAN
+                // decoder, the duration and multi-period discriminators, and a two-layer BERT on the real English
+                // vocabulary — at small widths and a 16-sample hop. Input: 8 symbol ids.
+                // Production defaults in MeloTTSOptions are untouched.
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 8, inputWidth: 80, inputDepth: 1, outputSize: 8), " +
+                    "inputHeight: 8, inputWidth: 1, inputDepth: 1, outputSize: 8), " +
                     "new AiDotNet.TextToSpeech.EndToEnd.MeloTTSOptions { " +
-                    "NumFlowSteps = 1, InterChannels = 32, FilterChannels = 64, " +
-                    "EncoderDim = 32, DecoderDim = 32 })";
+                    "SampleRate = 16000, FftSize = 64, WindowSize = 64, HopSize = 16, MelChannels = 16, SegmentSize = 64, " +
+                    "HiddenDim = 16, InterChannels = 8, FilterChannels = 32, NumHeads = 2, NumEncoderLayers = 3, " +
+                    "FlowTransformerLayers = 3, NumFlowSteps = 1, NumSpeakers = 2, SpeakerChannels = 8, " +
+                    "UpsampleRates = new[] { 4, 4 }, UpsampleKernelSizes = new[] { 8, 8 }, UpsampleInitialChannels = 16, " +
+                    "ResblockKernelSizes = new[] { 3 }, ResblockDilationSizes = new[] { new[] { 1, 3, 5 } }, " +
+                    "BertChannels = 16, JaBertChannels = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, DiscriminatorWidthDivisor = 16 })";
             }
             else if ((model.ClassName is "ClaudeVision" or "GeminiVision" or "GrokVision")
                      && model.TypeParameterCount == 1)
