@@ -372,7 +372,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
         // eager, which is correct and bit-identical across calls.
         if (!s_autoCompiledInferenceEnabled)
-            return DetachPlanOutput(eagerFallback());
+            return RunEagerInference(new[] { input }, eagerFallback);
 
         // #1622 L3b: front the compile host with the verify-then-trust gate so a compiled plan is
         // adopted for a shape only after it matches the eager forward — then replayed for the rest of
@@ -415,7 +415,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // corrupts the package's shared eager/compiled scratch for rejected shapes. Default to pure
         // eager, which is correct and bit-identical across the denoising loop and across calls.
         if (!s_autoCompiledInferenceEnabled)
-            return DetachPlanOutput(eagerFallback());
+            return RunEagerInference(inputs, eagerFallback);
 
         return DetachPlanOutput(_inferenceGate.Run(
             inputs,
@@ -456,6 +456,104 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     private static Tensor<T> DetachPlanOutput(Tensor<T> planOutput) => planOutput.Clone();
 
     /// <summary>
+    /// Whether eager inference forwards run inside a reused <see cref="TensorArena"/> (#653). On by default;
+    /// <c>AIDOTNET_DISABLE_INFERENCE_ARENA=1</c> turns it off. Internal so tests can compare both paths.
+    /// </summary>
+    internal static bool InferenceArenaEnabled { get; set; } =
+        !string.Equals(System.Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_INFERENCE_ARENA"), "1", System.StringComparison.Ordinal);
+
+    // One detached arena per calling thread: an arena is not thread-safe, and a predictor may serve several threads.
+    // Each remembers the layer-graph generation it was filled under, so a graph change retires it on next use.
+    private sealed class InferenceArenaSlot
+    {
+        internal readonly TensorArena Arena = TensorArena.CreateDetached();
+        internal int Generation;
+    }
+
+    private readonly System.Threading.ThreadLocal<InferenceArenaSlot?> _inferenceArenas = new(trackAllValues: true);
+    private int _inferenceArenaGeneration;
+    private long _inferenceArenaForwards;
+
+    /// <summary>Forwards this predictor ran inside its inference arena. Test/diagnostic hook.</summary>
+    internal long InferenceArenaForwards => System.Threading.Interlocked.Read(ref _inferenceArenaForwards);
+
+    // Input-shape signatures that already ran one forward outside the arena. Guarded by itself.
+    private readonly HashSet<string> _inferenceShapesWarmed = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Runs an eager inference forward and returns a copy the caller owns. From the second forward of an input shape
+    /// on, the forward runs inside this thread's detached arena, reset after each call, so every intermediate reuses
+    /// the previous forward's arrays instead of fresh memory.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Why: fresh large arrays are faulted in and zeroed by the OS on first write, and those page faults serialize, so
+    /// an op over fresh memory gains almost nothing from more threads (#653, Threadripper 3990X: writing a fresh 1.2 MB
+    /// output took 230-283 us on one thread and still 191-249 us on 16, against 141 us and 13-25 us into a reused
+    /// buffer). A DiT-XL/2 forward allocated 1.5 GB of such memory; in an arena it allocates 0.3 GB, GC pauses drop
+    /// from ~47 to ~1 ms per forward, and the forward ran 1.13-1.43x faster at 16 threads.
+    /// </para>
+    /// <para>
+    /// Safety: the first forward of each input shape runs outside the arena, so lazily initialized weights and any
+    /// buffer a layer caches across calls (a preallocated output, an embedding cache) live in ordinary memory, not in
+    /// arena memory that the next reset would hand out again. The output is deep-copied after the arena is deactivated,
+    /// so the caller's copy is ordinary memory too. The arena is not used under an arena the caller already activated,
+    /// or while transparent weight streaming is engaged (rehydrated weights must not land in arena memory).
+    /// </para>
+    /// </remarks>
+    private Tensor<T> RunEagerInference(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
+    {
+        if (!InferenceArenaEnabled || TensorArena.Current is not null
+            || System.Threading.Volatile.Read(ref _streamingEngaged) != 0)
+            return DetachPlanOutput(eagerFallback());
+
+        var key = new System.Text.StringBuilder();
+        foreach (var input in inputs)
+        {
+            key.Append('[');
+            foreach (int d in input._shape) key.Append(d).Append(',');
+            key.Append(']');
+        }
+        string shapeKey = key.ToString();
+        bool warmed;
+        lock (_inferenceShapesWarmed) warmed = _inferenceShapesWarmed.Contains(shapeKey);
+        if (!warmed)
+        {
+            var output = DetachPlanOutput(eagerFallback());
+            lock (_inferenceShapesWarmed) _inferenceShapesWarmed.Add(shapeKey);
+            return output;
+        }
+
+        int generation = System.Threading.Volatile.Read(ref _inferenceArenaGeneration);
+        var slot = _inferenceArenas.Value;
+        if (slot is not null && slot.Generation != generation)
+        {
+            slot.Arena.Dispose();
+            slot = null;
+        }
+        if (slot is null) _inferenceArenas.Value = slot = new InferenceArenaSlot { Generation = generation };
+
+        Tensor<T> result;
+        using (slot.Arena.Activate())
+            result = eagerFallback();
+        System.Threading.Interlocked.Increment(ref _inferenceArenaForwards);
+        // An eager deep copy, not Clone(): Clone shares the storage copy-on-write and privatizes only when a write goes
+        // through a tensor, but the arena hands the array itself to the next forward's tensors after Reset, so a
+        // shared clone would change under the caller.
+        var detached = (Tensor<T>)result.CloneDeepCopy();
+        slot.Arena.Reset();
+        return detached;
+    }
+
+    // After the layer graph changed (new weights, new shapes): every shape warms again outside the arena, and each
+    // thread's arena is replaced on its next use. Nothing is disposed here, since this can run inside a forward.
+    private void ResetInferenceArenas()
+    {
+        lock (_inferenceShapesWarmed) _inferenceShapesWarmed.Clear();
+        System.Threading.Interlocked.Increment(ref _inferenceArenaGeneration);
+    }
+
+    /// <summary>
     /// Count of successful multi-input compiled-plan executions on this predictor's compile
     /// host (the per-step denoising path). Test/diagnostic hook: a test can assert this grew
     /// to confirm the compiled plan actually ran rather than silently falling back to eager.
@@ -494,6 +592,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // immediately — important when the caller is invalidating because the
         // old graph holds memory we want to reclaim now.
         _compileHost.Invalidate();
+        ResetInferenceArenas();
         // The gate's verdicts/memo are version-scoped (stale entries are ignored after the bump), but
         // clear eagerly so the memo's retained input/output clones are released now too.
         _inferenceGate.Clear();
@@ -2407,6 +2506,8 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         ReleaseStreamingWeights(includeRegistered: true);
 
         _compileHost.Dispose();
+        foreach (var slot in _inferenceArenas.Values) slot?.Arena.Dispose();
+        _inferenceArenas.Dispose();
 
         // Release tensor handles cached per integer timestep — these are
         // owned exclusively by this predictor and have no other Dispose path.
