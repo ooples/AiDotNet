@@ -317,9 +317,13 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
     protected override void OnRandomSeedAssigned()
     {
         var drawn = new[] { _projection };
-        if (!TryBeginSeededReinitialization(drawn, out var random)) return;
-        NormalTensor(new[] { _visionDim, _projectionDim }, 0.02, random).AsSpan().CopyTo(_projection.AsWritableSpan());
-        CompleteSeededReinitialization(drawn);
+        // The tables are redrawn only while untouched; the children are seeded either way, since each guards its own.
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            NormalTensor(new[] { _visionDim, _projectionDim }, 0.02, random).AsSpan().CopyTo(_projection.AsWritableSpan());
+            CompleteSeededReinitialization(drawn);
+        }
+
         PropagateSeedToSubLayers();
     }
 

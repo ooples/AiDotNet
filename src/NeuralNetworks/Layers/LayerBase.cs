@@ -753,9 +753,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     protected bool TryBeginSeededReinitialization(
         Tensor<T>[] constructionTensors,
-        out Random seededStream)
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Random? seededStream)
     {
-        seededStream = null!;
+        seededStream = null;
         if (!_initializedWithoutOwnSeed) return false;
         if (RandomSeed is not int assigned) return false;
         if (ComputeParameterFingerprint(constructionTensors) != _unseededConstructionFingerprint) return false;

@@ -226,11 +226,15 @@ public partial class ClipVisionTransformerLayer<T> : LayerBase<T>, IShapeContrac
     protected override void OnRandomSeedAssigned()
     {
         var drawn = new[] { _classEmbedding, _positionEmbedding };
-        if (!TryBeginSeededReinitialization(drawn, out var random)) return;
-        int tokens = 1 + ((_imageSize / _patchSize) * (_imageSize / _patchSize));
-        NormalTensor(new[] { 1, _hidden }, Math.Pow(_hidden, -0.5), random).AsSpan().CopyTo(_classEmbedding.AsWritableSpan());
-        NormalTensor(new[] { tokens, _hidden }, 0.02, random).AsSpan().CopyTo(_positionEmbedding.AsWritableSpan());
-        CompleteSeededReinitialization(drawn);
+        // The tables are redrawn only while untouched; the children are seeded either way, since each guards its own.
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            int tokens = 1 + ((_imageSize / _patchSize) * (_imageSize / _patchSize));
+            NormalTensor(new[] { 1, _hidden }, Math.Pow(_hidden, -0.5), random).AsSpan().CopyTo(_classEmbedding.AsWritableSpan());
+            NormalTensor(new[] { tokens, _hidden }, 0.02, random).AsSpan().CopyTo(_positionEmbedding.AsWritableSpan());
+            CompleteSeededReinitialization(drawn);
+        }
+
         PropagateSeedToSubLayers();
     }
 
@@ -413,9 +417,13 @@ public partial class KosmosImageResamplerLayer<T> : LayerBase<T>, IShapeContract
     protected override void OnRandomSeedAssigned()
     {
         var drawn = new[] { _latents };
-        if (!TryBeginSeededReinitialization(drawn, out var random)) return;
-        NormalTensor(new[] { _numLatents, _dim }, 1.0, random).AsSpan().CopyTo(_latents.AsWritableSpan());
-        CompleteSeededReinitialization(drawn);
+        // The tables are redrawn only while untouched; the children are seeded either way, since each guards its own.
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            NormalTensor(new[] { _numLatents, _dim }, 1.0, random).AsSpan().CopyTo(_latents.AsWritableSpan());
+            CompleteSeededReinitialization(drawn);
+        }
+
         PropagateSeedToSubLayers();
     }
 

@@ -297,14 +297,18 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
     protected override void OnRandomSeedAssigned()
     {
         var drawn = new[] { _shared, _encoderBias1D, _encoderBiasHorizontal, _encoderBiasVertical, _decoderBias };
-        if (!TryBeginSeededReinitialization(drawn, out var random)) return;
-        double biasStd = Math.Pow(_dim, -0.5);
-        NormalTensor(new[] { _vocabSize, _dim }, 1.0, random).AsSpan().CopyTo(_shared.AsWritableSpan());
-        NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBias1D.AsWritableSpan());
-        NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBiasHorizontal.AsWritableSpan());
-        NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBiasVertical.AsWritableSpan());
-        NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_decoderBias.AsWritableSpan());
-        CompleteSeededReinitialization(drawn);
+        // The tables are redrawn only while untouched; the children are seeded either way, since each guards its own.
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            double biasStd = Math.Pow(_dim, -0.5);
+            NormalTensor(new[] { _vocabSize, _dim }, 1.0, random).AsSpan().CopyTo(_shared.AsWritableSpan());
+            NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBias1D.AsWritableSpan());
+            NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBiasHorizontal.AsWritableSpan());
+            NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBiasVertical.AsWritableSpan());
+            NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_decoderBias.AsWritableSpan());
+            CompleteSeededReinitialization(drawn);
+        }
+
         // The patch convolution, the two cell embeddings and every encoder/decoder block were built in this
         // constructor too, so they drew before the model existed and need the seed as much as the tables do.
         PropagateSeedToSubLayers();

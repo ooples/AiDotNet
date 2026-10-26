@@ -108,8 +108,13 @@ public class CallerBuiltLayerSeedingTests
     [Fact]
     public void AnExplicitConstructorSeed_IsNotOverriddenByAnAssignedSeed()
     {
-        // The caller chose the constructor seed, so the same one must win whatever is wired on afterwards.
-        Assert.Equal(T5LayerWeights(7, 2290), T5LayerWeights(7, 2291));
+        // The caller chose the constructor seed, so the same one must win whatever is wired on afterwards: both
+        // assigned seeds give exactly the constructor-seeded weights, and a different constructor seed does not.
+        var baseline = T5LayerWeights(7);
+        Assert.NotEmpty(baseline);
+        Assert.Equal(baseline, T5LayerWeights(7, 2290));
+        Assert.Equal(baseline, T5LayerWeights(7, 2291));
+        Assert.NotEqual(baseline, T5LayerWeights(8));
     }
 
     [Fact]
@@ -197,6 +202,75 @@ public class CallerBuiltLayerSeedingTests
             vocabSize: 16, dim: Width, numHeads: 2, keyValueDim: 4, ffDim: Width * 2,
             numEncoderLayers: 1, numDecoderLayers: 1, imageSize: 8, patchSize: 4,
             numBuckets: 8, maxDistance: 16, maxDistance2D: 16, max2DPositions: 8));
+
+    private static Florence2ProjectorLayer<double> Projector()
+        => new Florence2ProjectorLayer<double>(visionDim: Width, projectionDim: Width, grid: 2);
+
+    [Fact]
+    public void ASeedAssignedAfterAnEdit_KeepsTheEditedWeights()
+    {
+        // The redraw only replaces weights construction drew: once a caller has set them, a seed must not undo that.
+        var layer = Projector();
+        var edited = layer.GetParameters().ToArray().Select(v => v + 0.5).ToArray();
+        layer.SetParameters(new Vector<double>(edited));
+
+        layer.RandomSeed = 2290;
+
+        Assert.Equal(edited, layer.GetParameters().ToArray());
+    }
+
+    [Fact]
+    public void ASecondSeed_RedrawsWeightsTheFirstSeedDrew()
+    {
+        // The first redraw refreshes the construction baseline, so a second seed sees untouched weights and redraws
+        // them; a stale baseline would refuse and leave the first seed's weights in place.
+        var layer = Projector();
+        layer.RandomSeed = 2290;
+        layer.RandomSeed = 2291;
+
+        Assert.Equal(DrawnAtAssignedSeed(Projector, 2291), layer.GetParameters().ToArray());
+        Assert.NotEqual(DrawnAtAssignedSeed(Projector, 2290), layer.GetParameters().ToArray());
+    }
+
+    public static TheoryData<string> ComposedLayers => new() { "Florence2Projector", "ClipVisionTransformer", "KosmosImageResampler", "UdopTransformer" };
+
+    private static LayerBase<double> Composed(string kind) => kind switch
+    {
+        "Florence2Projector" => Projector(),
+        "ClipVisionTransformer" => new ClipVisionTransformerLayer<double>(
+            hidden: Width, numLayers: 1, numHeads: 2, patchSize: 4, imageSize: 8),
+        "KosmosImageResampler" => new KosmosImageResamplerLayer<double>(
+            visionDim: Width, dim: Width, numLatents: 2, numHeads: 2, depth: 1, perceiver: true),
+        "UdopTransformer" => new UdopTransformerLayer<double>(
+            vocabSize: 16, dim: Width, numHeads: 2, keyValueDim: 4, ffDim: Width * 2,
+            numEncoderLayers: 1, numDecoderLayers: 1, imageSize: 8, patchSize: 4,
+            numBuckets: 8, maxDistance: 16, maxDistance2D: 16, max2DPositions: 8),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    private static int?[] ChildSeeds(LayerBase<double> layer)
+        => layer.GetSubLayers().OfType<LayerBase<double>>().Select(child => child.RandomSeed).ToArray();
+
+    [Theory]
+    [MemberData(nameof(ComposedLayers))]
+    public void AnAssignedSeed_ReachesTheChildren_WhenTheParentKeepsEditedWeights(string kind)
+    {
+        // An edit makes the parent refuse to redraw its own tables, which used to return before the children were
+        // seeded: they kept their construction seeds. They must get exactly the seeds an unedited layer gives them.
+        var edited = Composed(kind);
+        var shifted = edited.GetParameters().ToArray().Select(v => v + 0.5).ToArray();
+        edited.SetParameters(new Vector<double>(shifted));
+        edited.RandomSeed = 2290;
+
+        var fresh = Composed(kind);
+        fresh.RandomSeed = 2290;
+
+        var expected = ChildSeeds(fresh);
+        Assert.NotEmpty(expected);
+        Assert.All(expected, seed => Assert.NotNull(seed));
+        Assert.Equal(expected, ChildSeeds(edited));
+        Assert.Equal(shifted, edited.GetParameters().ToArray());
+    }
 
     [Fact]
     public void EqualModelSeeds_GiveEqualInitialWeights_ForACallerBuiltSsmStack()
