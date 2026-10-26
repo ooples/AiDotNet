@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Attributes;
@@ -153,6 +154,34 @@ public class CallerBuiltLayerSeedingTests
     {
         Assert.NotEqual(InitialT5Weights(2290), InitialT5Weights(2291));
     }
+
+    // A layer built by a caller, then handed a seed the way a model wires one on. Reading the parameters
+    // forces whatever allocation the layer defers.
+    private static double[] DrawnAtAssignedSeed(Func<LayerBase<double>> make, int assigned)
+    {
+        var layer = make();
+        layer.RandomSeed = assigned;
+        return layer.GetParameters().ToArray();
+    }
+
+    private static void AssertSeedReachesTheWeights(Func<LayerBase<double>> make)
+    {
+        var first = DrawnAtAssignedSeed(make, 2290);
+        Assert.NotEmpty(first);
+        Assert.Equal(first, DrawnAtAssignedSeed(make, 2290));
+        Assert.NotEqual(first, DrawnAtAssignedSeed(make, 2291));
+    }
+
+    [Fact]
+    public void AnAssignedSeed_ReachesACallerBuiltT5FeedForward()
+        => AssertSeedReachesTheWeights(() => new T5FeedForwardLayer<double>(Width, Width * 2));
+
+    [Fact]
+    public void AnAssignedSeed_ReachesACallerBuiltUdopTransformer()
+        => AssertSeedReachesTheWeights(() => new UdopTransformerLayer<double>(
+            vocabSize: 16, dim: Width, numHeads: 2, keyValueDim: 4, ffDim: Width * 2,
+            numEncoderLayers: 1, numDecoderLayers: 1, imageSize: 8, patchSize: 4,
+            numBuckets: 8, maxDistance: 16, maxDistance2D: 16, max2DPositions: 8));
 
     [Fact]
     public void EqualModelSeeds_GiveEqualInitialWeights_ForACallerBuiltSsmStack()

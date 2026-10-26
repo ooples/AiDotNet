@@ -717,6 +717,86 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
     }
 
+    // Set when a constructor initialisation ran without a seed of this layer's own; cleared by nothing, because
+    // the seed can change again before the weights are allocated.
+    [AiDotNet.Attributes.Scratch]
+    private bool _initializedWithoutOwnSeed;
+
+    [AiDotNet.Attributes.Scratch]
+    private long _unseededConstructionFingerprint;
+
+    /// <summary>
+    /// Records that this layer drew its weights in its constructor without a seed of its own, so a seed assigned
+    /// later can redo that draw. Call it at the END of the constructor, after the tensors exist.
+    /// </summary>
+    /// <remarks>
+    /// A layer a caller builds into an explicit <see cref="NeuralNetworkArchitecture{T}.Layers"/> list is
+    /// constructed before the model exists, so <see cref="LayerInitializationSeedScope"/> gave it either nothing
+    /// (the secure fallback) or a seed left armed by whichever model was built last on the thread -- chosen by
+    /// nobody. The model that adopts the layer wires its own seed on afterwards, and without this the weights
+    /// would keep the pre-model draw: two models with the same seed got different initial weights (#2290).
+    /// </remarks>
+    /// <param name="constructionTensors">The tensors the constructor drew, in the order it drew them.</param>
+    protected void NoteConstructorInitialization(params Tensor<T>[] constructionTensors)
+    {
+        // A seed the caller chose outright is already this layer's own, so there is nothing to redo.
+        if (RandomSeed.HasValue && !RandomSeedCameFromConstructionScope) return;
+        _initializedWithoutOwnSeed = true;
+        _unseededConstructionFingerprint = ComputeParameterFingerprint(constructionTensors);
+    }
+
+    /// <summary>
+    /// Whether an <see cref="OnRandomSeedAssigned"/> override may redo its constructor draw, handing back the
+    /// stream to redo it from. False when there is no seed, when the constructor draw was already the layer's own,
+    /// or when <paramref name="constructionTensors"/> no longer hold exactly what construction put there --
+    /// weights since trained, loaded or assigned are never overwritten.
+    /// </summary>
+    protected bool TryBeginSeededReinitialization(
+        Tensor<T>[] constructionTensors,
+        out Random seededStream)
+    {
+        seededStream = null!;
+        if (!_initializedWithoutOwnSeed) return false;
+        if (RandomSeed is not int assigned) return false;
+        if (ComputeParameterFingerprint(constructionTensors) != _unseededConstructionFingerprint) return false;
+
+        seededStream = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(assigned);
+        return true;
+    }
+
+    /// <summary>
+    /// Records the redrawn values as the new construction baseline, so a seed changed again before the weights
+    /// are allocated can still tell an untouched draw from one something else has edited.
+    /// </summary>
+    protected void CompleteSeededReinitialization(Tensor<T>[] constructionTensors)
+        => _unseededConstructionFingerprint = ComputeParameterFingerprint(constructionTensors);
+
+    /// <summary>
+    /// Hands every registered child a seed derived from this layer's own, so a COMPOSITE layer a caller built
+    /// reproduces its children's weights as well as its own.
+    /// </summary>
+    /// <remarks>
+    /// A composite constructs its children in its own constructor, before any model exists, so each child drew
+    /// from whatever the construction scope held then. Redoing only the parent's own tensors leaves the children
+    /// on the pre-model draw and the composite is still not reproducible. Children that initialise lazily pick
+    /// the seed up on first use; a child that drew in its own constructor redoes it through its own
+    /// <see cref="OnRandomSeedAssigned"/>. With no seed the children stay unseeded, which keeps the
+    /// "reproducible iff a seed was requested" contract.
+    /// </remarks>
+    protected void PropagateSeedToSubLayers()
+    {
+        if (RandomSeed is not int assigned) return;
+        var children = GetSubLayers();
+        if (children is null || children.Count == 0) return;
+
+        var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(assigned);
+        foreach (var child in children)
+        {
+            if (child is LayerBase<T> seedable)
+                seedable.RandomSeed = subSeedRng.Next();
+        }
+    }
+
     /// <summary>
     /// True when <see cref="RandomSeed"/> was drawn from whatever construction scope was armed when this layer was
     /// built, rather than chosen by someone.
