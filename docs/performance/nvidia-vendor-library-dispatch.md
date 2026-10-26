@@ -1,42 +1,55 @@
 # NVIDIA vendor-library dispatch (cuBLAS, cuDNN)
 
-Which NVIDIA libraries AiDotNet's layers actually reach on a CUDA host, and how to check on your own machine (#1159).
+Which NVIDIA libraries AiDotNet's layers actually reach on a CUDA host, why, and how to check on your own machine (#1159).
 
-AiDotNet does not choose between vendor libraries itself. Layers call `Engine.Conv2D`, `Engine.BatchNorm` and `Engine.MatMul`. On an NVIDIA GPU the engine is `DirectGpuTensorEngine` with the CUDA backend, and the backend makes the routing decision per operation. So no AiDotNet-side dispatcher is needed, and there is none.
+AiDotNet does not choose between vendor libraries itself. Layers call `Engine.Conv2D`, `Engine.BatchNorm` and `Engine.MatMul`. On an NVIDIA GPU the engine is `DirectGpuTensorEngine` with the CUDA backend, and the backend decides per operation. So no AiDotNet-side dispatcher is needed, and there is none.
 
-## The routing rules (AiDotNet.Tensors CUDA backend)
+## The rule: our kernels where they measure faster, the vendor library elsewhere
 
-| Operation | Vendor route | When it is taken | Otherwise |
-|---|---|---|---|
-| GEMM: `DenseLayer`, `MatMul`, attention projections | cuBLAS / cuBLASLt | Whenever cuBLAS loads. It loads lazily on the first GEMM. | The backend's generated GEMM kernels, which solve the same problem. |
-| Conv2D forward | cuDNN's algorithms, as candidates of the tuned convolution slot | cuDNN loads and `TensorCodecOptions.UseCudnn` is on (the default where it loads). Every cuDNN algorithm competes with the backend's own routes under the slot's measured evidence, and the fastest wins per shape, as `cudnn.benchmark` does in PyTorch. | The backend's own convolution routes. |
-| Conv2D backward | im2col + cuBLAS GEMM, competing with cuDNN's backward algorithms when cuDNN loads | Always available with cuBLAS. | The direct backward kernels (`AIDOTNET_CONV_GEMM_BACKWARD=0`). |
-| BatchNorm | cuDNN batch normalization | cuDNN loads. | The backend's own kernels. |
+The goal is to need no external libraries. The vendor libraries stay only as measured fallbacks, on the shapes where our generated kernels have not yet beaten them.
 
-Precision and determinism follow the backend's policy: cuDNN descriptors use strict fp32 (FMA) math unless reduced-precision TF32 is opted into, and under `GpuDeterminism` the atomics-based cuDNN backward algorithms are never considered.
+| Operation | Route | Vendor library's role |
+|---|---|---|
+| GEMM: `DenseLayer`, `MatMul`, attention projections | A shape with a measured verdict runs the tuned generated kernel. Skinny and small shapes run the backend's narrow kernels. Any other shape goes to cuBLAS. | cuBLAS is **optional** (AiDotNet.Tensors #1316). When it cannot load or is turned off, the generated GEMM serves every shape, in FP32, FP16, BF16 and FP64. |
+| Conv2D forward and backward | The tuned convolution slot measures every candidate per shape and keeps the fastest (as `cudnn.benchmark` does in PyTorch). | cuDNN's algorithms are **candidates only** (#1457): never chosen by default, only when they win the measurement. |
+| BatchNorm | The backend's kernels, or cuDNN batch normalization when cuDNN loads. | cuDNN optional. |
 
-Opt-outs: `AIDOTNET_DISABLE_CUBLAS=1` (or `TensorCodecOptions.UseCublas = false`) runs every GEMM on the generated kernels; `TensorCodecOptions.UseCudnn = false` keeps convolutions and batch norm off cuDNN.
+Why the vendor libraries are not deleted yet. Measured on an RTX 3080:
+- **cuBLAS:** our best strict-FP32 SGEMM runs at 0.85–0.97× of cuBLAS at 2048–4096³ (#1310). Inside CUDA graphs it runs at 0.55× on small shapes (#1322).
+- **cuDNN:** adding its algorithms as candidates made ResNet 3×3 convolutions 1.5–2.0× faster than our routes (#1457).
 
-## What ships, and what that means
+Removing either now would slow those shapes down by those factors. They are removed once evolved kernels win those shapes.
 
-The `AiDotNet.Native.CUDA` package ships `cudart`, cuBLAS, cuBLASLt and NVRTC, so **cuBLAS is always available** on an NVIDIA machine with no CUDA Toolkit installed.
+Opt-outs:
+- `AIDOTNET_DISABLE_CUBLAS=1`, or `TensorCodecOptions.UseCublas = false`, runs every GEMM on the generated kernels.
+- `TensorCodecOptions.UseCudnn = false` keeps convolutions and batch norm off cuDNN.
 
-**It does not ship cuDNN.** cuDNN is used only when `cudnn64_9.dll` (or `cudnn64_8.dll`) can be loaded from the machine: a cuDNN install on `PATH`, or alongside the application. Without it, Conv2D and BatchNorm run on the backend's own tuned kernels, correctly and without a warning.
+## What ships
+
+The `AiDotNet.Native.CUDA` package ships `cudart`, cuBLAS, cuBLASLt and NVRTC. **It does not ship cuDNN**, so cuDNN is a candidate only on machines that have `cudnn64_9.dll` (or `cudnn64_8.dll`) on `PATH`.
 
 ## Measured on a GTX 1660 Ti (sm_75), driver 617.42, no cuDNN installed (2026-10-26)
 
-A probe ran a `ConvolutionalLayer<float>` (64 filters, 3x3, on [8, 64, 56, 56]), an eval-mode `BatchNormalizationLayer<float>` and a `DenseLayer<float>` (1024 outputs on [256, 1024]) on `DirectGpuTensorEngine` with `CudaBackend`, and listed the vendor libraries loaded into the process after each:
+The probe ran three layers on `DirectGpuTensorEngine` with `CudaBackend`:
+- a `ConvolutionalLayer<float>`: 64 filters, 3x3, on [8, 64, 56, 56];
+- an eval-mode `BatchNormalizationLayer<float>`;
+- a `DenseLayer<float>`: 1024 outputs on [256, 1024].
 
-| After | Vendor libraries loaded |
-|---|---|
-| Conv2D | none |
-| BatchNorm (eval) | none |
-| Dense | `cublas64_13.dll`, `cublasLt64_13.dll` |
+After each, it recorded the vendor libraries loaded into the process and the backend's `LastGemmDispatchPath`:
 
-So on this host GEMMs reach cuBLAS, and convolution and batch norm use the backend's kernels because cuDNN is not present, exactly as the rules above say.
+| After | Vendor libraries loaded | GEMM route |
+|---|---|---|
+| Conv2D | none | `NarrowGemm` (our kernel) |
+| BatchNorm (eval) | none | n/a |
+| Dense | `cublas64_13.dll`, `cublasLt64_13.dll` | `Cublas`: an untuned shape |
+| Dense, `AIDOTNET_DISABLE_CUBLAS=1` | none | the generated GEMM, identical output |
+
+Before AiDotNet.Tensors #1548 the last row reported `Cublas` although cuBLAS never loaded. It now reports `GeneratedFallback`.
 
 ## Checking your own machine
 
-List the loaded modules after running each operation once (`Process.GetCurrentProcess().Modules`, looking for `cublas*` and `cudnn*`). Watching with Nsight Systems from outside does not work for this: `nsys profile -t cuda,cuDNN,cublas dotnet app.dll` traced only `cuInit` here, because the GPU work runs in a context it did not follow.
+1. Run each operation once.
+2. List the loaded modules with `Process.GetCurrentProcess().Modules`, looking for `cublas*` and `cudnn*`.
+3. Read `CudaBackend.LastGemmDispatchPath`.
 
-To get cuDNN's convolution algorithms, install cuDNN 9 for your CUDA version so that `cudnn64_9.dll` is on `PATH`; the convolution slot then measures them against the backend's routes and keeps whichever is faster per shape.
+Watching from outside with Nsight Systems does not work for this. `nsys profile -t cuda,cuDNN,cublas dotnet app.dll` traced only `cuInit` here, because the GPU work runs in a context it did not follow.
