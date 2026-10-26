@@ -71,8 +71,8 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
             throw new ArgumentException("DETR's class head is a softmax with a no-object class; use a softmax cross-entropy set loss.", nameof(options));
         _detectionLoss = new DETRSetLoss<T>(checked(options.NumClasses + 1), lossOptions);
 
-        // Initialize backbone (ResNet-50 by default)
-        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+        // The paper's ResNet-50 unless the options name another ResNet (DETR also reports ResNet-101).
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetBackboneSelection.Resolve(options.Backbone) });
 
         // Project backbone features to hidden dimension
         int backboneChannels = Backbone.OutputChannels[^1];
