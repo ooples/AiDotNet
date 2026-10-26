@@ -173,6 +173,21 @@ public class CallerBuiltLayerSeedingTests
     }
 
     [Fact]
+    public void AnAssignedSeed_ReachesACallerBuiltFlorence2Projector()
+        => AssertSeedReachesTheWeights(() => new Florence2ProjectorLayer<double>(
+            visionDim: Width, projectionDim: Width, grid: 2));
+
+    [Fact]
+    public void AnAssignedSeed_ReachesACallerBuiltClipVisionTransformer()
+        => AssertSeedReachesTheWeights(() => new ClipVisionTransformerLayer<double>(
+            hidden: Width, numLayers: 1, numHeads: 2, patchSize: 4, imageSize: 8));
+
+    [Fact]
+    public void AnAssignedSeed_ReachesACallerBuiltKosmosImageResampler()
+        => AssertSeedReachesTheWeights(() => new KosmosImageResamplerLayer<double>(
+            visionDim: Width, dim: Width, numLatents: 2, numHeads: 2, depth: 1, perceiver: true));
+
+    [Fact]
     public void AnAssignedSeed_ReachesACallerBuiltT5FeedForward()
         => AssertSeedReachesTheWeights(() => new T5FeedForwardLayer<double>(Width, Width * 2));
 
