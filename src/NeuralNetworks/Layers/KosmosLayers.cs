@@ -197,6 +197,7 @@ public partial class ClipVisionTransformerLayer<T> : LayerBase<T>, IShapeContrac
         _positionEmbedding = NormalTensor(new[] { tokens, hidden }, 0.02, random);
         RegisterTrainableParameter(_classEmbedding, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_positionEmbedding, PersistentTensorRole.Weights);
+        NoteConstructorInitialization(_classEmbedding, _positionEmbedding);
 
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
         _patchEmbedding = new ConvolutionalLayer<T>(hidden, patchSize, patchSize, 0, identity);
@@ -215,6 +216,28 @@ public partial class ClipVisionTransformerLayer<T> : LayerBase<T>, IShapeContrac
         _postNorm = new LayerNormalizationLayer<T>();
         foreach (var layer in SubLayers()) RegisterSubLayer(layer);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Drawn in this layer's constructor, so a caller who builds it into an explicit layer list drew before the
+    /// model existed; the seed the model wires on afterwards redoes the draw, in the same order. Its registered
+    /// children were built here too and are seeded from the same seed.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        var drawn = new[] { _classEmbedding, _positionEmbedding };
+        // The tables are redrawn only while untouched; the children are seeded either way, since each guards its own.
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            int tokens = 1 + ((_imageSize / _patchSize) * (_imageSize / _patchSize));
+            NormalTensor(new[] { 1, _hidden }, Math.Pow(_hidden, -0.5), random).AsSpan().CopyTo(_classEmbedding.AsWritableSpan());
+            NormalTensor(new[] { tokens, _hidden }, 0.02, random).AsSpan().CopyTo(_positionEmbedding.AsWritableSpan());
+            CompleteSeededReinitialization(drawn);
+        }
+
+        PropagateSeedToSubLayers();
+    }
+
 
     private IEnumerable<LayerBase<T>> SubLayers()
     {
@@ -362,6 +385,7 @@ public partial class KosmosImageResamplerLayer<T> : LayerBase<T>, IShapeContract
         var random = LayerInitializationSeedScope.NextRandom();
         _latents = NormalTensor(new[] { numLatents, dim }, 1.0, random);
         RegisterTrainableParameter(_latents, PersistentTensorRole.Weights);
+        NoteConstructorInitialization(_latents);
 
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
         _projection = new DenseLayer<T>(dim, identity);
@@ -383,6 +407,26 @@ public partial class KosmosImageResamplerLayer<T> : LayerBase<T>, IShapeContract
         if (perceiver) _finalNorm.Add(new LayerNormalizationLayer<T>());
         foreach (var layer in SubLayers()) RegisterSubLayer(layer);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Drawn in this layer's constructor, so a caller who builds it into an explicit layer list drew before the
+    /// model existed; the seed the model wires on afterwards redoes the draw, in the same order. Its registered
+    /// children were built here too and are seeded from the same seed.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        var drawn = new[] { _latents };
+        // The tables are redrawn only while untouched; the children are seeded either way, since each guards its own.
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            NormalTensor(new[] { _numLatents, _dim }, 1.0, random).AsSpan().CopyTo(_latents.AsWritableSpan());
+            CompleteSeededReinitialization(drawn);
+        }
+
+        PropagateSeedToSubLayers();
+    }
+
 
     private IEnumerable<LayerBase<T>> SubLayers()
     {
