@@ -241,7 +241,7 @@ public class AsymmetricLicenseTests
         var parsed = LicensePublicKeyProvider.Parse(json);
 
         Assert.NotNull(parsed);
-        Assert.True(parsed!.ContainsKey("roundtrip"));
+        Assert.True(parsed.ContainsKey("roundtrip"));
         Assert.Equal(pub, parsed["roundtrip"]);
     }
 

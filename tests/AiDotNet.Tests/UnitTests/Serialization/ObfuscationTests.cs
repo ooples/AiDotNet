@@ -159,7 +159,7 @@ public class ObfuscationTests
     public async Task EncryptSigned_NullPayload_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelPayloadEncryption.EncryptSigned(null, "key", "aad"));
+            ModelPayloadEncryption.EncryptSigned(global::AiDotNet.Tests.TestNull.Of<byte[]>(), "key", "aad"));
     }
 
     [Fact(Timeout = 60000)]

@@ -443,7 +443,7 @@ public class DecisionTreeIntegrationTests
         testPoint[0, 0] = 1; testPoint[0, 1] = 1;
 
         var originalProbs = dt.PredictProbabilities(testPoint);
-        var cloneProbs = clone!.PredictProbabilities(testPoint);
+        var cloneProbs = clone.PredictProbabilities(testPoint);
 
         Assert.Equal(originalProbs[0, 0], cloneProbs[0, 0], Tolerance);
         Assert.Equal(originalProbs[0, 1], cloneProbs[0, 1], Tolerance);
@@ -505,7 +505,7 @@ public class DecisionTreeIntegrationTests
         var x = new Matrix<double>(10, 3);
         var y = new Vector<double>(10);
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 10; i++)
         {
             x[i, 0] = rand.NextDouble();

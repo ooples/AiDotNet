@@ -214,7 +214,7 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         ILossFunction<T>? lossFunction)
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), options.MaxGradNorm)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), options.MaxGradNorm)
     {
         options.Validate();
         _options = options;
@@ -226,7 +226,11 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
         DropoutRate = options.DropoutRate;
         _decoderType = options.DecoderType;
 
-        _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
+        // The outputs are raw scores (the graph autoencoder scores an edge as sigmoid(z_i . z_j)), so the default
+        // takes logits. Probability-space BinaryCrossEntropyLoss clamps its input to [eps, 1 - eps]: whenever every
+        // output fell outside (0, 1), as one random initialisation in about twelve did, its gradient was exactly zero
+        // and training never moved the weights.
+        _lossFunction = lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -681,7 +685,7 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
             throw new InvalidOperationException(
                 $"LinkPredictionModel tape-based training requires a LossFunctionBase<T> (one that "
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
-                + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyLoss.");
+                + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyWithLogitsLoss.");
         var adjacency = _cachedAdjacencyMatrix ?? throw new InvalidOperationException(
             "Adjacency matrix must be set before training. Call SetAdjacencyMatrix() first.");
         return GraphTrainingObjective(input, adjacency, target, Forward, tapeLoss);

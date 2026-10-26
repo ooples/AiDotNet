@@ -71,7 +71,7 @@ public class InteriorPointFreeVariableQpTests
         Assert.Equal(LinearProgramStatus.Optimal, solution.Status);
         Assert.NotNull(solution.Solution);
 
-        Assert.True(Math.Abs(solution.Solution![0] - 15.0) < 1e-4, $"x1 = {solution.Solution[0]}");
+        Assert.True(Math.Abs(solution.Solution[0] - 15.0) < 1e-4, $"x1 = {solution.Solution[0]}");
         Assert.True(Math.Abs(solution.Solution[1] - 15.0) < 1e-4, $"x2 = {solution.Solution[1]}");
         Assert.True(Math.Abs(solution.ObjectiveValue - 675.0) < 1e-3,
             $"objective = {solution.ObjectiveValue}");
@@ -121,7 +121,7 @@ public class InteriorPointFreeVariableQpTests
         Assert.Equal(LinearProgramStatus.Optimal, interior.Status);
         Assert.Equal(LinearProgramStatus.Optimal, activeSet.Status);
 
-        Assert.True(Math.Abs(interior.Solution![0] - activeSet.Solution![0]) < 1e-4,
+        Assert.True(Math.Abs((interior.Solution ?? throw new InvalidOperationException("interior.Solution is null where it is required."))[0] - (activeSet.Solution ?? throw new InvalidOperationException("activeSet.Solution is null where it is required."))[0]) < 1e-4,
             $"x1: interior {interior.Solution[0]}, active set {activeSet.Solution[0]}");
         Assert.True(Math.Abs(interior.Solution[1] - activeSet.Solution[1]) < 1e-4,
             $"x2: interior {interior.Solution[1]}, active set {activeSet.Solution[1]}");
@@ -162,7 +162,7 @@ public class InteriorPointFreeVariableQpTests
         var residual = KktConditions.Evaluate<double>(
             quadratic: quadratic,
             linear: linear,
-            solution: solution.Solution!,
+            solution: (solution.Solution ?? throw new InvalidOperationException("solution.Solution is null where it is required.")),
             inequalityMatrix: inequality,
             inequalityBounds: inequalityBounds,
             inequalityMultipliers: solution.InequalityMultipliers,
@@ -189,11 +189,11 @@ public class InteriorPointFreeVariableQpTests
                 .Solve(ProgramWithCapacity(capacity));
 
             Assert.True(
-                Math.Abs(interior.InequalityMultipliers![0] - activeSet.InequalityMultipliers![0]) < 1e-2,
+                Math.Abs((interior.InequalityMultipliers ?? throw new InvalidOperationException("interior.InequalityMultipliers is null where it is required."))[0] - (activeSet.InequalityMultipliers ?? throw new InvalidOperationException("activeSet.InequalityMultipliers is null where it is required."))[0]) < 1e-2,
                 $"cap {capacity}: interior mu {interior.InequalityMultipliers[0]}, " +
                 $"active set mu {activeSet.InequalityMultipliers[0]}");
             Assert.True(
-                Math.Abs(interior.EqualityMultipliers![0] - activeSet.EqualityMultipliers![0]) < 1e-2,
+                Math.Abs((interior.EqualityMultipliers ?? throw new InvalidOperationException("interior.EqualityMultipliers is null where it is required."))[0] - (activeSet.EqualityMultipliers ?? throw new InvalidOperationException("activeSet.EqualityMultipliers is null where it is required."))[0]) < 1e-2,
                 $"cap {capacity}: interior lambda {interior.EqualityMultipliers[0]}, " +
                 $"active set lambda {activeSet.EqualityMultipliers[0]}");
 
@@ -235,7 +235,7 @@ public class InteriorPointFreeVariableQpTests
         var solution = new InteriorPointSolver<double>().Solve(Program(false));
 
         Assert.NotNull(solution.InequalityMultipliers);
-        Assert.True(Math.Abs(Math.Abs(solution.InequalityMultipliers![0]) - 30.0) < 1e-2,
+        Assert.True(Math.Abs(Math.Abs(solution.InequalityMultipliers[0]) - 30.0) < 1e-2,
             $"capacity multiplier = {solution.InequalityMultipliers[0]}, expected magnitude 30");
     }
 }

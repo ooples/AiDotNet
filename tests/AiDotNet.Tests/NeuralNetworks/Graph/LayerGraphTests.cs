@@ -183,7 +183,7 @@ public class LayerGraphTests
         var outShape = graph.ResolveShapes(new[] { 3, 8, 8 });
 
         Assert.NotNull(outShape);
-        Assert.Equal(4, outShape![0]);
+        Assert.Equal(4, outShape[0]);
 
         var layers = graph.ToLayerList();
         Assert.Equal(3, ((ConvolutionalLayer<double>)layers[0]).GetInputShape()[0]);
@@ -219,7 +219,7 @@ public class LayerGraphTests
 
         // A dense layer DECLARES its per-sample output, so the leading column axis is absent here by
         // library convention — the resolved shape is [5], not [7, 5].
-        Assert.Equal(new[] { 5 }, outShape!);
+        Assert.Equal(new[] { 5 }, outShape);
 
         // THE assertion. The dense head must have been sized against C*h = 4*6 = 24, which only the edge
         // transform yields; against the conv's declared [4, 6, 7] it would be 7, and the first forward

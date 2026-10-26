@@ -136,6 +136,6 @@ public class CompositeLoss<T> : LossFunctionBase<T>
             accumulated = Engine.TensorAdd(accumulated, scaled);
         }
 
-        return accumulated!;
+        return (accumulated ?? throw new InvalidOperationException("accumulated is null where it is required."));
     }
 }

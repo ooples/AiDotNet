@@ -118,7 +118,7 @@ public class ModelRegistryTests : IDisposable
         var metadata = CreateTestMetadata();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => _registry.RegisterModel(null!, model, metadata));
+        Assert.Throws<ArgumentException>(() => _registry.RegisterModel(null, model, metadata));
     }
 
     [Fact(Timeout = 60000)]
@@ -128,7 +128,7 @@ public class ModelRegistryTests : IDisposable
         var metadata = CreateTestMetadata();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _registry.RegisterModel<ModelMetadata<double>>("test", null!, metadata));
+        Assert.Throws<ArgumentNullException>(() => _registry.RegisterModel<ModelMetadata<double>>("test", null, metadata));
     }
 
     #endregion

@@ -192,7 +192,7 @@ public class DatasetStatistics<T>
             if (TargetMean != null && TargetStdDev != null)
             {
                 lines.Add($"Target Mean: {NumOps.ToDouble(TargetMean):F4}");
-                lines.Add($"Target StdDev: {NumOps.ToDouble(TargetStdDev!):F4}");
+                lines.Add($"Target StdDev: {NumOps.ToDouble(TargetStdDev):F4}");
             }
         }
 

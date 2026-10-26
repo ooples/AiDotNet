@@ -61,7 +61,7 @@ public class StreamingInt8InferenceIntegrationTests
         net.SetTrainingMode(false);
 
         var input = new Tensor<float>(new[] { 1, 64 });
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         for (int i = 0; i < 64; i++) input[i] = (float)(rng.NextDouble() - 0.5);
 
         // fp32 baseline (also materializes the lazily-initialized Dense weights).

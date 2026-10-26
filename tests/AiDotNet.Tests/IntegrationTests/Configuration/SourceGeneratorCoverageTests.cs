@@ -855,7 +855,7 @@ promptTemplate:
     {
         var prop = typeof(YamlModelConfig).GetProperty("AutoML");
         Assert.NotNull(prop);
-        Assert.Equal(typeof(YamlTypeSection), prop!.PropertyType);
+        Assert.Equal(typeof(YamlTypeSection), prop.PropertyType);
     }
 
     /// <summary>
@@ -879,7 +879,7 @@ promptTemplate:
 
         // Thread 2: the generated property is a YamlTypeSection carrying the parsed type name.
         Assert.NotNull(config.AutoML);
-        Assert.Equal(engineName, config.AutoML!.Type);
+        Assert.Equal(engineName, config.AutoML.Type);
 
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
         var exception = Record.Exception(() =>

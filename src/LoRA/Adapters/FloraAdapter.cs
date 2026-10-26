@@ -175,7 +175,7 @@ public partial class FloraAdapter<T> : LoRAAdapterBase<T>
 
         Matrix<T> transferMatrix = ComputeTransferMatrix(oldA, newA);
         // Correct order: transferMatrix * momentum (project momentum into new parameter space)
-        Matrix<T> newMomentum = MultiplyMatrices(transferMatrix, _compressedMomentum!);
+        Matrix<T> newMomentum = MultiplyMatrices(transferMatrix, (_compressedMomentum ?? throw new InvalidOperationException("_compressedMomentum is null where it is required.")));
         _compressedMomentum = newMomentum;
 
         if (_useAdaptiveLearningRate && _compressedSecondMoment != null)

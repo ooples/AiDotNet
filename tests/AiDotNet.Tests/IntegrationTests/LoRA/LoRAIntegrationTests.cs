@@ -461,7 +461,7 @@ public class LoRAIntegrationTests
     public async Task StandardLoRAAdapter_NullBaseLayer_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new StandardLoRAAdapter<double>(null!, Rank, Alpha));
+            new StandardLoRAAdapter<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.ILayer<double>>(), Rank, Alpha));
     }
 
     [Fact(Timeout = 120000)]

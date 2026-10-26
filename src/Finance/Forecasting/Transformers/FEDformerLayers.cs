@@ -107,6 +107,79 @@ internal sealed partial class FedformerNetwork<T> : LayerBase<T>, IShapeContract
         _projectionBias = Uniform(new[] { features }, modelDimension);
 
         RegisterInReferenceOrder();
+        NoteConstructorInitialization();
+    }
+
+    // Every tensor RegisterInReferenceOrder registered, in that order: the subject of the construction
+    // fingerprint and the target of a reseeded re-initialisation.
+    private Tensor<T>[] InitializedTensors()
+    {
+        var tensors = new Tensor<T>[_named.Count];
+        for (int i = 0; i < _named.Count; i++) tensors[i] = _named[i].Tensor;
+        return tensors;
+    }
+
+    [AiDotNet.Attributes.Scratch]
+    private bool _initializedWithoutSeed;
+
+    [AiDotNet.Attributes.Scratch]
+    private long _unseededInitFingerprint;
+
+    /// <summary>
+    /// Records a constructor initialisation that ran without a seed, so a seed assigned later can redo it.
+    /// </summary>
+    private void NoteConstructorInitialization()
+    {
+        // A seed drawn from a construction scope an earlier model left armed was chosen by nobody; whoever
+        // assigns a seed next replaces it, and that replacement must redo the draw like a first seed does.
+        if (RandomSeed.HasValue && !RandomSeedCameFromConstructionScope) return;
+        _initializedWithoutSeed = true;
+        _unseededInitFingerprint = ComputeParameterFingerprint(InitializedTensors());
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Every weight here is drawn in the constructor through <see cref="LayerInitializationSeedScope"/>, which falls
+    /// back to a SECURE generator when no scope is armed. Constructed on its own -- as the facade and the reference
+    /// tests do, with the seed set through the property afterwards -- this network therefore initialised from
+    /// cryptographic randomness and its seed reached only the dropout masks, so two runs at the same seed trained
+    /// from different weights. The initialisation is redone here from the seed, as MambaBlock and RWKV7Block already
+    /// do (#2290), by building a twin under a scope armed with that seed and copying its initial weights in. The
+    /// twin is used rather than a second copy of the constructor's draw order so the two can never drift apart, and
+    /// the registered tensors keep their identity, which the blocks' own references and every parameter view need.
+    /// Weights that were trained, loaded or set since construction are left alone.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        if (!_initializedWithoutSeed) return;
+        _initializedWithoutSeed = false;
+        if (!RandomSeed.HasValue) return;
+
+        var ours = InitializedTensors();
+        if (ComputeParameterFingerprint(ours) != _unseededInitFingerprint) return;
+
+        var capturedScope = LayerInitializationSeedScope.CaptureScope();
+        try
+        {
+            LayerInitializationSeedScope.ResumeSequence(RandomHelper.CreateSeededRandom(RandomSeed.Value));
+            var seeded = new FedformerNetwork<T>(_sequenceLength, _labelLength, _predictionHorizon, _features,
+                _modelDimension, _heads, _feedForward, _encoderLayers, _decoderLayers, _modes, _modeSelection,
+                _modeSelectionSeed, _movingAverage, _dropout);
+            var theirs = seeded.InitializedTensors();
+
+            // Checked in full before anything is written: a partial copy would leave half-seeded weights, which is
+            // worse than the unseeded initialisation this is replacing.
+            if (theirs.Length != ours.Length) return;
+            for (int i = 0; i < ours.Length; i++)
+                if (ours[i].Length != theirs[i].Length) return;
+
+            for (int i = 0; i < ours.Length; i++)
+                theirs[i].AsSpan().CopyTo(ours[i].AsWritableSpan());
+        }
+        finally
+        {
+            LayerInitializationSeedScope.RestoreScope(capturedScope);
+        }
     }
 
     // Registered in the reference's state-dict order; a shared Fourier weight is registered once (with its first user,

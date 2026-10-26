@@ -14,7 +14,7 @@ public class T5RelativeBiasAttentionBehaviourTests
 {
     private static Tensor<double> Random2D(int rows, int cols, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(new[] { rows, cols });
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() - 0.5;
         return t;

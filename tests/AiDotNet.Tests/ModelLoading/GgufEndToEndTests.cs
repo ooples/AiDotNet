@@ -361,7 +361,7 @@ namespace AiDotNet.Tests.ModelLoading
                 int rank = afterAttn.Shape.Length, featureDim = afterAttn.Shape[rank - 1], flatN = 1;
                 for (int i = 0; i < rank - 1; i++) flatN *= afterAttn.Shape[i];
                 var normed2Flat = eng.Reshape(normed2, new[] { flatN, featureDim });
-                var gateOut = blk.FfnGate!.Forward(normed2Flat); Cap("ffnGate", gateOut);
+                var gateOut = (blk.FfnGate ?? throw new InvalidOperationException("blk.FfnGate is null where it is required.")).Forward(normed2Flat); Cap("ffnGate", gateOut);
                 var upOut = blk.FfnUp.Forward(normed2Flat); Cap("ffnUp", upOut);
                 var ffnHidden = eng.TensorMultiply(gateOut, upOut); Cap("gate*up", ffnHidden);
                 var ffnDownOut = blk.FfnDown.Forward(ffnHidden); Cap("ffnDown", ffnDownOut);

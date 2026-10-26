@@ -162,7 +162,7 @@ public sealed class CensusPaperFidelityContractTests
 
         Assert.True(gradients.TryGetValue(parameter, out var gradient));
         Assert.NotNull(gradient);
-        Assert.NotEqual(0.0, gradient![0]);
+        Assert.NotEqual(0.0, gradient[0]);
         Assert.Equal(1.0 / 0.07, layer.Scale, 10);
     }
 

@@ -52,7 +52,7 @@ public class AiModelBuilderFederatedLearningIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.Equal("FedAvg", metadata!.AggregationStrategyUsed);
+        Assert.Equal("FedAvg", metadata.AggregationStrategyUsed);
         Assert.True(metadata.RoundsCompleted >= 1);
         Assert.True(metadata.Converged);
     }

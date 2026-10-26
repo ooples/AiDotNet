@@ -54,7 +54,7 @@ public class AmsGradVariantConventionTests
     [Fact]
     public void Adam_UseAMSGrad_vector_path_matches_PyTorch()
     {
-        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(null!,
+        var optimizer = new AdamOptimizer<double, Matrix<double>, Vector<double>>(null,
             new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
             { InitialLearningRate = Lr, Beta1 = B1, Beta2 = B2, Epsilon = Eps, UseAMSGrad = true });
         var expected = Reference(0);
@@ -69,7 +69,7 @@ public class AmsGradVariantConventionTests
     [Fact]
     public void AdamW_UseAMSGrad_vector_path_matches_PyTorch()
     {
-        var optimizer = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null!,
+        var optimizer = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null,
             new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
             { InitialLearningRate = Lr, Beta1 = B1, Beta2 = B2, Epsilon = Eps, WeightDecay = Wd, UseAMSGrad = true });
         var expected = Reference(Wd);
@@ -84,7 +84,7 @@ public class AmsGradVariantConventionTests
     [Fact]
     public void AdamW_UseAMSGrad_matrix_path_applies_AMSGrad()
     {
-        var optimizer = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null!,
+        var optimizer = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null,
             new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
             { InitialLearningRate = Lr, Beta1 = B1, Beta2 = B2, Epsilon = Eps, WeightDecay = Wd, UseAMSGrad = true });
         var expected = Reference(Wd);
@@ -102,14 +102,14 @@ public class AmsGradVariantConventionTests
     [Fact]
     public void Fused_AdamW_UseAMSGrad_requests_decoupled_decay_and_plain_AdamW_does_not()
     {
-        var amsgrad = new AdamWOptimizer<float, Matrix<float>, Vector<float>>(null!,
+        var amsgrad = new AdamWOptimizer<float, Matrix<float>, Vector<float>>(null,
             new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>> { WeightDecay = 0.01, UseAMSGrad = true });
         Assert.True(((IFusedOptimizerSpec)amsgrad).TryGetFusedOptimizerConfig(out var cfg));
         Assert.Equal(AiDotNet.Tensors.Engines.Compilation.OptimizerType.AMSGrad, cfg.Type);
         Assert.NotNull(cfg.Extras);
-        Assert.True(cfg.Extras!.DecoupledWeightDecay);
+        Assert.True(cfg.Extras.DecoupledWeightDecay);
 
-        var plain = new AdamWOptimizer<float, Matrix<float>, Vector<float>>(null!,
+        var plain = new AdamWOptimizer<float, Matrix<float>, Vector<float>>(null,
             new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>> { WeightDecay = 0.01 });
         Assert.True(((IFusedOptimizerSpec)plain).TryGetFusedOptimizerConfig(out var plainCfg));
         Assert.Equal(AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW, plainCfg.Type);

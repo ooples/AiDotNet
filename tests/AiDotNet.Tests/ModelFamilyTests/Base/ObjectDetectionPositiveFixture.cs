@@ -462,11 +462,14 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
     {
         // Five real RPN grids contain 3*(16^2+8^2+4^2+2^2+1)=1023 anchors.
         // Zero RPN logits/deltas and per-level NMS leave 275 fixed proposals. Public Predict
-        // concatenates final [N,3] logits, [N,12] deltas, [N,4] proposals, optional earlier
-        // cascade heads, then 1023*2 objectness and 1023*4 RPN regression values.
+        // concatenates final [N,3] logits, the deltas ([N,12] per class for Faster R-CNN, class-agnostic
+        // [N,4] for Cascade R-CNN's stages), [N,4] proposals, optional earlier cascade heads, then
+        // 1023*2 objectness and 1023*4 RPN regression values.
         const int proposals = 275;
         int stageCount = profile == HeadProfile.CascadeRcnn ? 3 : 1;
-        Assert.Equal(new[] { 1, proposals * (4 + stageCount * 15) + 1023 * 6 }, raw.Shape.ToArray());
+        int deltaWidth = profile == HeadProfile.CascadeRcnn ? 4 : 12;
+        int stageWidth = 3 + deltaWidth;
+        Assert.Equal(new[] { 1, proposals * (4 + stageCount * stageWidth) + 1023 * 6 }, raw.Shape.ToArray());
         var expected = new List<ExpectedDetection>();
         for (int proposal = 0; proposal < proposals; proposal++)
         {
@@ -475,21 +478,21 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             Assert.InRange(foregroundLogit, 3, 5);
             AssertClose(-20, ToD(raw[0, proposal * 3 + 2]));
             double score = 1 / (1 + Math.Exp(-foregroundLogit) + Math.Exp(-20 - foregroundLogit));
-            int box = proposals * 15 + proposal * 4;
+            int box = proposals * stageWidth + proposal * 4;
             expected.Add(new ExpectedDetection(score, ToD(raw[0, box]), ToD(raw[0, box + 1]),
                 ToD(raw[0, box + 2]), ToD(raw[0, box + 3])));
         }
-        for (int index = proposals * 3; index < proposals * 15; index++) AssertClose(0, ToD(raw[0, index]));
+        for (int index = proposals * 3; index < proposals * stageWidth; index++) AssertClose(0, ToD(raw[0, index]));
         for (int stage = 0; stage < stageCount - 1; stage++)
         {
-            int offset = proposals * (19 + stage * 15);
+            int offset = proposals * (stageWidth + 4 + stage * stageWidth);
             for (int proposal = 0; proposal < proposals; proposal++)
             {
                 AssertClose(0, ToD(raw[0, offset + proposal * 3]));
                 Assert.InRange(ToD(raw[0, offset + proposal * 3 + 1]), 3, 5);
                 AssertClose(-20, ToD(raw[0, offset + proposal * 3 + 2]));
             }
-            for (int index = offset + proposals * 3; index < offset + proposals * 15; index++)
+            for (int index = offset + proposals * 3; index < offset + proposals * stageWidth; index++)
                 AssertClose(0, ToD(raw[0, index]));
         }
         for (int index = raw.Length - 1023 * 6; index < raw.Length; index++) AssertClose(0, ToD(raw[0, index]));

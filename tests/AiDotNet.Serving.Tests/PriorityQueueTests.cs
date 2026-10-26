@@ -68,12 +68,12 @@ public class PriorityQueueTests
         var dequeuedItems = new List<string>();
         while (queue.TryDequeue(out var item))
         {
-            dequeuedItems.Add(item!);
+            dequeuedItems.Add((item ?? throw new InvalidOperationException("item is null where it is required.")));
         }
 
         // Assert - High priority items should come first, but not starve low priority
         var firstFiveItems = dequeuedItems.Take(5).ToList();
-        Assert.Contains(firstFiveItems, item => item!.StartsWith("high"));
+        Assert.Contains(firstFiveItems, item => item.StartsWith("high"));
     }
 
     [Fact(Timeout = 60000)]

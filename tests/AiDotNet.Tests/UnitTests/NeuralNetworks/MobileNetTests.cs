@@ -125,7 +125,7 @@ public class MobileNetTests
 
             // Use standard 224x224 resolution expected by MobileNetV2
             var input = new Tensor<double>([1, 3, 224, 224]);
-            var random = new Random(123);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
             for (int i = 0; i < input.Length; i++)
                 input[i] = random.NextDouble() * 0.5 + 0.1;
 
@@ -147,7 +147,7 @@ public class MobileNetTests
             var network = MobileNetV2Network<double>.MobileNetV2_100(numClasses: 10);
 
             var input = new Tensor<double>([1, 3, 224, 224]);
-            var random = new Random(42);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < input.Length; i++)
                 input[i] = random.NextDouble();
 
@@ -266,7 +266,7 @@ public class MobileNetTests
 
             // Use standard 224x224 resolution expected by MobileNetV3
             var input = new Tensor<double>([1, 3, 224, 224]);
-            var random = new Random(123);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
             for (int i = 0; i < input.Length; i++)
                 input[i] = random.NextDouble() * 0.5 + 0.1;
 
@@ -289,7 +289,7 @@ public class MobileNetTests
 
             // Use standard 224x224 resolution expected by MobileNetV3
             var input = new Tensor<double>([1, 3, 224, 224]);
-            var random = new Random(123);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
             for (int i = 0; i < input.Length; i++)
                 input[i] = random.NextDouble() * 0.5 + 0.1;
 
@@ -359,7 +359,7 @@ public class MobileNetTests
             useSE: false);
 
         var input = new Tensor<double>([1, 32, 8, 8]);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
             input[i] = random.NextDouble();
 
@@ -385,7 +385,7 @@ public class MobileNetTests
             useSE: false);
 
         var input = new Tensor<double>([1, 32, 16, 16]);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
             input[i] = random.NextDouble();
 

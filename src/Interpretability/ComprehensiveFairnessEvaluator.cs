@@ -206,7 +206,7 @@ namespace AiDotNet.Interpretability
         public GroupStatistics()
         {
             var numOps = MathHelper.GetNumericOperations<T>();
-            GroupValue = default(T)!;
+            GroupValue = numOps.Zero;
             Size = 0;
             PositiveRate = numOps.Zero;
             TruePositiveRate = numOps.Zero;

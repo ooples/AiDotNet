@@ -48,7 +48,7 @@ public class VideoMAEPretrainingFidelityTests
 
     private static Tensor<double> RandomClip(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var clip = new Tensor<double>([1, Frames, Channels, Size, Size]);
         var span = clip.Data.Span;
         for (int i = 0; i < span.Length; i++)
@@ -71,7 +71,7 @@ public class VideoMAEPretrainingFidelityTests
     /// </summary>
     private static Tensor<double> TiledClip(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var tile = new double[Frames, Channels, PatchSize, PatchSize];
         for (int f = 0; f < Frames; f++)
             for (int c = 0; c < Channels; c++)

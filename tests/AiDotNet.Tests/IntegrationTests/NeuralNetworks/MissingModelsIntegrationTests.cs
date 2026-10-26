@@ -17,7 +17,7 @@ public class MissingModelsIntegrationTests
 {
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var length = 1;
         foreach (var dim in shape)
         {
@@ -206,7 +206,7 @@ public class MissingModelsIntegrationTests
         await Task.Yield();
 
         const int n = 60, F = 4, C = 2;
-        var rng = new Random(3);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
         var features = new Tensor<double>(new[] { n, F });
         var labels = new Tensor<double>(new[] { n, C });
         var adjacency = new Tensor<double>(new[] { n, n });

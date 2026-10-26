@@ -111,7 +111,7 @@ public class ParametricDistributionsArePubliclyUsableTests
     public void SamplingGoesThroughThePublicInterfaceToo()
     {
         var distribution = new NormalDistribution<double>(15.0, 0.25);
-        var random = new Random(20260818);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260818);
 
         double total = 0.0;
         const int draws = 20000;

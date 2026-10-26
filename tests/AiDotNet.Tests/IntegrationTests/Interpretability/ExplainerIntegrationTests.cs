@@ -119,7 +119,7 @@ public class ExplainerIntegrationTests
     private Matrix<double> CreateTestData(int rows = 100)
     {
         var data = new double[rows, _numFeatures];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < _numFeatures; j++)
@@ -776,7 +776,7 @@ public class ExplainerIntegrationTests
     private Tensor<double> CreateTestImageTensor(int height, int width, int channels)
     {
         var data = new double[height * width * channels];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++)
         {
             data[i] = random.NextDouble();
@@ -834,7 +834,7 @@ public class ExplainerIntegrationTests
             // Return mock attention weights for a single layer
             // Shape: [batch, heads, seq_len, seq_len]
             var data = new double[1 * 4 * 10 * 10];
-            var random = new Random(42 + layerIndex);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42 + layerIndex);
             for (int i = 0; i < data.Length; i++)
             {
                 data[i] = random.NextDouble();
@@ -1125,7 +1125,7 @@ public class ExplainerIntegrationTests
     {
         Assert.Throws<ArgumentNullException>(() =>
             new TreeSHAPExplainer<double>(
-                tree: null!,
+                tree: global::AiDotNet.Tests.TestNull.Of<AiDotNet.LinearAlgebra.DecisionTreeNode<double>>(),
                 numFeatures: 3,
                 expectedValue: 15.0));
     }
@@ -1399,8 +1399,8 @@ public class ExplainerIntegrationTests
         var tree1 = CreateSimpleTestTree(); // Left: 10, Right: 20
         var tree2 = CreateSimpleTestTree();
         // Modify tree2's predictions
-        tree2.Left!.Prediction = 14.0;  // Left: 14
-        tree2.Right!.Prediction = 22.0; // Right: 22
+        (tree2.Left ?? throw new InvalidOperationException("tree2.Left is null where it is required.")).Prediction = 14.0;  // Left: 14
+        (tree2.Right ?? throw new InvalidOperationException("tree2.Right is null where it is required.")).Prediction = 22.0; // Right: 22
 
         var trees = new List<DecisionTreeNode<double>> { tree1, tree2 };
 
@@ -1488,13 +1488,13 @@ public class ExplainerIntegrationTests
     public async Task Explainers_NullPredictFunction_ThrowsException()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new IntegratedGradientsExplainer<double>(null!, null, _numFeatures));
+            new IntegratedGradientsExplainer<double>(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), null, _numFeatures));
 
         Assert.Throws<ArgumentNullException>(() =>
-            new DeepLIFTExplainer<double>(predictFunction: null!, numFeatures: _numFeatures));
+            new DeepLIFTExplainer<double>(predictFunction: global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), numFeatures: _numFeatures));
 
         Assert.Throws<ArgumentNullException>(() =>
-            new SaliencyMapExplainer<double>(null!, numFeatures: _numFeatures));
+            new SaliencyMapExplainer<double>(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), numFeatures: _numFeatures));
     }
 
     [Fact(Timeout = 120000)]
@@ -1691,7 +1691,7 @@ public class ExplainerIntegrationTests
 
         // Feature 0 is constant, others vary
         var data = new double[50, 5];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
         {
             data[i, 0] = 5.0; // Constant
@@ -1879,7 +1879,7 @@ public class ExplainerIntegrationTests
 
         // Create test data
         var data = new double[50, 5];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
             for (int j = 0; j < 5; j++)
                 data[i, j] = random.NextDouble() * 10;
@@ -1916,7 +1916,7 @@ public class ExplainerIntegrationTests
 
         // Create test data
         var data = new double[50, 5];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
             for (int j = 0; j < 5; j++)
                 data[i, j] = random.NextDouble() * 10;
@@ -1998,7 +1998,7 @@ public class ExplainerIntegrationTests
 
         // Create test data with uniform distribution
         var data = new double[100, 5];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 100; i++)
             for (int j = 0; j < 5; j++)
                 data[i, j] = random.NextDouble() * 10;

@@ -69,14 +69,14 @@ public class LearnedTensorsSurviveSaveTests
         var field = layer.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(field is not null, $"{layerName} has no field named {fieldName}");
 
-        var tensor = field!.GetValue(layer) as Tensor<double>;
+        var tensor = field.GetValue(layer) as Tensor<double>;
         Assert.True(tensor is not null && tensor.Length > 0,
             $"{layerName}.{fieldName} is not a populated Tensor<double>");
 
         layer.ResetState();
         var baseline = layer.Forward(input).Clone();
 
-        for (int i = 0; i < tensor!.Length; i++) tensor[i] = tensor[i] + 0.25;
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = tensor[i] + 0.25;
 
         layer.ResetState();
         var mutated = layer.Forward(input).Clone();
@@ -148,11 +148,11 @@ public class LearnedTensorsSurviveSaveTests
         var field = layer.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(field is not null, $"RWKVLayer has no field named {fieldName}");
 
-        var tensor = field!.GetValue(layer) as Tensor<double>;
+        var tensor = field.GetValue(layer) as Tensor<double>;
         Assert.True(tensor is not null && tensor.Length > 0,
             $"RWKVLayer.{fieldName} is not a populated Tensor<double>");
 
-        for (int i = 0; i < tensor!.Length; i++) tensor[i] = tensor[i] + 0.25;
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = tensor[i] + 0.25;
         var expected = tensor.Clone();
 
         using var ms = new MemoryStream();
@@ -164,13 +164,15 @@ public class LearnedTensorsSurviveSaveTests
         using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
             restored.Deserialize(reader);
 
-        var restoredTensor = (Tensor<double>)restored.GetType()
-            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(restored)!;
+        var restoredTensor = (restored.GetType()
+            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException($"No field '{fieldName}' on the restored model."))
+            .GetValue(restored) as Tensor<double>
+            ?? throw new InvalidOperationException($"Field '{fieldName}' on the restored model is not a tensor.");
 
         double drift = 0;
         for (int i = 0; i < expected.Length; i++)
-            drift = Math.Max(drift, Math.Abs(expected[i] - restoredTensor[i]));
+            drift = Math.Max(drift, Math.Abs(expected[i] - (restoredTensor ?? throw new InvalidOperationException("restoredTensor is null where it is required."))[i]));
 
         Assert.True(drift <= 1e-12,
             $"RWKVLayer.{fieldName} was LOST on save: the field came back {drift:E3} away from " +
@@ -210,11 +212,11 @@ public class LearnedTensorsSurviveSaveTests
         var field = layer.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(field is not null, $"{layerName} has no field named {fieldName}");
 
-        var tensor = field!.GetValue(layer) as Tensor<double>;
+        var tensor = field.GetValue(layer) as Tensor<double>;
         Assert.True(tensor is not null && tensor.Length > 0,
             $"{layerName}.{fieldName} is not a populated Tensor<double>");
 
-        for (int i = 0; i < tensor!.Length; i++) tensor[i] = tensor[i] + 0.25;
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = tensor[i] + 0.25;
         var expected = tensor.Clone();
 
         using var ms = new MemoryStream();
@@ -226,12 +228,15 @@ public class LearnedTensorsSurviveSaveTests
         using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
             restored.Deserialize(reader);
 
-        var restoredTensor = (Tensor<double>)restored.GetType()
-            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(restored)!;
+        var restoredTensor = (restored.GetType()
+            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException($"No field '{fieldName}' on the restored model."))
+            .GetValue(restored) as Tensor<double>
+            ?? throw new InvalidOperationException($"Field '{fieldName}' on the restored model is not a tensor.");
 
         double drift = 0;
         for (int i = 0; i < expected.Length; i++)
-            drift = Math.Max(drift, Math.Abs(expected[i] - restoredTensor[i]));
+            drift = Math.Max(drift, Math.Abs(expected[i] - (restoredTensor ?? throw new InvalidOperationException("restoredTensor is null where it is required."))[i]));
 
         Assert.True(drift <= 1e-12,
             $"{layerName}.{fieldName} was LOST on save: the field came back {drift:E3} away from " +

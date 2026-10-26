@@ -47,7 +47,7 @@ public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
 
         var flMetadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(flMetadata);
-        Assert.True(flMetadata!.DifferentialPrivacyEnabled);
+        Assert.True(flMetadata.DifferentialPrivacyEnabled);
         Assert.Equal("Basic", flMetadata.PrivacyAccountantUsed);
         Assert.Equal(3, flMetadata.RoundsCompleted);
         Assert.Equal(1.5, flMetadata.TotalPrivacyBudgetConsumed, 6);
@@ -88,7 +88,7 @@ public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
 
         var flMetadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(flMetadata);
-        Assert.True(flMetadata!.SecureAggregationEnabled);
+        Assert.True(flMetadata.SecureAggregationEnabled);
         Assert.Equal(2, flMetadata.RoundsCompleted);
     }
 
@@ -128,7 +128,7 @@ public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
 
         var flMetadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(flMetadata);
-        Assert.True(flMetadata!.DifferentialPrivacyEnabled);
+        Assert.True(flMetadata.DifferentialPrivacyEnabled);
         Assert.Equal("RDP", flMetadata.PrivacyAccountantUsed);
         Assert.Equal(flOptions.PrivacyDelta, flMetadata.ReportedDelta, 12);
         Assert.True(flMetadata.ReportedEpsilonAtDelta > 0.0);

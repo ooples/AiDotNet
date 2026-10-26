@@ -512,7 +512,7 @@ public class EmbeddingLayersIntegrationTests
     private static Tensor<T> CreateRandomTensor<T>(int[] shape) where T : struct, IComparable<T>
     {
         var tensor = new Tensor<T>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < tensor.Length; i++)
         {
@@ -526,7 +526,7 @@ public class EmbeddingLayersIntegrationTests
     private static Tensor<float> CreateTokenIndices(int[] shape, int vocabSize)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < tensor.Length; i++)
         {
@@ -539,7 +539,7 @@ public class EmbeddingLayersIntegrationTests
     private static Tensor<float> CreateTimesteps(int[] shape, int maxTimestep)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < tensor.Length; i++)
         {

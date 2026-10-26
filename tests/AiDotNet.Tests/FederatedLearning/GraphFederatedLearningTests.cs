@@ -81,7 +81,7 @@ public class GraphFederatedLearningTests
     [Fact(Timeout = 60000)]
     public async Task SubgraphExpander_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new SubgraphExpander<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new SubgraphExpander<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedGraphOptions>()));
     }
 
     // ========== FederatedGraphPartitioner Tests ==========
@@ -102,7 +102,7 @@ public class GraphFederatedLearningTests
     [Fact(Timeout = 60000)]
     public async Task GraphPartitioner_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new FederatedGraphPartitioner<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new FederatedGraphPartitioner<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedGraphOptions>()));
     }
 
     // ========== GraphNeighborhoodPrivacy Tests ==========
@@ -204,7 +204,7 @@ public class GraphFederatedLearningTests
     public async Task PrototypeFGL_NullOptions_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new PrototypeFederatedGraphLearning<double>(null, 16, 3));
+            new PrototypeFederatedGraphLearning<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedGraphOptions>(), 16, 3));
     }
 
     [Fact(Timeout = 60000)]

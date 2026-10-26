@@ -251,14 +251,14 @@ internal static class OpenAiJson
         if (t.Type == JTokenType.String)
         {
             var s = t.Value<string>();
-            if (!string.IsNullOrEmpty(s)) list.Add(s!);
+            if (!string.IsNullOrEmpty(s)) list.Add(s);
         }
         else if (t.Type == JTokenType.Array)
         {
             foreach (var e in t)
             {
                 var s = e.Value<string>();
-                if (!string.IsNullOrEmpty(s)) list.Add(s!);
+                if (!string.IsNullOrEmpty(s)) list.Add(s);
             }
         }
         return list;

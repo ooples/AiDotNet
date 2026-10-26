@@ -45,11 +45,11 @@ public sealed class TreeSitterTokenizerFallbackTests
     {
         var treeSitterAvailable = typeof(TreeSitterTokenizer).GetField("_treeSitterAvailable", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(treeSitterAvailable);
-        treeSitterAvailable!.SetValue(tokenizer, false);
+        treeSitterAvailable.SetValue(tokenizer, false);
 
         var parser = typeof(TreeSitterTokenizer).GetField("_parser", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(parser);
-        parser!.SetValue(tokenizer, null);
+        parser.SetValue(tokenizer, null);
     }
 
     private sealed class SimpleTestTokenizer : ITokenizer

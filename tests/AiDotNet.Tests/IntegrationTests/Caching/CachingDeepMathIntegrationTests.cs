@@ -240,7 +240,7 @@ public class CachingDeepMathIntegrationTests
     public async Task GenerateKey_NullVector_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            DeterministicCacheKeyGenerator.GenerateKey<double>(null!, "test"));
+            DeterministicCacheKeyGenerator.GenerateKey<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), "test"));
     }
 
     [Fact(Timeout = 120000)]
@@ -248,7 +248,7 @@ public class CachingDeepMathIntegrationTests
     {
         var v = new Vector<double>(new double[] { 1.0 });
         Assert.Throws<ArgumentNullException>(() =>
-            DeterministicCacheKeyGenerator.GenerateKey(v, null!));
+            DeterministicCacheKeyGenerator.GenerateKey(v, global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     // ============================

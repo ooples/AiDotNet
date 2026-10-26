@@ -63,9 +63,9 @@ public class CreditRuleFacadeTrainingTests
 
     private static (Tensor<double> x, Tensor<double> y, int[] labels) MakeBlobs(int samples, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var centres = new double[MlpClasses][];
-        var centreRng = new Random(20260706);
+        var centreRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260706);
         for (int c = 0; c < MlpClasses; c++)
         {
             centres[c] = new double[MlpDim];
@@ -290,7 +290,7 @@ public class CreditRuleFacadeTrainingTests
     /// </summary>
     private static (Tensor<float> x, Tensor<float> y, int[] labels) MakeSeqData(int samples, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<float>(new[] { samples, SeqLen });
         var y = new Tensor<float>(new[] { samples, TfClasses });
         var labels = new int[samples];
@@ -613,7 +613,7 @@ public class CreditRuleFacadeTrainingTests
             foreach (var layer in context.Layers)
             {
                 if (layer.IsOutputLayer) continue;
-                var projected = ProjectThrough(error, feedback[layer.Index]!);
+                var projected = ProjectThrough(error, (feedback[layer.Index] ?? throw new InvalidOperationException("feedback[layer.Index] is null where it is required.")));
                 layer.TeachingSignal = ToTeachingSignal(projected, layer.OutputShape);
             }
         }

@@ -109,7 +109,7 @@ public class OnlineLearningDeepMathIntegrationTests
         sgdHuber.PartialFit(x, 0.1);
 
         // With large epsilon and small target, both should give same update
-        Assert.Equal(sgdSquared.GetWeights()[0], sgdHuber.GetWeights()[0], MediumTolerance);
+        Assert.Equal((sgdSquared.GetWeights() ?? throw new InvalidOperationException("sgdSquared.GetWeights() is null where it is required."))[0], (sgdHuber.GetWeights() ?? throw new InvalidOperationException("sgdHuber.GetWeights() is null where it is required."))[0], MediumTolerance);
         Assert.Equal(sgdSquared.GetBias(), sgdHuber.GetBias(), MediumTolerance);
     }
 
@@ -130,7 +130,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 1.0 });
         sgd.PartialFit(x, 100.0);
 
-        Assert.Equal(0.01, sgd.GetWeights()[0], MediumTolerance);
+        Assert.Equal(0.01, (sgd.GetWeights() ?? throw new InvalidOperationException("sgd.GetWeights() is null where it is required."))[0], MediumTolerance);
         Assert.Equal(0.01, sgd.GetBias(), MediumTolerance);
     }
 
@@ -148,7 +148,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 1.0 });
         sgd.PartialFit(x, 0.5);
 
-        Assert.Equal(0.0, sgd.GetWeights()[0], Tolerance);
+        Assert.Equal(0.0, (sgd.GetWeights() ?? throw new InvalidOperationException("sgd.GetWeights() is null where it is required."))[0], Tolerance);
         Assert.Equal(0.0, sgd.GetBias(), Tolerance);
     }
 
@@ -168,7 +168,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 1.0 });
         sgd.PartialFit(x, 5.0);
 
-        Assert.Equal(0.1, sgd.GetWeights()[0], MediumTolerance);
+        Assert.Equal(0.1, (sgd.GetWeights() ?? throw new InvalidOperationException("sgd.GetWeights() is null where it is required."))[0], MediumTolerance);
         Assert.Equal(0.1, sgd.GetBias(), MediumTolerance);
     }
 
@@ -188,7 +188,7 @@ public class OnlineLearningDeepMathIntegrationTests
 
         // With large L1, weights should be close to 0 (thresholded)
         var weights = sgd.GetWeights();
-        Assert.True(Math.Abs(weights[0]) < 0.1,
+        Assert.True(Math.Abs((weights ?? throw new InvalidOperationException("weights is null where it is required."))[0]) < 0.1,
             $"L1 regularization should keep weights small, got {weights[0]:F6}");
     }
 
@@ -219,7 +219,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var weights = sgd.GetWeights();
         double bias = sgd.GetBias();
 
-        Assert.True(Math.Abs(weights[0] - 2.0) < 0.5,
+        Assert.True(Math.Abs((weights ?? throw new InvalidOperationException("weights is null where it is required."))[0] - 2.0) < 0.5,
             $"Weight should be ~2.0, got {weights[0]:F4}");
         Assert.True(Math.Abs(bias - 3.0) < 0.5,
             $"Bias should be ~3.0, got {bias:F4}");
@@ -305,7 +305,7 @@ public class OnlineLearningDeepMathIntegrationTests
 
         var weights = pa.GetWeights();
         // w_new = 0 + 0.5*1*1 = 0.5
-        Assert.Equal(0.5, weights[0], MediumTolerance);
+        Assert.Equal(0.5, (weights ?? throw new InvalidOperationException("weights is null where it is required."))[0], MediumTolerance);
         // b_new = 0 + 0.5*1 = 0.5
         Assert.Equal(0.5, pa.GetBias(), MediumTolerance);
     }
@@ -326,7 +326,7 @@ public class OnlineLearningDeepMathIntegrationTests
 
         var weights = pa.GetWeights();
         // w_new = 0 + 2.0*1*1 = 2.0
-        Assert.Equal(2.0, weights[0], MediumTolerance);
+        Assert.Equal(2.0, (weights ?? throw new InvalidOperationException("weights is null where it is required."))[0], MediumTolerance);
         // b_new = 0 + 2.0*1 = 2.0
         Assert.Equal(2.0, pa.GetBias(), MediumTolerance);
     }
@@ -342,7 +342,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 1.0 });
         pa.PartialFit(x, 10.0);
 
-        double weightBefore = pa.GetWeights()[0];
+        double weightBefore = (pa.GetWeights() ?? throw new InvalidOperationException("pa.GetWeights() is null where it is required."))[0];
         double biasBefore = pa.GetBias();
 
         // Now present a sample within epsilon of current prediction
@@ -352,7 +352,7 @@ public class OnlineLearningDeepMathIntegrationTests
         pa.PartialFit(x, targetWithinEps);
 
         // Weights should NOT change (passive)
-        Assert.Equal(weightBefore, pa.GetWeights()[0], Tolerance);
+        Assert.Equal(weightBefore, (pa.GetWeights() ?? throw new InvalidOperationException("pa.GetWeights() is null where it is required."))[0], Tolerance);
         Assert.Equal(biasBefore, pa.GetBias(), Tolerance);
     }
 
@@ -400,7 +400,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 1.0 });
         pac.PartialFit(x, 1.0); // label +1
 
-        Assert.Equal(0.5, pac.GetWeights()[0], MediumTolerance);
+        Assert.Equal(0.5, (pac.GetWeights() ?? throw new InvalidOperationException("pac.GetWeights() is null where it is required."))[0], MediumTolerance);
         Assert.Equal(0.5, pac.GetBias(), MediumTolerance);
 
         // New score: 0.5*1 + 0.5 = 1.0, margin = 1*1.0 = 1.0 (exactly at margin!)
@@ -419,14 +419,14 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 1.0 });
         pac.PartialFit(x, 1.0);
 
-        double weightBefore = pac.GetWeights()[0];
+        double weightBefore = (pac.GetWeights() ?? throw new InvalidOperationException("pac.GetWeights() is null where it is required."))[0];
         double biasBefore = pac.GetBias();
 
         // Now present the same sample - margin should be >= 1 → passive
         pac.PartialFit(x, 1.0);
 
         // Weights should NOT change
-        Assert.Equal(weightBefore, pac.GetWeights()[0], Tolerance);
+        Assert.Equal(weightBefore, (pac.GetWeights() ?? throw new InvalidOperationException("pac.GetWeights() is null where it is required."))[0], Tolerance);
         Assert.Equal(biasBefore, pac.GetBias(), Tolerance);
     }
 
@@ -444,8 +444,8 @@ public class OnlineLearningDeepMathIntegrationTests
         // normSq = 0.01 + 1 = 1.01, hingeLoss = 1, loss/normSq ≈ 0.99
         // tau = min(0.1, 0.99) = 0.1 (bounded)
         // w_new = 0 + 0.1*1*0.1 = 0.01
-        Assert.True(Math.Abs(pac.GetWeights()[0] - 0.01) < MediumTolerance,
-            $"PA-I weight should be ~0.01, got {pac.GetWeights()[0]:F6}");
+        Assert.True(Math.Abs((pac.GetWeights() ?? throw new InvalidOperationException("pac.GetWeights() is null where it is required."))[0] - 0.01) < MediumTolerance,
+            $"PA-I weight should be ~0.01, got {(pac.GetWeights() ?? throw new InvalidOperationException("pac.GetWeights() is null where it is required."))[0]:F6}");
     }
 
     [Fact(Timeout = 120000)]
@@ -521,7 +521,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 1.0 });
         sgd.PartialFit(x, 1.0);
 
-        Assert.Equal(0.05, sgd.GetWeights()[0], MediumTolerance);
+        Assert.Equal(0.05, (sgd.GetWeights() ?? throw new InvalidOperationException("sgd.GetWeights() is null where it is required."))[0], MediumTolerance);
         Assert.Equal(0.05, sgd.GetBias(), MediumTolerance);
     }
 
@@ -584,7 +584,7 @@ public class OnlineLearningDeepMathIntegrationTests
 
         var weights = sgd.GetWeights();
         // Feature 1 weight should be exactly 0 (never updated since x_1=0)
-        Assert.Equal(0.0, weights[1], Tolerance);
+        Assert.Equal(0.0, (weights ?? throw new InvalidOperationException("weights is null where it is required."))[1], Tolerance);
     }
 
     #endregion
@@ -679,14 +679,14 @@ public class OnlineLearningDeepMathIntegrationTests
         // Now present one more sample with a new target
         // The inverse scaling model should have smaller effective LR
         // so it should be less responsive to the new sample
-        double wConstantBefore = sgdConstant.GetWeights()[0];
-        double wInverseBefore = sgdInverse.GetWeights()[0];
+        double wConstantBefore = (sgdConstant.GetWeights() ?? throw new InvalidOperationException("sgdConstant.GetWeights() is null where it is required."))[0];
+        double wInverseBefore = (sgdInverse.GetWeights() ?? throw new InvalidOperationException("sgdInverse.GetWeights() is null where it is required."))[0];
 
         sgdConstant.PartialFit(x, 100.0); // Sudden jump
         sgdInverse.PartialFit(x, 100.0);
 
-        double wConstantAfter = sgdConstant.GetWeights()[0];
-        double wInverseAfter = sgdInverse.GetWeights()[0];
+        double wConstantAfter = (sgdConstant.GetWeights() ?? throw new InvalidOperationException("sgdConstant.GetWeights() is null where it is required."))[0];
+        double wInverseAfter = (sgdInverse.GetWeights() ?? throw new InvalidOperationException("sgdInverse.GetWeights() is null where it is required."))[0];
 
         double constantChange = Math.Abs(wConstantAfter - wConstantBefore);
         double inverseChange = Math.Abs(wInverseAfter - wInverseBefore);
@@ -1105,7 +1105,7 @@ public class OnlineLearningDeepMathIntegrationTests
         sgd.PartialFit(x, 1000.0);
 
         // Weights should be essentially zero due to tiny learning rate
-        Assert.True(Math.Abs(sgd.GetWeights()[0]) < 1e-6,
+        Assert.True(Math.Abs((sgd.GetWeights() ?? throw new InvalidOperationException("sgd.GetWeights() is null where it is required."))[0]) < 1e-6,
             "Tiny learning rate should produce negligible weight updates");
     }
 
@@ -1119,7 +1119,7 @@ public class OnlineLearningDeepMathIntegrationTests
         var x = new Vector<double>(new double[] { 0.0 });
         pa.PartialFit(x, 5.0);
 
-        Assert.Equal(0.0, pa.GetWeights()[0], Tolerance);
+        Assert.Equal(0.0, (pa.GetWeights() ?? throw new InvalidOperationException("pa.GetWeights() is null where it is required."))[0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]

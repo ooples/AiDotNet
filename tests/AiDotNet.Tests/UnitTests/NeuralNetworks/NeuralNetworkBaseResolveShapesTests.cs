@@ -66,7 +66,7 @@ public class NeuralNetworkBaseResolveShapesTests
 
     private static (Tensor<float> input, Tensor<float> target) DummyBatch(int n, int seed = 0)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var input = new float[n * 6];
         var target = new float[n * 4];
         for (int i = 0; i < n; i++)
@@ -231,7 +231,7 @@ public class NeuralNetworkBaseResolveShapesTests
     public void ResolveShapes_NullSampleInput_ThrowsArgumentNullException()
     {
         var model = BuildNeRF();
-        Assert.Throws<ArgumentNullException>(() => model.ResolveShapes(null!));
+        Assert.Throws<ArgumentNullException>(() => model.ResolveShapes(global::AiDotNet.Tests.TestNull.Of<Tensor<float>>()));
     }
 
     [Fact]
@@ -342,10 +342,10 @@ public class NeuralNetworkBaseResolveShapesTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 
         Assert.NotNull(advance);
-        bool advanced = (bool)advance!.Invoke(model, arguments)!;
+        bool advanced = (bool)(advance.Invoke(model, arguments) ?? throw new InvalidOperationException("advance.Invoke(model, arguments) is null where it is required."));
 
         Assert.False(advanced);
-        Assert.Equal(new[] { 32 }, (int[])arguments[1]!);
+        Assert.Equal(new[] { 32 }, (int[])(arguments[1] ?? throw new InvalidOperationException("(int[])arguments[1] is null where it is required.")));
         Assert.False(layer.IsShapeResolved);
     }
 

@@ -47,7 +47,7 @@ public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.True(metadata!.PersonalizationEnabled);
+        Assert.True(metadata.PersonalizationEnabled);
         Assert.Equal("FedPer", metadata.PersonalizationStrategyUsed);
 
         var parameters = result.GetParameters();
@@ -103,7 +103,7 @@ public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.True(metadata!.MetaLearningEnabled);
+        Assert.True(metadata.MetaLearningEnabled);
         Assert.Equal("Reptile", metadata.MetaLearningStrategyUsed);
         Assert.Equal(0.5, metadata.MetaLearningRateUsed, precision: 6);
 

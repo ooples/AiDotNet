@@ -419,7 +419,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         var flatInput = Engine.Reshape(input, new[] { batchSize * _memorySize, 1 });
 
         if (_measure != "legs")
-            return ApplyFixedTransition(flatMemory, flatInput, _ltiTransition!, _ltiInput!, batchSize);
+            return ApplyFixedTransition(flatMemory, flatInput, (_ltiTransition ?? throw new InvalidOperationException("_ltiTransition is null where it is required.")), (_ltiInput ?? throw new InvalidOperationException("_ltiInput is null where it is required.")), batchSize);
 
         double stepSize = ClampStep(1.0 / scaledTime);
         if (_discretization == "zoh")

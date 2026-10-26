@@ -63,7 +63,10 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// The feed-forward neural network component of the decoder layer.
     /// </summary>
     private readonly FeedForwardLayer<T> _feedForward1;
-    private FeedForwardLayer<T> _feedForward2;
+    private FeedForwardLayer<T>? _feedForward2;
+
+    private FeedForwardLayer<T> FeedForward2Layer => _feedForward2 ?? throw new InvalidOperationException(
+        "DecoderLayer._feedForward2 is used before the layer has built its sublayers.");
 
     /// <summary>
     /// Layer normalization applied after self-attention.
@@ -152,7 +155,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     {
         return _feedForward2 ?? throw new InvalidOperationException(
             $"DecoderLayer.{caller} was called before the layer's shape was resolved " +
-            $"(_feedForward2 is null). The lazy ctor defers _feedForward2 construction " +
+            $"(_feedForward2 is null). The lazy ctor defers FeedForward2Layer construction " +
             $"until OnFirstForward sees the real input. Run a Forward pass once, or " +
             $"deserialize into a fresh unresolved instance (which calls ResolveFromShape " +
             $"and triggers OnFirstForward), before invoking parameter / optimizer / " +
@@ -195,7 +198,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         // rebuilds it once input size is known.
         _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, activation);
         _feedForwardInputSize = -1;
-        _feedForward2 = null!;
+        _feedForward2 = null;
 
         InputSize = -1;
 
@@ -224,7 +227,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         InputSize = inputSize;
         _feedForwardInputSize = inputSize;
         _feedForward2 = new FeedForwardLayer<T>(inputSize, (IActivationFunction<T>?)null);
-        RegisterSubLayer(_feedForward2);
+        RegisterSubLayer(FeedForward2Layer);
 
         var inputShape = input.Shape.ToArray();
         ResolveShapes(inputShape, inputShape);
@@ -251,7 +254,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
             // before that grow disagrees with the post-Forward count, breaking
             // SetParameters distribution during Deserialize. Skip ff2 here
             // and resolve it explicitly below using ff1's resolved output dim.
-            if (object.ReferenceEquals(sub, _feedForward2)) continue;
+            if (object.ReferenceEquals(sub, FeedForward2Layer)) continue;
 
             // LayerNormalizationLayer deliberately IGNORES a speculative ResolveShapesOnly walk --
             // it returns without resolving and without throwing, because a chain-level walk is only
@@ -306,13 +309,13 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         // Resolve ff2 with its actual input shape: ff1's output last-dim
         // (feedForwardSize). Use GetOutputShape so we don't need a back-channel
         // field for feedForwardSize.
-        if (!_feedForward2.IsShapeResolved)
+        if (!FeedForward2Layer.IsShapeResolved)
         {
             var ff1OutputShape = _feedForward1.GetOutputShape();
             int ff2InputSize = ff1OutputShape[ff1OutputShape.Length - 1];
             if (ff2InputSize > 0)
             {
-                _feedForward2.ResolveShapesOnly(new[] { ff2InputSize });
+                FeedForward2Layer.ResolveShapesOnly(new[] { ff2InputSize });
             }
         }
     }
@@ -336,7 +339,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         var ffActivation = activation ?? (IVectorActivationFunction<T>)new ReLUActivation<T>();
         _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, ffActivation);
         _feedForwardInputSize = -1;
-        _feedForward2 = null!;
+        _feedForward2 = null;
 
         InputSize = -1;
 
@@ -488,7 +491,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
         var ffExpanded = _feedForward1.Forward(normalized2);
-        var feedForwardOutput = _feedForward2.Forward(ffExpanded);
+        var feedForwardOutput = FeedForward2Layer.Forward(ffExpanded);
         var output = _norm3.Forward(normalized2.Add(feedForwardOutput));
 
         // Restore original tensor shape

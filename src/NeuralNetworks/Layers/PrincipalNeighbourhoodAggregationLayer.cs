@@ -431,11 +431,11 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         {
             case PNAAggregator.Sum:
                 // Sum aggregation: A @ X (message passing via adjacency matrix)
-                return Engine.TensorMatMul(_adjacencyMatrix!, transformed);
+                return Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix is null where it is required.")), transformed);
 
             case PNAAggregator.Mean:
                 // Mean aggregation: (A @ X) / degree
-                var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
+                var sumAgg = Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix is null where it is required.")), transformed);
                 // Expand degrees for broadcasting: [batch, nodes] -> [batch, nodes, 1]
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                 return Engine.TensorDivide(sumAgg, degreesExpanded);
@@ -453,7 +453,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                 return ComputeStdDevAggregation(transformed, safeDegrees, numNodes);
 
             default:
-                return Engine.TensorMatMul(_adjacencyMatrix!, transformed);
+                return Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix is null where it is required.")), transformed);
         }
     }
 
@@ -537,13 +537,13 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         int batchSize = transformed.Shape[0];
 
         // Mean: E[X] = (A @ X) / degree
-        var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
+        var sumAgg = Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix is null where it is required.")), transformed);
         var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
         var mean = Engine.TensorDivide(sumAgg, degreesExpanded);
 
         // E[X^2] = (A @ X^2) / degree
         var transformedSquared = Engine.TensorMultiply(transformed, transformed);
-        var sumSquared = Engine.TensorMatMul(_adjacencyMatrix!, transformedSquared);
+        var sumSquared = Engine.TensorMatMul(_adjacencyMatrix, transformedSquared);
         var meanSquared = Engine.TensorDivide(sumSquared, degreesExpanded);
 
         // Variance = E[X^2] - E[X]^2
@@ -715,7 +715,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
         for (int b = 0; b < batchSize; b++)
         {
-            var hiddenSlice = Engine.TensorSlice(_lastMlpHidden!, [b, 0, 0], [1, numNodes, _hiddenDim])
+            var hiddenSlice = Engine.TensorSlice((_lastMlpHidden ?? throw new InvalidOperationException("_lastMlpHidden is null where it is required.")), [b, 0, 0], [1, numNodes, _hiddenDim])
                 .Reshape([numNodes, _hiddenDim]);
             var gradSlice = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, _outputFeatures])
                 .Reshape([numNodes, _outputFeatures]);
@@ -772,7 +772,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
         for (int b = 0; b < batchSize; b++)
         {
-            var inputSlice = Engine.TensorSlice(_lastInput!, [b, 0, 0], [1, numNodes, _inputFeatures])
+            var inputSlice = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, _inputFeatures])
                 .Reshape([numNodes, _inputFeatures]);
             var gradSlice = Engine.TensorSlice(transformedGrad, [b, 0, 0], [1, numNodes, _inputFeatures])
                 .Reshape([numNodes, _inputFeatures]);
@@ -797,15 +797,15 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         Engine.TensorSubtractInPlace(_preTransformWeights,
             Engine.TensorMultiplyScalar(_preTransformWeightsGradient, learningRate));
         Engine.TensorSubtractInPlace(_preTransformBias,
-            Engine.TensorMultiplyScalar(_preTransformBiasGradient!, learningRate));
+            Engine.TensorMultiplyScalar((_preTransformBiasGradient ?? throw new InvalidOperationException("_preTransformBiasGradient is null where it is required.")), learningRate));
         Engine.TensorSubtractInPlace(_postAggregationWeights1,
             Engine.TensorMultiplyScalar(_postAggregationWeights1Gradient, learningRate));
         Engine.TensorSubtractInPlace(_postAggregationWeights2,
             Engine.TensorMultiplyScalar(_postAggregationWeights2Gradient, learningRate));
         Engine.TensorSubtractInPlace(_postAggregationBias1,
-            Engine.TensorMultiplyScalar(_postAggregationBias1Gradient!, learningRate));
+            Engine.TensorMultiplyScalar((_postAggregationBias1Gradient ?? throw new InvalidOperationException("_postAggregationBias1Gradient is null where it is required.")), learningRate));
         Engine.TensorSubtractInPlace(_postAggregationBias2,
-            Engine.TensorMultiplyScalar(_postAggregationBias2Gradient!, learningRate));
+            Engine.TensorMultiplyScalar((_postAggregationBias2Gradient ?? throw new InvalidOperationException("_postAggregationBias2Gradient is null where it is required.")), learningRate));
         Engine.TensorSubtractInPlace(_selfWeights,
             Engine.TensorMultiplyScalar(_selfWeightsGradient, learningRate));
         Engine.TensorSubtractInPlace(_bias,

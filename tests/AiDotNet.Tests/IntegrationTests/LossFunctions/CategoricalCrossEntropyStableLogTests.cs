@@ -59,7 +59,7 @@ public class CategoricalCrossEntropyStableLogTests
     public void FloorOnly_BitIdentical_To_TwoSidedClamp_For_ValidProbabilities()
     {
         // Realistic softmax rows (each sums to 1, all ≤ 1), incl. a near-1 confident row.
-        var rng = new Random(11);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         int B = 8, V = 32;
         var p = new float[B, V];
         var y = new float[B, V];

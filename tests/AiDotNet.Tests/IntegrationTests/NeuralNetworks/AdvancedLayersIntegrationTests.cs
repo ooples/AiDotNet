@@ -2823,7 +2823,7 @@ public class AdvancedLayersIntegrationTests
         Assert.True(
             gradients.TryGetValue(pointwiseKernel, out var pointwiseGradient) && pointwiseGradient is not null,
             "The contiguous NCHW materialization must retain a tape edge to the original pointwise kernel.");
-        Assert.Contains(pointwiseGradient!, value => Math.Abs(value) > 1e-6f);
+        Assert.Contains(pointwiseGradient, value => Math.Abs(value) > 1e-6f);
     }
 
     #endregion

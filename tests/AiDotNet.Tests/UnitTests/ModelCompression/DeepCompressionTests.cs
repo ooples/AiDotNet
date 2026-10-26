@@ -155,7 +155,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             var compression = new DeepCompression<double>();
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => compression.Compress(null!));
+            Assert.Throws<ArgumentNullException>(() => compression.Compress(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -264,7 +264,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                compression.Decompress(null!, metadata));
+                compression.Decompress(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), metadata));
         }
 
         #endregion
@@ -391,7 +391,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new DeepCompressionMetadata<double>(
-                    null!, clusteringMetadata, huffmanMetadata, 10, new DeepCompressionStats()));
+                    global::AiDotNet.Tests.TestNull.Of<AiDotNet.ModelCompression.SparsePruningMetadata<double>>(), clusteringMetadata, huffmanMetadata, 10, new DeepCompressionStats()));
         }
 
         [Fact(Timeout = 60000)]
@@ -407,7 +407,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new DeepCompressionMetadata<double>(
-                    pruningMetadata, null!, huffmanMetadata, 10, new DeepCompressionStats()));
+                    pruningMetadata, global::AiDotNet.Tests.TestNull.Of<AiDotNet.ModelCompression.WeightClusteringMetadata<double>>(), huffmanMetadata, 10, new DeepCompressionStats()));
         }
 
         [Fact(Timeout = 60000)]
@@ -422,7 +422,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
                 new DeepCompressionMetadata<double>(
-                    pruningMetadata, clusteringMetadata, null!, 10, new DeepCompressionStats()));
+                    pruningMetadata, clusteringMetadata, global::AiDotNet.Tests.TestNull.Of<AiDotNet.ModelCompression.HuffmanEncodingMetadata<double>>(), 10, new DeepCompressionStats()));
         }
 
         [Fact(Timeout = 60000)]

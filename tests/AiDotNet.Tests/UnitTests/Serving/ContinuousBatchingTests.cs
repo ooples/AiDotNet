@@ -672,8 +672,10 @@ public class ContinuousBatchingTests
     {
         // Use reflection to access private scheduler for testing
         var field = typeof(ContinuousBatcher<T>).GetField("_scheduler",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        return (BatchScheduler<T>)field!.GetValue(batcher)!;
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("ContinuousBatcher has no _scheduler field.");
+        return field.GetValue(batcher) as BatchScheduler<T>
+            ?? throw new InvalidOperationException("ContinuousBatcher._scheduler is not a BatchScheduler.");
     }
 
     #endregion

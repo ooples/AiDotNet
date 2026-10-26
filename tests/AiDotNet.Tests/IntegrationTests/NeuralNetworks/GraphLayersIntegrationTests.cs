@@ -79,7 +79,7 @@ public class GraphLayersIntegrationTests
     /// </summary>
     private static Tensor<float> CreateNodeFeatures(int numNodes, int numFeatures, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var features = new Tensor<float>(new[] { numNodes, numFeatures });
 
         for (int i = 0; i < numNodes; i++)
@@ -98,7 +98,7 @@ public class GraphLayersIntegrationTests
     /// </summary>
     private static Tensor<float> CreateBatchedNodeFeatures(int batchSize, int numNodes, int numFeatures, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var features = new Tensor<float>(new[] { batchSize, numNodes, numFeatures });
 
         for (int b = 0; b < batchSize; b++)
@@ -1129,7 +1129,7 @@ public class GraphLayersIntegrationTests
             }
         }
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var nodeFeatures = new Tensor<double>(new[] { numNodes, inputFeatures });
         for (int i = 0; i < numNodes; i++)
         {

@@ -1252,7 +1252,7 @@ public class AugmentationIntegrationTests
         var pipeline = new AugmentationPipeline<double, ImageTensor<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => pipeline.Add(null!));
+        Assert.Throws<ArgumentNullException>(() => pipeline.Add(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Augmentation.IAugmentation<double, AiDotNet.Augmentation.Image.ImageTensor<double>>>()));
     }
 
     #endregion
@@ -1510,7 +1510,7 @@ public class AugmentationIntegrationTests
         Assert.Equal(10, original.X1, Tolerance);
         Assert.Equal(50, clone.X1, Tolerance);
         Assert.Equal(5, clone.ClassIndex);
-        Assert.Equal(0.9, (double)clone.Confidence!, Tolerance);
+        Assert.Equal(0.9, (double)clone.Confidence, Tolerance);
     }
 
     #endregion
@@ -1572,7 +1572,7 @@ public class AugmentationIntegrationTests
         // Assert
         Assert.Equal(10, sample.Data.Height);
         Assert.True(sample.HasBoundingBoxes);
-        Assert.Single(sample.BoundingBoxes!);
+        Assert.Single(sample.BoundingBoxes);
     }
 
     [Fact(Timeout = 120000)]
@@ -1591,7 +1591,7 @@ public class AugmentationIntegrationTests
 
         // Act
         var clone = original.Clone();
-        clone.BoundingBoxes![0].X1 = 100;
+        (clone.BoundingBoxes ?? throw new InvalidOperationException("clone.BoundingBoxes is null where it is required."))[0].X1 = 100;
 
         // Assert
         Assert.Equal(0, original.BoundingBoxes[0].X1, Tolerance);
@@ -1619,7 +1619,7 @@ public class AugmentationIntegrationTests
         var result = flip.ApplyWithTargets(sample, context);
 
         // Assert - box should be flipped horizontally
-        var flippedBox = result.BoundingBoxes![0];
+        var flippedBox = (result.BoundingBoxes ?? throw new InvalidOperationException("result.BoundingBoxes is null where it is required."))[0];
         // Original: x1=10, x2=30, width=100
         // After flip: new_x1 = 100 - 30 = 70, new_x2 = 100 - 10 = 90
         Assert.Equal(70, flippedBox.X1, 1.0);
@@ -1643,7 +1643,7 @@ public class AugmentationIntegrationTests
         var result = flip.ApplyWithTargets(sample, context);
 
         // Assert - keypoint x should be flipped
-        var flippedKeypoint = result.Keypoints![0];
+        var flippedKeypoint = (result.Keypoints ?? throw new InvalidOperationException("result.Keypoints is null where it is required."))[0];
         // Original x=25, width=100
         // After flip: new_x = 100 - 1 - 25 = 74
         Assert.Equal(74, flippedKeypoint.X, 1.0);
@@ -1667,8 +1667,8 @@ public class AugmentationIntegrationTests
         var result = rotation.ApplyWithTargets(sample, context);
 
         // Assert - box should be rotated (and expanded to axis-aligned bounding box)
-        Assert.Single(result.BoundingBoxes!);
-        var rotatedBox = result.BoundingBoxes![0];
+        Assert.Single((result.BoundingBoxes ?? throw new InvalidOperationException("result.BoundingBoxes is null where it is required.")));
+        var rotatedBox = result.BoundingBoxes[0];
         // After 45-degree rotation, the axis-aligned bounding box enclosing the rotated square will be larger
         // Original box: (40,40) to (60,60), 20x20 square centered at (50,50)
         // Rotated 45 degrees: corners move to new positions, AABB will be roughly sqrt(2) times larger
@@ -1976,7 +1976,7 @@ public class AugmentationIntegrationTests
         Assert.Equal(0.95, recommendation.ConfidenceScore, Tolerance);
         Assert.Equal(1, recommendation.Priority);
         Assert.False(recommendation.IsCritical);
-        Assert.Single(recommendation.IncompatibleWith!);
+        Assert.Single(recommendation.IncompatibleWith);
     }
 
     [Fact(Timeout = 120000)]

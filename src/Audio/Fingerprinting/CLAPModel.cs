@@ -101,7 +101,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     // through the tape via Engine ops; the optimizer updates this alongside
     // the rest of the network.
     [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _logTemperature = null!;
+    // Sized here and given its initial value where the layers are built.
+    private Tensor<T> _logTemperature = new Tensor<T>([1]);
 
     // The waveform -> log-mel pipeline (clip fitting, feature-fusion views, filterbank).
     private readonly ClapAudioFrontEnd<T> _frontEnd;

@@ -229,7 +229,7 @@ public sealed class EvolveBlockTests
         Assert.Throws<ArgumentException>(() => new EvolveBlockMarkers("start", string.Empty));
         Assert.Throws<ArgumentException>(() => new EvolveBlockMarkers("same", "same"));
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => new EvolveBlockMarkers(null, "end"));
+        Assert.Throws<ArgumentNullException>(() => new EvolveBlockMarkers(global::AiDotNet.Tests.TestNull.Of<string>(), "end"));
 #pragma warning restore CS8600, CS8625
     }
 

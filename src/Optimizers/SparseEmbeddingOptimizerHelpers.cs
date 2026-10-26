@@ -176,7 +176,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T> context,
         Tensor<T> param,
         IEngine engine,
-        out Tensor<T> grad)
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Tensor<T>? grad)
     {
         if (context is null) throw new System.ArgumentNullException(nameof(context));
         if (param is null) throw new System.ArgumentNullException(nameof(param));
@@ -190,7 +190,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         var sparseList = DifferentiableOps.GetSparseEmbeddingGradsFor(param);
         if (sparseList is null || sparseList.Count == 0)
         {
-            grad = null!;
+            grad = null;
             return false;
         }
 

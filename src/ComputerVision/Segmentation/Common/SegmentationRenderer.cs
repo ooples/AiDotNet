@@ -497,7 +497,7 @@ public static class SegmentationRenderer
         SegmentationOutput<T> output, SegmentationVisualizationConfig config, INumericOperations<T> numOps)
     {
         var scores = output.InstanceScores;
-        int count = output.InstanceMasks!.Shape[0];
+        int count = (output.InstanceMasks ?? throw new InvalidOperationException("output.InstanceMasks is null where it is required.")).Shape[0];
         var keep = new List<int>(count);
         for (int i = 0; i < count; i++)
         {
@@ -577,7 +577,7 @@ public static class SegmentationRenderer
 
             if (!string.IsNullOrEmpty(name))
             {
-                label = name!;
+                label = (name ?? throw new InvalidOperationException("name is null where it is required."));
             }
             else if (output.InstanceClasses is not null && instanceIndex < output.InstanceClasses.Length)
             {
@@ -594,10 +594,10 @@ public static class SegmentationRenderer
         {
             double score = numOps.ToDouble(output.InstanceScores[instanceIndex]);
             string scoreText = score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-            label = label.Length == 0 ? scoreText : $"{label} {scoreText}";
+            label = (label ?? throw new InvalidOperationException("label is null where it is required.")).Length == 0 ? scoreText : $"{label} {scoreText}";
         }
 
-        return label;
+        return (label ?? throw new InvalidOperationException("label is null where it is required."));
     }
 
     /// <summary>

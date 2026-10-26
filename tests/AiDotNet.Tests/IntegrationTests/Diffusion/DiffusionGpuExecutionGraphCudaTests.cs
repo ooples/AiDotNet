@@ -78,8 +78,8 @@ public class DiffusionGpuExecutionGraphCudaTests
                 "DDPM UNet denoise diverges ~100% from the eager-GPU forward (proven on a GTX 1660 Ti). " +
                 "Set AIDOTNET_TEST_DEFERRED_GRAPH=1 to run this once consuming a fixed Tensors build.");
 
-            AiDotNetEngine.Current = gpu!;
-            _output.WriteLine($"engine={gpu!.Name}");
+            AiDotNetEngine.Current = gpu;
+            _output.WriteLine($"engine={gpu.Name}");
 
             const int seed = 42, steps = 3;
             var shape = new[] { 1, 3, 32, 32 }; // 3 channels => real UNet forward (not the zero placeholder)

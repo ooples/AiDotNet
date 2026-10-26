@@ -558,7 +558,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
 
             var parameterType = parameters[0].Type is null
                 ? null
-                : ctx.SemanticModel.GetTypeInfo(parameters[0].Type!).Type;
+                : ctx.SemanticModel.GetTypeInfo((parameters[0].Type ?? throw new System.InvalidOperationException("parameters[0].Type is null where it is required."))).Type;
 
             if (parameterType is null) continue;
 

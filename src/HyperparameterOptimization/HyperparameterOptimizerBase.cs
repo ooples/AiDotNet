@@ -183,7 +183,7 @@ public abstract class HyperparameterOptimizerBase<T, TInput, TOutput> : IHyperpa
             BestTrial = bestTrial,
             AllTrials = new List<HyperparameterTrial<T>>(Trials),
             BestParameters = bestTrial.Parameters,
-            BestObjectiveValue = bestTrial.ObjectiveValue!,
+            BestObjectiveValue = bestTrial.ObjectiveValue,
             SearchSpace = searchSpace,
             TotalTrials = totalTrials,
             CompletedTrials = Trials.Count(t => t.Status == TrialStatus.Complete),

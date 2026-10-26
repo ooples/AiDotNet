@@ -19,7 +19,7 @@ public class BoostingRegressionIntegrationTests
     private static (Matrix<double> x, Vector<double> y) CreateLinearData(
         int n, double[] coefficients, double intercept, double noise, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int p = coefficients.Length;
         var x = new Matrix<double>(n, p);
         var y = new Vector<double>(n);
@@ -171,7 +171,7 @@ public class BoostingRegressionIntegrationTests
     public async Task GradientBoosting_FitsNonLinearData_BetterThanLinear()
     {
         // Non-linear data: y = x1^2 + x2
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 80;
         var x = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);
@@ -283,7 +283,7 @@ public class BoostingRegressionIntegrationTests
     public async Task EBM_InteractionDetection_TwoFeatures()
     {
         // Data with interaction: y = x1 * x2
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 80;
         var x = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);

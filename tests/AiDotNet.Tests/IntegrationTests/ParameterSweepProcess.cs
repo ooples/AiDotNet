@@ -97,7 +97,7 @@ internal static class ParameterSweepProcess
         }
         catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); } catch { }
+            try { process.Kill(entireProcessTree: true); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"ParameterSweepProcess: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
             return new Measurement("timeout", -1, -1, -1, 0, "Unknown", null);
         }
 

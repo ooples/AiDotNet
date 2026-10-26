@@ -119,7 +119,7 @@ public class ArcDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
             }
             for (int i = n; i < Choices; i++) choiceStrs[i] = string.Empty;
             if (correctIdx < 0 || correctIdx >= Choices) continue;
-            questions.Add(stem!);
+            questions.Add((stem ?? throw new InvalidOperationException("stem is null where it is required.")));
             choices.Add(choiceStrs);
             labels.Add(correctIdx);
         }

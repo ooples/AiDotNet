@@ -51,7 +51,7 @@ public class GpuFusedTrainKeepsLearningTests
     private static (Tensor<float> X, Tensor<float> Y) LearnableData()
     {
         // y = A x: a target the network can fit, so a working optimizer must drive the loss well down.
-        var rng = new Random(20260926);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260926);
         var x = new Tensor<float>(new[] { Batch, Inputs });
         var y = new Tensor<float>(new[] { Batch, Outputs });
         var a = new float[Outputs, Inputs];
@@ -80,7 +80,7 @@ public class GpuFusedTrainKeepsLearningTests
         try
         {
             Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
-            AiDotNetEngine.Current = gpu!;
+            AiDotNetEngine.Current = gpu;
             int fusedHits = 0;
             TrainingDiagnosticsConfig.Level = TrainingDiagnosticLevel.PerStep;
             TrainingDiagnosticsConfig.Sink = evt => { if (evt is FusedOptimizerPathEvent { Hit: true }) fusedHits++; };

@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 var body = request.Content != null
                     ? await request.Content.ReadAsStringAsync().ConfigureAwait(false)
                     : string.Empty;
-                var path = request.RequestUri!.AbsolutePath;
+                var path = (request.RequestUri ?? throw new InvalidOperationException("request.RequestUri is null where it is required.")).AbsolutePath;
                 Requests.Add(new RecordedRequest(request.Method.Method, request.RequestUri.PathAndQuery, body));
 
                 foreach (var route in _routes)
@@ -111,7 +111,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var body = JObject.Parse(create.Body);
             Assert.Equal("Article", (string?)body["class"]);
             Assert.Equal("none", (string?)body["vectorizer"]);
-            Assert.Equal("l2-squared", (string?)body["vectorIndexConfig"]!["distance"]);
+            Assert.Equal("l2-squared", (string?)(body["vectorIndexConfig"] ?? throw new InvalidOperationException("body[\"vectorIndexConfig\"] is null where it is required."))["distance"]);
         }
 
         [Fact]
@@ -129,10 +129,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var upsert = handler.Requests.Single(r => r.Method == "POST" && r.Path == "/v1/objects");
             var body = JObject.Parse(upsert.Body);
             Assert.Equal("Article", (string?)body["class"]);
-            Assert.Equal("doc1", (string?)body["properties"]!["docId"]);
-            Assert.Equal("Hello world", (string?)body["properties"]!["content"]);
-            Assert.Equal("science", (string?)body["properties"]!["m_category"]);
-            Assert.Equal(3, ((JArray)body["vector"]!).Count);
+            Assert.Equal("doc1", (string?)(body["properties"] ?? throw new InvalidOperationException("body[\"properties\"] is null where it is required."))["docId"]);
+            Assert.Equal("Hello world", (string?)(body["properties"] ?? throw new InvalidOperationException("body[\"properties\"] is null where it is required."))["content"]);
+            Assert.Equal("science", (string?)(body["properties"] ?? throw new InvalidOperationException("body[\"properties\"] is null where it is required."))["m_category"]);
+            Assert.Equal(3, ((JArray)(body["vector"] ?? throw new InvalidOperationException("(JArray)body[\"vector\"] is null where it is required."))).Count);
         }
 
         [Fact]
@@ -151,8 +151,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             Assert.Equal(2, store.DocumentCount);
             var batch = handler.Requests.Single(r => r.Method == "POST" && r.Path.Contains("/v1/batch/objects"));
-            var objs = (JArray)JObject.Parse(batch.Body)["objects"]!;
-            Assert.Equal(2, objs.Count);
+            var objs = (JArray)(JObject.Parse(batch.Body)["objects"] ?? throw new InvalidOperationException("(JArray)JObject.Parse(batch.Body)[\"objects\"] is null where it is required."));
+            Assert.Equal(2, (objs ?? throw new InvalidOperationException("objs is null where it is required.")).Count);
         }
 
         [Fact]
@@ -179,7 +179,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.True(Convert.ToDouble(results[0].RelevanceScore) > Convert.ToDouble(results[1].RelevanceScore));
 
             var search = handler.Requests.Single(r => r.Path.Contains("/v1/graphql"));
-            var query = (string)JObject.Parse(search.Body)["query"]!;
+            var query = (JObject.Parse(search.Body)["query"] ?? throw new InvalidOperationException("(string)JObject.Parse(search.Body)[\"query\"] is null where it is required.")).ToString();
             Assert.Contains("nearVector", query);
             Assert.Contains("Get { Article", query);
             Assert.Contains("limit: 2", query);
@@ -197,7 +197,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             store.GetSimilarWithFilters(new Vector<float>(new float[] { 1, 0, 0 }), 10, filters).ToList();
 
             var search = handler.Requests.Single(r => r.Path.Contains("/v1/graphql"));
-            var query = (string)JObject.Parse(search.Body)["query"]!;
+            var query = (JObject.Parse(search.Body)["query"] ?? throw new InvalidOperationException("(string)JObject.Parse(search.Body)[\"query\"] is null where it is required.")).ToString();
 
             Assert.Contains("operator: And", query);
             Assert.Contains("[\"m_category\"]", query);
@@ -219,7 +219,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var filters = new Dictionary<string, object> { ["tag"] = new List<string> { "a", "b" } };
             store.GetSimilarWithFilters(new Vector<float>(new float[] { 1, 0, 0 }), 5, filters).ToList();
 
-            var query = (string)JObject.Parse(handler.Requests.Single(r => r.Path.Contains("/v1/graphql")).Body)["query"]!;
+            var query = (JObject.Parse(handler.Requests.Single(r => r.Path.Contains("/v1/graphql")).Body)["query"] ?? throw new InvalidOperationException("(string)JObject.Parse(handler.Requests.Single(r => r.Path.Contains(\"/v1/graph... is null where it is required.")).ToString();
             Assert.Contains("operator: Or", query);
             Assert.Contains("valueText: \"a\"", query);
             Assert.Contains("valueText: \"b\"", query);
@@ -237,7 +237,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var doc = store.GetById("doc1");
 
             Assert.NotNull(doc);
-            Assert.Equal("doc1", doc!.Id);
+            Assert.Equal("doc1", doc.Id);
             Assert.Equal("hi", doc.Content);
             Assert.Equal("v", doc.Metadata["k"].ToString());
         }
@@ -328,7 +328,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             var apiKey = Environment.GetEnvironmentVariable("WEAVIATE_API_KEY");
             var className = "Aidotnet_it_" + Guid.NewGuid().ToString("N");
-            var store = new WeaviateDocumentStore<float>(className, url!, apiKey,
+            var store = new WeaviateDocumentStore<float>(className, url, apiKey,
                 distanceMetric: DistanceMetricType.Cosine);
 
             try

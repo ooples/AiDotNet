@@ -515,7 +515,7 @@ public class AdvancedLossFunctionsIntegrationTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new PerceptualLoss<double>(null!, new Vector<double>(1)));
+            new PerceptualLoss<double>(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<AiDotNet.Tensors.LinearAlgebra.Vector<double>>>>(), new Vector<double>(1)));
     }
 
     #endregion

@@ -558,7 +558,7 @@ public class CrossValidationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GroupKFold_NullGroups_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new GroupKFoldStrategy<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new GroupKFoldStrategy<double>(global::AiDotNet.Tests.TestNull.Of<int[]>()));
     }
 
     #endregion

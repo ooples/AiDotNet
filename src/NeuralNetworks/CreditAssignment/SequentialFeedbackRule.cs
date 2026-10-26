@@ -64,7 +64,7 @@ internal sealed class FeedbackAlignmentCreditRule<T> : SequentialFeedbackRule<T>
         // Boundary matrix i maps layer i+1's output space to layer i's output space: [M_{i+1}, M_i].
         var feedback = EnsureFeedback(context, (layers, i) =>
             i < layers.Count - 1 ? (layers[i + 1].FlatFeatureSize, layers[i].FlatFeatureSize) : ((int, int)?)null);
-        return feedback[index]!;
+        return (feedback[index] ?? throw new InvalidOperationException("feedback[index] is null where it is required."));
     }
 }
 

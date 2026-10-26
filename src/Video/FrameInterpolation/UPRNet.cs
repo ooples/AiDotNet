@@ -221,7 +221,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
             [decoder1[0] + synth1[0], decoder1[1], decoder1[2]]);
         var decoder0 = ResolveStageShapes(_synthDecoder0,
             [decoder2[0] + synth0[0], decoder2[1], decoder2[2]]);
-        _synthPrediction!.ResolveFromShape(decoder0);
+        (_synthPrediction ?? throw new InvalidOperationException("_synthPrediction is null where it is required.")).ResolveFromShape(decoder0);
         MarkLayerShapesResolved();
         _paperShapesResolved = true;
     }
@@ -323,7 +323,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
                     Resize(flow, motionHeight, motionWidth), NumOps.FromDouble(scale));
                 lastFeature = Engine.TensorMultiplyScalar(
                     Resize(feature, motionHeight, motionWidth), NumOps.FromDouble(scale));
-                interpolation = Resize(interpolation!, levelHeight, levelWidth);
+                interpolation = Resize((interpolation ?? throw new InvalidOperationException("interpolation is null where it is required.")), levelHeight, levelWidth);
             }
 
             var pyramid0 = ExtractFeaturePyramid(image0);
@@ -432,7 +432,7 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
         var d1 = Apply(_synthDecoder1, ConcatChannels([s2, warpedC02, warpedC12]));
         var d2 = Apply(_synthDecoder2, ConcatChannels([d1, s1]));
         var d0 = Apply(_synthDecoder0, ConcatChannels([d2, s0]));
-        var prediction = _synthPrediction!.Forward(d0);
+        var prediction = (_synthPrediction ?? throw new InvalidOperationException("_synthPrediction is null where it is required.")).Forward(d0);
 
         var residual = Engine.TensorSubtract(
             Engine.TensorMultiplyScalar(

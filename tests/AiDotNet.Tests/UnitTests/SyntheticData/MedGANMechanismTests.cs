@@ -49,7 +49,7 @@ public class MedGANMechanismTests
 
     private static Tensor<double> Batch(int rows, int cols, int seed = 3)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>([rows, cols]);
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble();
         return t;
@@ -365,7 +365,7 @@ public class MedGANMechanismTests
 
     private static (Matrix<double> Data, ColumnMetadata[] Columns) SmallTable(int rows, int cols, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
         {

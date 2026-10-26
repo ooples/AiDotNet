@@ -726,19 +726,19 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         var scaledW1Grad = Engine.TensorMultiplyScalar(_edgeNetworkWeights1Gradient, learningRate);
         Engine.TensorSubtractInPlace(_edgeNetworkWeights1, scaledW1Grad);
 
-        var scaledW2Grad = Engine.TensorMultiplyScalar(_edgeNetworkWeights2Gradient!, learningRate);
+        var scaledW2Grad = Engine.TensorMultiplyScalar((_edgeNetworkWeights2Gradient ?? throw new InvalidOperationException("_edgeNetworkWeights2Gradient is null where it is required.")), learningRate);
         Engine.TensorSubtractInPlace(_edgeNetworkWeights2, scaledW2Grad);
 
-        var scaledSelfGrad = Engine.TensorMultiplyScalar(_selfWeightsGradient!, learningRate);
+        var scaledSelfGrad = Engine.TensorMultiplyScalar((_selfWeightsGradient ?? throw new InvalidOperationException("_selfWeightsGradient is null where it is required.")), learningRate);
         Engine.TensorSubtractInPlace(_selfWeights, scaledSelfGrad);
 
-        var scaledBias1Grad = Engine.TensorMultiplyScalar(_edgeNetworkBias1Gradient!, learningRate);
+        var scaledBias1Grad = Engine.TensorMultiplyScalar((_edgeNetworkBias1Gradient ?? throw new InvalidOperationException("_edgeNetworkBias1Gradient is null where it is required.")), learningRate);
         Engine.TensorSubtractInPlace(_edgeNetworkBias1, scaledBias1Grad);
 
-        var scaledBias2Grad = Engine.TensorMultiplyScalar(_edgeNetworkBias2Gradient!, learningRate);
+        var scaledBias2Grad = Engine.TensorMultiplyScalar((_edgeNetworkBias2Gradient ?? throw new InvalidOperationException("_edgeNetworkBias2Gradient is null where it is required.")), learningRate);
         Engine.TensorSubtractInPlace(_edgeNetworkBias2, scaledBias2Grad);
 
-        var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient!, learningRate);
+        var scaledBiasGrad = Engine.TensorMultiplyScalar((_biasGradient ?? throw new InvalidOperationException("_biasGradient is null where it is required.")), learningRate);
         Engine.TensorSubtractInPlace(_bias, scaledBiasGrad);
 
         // Invalidate GPU cache after parameter updates

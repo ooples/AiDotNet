@@ -238,7 +238,7 @@ public class DeepLearningCausalDiscoveryTests
     private static Matrix<double> CreateCgnnDagRegressionData()
     {
         const int n = 200;
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var data = new Matrix<double>(n, 4);
         for (int i = 0; i < n; i++)
         {

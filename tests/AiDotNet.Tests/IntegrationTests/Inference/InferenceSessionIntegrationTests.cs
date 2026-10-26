@@ -70,7 +70,7 @@ public class InferenceSessionIntegrationTests
 
         var loadedConfig = loaded.GetInferenceOptimizationConfigForServing();
         Assert.NotNull(loadedConfig);
-        Assert.Equal(config.EnableFlashAttention, loadedConfig!.EnableFlashAttention);
+        Assert.Equal(config.EnableFlashAttention, loadedConfig.EnableFlashAttention);
         Assert.Equal(config.EnableKVCache, loadedConfig.EnableKVCache);
         Assert.Equal(config.EnablePagedKVCache, loadedConfig.EnablePagedKVCache);
         Assert.Equal(config.AttentionMasking, loadedConfig.AttentionMasking);

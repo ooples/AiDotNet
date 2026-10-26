@@ -373,8 +373,8 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
         {
             ["timesteps"] = _timesteps.ToArray(),
             ["train_timesteps"] = Config.TrainTimesteps,
-            ["beta_start"] = Config.BetaStart!,
-            ["beta_end"] = Config.BetaEnd!,
+            ["beta_start"] = (Config.BetaStart ?? throw new InvalidOperationException("Config.BetaStart is null where it is required.")),
+            ["beta_end"] = (Config.BetaEnd ?? throw new InvalidOperationException("Config.BetaEnd is null where it is required.")),
             ["beta_schedule"] = Config.BetaSchedule.ToString(),
             ["prediction_type"] = Config.PredictionType.ToString()
         };

@@ -34,7 +34,7 @@ public class TimestepDependentLoraTests
     private const int Horizon = 1000;
 
     private static TimestepDependentLora<double> Adapter(int rank = Rank, int width = Width, int seed = 5)
-        => new(rank, width, width, Horizon, new Random(seed));
+        => new(rank, width, width, Horizon, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
 
     [Fact]
     public void RankIsFullAtTimestepZero()
@@ -191,7 +191,7 @@ public class TimestepDependentLoraTests
         // With a trained (moved) B, a high timestep must produce a DIFFERENT update than a low one —
         // otherwise the mask is decorative.
         var adapter = Adapter();
-        var rng = new Random(3);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
         for (int o = 0; o < adapter.UpProjection.Rows; o++)
         {
             for (int r = 0; r < Rank; r++) adapter.UpProjection[o, r] = rng.NextDouble() - 0.5;
@@ -231,13 +231,13 @@ public class TimestepDependentLoraTests
         // paper's SVD initialization has no trailing triplet of that size to draw from. Rejected at
         // construction rather than silently yielding zero rows that merely look orthogonal.
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => new TimestepDependentLora<double>(rank: 6, inputDim: 3, outputDim: 3, Horizon, new Random(1)));
+            () => new TimestepDependentLora<double>(rank: 6, inputDim: 3, outputDim: 3, Horizon, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1)));
     }
 
     [Fact]
     public void ConstructorRejectsDegenerateConfiguration()
     {
-        var rng = new Random(1);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1);
         Assert.Throws<ArgumentOutOfRangeException>(() => new TimestepDependentLora<double>(0, Width, Width, Horizon, rng));
         Assert.Throws<ArgumentOutOfRangeException>(() => new TimestepDependentLora<double>(Rank, 0, Width, Horizon, rng));
         Assert.Throws<ArgumentOutOfRangeException>(() => new TimestepDependentLora<double>(Rank, Width, 0, Horizon, rng));

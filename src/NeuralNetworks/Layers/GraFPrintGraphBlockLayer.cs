@@ -214,10 +214,10 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
         // difference to x_j - x_i, matching the eager multiply/sum formulation below.
         if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
         {
-            var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current!;
+            var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
             var capturedNodes = nodes;
             var replayState = new DynamicKnnReplayState();
-            return scope.RecordUnary(
+            return (scope ?? throw new InvalidOperationException("scope is null where it is required.")).RecordUnary(
                 AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
                 "GraFPrintMaxRelative",
                 nodes,
@@ -398,7 +398,7 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
         EnsurePermutationIndices(batch, channels, height, width);
         var flat = Engine.Reshape(input, [input.Length]);
         var reordered = Engine.TensorGather(
-            flat, new Tensor<int>(_toNodeIndices!, [_toNodeIndices!.Length]), axis: 0);
+            flat, new Tensor<int>((_toNodeIndices ?? throw new InvalidOperationException("_toNodeIndices is null where it is required.")), [(_toNodeIndices ?? throw new InvalidOperationException("_toNodeIndices is null where it is required.")).Length]), axis: 0);
         return Engine.Reshape(reordered, [batch, height * width, channels]);
     }
 
@@ -408,7 +408,7 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
         EnsurePermutationIndices(batch, channels, height, width);
         var flat = Engine.Reshape(nodes, [nodes.Length]);
         var reordered = Engine.TensorGather(
-            flat, new Tensor<int>(_toSpatialIndices!, [_toSpatialIndices!.Length]), axis: 0);
+            flat, new Tensor<int>((_toSpatialIndices ?? throw new InvalidOperationException("_toSpatialIndices is null where it is required.")), [(_toSpatialIndices ?? throw new InvalidOperationException("_toSpatialIndices is null where it is required.")).Length]), axis: 0);
         return Engine.Reshape(reordered, [batch, channels, height, width]);
     }
 

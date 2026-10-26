@@ -42,7 +42,7 @@ public class ClusteringAutoEvaluationBuildTests
 
         Assert.NotNull(result.ClusteringEvaluation);
         // The default internal indices run for any clustering model, with no configuration.
-        Assert.Contains("Silhouette Score", result.ClusteringEvaluation!.InternalMetrics.Keys);
+        Assert.Contains("Silhouette Score", result.ClusteringEvaluation.InternalMetrics.Keys);
         Assert.Contains("Davies-Bouldin Index", result.ClusteringEvaluation.InternalMetrics.Keys);
         Assert.Equal(2, result.ClusteringEvaluation.NumClusters);
         // Same values are mirrored, by name, into ConfiguredMetrics.
@@ -62,7 +62,7 @@ public class ClusteringAutoEvaluationBuildTests
 
         Assert.NotNull(result.ClusteringEvaluation);
         // The configured custom metric appears alongside the defaults, not replacing them.
-        Assert.Contains(new WCSS<double>().Name, result.ClusteringEvaluation!.InternalMetrics.Keys);
+        Assert.Contains(new WCSS<double>().Name, result.ClusteringEvaluation.InternalMetrics.Keys);
         Assert.Contains("Silhouette Score", result.ClusteringEvaluation.InternalMetrics.Keys);
     }
 
@@ -80,7 +80,7 @@ public class ClusteringAutoEvaluationBuildTests
         Assert.NotNull(result.ClusteringEvaluation);
         // The two blobs are integer-labelled ground truth, so external metrics run and the configured
         // one is present.
-        Assert.NotEmpty(result.ClusteringEvaluation!.ExternalMetrics);
+        Assert.NotEmpty(result.ClusteringEvaluation.ExternalMetrics);
         Assert.Contains(
             result.ClusteringEvaluation.ExternalMetrics.Keys,
             k => k.Contains("Rand"));

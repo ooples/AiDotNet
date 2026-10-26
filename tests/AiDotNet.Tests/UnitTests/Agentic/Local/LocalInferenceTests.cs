@@ -130,7 +130,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Local
                 new ChatOptions { Temperature = 0.0, MaxOutputTokens = 3 });
 
             Assert.Equal(ChatFinishReason.Length, response.FinishReason);
-            Assert.Equal(3, response.Usage.OutputTokens);
+            Assert.Equal(3, (response.Usage ?? throw new InvalidOperationException("response.Usage is null where it is required.")).OutputTokens);
         }
 
         [Fact(Timeout = 60000)]

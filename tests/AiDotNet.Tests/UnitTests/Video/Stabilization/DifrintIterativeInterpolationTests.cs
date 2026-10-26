@@ -42,7 +42,7 @@ public class DifrintIterativeInterpolationTests
     private static Tensor<double> Textured(int h, int w, int seed)
     {
         var t = new Tensor<double>(new[] { Channels, h, w });
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble();
         return t;
     }

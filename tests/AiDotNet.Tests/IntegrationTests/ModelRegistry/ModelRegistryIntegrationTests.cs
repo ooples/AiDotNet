@@ -137,7 +137,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         var model = new MockModel();
         var metadata = CreateTestMetadata();
 
-        Assert.Throws<ArgumentException>(() => registry.RegisterModel(null!, model, metadata));
+        Assert.Throws<ArgumentException>(() => registry.RegisterModel(global::AiDotNet.Tests.TestNull.Of<string>(), model, metadata));
     }
 
     [Fact(Timeout = 120000)]
@@ -158,7 +158,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         var registry = new ModelRegistry<double, double[], double>(registryDir);
         var metadata = CreateTestMetadata();
 
-        Assert.Throws<ArgumentNullException>(() => registry.RegisterModel<object>("test", null!, metadata));
+        Assert.Throws<ArgumentNullException>(() => registry.RegisterModel<object>("test", global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IModel<double[], double, object>>(), metadata));
     }
 
     [Fact(Timeout = 120000)]
@@ -571,7 +571,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         var registryDir = Path.Combine(_testDirectory, "registry_search_null");
         var registry = new ModelRegistry<double, double[], double>(registryDir);
 
-        Assert.Throws<ArgumentNullException>(() => registry.SearchModels(null!));
+        Assert.Throws<ArgumentNullException>(() => registry.SearchModels(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.ModelSearchCriteria<double>>()));
     }
 
     #endregion
@@ -612,7 +612,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         registry.RegisterModel("null_metadata", model, metadata);
 
         Assert.Throws<ArgumentNullException>(() =>
-            registry.UpdateModelMetadata("null_metadata", 1, null!));
+            registry.UpdateModelMetadata("null_metadata", 1, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.ModelMetadata<double>>()));
     }
 
     #endregion
@@ -653,7 +653,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         registry.RegisterModel("null_tags", model, metadata);
 
         Assert.Throws<ArgumentNullException>(() =>
-            registry.UpdateModelTags("null_tags", 1, null!));
+            registry.UpdateModelTags("null_tags", 1, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, string>>()));
     }
 
     #endregion
@@ -884,7 +884,7 @@ public class ModelRegistryIntegrationTests : IDisposable
         registry.RegisterModel("null_card", model, metadata);
 
         Assert.Throws<ArgumentNullException>(() =>
-            registry.AttachModelCard("null_card", 1, null!));
+            registry.AttachModelCard("null_card", 1, global::AiDotNet.Tests.TestNull.Of<AiDotNet.AdversarialRobustness.Documentation.ModelCard>()));
     }
 
     [Fact(Timeout = 120000)]

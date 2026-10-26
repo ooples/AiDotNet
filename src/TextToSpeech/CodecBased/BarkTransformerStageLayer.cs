@@ -215,7 +215,7 @@ internal partial class BarkTransformerStageLayer<T> : LayerBase<T>, IShapeContra
             throw new InvalidOperationException("KV caching is only valid for Bark's causal semantic and coarse stages.");
 
         EnsureCachedAttentionInstalled();
-        _cache!.Clear();
+        (_cache ?? throw new InvalidOperationException("_cache is null where it is required.")).Clear();
         SetCachedInferenceMode(true);
         return ForwardSingleStream(promptTokenIds, useCache: true, positionOffset: 0, outputHead);
     }

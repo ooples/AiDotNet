@@ -228,12 +228,12 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
             if (method.Category == SectionCategory.Interface)
             {
                 // Find all non-abstract, non-interface types that implement this interface.
-                section.ConcreteImplementations = FindImplementations(method.ParameterType, compilation);
+                section.ConcreteImplementations = FindImplementations((method.ParameterType ?? throw new InvalidOperationException("method.ParameterType is null where it is required.")), compilation);
             }
             else if (method.Category == SectionCategory.PocoConfig && method.IsAbstract)
             {
                 // Abstract classes (generic or non-generic) need implementation lookup (subclass discovery).
-                section.ConcreteImplementations = FindImplementations(method.ParameterType, compilation);
+                section.ConcreteImplementations = FindImplementations((method.ParameterType ?? throw new InvalidOperationException("method.ParameterType is null where it is required.")), compilation);
             }
 
             sections.Add(section);
@@ -261,7 +261,7 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
     {
         var results = new List<SectionInfo>();
         var existingNames = new HashSet<string>(
-            existingSections.Select(s => s.Method.SectionName),
+            existingSections.Select(s => (s.Method ?? throw new InvalidOperationException("s.Method is null where it is required.")).SectionName),
             StringComparer.OrdinalIgnoreCase);
 
         // Find the YamlConfigurableAttribute type in the compilation.
@@ -288,14 +288,14 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
                 if (markedType.TypeKind == TypeKind.Interface)
                 {
                     var existing = existingSections.FirstOrDefault(s =>
-                        string.Equals(s.Method.SectionName, sectionName, StringComparison.OrdinalIgnoreCase));
+                        string.Equals((s.Method ?? throw new InvalidOperationException("s.Method is null where it is required.")).SectionName, sectionName, StringComparison.OrdinalIgnoreCase));
                     if (existing != null && existing.ConcreteImplementations.Count == 0)
                     {
                         var mergedImpls = FindImplementations(markedType, compilation);
                         if (mergedImpls.Count > 0)
                         {
                             existing.ConcreteImplementations = mergedImpls;
-                            existing.Method.RegistryMerged = true;
+                            (existing.Method ?? throw new InvalidOperationException("existing.Method is null where it is required.")).RegistryMerged = true;
 
                             // Only enable the applier's YAML `type:` -> CreateInstance branch when the
                             // builder actually exposes a Configure<Section>(interface) overload to receive
@@ -678,7 +678,7 @@ internal static class YamlParamsHelper
 
         foreach (var section in sections)
         {
-            if (existingSections.Contains(section.Method.SectionName)) continue;
+            if (existingSections.Contains((section.Method ?? throw new InvalidOperationException("section.Method is null where it is required.")).SectionName)) continue;
 
             // Skip the TimeSeriesModel-specific one (already handled via YamlTimeSeriesModelSection).
             if (section.Method.SectionName == "Model" &&
@@ -735,7 +735,7 @@ internal static class YamlParamsHelper
 
         foreach (var section in sections)
         {
-            if (existingSections.Contains(section.Method.SectionName)) continue;
+            if (existingSections.Contains((section.Method ?? throw new InvalidOperationException("section.Method is null where it is required.")).SectionName)) continue;
             if (section.Method.SectionName == "Model" &&
                 section.Method.ParameterTypeName.Contains("IFullModel")) continue;
 
@@ -767,7 +767,7 @@ internal static class YamlParamsHelper
                 continue;
             }
 
-            var hasGenericParams = ContainsTypeParameters(section.Method.ParameterType);
+            var hasGenericParams = ContainsTypeParameters((section.Method.ParameterType ?? throw new InvalidOperationException("section.Method.ParameterType is null where it is required.")));
 
             // Merged POCO+interface section (e.g. AutoML): a YAML `type:` selects a concrete
             // implementation of the merged interface through the type registry and passes it to the
@@ -982,7 +982,7 @@ internal static class YamlParamsHelper
         // Include both interface sections and abstract POCO sections (generic or non-generic) that have implementations.
         var interfaceSections = sections
             .Where(s => s.ConcreteImplementations.Count > 0 &&
-                (s.Method.Category == SectionCategory.Interface ||
+                ((s.Method ?? throw new InvalidOperationException("s.Method is null where it is required.")).Category == SectionCategory.Interface ||
                  (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract) ||
                  (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered) ||
                  s.Method.RegistryMerged))
@@ -1010,7 +1010,7 @@ internal static class YamlParamsHelper
         // Emit a static dictionary per interface section.
         foreach (var section in interfaceSections)
         {
-            var dictName = $"_{ToCamelCase(section.Method.SectionName)}Types";
+            var dictName = $"_{ToCamelCase((section.Method ?? throw new InvalidOperationException("section.Method is null where it is required.")).SectionName)}Types";
             sb.AppendLine($"    /// <summary>Registered implementations for {section.Method.SectionName}.</summary>");
             sb.AppendLine($"    private static readonly Dictionary<string, Type> {dictName} = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)");
             sb.AppendLine($"    {{");
@@ -1033,7 +1033,7 @@ internal static class YamlParamsHelper
         sb.AppendLine("    {");
         foreach (var section in interfaceSections)
         {
-            var dictName = $"_{ToCamelCase(section.Method.SectionName)}Types";
+            var dictName = $"_{ToCamelCase((section.Method ?? throw new InvalidOperationException("section.Method is null where it is required.")).SectionName)}Types";
             sb.AppendLine($"        {{ \"{section.Method.SectionName}\", {dictName} }},");
         }
         sb.AppendLine("    };");
@@ -1223,7 +1223,7 @@ internal static class YamlParamsHelper
         // Collect interface sections and abstract POCOs (generic or non-generic) that have implementations.
         var registrySections = sections
             .Where(s => s.ConcreteImplementations.Count > 0 &&
-                (s.Method.Category == SectionCategory.Interface ||
+                ((s.Method ?? throw new InvalidOperationException("s.Method is null where it is required.")).Category == SectionCategory.Interface ||
                  (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract) ||
                  (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAttributeDiscovered) ||
                  s.Method.RegistryMerged))
@@ -1255,7 +1255,7 @@ internal static class YamlParamsHelper
                 .Select(i => i.ShortName)
                 .Distinct(StringComparer.OrdinalIgnoreCase);
             var names = string.Join(", ", uniqueNames.Select(n => $"\"{n}\""));
-            sb.AppendLine($"        {{ \"{section.Method.SectionName}\", new[] {{ {names} }} }},");
+            sb.AppendLine($"        {{ \"{(section.Method ?? throw new InvalidOperationException("section.Method is null where it is required.")).SectionName}\", new[] {{ {names} }} }},");
         }
 
         sb.AppendLine("    };");
@@ -1297,7 +1297,7 @@ internal static class YamlParamsHelper
 
         foreach (var section in sections)
         {
-            if (section.Method.SectionName == "Model" &&
+            if ((section.Method ?? throw new InvalidOperationException("section.Method is null where it is required.")).SectionName == "Model" &&
                 section.Method.ParameterTypeName.Contains("IFullModel")) continue;
 
             var category =
@@ -1307,9 +1307,9 @@ internal static class YamlParamsHelper
                 {
                     SectionCategory.Interface => "Interface",
                     SectionCategory.PocoConfig when section.Method.IsAttributeDiscovered && section.ConcreteImplementations.Count > 0 => "Interface",
-                    SectionCategory.PocoConfig when section.Method.IsAbstract && !ContainsTypeParameters(section.Method.ParameterType) => "AbstractNonGeneric",
-                    SectionCategory.PocoConfig when section.Method.IsAbstract && ContainsTypeParameters(section.Method.ParameterType) => "AbstractGeneric",
-                    SectionCategory.PocoConfig when ContainsTypeParameters(section.Method.ParameterType) => "ConcreteGeneric",
+                    SectionCategory.PocoConfig when section.Method.IsAbstract && !ContainsTypeParameters((section.Method.ParameterType ?? throw new InvalidOperationException("section.Method.ParameterType is null where it is required."))) => "AbstractNonGeneric",
+                    SectionCategory.PocoConfig when section.Method.IsAbstract && ContainsTypeParameters((section.Method.ParameterType ?? throw new InvalidOperationException("section.Method.ParameterType is null where it is required."))) => "AbstractGeneric",
+                    SectionCategory.PocoConfig when ContainsTypeParameters((section.Method.ParameterType ?? throw new InvalidOperationException("section.Method.ParameterType is null where it is required."))) => "ConcreteGeneric",
                     SectionCategory.PocoConfig => "Poco",
                     SectionCategory.ActionBuilder => "Pipeline",
                     _ => "Unknown",
@@ -1320,7 +1320,7 @@ internal static class YamlParamsHelper
 
             // For POCO types (non-abstract), extract public property names and types.
             var pocoProps = new List<string>();
-            if (section.Method.Category == SectionCategory.PocoConfig && !ContainsTypeParameters(section.Method.ParameterType) && !section.Method.IsAbstract)
+            if (section.Method.Category == SectionCategory.PocoConfig && !ContainsTypeParameters((section.Method.ParameterType ?? throw new InvalidOperationException("section.Method.ParameterType is null where it is required."))) && !section.Method.IsAbstract)
             {
                 if (IsScalarYamlParameter(section.Method.ParameterType))
                 {
@@ -1532,7 +1532,7 @@ internal static class YamlParamsHelper
         // would surface its concrete type here and the applier's `config.<Section>.Type` access
         // would not compile. This mirrors the applier's `RegistryMerged && MergedInterfaceTypeName`
         // guard exactly; registry-only merges (no interface overload) keep the POCO path below.
-        if (section.Method.RegistryMerged && section.Method.MergedInterfaceTypeName is not null)
+        if ((section.Method ?? throw new InvalidOperationException("section.Method is null where it is required.")).RegistryMerged && section.Method.MergedInterfaceTypeName is not null)
         {
             return "YamlTypeSection";
         }
@@ -1554,7 +1554,7 @@ internal static class YamlParamsHelper
             SectionCategory.Interface => "YamlTypeSection",
             SectionCategory.ActionBuilder => "YamlPipelineSection",
             SectionCategory.PocoConfig when section.Method.IsAbstract => "YamlTypeSection",
-            SectionCategory.PocoConfig when ContainsTypeParameters(section.Method.ParameterType) => "YamlTypeSection",
+            SectionCategory.PocoConfig when ContainsTypeParameters((section.Method.ParameterType ?? throw new InvalidOperationException("section.Method.ParameterType is null where it is required."))) => "YamlTypeSection",
             SectionCategory.PocoConfig => section.Method.ParameterType.ToDisplayString(
                 SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", ""),
             _ => "YamlTypeSection",

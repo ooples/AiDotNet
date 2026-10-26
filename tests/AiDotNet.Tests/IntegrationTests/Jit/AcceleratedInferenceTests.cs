@@ -67,7 +67,7 @@ public class AcceleratedInferenceTests : IDisposable
 
         var p = net.GetParameters();
         var det = new float[p.Length];
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < det.Length; i++) det[i] = (float)(rng.NextDouble() - 0.5) * 0.3f;
         net.UpdateParameters(new Vector<float>(det));
         return net;
@@ -75,7 +75,7 @@ public class AcceleratedInferenceTests : IDisposable
 
     private static Tensor<float> MakeInput(int seed, float scale = 1f)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new float[InputDim];
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() - 0.5) * scale;
         return new Tensor<float>(data, new[] { 1, InputDim });
@@ -231,7 +231,7 @@ public class AcceleratedInferenceTests : IDisposable
         net.SetTrainingMode(false);
         var p = net.GetParameters();
         var det = new float[p.Length];
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         for (int i = 0; i < det.Length; i++) det[i] = (float)(rng.NextDouble() - 0.5) * 0.3f;
         net.UpdateParameters(new Vector<float>(det));
 

@@ -377,7 +377,7 @@ public class AllLayersCloneTests
         // TestConstructorArgs is C# source for the compile-time scaffold generator. This runtime
         // sweep can interpret its integer-only subset; for richer expressions, use the same
         // constructor-signature synthesis as an undeclared layer instead of treating it as absent.
-        var literals = raw!.Split(',').Select(s => s.Trim()).ToArray();
+        var literals = raw.Split(',').Select(s => s.Trim()).ToArray();
         if (literals.Any(l => !int.TryParse(l, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)))
         {
             return TryConstructSynthesized(closed, out constructionError);
@@ -518,7 +518,7 @@ public class AllLayersCloneTests
         if (t == typeof(string)) return "test";
         if (t.IsEnum) return Enum.GetValues(t).Cast<object>().FirstOrDefault();
         if (t == typeof(int[])) return new[] { 4, 4 };
-        if (t.IsArray) return Array.CreateInstance(t.GetElementType()!, 0);
+        if (t.IsArray) return Array.CreateInstance((t.GetElementType() ?? throw new InvalidOperationException("t.GetElementType() is null where it is required.")), 0);
         // Reference types the layer treats as collaborators are left null; a constructor that
         // genuinely requires one will throw and the next overload is tried.
         return t.IsValueType ? Activator.CreateInstance(t) : null;

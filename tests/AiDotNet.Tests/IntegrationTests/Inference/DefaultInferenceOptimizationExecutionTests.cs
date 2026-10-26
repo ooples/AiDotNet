@@ -104,12 +104,42 @@ public sealed class DefaultInferenceOptimizationExecutionTests
             layer is CachedMultiHeadAttention<double> or PagedCachedMultiHeadAttention<double>);
     }
 
-    private static NeuralNetwork<double> BuildAttentionModel()
+    /// <summary>
+    /// The default config is applied to every model, so it must not treat every attention model as an
+    /// autoregressive decoder. A regression model's attention is not causal and a full-sequence Predict gains
+    /// nothing from a KV cache: rewriting it onto the cached path made a one-layer transformer ~40x slower per
+    /// Predict. It must come back on plain (or flash) attention, predicting what the original model predicts.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task TheDefaultConfigLeavesANonGenerativeModelOffTheKVCache()
+    {
+        await Task.Yield();
+
+        var model = BuildAttentionModel(NeuralNetworkTaskType.Regression);
+        var input = new Tensor<double>(new[] { 1, 6, 16 });
+        for (int i = 0; i < input.Length; i++) input[i] = System.Math.Sin(0.37 * i);
+        var expected = model.Predict(input);
+
+        var optimizer = new InferenceOptimizer<double>(InferenceOptimizationConfig.Default);
+        var (optimized, _) = optimizer.OptimizeForInference(model);
+
+        Assert.DoesNotContain(optimized.Layers, layer =>
+            layer is CachedMultiHeadAttention<double> or PagedCachedMultiHeadAttention<double>);
+        Assert.Null(optimizer.KVCache);
+        Assert.Null(optimizer.PagedKVCache);
+        var actual = optimized.Predict(input);
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 1e-9);
+    }
+
+    private static NeuralNetwork<double> BuildAttentionModel(
+        NeuralNetworkTaskType taskType = NeuralNetworkTaskType.SequenceToSequence)
     {
         const int embedding = 16;
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.ThreeDimensional,
-            taskType: NeuralNetworkTaskType.SequenceToSequence,
+            taskType: taskType,
             inputSize: embedding,
             outputSize: embedding,
             layers:

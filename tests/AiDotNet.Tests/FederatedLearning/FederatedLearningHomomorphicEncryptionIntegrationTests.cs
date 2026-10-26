@@ -49,7 +49,7 @@ public class FederatedLearningHomomorphicEncryptionIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.True(metadata!.HomomorphicEncryptionEnabled);
+        Assert.True(metadata.HomomorphicEncryptionEnabled);
         Assert.Equal(scheme == HomomorphicEncryptionScheme.Ckks ? "CKKS" : "BFV", metadata.HomomorphicEncryptionSchemeUsed);
         Assert.Equal("HEOnly", metadata.HomomorphicEncryptionModeUsed);
         Assert.Equal("SEAL", metadata.HomomorphicEncryptionProviderUsed);
@@ -97,7 +97,7 @@ public class FederatedLearningHomomorphicEncryptionIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.True(metadata!.HomomorphicEncryptionEnabled);
+        Assert.True(metadata.HomomorphicEncryptionEnabled);
         Assert.Equal("Hybrid", metadata.HomomorphicEncryptionModeUsed);
         Assert.True(metadata.SecureAggregationEnabled);
     }

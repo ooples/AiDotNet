@@ -76,8 +76,8 @@ public sealed class ProgramGenomeCodecTests
     public void NullArgumentsAreRejected()
     {
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => Codec.Serialize(null));
-        Assert.Throws<ArgumentNullException>(() => Codec.Deserialize(null));
+        Assert.Throws<ArgumentNullException>(() => Codec.Serialize(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Evolution.Programs.ProgramGenome>()));
+        Assert.Throws<ArgumentNullException>(() => Codec.Deserialize(global::AiDotNet.Tests.TestNull.Of<string>()));
 #pragma warning restore CS8600, CS8625
     }
 }

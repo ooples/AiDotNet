@@ -14,7 +14,7 @@ public class ExplorationStrategiesIntegrationTests
         var strategy = new NoExploration<double>();
         var policyAction = CreateVector(3, 0.2);
 
-        var action = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 3, new Random(1));
+        var action = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1));
 
         Assert.Same(policyAction, action);
     }
@@ -25,7 +25,7 @@ public class ExplorationStrategiesIntegrationTests
         var strategy = new EpsilonGreedyExploration<double>(epsilonStart: 1.0, epsilonEnd: 0.1, epsilonDecay: 0.5);
         var policyAction = CreateOneHotAction(3, 2);
 
-        var randomAction = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 3, new Random(2));
+        var randomAction = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2));
 
         AssertOneHot(randomAction, 3);
         Assert.Equal(1.0, strategy.CurrentEpsilon, precision: 12);
@@ -44,10 +44,10 @@ public class ExplorationStrategiesIntegrationTests
         var discreteAction = CreateOneHotAction(3, 1);
         var continuousAction = CreateVector(2, 0.25);
 
-        var discreteResult = strategy.GetExplorationAction(new Vector<double>(1), discreteAction, 3, new Random(3));
+        var discreteResult = strategy.GetExplorationAction(new Vector<double>(1), discreteAction, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3));
         AssertOneHot(discreteResult, 3);
 
-        var continuousResult = strategy.GetExplorationAction(new Vector<double>(1), continuousAction, 2, new Random(3));
+        var continuousResult = strategy.GetExplorationAction(new Vector<double>(1), continuousAction, 2, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3));
         AssertVectorInRange(continuousResult, 2, -1.0, 1.0);
 
         strategy.Update();
@@ -60,7 +60,7 @@ public class ExplorationStrategiesIntegrationTests
         var strategy = new GaussianNoiseExploration<double>(initialStdDev: 0.0, noiseDecay: 1.0, minNoise: 0.0);
         var policyAction = CreateVector(2, 0.3);
 
-        var result = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 2, new Random(4));
+        var result = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 2, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4));
 
         Assert.Equal(policyAction.Length, result.Length);
         for (int i = 0; i < result.Length; i++)
@@ -77,10 +77,10 @@ public class ExplorationStrategiesIntegrationTests
         var strategy = new OrnsteinUhlenbeckNoise<double>(actionSize: 2);
         var policyAction = CreateVector(2, 0.1);
 
-        var result = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 2, new Random(5));
+        var result = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 2, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5));
         AssertVectorInRange(result, 2, -1.0, 1.0);
 
-        Assert.Throws<ArgumentException>(() => strategy.GetExplorationAction(new Vector<double>(1), policyAction, 3, new Random(5)));
+        Assert.Throws<ArgumentException>(() => strategy.GetExplorationAction(new Vector<double>(1), policyAction, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5)));
 
         strategy.Reset();
     }
@@ -91,11 +91,11 @@ public class ExplorationStrategiesIntegrationTests
         var strategy = new UpperConfidenceBoundExploration<double>(explorationConstant: 1.0);
         var qValues = CreateVector(3, 0.1);
 
-        var firstAction = strategy.GetExplorationAction(new Vector<double>(1), qValues, 3, new Random(6));
+        var firstAction = strategy.GetExplorationAction(new Vector<double>(1), qValues, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(6));
         AssertOneHot(firstAction, 3);
         Assert.Equal(1, strategy.TotalSteps);
 
-        var secondAction = strategy.GetExplorationAction(new Vector<double>(1), qValues, 3, new Random(6));
+        var secondAction = strategy.GetExplorationAction(new Vector<double>(1), qValues, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(6));
         AssertOneHot(secondAction, 3);
         Assert.Equal(2, strategy.TotalSteps);
 
@@ -109,7 +109,7 @@ public class ExplorationStrategiesIntegrationTests
         var strategy = new ThompsonSamplingExploration<double>(priorAlpha: 1.0, priorBeta: 1.0);
         var policyAction = CreateVector(2, 0.1);
 
-        var action = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 2, new Random(7));
+        var action = strategy.GetExplorationAction(new Vector<double>(1), policyAction, 2, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7));
         AssertOneHot(action, 2);
 
         strategy.UpdateDistribution(actionIndex: 0, reward: 1.0);

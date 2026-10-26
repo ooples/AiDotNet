@@ -33,7 +33,7 @@ internal sealed class DirectFeedbackAlignmentCreditRule<T> : CreditRuleBase<T>
         foreach (var layer in context.Layers)
         {
             if (layer.IsOutputLayer) continue; // engine uses the exact loss gradient here
-            var projected = ProjectThrough(error, feedback[layer.Index]!); // [B, C] · [C, M_i] = [B, M_i]
+            var projected = ProjectThrough(error, (feedback[layer.Index] ?? throw new InvalidOperationException("feedback[layer.Index] is null where it is required."))); // [B, C] · [C, M_i] = [B, M_i]
             layer.TeachingSignal = ToTeachingSignal(projected, layer.OutputShape);
         }
     }

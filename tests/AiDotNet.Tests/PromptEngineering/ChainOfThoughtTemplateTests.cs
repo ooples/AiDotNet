@@ -149,7 +149,7 @@ public class ChainOfThoughtTemplateTests
     {
         var template = ChainOfThoughtTemplate.Builder()
             .WithQuestion("Test")
-            .AddExample(null!)
+            .AddExample(null)
             .Build();
 
         Assert.NotNull(template);

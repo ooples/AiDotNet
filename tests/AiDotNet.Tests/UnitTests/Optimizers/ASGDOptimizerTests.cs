@@ -63,7 +63,7 @@ public class ASGDOptimizerTests
 
         var average = optimizer.GetTapeAveragedParameterForTests(parameter);
         Assert.NotNull(average);
-        Assert.Equal(sum0 / steps, average!.AsSpan()[0], 12);
+        Assert.Equal(sum0 / steps, average.AsSpan()[0], 12);
         Assert.Equal(sum1 / steps, average.AsSpan()[1], 12);
         Assert.NotEqual(parameter.AsSpan()[0], average.AsSpan()[0], 12);
     }
@@ -136,7 +136,7 @@ public class ASGDOptimizerTests
 
         var averaged = optimizer.GetAveragedParameters();
         Assert.NotNull(averaged);
-        Assert.Equal(sum0 / steps, averaged![0], 12);
+        Assert.Equal(sum0 / steps, averaged[0], 12);
         Assert.Equal(sum1 / steps, averaged[1], 12);
 
         // The average must actually differ from the final iterate, or the test would pass trivially.
@@ -160,7 +160,7 @@ public class ASGDOptimizerTests
             parameters = optimizer.UpdateParameters(parameters, gradient);
             var averaged = optimizer.GetAveragedParameters();
             Assert.NotNull(averaged);
-            Assert.Equal(parameters[0], averaged![0], 12);
+            Assert.Equal(parameters[0], averaged[0], 12);
         }
     }
 
@@ -215,7 +215,7 @@ public class ASGDOptimizerTests
         Assert.Equal(0.01f, config.WeightDecay, 6);
 
         Assert.NotNull(config.Extras);
-        Assert.Equal((float)Lambda, config.Extras!.Lambd, 8);
+        Assert.Equal((float)Lambda, config.Extras.Lambd, 8);
         Assert.Equal((float)Alpha, config.Extras.Alpha, 6);
         Assert.Equal(500f, config.Extras.T0, 3);
     }
@@ -256,7 +256,7 @@ public class ASGDOptimizerTests
         var restoredAverage = restored.GetAveragedParameters();
         Assert.NotNull(originalAverage);
         Assert.NotNull(restoredAverage);
-        Assert.Equal(originalAverage![0], restoredAverage![0], 12);
+        Assert.Equal(originalAverage[0], restoredAverage[0], 12);
 
         // Step 9 must use eta_9 and mu_9 on both, which only holds if _t survived the round trip.
         Assert.Equal(

@@ -512,7 +512,7 @@ public class ServingIntegrationTests : IClassFixture<ServingTestWebApplicationFa
         response.EnsureSuccessStatusCode();
 
         Assert.True(response.Headers.TryGetValues("X-AiDotNet-Artifact-Encrypted", out var encryptedHeader));
-        Assert.Equal("true", encryptedHeader!.First());
+        Assert.Equal("true", encryptedHeader.First());
 
         var encryptedBytes = await response.Content.ReadAsByteArrayAsync();
         Assert.NotEmpty(encryptedBytes);
@@ -525,7 +525,7 @@ public class ServingIntegrationTests : IClassFixture<ServingTestWebApplicationFa
 
         var keyPayload = await ReadAsJsonAsync<ModelArtifactKeyResponse>(keyResponse.Content);
         Assert.NotNull(keyPayload);
-        Assert.False(string.IsNullOrWhiteSpace(keyPayload!.KeyId));
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyId));
         Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyBase64));
         Assert.False(string.IsNullOrWhiteSpace(keyPayload.NonceBase64));
 
@@ -561,7 +561,7 @@ public class ServingIntegrationTests : IClassFixture<ServingTestWebApplicationFa
 
         artifactResponse.EnsureSuccessStatusCode();
         Assert.True(artifactResponse.Headers.TryGetValues("X-AiDotNet-Artifact-Encrypted", out var encryptedHeader));
-        Assert.Equal("true", encryptedHeader!.First());
+        Assert.Equal("true", encryptedHeader.First());
 
         var encryptedBytes = await artifactResponse.Content.ReadAsByteArrayAsync();
         Assert.NotEmpty(encryptedBytes);
@@ -581,7 +581,7 @@ public class ServingIntegrationTests : IClassFixture<ServingTestWebApplicationFa
 
         var keyPayload = await ReadAsJsonAsync<ModelArtifactKeyResponse>(keyResponse.Content);
         Assert.NotNull(keyPayload);
-        Assert.False(string.IsNullOrWhiteSpace(keyPayload!.KeyId));
+        Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyId));
         Assert.False(string.IsNullOrWhiteSpace(keyPayload.KeyBase64));
         Assert.False(string.IsNullOrWhiteSpace(keyPayload.NonceBase64));
 

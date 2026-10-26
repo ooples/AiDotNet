@@ -125,7 +125,7 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         _connection = connection;
         _ownsConnection = ownsConnection;
         _indexName = indexName;
-        _keyPrefix = string.IsNullOrWhiteSpace(keyPrefix) ? indexName + ":doc:" : keyPrefix!;
+        _keyPrefix = string.IsNullOrWhiteSpace(keyPrefix) ? indexName + ":doc:" : keyPrefix;
         _vectorDimension = vectorDimension;
         _metric = distanceMetric;
         _distanceMetric = MapDistance(distanceMetric);
@@ -389,7 +389,11 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>, IDisposable
 
             var map = new Dictionary<string, string>();
             for (var j = 0; j + 1 < fields.Length; j += 2)
-                map[(string)fields[j]!] = (string)fields[j + 1]!;
+            {
+                // A field with no name or no value carries nothing to read back.
+                if ((string?)fields[j] is { } fieldName && (string?)fields[j + 1] is { } fieldValue)
+                    map[fieldName] = fieldValue;
+            }
 
             var doc = BuildDocument(map);
             if (doc == null)
@@ -414,7 +418,7 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         map.TryGetValue(MetadataField, out var metadataJson);
         var metadata = string.IsNullOrEmpty(metadataJson)
             ? new Dictionary<string, object>()
-            : JsonConvert.DeserializeObject<Dictionary<string, object>>(metadataJson!) ?? new Dictionary<string, object>();
+            : JsonConvert.DeserializeObject<Dictionary<string, object>>(metadataJson) ?? new Dictionary<string, object>();
 
         return new Document<T>(id, content ?? string.Empty, metadata);
     }
@@ -426,7 +430,9 @@ public class RedisVLDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         if (entries.Length == 0)
             return null;
 
-        var map = entries.ToDictionary(e => (string)e.Name!, e => (string)e.Value!);
+        var map = entries
+            .Where(e => !e.Name.IsNull && !e.Value.IsNull)
+            .ToDictionary(e => e.Name.ToString(), e => e.Value.ToString());
         return BuildDocument(map);
     }
 

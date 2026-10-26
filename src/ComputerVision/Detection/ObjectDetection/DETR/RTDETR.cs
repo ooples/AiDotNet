@@ -55,6 +55,13 @@ public partial class RTDETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
     private readonly RTDETROptions<T> _rtdetr;
     private readonly NMS<T> _nms;
     private readonly AiDotNet.ComputerVision.Detection.Losses.DETRSetLoss<T> _detectionLoss;
+
+    /// <summary>
+    /// The paper's optimizer (Zhao et al. 2024, implementation details): AdamW at base learning rate 1e-4 with weight decay
+    /// 1e-4. The backbone's lower rate (1e-5) is not separated here.
+    /// </summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperAdamW(1e-4, 1e-4);
     private readonly int _trainingClassCount;
     private readonly Random _denoisingRandom;
 

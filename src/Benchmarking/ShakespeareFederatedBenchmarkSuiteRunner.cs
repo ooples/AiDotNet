@@ -68,10 +68,10 @@ internal static class ShakespeareFederatedBenchmarkSuiteRunner
         };
 
         var leafLoader = new LeafShakespeareFederatedDatasetLoader();
-        var dataset = leafLoader.LoadDatasetFromFiles(shakespeare.TrainFilePath!, shakespeare.TestFilePath, loadOptions);
+        var dataset = leafLoader.LoadDatasetFromFiles((shakespeare.TrainFilePath ?? throw new InvalidOperationException("shakespeare.TrainFilePath is null where it is required.")), shakespeare.TestFilePath, loadOptions);
 
         var trainClientData = dataset.Train.ToClientIdDictionary(out _);
-        var testSplit = dataset.Test ?? dataset.Train;
+        var testSplit = dataset.Test is { } heldOut ? heldOut : dataset.Train;
         var testClientData = testSplit.ToClientIdDictionary(out _);
 
         var sampledTrainClientData = maxSamplesPerUser.HasValue
@@ -327,11 +327,11 @@ internal static class ShakespeareFederatedBenchmarkSuiteRunner
             return;
         }
 
-        var ids = tokenIds!;
+        var ids = tokenIds;
         int take = Math.Min(count, maxSequenceLength);
         for (int col = 0; col < take; col++)
         {
-            matrix[row, col] = numOps.FromDouble(ids[col]);
+            matrix[row, col] = numOps.FromDouble((ids ?? throw new InvalidOperationException("ids is null where it is required."))[col]);
         }
 
         for (int col = take; col < maxSequenceLength; col++)

@@ -18,7 +18,7 @@ public class MultiOutputRegressorTests
 {
     private static (Matrix<double> x, Matrix<double> y) CreateMultiHorizonData(int n, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         // Two features; three "horizons", each a distinct linear combination of the features.
         var x = new Matrix<double>(n, 2);
         var y = new Matrix<double>(n, 3);

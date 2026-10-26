@@ -78,8 +78,8 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
             .BuildAsync();
 
         Assert.NotNull(result.DeploymentConfiguration);
-        Assert.NotNull(result.DeploymentConfiguration!.Caching);
-        Assert.Equal(sentinel, result.DeploymentConfiguration.Caching!.MaxCacheSize);
+        Assert.NotNull(result.DeploymentConfiguration.Caching);
+        Assert.Equal(sentinel, result.DeploymentConfiguration.Caching.MaxCacheSize);
     }
 
     /// <summary>
@@ -104,8 +104,8 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
             .BuildAsync();
 
         Assert.NotNull(result.DeploymentConfiguration);
-        Assert.NotNull(result.DeploymentConfiguration!.Versioning);
-        Assert.Equal(sentinel, result.DeploymentConfiguration.Versioning!.DefaultVersion);
+        Assert.NotNull(result.DeploymentConfiguration.Versioning);
+        Assert.Equal(sentinel, result.DeploymentConfiguration.Versioning.DefaultVersion);
     }
 
     /// <summary>
@@ -130,8 +130,8 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
             .BuildAsync();
 
         Assert.NotNull(result.DeploymentConfiguration);
-        Assert.NotNull(result.DeploymentConfiguration!.ABTesting);
-        Assert.Equal(sentinel, result.DeploymentConfiguration.ABTesting!.DefaultTrafficSplit);
+        Assert.NotNull(result.DeploymentConfiguration.ABTesting);
+        Assert.Equal(sentinel, result.DeploymentConfiguration.ABTesting.DefaultTrafficSplit);
     }
 
     /// <summary>
@@ -158,8 +158,8 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
             .BuildAsync();
 
         Assert.NotNull(result.DeploymentConfiguration);
-        Assert.NotNull(result.DeploymentConfiguration!.Export);
-        Assert.Equal(sentinel, result.DeploymentConfiguration.Export!.TargetPlatform);
+        Assert.NotNull(result.DeploymentConfiguration.Export);
+        Assert.Equal(sentinel, result.DeploymentConfiguration.Export.TargetPlatform);
     }
 
     /// <summary>

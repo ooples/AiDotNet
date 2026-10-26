@@ -126,7 +126,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         var model = new DDPMModel<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => model.PredictNoise(null!, 500));
+        Assert.Throws<ArgumentNullException>(() => model.PredictNoise(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), 500));
     }
 
     [Fact(Timeout = 120000)]
@@ -209,7 +209,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         var model = new DDPMModel<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => model.Generate(null!));
+        Assert.Throws<ArgumentException>(() => model.Generate(global::AiDotNet.Tests.TestNull.Of<int[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -291,7 +291,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         var timesteps = new[] { 500 };
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => model.ComputeLoss(null!, noise, timesteps));
+        Assert.Throws<ArgumentNullException>(() => model.ComputeLoss(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), noise, timesteps));
     }
 
     [Fact(Timeout = 120000)]
@@ -303,7 +303,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         var timesteps = new[] { 500 };
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => model.ComputeLoss(cleanSamples, null!, timesteps));
+        Assert.Throws<ArgumentNullException>(() => model.ComputeLoss(cleanSamples, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), timesteps));
     }
 
     [Fact(Timeout = 120000)]
@@ -370,7 +370,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         var model = new DDPMModel<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => model.SetParameters(null!));
+        Assert.Throws<ArgumentNullException>(() => model.SetParameters(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -435,7 +435,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         var model = new DDPMModel<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => model.SaveState(null!));
+        Assert.Throws<ArgumentNullException>(() => model.SaveState(global::AiDotNet.Tests.TestNull.Of<System.IO.Stream>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -445,7 +445,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         var model = new DDPMModel<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => model.LoadState(null!));
+        Assert.Throws<ArgumentNullException>(() => model.LoadState(global::AiDotNet.Tests.TestNull.Of<System.IO.Stream>()));
     }
 
     [Fact(Timeout = 120000)]

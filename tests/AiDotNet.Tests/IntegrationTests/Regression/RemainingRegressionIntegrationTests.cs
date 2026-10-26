@@ -48,7 +48,7 @@ public class RemainingRegressionIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) GenerateBinaryClassificationData(int n)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);
 
@@ -72,7 +72,7 @@ public class RemainingRegressionIntegrationTests
     {
         var X = new Matrix<double>(n, 1);
         var y = new Vector<double>(n);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < n; i++)
         {
@@ -110,7 +110,7 @@ public class RemainingRegressionIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) GenerateMultivariateData(int n)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(n, 3);
         var y = new Vector<double>(n);
 
@@ -770,7 +770,7 @@ public class RemainingRegressionIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) GenerateMultiClassData(int n, int numClasses = 3)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);
 

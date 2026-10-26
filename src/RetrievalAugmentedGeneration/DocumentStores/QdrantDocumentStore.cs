@@ -305,7 +305,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 if (doc == null)
                     continue;
 
-                var score = hit?["score"] != null ? Convert.ToDouble(hit!["score"], CultureInfo.InvariantCulture) : 0.0;
+                var score = hit?["score"] != null ? Convert.ToDouble(hit["score"], CultureInfo.InvariantCulture) : 0.0;
                 doc.RelevanceScore = NumOps.FromDouble(score);
                 doc.HasRelevanceScore = true;
                 results.Add(doc);
@@ -605,7 +605,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             var metadata = (payload["metadata"] as JObject)?.ToObject<Dictionary<string, object>>()
                            ?? new Dictionary<string, object>();
 
-            return new Document<T>(id!, content, metadata);
+            return new Document<T>((id ?? throw new InvalidOperationException("id is null where it is required.")), content, metadata);
         }
 
         private static bool IsNumeric(object value)

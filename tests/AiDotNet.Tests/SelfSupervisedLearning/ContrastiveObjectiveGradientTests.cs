@@ -29,7 +29,7 @@ public class ContrastiveObjectiveGradientTests
 
     private static Tensor<double> Sample(int[] shape, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() * 2 - 1;
         return t;

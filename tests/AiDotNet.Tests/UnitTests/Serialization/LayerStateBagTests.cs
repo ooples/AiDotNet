@@ -26,7 +26,7 @@ public sealed class LayerStateBagTests
         Assert.Equal(string.Empty, bag.NullableString("emptyText"));
         Assert.Equal("before-tags", bag.NullableString("legacyText"));
         Assert.Null(bag.NullableInt32Array("nullArray"));
-        Assert.Empty(bag.NullableInt32Array("emptyArray")!);
+        Assert.Empty((bag.NullableInt32Array("emptyArray") ?? throw new InvalidOperationException("bag.NullableInt32Array(\"emptyArray\") is null where it is required.")));
         Assert.Equal(new[] { 2, 3, 5 }, bag.NullableInt32Array("legacyArray"));
     }
 
@@ -120,7 +120,7 @@ public sealed class LayerStateBagTests
         var copy = bag.Component<ConfigurationProbe>("component");
 
         Assert.NotNull(copy);
-        Assert.Equal(delimiterText, copy!.Text);
+        Assert.Equal(delimiterText, copy.Text);
         Assert.Equal(largeInteger, copy.LargeInteger);
         Assert.Equal(preciseDecimal, copy.PreciseDecimal);
         Assert.Equal((char)31, copy.Marker);
@@ -138,7 +138,7 @@ public sealed class LayerStateBagTests
         var copy = bag.Component<NullableConfigurationProbe>("component");
 
         Assert.NotNull(copy);
-        Assert.Null(copy!.Label);
+        Assert.Null(copy.Label);
         Assert.Null(copy.Limit);
     }
 
@@ -159,7 +159,7 @@ public sealed class LayerStateBagTests
         var copy = bag.Component<ConfigurationProbe>("component");
 
         Assert.NotNull(copy);
-        Assert.Equal(legacyText, copy!.Text);
+        Assert.Equal(legacyText, copy.Text);
         Assert.Equal('X', copy.Marker);
     }
 

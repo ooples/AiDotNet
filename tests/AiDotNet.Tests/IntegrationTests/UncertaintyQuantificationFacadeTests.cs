@@ -102,7 +102,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var uqResult = result.PredictWithUncertainty(x, numSamples: 16);
 
         Assert.NotNull(uqResult.Variance);
-        Assert.Equal(uqResult.Prediction.Shape.ToArray(), uqResult.Variance!.Shape.ToArray());
+        Assert.Equal(uqResult.Prediction.Shape.ToArray(), uqResult.Variance.Shape.ToArray());
         Assert.True(uqResult.Metrics.ContainsKey("predictive_entropy"));
         Assert.True(uqResult.Metrics.ContainsKey("mutual_information"));
     }
@@ -156,7 +156,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         AssertTensorEqual(first.Prediction, second.Prediction);
         Assert.NotNull(first.Variance);
         Assert.NotNull(second.Variance);
-        AssertTensorEqual(first.Variance!, second.Variance!);
+        AssertTensorEqual(first.Variance, second.Variance);
 
         Assert.True(first.Metrics.ContainsKey("predictive_entropy"));
         Assert.True(first.Metrics.ContainsKey("mutual_information"));
@@ -249,8 +249,8 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.NotNull(uq.RegressionInterval);
 
         var pred = ConversionsHelper.ConvertToTensor<double>(uq.Prediction).ToVector();
-        var lower = ConversionsHelper.ConvertToTensor<double>(uq.RegressionInterval!.Lower).ToVector();
-        var upper = ConversionsHelper.ConvertToTensor<double>(uq.RegressionInterval!.Upper).ToVector();
+        var lower = ConversionsHelper.ConvertToTensor<double>(uq.RegressionInterval.Lower).ToVector();
+        var upper = ConversionsHelper.ConvertToTensor<double>(uq.RegressionInterval.Upper).ToVector();
 
         Assert.Equal(pred.Length, lower.Length);
         Assert.Equal(pred.Length, upper.Length);
@@ -307,7 +307,7 @@ public sealed class UncertaintyQuantificationFacadeTests
 
         var uq = result.PredictWithUncertainty(xCal);
         Assert.NotNull(uq.ClassificationSet);
-        Assert.Equal(2, uq.ClassificationSet!.ClassIndices.Length);
+        Assert.Equal(2, uq.ClassificationSet.ClassIndices.Length);
         Assert.All(uq.ClassificationSet.ClassIndices, set => Assert.NotEmpty(set));
 
         // Probabilities should be normalized per sample (sum to ~1).
@@ -375,7 +375,7 @@ public sealed class UncertaintyQuantificationFacadeTests
 
         var uq = result.PredictWithUncertainty(xCal);
         Assert.NotNull(uq.ClassificationSet);
-        Assert.Equal(3, uq.ClassificationSet!.ClassIndices.Length);
+        Assert.Equal(3, uq.ClassificationSet.ClassIndices.Length);
         Assert.All(uq.ClassificationSet.ClassIndices, set => Assert.NotEmpty(set));
     }
 
@@ -485,7 +485,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var uq = result.PredictWithUncertainty(xCal);
         Assert.Equal(UncertaintyQuantificationMethod.LaplaceApproximation, uq.MethodUsed);
         Assert.NotNull(uq.Variance);
-        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape.ToArray(), ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape.ToArray());
+        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape.ToArray(), ConversionsHelper.ConvertToTensor<double>(uq.Variance).Shape.ToArray());
     }
 
     [Fact(Timeout = 120000)]
@@ -599,7 +599,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var uq = result.PredictWithUncertainty(xCal);
         Assert.Equal(UncertaintyQuantificationMethod.Swag, uq.MethodUsed);
         Assert.NotNull(uq.Variance);
-        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape.ToArray(), ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape.ToArray());
+        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape.ToArray(), ConversionsHelper.ConvertToTensor<double>(uq.Variance).Shape.ToArray());
     }
 
     [Fact(Timeout = 120000)]
@@ -694,9 +694,9 @@ public sealed class UncertaintyQuantificationFacadeTests
 
         var uq = result.PredictWithUncertainty(x);
         Assert.NotNull(uq.Variance);
-        Assert.Equal(uq.Prediction.Shape.ToArray(), uq.Variance!.Shape.ToArray());
+        Assert.Equal(uq.Prediction.Shape.ToArray(), uq.Variance.Shape.ToArray());
 
-        var varianceVector = uq.Variance!.ToVector();
+        var varianceVector = uq.Variance.ToVector();
         Assert.Contains(varianceVector, v => v > 0.0);
     }
 
@@ -742,7 +742,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var uq = result.PredictWithUncertainty(x);
 
         Assert.NotNull(uq.Variance);
-        Assert.Equal(uq.Prediction.Shape.ToArray(), uq.Variance!.Shape.ToArray());
+        Assert.Equal(uq.Prediction.Shape.ToArray(), uq.Variance.Shape.ToArray());
         Assert.True(uq.Metrics.ContainsKey("predictive_entropy"));
         Assert.True(uq.Metrics.ContainsKey("mutual_information"));
     }
@@ -794,7 +794,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.All(results, r =>
         {
             Assert.NotNull(r.Variance);
-            Assert.Equal(r.Prediction.Shape.ToArray(), r.Variance!.Shape.ToArray());
+            Assert.Equal(r.Prediction.Shape.ToArray(), r.Variance.Shape.ToArray());
             Assert.True(r.Metrics.ContainsKey("predictive_entropy"));
             Assert.True(r.Metrics.ContainsKey("mutual_information"));
         });

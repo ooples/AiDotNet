@@ -32,7 +32,7 @@ public class VgmTransformerPaperFidelityTests
     public void Vgm_RecoversTwoModeMixture_StructureAndMeans()
     {
         const int perMode = 300;
-        var rng = new Random(Seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         var data = new Matrix<double>(perMode * 2, 1);
         for (int i = 0; i < perMode; i++)
             data[i, 0] = -5.0 + 0.4 * SampleNormal(rng);
@@ -41,7 +41,7 @@ public class VgmTransformerPaperFidelityTests
 
         var columns = new List<ColumnMetadata> { new("X", ColumnDataType.Continuous, columnIndex: 0) };
 
-        var t = new TabularDataTransformer<double>(vgmModes: 10, random: new Random(Seed));
+        var t = new TabularDataTransformer<double>(vgmModes: 10, random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed));
         t.Fit(data, columns);
 
         // transformedWidth = 1 (normalized) + numActiveModes. Recover the mode count.

@@ -460,7 +460,7 @@ namespace AiDotNet.Tokenization.Algorithms
         {
             if (_addBosToken && !string.IsNullOrEmpty(_bosToken))
             {
-                var withBos = new List<string>(tokens.Count + 1) { _bosToken! };
+                var withBos = new List<string>(tokens.Count + 1) { (_bosToken ?? throw new InvalidOperationException("_bosToken is null where it is required.")) };
                 withBos.AddRange(tokens);
                 return withBos;
             }

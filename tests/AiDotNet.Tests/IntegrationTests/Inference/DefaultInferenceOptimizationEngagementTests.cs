@@ -43,7 +43,7 @@ public class DefaultInferenceOptimizationEngagementTests
         Assert.NotNull(config);
 
         // What IS on by default.
-        Assert.True(config!.EnableKVCache, "KV cache should be on by default.");
+        Assert.True(config.EnableKVCache, "KV cache should be on by default.");
         Assert.True(config.EnablePagedKVCache, "Paged KV cache should be on by default.");
         Assert.True(config.EnableFlashAttention, "Flash attention should be on by default.");
         Assert.True(config.EnableLayerFusion, "Layer fusion should be on by default.");
@@ -54,7 +54,7 @@ public class DefaultInferenceOptimizationEngagementTests
         // keeps the documented default honest — #1632 assumed the whole set was uniformly off,
         // and the truth is that this one component alone stays opt-in.
         Assert.NotNull(config.SpeculativeDecoding);
-        Assert.False(config.SpeculativeDecoding!.Enabled,
+        Assert.False(config.SpeculativeDecoding.Enabled,
             "Speculative decoding requires a caller-supplied draft model and stays opt-in.");
     }
 
@@ -78,7 +78,7 @@ public class DefaultInferenceOptimizationEngagementTests
         var config = view.ConfiguredInferenceOptimizations;
 
         Assert.NotNull(config);
-        Assert.False(config!.EnableKVCache);
+        Assert.False(config.EnableKVCache);
         Assert.False(config.EnablePagedKVCache);
         Assert.False(config.EnableFlashAttention);
         Assert.False(config.EnableLayerFusion);

@@ -64,7 +64,7 @@ internal static class ModelShapeConformanceProcess
 
         try
         {
-            return JsonSerializer.Deserialize<Measurement>(run.Json!, JsonOptions)
+            return JsonSerializer.Deserialize<Measurement>((run.Json ?? throw new InvalidOperationException("run.Json is null where it is required.")), JsonOptions)
                    ?? new Measurement("invalid-result", null, null, null, run.Json);
         }
         catch (JsonException)
@@ -94,7 +94,7 @@ internal static class ModelShapeConformanceProcess
 
         try
         {
-            return JsonSerializer.Deserialize<Observation>(run.Json!, JsonOptions)
+            return JsonSerializer.Deserialize<Observation>((run.Json ?? throw new InvalidOperationException("run.Json is null where it is required.")), JsonOptions)
                    ?? new Observation("invalid-result", run.Json, Array.Empty<ProfileObservation>());
         }
         catch (JsonException)

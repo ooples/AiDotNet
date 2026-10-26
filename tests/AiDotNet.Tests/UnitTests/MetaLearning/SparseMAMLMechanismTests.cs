@@ -24,7 +24,7 @@ public class SparseMAMLMechanismTests
 {
     private static MetaLearningTask<double, Matrix<double>, Vector<double>> Task(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var sx = new Matrix<double>(4, 3);
         var qx = new Matrix<double>(4, 3);
         var sy = new Vector<double>(4);

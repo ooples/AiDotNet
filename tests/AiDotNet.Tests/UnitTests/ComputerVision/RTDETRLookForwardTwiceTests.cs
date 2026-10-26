@@ -27,7 +27,7 @@ public class RTDETRLookForwardTwiceTests
             Size = ModelSize.Nano,
             NumClasses = 2
         });
-        var rng = new Random(5);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
         var input = new Tensor<double>(new[] { 1, 3, 64, 64 });
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 

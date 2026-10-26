@@ -1433,7 +1433,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
                 combined = Engine.TensorAdd(combined, weightedOutput);
         }
 
-        return combined!;
+        return (combined ?? throw new InvalidOperationException("combined is null where it is required."));
     }
 
     /// <summary>

@@ -375,7 +375,7 @@ public class ReplayBufferIntegrationTests
 
         var state = new Vector<double>(new double[] { 0.5 });
         var policyAction = new Vector<double>(new double[] { 1, 0, 0 }); // one-hot action 0
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         int differentFromPolicy = 0;
         for (int trial = 0; trial < 100; trial++)
@@ -409,7 +409,7 @@ public class ReplayBufferIntegrationTests
 
         var state = new Vector<double>(new double[] { 0.5 });
         var policyAction = new Vector<double>(new double[] { 0, 1, 0 }); // one-hot action 1
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int trial = 0; trial < 50; trial++)
         {
@@ -480,7 +480,7 @@ public class ReplayBufferIntegrationTests
         var state = new Vector<double>(new double[] { 0.5 });
         // One-hot action: [1, 0, 0] - but high temp should override this
         var policyAction = new Vector<double>(new double[] { 1, 0, 0 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Count how often each action is selected
         int[] actionCounts = new int[3];
@@ -518,7 +518,7 @@ public class ReplayBufferIntegrationTests
         // Generate some noise
         var state = new Vector<double>(new double[] { 0, 0, 0 });
         var action = new Vector<double>(new double[] { 0.5, -0.3, 0.8 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < 10; i++)
         {
@@ -551,7 +551,7 @@ public class ReplayBufferIntegrationTests
         var state = new Vector<double>(new double[] { 0 });
         // Start with a large action far from mean
         var action = new Vector<double>(new double[] { 0.0 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Run many steps and collect the noise values
         double sum = 0;
@@ -578,7 +578,7 @@ public class ReplayBufferIntegrationTests
 
         var state = new Vector<double>(new double[] { 0 });
         var action = new Vector<double>(new double[] { 0.0 });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         var values = new List<double>();
         for (int i = 0; i < 100; i++)

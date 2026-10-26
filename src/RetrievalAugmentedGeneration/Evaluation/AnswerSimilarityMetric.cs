@@ -86,11 +86,11 @@ public class AnswerSimilarityMetric<T> : RAGMetricBase<T>
         if (_embeddingModel != null)
         {
             // Semantic similarity via embeddings; negative cosine is clamped to 0 by the base class.
-            var cosine = EmbeddingCosine(_embeddingModel, answer.Answer, groundTruth!);
+            var cosine = EmbeddingCosine(_embeddingModel, answer.Answer, (groundTruth ?? throw new InvalidOperationException("groundTruth is null where it is required.")));
             return NumOps.FromDouble(cosine);
         }
 
         // Offline lexical fallback: Jaccard word overlap.
-        return NumOps.FromDouble(JaccardSimilarity(answer.Answer, groundTruth!));
+        return NumOps.FromDouble(JaccardSimilarity(answer.Answer, (groundTruth ?? throw new InvalidOperationException("groundTruth is null where it is required."))));
     }
 }

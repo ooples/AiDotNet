@@ -386,7 +386,7 @@ public class ParameterGradientOrderingH5ProbeTests
 
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
-        var rng = new Random(Seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         var x = new Tensor<float>([SampleCount, CtxLen]);
         var y = new Tensor<float>([SampleCount, VocabSize]);
         for (int i = 0; i < SampleCount; i++)

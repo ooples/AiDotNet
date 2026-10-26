@@ -242,8 +242,8 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var newParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
         var parameterSpan = parameters.AsSpan();
         var gradientSpan = gradient.AsSpan();
-        var zSpan = _z!.AsWritableSpan();
-        var nSpan = _n!.AsWritableSpan();
+        var zSpan = _z.AsWritableSpan();
+        var nSpan = _n.AsWritableSpan();
         var newParameterSpan = newParameters.AsWritableSpan();
 
         for (int i = 0; i < parameters.Length; i++)
@@ -512,18 +512,18 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
 
         // Vectorized n update: n = n + g^2
-        var nPlusGradSq = (Vector<T>)Engine.Add(_n!, gradSquared);
+        var nPlusGradSq = (Vector<T>)Engine.Add((_n ?? throw new InvalidOperationException("_n is null where it is required.")), gradSquared);
 
         // Vectorized sqrt operations for sigma calculation
         var sqrtNPlusGradSq = (Vector<T>)Engine.Sqrt(nPlusGradSq);
-        var sqrtN = (Vector<T>)Engine.Sqrt(_n!);
+        var sqrtN = (Vector<T>)Engine.Sqrt(_n);
         var numerator = (Vector<T>)Engine.Subtract(sqrtNPlusGradSq, sqrtN);
         var sigma = (Vector<T>)Engine.Divide(numerator, alpha);
 
         // Vectorized z update: z = z + g - sigma * params
         var sigmaTimesParams = (Vector<T>)Engine.Multiply(sigma, parameters);
         var gradMinusSigmaParams = (Vector<T>)Engine.Subtract(gradient, sigmaTimesParams);
-        _z = (Vector<T>)Engine.Add(_z!, gradMinusSigmaParams);
+        _z = (Vector<T>)Engine.Add((_z ?? throw new InvalidOperationException("_z is null where it is required.")), gradMinusSigmaParams);
 
         // Update n state
         _n = nPlusGradSq;
@@ -683,8 +683,8 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         backend.FtrlUpdate(
             parameters,
             gradients,
-            _gpuZ!,
-            _gpuN!,
+            (_gpuZ ?? throw new InvalidOperationException("_gpuZ is null where it is required.")),
+            (_gpuN ?? throw new InvalidOperationException("_gpuN is null where it is required.")),
             (float)_options.Alpha,
             (float)_options.Lambda1,
             (float)_options.Lambda2,

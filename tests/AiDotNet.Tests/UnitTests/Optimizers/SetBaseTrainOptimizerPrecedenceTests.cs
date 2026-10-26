@@ -77,7 +77,7 @@ public sealed class SetBaseTrainOptimizerPrecedenceTests
 
     private static (Tensor<float> Input, Tensor<float> Target) Data()
     {
-        var rng = new Random(17);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
         var input = new Tensor<float>(new[] { 8, 6 });
         for (int i = 0; i < input.Length; i++) input[i] = (float)(rng.NextDouble() * 2 - 1);
         var target = new Tensor<float>(new[] { 8, 3 });

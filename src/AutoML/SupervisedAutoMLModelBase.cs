@@ -213,8 +213,8 @@ public abstract partial class SupervisedAutoMLModelBase<T, TInput, TOutput> : Au
         TOutput trainTargets,
         CancellationToken cancellationToken)
     {
-        var cvOptions = CrossValidationOptions!;
-        int numFolds = cvOptions.NumberOfFolds;
+        var cvOptions = CrossValidationOptions;
+        int numFolds = (cvOptions ?? throw new InvalidOperationException("cvOptions is null where it is required.")).NumberOfFolds;
 
         // Get row count based on input type
         int totalRows = GetRowCount(trainInputs);

@@ -216,7 +216,7 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
             magnitude = magnitude is null ? binMagnitude : Engine.TensorConcatenate([magnitude, binMagnitude], 0);
         }
 
-        return magnitude!;
+        return (magnitude ?? throw new InvalidOperationException("magnitude is null where it is required."));
     }
 
     /// <summary>

@@ -159,7 +159,7 @@ public class KnowledgeDistillationIntegrationTests
         var loss = new DistillationLoss<double>();
         var teacherLogits = CreateLogits(BatchSize, NumClasses);
 
-        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(null!, teacherLogits));
+        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>(), teacherLogits));
     }
 
     [Fact(Timeout = 120000)]
@@ -168,7 +168,7 @@ public class KnowledgeDistillationIntegrationTests
         var loss = new DistillationLoss<double>();
         var studentLogits = CreateLogits(BatchSize, NumClasses);
 
-        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(studentLogits, null!));
+        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(studentLogits, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -254,7 +254,7 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FeatureDistillation_Constructor_NullLayerPairs_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new FeatureDistillationStrategy<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new FeatureDistillationStrategy<double>(global::AiDotNet.Tests.TestNull.Of<string[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -332,7 +332,7 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AttentionDistillation_Constructor_NullLayers_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new AttentionDistillationStrategy<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new AttentionDistillationStrategy<double>(global::AiDotNet.Tests.TestNull.Of<string[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -446,7 +446,7 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task HybridDistillation_Constructor_NullStrategies_Throws()
     {
-        Assert.Throws<ArgumentException>(() => new HybridDistillationStrategy<double>(null!));
+        Assert.Throws<ArgumentException>(() => new HybridDistillationStrategy<double>(global::AiDotNet.Tests.TestNull.Of<(AiDotNet.Interfaces.IDistillationStrategy<double> Strategy, double Weight)[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -857,7 +857,7 @@ public class KnowledgeDistillationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DistillationForwardResult_NullOutput_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new DistillationForwardResult<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new DistillationForwardResult<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>()));
     }
 
     #endregion

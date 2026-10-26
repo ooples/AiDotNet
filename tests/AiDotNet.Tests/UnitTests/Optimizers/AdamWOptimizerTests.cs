@@ -52,7 +52,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(options);
-            Assert.Equal(0.01, options!.InitialLearningRate);
+            Assert.Equal(0.01, options.InitialLearningRate);
             Assert.Equal(0.85, options.Beta1);
             Assert.Equal(0.9999, options.Beta2);
             Assert.Equal(1e-7, options.Epsilon);
@@ -286,7 +286,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(deserializedOptions);
-            Assert.Equal(options.InitialLearningRate, deserializedOptions!.InitialLearningRate);
+            Assert.Equal(options.InitialLearningRate, deserializedOptions.InitialLearningRate);
             Assert.Equal(options.WeightDecay, deserializedOptions.WeightDecay);
         }
 
@@ -356,7 +356,7 @@ namespace AiDotNetTests.UnitTests.Optimizers
 
             // Assert
             Assert.NotNull(retrievedOptions);
-            Assert.Equal(0.005, retrievedOptions!.InitialLearningRate);
+            Assert.Equal(0.005, retrievedOptions.InitialLearningRate);
             Assert.Equal(0.92, retrievedOptions.Beta1);
             Assert.Equal(0.9995, retrievedOptions.Beta2);
             Assert.Equal(0.02, retrievedOptions.WeightDecay);

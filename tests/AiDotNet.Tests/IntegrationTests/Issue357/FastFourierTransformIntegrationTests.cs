@@ -159,7 +159,7 @@ public class FastFourierTransformIntegrationTests
     public void FFT_RoundTrip_RandomSignal_PreservesSignal(int length)
     {
         var fft = new FastFourierTransform<double>();
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var original = new Vector<double>(length);
 
         for (int i = 0; i < length; i++)

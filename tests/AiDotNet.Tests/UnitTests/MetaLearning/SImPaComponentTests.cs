@@ -27,7 +27,7 @@ public class SImPaComponentTests
 {
     private static ImplicitPosteriorGenerator<double> SmallGenerator(int outputDim = 6, int seed = 5) =>
         new(outputDimension: outputDim, latentDimension: 8, firstHiddenWidth: 8, secondHiddenWidth: 8,
-            rng: new Random(seed));
+            rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
 
     private static double MaxAbsDiff(Vector<double> a, Vector<double> b)
     {
@@ -47,7 +47,7 @@ public class SImPaComponentTests
         // lands somewhere else. If this ever passes trivially, the method has silently collapsed back
         // into the baseline the paper was written to beat.
         var generator = SmallGenerator();
-        var rng = new Random(1234);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1234);
 
         var first = generator.Sample(rng);
         var second = generator.Sample(rng);
@@ -81,7 +81,7 @@ public class SImPaComponentTests
         // untrained generator can emit parameters large enough to make the base model diverge on its very
         // first forward pass, which would look like a broken model rather than an unconverged one.
         var generator = SmallGenerator(outputDim: 12);
-        var rng = new Random(77);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(77);
 
         foreach (var sample in generator.SampleMany(24, rng))
         {
@@ -120,7 +120,7 @@ public class SImPaComponentTests
     {
         var generator = SmallGenerator();
         Assert.Throws<ArgumentException>(() => generator.SetParameters(new Vector<double>(3)));
-        Assert.Throws<ArgumentNullException>(() => generator.SetParameters(null!));
+        Assert.Throws<ArgumentNullException>(() => generator.SetParameters(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ImplicitPosteriorGenerator<double>(0));
     }
 
@@ -128,7 +128,7 @@ public class SImPaComponentTests
 
     private static IReadOnlyList<Vector<double>> Gaussian(int count, int dim, double mean, double sd, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var list = new List<Vector<double>>(count);
         for (int s = 0; s < count; s++)
         {
@@ -150,7 +150,7 @@ public class SImPaComponentTests
         // The compression lemma's trivial point: phi identically 0 gives 0 - ln(1) = 0. Starting there
         // means the estimate can only ever be improved upward by training, never begin overstated — which
         // matters because the KL enters the bound positively.
-        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 4, hiddenWidth: 8, rng: new Random(3));
+        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 4, hiddenWidth: 8, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3));
         var q = Gaussian(32, 4, mean: 2.0, sd: 0.5, seed: 11);
         var p = Gaussian(32, 4, mean: 0.0, sd: 1.0, seed: 12);
 
@@ -165,11 +165,11 @@ public class SImPaComponentTests
         // The estimator's whole job, and it uses SAMPLES ONLY — no density is ever evaluated, which is
         // what makes it usable with an implicit posterior. q is centred far from p, so a real KL exists
         // and the lower bound must climb above the trivial 0.
-        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 3, hiddenWidth: 12, rng: new Random(5));
+        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 3, hiddenWidth: 12, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5));
         var q = Gaussian(128, 3, mean: 3.0, sd: 0.4, seed: 21);
         var p = Gaussian(128, 3, mean: 0.0, sd: 1.0, seed: 22);
 
-        double estimate = estimator.EstimateKL(q, p, steps: 200, learningRate: 0.05, rng: new Random(23));
+        double estimate = estimator.EstimateKL(q, p, steps: 200, learningRate: 0.05, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(23));
 
         Assert.True(estimate > 0.05,
             $"The KL estimate stayed at {estimate:E3} for two clearly separated distributions, so the "
@@ -181,15 +181,15 @@ public class SImPaComponentTests
     {
         // The other side of the same claim: no separation means no divergence to find. Without this, a
         // test that only checks "the estimate goes up" would pass an estimator that inflates everything.
-        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 3, hiddenWidth: 12, rng: new Random(7));
+        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 3, hiddenWidth: 12, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7));
         var q = Gaussian(128, 3, mean: 0.0, sd: 1.0, seed: 31);
         var p = Gaussian(128, 3, mean: 0.0, sd: 1.0, seed: 32);
 
-        double same = estimator.EstimateKL(q, p, steps: 200, learningRate: 0.05, rng: new Random(33));
+        double same = estimator.EstimateKL(q, p, steps: 200, learningRate: 0.05, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(33));
 
-        var estimator2 = new CompressionLemmaKLEstimator<double>(inputDimension: 3, hiddenWidth: 12, rng: new Random(7));
+        var estimator2 = new CompressionLemmaKLEstimator<double>(inputDimension: 3, hiddenWidth: 12, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7));
         var far = Gaussian(128, 3, mean: 3.0, sd: 0.4, seed: 34);
-        double different = estimator2.EstimateKL(far, p, steps: 200, learningRate: 0.05, rng: new Random(33));
+        double different = estimator2.EstimateKL(far, p, steps: 200, learningRate: 0.05, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(33));
 
         Assert.True(different > same,
             $"Two identical distributions scored {same:E3} while clearly different ones scored "
@@ -201,7 +201,7 @@ public class SImPaComponentTests
     {
         // A KL divergence cannot be negative; a lower bound can be, and returning it raw would let the
         // PAC-Bayes bound shrink below its empirical loss.
-        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 2, hiddenWidth: 4, rng: new Random(9));
+        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 2, hiddenWidth: 4, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9));
         var q = Gaussian(16, 2, mean: 0.0, sd: 1.0, seed: 41);
         var p = Gaussian(16, 2, mean: 0.0, sd: 1.0, seed: 42);
 
@@ -214,7 +214,7 @@ public class SImPaComponentTests
         // exp(phi) overflows for a well-trained phi, so the prior term is computed by log-sum-exp. Without
         // it the estimate becomes NaN exactly when the estimator starts working — a failure that looks
         // like instability rather than a missing numerical trick.
-        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 2, hiddenWidth: 4, rng: new Random(13));
+        var estimator = new CompressionLemmaKLEstimator<double>(inputDimension: 2, hiddenWidth: 4, rng: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(13));
 
         var omega = estimator.GetParameters();
         for (int i = 0; i < omega.Length; i++) omega[i] = 50.0;   // drives phi to a huge magnitude

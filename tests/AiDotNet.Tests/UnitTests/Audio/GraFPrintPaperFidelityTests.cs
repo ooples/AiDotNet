@@ -145,19 +145,19 @@ public class GraFPrintPaperFidelityTests
         var second = BuildFourNodeInput([0.0, 10.0, 11.0, 1.0]);
 
         var firstOutput = layer.Forward(first);
-        int[,,] firstGraph = (int[,,])layer.LastNeighborIndices!.Clone();
+        int[,,] firstGraph = (int[,,])(layer.LastNeighborIndices ?? throw new InvalidOperationException("layer.LastNeighborIndices is null where it is required.")).Clone();
 
         for (int node = 0; node < 4; node++)
             Assert.Equal(node, firstGraph[0, node, 0]);
 
         var replay = layer.Forward(first);
-        int[,,] replayGraph = (int[,,])layer.LastNeighborIndices!.Clone();
+        int[,,] replayGraph = (int[,,])layer.LastNeighborIndices.Clone();
 
         Assert.Equal(firstGraph.Cast<int>(), replayGraph.Cast<int>());
         AssertBitwiseEqual(firstOutput, replay);
 
         var secondOutput = layer.Forward(second);
-        int[,,] secondGraph = layer.LastNeighborIndices!;
+        int[,,] secondGraph = layer.LastNeighborIndices;
 
         Assert.False(firstGraph.Cast<int>().SequenceEqual(secondGraph.Cast<int>()));
         Assert.All(secondOutput.ToArray(), value =>
@@ -192,11 +192,11 @@ public class GraFPrintPaperFidelityTests
 
             compiledModel.Train(first, target);
             Assert.Equal(1, AiDotNet.Training.CompiledTapeTrainingStep<double>.GetFusedStepCount());
-            int[,,] firstGraph = (int[,,])graphBlock.LastNeighborIndices!.Clone();
+            int[,,] firstGraph = (int[,,])(graphBlock.LastNeighborIndices ?? throw new InvalidOperationException("graphBlock.LastNeighborIndices is null where it is required.")).Clone();
 
             compiledModel.Train(second, target);
             Assert.Equal(2, AiDotNet.Training.CompiledTapeTrainingStep<double>.GetFusedStepCount());
-            int[,,] secondGraph = graphBlock.LastNeighborIndices!;
+            int[,,] secondGraph = graphBlock.LastNeighborIndices;
 
             Assert.False(firstGraph.Cast<int>().SequenceEqual(secondGraph.Cast<int>()),
                 "Compiled replay reused the first input's k-NN topology for a different input.");
@@ -282,9 +282,9 @@ public class GraFPrintPaperFidelityTests
         }
 
         _ = layer.Forward(input);
-        int[,,] originalGraph = (int[,,])layer.LastNeighborIndices!.Clone();
+        int[,,] originalGraph = (int[,,])(layer.LastNeighborIndices ?? throw new InvalidOperationException("layer.LastNeighborIndices is null where it is required.")).Clone();
         _ = layer.Forward(scaled);
-        int[,,] scaledGraph = layer.LastNeighborIndices!;
+        int[,,] scaledGraph = layer.LastNeighborIndices;
 
         Assert.Equal(originalGraph.Cast<int>(), scaledGraph.Cast<int>());
     }

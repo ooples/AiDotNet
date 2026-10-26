@@ -57,7 +57,7 @@ public class GLMFamilyRegressionIntegrationTests
     private static (Matrix<double> x, Vector<double> y) CreatePositiveResponseData(
         int n, double[] coefficients, double intercept, double noise, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int p = coefficients.Length;
         var x = new Matrix<double>(n, p);
         var y = new Vector<double>(n);
@@ -83,7 +83,7 @@ public class GLMFamilyRegressionIntegrationTests
     private static (Matrix<double> x, Vector<double> y) CreateCountData(
         int n, double[] coefficients, double intercept, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int p = coefficients.Length;
         var x = new Matrix<double>(n, p);
         var y = new Vector<double>(n);
@@ -124,7 +124,7 @@ public class GLMFamilyRegressionIntegrationTests
     private static (Matrix<double> x, Vector<double> y) CreateBetaData(
         int n, double[] coefficients, double intercept, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int p = coefficients.Length;
         var x = new Matrix<double>(n, p);
         var y = new Vector<double>(n);
@@ -299,7 +299,7 @@ public class GLMFamilyRegressionIntegrationTests
     public async Task ZeroInflatedRegression_HandlesZeroHeavyData()
     {
         // Create data with many zeros (zero-inflated pattern)
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 80;
         var x = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);
@@ -330,7 +330,7 @@ public class GLMFamilyRegressionIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GAMLSSRegression_FitsData_PredictionsFinite()
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 80;
         var x = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);

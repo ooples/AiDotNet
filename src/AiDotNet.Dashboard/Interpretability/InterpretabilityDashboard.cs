@@ -536,9 +536,12 @@ public class InterpretabilityDashboard : IDisposable
 
             foreach (var heatmap in heatmaps)
             {
+                // An instance whose explainer produced no heatmap has nothing to export.
+                if (heatmap.Heatmap is not { } map)
+                    continue;
                 string heatmapFilename = $"{baseFilename}_heatmap_{heatmap.InstanceId}";
                 results[$"heatmap_{heatmap.InstanceId}"] = _exporter.ExportHeatmapToHtml(
-                    heatmap.Heatmap!,
+                    map,
                     $"Heatmap - {heatmap.InstanceId}",
                     metadata,
                     heatmapFilename);

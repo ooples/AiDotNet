@@ -44,7 +44,7 @@ internal sealed class DirectKolenPollackCreditRule<T> : CreditRuleBase<T>
         foreach (var layer in context.Layers)
         {
             if (layer.IsOutputLayer) continue;
-            var projected = ProjectThrough(error, feedback[layer.Index]!); // [B, C] · [C, M_i] = [B, M_i]
+            var projected = ProjectThrough(error, (feedback[layer.Index] ?? throw new InvalidOperationException("feedback[layer.Index] is null where it is required."))); // [B, C] · [C, M_i] = [B, M_i]
             layer.TeachingSignal = ToTeachingSignal(projected, layer.OutputShape);
         }
     }
@@ -63,7 +63,7 @@ internal sealed class DirectKolenPollackCreditRule<T> : CreditRuleBase<T>
             if (layer.IsOutputLayer) continue;
             Matrix<T> activation = FlatMatrix(layer.Output); // [B, M_i]
             Matrix<T> grad = MeanOuter(error, activation, ops); // [C, M_i]
-            KpUpdate(feedback[layer.Index]!, grad, _feedbackLearningRate, _weightDecay, ops);
+            KpUpdate((feedback[layer.Index] ?? throw new InvalidOperationException("feedback[layer.Index] is null where it is required.")), grad, _feedbackLearningRate, _weightDecay, ops);
         }
     }
 }

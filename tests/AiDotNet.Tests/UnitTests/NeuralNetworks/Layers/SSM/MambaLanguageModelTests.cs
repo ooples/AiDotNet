@@ -448,7 +448,7 @@ public class MambaLanguageModelTests
     private static Tensor<float> CreateOneHotTarget(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<float>(new[] { batchSize, seqLen, vocabSize });
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -477,7 +477,7 @@ public class MambaLanguageModelTests
     private static Tensor<float> CreateTokenInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<float>(new[] { batchSize, seqLen });
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -494,7 +494,7 @@ public class MambaLanguageModelTests
     private static Tensor<double> CreateOneHotDoubleTarget(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<double>(new[] { batchSize, seqLen, vocabSize });
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -511,7 +511,7 @@ public class MambaLanguageModelTests
     private static Tensor<double> CreateTokenDoubleInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<double>(new[] { batchSize, seqLen });
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -527,7 +527,7 @@ public class MambaLanguageModelTests
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1);

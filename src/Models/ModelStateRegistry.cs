@@ -882,42 +882,46 @@ public sealed class ModelStateRegistry<T>
             }
         }
 
+        // A reference-typed null returned above; a value-typed field cannot hold null.
+        if (value is null)
+            throw new InvalidDataException($"Random-generator state holds null for the value type {declaredType}.");
+
         if (declaredType.IsEnum)
         {
             Type underlyingType = Enum.GetUnderlyingType(declaredType);
             object underlyingValue = Convert.ChangeType(
-                value!, underlyingType, System.Globalization.CultureInfo.InvariantCulture);
+                value, underlyingType, System.Globalization.CultureInfo.InvariantCulture);
             WriteRandomValue(writer, underlyingType, underlyingValue, depth, ancestors);
             return;
         }
 
-        if (declaredType == typeof(bool)) { writer.Write((bool)value!); return; }
-        if (declaredType == typeof(byte)) { writer.Write((byte)value!); return; }
-        if (declaredType == typeof(sbyte)) { writer.Write((sbyte)value!); return; }
-        if (declaredType == typeof(short)) { writer.Write((short)value!); return; }
-        if (declaredType == typeof(ushort)) { writer.Write((ushort)value!); return; }
-        if (declaredType == typeof(int)) { writer.Write((int)value!); return; }
-        if (declaredType == typeof(uint)) { writer.Write((uint)value!); return; }
-        if (declaredType == typeof(long)) { writer.Write((long)value!); return; }
-        if (declaredType == typeof(ulong)) { writer.Write((ulong)value!); return; }
-        if (declaredType == typeof(float)) { writer.Write((float)value!); return; }
-        if (declaredType == typeof(double)) { writer.Write((double)value!); return; }
-        if (declaredType == typeof(decimal)) { writer.Write((decimal)value!); return; }
-        if (declaredType == typeof(char)) { writer.Write((char)value!); return; }
-        if (declaredType == typeof(string)) { writer.Write((string)value!); return; }
-        if (declaredType == typeof(IntPtr)) { writer.Write(((IntPtr)value!).ToInt64()); return; }
-        if (declaredType == typeof(UIntPtr)) { writer.Write(((UIntPtr)value!).ToUInt64()); return; }
+        if (declaredType == typeof(bool)) { writer.Write((bool)value); return; }
+        if (declaredType == typeof(byte)) { writer.Write((byte)value); return; }
+        if (declaredType == typeof(sbyte)) { writer.Write((sbyte)value); return; }
+        if (declaredType == typeof(short)) { writer.Write((short)value); return; }
+        if (declaredType == typeof(ushort)) { writer.Write((ushort)value); return; }
+        if (declaredType == typeof(int)) { writer.Write((int)value); return; }
+        if (declaredType == typeof(uint)) { writer.Write((uint)value); return; }
+        if (declaredType == typeof(long)) { writer.Write((long)value); return; }
+        if (declaredType == typeof(ulong)) { writer.Write((ulong)value); return; }
+        if (declaredType == typeof(float)) { writer.Write((float)value); return; }
+        if (declaredType == typeof(double)) { writer.Write((double)value); return; }
+        if (declaredType == typeof(decimal)) { writer.Write((decimal)value); return; }
+        if (declaredType == typeof(char)) { writer.Write((char)value); return; }
+        if (declaredType == typeof(string)) { writer.Write((string)value); return; }
+        if (declaredType == typeof(IntPtr)) { writer.Write(((IntPtr)value).ToInt64()); return; }
+        if (declaredType == typeof(UIntPtr)) { writer.Write(((UIntPtr)value).ToUInt64()); return; }
 
         if (declaredType.IsArray)
         {
-            var array = (Array)value!;
+            var array = (Array)value;
             if (array.Rank != 1)
                 throw new NotSupportedException("Random-generator state supports only rank-one arrays.");
             writer.Write(array.Length);
-            Type elementType = declaredType.GetElementType()!;
+            Type elementType = (declaredType.GetElementType() ?? throw new InvalidOperationException("declaredType.GetElementType() is null where it is required."));
             for (int index = 0; index < array.Length; index++)
                 WriteRandomValue(
-                    writer, elementType, array.GetValue(index), depth + 1, ancestors);
+                    writer, (elementType ?? throw new InvalidOperationException("elementType is null where it is required.")), array.GetValue(index), depth + 1, ancestors);
             return;
         }
 
@@ -953,7 +957,7 @@ public sealed class ModelStateRegistry<T>
             Type underlyingType = Enum.GetUnderlyingType(declaredType);
             object? underlyingValue = ReadRandomValue(
                 reader, underlyingType, null, stateName, depth);
-            return Enum.ToObject(declaredType, underlyingValue!);
+            return Enum.ToObject(declaredType, (underlyingValue ?? throw new InvalidOperationException("underlyingValue is null where it is required.")));
         }
         if (declaredType == typeof(bool)) return reader.ReadBoolean();
         if (declaredType == typeof(byte)) return reader.ReadByte();
@@ -978,13 +982,13 @@ public sealed class ModelStateRegistry<T>
             if (length < 0 || length > 1_000_000)
                 throw new InvalidDataException(
                     $"State '{stateName}' contains invalid random-state array length {length}.");
-            Type elementType = declaredType.GetElementType()!;
+            Type elementType = (declaredType.GetElementType() ?? throw new InvalidOperationException("declaredType.GetElementType() is null where it is required."));
             Array array = (current as Array) is { Rank: 1 } existing && existing.Length == length
                 ? existing
-                : Array.CreateInstance(elementType, length);
+                : Array.CreateInstance((elementType ?? throw new InvalidOperationException("elementType is null where it is required.")), length);
             for (int index = 0; index < length; index++)
                 array.SetValue(ReadRandomValue(
-                    reader, elementType, array.GetValue(index), stateName, depth + 1), index);
+                    reader, (elementType ?? throw new InvalidOperationException("elementType is null where it is required.")), array.GetValue(index), stateName, depth + 1), index);
             return array;
         }
 
@@ -1117,7 +1121,7 @@ public sealed class ModelStateRegistry<T>
             string? payload = data["payload"]?.Value<string>();
             Type? concrete = string.IsNullOrWhiteSpace(typeName)
                 ? objectType
-                : Type.GetType(typeName!, throwOnError: false);
+                : Type.GetType(typeName, throwOnError: false);
             if (concrete is null || !objectType.IsAssignableFrom(concrete) || !CanConvert(concrete))
             {
                 throw new JsonSerializationException(
@@ -1199,7 +1203,7 @@ public sealed class ModelStateRegistry<T>
             string? payloadText = data["payload"]?.Value<string>();
             Type? concrete = string.IsNullOrWhiteSpace(typeName)
                 ? objectType
-                : Type.GetType(typeName!, throwOnError: false);
+                : Type.GetType(typeName, throwOnError: false);
 
             if (concrete is null || !objectType.IsAssignableFrom(concrete)
                 || !typeof(IModelSerializer).IsAssignableFrom(concrete))
@@ -1566,7 +1570,7 @@ public sealed class ModelStateRegistry<T>
     {
         if (!r.ReadBoolean()) return null;
 
-        var node = shape.Factory!();
+        var node = (shape.Factory ?? throw new InvalidOperationException("shape.Factory is null where it is required."))();
         foreach (var field in shape.Fields) field.Read(node, r);
         foreach (var child in shape.Children) child.Set(node, ReadNode(r, shape));
         return node;
@@ -2158,7 +2162,7 @@ public sealed class ModelStateRegistry<T>
         {
             w.Write(true);
             var concrete = node.LinearModel.GetType();
-            w.Write(concrete.AssemblyQualifiedName ?? concrete.FullName ?? concrete.Name);
+            w.Write(concrete.AssemblyQualifiedName is { } qualifiedName ? qualifiedName : concrete.FullName is { } fullName ? fullName : concrete.Name);
             var payload = node.LinearModel.Serialize();
             w.Write(payload.Length);
             w.Write(payload);
@@ -2449,7 +2453,7 @@ public sealed class ModelStateRegistry<T>
             var underlying = Enum.GetUnderlyingType(bare);
             var converted = Convert.ChangeType(
                 value, underlying, System.Globalization.CultureInfo.InvariantCulture);
-            return Enum.ToObject(bare, converted!);
+            return Enum.ToObject(bare, converted);
         }
 
         return Convert.ChangeType(value, bare, System.Globalization.CultureInfo.InvariantCulture);

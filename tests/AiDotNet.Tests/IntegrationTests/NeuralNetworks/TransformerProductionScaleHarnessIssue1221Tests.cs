@@ -126,7 +126,7 @@ public class TransformerProductionScaleHarnessIssue1221Tests
     private static (Tensor<float> features, Tensor<float> labels) BuildZipfCorpus(
         int vocab, int seqLen, int numSamples, int seed = 42)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         // Precompute Zipf CDF for inverse-transform sampling.
         var zipfWeights = new double[vocab];
@@ -257,7 +257,7 @@ public class TransformerProductionScaleHarnessIssue1221Tests
 
         // Train the model so weights have real, non-default values.
         model.SetTrainingMode(true);
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         for (int i = 0; i < 30; i++)
         {
             var inp = new Tensor<float>([1, seqLen]);
@@ -591,7 +591,7 @@ public class TransformerProductionScaleHarnessIssue1221Tests
         for (int s = 0; s < seqLen; s++) inp1[0, s] = 7;
 
         var inp2 = new Tensor<float>([1, seqLen]);
-        var rng = new Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         for (int s = 0; s < seqLen; s++) inp2[0, s] = rng.Next(vocab);
 
         // model.Predict — direct call on the trained Transformer.
@@ -672,7 +672,7 @@ public class TransformerProductionScaleHarnessIssue1221Tests
 
         // Run real training steps with RANDOM inputs.
         const int trainSteps = 50;
-        var rngTrain = new Random(7);
+        var rngTrain = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         for (int i = 0; i < trainSteps; i++)
         {
             var inp = new Tensor<float>([1, seqLen]);

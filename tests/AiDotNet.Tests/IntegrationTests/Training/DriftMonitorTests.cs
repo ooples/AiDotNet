@@ -101,7 +101,7 @@ public class DriftMonitorTests
 
     private static (Vector<double> predicted, Vector<double> actual) Steady(int n, double prediction, double error, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var p = new double[n];
         var a = new double[n];
         for (int i = 0; i < n; i++)

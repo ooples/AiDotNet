@@ -62,7 +62,7 @@ public abstract class SafetyModuleTestBase
     /// <summary>Creates test content vector with random data (some modules may flag this).</summary>
     protected virtual Vector<double> CreateRandomContent()
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var content = new Vector<double>(ContentSize);
         for (int i = 0; i < ContentSize; i++)
             content[i] = rng.NextDouble() * 255.0;
@@ -271,7 +271,7 @@ public abstract class SafetyModuleTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var module = CreateModule();
-        Assert.ThrowsAny<ArgumentException>(() => module.Evaluate(null!));
+        Assert.ThrowsAny<ArgumentException>(() => module.Evaluate(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     // INVARIANT 10: Empty content does not crash
@@ -302,7 +302,7 @@ public abstract class SafetyModuleTestBase
         var module = CreateAndAssertReady();
 
         var largeContent = new Vector<double>(1000);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 1000; i++)
             largeContent[i] = rng.NextDouble() * 255.0;
 

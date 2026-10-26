@@ -153,7 +153,7 @@ public sealed class ProgramSandboxOptionsTests
     {
         var options = new ProgramSandboxOptions();
 #pragma warning disable CS8625
-        Assert.Throws<ArgumentNullException>(() => options.SetInterpreter(ProgramLanguage.Python, null));
+        Assert.Throws<ArgumentNullException>(() => options.SetInterpreter(ProgramLanguage.Python, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Configuration.ProgramInterpreterSpecification>()));
 #pragma warning restore CS8625
         Assert.Throws<ArgumentOutOfRangeException>(
             () => options.SetInterpreter((ProgramLanguage)99, new ProgramInterpreterSpecification("x", "{source}")));
@@ -163,8 +163,8 @@ public sealed class ProgramSandboxOptionsTests
     public void InterpreterSpecificationValidatesItsArguments()
     {
 #pragma warning disable CS8625
-        Assert.Throws<ArgumentNullException>(() => new ProgramInterpreterSpecification(null, "{source}"));
-        Assert.Throws<ArgumentNullException>(() => new ProgramInterpreterSpecification("python", null));
+        Assert.Throws<ArgumentNullException>(() => new ProgramInterpreterSpecification(global::AiDotNet.Tests.TestNull.Of<string>(), "{source}"));
+        Assert.Throws<ArgumentNullException>(() => new ProgramInterpreterSpecification("python", global::AiDotNet.Tests.TestNull.Of<string>()));
 #pragma warning restore CS8625
         Assert.Throws<ArgumentException>(() => new ProgramInterpreterSpecification("  ", "{source}"));
     }

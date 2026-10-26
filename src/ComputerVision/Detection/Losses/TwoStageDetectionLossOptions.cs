@@ -61,14 +61,33 @@ public sealed class TwoStageDetectionLossOptions
     /// <remarks><para><b>For Beginners:</b> Cascade R-CNN sums its stages equally by default.</para></remarks>
     public double[] StageLossWeights { get; set; } = { 1.0, 1.0, 1.0 };
 
+    /// <summary>
+    /// Per-stage weights (wx, wy, ww, wh) the box-regression targets are multiplied by, and the predicted deltas
+    /// divided by when decoded. Null means unit weights (raw deltas).
+    /// </summary>
+    /// <remarks>
+    /// <para>The reference Cascade R-CNN (Detectron <c>CASCADE_RCNN.BBOX_REG_WEIGHTS</c>) normalizes each stage's targets
+    /// with (10, 10, 5, 5), (20, 20, 10, 10) and (30, 30, 15, 15): later stages receive tighter boxes, whose raw deltas
+    /// are too small for smooth-L1 to regress strongly.</para>
+    /// <para><b>For Beginners:</b> scales the box corrections each stage learns, so small corrections still matter.</para>
+    /// </remarks>
+    public double[][]? StageBoxRegressionWeights { get; set; }
+
     internal TwoStageDetectionLossOptions Snapshot(int stages)
     {
         var copy = (TwoStageDetectionLossOptions)MemberwiseClone();
         copy.StageForegroundIoU = (double[])(StageForegroundIoU ?? throw new ArgumentNullException(nameof(StageForegroundIoU))).Clone();
         copy.StageLossWeights = (double[])(StageLossWeights ?? throw new ArgumentNullException(nameof(StageLossWeights))).Clone();
+        copy.StageBoxRegressionWeights = StageBoxRegressionWeights is { } boxWeights
+            ? Array.ConvertAll(boxWeights, weights => (double[])(weights ?? throw new ArgumentNullException(nameof(StageBoxRegressionWeights))).Clone())
+            : null;
         copy.Validate(stages);
         return copy;
     }
+
+    /// <summary>The (wx, wy, ww, wh) of <paramref name="stage"/>: the configured weights, or ones.</summary>
+    internal double[] BoxRegressionWeights(int stage)
+        => StageBoxRegressionWeights is { } weights ? weights[stage] : new[] { 1.0, 1.0, 1.0, 1.0 };
 
     private void Validate(int stages)
     {
@@ -93,6 +112,19 @@ public sealed class TwoStageDetectionLossOptions
             if (RoiBackgroundIoULow > StageForegroundIoU[stage])
                 throw new ArgumentOutOfRangeException(nameof(RoiBackgroundIoULow), "The background interval must end at or above its lower bound.");
             RequireNonnegative(StageLossWeights[stage], nameof(StageLossWeights));
+        }
+        if (StageBoxRegressionWeights is { } boxWeights)
+        {
+            if (boxWeights.Length < stages)
+                throw new ArgumentException($"StageBoxRegressionWeights needs one (wx, wy, ww, wh) for each of the {stages} detection stages.", nameof(StageBoxRegressionWeights));
+            for (int stage = 0; stage < stages; stage++)
+            {
+                if (boxWeights[stage].Length != 4)
+                    throw new ArgumentException("Each stage's box-regression weights are (wx, wy, ww, wh).", nameof(StageBoxRegressionWeights));
+                foreach (double weight in boxWeights[stage])
+                    if (double.IsNaN(weight) || double.IsInfinity(weight) || weight <= 0)
+                        throw new ArgumentOutOfRangeException(nameof(StageBoxRegressionWeights), "Box-regression weights must be finite and positive.");
+            }
         }
     }
 

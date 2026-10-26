@@ -124,7 +124,7 @@ internal sealed class RadixPrefixCache<T>
             for (int i = candidates.Count - 1; i >= 0; i--)
             {
                 var cand = candidates[i];
-                if (_cache.ForkSequence(cand.BaseSequenceId!.Value, targetSequenceId))
+                if (_cache.ForkSequence((cand.BaseSequenceId ?? throw new InvalidOperationException("cand.BaseSequenceId is null where it is required.")), targetSequenceId))
                 {
                     Touch(cand);
                     return Depth(cand);
@@ -231,7 +231,7 @@ internal sealed class RadixPrefixCache<T>
                !node.BaseSequenceId.HasValue &&
                (node.Children is null || node.Children.Count == 0))
         {
-            node.Parent.Children!.Remove(node.Token);
+            (node.Parent.Children ?? throw new InvalidOperationException("node.Parent.Children is null where it is required.")).Remove(node.Token);
             node = node.Parent;
         }
     }

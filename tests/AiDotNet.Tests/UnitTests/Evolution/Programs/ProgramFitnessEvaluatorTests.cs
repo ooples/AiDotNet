@@ -61,7 +61,7 @@ public sealed class ProgramFitnessEvaluatorTests
     public void DelegateEvaluatorValidatesItsArguments()
     {
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => new DelegateProgramFitnessEvaluator((Func<ProgramGenome, double>)null));
+        Assert.Throws<ArgumentNullException>(() => new DelegateProgramFitnessEvaluator(global::AiDotNet.Tests.TestNull.Of<Func<ProgramGenome, double>>()));
 #pragma warning restore CS8600, CS8625
         Assert.Throws<ArgumentException>(() => new DelegateProgramFitnessEvaluator(_ => 1.0, " "));
     }
@@ -210,7 +210,7 @@ public sealed class ProgramFitnessEvaluatorTests
             new InputOutputProgramFitnessEvaluator(engine, Array.Empty<ProgramInputOutputExample>()));
 #pragma warning disable CS8600, CS8625
         Assert.Throws<ArgumentNullException>(() =>
-            new InputOutputProgramFitnessEvaluator(null, new[] { Example("a", "b") }));
+            new InputOutputProgramFitnessEvaluator(global::AiDotNet.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine>(), new[] { Example("a", "b") }));
 #pragma warning restore CS8600, CS8625
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new InputOutputProgramFitnessEvaluator(engine, new[] { Example("a", "b") }, (ProgramOutputComparison)99));

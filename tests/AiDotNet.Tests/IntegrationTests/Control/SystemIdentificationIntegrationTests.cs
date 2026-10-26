@@ -38,7 +38,7 @@ public class SystemIdentificationIntegrationTests
         int stateCount = a.Rows;
         int inputCount = b.Columns;
 
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         var states = new Matrix<double>(stateCount, snapshots);
         var nextStates = new Matrix<double>(stateCount, snapshots);

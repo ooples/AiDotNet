@@ -61,7 +61,7 @@ public class ModelLoaderTests
     [Fact(Timeout = 60000)]
     public async Task Inspect_ThrowsOnNullPath()
     {
-        Assert.Throws<ArgumentException>(() => ModelLoader.Inspect(null));
+        Assert.Throws<ArgumentException>(() => ModelLoader.Inspect(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -113,7 +113,7 @@ public class ModelLoaderTests
     [Fact(Timeout = 60000)]
     public async Task Load_ThrowsOnNullPath()
     {
-        Assert.Throws<ArgumentException>(() => ModelLoader.Load<double>(null));
+        Assert.Throws<ArgumentException>(() => ModelLoader.Load<double>(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -152,7 +152,7 @@ public class ModelLoaderTests
     [Fact(Timeout = 60000)]
     public async Task LoadFromBytes_ThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => ModelLoader.LoadFromBytes<double>(null));
+        Assert.Throws<ArgumentNullException>(() => ModelLoader.LoadFromBytes<double>(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 60000)]

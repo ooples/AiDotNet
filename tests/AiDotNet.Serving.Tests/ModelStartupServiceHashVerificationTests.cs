@@ -43,7 +43,7 @@ public sealed class ModelStartupServiceHashVerificationTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(loadMethod);
 
-        var loadTask = (Task)loadMethod!.Invoke(service, new object[] { options.Value.StartupModels[0] })!;
+        var loadTask = (Task)(loadMethod.Invoke(service, new object[] { options.Value.StartupModels[0] }) ?? throw new InvalidOperationException("loadMethod.Invoke(service, new object[] { options.Value.StartupModels[0] }) is null where it is required."));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => loadTask);
         Assert.Contains("SHA-256 verification", ex.Message);

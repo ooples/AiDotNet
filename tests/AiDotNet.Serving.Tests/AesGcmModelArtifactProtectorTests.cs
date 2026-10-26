@@ -23,7 +23,7 @@ public class AesGcmModelArtifactProtectorTests
         var protector = new AesGcmModelArtifactProtector();
 
         var ex = Assert.Throws<ArgumentException>(() =>
-            protector.ProtectToFile(modelName!, sourcePath!, outputDirectory!));
+            protector.ProtectToFile(TestNull.Pass(modelName), TestNull.Pass(sourcePath), TestNull.Pass(outputDirectory)));
 
         Assert.Equal(expectedParamName, ex.ParamName);
     }

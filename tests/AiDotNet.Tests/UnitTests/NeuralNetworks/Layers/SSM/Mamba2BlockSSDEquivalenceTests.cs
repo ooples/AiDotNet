@@ -47,7 +47,7 @@ public class Mamba2BlockSSDEquivalenceTests
             convKernelSize: 4, chunkSize: chunkSize);
 
         int innerDim = block.InnerDimension;      // 12
-        var rng = new Random(1234);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1234);
 
         var x = Random(new[] { batch, seqLen, innerDim }, rng);
         // dt must be positive (softplus output in the real forward); use magnitudes so decays stay in (0,1].

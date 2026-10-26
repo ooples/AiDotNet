@@ -112,7 +112,7 @@ public class ActiveLearningSelectionTests
 
         Assert.NotNull(result.ActiveLearningSelection);
         Assert.Equal(3, result.ActiveLearningSelection?.SelectedIndices.Length ?? -1);
-        Assert.Equal(12, result.ActiveLearningSelection.Ranking.Count);
+        Assert.Equal(12, (result.ActiveLearningSelection ?? throw new InvalidOperationException("result.ActiveLearningSelection is null where it is required.")).Ranking.Count);
         Assert.Equal("decreasing-test", result.ActiveLearningSelection.StrategyName);
         // The three-tier cascade must have chosen one of the recognized representation spaces.
         Assert.Contains(result.ActiveLearningSelection.RepresentationSpace,

@@ -56,7 +56,7 @@ public class FederatedLearningCompressionIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.True(metadata!.CompressionEnabled);
+        Assert.True(metadata.CompressionEnabled);
         Assert.Equal(strategy.ToString(), metadata.CompressionStrategyUsed);
         Assert.All(metadata.RoundMetrics, r => Assert.True(r.UploadCompressionRatio <= 1.0));
     }
@@ -97,7 +97,7 @@ public class FederatedLearningCompressionIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.True(metadata!.CompressionEnabled);
+        Assert.True(metadata.CompressionEnabled);
         Assert.Equal("UniformQuantization", metadata.CompressionStrategyUsed);
     }
 

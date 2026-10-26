@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
 
             var all = await store.GetAllAsync();
             Assert.NotNull(all[0].Metadata);
-            Assert.Equal("exp-1", all[0].Metadata["experiment"]);
+            Assert.Equal("exp-1", (all[0].Metadata ?? throw new InvalidOperationException("all[0].Metadata is null where it is required."))["experiment"]);
         }
 
         [Fact(Timeout = 60000)]

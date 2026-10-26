@@ -228,10 +228,10 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         // _expandConv, _expandBn, _dwConv, _dwBn, _se, _projectConv,
         // _projectBn are allocated in OnFirstForward — their channel
         // dimensions all derive from the resolved inChannels.
-        _projectConv = null!;
-        _projectBn = null!;
-        _dwConv = null!;
-        _dwBn = null!;
+        _projectConv = null;
+        _projectBn = null;
+        _dwConv = null;
+        _dwBn = null;
     }
 
     private readonly int _seRatio;
@@ -332,8 +332,8 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         // for buffered Deserialize parameters to slice correctly.
         if (_hasExpansion)
         {
-            _expandConv!.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
-            _expandBn!.ResolveFromShape(new[] { 1, hiddenDim, inputHeight, inputWidth });
+            (_expandConv ?? throw new InvalidOperationException("_expandConv is null where it is required.")).ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
+            (_expandBn ?? throw new InvalidOperationException("_expandBn is null where it is required.")).ResolveFromShape(new[] { 1, hiddenDim, inputHeight, inputWidth });
         }
         _dwConv.ResolveFromShape(new[] { dwInputChannels, inputHeight, inputWidth });
         _dwBn.ResolveFromShape(new[] { 1, dwInputChannels, dwOutH, dwOutW });

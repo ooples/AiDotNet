@@ -29,7 +29,7 @@ public class Blip2NeuralNetworkTests
         var exception = Assert.Throws<ArgumentException>(() =>
             new Blip2NeuralNetwork<float>(
                 architecture,
-                null!,
+                global::AiDotNet.Tests.TestNull.Of<string>(),
                 "qformer.onnx",
                 "llm.onnx",
                 tokenizer));
@@ -68,7 +68,7 @@ public class Blip2NeuralNetworkTests
             new Blip2NeuralNetwork<float>(
                 architecture,
                 "vision.onnx",
-                null!,
+                global::AiDotNet.Tests.TestNull.Of<string>(),
                 "llm.onnx",
                 tokenizer));
 
@@ -107,7 +107,7 @@ public class Blip2NeuralNetworkTests
                 architecture,
                 "vision.onnx",
                 "qformer.onnx",
-                null!,
+                global::AiDotNet.Tests.TestNull.Of<string>(),
                 tokenizer));
 
         Assert.Contains("Language model path", exception.Message);

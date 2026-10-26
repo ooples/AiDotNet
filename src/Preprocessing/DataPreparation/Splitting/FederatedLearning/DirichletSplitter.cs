@@ -91,7 +91,7 @@ public class DirichletSplitter<T> : DataSplitterBase<T>
     public override DataSplitResult<T> Split(Matrix<T> X, Vector<T>? y = null)
     {
         ValidateInputs(X, y);
-        var splits = GetSplits(X, y!).ToList();
+        var splits = GetSplits(X, y).ToList();
         return splits.Count > 0 ? splits[0] : throw new InvalidOperationException("No splits generated.");
     }
 

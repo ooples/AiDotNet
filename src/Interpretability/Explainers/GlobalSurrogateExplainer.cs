@@ -148,7 +148,7 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
         Fit(data);
 
         return new SurrogateExplanation<T>(
-            coefficients: _surrogateCoefficients!,
+            coefficients: (_surrogateCoefficients ?? throw new InvalidOperationException("_surrogateCoefficients is null where it is required.")),
             intercept: _surrogateIntercept,
             fidelity: _fidelity,
             featureNames: _featureNames);

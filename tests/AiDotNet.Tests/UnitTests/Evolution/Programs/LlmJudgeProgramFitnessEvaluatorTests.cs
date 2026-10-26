@@ -287,8 +287,8 @@ public sealed class LlmJudgeProgramFitnessEvaluatorTests
         IProgramFitnessEvaluator inner = Measured(0.5);
 
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => new LlmJudgeProgramFitnessEvaluator<double>(null, inner));
-        Assert.Throws<ArgumentNullException>(() => new LlmJudgeProgramFitnessEvaluator<double>(client, null));
+        Assert.Throws<ArgumentNullException>(() => new LlmJudgeProgramFitnessEvaluator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Agentic.Models.IChatClient<double>>(), inner));
+        Assert.Throws<ArgumentNullException>(() => new LlmJudgeProgramFitnessEvaluator<double>(client, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IProgramFitnessEvaluator>()));
 #pragma warning restore CS8600, CS8625
         Assert.Throws<ArgumentOutOfRangeException>(() => new LlmJudgeProgramFitnessEvaluator<double>(
             client, inner, null, new LlmFeedbackOptions { CombinedBlend = 1.5 }));
