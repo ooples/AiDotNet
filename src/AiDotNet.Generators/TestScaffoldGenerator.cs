@@ -5016,11 +5016,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return null;
     }
 
+    // An outputSize value is an integer or an integer-arithmetic expression of them (256 * 256 * 3); the whole value goes.
     private static readonly System.Text.RegularExpressions.Regex StatedOutputSize =
-        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*\d+|outputSize:\s*\d+,\s*",
+        new System.Text.RegularExpressions.Regex(
+            @",\s*outputSize:\s*\d+(?:\s*[-+*/]\s*\d+)*|outputSize:\s*\d+(?:\s*[-+*/]\s*\d+)*,\s*",
             System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
 
-    /// <summary>Removes every <c>outputSize: n</c> argument from a generated constructor expression (#2147).</summary>
+    /// <summary>
+    /// Removes every <c>outputSize: n</c> argument from a generated constructor expression (#2147), where n is an
+    /// integer or an integer-arithmetic expression. A pattern that took only the first integer of <c>256 * 256 * 3</c>
+    /// removed <c>, outputSize: 256</c> and left <c> * 256 * 3</c> on the preceding argument, turning OpenSora's
+    /// <c>inputDepth: 3</c> into <c>inputDepth: 3 * 256 * 3</c>: a 2304-channel model fed 3 channels (#2365).
+    /// </summary>
     private static string OmitStatedOutputSize(string expression) => StatedOutputSize.Replace(expression, string.Empty);
 
     private static bool InheritsFromAnyExcludedBase(INamedTypeSymbol type)

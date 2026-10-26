@@ -129,6 +129,69 @@ public sealed class GeneratedHeavyFixtureContractTests
         AssertShape(fixture, "OutputShape", 1, 1, 256);
     }
 
+    // OpenSora sizes its layers from its options, so the generator drops the architecture's outputSize (#2147). Its
+    // fixture states that size as an expression, 256 * 256 * 3, which is what the removal has to take whole.
+    private const string OptionsSizedModels = """
+        using System;
+        namespace AiDotNet.Attributes
+        {
+            [AttributeUsage(AttributeTargets.Class)]
+            public sealed class ModelDomainAttribute : Attribute
+            {
+                public ModelDomainAttribute(int domain) { }
+            }
+        }
+        namespace AiDotNet.Tensors.LinearAlgebra { public class Tensor<T> { } }
+        namespace AiDotNet.Interfaces
+        {
+            public interface IFullModel<T, TInput, TOutput> { }
+            public interface INeuralNetworkModel<T> : IFullModel<T,
+                AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>> { }
+        }
+        namespace AiDotNet.NeuralNetworks
+        {
+            public class NeuralNetworkArchitecture<T> { }
+            public abstract class NeuralNetworkBase<T> : AiDotNet.Interfaces.INeuralNetworkModel<T>
+            {
+                protected virtual bool SizesLayersFromOptions => false;
+            }
+        }
+        namespace AiDotNet.Video.Options { public class OpenSoraOptions { public int HiddenDim { get; set; } } }
+        namespace AiDotNet.Video.Generation
+        {
+            [AiDotNet.Attributes.ModelDomain(0)]
+            public class OpenSora<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+            {
+                protected override bool SizesLayersFromOptions => true;
+                public OpenSora(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T> architecture,
+                    AiDotNet.Video.Options.OpenSoraOptions? options = null) { }
+            }
+        }
+        """;
+
+    /// <summary>
+    /// The outputSize removal once stopped after the first integer of <c>256 * 256 * 3</c>: it took
+    /// <c>, outputSize: 256</c> and left <c> * 256 * 3</c> on the argument before it, so the fixture stated
+    /// <c>inputDepth: 3 * 256 * 3</c>. OpenSora then sized its patch embedding for 2304 channels and rejected every
+    /// 3-channel training input (#2365). The architecture must keep its three image dimensions as stated and carry
+    /// no outputSize at all.
+    /// </summary>
+    [Fact]
+    public void OptionsSizedModel_DropsAnExpressionValuedOutputSizeWhole()
+    {
+        ObjectCreationExpressionSyntax creation = ModelConstructor(
+            GenerateFixture("OpenSoraTests", OptionsSizedModels), "OpenSora");
+        ObjectCreationExpressionSyntax architecture = Assert.Single(creation.DescendantNodes()
+            .OfType<ObjectCreationExpressionSyntax>(),
+            node => node.Type.ToString().Contains("NeuralNetworkArchitecture"));
+        AssertNamedInteger(architecture, "inputHeight", 256);
+        AssertNamedInteger(architecture, "inputWidth", 256);
+        AssertNamedInteger(architecture, "inputDepth", 3);
+        Assert.NotNull(architecture.ArgumentList);
+        Assert.DoesNotContain(architecture.ArgumentList.Arguments,
+            argument => argument.NameColon?.Name.Identifier.ValueText == "outputSize");
+    }
+
     public enum TransformerFixture
     {
         DistilBERTNER, ELECTRANER, FinBERTNER, LegalBERTNER, XLMRoBERTaNER, TemplateNER,
