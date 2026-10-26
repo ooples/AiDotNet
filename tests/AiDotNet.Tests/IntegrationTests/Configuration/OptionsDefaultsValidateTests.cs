@@ -203,7 +203,7 @@ public class OptionsDefaultsValidateTests
         }
         catch (ReflectionTypeLoadException ex)
         {
-            types = ex.Types.Where(t => t != null).ToArray()!;
+            types = ex.Types.OfType<Type>().ToArray();
         }
 
         foreach (var type in types)

@@ -152,7 +152,8 @@ public class TransitivelyOwnedOptimizerResetTests
         public IEnumerable<TValue> Values => _items.Values;
         public int Count => _items.Count;
         public bool ContainsKey(TKey key) => _items.ContainsKey(key);
-        public bool TryGetValue(TKey key, out TValue value) => _items.TryGetValue(key, out value!);
+        public bool TryGetValue(TKey key, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TValue value)
+            => _items.TryGetValue(key, out value);
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => _items.GetEnumerator();
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }

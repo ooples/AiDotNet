@@ -305,7 +305,7 @@ public sealed class ComparisonFilter : MetadataFilter
     public override bool Matches(IReadOnlyDictionary<string, object> metadata)
     {
         var present = metadata != null && metadata.TryGetValue(Key, out _);
-        object? actual = present ? metadata![Key] : null;
+        object? actual = present ? (metadata ?? throw new InvalidOperationException("metadata is null where it is required."))[Key] : null;
 
         switch (Operator)
         {

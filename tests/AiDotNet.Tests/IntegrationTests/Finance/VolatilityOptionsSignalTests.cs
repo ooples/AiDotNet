@@ -41,7 +41,7 @@ public class VolatilityOptionsSignalTests
         var strat = VolatilityOptionsSignal.Recommend(edge, spot: 100, expiryYears: 0.0833 /* ~1 mo */, BrokerOptionsProfile.Default);
 
         Assert.NotNull(strat);
-        Assert.Equal("Iron Condor", strat!.Name);
+        Assert.Equal("Iron Condor", strat.Name);
         Assert.Equal(OptionStrategyClass.DefinedRiskSpread, strat.Class);
         Assert.True(strat.IsDefinedRisk);
         // 4 legs straddling spot: long put < short put < short call < long call.
@@ -56,7 +56,7 @@ public class VolatilityOptionsSignalTests
         var edge = VolatilityOptionsSignal.Evaluate(0.40, 0.20); // strong buy
         var strat = VolatilityOptionsSignal.Recommend(edge, spot: 100, expiryYears: 0.0833, BrokerOptionsProfile.Default);
         Assert.NotNull(strat);
-        Assert.Equal("Long Straddle", strat!.Name);
+        Assert.Equal("Long Straddle", strat.Name);
         Assert.Equal(OptionStrategyClass.LongPremium, strat.Class);
     }
 

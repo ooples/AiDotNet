@@ -256,7 +256,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
 
         // ---- Encoder: stem -> 4 stages, collecting one skip per stage. ----
         var skips = new Tensor<T>[_channelDims.Length];
-        var cur = _stem!.Forward(input);
+        var cur = (_stem ?? throw new InvalidOperationException("_stem is null where it is required.")).Forward(input);
         for (int stage = 0; stage < _channelDims.Length; stage++)
         {
             if (stage > 0)
@@ -302,7 +302,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         d = ApplyConvBlock(_decConvs[convIdx], _decNorms[convIdx], d);
 
         // 1x1x1 projection to class logits.
-        var logits = _outConv!.Forward(d);
+        var logits = (_outConv ?? throw new InvalidOperationException("_outConv is null where it is required.")).Forward(d);
 
         if (!hasBatch)
         {
@@ -355,7 +355,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
             ? input
             : Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]]);
 
-        var cur = _stem!.Forward(x);
+        var cur = (_stem ?? throw new InvalidOperationException("_stem is null where it is required.")).Forward(x);
         activations["stem"] = cur.Clone();
         for (int stage = 0; stage < _channelDims.Length; stage++)
         {

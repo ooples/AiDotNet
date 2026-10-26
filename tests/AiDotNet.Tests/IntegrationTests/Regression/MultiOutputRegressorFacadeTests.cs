@@ -21,7 +21,7 @@ public class MultiOutputRegressorFacadeTests
 {
     private static (Matrix<double> x, Matrix<double> y) CreateMultiHorizonData(int n, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(n, 2);
         var y = new Matrix<double>(n, 3);
         for (var i = 0; i < n; i++)
@@ -88,7 +88,7 @@ public class MultiOutputRegressorFacadeTests
         // Exercises the full default path: per-column target standardization (ConfigureTargetScaling) + inverse-
         // transform on the way out. Horizons here are on deliberately DIFFERENT scales so a working per-column
         // target scaler matters. Recovery in native units proves the inverse-transform is wired for a Matrix target.
-        var random = new Random(7);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         const int n = 200;
         var x = new Matrix<double>(n, 2);
         var y = new Matrix<double>(n, 3);

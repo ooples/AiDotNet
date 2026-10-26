@@ -45,7 +45,7 @@ public static class ClBlastBaselineBenchmark
         {
             var A = new float[size * size];
             var B = new float[size * size];
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < A.Length; i++) A[i] = (float)(rand.NextDouble() - 0.5);
             for (int i = 0; i < B.Length; i++) B[i] = (float)(rand.NextDouble() - 0.5);
 

@@ -195,8 +195,8 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             FilterMode.Remove => RemoveAnomalies(data, predictions),
             FilterMode.Flag => FlagAnomalies(data, predictions),
-            FilterMode.ReplaceWithMedian => ReplaceAnomalies(data, predictions, _columnMedians!),
-            FilterMode.ReplaceWithMean => ReplaceAnomalies(data, predictions, _columnMeans!),
+            FilterMode.ReplaceWithMedian => ReplaceAnomalies(data, predictions, (_columnMedians ?? throw new InvalidOperationException("_columnMedians is null where it is required."))),
+            FilterMode.ReplaceWithMean => ReplaceAnomalies(data, predictions, (_columnMeans ?? throw new InvalidOperationException("_columnMeans is null where it is required."))),
             _ => data
         };
     }

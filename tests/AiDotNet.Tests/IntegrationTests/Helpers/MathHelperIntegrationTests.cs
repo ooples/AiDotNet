@@ -617,7 +617,7 @@ public class MathHelperIntegrationTests
     public async Task GetNormalRandom_ZeroStdDev_ReturnsMean()
     {
         // With stdDev = 0, result should always be the mean
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         double result = MathHelper.GetNormalRandom(5.0, 0.0, random);
         Assert.Equal(5.0, result);
     }
@@ -625,7 +625,7 @@ public class MathHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GetNormalRandom_GeneratesVaried_WithNonZeroStdDev()
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var values = new List<double>();
 
         for (int i = 0; i < 100; i++)
@@ -641,8 +641,8 @@ public class MathHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GetNormalRandom_WithSeed_IsReproducible()
     {
-        var random1 = new Random(123);
-        var random2 = new Random(123);
+        var random1 = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
+        var random2 = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
 
         double value1 = MathHelper.GetNormalRandom(0.0, 1.0, random1);
         double value2 = MathHelper.GetNormalRandom(0.0, 1.0, random2);

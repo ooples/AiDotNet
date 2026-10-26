@@ -68,7 +68,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 $"fields: {fields}. Reply with ONLY a JSON object of the form " +
                 $"{{\"query\": \"...\", \"filters\": {{\"field\": value}}}}. Use only the listed fields; omit " +
                 $"filters if none apply.\n\nUser query: {query}\n\nJSON:";
-            var reply = _generator!.Generate(prompt);
+            var reply = (_generator ?? throw new InvalidOperationException("_generator is null where it is required.")).Generate(prompt);
             if (string.IsNullOrWhiteSpace(reply)) return (query, filters);
 
             try
@@ -90,7 +90,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                     }
                 }
 
-                return (string.IsNullOrWhiteSpace(cleaned) ? query : cleaned!, filters);
+                return (cleaned is null || string.IsNullOrWhiteSpace(cleaned) ? query : cleaned, filters);
             }
             catch (Exception)
             {

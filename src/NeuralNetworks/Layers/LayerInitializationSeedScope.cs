@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -91,8 +91,30 @@ internal static class LayerInitializationSeedScope
         _rng = effectiveSeed.HasValue
             ? RandomHelper.CreateSeededRandom(effectiveSeed.Value)
             : null;
+        _generation++;
+        _seedsDrawn = 0;
         _pendingModelSeed = null;
     }
+
+    [ThreadStatic]
+    private static int _generation;
+
+    [ThreadStatic]
+    private static int _seedsDrawn;
+
+    /// <summary>
+    /// Where this thread's construction scope stands: which reset it is on and how many seeds that reset has handed
+    /// out. A model records it after its own reset and compares later (<see cref="HasDrawnSince"/>).
+    /// </summary>
+    internal static (int Generation, int SeedsDrawn) Position => (_generation, _seedsDrawn);
+
+    /// <summary>
+    /// Whether the scope a model recorded with <see cref="Position"/> is still current and has handed out a seed
+    /// since, meaning some layer of that model already initialised from it. This needs no walk of the model's members:
+    /// a layer kept in a field or a generated group is counted the moment its constructor draws.
+    /// </summary>
+    internal static bool HasDrawnSince((int Generation, int SeedsDrawn) recorded)
+        => _generation == recorded.Generation && _seedsDrawn > recorded.SeedsDrawn;
 
     // A seed the model under construction holds but has not handed to the base yet. Most models keep their options
     // in a field of their own (_options) that the base reads only through GetOptions(), so the base constructor,
@@ -169,6 +191,27 @@ internal static class LayerInitializationSeedScope
         return NextSeedOrNull();
     }
 
+    /// <summary>
+    /// The seed sequence this thread's scope draws from. A model keeps the one its constructor armed, so layers it
+    /// builds after the constructor returned can continue it (<see cref="ResumeSequence"/>).
+    /// </summary>
+    internal static Random? CurrentSequence => _rng;
+
+    /// <summary>
+    /// Makes <paramref name="sequence"/> the one layers draw from, with no seed deferred to any model. Capture the
+    /// scope first and restore it in a <c>finally</c>.
+    /// </summary>
+    /// <remarks>
+    /// The scope stays armed after a model finishes constructing, so a model that builds its layers on first use drew
+    /// them from whichever model was constructed last on the thread: two models with the same seed got different
+    /// weights whenever another was built between the constructor and the first use.
+    /// </remarks>
+    internal static void ResumeSequence(Random? sequence)
+    {
+        _rng = sequence;
+        _pendingModelSeed = null;
+    }
+
     /// <summary>Restores a scope captured by <see cref="CaptureScope"/>, including its deferred seed.</summary>
     internal static void RestoreScope(ScopeSnapshot capturedScope)
     {
@@ -214,7 +257,10 @@ internal static class LayerInitializationSeedScope
         if (_rng is null && _ambientFallbackSeed.HasValue)
             _rng = RandomHelper.CreateSeededRandom(_ambientFallbackSeed.Value);
 
-        return _rng is null ? (int?)null : _rng.Next();
+        if (_rng is null)
+            return null;
+        _seedsDrawn++;
+        return _rng.Next();
     }
 
     /// <summary>

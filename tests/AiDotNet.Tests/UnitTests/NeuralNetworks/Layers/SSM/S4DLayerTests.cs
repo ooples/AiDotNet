@@ -216,7 +216,7 @@ public class S4DLayerTests
     private static Tensor<float> CreateRandomTensor(int[] shape)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1);
@@ -227,7 +227,7 @@ public class S4DLayerTests
     private static Tensor<double> CreateRandomDoubleTensor(int[] shape)
     {
         var tensor = new Tensor<double>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = random.NextDouble() * 2 - 1;

@@ -24,6 +24,9 @@ namespace AiDotNet.Statistics;
 /// </remarks>
 public partial class ModelStats<T, TInput, TOutput>
 {
+    /// <summary>The value every statistic holds until it is computed: zero, which is what <c>default</c> is for the numeric types.</summary>
+    private static readonly T ZeroValue = MathHelper.GetNumericOperations<T>().Zero;
+
     private readonly INumericOperations<T> _numOps;
     private readonly ModelStatsOptions _options;
 
@@ -47,7 +50,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     [AiDotNet.Attributes.TrainableParameter]
-    private Matrix<T> _correlationMatrix = default!;
+    private Matrix<T> _correlationMatrix = new Matrix<T>(0, 0);
     public Matrix<T> CorrelationMatrix { get { EnsureFullStatsComputed(); return _correlationMatrix; } private set { _correlationMatrix = value; } }
 
     /// <summary>
@@ -60,7 +63,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     [AiDotNet.Attributes.TrainableParameter]
-    private Matrix<T> _covarianceMatrix = default!;
+    private Matrix<T> _covarianceMatrix = new Matrix<T>(0, 0);
     public Matrix<T> CovarianceMatrix { get { EnsureFullStatsComputed(); return _covarianceMatrix; } private set { _covarianceMatrix = value; } }
 
     /// <summary>
@@ -72,7 +75,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// as its information is already captured by other features.
     /// </para>
     /// </remarks>
-    private List<T> _vIFList = default!;
+    private List<T> _vIFList = new List<T>();
     public List<T> VIFList { get { EnsureFullStatsComputed(); return _vIFList; } private set { _vIFList = value; } }
 
     /// <summary>
@@ -84,7 +87,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// (typically above 30) suggests that your model might be unstable and sensitive to small data changes.
     /// </para>
     /// </remarks>
-    private T _conditionNumber = default!;
+    private T _conditionNumber = ZeroValue;
     public T ConditionNumber { get { EnsureFullStatsComputed(); return _conditionNumber; } private set { _conditionNumber = value; } }
 
     /// <summary>
@@ -95,7 +98,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// Higher values generally indicate better predictions. It's particularly useful when comparing different models.
     /// </para>
     /// </remarks>
-    private T _logPointwisePredictiveDensity = default!;
+    private T _logPointwisePredictiveDensity = ZeroValue;
     public T LogPointwisePredictiveDensity { get { EnsureFullStatsComputed(); return _logPointwisePredictiveDensity; } private set { _logPointwisePredictiveDensity = value; } }
 
     /// <summary>
@@ -106,7 +109,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It helps identify which data points might be harder for the model to predict accurately.
     /// </para>
     /// </remarks>
-    private List<T> _leaveOneOutPredictiveDensities = default!;
+    private List<T> _leaveOneOutPredictiveDensities = new List<T>();
     public List<T> LeaveOneOutPredictiveDensities { get { EnsureFullStatsComputed(); return _leaveOneOutPredictiveDensities; } private set { _leaveOneOutPredictiveDensities = value; } }
 
     /// <summary>
@@ -117,7 +120,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It's used in statistical tests to determine if your model is significantly better than a simpler alternative.
     /// </para>
     /// </remarks>
-    private T _observedTestStatistic = default!;
+    private T _observedTestStatistic = ZeroValue;
     public T ObservedTestStatistic { get { EnsureFullStatsComputed(); return _observedTestStatistic; } private set { _observedTestStatistic = value; } }
 
     /// <summary>
@@ -128,7 +131,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// They help you understand the range and uncertainty of your model's predictions.
     /// </para>
     /// </remarks>
-    private List<T> _posteriorPredictiveSamples = default!;
+    private List<T> _posteriorPredictiveSamples = new List<T>();
     public List<T> PosteriorPredictiveSamples { get { EnsureFullStatsComputed(); return _posteriorPredictiveSamples; } private set { _posteriorPredictiveSamples = value; } }
 
     /// <summary>
@@ -139,7 +142,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It helps in comparing different models, with higher values generally indicating better models.
     /// </para>
     /// </remarks>
-    private T _marginalLikelihood = default!;
+    private T _marginalLikelihood = ZeroValue;
     public T MarginalLikelihood { get { EnsureFullStatsComputed(); return _marginalLikelihood; } private set { _marginalLikelihood = value; } }
 
     /// <summary>
@@ -150,7 +153,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It's used as a comparison point to see how much better your more complex model performs.
     /// </para>
     /// </remarks>
-    private T _referenceModelMarginalLikelihood = default!;
+    private T _referenceModelMarginalLikelihood = ZeroValue;
     public T ReferenceModelMarginalLikelihood { get { EnsureFullStatsComputed(); return _referenceModelMarginalLikelihood; } private set { _referenceModelMarginalLikelihood = value; } }
 
     /// <summary>
@@ -161,7 +164,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// Higher values mean your model fits the data better. It's often used in more advanced statistical techniques.
     /// </para>
     /// </remarks>
-    private T _logLikelihood = default!;
+    private T _logLikelihood = ZeroValue;
     public T LogLikelihood { get { EnsureFullStatsComputed(); return _logLikelihood; } private set { _logLikelihood = value; } }
 
     /// <summary>
@@ -173,7 +176,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// (using more complexity than needed to explain the data).
     /// </para>
     /// </remarks>
-    private T _effectiveNumberOfParameters = default!;
+    private T _effectiveNumberOfParameters = ZeroValue;
     public T EffectiveNumberOfParameters { get { EnsureFullStatsComputed(); return _effectiveNumberOfParameters; } private set { _effectiveNumberOfParameters = value; } }
 
     /// <summary>
@@ -214,7 +217,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// Lower values indicate predictions that are closer to the actual values.
     /// </para>
     /// </remarks>
-    private T _euclideanDistance = default!;
+    private T _euclideanDistance = ZeroValue;
     public T EuclideanDistance { get { EnsureFullStatsComputed(); return _euclideanDistance; } private set { _euclideanDistance = value; } }
 
     /// <summary>
@@ -225,7 +228,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// horizontally or vertically (like navigating city blocks). Lower values indicate better predictions.
     /// </para>
     /// </remarks>
-    private T _manhattanDistance = default!;
+    private T _manhattanDistance = ZeroValue;
     public T ManhattanDistance { get { EnsureFullStatsComputed(); return _manhattanDistance; } private set { _manhattanDistance = value; } }
 
     /// <summary>
@@ -236,7 +239,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// ignoring their magnitude. Values closer to 1 indicate more similar directions.
     /// </para>
     /// </remarks>
-    private T _cosineSimilarity = default!;
+    private T _cosineSimilarity = ZeroValue;
     public T CosineSimilarity { get { EnsureFullStatsComputed(); return _cosineSimilarity; } private set { _cosineSimilarity = value; } }
 
     /// <summary>
@@ -247,7 +250,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It's especially useful for binary (yes/no) predictions. Values closer to 1 indicate more overlap.
     /// </para>
     /// </remarks>
-    private T _jaccardSimilarity = default!;
+    private T _jaccardSimilarity = ZeroValue;
     public T JaccardSimilarity { get { EnsureFullStatsComputed(); return _jaccardSimilarity; } private set { _jaccardSimilarity = value; } }
 
     /// <summary>
@@ -258,7 +261,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It's most useful for categorical predictions. Lower values indicate fewer differences.
     /// </para>
     /// </remarks>
-    private T _hammingDistance = default!;
+    private T _hammingDistance = ZeroValue;
     public T HammingDistance { get { EnsureFullStatsComputed(); return _hammingDistance; } private set { _hammingDistance = value; } }
 
     /// <summary>
@@ -269,7 +272,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// are related to each other. It can be more meaningful than simpler distances when your features are correlated.
     /// </para>
     /// </remarks>
-    private T _mahalanobisDistance = default!;
+    private T _mahalanobisDistance = ZeroValue;
     public T MahalanobisDistance { get { EnsureFullStatsComputed(); return _mahalanobisDistance; } private set { _mahalanobisDistance = value; } }
 
     /// <summary>
@@ -280,7 +283,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// Higher values mean your predictions are more informative and closely related to the actual values.
     /// </para>
     /// </remarks>
-    private T _mutualInformation = default!;
+    private T _mutualInformation = ZeroValue;
     public T MutualInformation { get { EnsureFullStatsComputed(); return _mutualInformation; } private set { _mutualInformation = value; } }
 
     /// <summary>
@@ -291,7 +294,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It's easier to interpret across different datasets. Values closer to 1 indicate better predictions.
     /// </para>
     /// </remarks>
-    private T _normalizedMutualInformation = default!;
+    private T _normalizedMutualInformation = ZeroValue;
     public T NormalizedMutualInformation { get { EnsureFullStatsComputed(); return _normalizedMutualInformation; } private set { _normalizedMutualInformation = value; } }
 
     /// <summary>
@@ -303,7 +306,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It's particularly useful when comparing different clustering results.
     /// </para>
     /// </remarks>
-    private T _variationOfInformation = default!;
+    private T _variationOfInformation = ZeroValue;
     public T VariationOfInformation { get { EnsureFullStatsComputed(); return _variationOfInformation; } private set { _variationOfInformation = value; } }
 
     /// <summary>
@@ -317,7 +320,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// - Values close to -1 mean some data points might be in the wrong group
     /// </para>
     /// </remarks>
-    private T _silhouetteScore = default!;
+    private T _silhouetteScore = ZeroValue;
     public T SilhouetteScore { get { EnsureFullStatsComputed(); return _silhouetteScore; } private set { _silhouetteScore = value; } }
 
     /// <summary>
@@ -329,7 +332,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It's useful when comparing different ways of grouping your data.
     /// </para>
     /// </remarks>
-    private T _calinskiHarabaszIndex = default!;
+    private T _calinskiHarabaszIndex = ZeroValue;
     public T CalinskiHarabaszIndex { get { EnsureFullStatsComputed(); return _calinskiHarabaszIndex; } private set { _calinskiHarabaszIndex = value; } }
 
     /// <summary>
@@ -341,7 +344,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It's particularly useful when you're not sure how many groups to divide your data into.
     /// </para>
     /// </remarks>
-    private T _daviesBouldinIndex = default!;
+    private T _daviesBouldinIndex = ZeroValue;
     public T DaviesBouldinIndex { get { EnsureFullStatsComputed(); return _daviesBouldinIndex; } private set { _daviesBouldinIndex = value; } }
 
     /// <summary>
@@ -353,7 +356,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// For example, in a search engine, it would measure how well the most relevant results are placed at the top.
     /// </para>
     /// </remarks>
-    private T _meanAveragePrecision = default!;
+    private T _meanAveragePrecision = ZeroValue;
     public T MeanAveragePrecision { get { EnsureFullStatsComputed(); return _meanAveragePrecision; } private set { _meanAveragePrecision = value; } }
 
     /// <summary>
@@ -364,7 +367,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// It ranges from 0 to 1, where 1 is perfect. It's often used in search engines or recommendation systems to ensure the most relevant items appear first.
     /// </para>
     /// </remarks>
-    private T _normalizedDiscountedCumulativeGain = default!;
+    private T _normalizedDiscountedCumulativeGain = ZeroValue;
     public T NormalizedDiscountedCumulativeGain { get { EnsureFullStatsComputed(); return _normalizedDiscountedCumulativeGain; } private set { _normalizedDiscountedCumulativeGain = value; } }
 
     /// <summary>
@@ -376,7 +379,7 @@ public partial class ModelStats<T, TInput, TOutput>
     /// or search engines to measure how quickly a user might find the right answer.
     /// </para>
     /// </remarks>
-    private T _meanReciprocalRank = default!;
+    private T _meanReciprocalRank = ZeroValue;
     public T MeanReciprocalRank { get { EnsureFullStatsComputed(); return _meanReciprocalRank; } private set { _meanReciprocalRank = value; } }
 
     /// <summary>

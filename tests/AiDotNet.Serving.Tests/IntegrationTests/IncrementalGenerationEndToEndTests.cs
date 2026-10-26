@@ -421,7 +421,7 @@ public class IncrementalGenerationEndToEndTests
         // The batcher's config must come from the facade's InferenceOptimizationConfig, not hardcoded defaults.
         var batcher = wrapper.EnsureBatcher();
         Assert.NotNull(batcher);
-        Assert.False(batcher!.Config.EnableSpeculativeDecoding);
+        Assert.False(batcher.Config.EnableSpeculativeDecoding);
         Assert.Equal(7, batcher.Config.SpeculationDepth);
         Assert.Equal(13, batcher.Config.SchedulerConfig.MaxBatchSize);
 

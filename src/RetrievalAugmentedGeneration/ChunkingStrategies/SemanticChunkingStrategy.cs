@@ -61,7 +61,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         private IEnumerable<(string Chunk, int StartPosition, int EndPosition)> SemanticChunks(List<string> sentences, string text)
         {
             var spans = LocateSentenceSpans(sentences, text);
-            var embeddings = _embedBatch!(sentences);
+            var embeddings = (_embedBatch ?? throw new InvalidOperationException("_embedBatch is null where it is required."))(sentences);
 
             var distances = new List<double>(sentences.Count - 1);
             for (int i = 0; i < sentences.Count - 1; i++)

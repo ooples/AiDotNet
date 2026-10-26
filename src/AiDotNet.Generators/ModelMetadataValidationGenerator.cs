@@ -371,7 +371,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         }
 
         // Case-insensitive checks to avoid brittle string matching
-        if (xmlDoc.IndexOf("<summary>", System.StringComparison.OrdinalIgnoreCase) < 0)
+        if ((xmlDoc ?? throw new System.InvalidOperationException("xmlDoc is null where it is required.")).IndexOf("<summary>", System.StringComparison.OrdinalIgnoreCase) < 0)
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingSummary, location, className));
         }

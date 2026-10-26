@@ -32,7 +32,7 @@ public class KVCacheDecodeEquivalenceTests
         mha.Cache = cache;
 
         // Deterministic input [1, seqLen, embDim].
-        var rng = new Random(20260616);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260616);
         var data = new float[seqLen * embDim];
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() - 0.5);
         var full = new Tensor<float>(data, new[] { 1, seqLen, embDim });

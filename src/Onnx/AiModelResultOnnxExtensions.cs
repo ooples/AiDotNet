@@ -92,8 +92,10 @@ public static class AiModelResultOnnxExtensions
                     layer.GetType().Name,
                     "Layer does not expose ConvertToOnnx — it is not a LayerBase-derived layer.");
             }
-            lastOutputs = (OnnxLayerOutputs)convertMethod.Invoke(layer, new object[] { builder, currentInputs })!;
-            currentInputs = new OnnxLayerInputs(lastOutputs.Primary);
+            var converted = convertMethod.Invoke(layer, new object[] { builder, currentInputs }) as OnnxLayerOutputs
+                ?? throw new InvalidOperationException($"{layer.GetType().Name}.ConvertToOnnx returned no outputs.");
+            lastOutputs = converted;
+            currentInputs = new OnnxLayerInputs(converted.Primary);
         }
 
         // Re-name the final tensor to the configured outputName by wiring it as

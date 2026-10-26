@@ -79,10 +79,10 @@ public class AdaptiveRandomForestClassifierTests : ClassificationModelTestBase
         AdaptiveRandomForestClassifier<double> clone)
     {
         const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        FieldInfo ensembleField = typeof(AdaptiveRandomForestClassifier<double>)
-            .GetField("_ensemble", Flags)!;
-        var sourceMembers = ((IEnumerable)ensembleField.GetValue(source)!).Cast<object>().ToArray();
-        var cloneMembers = ((IEnumerable)ensembleField.GetValue(clone)!).Cast<object>().ToArray();
+        FieldInfo ensembleField = (typeof(AdaptiveRandomForestClassifier<double>)
+            .GetField("_ensemble", Flags) ?? throw new InvalidOperationException("typeof(AdaptiveRandomForestClassifier<double>) .GetField(\"_ensemble\", Flags) is null where it is required."));
+        var sourceMembers = ((IEnumerable)(ensembleField.GetValue(source) ?? throw new InvalidOperationException("(IEnumerable)ensembleField.GetValue(source) is null where it is required."))).Cast<object>().ToArray();
+        var cloneMembers = ((IEnumerable)(ensembleField.GetValue(clone) ?? throw new InvalidOperationException("(IEnumerable)ensembleField.GetValue(clone) is null where it is required."))).Cast<object>().ToArray();
         Assert.Equal(sourceMembers.Length, cloneMembers.Length);
 
         for (int memberIndex = 0; memberIndex < sourceMembers.Length; memberIndex++)
@@ -90,9 +90,9 @@ public class AdaptiveRandomForestClassifierTests : ClassificationModelTestBase
             Type memberType = sourceMembers[memberIndex].GetType();
             foreach (string propertyName in new[] { "DriftDetector", "WarningDetector" })
             {
-                PropertyInfo detectorProperty = memberType.GetProperty(propertyName)!;
+                PropertyInfo detectorProperty = (memberType.GetProperty(propertyName) ?? throw new InvalidOperationException("memberType.GetProperty(propertyName) is null where it is required."));
                 var sourceDetector = Assert.IsType<DDMDriftDetector<double>>(
-                    detectorProperty.GetValue(sourceMembers[memberIndex]));
+                    (detectorProperty ?? throw new InvalidOperationException("detectorProperty is null where it is required.")).GetValue(sourceMembers[memberIndex]));
                 var cloneDetector = Assert.IsType<DDMDriftDetector<double>>(
                     detectorProperty.GetValue(cloneMembers[memberIndex]));
                 Assert.NotSame(sourceDetector, cloneDetector);

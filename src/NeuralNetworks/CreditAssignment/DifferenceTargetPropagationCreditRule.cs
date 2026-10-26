@@ -98,8 +98,8 @@ internal sealed class DifferenceTargetPropagationCreditRule<T> : CreditRuleBase<
         for (int j = last; j >= 1; j--)
         {
             var hj = FlatMatrix(layers[j].Output);               // [B, M_j]
-            var gAtOutput = ProjectThrough(hj, inverse[j]!);     // g_j(h_j)   [B, In_j]
-            var gAtTarget = ProjectThrough(targetAbove, inverse[j]!); // g_j(ĥ_j)   [B, In_j]
+            var gAtOutput = ProjectThrough(hj, (inverse[j] ?? throw new InvalidOperationException("inverse[j] is null where it is required.")));     // g_j(h_j)   [B, In_j]
+            var gAtTarget = ProjectThrough(targetAbove, (inverse[j] ?? throw new InvalidOperationException("inverse[j] is null where it is required."))); // g_j(ĥ_j)   [B, In_j]
 
             // teaching for layer j-1 = h_{j-1} − ĥ_{j-1} = g_j(h_j) − g_j(ĥ_j)  (the difference correction).
             var delta = Subtract(gAtOutput, gAtTarget, ops);     // [B, In_j = M_{j-1}]
@@ -128,10 +128,10 @@ internal sealed class DifferenceTargetPropagationCreditRule<T> : CreditRuleBase<
             if (inverse[j] is null) continue;
             var yOut = FlatMatrix(layers[j].Output);             // [B, M_j]
             var xIn = FlatMatrix(layers[j].Input);               // [B, In_j]
-            var reconstruction = ProjectThrough(yOut, inverse[j]!); // [B, In_j]
+            var reconstruction = ProjectThrough(yOut, (inverse[j] ?? throw new InvalidOperationException("inverse[j] is null where it is required."))); // [B, In_j]
             var residual = Subtract(reconstruction, xIn, ops);   // g_j(h_j) − input_j
             var grad = MeanOuter(yOut, residual, ops);           // yᵀ·residual / B  -> [M_j, In_j]
-            KpUpdate(inverse[j]!, grad, _inverseLearningRate, _weightDecay, ops);
+            KpUpdate((inverse[j] ?? throw new InvalidOperationException("inverse[j] is null where it is required.")), grad, _inverseLearningRate, _weightDecay, ops);
         }
     }
 

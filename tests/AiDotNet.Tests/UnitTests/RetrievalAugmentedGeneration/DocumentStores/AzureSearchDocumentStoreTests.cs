@@ -66,7 +66,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 var body = request.Content != null
                     ? await request.Content.ReadAsStringAsync().ConfigureAwait(false)
                     : string.Empty;
-                var path = request.RequestUri!.AbsolutePath;
+                var path = (request.RequestUri ?? throw new InvalidOperationException("request.RequestUri is null where it is required.")).AbsolutePath;
                 Requests.Add(new RecordedRequest(request.Method.Method, request.RequestUri.PathAndQuery, body));
 
                 foreach (var route in _routes)
@@ -123,12 +123,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(4, store.VectorDimension);
             var create = handler.Requests.Single(r => r.Method == "PUT" && r.Path.StartsWith("/indexes/test"));
             var body = JObject.Parse(create.Body);
-            var embedding = ((JArray)body["fields"]!).Single(f => (string?)f["name"] == "embedding");
-            Assert.Equal(4, (int)embedding["dimensions"]!);
+            var embedding = ((JArray)(body["fields"] ?? throw new InvalidOperationException("(JArray)body[\"fields\"] is null where it is required."))).Single(f => (string?)f["name"] == "embedding");
+            Assert.Equal(4, (int)(embedding["dimensions"] ?? throw new InvalidOperationException("embedding[\"dimensions\"] is null where it is required.")));
             Assert.Equal("vprofile", (string?)embedding["vectorSearchProfile"]);
-            var algo = ((JArray)body["vectorSearch"]!["algorithms"]!)[0]!;
+            var algo = ((JArray)(body["vectorSearch"]?["algorithms"] ?? throw new InvalidOperationException("(JArray)body[\"vectorSearch\"][\"algorithms\"] is null where it is required.")))[0];
             Assert.Equal("hnsw", (string?)algo["kind"]);
-            Assert.Equal("euclidean", (string?)algo["hnswParameters"]!["metric"]);
+            Assert.Equal("euclidean", (string?)(algo["hnswParameters"] ?? throw new InvalidOperationException("algo[\"hnswParameters\"] is null where it is required."))["metric"]);
         }
 
         [Fact]
@@ -144,12 +144,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             Assert.Equal(1, store.DocumentCount);
             var upload = handler.Requests.Single(r => r.Method == "POST" && r.Path.Contains("/docs/index"));
-            var action = JObject.Parse(upload.Body)["value"]![0]!;
-            Assert.Equal("mergeOrUpload", (string?)action["@search.action"]);
+            var action = (JObject.Parse(upload.Body)["value"] ?? throw new InvalidOperationException("JObject.Parse(upload.Body)[\"value\"] is null where it is required."))[0];
+            Assert.Equal("mergeOrUpload", (string?)(action ?? throw new InvalidOperationException("action is null where it is required."))["@search.action"]);
             Assert.Equal("doc1", (string?)action["id"]);
             Assert.Equal("Hello world", (string?)action["content"]);
             Assert.Equal("science", (string?)action["category"]);
-            Assert.Equal(3, ((JArray)action["embedding"]!).Count);
+            Assert.Equal(3, ((JArray)(action["embedding"] ?? throw new InvalidOperationException("(JArray)action[\"embedding\"] is null where it is required."))).Count);
         }
 
         [Fact]
@@ -177,11 +177,11 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             var search = handler.Requests.Single(r => r.Path.Contains("/docs/search"));
             var body = JObject.Parse(search.Body);
-            var vq = ((JArray)body["vectorQueries"]!)[0]!;
+            var vq = ((JArray)(body["vectorQueries"] ?? throw new InvalidOperationException("(JArray)body[\"vectorQueries\"] is null where it is required.")))[0];
             Assert.Equal("vector", (string?)vq["kind"]);
             Assert.Equal("embedding", (string?)vq["fields"]);
-            Assert.Equal(2, (int)vq["k"]!);
-            Assert.Equal(3, ((JArray)vq["vector"]!).Count);
+            Assert.Equal(2, (int)(vq["k"] ?? throw new InvalidOperationException("vq[\"k\"] is null where it is required.")));
+            Assert.Equal(3, ((JArray)(vq["vector"] ?? throw new InvalidOperationException("(JArray)vq[\"vector\"] is null where it is required."))).Count);
         }
 
         [Fact]
@@ -200,7 +200,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             };
             store.GetSimilarWithFilters(new Vector<float>(new float[] { 1, 0, 0 }), 10, filters).ToList();
 
-            var filter = (string)JObject.Parse(handler.Requests.Single(r => r.Path.Contains("/docs/search")).Body)["filter"]!;
+            var filter = (JObject.Parse(handler.Requests.Single(r => r.Path.Contains("/docs/search")).Body)["filter"] ?? throw new InvalidOperationException("(string)JObject.Parse(handler.Requests.Single(r => r.Path.Contains(\"/docs/sea... is null where it is required.")).ToString();
             Assert.Contains("category eq 'science'", filter);
             Assert.Contains("year ge 2020", filter);
             Assert.Contains("(tag eq 'a' or tag eq 'b')", filter);
@@ -219,7 +219,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var doc = store.GetById("doc1");
 
             Assert.NotNull(doc);
-            Assert.Equal("doc1", doc!.Id);
+            Assert.Equal("doc1", doc.Id);
             Assert.Equal("hi", doc.Content);
             Assert.Equal("v", doc.Metadata["k"].ToString());
         }
@@ -246,8 +246,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.True(store.Remove("doc1"));
 
             var del = handler.Requests.Single(r => r.Method == "POST" && r.Path.Contains("/docs/index"));
-            var action = JObject.Parse(del.Body)["value"]![0]!;
-            Assert.Equal("delete", (string?)action["@search.action"]);
+            var action = (JObject.Parse(del.Body)["value"] ?? throw new InvalidOperationException("JObject.Parse(del.Body)[\"value\"] is null where it is required."))[0];
+            Assert.Equal("delete", (string?)(action ?? throw new InvalidOperationException("action is null where it is required."))["@search.action"]);
             Assert.Equal("doc1", (string?)action["id"]);
         }
 
@@ -314,7 +314,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 "Set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_API_KEY to run Azure AI Search integration tests.");
 
             var index = "aidotnet-it-" + Guid.NewGuid().ToString("N");
-            var store = new AzureSearchDocumentStore<float>(index, endpoint!, apiKey!,
+            var store = new AzureSearchDocumentStore<float>(index, endpoint, apiKey,
                 distanceMetric: DistanceMetricType.Cosine, vectorDimension: 4);
 
             try

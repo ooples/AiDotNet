@@ -46,7 +46,7 @@ public class TableGANGeneratorTests
     private static (Matrix<double> data, ColumnMetadata[] columns) BuildToyDataset(int rows = 32)
     {
         var data = new Matrix<double>(rows, 4);
-        var rand = new Random(123);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         for (int r = 0; r < rows; r++)
         {
             // Three correlated continuous features
@@ -159,7 +159,7 @@ public class TableGANGeneratorTests
         // generator's input layer.
         var probeOptions = new TableGANOptions<double>();
         var probe = new Tensor<double>([1, probeOptions.EmbeddingDimension]);
-        var probeRng = new System.Random(7);  // positional — Random's seed param name differs across TFMs
+        var probeRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);  // positional — Random's seed param name differs across TFMs
         for (int i = 0; i < probe.Length; i++)
             probe[i] = probeRng.NextDouble();
 

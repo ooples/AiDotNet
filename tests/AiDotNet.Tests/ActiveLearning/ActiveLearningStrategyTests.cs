@@ -43,7 +43,7 @@ public class ActiveLearningStrategyTests
         var pool = ActiveLearningTestHelper.CreateUnlabeledPool(10, 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(null!, pool, 3));
+        Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>(), pool, 3));
     }
 
     [Fact(Timeout = 60000)]
@@ -54,7 +54,7 @@ public class ActiveLearningStrategyTests
         var model = ActiveLearningTestHelper.CreateMockModel();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(model, null!, 3));
+        Assert.Throws<ArgumentNullException>(() => strategy.SelectSamples(model, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), 3));
     }
 
     [Fact(Timeout = 60000)]
@@ -174,7 +174,7 @@ public class ActiveLearningStrategyTests
         var pool = ActiveLearningTestHelper.CreateUnlabeledPool(10, 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => strategy.ComputeInformativenessScores(null!, pool));
+        Assert.Throws<ArgumentNullException>(() => strategy.ComputeInformativenessScores(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>(), pool));
     }
 
     #endregion
@@ -409,7 +409,7 @@ public class ActiveLearningStrategyTests
     public async Task QueryByCommittee_Constructor_NullCommittee_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new QueryByCommittee<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new QueryByCommittee<double>(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>>()));
     }
 
     [Fact(Timeout = 60000)]

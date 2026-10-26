@@ -574,9 +574,9 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
         // optimized BLAS/GPU kernels (NOT the generic-T Tensor.Multiply, which is a per-element NumOps loop).
         EnsureProjectionWeightTensors();
         var input2D = Engine.Reshape(input, new[] { rows, embDim });
-        var q2D = Engine.TensorMatMul(input2D, _wqTensor!); // [rows, projDim]
-        var k2D = Engine.TensorMatMul(input2D, _wkTensor!); // [rows, kvProjDim]
-        var v2D = Engine.TensorMatMul(input2D, _wvTensor!); // [rows, kvProjDim]
+        var q2D = Engine.TensorMatMul(input2D, (_wqTensor ?? throw new InvalidOperationException("_wqTensor is null where it is required."))); // [rows, projDim]
+        var k2D = Engine.TensorMatMul(input2D, (_wkTensor ?? throw new InvalidOperationException("_wkTensor is null where it is required."))); // [rows, kvProjDim]
+        var v2D = Engine.TensorMatMul(input2D, (_wvTensor ?? throw new InvalidOperationException("_wvTensor is null where it is required."))); // [rows, kvProjDim]
         // Materialize the projected Q/K/V to flat row-major spans once so the causal per-token loop reads
         // them without per-element Tensor indexing (which would round-trip a GPU-resident GEMM result).
         var qFlat = q2D.AsSpan();
@@ -673,7 +673,7 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
 
         // Batched output projection (one Engine GEMM) + bias + activation.
         var attn2D = new Tensor<T>(attnData, new[] { rows, projDim });
-        var o2D = Engine.TensorMatMul(attn2D, _woTensor!); // [rows, embDim]
+        var o2D = Engine.TensorMatMul(attn2D, (_woTensor ?? throw new InvalidOperationException("_woTensor is null where it is required."))); // [rows, embDim]
         var oFlat = o2D.AsSpan();
         var output = new Tensor<T>([batchSize, seqLen, embDim]);
         for (int b = 0; b < batchSize; b++)

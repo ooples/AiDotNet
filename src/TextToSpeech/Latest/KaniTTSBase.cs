@@ -44,8 +44,6 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
     private readonly List<LayerBase<T>> _encoderLayers = new();
     private readonly List<LayerBase<T>> _decoderLayers = new();
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>The options, for KaniTTS 2.</summary>
     protected KaniTTSOptions KaniOptions => _options;
@@ -54,7 +52,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
     protected KaniTTSBase(NeuralNetworkArchitecture<T> architecture, string modelPath, KaniTTSOptions options)
         : base(architecture)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options = options ?? throw new ArgumentNullException(nameof(options)); Options = _options;
         _useNativeMode = false;
         ConfigureBase();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -68,7 +66,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
     protected KaniTTSBase(NeuralNetworkArchitecture<T> architecture, KaniTTSOptions options)
         : base(architecture)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options = options ?? throw new ArgumentNullException(nameof(options)); Options = _options;
         _useNativeMode = true;
         ConfigureBase();
         InitializeLayers();

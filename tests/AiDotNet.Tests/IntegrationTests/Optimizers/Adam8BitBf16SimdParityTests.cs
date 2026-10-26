@@ -75,7 +75,7 @@ public class Adam8BitBf16SimdParityTests
     [InlineData(20001, 77)]
     public void Bf16Simd_MatchesScalar_OnRandomArrays(int length, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var src = new float[length];
         for (int i = 0; i < length; i++)
         {

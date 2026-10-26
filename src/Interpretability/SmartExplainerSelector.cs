@@ -151,7 +151,7 @@ public class SmartExplainerSelector<T>
         var cacheKey = ComputeCacheKey(instance, targetClass);
         if (_options.EnableCaching && _cache.TryGet(cacheKey, out var cached))
         {
-            return cached!;
+            return (cached ?? throw new InvalidOperationException("cached is null where it is required."));
         }
 
         // Compute explanation
@@ -260,7 +260,7 @@ public class SmartExplainerSelector<T>
         {
             _shapExplainer = new SHAPExplainer<T>(
                 _predictFunction,
-                _backgroundData!,
+                (_backgroundData ?? throw new InvalidOperationException("_backgroundData is null where it is required.")),
                 featureNames: _featureNames);
         }
 

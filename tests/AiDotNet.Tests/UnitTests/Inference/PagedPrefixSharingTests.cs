@@ -28,7 +28,7 @@ public class PagedPrefixSharingTests
     {
         var layer = new PagedCachedMultiHeadAttention<float>(Total, EmbDim, Heads, useCausalMask: true)
         { InferenceMode = true, LayerIndex = 0 };
-        var rng = new Random(20260616);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260616);
         var p = layer.GetParameters();
         var pv = new float[p.Length];
         for (int i = 0; i < pv.Length; i++) pv[i] = (float)(rng.NextDouble() - 0.5) * 0.2f;
@@ -41,7 +41,7 @@ public class PagedPrefixSharingTests
 
     private static float[] Tokens(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var d = new float[Total * EmbDim];
         for (int i = 0; i < d.Length; i++) d[i] = (float)(rng.NextDouble() - 0.5);
         return d;
@@ -64,7 +64,7 @@ public class PagedPrefixSharingTests
         const int E = EmbDim, H = Heads, HD = E / H;
         var layer = new PagedCachedMultiHeadAttention<float>(8, E, H, useCausalMask: true)
         { InferenceMode = true, LayerIndex = 0 };
-        var rng = new Random(20260616);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260616);
         var pv = new float[layer.GetParameters().Length];
         for (int i = 0; i < pv.Length; i++) pv[i] = (float)(rng.NextDouble() - 0.5) * 0.2f;
         layer.SetParameters(new Vector<float>(pv));
@@ -73,7 +73,7 @@ public class PagedPrefixSharingTests
         { NumHeads = H, HeadDimension = HD, BlockSize = 16, MaxBatchSize = 8 });
 
         var data = new float[6 * E];
-        var rd = new Random(55);
+        var rd = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(55);
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rd.NextDouble() - 0.5);
 
         float[] StepOn(long seq, int t)

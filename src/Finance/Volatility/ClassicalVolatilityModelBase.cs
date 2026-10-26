@@ -153,8 +153,8 @@ public abstract class ClassicalVolatilityModelBase<T> :
             FitReturns(returns);
         }
 
-        var p = Parameters!;
-        double sigma2 = UnconditionalVariance(p);
+        var p = Parameters;
+        double sigma2 = UnconditionalVariance((p ?? throw new InvalidOperationException("p is null where it is required.")));
         for (int t = 1; t < returns.Count; t++)
         {
             sigma2 = NextVariance(sigma2, returns[t - 1], p);
@@ -176,8 +176,8 @@ public abstract class ClassicalVolatilityModelBase<T> :
     {
         var r = ToDoubles(historicalReturns);
         double var1 = ForecastNextVariance(r);
-        var p = Parameters!;
-        double uncond = UnconditionalVariance(p);
+        var p = Parameters;
+        double uncond = UnconditionalVariance((p ?? throw new InvalidOperationException("p is null where it is required.")));
         var data = new T[Math.Max(1, horizon)];
         double v = var1;
         for (int h = 0; h < data.Length; h++)

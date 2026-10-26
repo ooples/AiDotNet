@@ -33,7 +33,7 @@ public class VisionBenchmarkTests
                 {
                     // Create minimal synthetic image data (just raw bytes, not real JPEG)
                     byte[] fakeImage = new byte[64 * 64 * 3];
-                    new Random(42 + i).NextBytes(fakeImage);
+                    AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42 + i).NextBytes(fakeImage);
                     File.WriteAllBytes(Path.Combine(classDir, $"{className}_{i}.jpg"), fakeImage);
                 }
             }
@@ -94,7 +94,7 @@ public class VisionBenchmarkTests
             for (int i = 1; i <= 3; i++)
             {
                 byte[] fakeImage = new byte[224 * 224];
-                new Random(i).NextBytes(fakeImage);
+                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(i).NextBytes(fakeImage);
                 File.WriteAllBytes(Path.Combine(imageDir, $"{i:D8}_000.png"), fakeImage);
             }
 

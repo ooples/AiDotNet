@@ -24,7 +24,7 @@ public class CheckpointOptimizerTypeCompatTests
         var type = typeof(int);
         // The bare-FullName fallback compares expectedFullName to actualType.FullName; that equality must
         // hold when the saved name is the type's own assembly-qualified name.
-        Assert.Equal(type.FullName, Extract(type.AssemblyQualifiedName!));
+        Assert.Equal(type.FullName, Extract((type.AssemblyQualifiedName ?? throw new InvalidOperationException("type.AssemblyQualifiedName is null where it is required."))));
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public class CheckpointOptimizerTypeCompatTests
         // (each containing commas) inside [[...]]. A naive Split(',')[0] would truncate at the first inner
         // comma; the depth-aware parse must return the entire type FullName.
         var type = typeof(Dictionary<string, int>);
-        string extracted = Extract(type.AssemblyQualifiedName!);
+        string extracted = Extract((type.AssemblyQualifiedName ?? throw new InvalidOperationException("type.AssemblyQualifiedName is null where it is required.")));
 
         Assert.Equal(type.FullName, extracted);
         // Sanity: the generic-argument block survived (a truncating parse would have dropped it).

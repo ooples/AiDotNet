@@ -108,9 +108,9 @@ internal static class OnlineLicenseServices
             {
                 string? crl = HttpGet(crlUrl);
                 if (!string.IsNullOrWhiteSpace(crl) &&
-                    LicenseRevocationProvider.TryInstallFetched(crl!, DateTimeOffset.UtcNow))
+                    LicenseRevocationProvider.TryInstallFetched((crl ?? throw new InvalidOperationException("crl is null where it is required.")), DateTimeOffset.UtcNow))
                 {
-                    WriteAtomic(CrlPath, crl!);
+                    WriteAtomic(CrlPath, crl);
                 }
             }
         }
@@ -248,7 +248,7 @@ internal static class OnlineLicenseServices
 
         try
         {
-            var obj = JsonConvert.DeserializeAnonymousType(responseJson!, new { valid = false, offline_token = (string?)null });
+            var obj = JsonConvert.DeserializeAnonymousType((responseJson ?? throw new InvalidOperationException("responseJson is null where it is required.")), new { valid = false, offline_token = (string?)null });
             return obj is { valid: true } && !string.IsNullOrWhiteSpace(obj.offline_token) ? obj.offline_token : null;
         }
         catch (JsonException)

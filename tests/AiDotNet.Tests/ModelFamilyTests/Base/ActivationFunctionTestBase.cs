@@ -249,7 +249,7 @@ public abstract class ActivationFunctionTestBase<T>
         using var _arena = TensorArena.Create();
         var fn = CreateTestActivation();
         var input = new Tensor<T>([5]);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 5; i++)
             input[i] = ToT(rng.NextDouble() * 4.0 - 2.0); // [-2, 2]
 

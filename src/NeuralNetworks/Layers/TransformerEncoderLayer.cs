@@ -1,4 +1,13 @@
-﻿using AiDotNet.Attributes;
+// The sub-layers below are declared non-nullable and built lazily in EnsureInitialized, once the
+// embedding size is known. The annotation is load-bearing rather than cosmetic: the trainable-parameter
+// generator reads it to tell a child that is not built YET from a child that is genuinely OPTIONAL.
+// A non-nullable child that is still null makes DeclaredSubLayerShapes bail and retry; a nullable one is
+// skipped as configuration and the result is cached, so annotating these as nullable permanently drops
+// them from the declared surface and they report zero parameters. That is what made a deserialize size
+// this layer against its own parameters only and reject the full payload.
+#pragma warning disable CS8618 // Lazily built in EnsureInitialized; see the note above.
+
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -397,11 +406,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _feedForwardDim = feedForwardDim;
 
         // Sublayers constructed lazily inside EnsureInitialized once _embeddingSize is known.
-        _selfAttention = null!;
-        _norm1 = null!;
-        _feedForward1 = null!;
-        _feedForward2 = null!;
-        _norm2 = null!;
 
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;

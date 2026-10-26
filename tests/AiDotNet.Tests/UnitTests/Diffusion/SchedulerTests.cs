@@ -348,7 +348,7 @@ public class SchedulerTests : DiffusionUnitTestBase
     private static Vector<float> CreateRandomVector(int length, int seed)
     {
         var vector = new Vector<float>(length);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int i = 0; i < length; i++)
         {

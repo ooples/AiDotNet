@@ -32,6 +32,11 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Bounds every regex evaluation over generator replies, so a pathological reply cannot hang a metric (ReDoS).
+    /// </summary>
+    protected static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    /// <summary>
     /// Gets the name of this metric.
     /// </summary>
     public abstract string Name { get; }
@@ -154,11 +159,23 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
         if (string.IsNullOrWhiteSpace(reply))
             return result;
 
-        var lines = reply!.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        var lines = (reply ?? throw new InvalidOperationException("reply is null where it is required.")).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
-            var cleaned = System.Text.RegularExpressions.Regex.Replace(
-                line.Trim(), @"^\s*(\d+[\.\)]|[-*•])\s*", string.Empty).Trim();
+            string cleaned;
+            try
+            {
+                cleaned = System.Text.RegularExpressions.Regex.Replace(
+                    line.Trim(), @"^\s*(\d+[\.\)]|[-*•])\s*", string.Empty,
+                    System.Text.RegularExpressions.RegexOptions.None, RegexTimeout).Trim();
+            }
+            catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)
+            {
+                // Keep the line with its marker rather than lose it.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"RAG metric: stripping a list marker timed out; keeping the line as written. {ex.Message}");
+                cleaned = line.Trim();
+            }
             if (cleaned.Length > 0)
                 result.Add(cleaned);
         }
@@ -177,7 +194,7 @@ public abstract class RAGMetricBase<T> : IRAGMetric<T>
         if (string.IsNullOrWhiteSpace(reply))
             return false;
 
-        var s = reply!.Trim().ToLowerInvariant();
+        var s = (reply ?? throw new InvalidOperationException("reply is null where it is required.")).Trim().ToLowerInvariant();
         if (s.StartsWith("yes") || s.StartsWith("true") || s.StartsWith("support"))
             return true;
         if (s.StartsWith("no") || s.StartsWith("false") || s.StartsWith("not"))

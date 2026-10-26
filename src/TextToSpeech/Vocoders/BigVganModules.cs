@@ -18,14 +18,20 @@ internal sealed class AntiAliasedSnake<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private const int Taps = 12;
     private readonly IEngine _engine;
-    private readonly SnakeLayer<T> _snake;
+    private readonly LayerBase<T> _snake;
     private readonly Tensor<T> _upFilter;     // [1, 1, 1, 12], scaled by the ratio
     private readonly Tensor<T> _downFilter;   // [1, 1, 1, 12]
 
     public AntiAliasedSnake(IEngine engine, List<LayerBase<T>> owned, int channels)
+        : this(engine, owned, new SnakeLayer<T>(channels))
+    {
+    }
+
+    /// <summary>Wraps another per-channel activation of <c>[1, C, T]</c> (X-codec2's SnakeBeta) in the same filters.</summary>
+    public AntiAliasedSnake(IEngine engine, List<LayerBase<T>> owned, LayerBase<T> activation)
     {
         _engine = engine;
-        owned.Add(_snake = new SnakeLayer<T>(channels));
+        owned.Add(_snake = activation);
         var filter = KaiserSinc(0.25, 0.3, Taps);
         _upFilter = new Tensor<T>(new[] { 1, 1, 1, Taps });
         _downFilter = new Tensor<T>(new[] { 1, 1, 1, Taps });

@@ -56,7 +56,7 @@ public abstract class DualInputLayerTestBase<T>
 
     protected static Tensor<T> CreateRandomTensor(int[] shape, int seed = 42)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = ToT(rng.NextDouble() * 2.0 - 1.0);
@@ -266,7 +266,7 @@ public abstract class DualInputLayerTestBase<T>
         using (var probe = new Tensor<T>(PrimaryInputShape))
         {
             for (int i = 0; i < probe.Length; i++) probe[i] = ToT(0.01 * (i + 1));
-            try { layer.Forward(probe); } catch { }
+            try { layer.Forward(probe); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DualInputLayerTestBase: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
         }
 
         if (layer.ParameterCount == 0) return;

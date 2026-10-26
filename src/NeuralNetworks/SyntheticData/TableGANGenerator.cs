@@ -586,8 +586,8 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         var centered = Engine.TensorSubtract(fakeActivated, fakeMeanBroadcast);
         var fakeVariance = Engine.ReduceMean(Engine.TensorMultiply(centered, centered), fakeFeatureAxes, keepDims: false);
 
-        var realMeanTensor = VectorToTensor(_realMean!);
-        var realVarianceTensor = VectorToTensor(_realVar!);
+        var realMeanTensor = VectorToTensor((_realMean ?? throw new InvalidOperationException("_realMean is null where it is required.")));
+        var realVarianceTensor = VectorToTensor((_realVar ?? throw new InvalidOperationException("_realVar is null where it is required.")));
         var meanDiff = Engine.TensorSubtract(fakeMean, realMeanTensor);
         var varianceDiff = Engine.TensorSubtract(fakeVariance, realVarianceTensor);
         var meanSq = Engine.TensorMultiply(meanDiff, meanDiff);

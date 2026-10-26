@@ -110,10 +110,10 @@ public class AutomaticParameterOwnershipTests
 
         long byolTrainableScalars = byolSlots
             .Where(slot => slot.Role == ParameterSlotRole.Trainable)
-            .Sum(slot => slot.ParameterCount.Value);
+            .Sum(slot => (slot.ParameterCount ?? throw new InvalidOperationException("slot.ParameterCount is null where it is required.")));
         long byolFrozenScalars = byolSlots
             .Where(slot => slot.Role == ParameterSlotRole.Frozen)
-            .Sum(slot => slot.ParameterCount.Value);
+            .Sum(slot => (slot.ParameterCount ?? throw new InvalidOperationException("slot.ParameterCount is null where it is required.")));
 
         Assert.Equal(
             onlineEncoder.GetParameters().Length + onlineProjector.ParameterCount,
@@ -148,7 +148,7 @@ public class AutomaticParameterOwnershipTests
         Assert.Single(simSiamSlots.Where(
             slot => slot.StableId.EndsWith("::_projector", StringComparison.Ordinal)));
 
-        Assert.Equal(simSiamExpected, simSiamSlots.Sum(slot => slot.ParameterCount.Value));
+        Assert.Equal(simSiamExpected, simSiamSlots.Sum(slot => (slot.ParameterCount ?? throw new InvalidOperationException("slot.ParameterCount is null where it is required."))));
     }
 
     private static void AssertFreshRestoreRoundTrip<TModel>(TModel trained, TModel fresh)

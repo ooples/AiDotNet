@@ -283,7 +283,7 @@ public class LoggingIntegrationTests : IDisposable
         var logDir = Path.Combine(_testDir, "histogram_large");
         using var writer = new SummaryWriter(logDir);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var values = Enumerable.Range(0, 10000).Select(_ => (float)random.NextDouble()).ToArray();
         writer.AddHistogram("weights/large_layer", values, 0);
 
@@ -785,7 +785,7 @@ public class LoggingIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task TensorBoardWriter_Constructor_WithNullLogDir_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new TensorBoardWriter(null!));
+        Assert.Throws<ArgumentNullException>(() => new TensorBoardWriter(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -1156,7 +1156,7 @@ public class LoggingIntegrationTests : IDisposable
         var logDir = Path.Combine(_testDir, "full_training_loop");
         using var writer = new SummaryWriter(logDir);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Simulate training loop
         for (int epoch = 0; epoch < 5; epoch++)
@@ -1190,7 +1190,7 @@ public class LoggingIntegrationTests : IDisposable
             context = new TensorBoardTrainingContext("full_loop_context");
             logDir = context.Writer.LogDir;
 
-            var random = new Random(42);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
             // Simulate training
             for (int i = 0; i < 10; i++)
