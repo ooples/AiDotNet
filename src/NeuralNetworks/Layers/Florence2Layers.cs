@@ -298,6 +298,7 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         var random = LayerInitializationSeedScope.NextRandom();
         _projection = NormalTensor(new[] { visionDim, projectionDim }, 0.02, random);
         RegisterTrainableParameter(_projection, PersistentTensorRole.Weights);
+        NoteConstructorInitialization(_projection);
         // The reference splits the width as column = C - C/2, row = C/2.
         _columns = LayerGraphContract.FromDerivedInput(new EmbeddingLayer<T>(maxPositions, visionDim - (visionDim / 2)), "positions");
         _rows = LayerGraphContract.FromDerivedInput(new EmbeddingLayer<T>(maxPositions, visionDim / 2), "positions");
@@ -306,6 +307,26 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         RegisterSubLayer(_rows);
         RegisterSubLayer(_norm);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Drawn in this layer's constructor, so a caller who builds it into an explicit layer list drew before the
+    /// model existed; the seed the model wires on afterwards redoes the draw, in the same order. Its registered
+    /// children were built here too and are seeded from the same seed.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        var drawn = new[] { _projection };
+        // The tables are redrawn only while untouched; the children are seeded either way, since each guards its own.
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            NormalTensor(new[] { _visionDim, _projectionDim }, 0.02, random).AsSpan().CopyTo(_projection.AsWritableSpan());
+            CompleteSeededReinitialization(drawn);
+        }
+
+        PropagateSeedToSubLayers();
+    }
+
 
     /// <summary>Number of image tokens produced: the mean token plus one per position.</summary>
     public int TokenCount => 1 + (_grid * _grid);
