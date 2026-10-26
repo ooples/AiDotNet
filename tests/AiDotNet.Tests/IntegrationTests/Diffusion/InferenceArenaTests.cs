@@ -27,7 +27,7 @@ public class InferenceArenaTests
 
     private static Tensor<float> Sample(int batch, int seed)
     {
-        var rng = new Random(seed);
+        var rng = RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<float>([batch, 4, 8, 8]);
         for (int i = 0; i < x.Length; i++) x[i] = (float)(rng.NextDouble() * 2 - 1);
         return x;
@@ -78,7 +78,8 @@ public class InferenceArenaTests
             var predictor = Create(name);
             var withArena = Run(predictor, out var kept);
 
-            Assert.True(predictor.InferenceArenaForwards > 0, $"{name}: no forward ran inside the inference arena.");
+            // Eight calls over two input shapes; the first of each shape runs outside the arena.
+            Assert.Equal(6L, predictor.InferenceArenaForwards);
             for (int i = 0; i < Calls.Length; i++)
             {
                 Assert.Equal(reference[i].Length, withArena[i].Length);
@@ -88,6 +89,37 @@ public class InferenceArenaTests
             }
             // A returned prediction still holds its values after every later call reused the arena.
             AssertUnchanged(name + " with the arena", kept, withArena);
+        }
+        finally
+        {
+            NoisePredictorBase<float>.InferenceArenaEnabled = saved;
+        }
+    }
+
+    /// <summary>
+    /// Arenas are rented per forward from a bounded pool, not kept per thread: one thread after another predicting
+    /// leaves one idle arena, where a per-thread arena kept one for every thread that had ever called, exited or not.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Predictors))]
+    public void ShortLivedThreads_LeaveOneIdleArena_NotOnePerThread(string name)
+    {
+        bool saved = NoisePredictorBase<float>.InferenceArenaEnabled;
+        try
+        {
+            NoisePredictorBase<float>.InferenceArenaEnabled = true;
+            var predictor = Create(name);
+            predictor.PredictNoise(Sample(1, 1), 3);
+            for (int i = 0; i < 6; i++)
+            {
+                int inputSeed = 2 + i;
+                var worker = new System.Threading.Thread(() => predictor.PredictNoise(Sample(1, inputSeed), 500));
+                worker.Start();
+                worker.Join();
+            }
+
+            Assert.Equal(6L, predictor.InferenceArenaForwards);
+            Assert.Equal(1, predictor.IdleInferenceArenaCount);
         }
         finally
         {
