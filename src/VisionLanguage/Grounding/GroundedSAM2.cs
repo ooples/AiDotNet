@@ -74,7 +74,6 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     private GroundingDinoDetector<T>? _detector;
     private Sam2Network<T>? _segmenter;
 
-    public override ModelOptions GetOptions() => _options;
 
     private GroundingDinoDetector<T> Detector => _detector ?? throw new InvalidOperationException("The networks are not initialized.");
 
@@ -91,7 +90,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     )
         : base(architecture)
     {
-        _options = options ?? new GroundedSAM2Options();
+        _options = options ?? new GroundedSAM2Options(); Options = _options;
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? throw new InvalidOperationException("Grounded SAM 2 declares its detector's recipe.");

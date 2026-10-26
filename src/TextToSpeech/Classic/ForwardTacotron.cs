@@ -71,12 +71,11 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     private CbhgLayer<T>? _postnet;
     private BiasFreeLinearLayer<T>? _postProjection;
 
-    public override ModelOptions GetOptions() => _options;
 
     public ForwardTacotron(NeuralNetworkArchitecture<T> architecture, string modelPath, ForwardTacotronOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new ForwardTacotronOptions();
+        _options = options ?? new ForwardTacotronOptions(); Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -97,7 +96,7 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new ForwardTacotronOptions();
+        _options = options ?? new ForwardTacotronOptions(); Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

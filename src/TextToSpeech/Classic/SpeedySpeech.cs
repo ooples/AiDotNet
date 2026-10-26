@@ -82,12 +82,11 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     private readonly List<DilatedResidualConvBlock<T>> _durationBlocks = new();
     private DenseLayer<T>? _durationProjection;
 
-    public override ModelOptions GetOptions() => _options;
 
     public SpeedySpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, SpeedySpeechOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new SpeedySpeechOptions();
+        _options = options ?? new SpeedySpeechOptions(); Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -108,7 +107,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new SpeedySpeechOptions();
+        _options = options ?? new SpeedySpeechOptions(); Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

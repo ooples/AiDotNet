@@ -88,7 +88,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     private readonly Random _random;
     private AutoformerNetwork<T>? _network;
 
-    public override ModelOptions GetOptions() => _options;
 
     #region IForecastingModel Properties
 
@@ -254,7 +253,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     #region IForecastingModel Implementation
 
-    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));

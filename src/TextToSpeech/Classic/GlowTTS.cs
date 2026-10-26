@@ -67,12 +67,11 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     // Decoder (Fig. 8): squeeze, n x (ActNorm, grouped invertible 1x1 conv, affine coupling), unsqueeze.
     private readonly List<LayerBase<T>> _flows = new();
 
-    public override ModelOptions GetOptions() => _options;
 
     public GlowTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, GlowTTSOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new GlowTTSOptions();
+        _options = options ?? new GlowTTSOptions(); Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -93,7 +92,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new GlowTTSOptions();
+        _options = options ?? new GlowTTSOptions(); Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

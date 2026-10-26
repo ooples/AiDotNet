@@ -88,7 +88,7 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new AudioLMOptions();
+        _options = options ?? new AudioLMOptions(); Options = _options;
         _semanticTokenizer = semanticTokenizer;
         _suppliedOptimizer = optimizer;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
@@ -96,8 +96,6 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
         InitializeLayers();
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>The network a training step updates.</summary>
     public AudioLMStage CurrentStage { get; set; } = AudioLMStage.CoarseAcoustic;

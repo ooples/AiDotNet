@@ -96,7 +96,7 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
-        _codec = options ?? throw new ArgumentNullException(nameof(options));
+        _codec = options ?? throw new ArgumentNullException(nameof(options)); Options = _codec;
         // The clone plan replays the constructor from members named after its parameters.
         Options = _codec;
         _useNativeMode = true;
@@ -125,8 +125,6 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
         InitializeLayers();
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _codec;
 
     /// <summary>The codec options.</summary>
     protected NeuralAudioCodecOptions CodecSettings => _codec;

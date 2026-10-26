@@ -112,8 +112,6 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     private readonly ASTOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _useNativeMode;
@@ -155,7 +153,7 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
 
-        _options = options ?? new ASTOptions();
+        _options = options ?? new ASTOptions(); Options = _options;
         _useNativeMode = false;
         _options.ModelPath = modelPath;
         base.SampleRate = _options.SampleRate;
@@ -178,7 +176,7 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new ASTOptions();
+        _options = options ?? new ASTOptions(); Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;

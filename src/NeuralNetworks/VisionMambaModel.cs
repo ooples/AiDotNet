@@ -54,7 +54,6 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
 
     public override bool SupportsTraining => true;
 
-    public override ModelOptions GetOptions() => _options;
 
     public int ImageHeight => _configuration.ImageHeight;
     public int ImageWidth => _configuration.ImageWidth;
@@ -79,7 +78,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         : base(architecture,
             lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageClassification))
     {
-        _options = options ?? new VisionMambaOptions();
+        _options = options ?? new VisionMambaOptions(); Options = _options;
         _options.Validate();
         Options = _options;
         _configuration = new VimConfiguration

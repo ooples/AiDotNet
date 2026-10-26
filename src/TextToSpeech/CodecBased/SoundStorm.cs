@@ -108,14 +108,12 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
     private SoundStormCore<T>? _acoustic;
     private AudioCodecLayer<T>? _codec;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>Creates an ONNX-backed SoundStorm for inference.</summary>
     public SoundStorm(NeuralNetworkArchitecture<T> architecture, string modelPath, SoundStormOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new SoundStormOptions();
+        _options = options ?? new SoundStormOptions(); Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBase();
@@ -133,7 +131,7 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new SoundStormOptions();
+        _options = options ?? new SoundStormOptions(); Options = _options;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);

@@ -72,7 +72,6 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
     private bool _disposed;
     private GroundingDinoDetector<T>? _detector;
 
-    public override ModelOptions GetOptions() => _options;
 
     private GroundingDinoDetector<T> Detector => _detector ?? throw new InvalidOperationException("The network is not initialized.");
 
@@ -86,7 +85,7 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
     )
         : base(architecture)
     {
-        _options = options ?? new GroundingDINOOptions();
+        _options = options ?? new GroundingDINOOptions(); Options = _options;
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? throw new InvalidOperationException("Grounding DINO declares its paper recipe.");

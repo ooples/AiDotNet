@@ -68,8 +68,6 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     /// </summary>
     private readonly string? _modelPath;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
 
     /// <inheritdoc/>
     public string Name => _useNativeMode ? "AST-Native" : "AST-ONNX";
@@ -94,7 +92,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options = options ?? new ASTOptions();
+        _options = options ?? new ASTOptions(); Options = _options;
         _labels = _options.CustomLabels ?? AST<T>.AudioSetLabels;
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;
@@ -111,7 +109,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
-        _options = options ?? new ASTOptions();
+        _options = options ?? new ASTOptions(); Options = _options;
         _labels = _options.CustomLabels ?? AST<T>.AudioSetLabels;
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;

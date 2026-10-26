@@ -67,7 +67,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
-        _vits = options ?? throw new ArgumentNullException(nameof(options));
+        _vits = options ?? throw new ArgumentNullException(nameof(options)); Options = _vits;
         // The clone plan replays the constructor from members named after its parameters: the options live in the base's
         // Options, as NeuralNetworkBase asks of every derived model.
         Options = _vits;
@@ -82,7 +82,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
     protected VitsTtsModelBase(NeuralNetworkArchitecture<T> architecture, string modelPath, VitsModelOptions options)
         : base(architecture)
     {
-        _vits = options ?? throw new ArgumentNullException(nameof(options));
+        _vits = options ?? throw new ArgumentNullException(nameof(options)); Options = _vits;
         // The clone plan replays the constructor from members named after its parameters: the options live in the base's
         // Options, as NeuralNetworkBase asks of every derived model.
         Options = _vits;
@@ -106,8 +106,6 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
         base.HiddenDim = _vits.HiddenDim;
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _vits;
 
     /// <summary>The options, available to the hooks the base constructor calls before a derived constructor runs.</summary>
     protected VitsModelOptions VitsOptions => _vits;

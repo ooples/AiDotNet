@@ -59,12 +59,11 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
     private DenseLayer<T>? _finalModulation;
     private DenseLayer<T>? _projection;
 
-    public override ModelOptions GetOptions() => _options;
 
     public F5TTS(NeuralNetworkArchitecture<T> architecture, string modelPath, F5TTSOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new F5TTSOptions();
+        _options = options ?? new F5TTSOptions(); Options = _options;
         _useNativeMode = false;
         SeedTraining(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
@@ -86,7 +85,7 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new F5TTSOptions();
+        _options = options ?? new F5TTSOptions(); Options = _options;
         _useNativeMode = true;
         SeedTraining(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;

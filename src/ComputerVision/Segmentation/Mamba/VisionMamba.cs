@@ -73,7 +73,6 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     /// <summary>Draws stochastic-depth and dropout decisions during training.</summary>
     private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
-    public override ModelOptions GetOptions() => _options;
 
     internal bool UseNativeMode => _useNativeMode;
     internal VisionMambaModelSize ModelSize => _options.ModelSize;

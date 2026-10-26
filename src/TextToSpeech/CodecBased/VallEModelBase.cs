@@ -57,7 +57,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     protected VallEModelBase(NeuralNetworkArchitecture<T> architecture, string modelPath, VALLEOptions options)
         : base(architecture)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options = options ?? throw new ArgumentNullException(nameof(options)); Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         (_tokens, _wordSeparator) = BuildVocabulary(_tokenIds);
@@ -76,7 +76,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options = options ?? throw new ArgumentNullException(nameof(options)); Options = _options;
         _useNativeMode = true;
         _suppliedOptimizer = optimizer;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);

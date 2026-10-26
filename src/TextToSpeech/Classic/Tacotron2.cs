@@ -73,14 +73,12 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
 
     private Random _regularizationRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>Creates a Tacotron 2 that runs an exported ONNX graph.</summary>
     public Tacotron2(NeuralNetworkArchitecture<T> architecture, string modelPath, Tacotron2Options? options = null)
         : base(architecture)
     {
-        _options = options ?? new Tacotron2Options();
+        _options = options ?? new Tacotron2Options(); Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -102,7 +100,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new Tacotron2Options();
+        _options = options ?? new Tacotron2Options(); Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

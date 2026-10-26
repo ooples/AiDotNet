@@ -71,12 +71,11 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
     private DenseLayer<T>? _stopLinear;
     private ConvBatchNormStackLayer<T>? _postnet;
 
-    public override ModelOptions GetOptions() => _options;
 
     public TransformerTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, TransformerTTSOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new TransformerTTSOptions();
+        _options = options ?? new TransformerTTSOptions(); Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -97,7 +96,7 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new TransformerTTSOptions();
+        _options = options ?? new TransformerTTSOptions(); Options = _options;
         _useNativeMode = true;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

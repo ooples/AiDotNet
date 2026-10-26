@@ -82,7 +82,6 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
     // Decoder: the U-Net vector field estimator v_theta(x_t, mu, t).
     private MatchaDecoder<T>? _decoder;
 
-    public override ModelOptions GetOptions() => _options;
 
     public MatchaTTS(
         NeuralNetworkArchitecture<T> architecture,
@@ -91,7 +90,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
     )
         : base(architecture)
     {
-        _options = options ?? new MatchaTTSOptions();
+        _options = options ?? new MatchaTTSOptions(); Options = _options;
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
@@ -114,7 +113,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
     )
         : base(architecture)
     {
-        _options = options ?? new MatchaTTSOptions();
+        _options = options ?? new MatchaTTSOptions(); Options = _options;
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;

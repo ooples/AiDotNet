@@ -39,7 +39,7 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer, int samplingSeed)
         : base(architecture)
     {
-        _vocoder = options ?? throw new ArgumentNullException(nameof(options));
+        _vocoder = options ?? throw new ArgumentNullException(nameof(options)); Options = _vocoder;
         // The clone plan replays the constructor from members named after its parameters: the options live in the base's
         // Options, as NeuralNetworkBase asks of every derived model.
         Options = _vocoder;
@@ -55,7 +55,7 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
     protected SegmentVocoderBase(NeuralNetworkArchitecture<T> architecture, string modelPath, VocoderOptions options, int samplingSeed)
         : base(architecture)
     {
-        _vocoder = options ?? throw new ArgumentNullException(nameof(options));
+        _vocoder = options ?? throw new ArgumentNullException(nameof(options)); Options = _vocoder;
         // The clone plan replays the constructor from members named after its parameters: the options live in the base's
         // Options, as NeuralNetworkBase asks of every derived model.
         Options = _vocoder;
@@ -79,8 +79,6 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
         base.HopSize = _vocoder.HopSize;
     }
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _vocoder;
 
     /// <summary>The options, available to the hooks the base constructor calls before a derived constructor runs.</summary>
     protected VocoderOptions VocoderSettings => _vocoder;
