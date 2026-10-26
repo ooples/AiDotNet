@@ -116,6 +116,14 @@ internal static class InflectNumberWords
         return $" {a.Zero} {a.Zero}, ";
     }
 
+    /// <summary><c>inflect.engine().ordinal(words)</c> for a number in words (<c>_sub_ord</c>): the last word's ending
+    /// made ordinal ("three" → "third", "twenty" → "twentieth"), or "th" appended.</summary>
+    public static string Ordinal(string words)
+    {
+        var match = Ordinals.FirstOrDefault(o => words.EndsWith(o.Ending, StringComparison.Ordinal));
+        return match.Ending is not null ? words.Substring(0, words.Length - match.Ending.Length) + match.Ordinal : words + "th";
+    }
+
     /// <summary><c>inflect.engine().number_to_words(num, group=…, comma=…, andword=…, zero=…, one=…, decimal=…)</c>.</summary>
     public static string NumberToWords(string num, int group = 0, string comma = ",", string andword = "and", string zero = "zero",
         string one = "one", string? @decimal = "point")
