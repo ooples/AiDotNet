@@ -125,7 +125,7 @@ public class CodeSwitchingASRMechanismTests
 
     private static Tensor<double> Audio(int samples = 64, int seed = 5)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>([samples]);
         for (int i = 0; i < samples; i++) t[i] = rng.NextDouble() - 0.5;
         return t;
@@ -196,7 +196,7 @@ public class CodeSwitchingASRMechanismTests
         var before = model.GetParameters();
 
         var input = new Tensor<double>([4, 8]);
-        var rng = new Random(3);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() - 0.5;
         var target = new Tensor<double>([4, model.GetOptionsTyped().VocabSize]);
         for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
@@ -217,7 +217,7 @@ public class CodeSwitchingASRMechanismTests
         var model = Model(o => o.LidWeight = 0.0);
 
         var input = new Tensor<double>([4, 8]);
-        var rng = new Random(9);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() - 0.5;
         var target = new Tensor<double>([4, model.GetOptionsTyped().VocabSize]);
         for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();

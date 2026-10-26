@@ -160,11 +160,6 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     }
 
     /// <summary>
-    /// Gets a value indicating whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Gets the number of input channels.
     /// </summary>
     public int InChannels { get; private set; }
@@ -233,10 +228,10 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         // _expandConv, _expandBn, _dwConv, _dwBn, _se, _projectConv,
         // _projectBn are allocated in OnFirstForward — their channel
         // dimensions all derive from the resolved inChannels.
-        _projectConv = null!;
-        _projectBn = null!;
-        _dwConv = null!;
-        _dwBn = null!;
+        _projectConv = null;
+        _projectBn = null;
+        _dwConv = null;
+        _dwBn = null;
     }
 
     private readonly int _seRatio;
@@ -337,8 +332,8 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         // for buffered Deserialize parameters to slice correctly.
         if (_hasExpansion)
         {
-            _expandConv!.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
-            _expandBn!.ResolveFromShape(new[] { 1, hiddenDim, inputHeight, inputWidth });
+            (_expandConv ?? throw new InvalidOperationException("_expandConv is null where it is required.")).ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
+            (_expandBn ?? throw new InvalidOperationException("_expandBn is null where it is required.")).ResolveFromShape(new[] { 1, hiddenDim, inputHeight, inputWidth });
         }
         _dwConv.ResolveFromShape(new[] { dwInputChannels, inputHeight, inputWidth });
         _dwBn.ResolveFromShape(new[] { 1, dwInputChannels, dwOutH, dwOutW });
@@ -506,86 +501,6 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         if (_useResidual)
         {
             return AddTensors(projectBnOut, input);
-        }
-
-        return projectBnOut;
-    }
-
-    /// <summary>
-    /// Performs the forward pass on GPU, keeping data GPU-resident.
-    /// </summary>
-    /// <param name="inputs">The input tensors (expects single input).</param>
-    /// <returns>The output tensor on GPU.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        if (!IsShapeResolved) OnFirstForward(input);
-        var dwConv = _dwConv ?? throw new InvalidOperationException("OnFirstForward did not allocate _dwConv.");
-        var dwBn = _dwBn ?? throw new InvalidOperationException("OnFirstForward did not allocate _dwBn.");
-        var projectConv = _projectConv ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectConv.");
-        var projectBn = _projectBn ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectBn.");
-
-        Tensor<T> x = input;
-
-        // Expansion phase (if expansion > 1)
-        if (_hasExpansion && _expandConv is not null && _expandBn is not null)
-        {
-            var expandOut = _expandConv.ForwardGpu(x);
-            var expandBnOut = _expandBn.ForwardGpu(expandOut);
-            expandOut.Dispose(); // Dispose intermediate tensor
-            var expandAct = gpuEngine.ActivationGpu(expandBnOut, GetFusedActivationType());
-            expandBnOut.Dispose(); // Dispose intermediate tensor
-            x = expandAct;
-        }
-
-        // Depthwise convolution phase
-        var dwOut = dwConv.ForwardGpu(x);
-        // Dispose expansion output if we had expansion phase
-        if (_hasExpansion && x != input)
-            x.Dispose();
-        var dwBnOut = dwBn.ForwardGpu(dwOut);
-        dwOut.Dispose(); // Dispose intermediate tensor
-        var dwAct = gpuEngine.ActivationGpu(dwBnOut, GetFusedActivationType());
-        dwBnOut.Dispose(); // Dispose intermediate tensor
-        x = dwAct;
-
-        // Squeeze-and-Excitation phase (optional)
-        if (_useSE && _se is not null)
-        {
-            // Permute from NCHW [B, C, H, W] to NHWC [B, H, W, C] for SE layer
-            var xNhwc = gpuEngine.PermuteGpu(x, [0, 2, 3, 1]);
-            x.Dispose(); // Dispose dwAct before SE
-
-            // Apply SE layer (expects NHWC format)
-            var seOut = _se.ForwardGpu(xNhwc);
-            xNhwc.Dispose(); // Dispose intermediate tensor
-
-            // Permute back from NHWC [B, H, W, C] to NCHW [B, C, H, W]
-            var seOutNchw = gpuEngine.PermuteGpu(seOut, [0, 3, 1, 2]);
-            seOut.Dispose(); // Dispose intermediate tensor
-
-            x = seOutNchw;
-        }
-
-        // Projection phase (LINEAR - no activation)
-        var projectOut = projectConv.ForwardGpu(x);
-        x.Dispose(); // Dispose SE output (or dwAct if no SE)
-        var projectBnOut = projectBn.ForwardGpu(projectOut);
-        projectOut.Dispose(); // Dispose intermediate tensor
-
-        // Residual connection (only if dimensions match)
-        if (_useResidual)
-        {
-            var result = gpuEngine.AddGpu(projectBnOut, input);
-            projectBnOut.Dispose(); // Dispose intermediate tensor
-            return result;
         }
 
         return projectBnOut;

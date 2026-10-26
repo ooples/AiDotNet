@@ -51,7 +51,6 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
     #region Fields
 
     private readonly GraFPrintOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly NTXentLoss<T> _contrastiveLoss;
     private MelSpectrogram<T>? _melSpectrogram;
@@ -108,6 +107,7 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new GraFPrintOptions();
+        Options = _options;
         _contrastiveLoss = new NTXentLoss<T>(_options.Temperature, normalize: true);
         NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = false;
@@ -127,6 +127,7 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         : base(architecture)
     {
         _options = options ?? new GraFPrintOptions();
+        Options = _options;
         _contrastiveLoss = new NTXentLoss<T>(_options.Temperature, normalize: true);
         NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = true;

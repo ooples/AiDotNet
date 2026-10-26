@@ -22,7 +22,7 @@ public class HarmTaxonomyModeratorTests
 {
     private static List<Tensor<double>> Frames(int count, int seed = 11)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var frames = new List<Tensor<double>>(count);
         for (int f = 0; f < count; f++)
         {

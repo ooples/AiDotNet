@@ -47,11 +47,11 @@ public class TracedChainValidationTests
         Assert.True(open is not null, $"{modelName} not found");
 
         object? instance = null;
-        try { instance = Activator.CreateInstance(open!.MakeGenericType(typeof(double))); }
+        try { instance = Activator.CreateInstance(open.MakeGenericType(typeof(double))); }
         catch (Exception ex) { _out.WriteLine($"cannot construct: {ex.GetType().Name}"); return; }
         if (instance is null) return;
 
-        dynamic layers = instance.GetType().GetProperty("Layers", Flags)?.GetValue(instance)!;
+        dynamic layers = (instance.GetType().GetProperty("Layers", Flags)?.GetValue(instance) ?? throw new InvalidOperationException("instance.GetType().GetProperty(\"Layers\", Flags)?.GetValue(instance) is null where it is required."));
         if (layers is null || layers.Count < 2) return;
 
         int linear = LayerContractValidator.Validate<double>(layers).Count;

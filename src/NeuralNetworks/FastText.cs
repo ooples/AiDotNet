@@ -60,9 +60,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly FastTextOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         /// <summary>
@@ -231,8 +228,6 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         public Tensor<T> Forward(Tensor<T> input)
         {
-            if (TryForwardGpuOptimized(input, out var gpuResult))
-                return gpuResult;
 
             Tensor<T> output = input;
             foreach (var layer in Layers)
@@ -311,7 +306,10 @@ namespace AiDotNet.NeuralNetworks
                     // fastText's (nwords + bucket) x dim input matrix: words occupy
                     // [0, _vocabSize), hashed n-grams [_vocabSize, _vocabSize + _bucketSize).
                     var ngramIndices = ngrams
-                        .Select(ng => _vocabSize + (Math.Abs(ng.GetHashCode()) % _bucketSize))
+                        // fastText's own FNV-1a, stable across processes: string.GetHashCode() is randomized per
+                        // process, so a reloaded model read different buckets, and Math.Abs(int.MinValue) overflowed
+                        // to a negative id (#2361).
+                        .Select(ng => _vocabSize + AiDotNet.Helpers.StableHash.Index(ng, _bucketSize))
                         .ToArray();
                     var ngramValues = new T[ngramIndices.Length];
                     for (int i = 0; i < ngramIndices.Length; i++)

@@ -47,9 +47,6 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets a value indicating whether this network processes temporal data.
     /// </summary>
@@ -303,9 +300,6 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Set network AND layers to inference mode.
         // Critical: BatchNorm in training mode with batch_size=1 normalizes everything

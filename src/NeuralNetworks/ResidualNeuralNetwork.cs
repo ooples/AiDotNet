@@ -63,9 +63,6 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
     private readonly ResidualNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (deep supervision) should be used during training.
     /// </summary>
@@ -460,9 +457,6 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: perform forward pass through all layers sequentially (wrapped in the #1622
         // verify-then-trust compiled gate; no-op unless acceleration is engaged).
@@ -667,7 +661,7 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
         // stops rather than guess past a layer it cannot follow). That is a fact about the model,
         // not a failure to describe it, so it is reported as Dynamic instead of thrown over.
         var layerSizes = Layers
-            .Select(layer => layer.GetOutputLayerShape().TryGetConcrete(out var concrete) && concrete!.Length > 0
+            .Select(layer => layer.GetOutputLayerShape().TryGetConcrete(out var concrete) && (concrete ?? throw new InvalidOperationException("concrete is null where it is required.")).Length > 0
                 ? concrete[0]
                 : LayerShape.Dynamic)
             .ToList();

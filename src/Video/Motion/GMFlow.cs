@@ -68,9 +68,6 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
 {
     private readonly GMFlowOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly int _height;

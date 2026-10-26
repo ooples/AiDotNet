@@ -66,9 +66,6 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
 {
     private readonly DocGCNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -523,14 +520,14 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         if (modalityNodeFeatures is null)
             throw new ArgumentNullException(nameof(modalityNodeFeatures));
 
-        var present = System.Array.FindAll(modalityNodeFeatures, m => m is not null);
+        var present = modalityNodeFeatures.OfType<Tensor<T>>().ToArray();
         if (present.Length == 0)
             throw new ArgumentException("PredictMultimodal requires at least one non-null modality node-feature matrix.", nameof(modalityNodeFeatures));
 
         SetTrainingMode(false);
         var fused = present.Length == 1
-            ? present[0]!
-            : Engine.TensorConcatenate(System.Array.ConvertAll(present, m => m!), axis: 0); // [ΣN_modality, F]
+            ? present[0]
+            : Engine.TensorConcatenate(present, axis: 0); // [ΣN_modality, F]
         return Forward(fused);
     }
 
@@ -638,7 +635,7 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         var hidden = input;
         foreach (var conv in _graphConvolutions)
         {
-            conv.SetAdjacencyMatrix(adjacency!);
+            conv.SetAdjacencyMatrix((adjacency ?? throw new InvalidOperationException("adjacency is null where it is required.")));
             hidden = conv.Forward(hidden);
         }
 
@@ -649,7 +646,7 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
             positions[i] = NumOps.FromDouble(Math.Min(i, Math.Max(1, _maxNodes) - 1));
         }
 
-        var order = _nodeOrderEmbedding!.Forward(positions);
+        var order = (_nodeOrderEmbedding ?? throw new InvalidOperationException("_nodeOrderEmbedding is null where it is required.")).Forward(positions);
         if (order.Rank == hidden.Rank && order.Length == hidden.Length)
         {
             hidden = Engine.TensorAdd(hidden, order);

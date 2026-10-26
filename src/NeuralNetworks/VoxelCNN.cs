@@ -53,9 +53,6 @@ public partial class VoxelCNN<T> : VolumetricModelLayoutBase<T>
 {
     private readonly VoxelCNNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to compute the error between predictions and targets.
     /// </summary>
@@ -232,9 +229,6 @@ public partial class VoxelCNN<T> : VolumetricModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Conv3DLayer expects rank-5 [batch, channels, depth, height, width].
         // Tests construct unbatched [channels, depth, height, width] (rank-4)

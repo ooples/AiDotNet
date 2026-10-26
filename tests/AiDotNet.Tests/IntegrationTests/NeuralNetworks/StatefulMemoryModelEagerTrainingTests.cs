@@ -27,7 +27,7 @@ public class StatefulMemoryModelEagerTrainingTests
 {
     private static Tensor<float> Rand(int[] shape, int seed, float scale = 0.5f)
     {
-        var rng = new System.Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<float>(shape);
         var s = t.AsWritableSpan();
         for (int i = 0; i < s.Length; i++) s[i] = (float)(rng.NextDouble() * 2 - 1) * scale;

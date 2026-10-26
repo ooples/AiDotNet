@@ -48,7 +48,7 @@ public sealed class LossDomainMismatchInventoryTests
             + "to being scored with cross-entropy on detokenized forecasts. Rename here and in "
             + "NeuralNetworkModelTestBase.PredictLeavesLossDomain together.");
 
-        Assert.True(declared!.IsVirtual,
+        Assert.True(declared.IsVirtual,
             $"{TrainingForwardName} is no longer virtual, so no model can override it and the "
             + "condition can never be true for anyone.");
     }
@@ -67,7 +67,7 @@ public sealed class LossDomainMismatchInventoryTests
             + "forecasts. If the override was removed deliberately, the condition needs rewriting "
             + "rather than deleting.");
 
-        Assert.True(declared!.IsVirtual,
+        Assert.True(declared.IsVirtual,
             $"Chronos declares {TrainingForwardName}, but it is not virtual and therefore cannot "
             + "replace the training path dispatched by FinancialModelBase.");
         Assert.Same(typeof(FinancialModelBase<double>), declared.GetBaseDefinition().DeclaringType);

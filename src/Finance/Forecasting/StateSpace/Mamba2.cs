@@ -88,9 +88,6 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly Mamba2Options<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _lastForwardSeqLen;
     private int _lastForwardBatchSize;
@@ -213,7 +210,7 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultMamba2Layers(
-                Architecture, _contextLength, _forecastHorizon, _numFeatures,
+                _contextLength, _forecastHorizon, _numFeatures,
                 _modelDimension, _stateDimension, _numHeads, _expandFactor, _numLayers, _dropout,
                 _convKernelSize, _chunkSize));
             ExtractLayerReferences();
@@ -287,7 +284,7 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
         if (quantiles is not null && quantiles.Length > 0)

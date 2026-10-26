@@ -346,7 +346,7 @@ public class ModelCompressionDeepMathIntegrationTests
         };
         metrics.CalculateDerivedMetrics();
 
-        Assert.True(metrics.IsBetterThan(null));
+        Assert.True(metrics.IsBetterThan(global::AiDotNet.Tests.TestNull.Of<AiDotNet.ModelCompression.CompressionMetrics<double>>()));
     }
 
     #endregion
@@ -588,7 +588,7 @@ public class ModelCompressionDeepMathIntegrationTests
     public async Task WeightClusteringMetadata_InvalidParameters_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new WeightClusteringMetadata<double>(null, 3, 50));
+            new WeightClusteringMetadata<double>(global::AiDotNet.Tests.TestNull.Of<double[]>(), 3, 50));
         Assert.Throws<ArgumentException>(() =>
             new WeightClusteringMetadata<double>(new double[] { 1.0 }, 0, 50));
         Assert.Throws<ArgumentException>(() =>
@@ -720,7 +720,7 @@ public class ModelCompressionDeepMathIntegrationTests
     public async Task WeightClustering_NullWeights_Throws()
     {
         var compressor = new WeightClusteringCompression<double>(numClusters: 3);
-        Assert.Throws<ArgumentNullException>(() => compressor.Compress(null));
+        Assert.Throws<ArgumentNullException>(() => compressor.Compress(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     [Fact(Timeout = 120000)]

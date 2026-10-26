@@ -48,9 +48,6 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
 {
     private readonly ConvolutionalNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -178,16 +175,6 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // Allow any rank tensor - layers will handle dimension adaptation internally
-        // This supports industry standard flexibility where CNNs can accept:
-        // - 1D inputs (which get reshaped internally)
-        // - 2D inputs (treated as single-channel images)
-        // - 3D inputs (standard channels, height, width format)
-        // - 4D+ inputs (batch dimensions preserved)
-
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: each layer processes input and may download results
         Tensor<T> output = input;

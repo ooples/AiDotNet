@@ -91,9 +91,6 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphSAGEOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -806,9 +803,6 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
     /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Ensure 2D input [numNodes, features]
         if (input.Rank == 1)

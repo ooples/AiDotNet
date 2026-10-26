@@ -111,7 +111,7 @@ public static class DelegateState
         if (string.IsNullOrEmpty(owner)) return null;
 
         var parameters = string.Join(";", method.GetParameters()
-            .Select(p => p.ParameterType.AssemblyQualifiedName ?? p.ParameterType.FullName ?? string.Empty));
+            .Select(p => p.ParameterType.AssemblyQualifiedName is { } qualifiedName ? qualifiedName : p.ParameterType.FullName ?? string.Empty));
 
         return MethodScheme + owner + "|" + method.Name + "|" + parameters;
     }
@@ -132,7 +132,7 @@ public static class DelegateState
                 + "which has no name to refer to. Pass a named static method, an expression tree, "
                 + "or a traceable expression if this layer needs to survive a save.");
 
-        if (saved!.StartsWith(MethodScheme, StringComparison.Ordinal))
+        if ((saved ?? throw new InvalidOperationException("saved is null where it is required.")).StartsWith(MethodScheme, StringComparison.Ordinal))
             return LoadMethodReference<TDelegate>(saved.Substring(MethodScheme.Length), layerName, key);
         if (saved.StartsWith(GraphScheme, StringComparison.Ordinal))
             return LoadGraph<TDelegate>(saved.Substring(GraphScheme.Length), layerName, key);
@@ -166,11 +166,13 @@ public static class DelegateState
                 $"it was saved as a traced graph, which only rebuilds a {typeof(ComputationNode<>).Name} "
                 + $"expression, not a {typeof(TDelegate).Name}.");
 
-        var compile = typeof(GraphTrace)
-            .GetMethod(nameof(GraphTrace.Compile), BindingFlags.Public | BindingFlags.Static)!
+        var compile = (typeof(GraphTrace)
+            .GetMethod(nameof(GraphTrace.Compile), BindingFlags.Public | BindingFlags.Static) ?? throw new InvalidOperationException("typeof(GraphTrace) .GetMethod(nameof(GraphTrace.Compile), BindingFlags.Public... is null where it is required."))
             .MakeGenericMethod(numeric);
 
-        return (TDelegate)compile.Invoke(null, [graph, layerName, key])!;
+        return compile.Invoke(null, [graph, layerName, key]) is TDelegate compiled
+            ? compiled
+            : throw Unsaveable(layerName, key, "compiling its saved graph did not produce the delegate.");
     }
 
     /// <summary>Rebuilds a delegate from a reference to a named static method.</summary>
@@ -185,18 +187,19 @@ public static class DelegateState
         if (declaring is null)
             throw Unsaveable(layerName, key, $"the type '{Excerpt(parts[0])}' that declared it could not be loaded.");
 
-        var parameterTypes = parts[2].Length == 0
-            ? []
-            : parts[2].Split(';').Select(n => Type.GetType(n, throwOnError: false)).ToArray();
-
-        if (parameterTypes.Any(t => t is null))
-            throw Unsaveable(layerName, key, "one of its parameter types could not be loaded.");
+        var parameterTypeNames = parts[2].Length == 0 ? Array.Empty<string>() : parts[2].Split(';');
+        var parameterTypes = new Type[parameterTypeNames.Length];
+        for (int i = 0; i < parameterTypeNames.Length; i++)
+        {
+            parameterTypes[i] = Type.GetType(parameterTypeNames[i], throwOnError: false)
+                ?? throw Unsaveable(layerName, key, "one of its parameter types could not be loaded.");
+        }
 
         var method = declaring.GetMethod(
             parts[1],
             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
             binder: null,
-            types: parameterTypes!,
+            types: parameterTypes,
             modifiers: null);
 
         if (method is null)

@@ -53,9 +53,6 @@ public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the hidden layer (number of neurons).
     /// </summary>
@@ -199,9 +196,6 @@ public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Process the input through each layer sequentially
         Tensor<T> current = input;

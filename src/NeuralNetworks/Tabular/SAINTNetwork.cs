@@ -90,9 +90,6 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new SAINTOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -164,6 +161,7 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new SAINTOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -250,9 +248,6 @@ public partial class SAINTNetwork<T> : TabularNeuralNetworkBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: forward pass through each layer sequentially
         return Accelerate(input, () =>

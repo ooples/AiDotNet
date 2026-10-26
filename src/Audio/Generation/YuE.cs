@@ -62,7 +62,6 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Fields
 
     private readonly YuEOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -100,6 +99,7 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture)
     {
         _options = options ?? new YuEOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -115,6 +115,7 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture)
     {
         _options = options ?? new YuEOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
             optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
@@ -297,7 +298,8 @@ public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     private Tensor<T> EncodeStylePrompt(string prompt)
     {
         var embedding = new Tensor<T>([_options.SemanticDim]);
-        int hash = prompt.GetHashCode();
+        // A stable hash: string.GetHashCode() changes per process, so the same prompt would encode differently each run (#2361).
+        int hash = AiDotNet.Helpers.StableHash.Seed(prompt);
         for (int i = 0; i < _options.SemanticDim; i++)
         {
             double val = Math.Sin((hash + i) * 0.1) * 0.5;

@@ -68,9 +68,6 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="GRUNeuralNetwork{T}"/> class with the specified architecture.
     /// </summary>
@@ -215,9 +212,6 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Reset recurrent layer state for deterministic inference.
         // GRU layers carry hidden state across calls — must reset for reproducibility.

@@ -76,8 +76,6 @@ public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
 {
     private readonly PaLIOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -92,6 +90,7 @@ public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         : base(architecture)
     {
         _options = options ?? new PaLIOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -114,6 +113,7 @@ public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         : base(architecture)
     {
         _options = options ?? new PaLIOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));

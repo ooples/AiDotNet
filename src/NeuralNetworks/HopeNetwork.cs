@@ -49,9 +49,6 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HopeNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly int _hiddenDim;
     private readonly int _numCMSLevels;
     private readonly int _numRecurrentLayers;
@@ -223,9 +220,6 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
     /// </summary>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
 
         var current = input;

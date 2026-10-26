@@ -573,7 +573,7 @@ public class ServingIntegrationTests
         Assert.Equal(1, paddedMatrix.Rows);
         Assert.Equal(5, paddedMatrix.Columns);
         Assert.NotNull(attentionMask);
-        Assert.Equal(1.0, attentionMask![0, 0]);
+        Assert.Equal(1.0, attentionMask[0, 0]);
         Assert.Equal(1.0, attentionMask[0, 4]);
     }
 

@@ -58,7 +58,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 public partial class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly EfficientSAMOptions _options;
-    public override ModelOptions GetOptions() => _options;
     protected override double DefaultLearningRate => _options.LearningRate;
     protected override double DefaultWeightDecay => _options.WeightDecay;
 

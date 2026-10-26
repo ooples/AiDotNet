@@ -70,9 +70,6 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly SparseNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -221,10 +218,6 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
         // Validate input shape before any processing (including GPU path)
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(SparseNeuralNetwork<T>), "forward pass");
-
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         Tensor<T> output = input;
         foreach (var layer in Layers)

@@ -55,14 +55,14 @@ namespace AiDotNet.SpeechRecognition.NeMo;
                 Source = "Rekesh et al. 2023, Sec. 4.1: Fast Conformer models were trained using cosine scheduler with a 15k linear warmup, AdamW, global batch size 2048 across 32 GPUs. No learning rate is declared here because the paper states peak rates per decoder (0.0025 RNNT, 0.001 CTC) and this model is neither.")]
 public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly NemotronSpeechOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly NemotronSpeechOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public NemotronSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, NemotronSpeechOptions? options = null) : base(architecture) { _options = options ?? new NemotronSpeechOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public NemotronSpeech(NeuralNetworkArchitecture<T> architecture, NemotronSpeechOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new NemotronSpeechOptions(); _useNativeMode = true; _optimizer = optimizer
+    public NemotronSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, NemotronSpeechOptions? options = null) : base(architecture) { _options = options ?? new NemotronSpeechOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public NemotronSpeech(NeuralNetworkArchitecture<T> architecture, NemotronSpeechOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new NemotronSpeechOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
         ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 

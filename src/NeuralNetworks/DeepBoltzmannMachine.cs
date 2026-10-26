@@ -61,9 +61,6 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     private readonly DeepBoltzmannMachineOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the bias vectors for each layer in the network.
     /// </summary>
@@ -596,9 +593,6 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Use Layers-based forward pass for supervised prediction
         if (Layers.Count > 0)

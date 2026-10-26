@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -70,9 +71,6 @@ namespace AiDotNet.NeuralNetworks;
 public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IGpt4VisionModel<T>
 {
     private readonly Gpt4VisionOptions _options;
-
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
@@ -865,7 +863,7 @@ Then: SUGGESTIONS: list";
             else
             {
                 var parts = line.Split(':');
-                if (parts.Length >= 2 && double.TryParse(parts[^1].Trim(), out double score))
+                if (parts.Length >= 2 && double.TryParse(parts[^1].Trim(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double score))
                 {
                     scores[parts[0].Trim()] = NumOps.FromDouble(score / 10.0);
                 }
@@ -1514,9 +1512,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         SetTrainingMode(false);
         return Accelerate(input, () => ForwardImageEmbedding(input));

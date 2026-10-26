@@ -83,9 +83,6 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new AutoIntOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -123,6 +120,7 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new AutoIntOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         // Reuse the same resolved instance that was passed to base(...)
         _lossFunction = LossFunction;
         _optimizer = optimizer
@@ -157,8 +155,6 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Accelerate(input, () =>
         {

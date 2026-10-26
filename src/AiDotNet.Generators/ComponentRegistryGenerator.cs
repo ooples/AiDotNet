@@ -252,7 +252,7 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         var xmlDoc = componentClass.GetDocumentationCommentXml();
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
-            summary = ExtractXmlElement(xmlDoc, "summary");
+            summary = ExtractXmlElement((xmlDoc ?? throw new System.InvalidOperationException("xmlDoc is null where it is required.")), "summary");
         }
 
         return new ComponentEntryData(

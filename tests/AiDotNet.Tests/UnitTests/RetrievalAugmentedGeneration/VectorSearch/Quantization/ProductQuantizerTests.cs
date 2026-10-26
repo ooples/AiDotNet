@@ -64,8 +64,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Quan
             Assert.Equal(ksub, pq.CentroidsPerSubspace);
             Assert.Equal(Dim / m, pq.SubDimension);
 
-            var books = pq.Codebooks!;
-            Assert.Equal(m, books.Length);
+            var books = pq.Codebooks;
+            Assert.Equal(m, (books ?? throw new InvalidOperationException("books is null where it is required.")).Length);
             for (int mm = 0; mm < m; mm++)
             {
                 Assert.Equal(ksub, books[mm].Length);

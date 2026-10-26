@@ -100,7 +100,7 @@ public class QuantizationAwareTrainingTests
             numResBlocks: 1, attentionResolutions: Array.Empty<int>(), contextDim: 16, numHeads: 1,
             inputHeight: 8, seed: 42);
         var model = new DDPMModel<double>(channels: 3, imageSize: 8, unet: unet, seed: 42);
-        var rng = new Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         var shape = new[] { 1, 3, 8, 8 };
 
         var x0 = new Tensor<double>(shape);

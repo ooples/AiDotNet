@@ -85,9 +85,6 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new FTTransformerOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -125,6 +122,7 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ??= NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new FTTransformerOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction;
         // FT-Transformer (Gorishniy et al., 2021 — arXiv:2106.11959) is trained with
         // AdamW at a LOW learning rate: the paper's default is lr=1e-4 with weight
@@ -183,8 +181,6 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Accelerate(input, () =>
         {

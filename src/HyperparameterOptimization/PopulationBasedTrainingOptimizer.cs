@@ -180,8 +180,8 @@ public class PopulationBasedTrainingOptimizer<T, TInput, TOutput> : Hyperparamet
 
         // Sort by performance
         var sorted = Maximize
-            ? scoredMembers.OrderByDescending(m => _numOps.ToDouble(m.LastScore!)).ToList()
-            : scoredMembers.OrderBy(m => _numOps.ToDouble(m.LastScore!)).ToList();
+            ? scoredMembers.OrderByDescending(m => _numOps.ToDouble((m.LastScore ?? throw new InvalidOperationException("m.LastScore is null where it is required.")))).ToList()
+            : scoredMembers.OrderBy(m => _numOps.ToDouble((m.LastScore ?? throw new InvalidOperationException("m.LastScore is null where it is required.")))).ToList();
 
         // Determine how many members will exploit
         int numToExploit = Math.Max(1, (int)(_populationSize * _exploitFraction));
@@ -381,13 +381,13 @@ public class PopulationBasedTrainingOptimizer<T, TInput, TOutput> : Hyperparamet
             if (scoredMembers.Count == 0) return null;
 
             var best = Maximize
-                ? scoredMembers.OrderByDescending(m => _numOps.ToDouble(m.LastScore!)).First()
-                : scoredMembers.OrderBy(m => _numOps.ToDouble(m.LastScore!)).First();
+                ? scoredMembers.OrderByDescending(m => _numOps.ToDouble((m.LastScore ?? throw new InvalidOperationException("m.LastScore is null where it is required.")))).First()
+                : scoredMembers.OrderBy(m => _numOps.ToDouble((m.LastScore ?? throw new InvalidOperationException("m.LastScore is null where it is required.")))).First();
 
             return new PopulationMemberInfo(
                 best.MemberId,
                 new Dictionary<string, object>(best.Configuration),
-                _numOps.ToDouble(best.LastScore!),
+                _numOps.ToDouble((best.LastScore ?? throw new InvalidOperationException("best.LastScore is null where it is required."))),
                 best.StepCount,
                 best.Trials.Count
             );

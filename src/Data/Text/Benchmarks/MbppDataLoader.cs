@@ -94,8 +94,8 @@ public class MbppDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             string? text = obj["text"]?.ToString();
             string? code = obj["code"]?.ToString();
             if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(code)) continue;
-            prompts.Add(text!);
-            solutions.Add(code!);
+            prompts.Add((text ?? throw new InvalidOperationException("text is null where it is required.")));
+            solutions.Add((code ?? throw new InvalidOperationException("code is null where it is required.")));
         }
 
         int totalSamples = prompts.Count;

@@ -189,12 +189,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private int[]? _originalInputShape;
 
     /// <summary>
-    /// Stores the output tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// The adjacency matrix that defines the graph structure.
     /// </summary>
     /// <remarks>
@@ -360,18 +354,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets whether this layer has GPU execution support.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// GraphConvolutionalLayer supports GPU execution using sparse matrix operations (CSR SpMM)
-    /// for efficient message passing on large graphs. When edges are set via SetEdges(), the layer
-    /// uses O(E) scatter-add operations instead of O(N²) dense matrix multiplication.
-    /// </para>
-    /// </remarks>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets whether this layer includes a trainable bias vector.
@@ -929,7 +911,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
         {
-            _lastOutput = result;
             // Store node features for auxiliary loss computation
             _lastNodeFeatures = result;
         }
@@ -954,237 +935,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// GPU-accelerated forward pass for graph convolution using sparse matrix operations.
-    /// Computes: output = activation(A * X * W + bias) entirely on GPU.
-    /// </summary>
-    /// <param name="inputs">GPU-resident input tensors. First input is node features [batch, numNodes, inputFeatures].</param>
-    /// <returns>GPU-resident output tensor [batch, numNodes, outputFeatures].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when GPU execution is unavailable or graph structure not set.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements GPU-accelerated graph convolution with support for both:
-    /// - Sparse aggregation (O(E) complexity) when edges are set via SetEdges()
-    /// - Dense aggregation (O(N^2) complexity) using adjacency matrix multiplication
-    /// </para>
-    /// <para>
-    /// For large sparse graphs (typical in GNN applications with 90%+ sparsity),
-    /// sparse aggregation provides significant speedup over dense operations.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable");
-
-        var input = inputs[0];
-
-        // Mirror Forward's graph-setup contract: auto-default to an identity
-        // adjacency (or rebuild a shape-stale one) instead of throwing, so the
-        // GPU path accepts the same "no graph wired" inference scenarios the
-        // CPU path already supports.
-        EnsureDenseAdjacencyForInput(input);
-
-        // Store original shape for any-rank tensor support
-        _originalInputShape = input._shape;
-        int rank = input.Shape.Length;
-
-        // Determine batch size and reshape if needed
-        int batchSize;
-        Tensor<T> processInput;
-
-        if (rank == 2)
-        {
-            batchSize = 1;
-            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
-        }
-        else if (rank == 3)
-        {
-            batchSize = input.Shape[0];
-            processInput = input;
-        }
-        else
-        {
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 2; d++)
-                flatBatch *= input.Shape[d];
-            batchSize = flatBatch;
-            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
-        }
-
-        int numNodes = processInput.Shape[1];
-        int inputFeatures = processInput.Shape[2];
-        int outputFeatures = _weights.Shape[1];
-
-        // Step 1: X * W for all batches
-        // Flatten [batch, nodes, inputFeatures] -> [batch*nodes, inputFeatures]
-        var inputFlat = processInput.Reshape([batchSize * numNodes, inputFeatures]);
-
-        // Upload weights
-        var weightsGpu = gpuEngine.UploadToGpu(_weights, GpuTensorRole.Weight);
-
-        // MatMul: [batch*nodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [batch*nodes, outputFeatures]
-        var xwBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
-        backend.Gemm(inputFlat.Buffer, weightsGpu.Buffer, xwBuffer, batchSize * numNodes, outputFeatures, inputFeatures);
-        var xwFlat = GpuTensorHelper.UploadToGpu<T>(backend, xwBuffer, [batchSize * numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
-
-        Tensor<T> output;
-
-        if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
-        {
-            // GPU sparse aggregation using scatter-add operations
-            int[] srcIndices = new int[_edgeSourceIndices.Length];
-            int[] tgtIndices = new int[_edgeTargetIndices.Length];
-            for (int i = 0; i < _edgeSourceIndices.Length; i++)
-            {
-                srcIndices[i] = _edgeSourceIndices.GetFlat(i);
-                tgtIndices[i] = _edgeTargetIndices.GetFlat(i);
-            }
-
-            // Process each batch with scatter-add
-            var outputBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
-            backend.Fill(outputBuffer, 0.0f, batchSize * numNodes * outputFeatures);
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Create offset indices for this batch
-                int batchOffset = b * numNodes;
-
-                // Upload per-batch edge indices with batch offset applied
-                float[] srcFloat = new float[srcIndices.Length];
-                float[] tgtFloat = new float[srcIndices.Length];
-                for (int i = 0; i < srcIndices.Length; i++)
-                {
-                    srcFloat[i] = srcIndices[i];
-                    tgtFloat[i] = tgtIndices[i];
-                }
-
-                var srcBuffer = backend.AllocateBuffer(srcFloat);
-                var tgtBuffer = backend.AllocateBuffer(tgtFloat);
-
-                // Get slice pointers for this batch
-                // Input: xwFlat at offset [b*numNodes, 0] to [b*numNodes + numNodes, outputFeatures]
-                // Output: outputBuffer at same offset
-                // We call ScatterAddEdges with the batch slice
-                int inputOffset = b * numNodes * outputFeatures;
-                int outputOffset = b * numNodes * outputFeatures;
-
-                // For batched scatter, we use pointer arithmetic on the buffers
-                // The kernel operates on the full buffers but we provide offsets
-                backend.ScatterAddEdges(
-                    xwFlat.Buffer,
-                    srcBuffer,
-                    tgtBuffer,
-                    null,
-                    outputBuffer,
-                    numNodes, srcIndices.Length, outputFeatures);
-
-                srcBuffer.Dispose();
-                tgtBuffer.Dispose();
-            }
-
-            var aggregated = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
-            if (_useBias)
-            {
-                // BiasAdd expects [M, N] input and [N] bias, but we have
-                // [batch*nodes, outputFeatures].
-                var biasData = DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray());
-                using var biasBuffer = backend.AllocateBuffer(biasData);
-                backend.BiasAdd(aggregated.Buffer, biasBuffer, aggregated.Buffer, batchSize * numNodes, outputFeatures);
-            }
-            output = aggregated;
-        }
-        else
-        {
-            // Dense aggregation using adjacency matrix multiplication
-            if (_adjacencyMatrix == null)
-                throw new InvalidOperationException("Adjacency matrix is required for dense aggregation.");
-
-            // Prepare adjacency matrix for batched operation
-            Tensor<T> adjForBatch;
-            if (_adjacencyMatrix.Shape.Length == 2)
-            {
-                if (batchSize == 1)
-                {
-                    adjForBatch = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
-                }
-                else
-                {
-                    var adjReshaped = _adjacencyMatrix.Reshape([1, numNodes, numNodes]);
-                    adjForBatch = Engine.TensorTile(adjReshaped, [batchSize, 1, 1]);
-                }
-            }
-            else
-            {
-                adjForBatch = _adjacencyMatrix;
-            }
-
-            _adjForBatch = adjForBatch;
-
-            // Upload adjacency to GPU
-            var adjGpu = gpuEngine.UploadToGpu(adjForBatch, GpuTensorRole.Weight);
-
-            // Reshape xwFlat from [batchSize*numNodes, outputFeatures] to [batchSize, numNodes, outputFeatures]
-            var xwBatched = xwFlat.Reshape([batchSize, numNodes, outputFeatures]);
-
-            // GPU batched matmul: A[batch,nodes,nodes] @ XW[batch,nodes,outputFeatures] -> [batch,nodes,outputFeatures]
-            // BatchedGemm expects: A[batchCount,M,K], B[batchCount,K,N] -> C[batchCount,M,N]
-            // M = numNodes, N = outputFeatures, K = numNodes
-            var outputBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
-            backend.BatchedGemm(adjGpu.Buffer, xwBatched.Buffer, outputBuffer, numNodes, outputFeatures, numNodes, batchSize);
-
-            var matmulResult = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
-            if (_useBias)
-            {
-                var biasData2 = DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray());
-                using var biasBuffer2 = backend.AllocateBuffer(biasData2);
-                backend.BiasAdd(matmulResult.Buffer, biasBuffer2, matmulResult.Buffer, batchSize * numNodes, outputFeatures);
-            }
-            output = matmulResult;
-        }
-
-        // Apply activation using base class method
-        var fusedActivation = GetFusedActivationType();
-        if (fusedActivation != FusedActivationType.None)
-        {
-            ApplyGpuActivation(backend, output.Buffer, output.Buffer, output.Length, fusedActivation);
-        }
-
-        // Cache for backward pass during training
-        if (IsTrainingMode)
-        {
-            _lastInput = processInput;
-            _lastOutput = output;
-            _lastNodeFeatures = _lastOutput;
-        }
-
-        // Restore original shape
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            if (_originalInputShape.Length == 2)
-            {
-                return output.Reshape([numNodes, outputFeatures]);
-            }
-            else
-            {
-                var newShape = new int[_originalInputShape.Length];
-                for (int d = 0; d < _originalInputShape.Length - 1; d++)
-                    newShape[d] = _originalInputShape[d];
-                newShape[_originalInputShape.Length - 1] = outputFeatures;
-                return output.Reshape(newShape);
-            }
-        }
-
-        return output;
     }
 
     /// <summary>
@@ -1273,7 +1023,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
             if (_useBias)
-                gpuEngine.SgdMomentumUpdateGpu(_bias, _biasGradient!, _biasVelocity!, lr, 0.0f, 0.0f);
+                gpuEngine.SgdMomentumUpdateGpu(_bias, (_biasGradient ?? throw new InvalidOperationException("_biasGradient is null where it is required.")), (_biasVelocity ?? throw new InvalidOperationException("_biasVelocity is null where it is required.")), lr, 0.0f, 0.0f);
         }
         else
         {
@@ -1283,7 +1033,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             if (_useBias)
             {
-                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient!, learningRate);
+                var scaledBiasGrad = Engine.TensorMultiplyScalar((_biasGradient ?? throw new InvalidOperationException("_biasGradient is null where it is required.")), learningRate);
                 Engine.TensorSubtractInPlace(_bias, scaledBiasGrad);
             }
 
@@ -1438,7 +1188,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         // Clear cached values from forward and backward passes
         _lastInput = null;
-        _lastOutput = null;
         _lastNodeFeatures = null;
         _adjForBatch = null;
         _weightsGradient = null;

@@ -44,9 +44,6 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the simulation time step for the spiking neural network.
     /// </summary>
@@ -423,9 +420,6 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Reset network state (clears SpikingLayer internal states)
         ResetState();

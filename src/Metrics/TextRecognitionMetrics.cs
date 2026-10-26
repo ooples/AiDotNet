@@ -135,7 +135,7 @@ public static class TextRecognitionMetrics
             current[0] = i;
             for (int j = 1; j <= m; j++)
             {
-                bool equal = string.Equals(source![i - 1], target![j - 1], StringComparison.Ordinal);
+                bool equal = string.Equals((source ?? throw new InvalidOperationException("source is null where it is required."))[i - 1], (target ?? throw new InvalidOperationException("target is null where it is required."))[j - 1], StringComparison.Ordinal);
                 int substitution = previous[j - 1] + (equal ? 0 : 1);
                 int deletion = previous[j] + 1;
                 int insertion = current[j - 1] + 1;
@@ -382,7 +382,7 @@ public static class TextRecognitionMetrics
             return tokens;
         }
 
-        foreach (string token in value!.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        foreach (string token in (value ?? throw new InvalidOperationException("value is null where it is required.")).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
         {
             tokens.Add(token);
         }

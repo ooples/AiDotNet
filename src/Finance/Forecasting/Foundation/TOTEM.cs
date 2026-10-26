@@ -85,9 +85,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly TOTEMOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _contextLength;
     private int _forecastHorizon;
     private int _hiddenDimension;
@@ -465,7 +462,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
             throw new NotSupportedException("TOTEM does not support quantile forecasting. Pass null for point forecasts.");
@@ -646,7 +643,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private Tensor<T> VectorQuantizeTraceable(Tensor<T> encoderOutput)
     {
         if (_codebooks is null) InitializeCodebooks();
-        var codebooks = _codebooks!;
+        var codebooks = _codebooks;
 
         int totalLen = encoderOutput.Length;
         int dimPerCodebook = Math.Max(1, _codebookDimension);
@@ -672,7 +669,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         // codebook [1, C, K, D] → diff [P, C, K, D] → sum(diff²) → [P, C, K].
         // codebooks shape: [numCodebooks, codebookSize, codebookDim] → add batch axis.
         var headExpanded = Engine.Reshape(head, new[] { numPositions, _numCodebooks, 1, dimPerCodebook });
-        var codebookExpanded = Engine.Reshape(codebooks, new[] { 1, _numCodebooks, _codebookSize, dimPerCodebook });
+        var codebookExpanded = Engine.Reshape((codebooks ?? throw new InvalidOperationException("codebooks is null where it is required.")), new[] { 1, _numCodebooks, _codebookSize, dimPerCodebook });
         var diff = Engine.TensorSubtract(headExpanded, codebookExpanded);
         var diffSq = Engine.TensorMultiply(diff, diff);
         var distances = Engine.ReduceSum(diffSq, new[] { 3 }, keepDims: false);

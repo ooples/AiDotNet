@@ -58,9 +58,6 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HopfieldNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the weight matrix that stores the connection strengths between neurons.
     /// </summary>
@@ -406,9 +403,6 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Convert input tensor to vector
         Vector<T> inputVector = input.ToVector();

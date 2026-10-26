@@ -51,7 +51,7 @@ public class FederatedLearningAsyncIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.Equal(mode.ToString(), metadata!.AsyncModeUsed);
+        Assert.Equal(mode.ToString(), metadata.AsyncModeUsed);
         Assert.True(metadata.RoundsCompleted >= 1);
     }
 

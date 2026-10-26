@@ -56,9 +56,6 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
 {
     private readonly SelfOrganizingMapNNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The neuron codebook: shape [numNeurons, inputDimension]. Row i is the prototype vector of
     /// neuron i (row-major over the [mapHeight, mapWidth] grid, i = y * mapWidth + x).
@@ -194,7 +191,7 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // NO GPU LAYER-CHAIN FAST PATH HERE. TryForwardGpuOptimized delegates to ForwardGpu, which
+        // NO GPU LAYER-CHAIN FAST PATH HERE. The removed GPU fast path delegated to ForwardGpu, which
         // walks the LAYER CHAIN -- and this model deliberately has none: InitializeLayers is empty
         // because a SOM's parameters are its codebook in _weights, not a stack of layers. Walking an
         // empty chain returns the input verbatim, so with a DirectGpuTensorEngine (the default on

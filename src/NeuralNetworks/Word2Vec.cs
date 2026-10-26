@@ -69,9 +69,6 @@ namespace AiDotNet.NeuralNetworks
     {
         private readonly Word2VecOptions _options;
 
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _options;
-
         #region Fields
 
         /// <summary>
@@ -304,9 +301,6 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         public Tensor<T> Forward(Tensor<T> input)
         {
-            // GPU-resident optimization for high performance
-            if (TryForwardGpuOptimized(input, out var gpuResult))
-                return gpuResult;
 
             Tensor<T> output = input;
             foreach (var layer in Layers)

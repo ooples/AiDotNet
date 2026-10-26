@@ -1112,7 +1112,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         return InputContractTensorFactory.CreateValid<T>(
             shape,
-            _cachedOutputDomain!.Value,
+            (_cachedOutputDomain ?? throw new InvalidOperationException("_cachedOutputDomain is null where it is required.")),
             rng);
     }
 
@@ -3055,14 +3055,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         TimeSpan cpuStart = process.TotalProcessorTime;
         var totalTimer = System.Diagnostics.Stopwatch.StartNew();
 
-        WritePerformanceProgress(outputDirectory!, performanceFileName, "construct");
+        WritePerformanceProgress(outputDirectory, performanceFileName, "construct");
         var constructTimer = System.Diagnostics.Stopwatch.StartNew();
         using var network = CreateNetwork();
         constructTimer.Stop();
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
 
-        WritePerformanceProgress(outputDirectory!, performanceFileName, "cold-forward");
+        WritePerformanceProgress(outputDirectory, performanceFileName, "cold-forward");
         var coldForwardTimer = System.Diagnostics.Stopwatch.StartNew();
         // Benchmark a persistent production inference session. A one-off Predict from the default
         // training state intentionally restores that state on return; for a streamed foundation
@@ -3092,7 +3092,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var steadyForwardMs = new double[steadyForwardSamples];
         for (int i = 0; i < steadyForwardSamples; i++)
         {
-            WritePerformanceProgress(outputDirectory!, performanceFileName, $"steady-forward-{i + 1}");
+            WritePerformanceProgress(outputDirectory, performanceFileName, $"steady-forward-{i + 1}");
             var timer = System.Diagnostics.Stopwatch.StartNew();
             _ = network.Predict(input);
             timer.Stop();
@@ -3119,7 +3119,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // dozens of false shape failures and prevented it from reaching the expensive phases
             // that it exists to measure. Always derive this target from the exact tensor consumed
             // by BuildTrainingObjective; CrossEntropy is not special in this respect.
-            WritePerformanceProgress(outputDirectory!, performanceFileName, "training-target-shape");
+            WritePerformanceProgress(outputDirectory, performanceFileName, "training-target-shape");
             var targetPreparationTimer = System.Diagnostics.Stopwatch.StartNew();
             // BuildTrainingObjective switches the network back to training mode before it invokes
             // ForwardForTraining. Some streamed and stateful models expose a deliberately different
@@ -3145,7 +3145,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // charged as retained training memory.
             _arena.Reset();
 
-            WritePerformanceProgress(outputDirectory!, performanceFileName, "tape-forward");
+            WritePerformanceProgress(outputDirectory, performanceFileName, "tape-forward");
             using var tape = new GradientTape<T>();
             var tapeForwardTimer = System.Diagnostics.Stopwatch.StartNew();
             var objective = nn.BuildTrainingObjective(input, objectiveTarget, nn.DefaultLossFunction);
@@ -3153,7 +3153,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             tapeForwardMs = tapeForwardTimer.Elapsed.TotalMilliseconds;
             tapeEntries = tape.EntryCount;
 
-            WritePerformanceProgress(outputDirectory!, performanceFileName, "backward");
+            WritePerformanceProgress(outputDirectory, performanceFileName, "backward");
             var backwardTimer = System.Diagnostics.Stopwatch.StartNew();
             var gradients = tape.ComputeGradients(objective, sources: null);
             backwardTimer.Stop();
@@ -3169,7 +3169,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double trainStepMs = 0.0;
         if (!TrainingInvariantsNotApplicable(network))
         {
-            WritePerformanceProgress(outputDirectory!, performanceFileName, "train-step");
+            WritePerformanceProgress(outputDirectory, performanceFileName, "train-step");
             var trainTimer = System.Diagnostics.Stopwatch.StartNew();
             TrainOn(network, input, target);
             trainTimer.Stop();
@@ -3183,7 +3183,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         long parameterCount = 0;
         int parameterSlots = 0;
         long trainingBudgetParameterCount = 0;
-        WritePerformanceProgress(outputDirectory!, performanceFileName, "parameter-enumeration");
+        WritePerformanceProgress(outputDirectory, performanceFileName, "parameter-enumeration");
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> parameterNetwork)
         {
             // Census metadata needs scalar and slot counts, not parameter values. The canonical
@@ -3279,9 +3279,9 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             projectedMoreDataMs = trainStepMs * moreDataIterations,
         };
 
-        Directory.CreateDirectory(outputDirectory!);
-        WritePerformanceProgress(outputDirectory!, performanceFileName, "write-record");
-        string destination = Path.Combine(outputDirectory!, performanceFileName + ".json");
+        Directory.CreateDirectory(outputDirectory);
+        WritePerformanceProgress(outputDirectory, performanceFileName, "write-record");
+        string destination = Path.Combine(outputDirectory, performanceFileName + ".json");
         string temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
         string json = Newtonsoft.Json.JsonConvert.SerializeObject(sample, Newtonsoft.Json.Formatting.Indented);
         File.WriteAllText(temporary, json);
@@ -7298,7 +7298,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         {
             if (_snapshot is null)
             {
-                _network.UpdateParameters(_flatStart!);
+                _network.UpdateParameters((_flatStart ?? throw new InvalidOperationException("_flatStart is null where it is required.")));
                 return;
             }
 
@@ -7321,7 +7321,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
             var live = new List<Tensor<T>>();
             foreach (var chunk in EnumerateParameterChunks(_network)) live.Add(chunk);
-            return GatherFrom(live, _sampledChunks!, _sampleLength);
+            return GatherFrom(live, (_sampledChunks ?? throw new InvalidOperationException("_sampledChunks is null where it is required.")), _sampleLength);
         }
     }
 

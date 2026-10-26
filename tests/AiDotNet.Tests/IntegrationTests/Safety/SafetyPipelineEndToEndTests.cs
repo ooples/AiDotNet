@@ -28,7 +28,7 @@ public class SafetyPipelineEndToEndTests
         // stopped flagging jailbreak strings process-wide after ANY build — even
         // for freshly created pipelines. Build a model (swapping the global engine),
         // then assert jailbreak detection still fires on a fresh pipeline.
-        var rng = new System.Random(2024);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2024);
         var x = new AiDotNet.Tensors.LinearAlgebra.Matrix<double>(60, 4);
         var y = new AiDotNet.Tensors.LinearAlgebra.Vector<double>(60);
         for (int i = 0; i < 60; i++)

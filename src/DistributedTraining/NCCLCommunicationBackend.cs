@@ -148,7 +148,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"NCCL initialization failed: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"NCCL initialization failed: {ex}");
             _ncclAvailable = false;
         }
 
@@ -468,7 +468,11 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
             {
                 foreach (var connection in _tcpConnections.Values)
                 {
-                    try { connection.Close(); } catch { }
+                    try { connection.Close(); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Trace.TraceWarning($"NCCL backend: closing a TCP connection failed ({ex.GetType().Name}: {ex.Message}).");
+                    }
                 }
                 _tcpConnections.Clear();
             }

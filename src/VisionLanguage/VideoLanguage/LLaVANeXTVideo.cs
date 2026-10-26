@@ -63,8 +63,6 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
 {
     private readonly LLaVANeXTVideoOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -79,6 +77,7 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
         : base(architecture)
     {
         _options = options ?? new LLaVANeXTVideoOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -101,9 +100,11 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
         : base(architecture)
     {
         _options = options ?? new LLaVANeXTVideoOptions();
+        Options = _options;
         if (architecture.InputType == InputType.FourDimensional && architecture.InputHeight > 0)
         {
             _options = new LLaVANeXTVideoOptions(_options) { ImageSize = architecture.InputHeight };
+            Options = _options;
         }
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);

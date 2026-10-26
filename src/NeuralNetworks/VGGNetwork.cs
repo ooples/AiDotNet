@@ -70,9 +70,6 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VGGOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -255,9 +252,6 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
 
         var expectedShape = Architecture.GetInputShape();
@@ -295,9 +289,17 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         }
 
         Tensor<T> output = processedInput;
-        foreach (var layer in Layers)
+        for (int i = 0; i < Layers.Count; i++)
         {
-            output = layer.Forward(output);
+            // Each convolution, batch norm and ReLU runs as one folded convolution in inference
+            // (InferenceFusionSettings.FoldBatchNormIntoConvolution).
+            if (ConvolutionBatchNormFolding<T>.TryForwardSequence(Layers, i, output, out var folded, out int consumed))
+            {
+                output = folded;
+                i += consumed - 1;
+                continue;
+            }
+            output = Layers[i].Forward(output);
         }
 
         // Remove batch dimension if we added it

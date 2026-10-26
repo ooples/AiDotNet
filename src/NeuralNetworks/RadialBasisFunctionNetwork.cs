@@ -59,9 +59,6 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
     private readonly RadialBasisFunctionNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the size of the input layer (number of input features).
     /// </summary>
@@ -301,9 +298,6 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Validate input
         if (input == null)

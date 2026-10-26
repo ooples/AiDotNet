@@ -1,3 +1,12 @@
+// The sub-layers below are declared non-nullable and built lazily in EnsureInitialized, once the
+// embedding size is known. The annotation is load-bearing rather than cosmetic: the trainable-parameter
+// generator reads it to tell a child that is not built YET from a child that is genuinely OPTIONAL.
+// A non-nullable child that is still null makes DeclaredSubLayerShapes bail and retry; a nullable one is
+// skipped as configuration and the result is cached, so annotating these as nullable permanently drops
+// them from the declared surface and they report zero parameters. That is what made a deserialize size
+// this layer against its own parameters only and reject the full payload.
+#pragma warning disable CS8618 // Lazily built in EnsureInitialized; see the note above.
+
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -491,12 +500,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     [Scratch]
     private Tensor<T>? _lastFeedForwardOutput;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuNormalized1;
-    [ExternalState]
-    private Tensor<T>? _gpuNormalized2;
-
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -530,11 +533,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _crossAttention.ClearGradients(); _norm2.ClearGradients();
         _feedForward.ClearGradients(); _feedForwardProjection.ClearGradients(); _norm3.ClearGradients();
     }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer can execute on GPU.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Lazy ctor: <see cref="_embeddingSize"/> is resolved from <c>input.Shape[^1]</c>
@@ -571,13 +569,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _dropoutRate = dropoutRate;
         _causal = causal;
 
-        _selfAttention = null!;
-        _norm1 = null!;
-        _crossAttention = null!;
-        _norm2 = null!;
-        _feedForward = null!;
-        _feedForwardProjection = null!;
-        _norm3 = null!;
 
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
@@ -757,25 +748,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
-    /// Named multi-input GPU forward pass. The base wrapper rejects any layer with more than one port, so this layer
-    /// routes its own: the primary tensor under "decoder_input" (or "input"), and the optional "encoder_output".
-    /// </summary>
-    /// <remarks>
-    /// With an encoder output this is the two-input <see cref="ForwardGpu(Tensor{T}[])"/>. Without one there is nothing
-    /// to cross-attend to, so the block runs decoder-only, exactly as <see cref="ForwardTracedPorts"/> does.
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(IReadOnlyDictionary<string, Tensor<T>> inputs)
-    {
-        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
-        if ((!inputs.TryGetValue("decoder_input", out var decoderInput) || decoderInput == null)
-            && (!inputs.TryGetValue("input", out decoderInput) || decoderInput == null))
-            throw new ArgumentException("TransformerDecoderLayer requires 'decoder_input' (or 'input').", nameof(inputs));
-        if (!inputs.TryGetValue("encoder_output", out var encoderOutput) || encoderOutput == null)
-            return ForwardWithoutCrossAttention(decoderInput);
-        return ForwardGpu(decoderInput, encoderOutput);
-    }
-
-    /// <summary>
     /// Not supported for this layer. Use Forward(Tensor&lt;T&gt; input, Tensor&lt;T&gt; encoderOutput) instead.
     /// </summary>
     /// <param name="input">The input tensor.</param>
@@ -942,84 +914,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
-    /// GPU-resident forward pass for the transformer decoder layer.
-    /// Performs self-attention, cross-attention, and feed-forward operations entirely on GPU.
-    /// </summary>
-    /// <param name="inputs">Array containing [decoderInput, encoderOutput] GPU tensors.</param>
-    /// <returns>GPU-resident output tensor.</returns>
-    /// <exception cref="ArgumentException">Thrown when inputs array doesn't contain exactly 2 tensors.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs the entire transformer decoder forward pass on the GPU without downloading
-    /// intermediate results to CPU. All sublayer operations (self-attention, cross-attention, layer normalization,
-    /// feed-forward networks, residual connections) remain GPU-resident for maximum performance.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length < 2)
-            throw new ArgumentException("TransformerDecoderLayer requires two inputs: [decoderInput, encoderOutput]");
-
-        // Lazy ctor path: resolve _embeddingSize from decoder input.Shape[^1] and
-        // construct sublayers before any GPU code dereferences them.
-        EnsureInitializedFromInput(inputs[0]);
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        Tensor<T> decoderInput = inputs[0];
-        Tensor<T> encoderOutput = inputs[1];
-
-        // 1. Self-attention sublayer
-        var selfAttentionOutput = _selfAttention.ForwardGpu(decoderInput);
-        if (_selfDropout is not null) selfAttentionOutput = _selfDropout.ForwardGpu(selfAttentionOutput);
-
-        // 2. First residual connection: input + selfAttentionOutput
-        var residual1 = gpuEngine.AddGpu(decoderInput, selfAttentionOutput);
-
-        // 3. First layer normalization
-        var (normalized1, _, _) = gpuEngine.LayerNormGpu(residual1, _norm1.GetGammaTensor(), _norm1.GetBetaTensor(), Convert.ToDouble(_norm1.GetEpsilon()));
-
-        // 4. Cross-attention sublayer (decoder attends to encoder output)
-        var crossAttentionOutput = _crossAttention.ForwardGpu(normalized1, encoderOutput);
-        if (_crossDropout is not null) crossAttentionOutput = _crossDropout.ForwardGpu(crossAttentionOutput);
-
-        // 5. Second residual connection: normalized1 + crossAttentionOutput
-        var residual2 = gpuEngine.AddGpu(normalized1, crossAttentionOutput);
-
-        // 6. Second layer normalization
-        var (normalized2, _, _) = gpuEngine.LayerNormGpu(residual2, _norm2.GetGammaTensor(), _norm2.GetBetaTensor(), Convert.ToDouble(_norm2.GetEpsilon()));
-
-        // 7. Feed-forward network (two layers)
-        var ffHidden = _feedForward.ForwardGpu(normalized2);
-        var ffProjected = _feedForwardProjection.ForwardGpu(ffHidden);
-        if (_ffnDropout is not null) ffProjected = _ffnDropout.ForwardGpu(ffProjected);
-
-        // 8. Third residual connection: normalized2 + ffProjected
-        var residual3 = gpuEngine.AddGpu(normalized2, ffProjected);
-
-        // 9. Third layer normalization (final output)
-        var (output, _, _) = gpuEngine.LayerNormGpu(residual3, _norm3.GetGammaTensor(), _norm3.GetBetaTensor(), Convert.ToDouble(_norm3.GetEpsilon()));
-
-        // Cache state for backward pass only during training
-        // Skip this expensive download during inference (50% overhead reduction)
-        if (IsTrainingMode)
-        {
-            _gpuNormalized1 = normalized1;
-            _gpuNormalized2 = normalized2;
-            _lastInput = decoderInput;
-            _lastEncoderOutput = encoderOutput;
-            _lastSelfAttentionOutput = selfAttentionOutput;
-            _lastNormalized1 = normalized1;
-            _lastCrossAttentionOutput = crossAttentionOutput;
-            _lastNormalized2 = normalized2;
-            _lastFeedForwardOutput = ffProjected;
-        }
-
-        return output;
-    }
-
-    /// <summary>
     /// Updates the parameters of all sublayers using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for parameter updates.</param>
@@ -1117,10 +1011,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _feedForward.ResetState();
         _feedForwardProjection.ResetState();
         _norm3.ResetState();
-
-        // Clear GPU cached tensors
-        _gpuNormalized1 = null;
-        _gpuNormalized2 = null;
 
         // Clear cached tensors
         _lastInput = null;

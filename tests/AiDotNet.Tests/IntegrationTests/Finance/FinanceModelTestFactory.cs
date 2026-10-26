@@ -454,7 +454,7 @@ internal static class FinanceModelTestFactory
 
         Assert.NotNull(exception);
         Assert.True(exception is FileNotFoundException || exception is InvalidOperationException,
-            $"Unexpected ONNX constructor exception type: {exception!.GetType().Name}");
+            $"Unexpected ONNX constructor exception type: {exception.GetType().Name}");
     }
 
     internal static void RunTradingAgentSmokeTest<T>(Type modelType)
@@ -721,7 +721,9 @@ internal static class FinanceModelTestFactory
         }
 
         int inputSize = GetInputSizeFromOptions(optionsInstance) ?? 4;
-        int outputSize = GetOutputSizeFromOptions(optionsInstance) ?? Math.Max(1, inputSize);
+        // #2147: an output size the options do not name is left unstated. A guess (the input size, the asset count,
+        // the class count) described a model other than the one built, which the model now refuses.
+        int outputSize = GetOutputSizeFromOptions(optionsInstance) ?? 0;
         var architecture = FinanceTestHelpers.CreateArchitecture<T>(inputSize, outputSize);
         configureArchitecture?.Invoke(architecture);
 
@@ -872,7 +874,9 @@ internal static class FinanceModelTestFactory
         }
 
         int inputSize = GetInputSizeFromOptions(optionsInstance) ?? 4;
-        int outputSize = GetOutputSizeFromOptions(optionsInstance) ?? Math.Max(1, inputSize);
+        // #2147: an output size the options do not name is left unstated. A guess (the input size, the asset count,
+        // the class count) described a model other than the one built, which the model now refuses.
+        int outputSize = GetOutputSizeFromOptions(optionsInstance) ?? 0;
         var architecture = FinanceTestHelpers.CreateArchitecture<T>(inputSize, outputSize);
 
         if (optionsInstance != null)
@@ -1060,12 +1064,11 @@ internal static class FinanceModelTestFactory
             return GetIntOption(options, "ForecastHorizon");
         }
 
+        // Only options that ARE the output width. A class or asset count is not: a language model's output is its
+        // vocabulary whatever its sentiment classes, and Black-Litterman emits two values per asset (#2147).
         return GetIntOption(options, "ActionSize")
-            ?? GetIntOption(options, "NumSentimentClasses")
             ?? GetIntOption(options, "OutputSize")
-            ?? GetIntOption(options, "NumClasses")
-            ?? GetIntOption(options, "NumOutputs")
-            ?? GetIntOption(options, "NumAssets");
+            ?? GetIntOption(options, "NumOutputs");
     }
 
     private static bool IsOptionsType(object? options, Type genericTypeDefinition)

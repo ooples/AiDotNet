@@ -68,9 +68,6 @@ public partial class DCGAN<T> : GenerativeAdversarialNetwork<T>
     private readonly int _generatorFeatureMaps;
     private readonly int _discriminatorFeatureMaps;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Creates a DCGAN with default dimensions derived from the architecture.
     /// Per Radford et al. 2016: latent size 100, 64×64 images, 64 feature maps.

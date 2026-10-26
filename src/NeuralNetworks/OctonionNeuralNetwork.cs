@@ -60,9 +60,6 @@ public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly OctonionNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -266,9 +263,6 @@ public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// <returns>The output tensor after processing through all layers.</returns>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
 
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),

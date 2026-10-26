@@ -89,7 +89,7 @@ public sealed class GatedDeltaProductBroadcastRegressionTests
             input[index] = original;
 
             double numerical = (plus - minus) / (2.0 * step);
-            double analytical = gradient![index];
+            double analytical = gradient[index];
             double tolerance = Math.Max(2e-5, Math.Abs(numerical) * 5e-3);
             Assert.True(Math.Abs(numerical - analytical) <= tolerance,
                 $"Input VJP mismatch at {index}: numerical={numerical:R}, " +

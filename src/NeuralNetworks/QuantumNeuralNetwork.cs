@@ -53,9 +53,6 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly QuantumNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the number of qubits used in the quantum neural network.
     /// </summary>
@@ -196,9 +193,6 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Handle any-rank input by reshaping to match expected shape
         var expectedShape = Architecture.GetInputShape();

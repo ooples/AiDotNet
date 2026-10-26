@@ -2,7 +2,10 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Audio.Fingerprinting;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -185,7 +188,16 @@ public class ClapArchitectureTests
     public async Task ContrastiveTraining_ReducesTheLoss()
     {
         await Task.Yield();
-        using var model = ClapReferenceTests.Build(fusion: true);
+        // Without SpecAugment, drop-path and dropout. With them, each step's loss is taken on a freshly augmented
+        // view and over these 16 steps swings between about 0.3 and 1.8 before it settles, so comparing two of those
+        // losses read the draw. Unregularised, the same objective falls from about 2.0 to 0.02.
+        var options = ClapReferenceTests.TinyOptions(fusion: true);
+        options.AudioDropPathRate = 0;
+        options.TextDropoutRate = 0;
+        options.SpecAugmentTimeStripes = 0;
+        options.SpecAugmentFreqStripes = 0;
+        using var model = new CLAPModel<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Embedding, inputSize: 8192, outputSize: 12), options);
         var audio = Audio(2, 6000);
         var captions = Captions();
         // Measured in evaluation mode, on the embeddings: each training step's loss is one draw of text dropout,
@@ -229,6 +241,27 @@ public class ClapArchitectureTests
         return loss / (2 * n);
     }
 
+    /// <summary>
+    /// Options.Seed reaches the towers' stochastic layers. CLAP kept its options to itself, so the seed reached only
+    /// the crop generator, and SpecAugment, drop-path and dropout drew unseeded streams: two models with the same
+    /// seed trained to different weights.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Training_IsReproducibleFromTheOptionsSeed()
+    {
+        await Task.Yield();
+        double[] Trained()
+        {
+            using var model = ClapReferenceTests.Build(fusion: true);
+            var audio = Audio(2, 6000);
+            var captions = Captions();
+            for (int step = 0; step < 3; step++)
+                model.Train(audio, captions);
+            return model.GetParameters().ToArray();
+        }
+
+        Assert.Equal(Trained(), Trained());
+    }
     private static Tensor<double> Audio(int batch, int samples)
     {
         var audio = new Tensor<double>(new[] { batch, samples });
@@ -247,7 +280,7 @@ public class ClapArchitectureTests
         await Task.Yield();
         var layer = new AttentionalFeatureFusionLayer<double>(8, 4);
         layer.SetTrainingMode(false);
-        var rng = new Random(2313);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2313);
         Tensor<double> Map()
         {
             var t = new Tensor<double>(new[] { 2, 8, 4, 4 });
@@ -278,13 +311,13 @@ public class ClapArchitectureTests
             {
                 Assert.True(gradients.TryGetValue(parameters[i], out var gradient) && gradient is not null,
                     $"a {string.Join("x", parameters[i].Shape.ToArray())} parameter received no gradient");
-                foreach (var g in gradient!.ToArray()) largest[i] = Math.Max(largest[i], Math.Abs(g));
+                foreach (var g in gradient.ToArray()) largest[i] = Math.Max(largest[i], Math.Abs(g));
             }
         }
 
         // Both attention branches (local and global context) and their batch norms train.
-        for (int i = 0; i < parameters!.Count; i++)
-            Assert.True(largest![i] > 1e-12,
+        for (int i = 0; i < (parameters ?? throw new InvalidOperationException("parameters is null where it is required.")).Count; i++)
+            Assert.True((largest ?? throw new InvalidOperationException("largest is null where it is required."))[i] > 1e-12,
                 $"parameter {i} ({string.Join("x", parameters[i].Shape.ToArray())}) received only zero gradients");
     }
 }

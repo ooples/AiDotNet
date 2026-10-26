@@ -52,9 +52,6 @@ public partial class SKFlow<T> : OpticalFlowBase<T>
 {
     private readonly SKFlowOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private int _numFeatures;
     private int _numLayers;
     private ConvolutionalLayer<T>? _featureExtract;

@@ -54,8 +54,6 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     }
     private GradientBanditOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<T> _preferences;  // H(a)
     private T _averageReward;
@@ -73,6 +71,7 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     {
         Guard.NotNull(options);
         _options = options;
+        Options = _options;
         _random = RandomHelper.CreateSecureRandom();
         _preferences = new Vector<T>(_options.NumArms);
         for (int i = 0; i < _options.NumArms; i++)

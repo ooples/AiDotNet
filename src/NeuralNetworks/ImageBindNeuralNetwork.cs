@@ -67,9 +67,6 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 {
     private readonly ImageBindOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -284,9 +281,27 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         }
         catch
         {
-            try { audioEncoder?.Dispose(); } catch { }
-            try { textEncoder?.Dispose(); } catch { }
-            try { imageEncoder?.Dispose(); } catch { }
+            try { audioEncoder?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "ImageBind construction failed and releasing its audioEncoder also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
+            try { textEncoder?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "ImageBind construction failed and releasing its textEncoder also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
+            try { imageEncoder?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "ImageBind construction failed and releasing its imageEncoder also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
             throw;
         }
     }

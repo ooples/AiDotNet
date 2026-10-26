@@ -51,9 +51,6 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
 {
     private readonly FeedForwardNeuralNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -490,10 +487,6 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     public Tensor<T> Forward(Tensor<T> input)
     {
         ValidateInputShape(input, "forward pass");
-
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: each layer processes input and may download results
         Tensor<T> output = input;

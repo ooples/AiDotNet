@@ -91,9 +91,6 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     // Removed under AIDN082.
     private readonly StyleGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     // One Adam per network, with the hyperparameters StyleGAN reuses from Progressive GAN (Karras et al.
     // 2018, appendix A.1). The mapping network's runs at a learning
     // rate two orders of magnitude lower. These replace three hand-written Adam loops whose moment
@@ -714,9 +711,6 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Generate(input);
     }

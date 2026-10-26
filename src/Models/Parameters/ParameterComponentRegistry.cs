@@ -100,7 +100,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             var result = new List<IParameterSource<T>>(ordered.Count);
             for (int i = 0; i < ordered.Count; i++)
             {
-                if (ordered[i].Source is not null) result.Add(ordered[i].Source!);
+                if (ordered[i].Source is not null) result.Add((ordered[i].Source ?? throw new InvalidOperationException("ordered[i].Source is null where it is required.")));
             }
             return result;
         }
@@ -313,7 +313,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                 var item = captured.Entries[i];
                 var source = item.Entry.Source;
                 if (source is null) continue;
-                int expected = checked((int)item.ParameterCount!.Value);
+                int expected = checked((int)(item.ParameterCount ?? throw new InvalidOperationException("item.ParameterCount is null where it is required.")));
                 if (expected == 0) continue;
                 var part = source.GetParameters();
                 if (part.Length != expected)
@@ -348,7 +348,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             var entry = item.Entry;
             var source = entry.Source;
             if (source is null) continue;
-            int expected = checked((int)item.ParameterCount!.Value);
+            int expected = checked((int)(item.ParameterCount ?? throw new InvalidOperationException("item.ParameterCount is null where it is required.")));
             if (expected == 0) continue;
 
             var liveChunks = LiveChunksOf(source);
@@ -619,7 +619,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                 if (!captured.Entries[i].ParameterCount.HasValue)
                     throw new ParameterLayoutNotReadyException("restore", layout);
                 fixedParameterCount = checked(
-                    fixedParameterCount + captured.Entries[i].ParameterCount!.Value);
+                    fixedParameterCount + (captured.Entries[i].ParameterCount ?? throw new InvalidOperationException("captured.Entries[i].ParameterCount is null where it is required.")));
             }
         }
         if (variableIndex < 0 && parameters.Length != fixedParameterCount)
@@ -646,7 +646,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             if (source is null) continue;
             int count = i == variableIndex
                 ? checked(parameters.Length - offset)
-                : checked((int)item.ParameterCount!.Value);
+                : checked((int)(item.ParameterCount ?? throw new InvalidOperationException("item.ParameterCount is null where it is required.")));
             if (count == 0) continue;
             var slice = new Vector<T>(count);
             parameters.AsSpan().Slice(offset, count).CopyTo(slice.AsWritableSpan());
@@ -896,13 +896,16 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
         return registered is ComponentCollectionParameterSource<T> collection && collection.ContainsCurrent(candidateCurrent)
             || registered is ComponentAccessorParameterSource<T> accessor
-               && accessor.Current is not null && ReferenceEquals(accessor.Current, candidateCurrent)
-            || candidate is ComponentAccessorParameterSource<T> && ReferenceEquals(candidateCurrent, registered);
+               && accessor.Current is not null && SameReference(accessor.Current, candidateCurrent)
+            || candidate is ComponentAccessorParameterSource<T> && SameReference(candidateCurrent, registered);
     }
+
+    // Identity through object-typed parameters, so the comparison is by reference for any source type.
+    private static bool SameReference(object? left, object? right) => ReferenceEquals(left, right);
 
     private static bool TryGetNetwork(
         IParameterSource<T>? source,
-        out NeuralNetworks.NeuralNetworkBase<T> network)
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out NeuralNetworks.NeuralNetworkBase<T>? network)
     {
         var current = source is ComponentAccessorParameterSource<T> accessor
             ? accessor.Current
@@ -913,7 +916,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             return true;
         }
 
-        network = null!;
+        network = null;
         return false;
     }
 

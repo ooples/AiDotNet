@@ -72,9 +72,6 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
 {
     private readonly WGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private static RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateWganRmsPropOptions()
         => new()
         {
@@ -567,9 +564,6 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Generator.Predict(input);
     }

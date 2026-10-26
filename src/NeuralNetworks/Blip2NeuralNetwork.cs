@@ -81,9 +81,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
 {
     private readonly Blip2Options _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     /// <summary>
@@ -480,9 +477,27 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         catch
         {
             // Attempt every release while preserving the original construction error.
-            try { languageModel?.Dispose(); } catch { }
-            try { qformer?.Dispose(); } catch { }
-            try { visionEncoder?.Dispose(); } catch { }
+            try { languageModel?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "BLIP-2 construction failed and releasing its languageModel also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
+            try { qformer?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "BLIP-2 construction failed and releasing its qformer also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
+            try { visionEncoder?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "BLIP-2 construction failed and releasing its visionEncoder also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
 
             throw;
         }
@@ -1888,9 +1903,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     /// </summary>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
 
         // Extract Q-Former features

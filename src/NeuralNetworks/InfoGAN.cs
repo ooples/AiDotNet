@@ -91,9 +91,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     // Removed under AIDN082.
     private readonly InfoGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions(double learningRate = 2e-4)
         => new()
         {
@@ -732,9 +729,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Mirror Train's noise-only contract (Chen et al. 2016 §3 — public
         // Train(noise, realImages) treats `input` as raw z and concatenates

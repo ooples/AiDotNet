@@ -4200,7 +4200,7 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         transformer.InitializeIncremental(data);
 
         var stateBefore = transformer.GetIncrementalState();
-        long pointsBefore = stateBefore!.PointsProcessed;
+        long pointsBefore = (stateBefore ?? throw new InvalidOperationException("stateBefore is null where it is required.")).PointsProcessed;
 
         // Process several new data points
         for (int i = 0; i < 5; i++)
@@ -4209,7 +4209,7 @@ public class TimeSeriesFeatureExtractionIntegrationTests
         }
 
         var stateAfter = transformer.GetIncrementalState();
-        Assert.Equal(pointsBefore + 5, stateAfter!.PointsProcessed);
+        Assert.Equal(pointsBefore + 5, (stateAfter ?? throw new InvalidOperationException("stateAfter is null where it is required.")).PointsProcessed);
     }
 
     [Fact(Timeout = 120000)]

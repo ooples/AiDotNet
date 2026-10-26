@@ -83,9 +83,6 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphGenerationModelOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the reconstruction error.
     /// </summary>
@@ -859,15 +856,6 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         {
             if (layer is IGraphConvolutionLayer<T> graphLayer)
                 graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
-        }
-
-        if (TryForwardGpuOptimized(input, out var gpuEncoderOutput))
-        {
-            using (gpuEncoderOutput)
-            {
-                using var gpuMean = Engine.TensorMatMul(gpuEncoderOutput, _meanWeights);
-                return Decode(gpuMean);
-            }
         }
 
         // Encode → use mean (deterministic) → decode

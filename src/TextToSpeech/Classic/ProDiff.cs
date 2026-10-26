@@ -75,8 +75,6 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
     private ProDiffDenoiser<T>? _teacher;
     private TrainingDraw? _pendingDraw;
 
-    public override ModelOptions GetOptions() => _options;
-
     public ProDiff(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -85,6 +83,7 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
         : base(architecture)
     {
         _options = options ?? new ProDiffOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
@@ -109,6 +108,7 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
         : base(architecture)
     {
         _options = options ?? new ProDiffOptions();
+        Options = _options;
         ValidateOptions(_options);
         _useNativeMode = true;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);

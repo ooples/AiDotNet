@@ -83,9 +83,6 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new TabNetOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the number of decision steps.
     /// </summary>
@@ -118,6 +115,7 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabNetOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -149,8 +147,6 @@ public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Wrapped in the #1622 verify-then-trust compiled gate; no-op unless acceleration is engaged.
         return Accelerate(input, () =>

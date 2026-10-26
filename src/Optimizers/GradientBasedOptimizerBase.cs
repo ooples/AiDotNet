@@ -2348,6 +2348,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
+    /// Sets the learning rate the next step uses, for a caller that runs its own schedule (the self-supervised
+    /// methods' warmup and cosine decay).
+    /// </summary>
+    /// <param name="learningRate">A finite, non-negative learning rate.</param>
+    internal void SetScheduledLearningRate(double learningRate)
+    {
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate < 0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), learningRate, "The learning rate must be finite and non-negative.");
+        SetLearningRate(learningRate);
+    }
+
+    /// <summary>
     /// Installs (or clears) the learning-rate scheduler on an already-constructed optimizer.
     /// </summary>
     /// <param name="scheduler">The scheduler to drive the learning rate, or <c>null</c> to remove it.</param>

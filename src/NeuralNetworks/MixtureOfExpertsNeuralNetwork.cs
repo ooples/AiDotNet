@@ -85,9 +85,6 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </summary>
     private readonly MixtureOfExpertsOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -347,10 +344,6 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
     {
         TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
             nameof(MixtureOfExpertsNeuralNetwork<T>), "forward pass");
-
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: each layer processes input and may download results
         Tensor<T> output = input;

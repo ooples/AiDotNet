@@ -353,6 +353,9 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
         double threshold = NumOps.ToDouble(Options.ConfidenceThreshold);
 
         var candidates = new List<Detection<T>>();
+        // The detection loss multiplies the stage's regression targets by these weights, so the predicted deltas are
+        // divided by them here; unit weights (the default) leave them raw.
+        var regressionWeights = _detectionLoss.StageBoxRegressionWeights(0);
         for (int r = 0; r < count; r++)
         {
             double maxLogit = double.NegativeInfinity;
@@ -376,10 +379,10 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
                 double score = probabilities[c] / sum;
                 if (score < threshold) continue;
 
-                double cx = px1 + pw / 2 + NumOps.ToDouble(boxDeltas[r, c * 4]) * pw;
-                double cy = py1 + ph / 2 + NumOps.ToDouble(boxDeltas[r, c * 4 + 1]) * ph;
-                double w = pw * Math.Exp(Math.Min(NumOps.ToDouble(boxDeltas[r, c * 4 + 2]), BoxDeltaClamp));
-                double h = ph * Math.Exp(Math.Min(NumOps.ToDouble(boxDeltas[r, c * 4 + 3]), BoxDeltaClamp));
+                double cx = px1 + pw / 2 + NumOps.ToDouble(boxDeltas[r, c * 4]) / regressionWeights[0] * pw;
+                double cy = py1 + ph / 2 + NumOps.ToDouble(boxDeltas[r, c * 4 + 1]) / regressionWeights[1] * ph;
+                double w = pw * Math.Exp(Math.Min(NumOps.ToDouble(boxDeltas[r, c * 4 + 2]) / regressionWeights[2], BoxDeltaClamp));
+                double h = ph * Math.Exp(Math.Min(NumOps.ToDouble(boxDeltas[r, c * 4 + 3]) / regressionWeights[3], BoxDeltaClamp));
                 double x1 = Math.Max(0, cx - w / 2);
                 double y1 = Math.Max(0, cy - h / 2);
                 double x2 = Math.Min(imageWidth, cx + w / 2);
@@ -480,8 +483,8 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
         if (pathOrUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             pathOrUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            using var client = new System.Net.Http.HttpClient();
-            data = await client.GetByteArrayWithCancellationAsync(pathOrUrl, cancellationToken);
+            using var download = AiDotNet.Helpers.SharedHttp.WithTimeout(AiDotNet.Helpers.SharedHttp.DefaultTimeout, cancellationToken);
+            data = await AiDotNet.Helpers.SharedHttp.Downloads.GetByteArrayWithCancellationAsync(pathOrUrl, download.Token);
         }
         else
         {

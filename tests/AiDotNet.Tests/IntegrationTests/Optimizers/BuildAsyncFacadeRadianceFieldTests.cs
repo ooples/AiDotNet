@@ -50,7 +50,7 @@ public class BuildAsyncFacadeRadianceFieldTests
 
     private static (Tensor<float> input, Tensor<float> target) SmallCubeBatch(int seed)
     {
-        var rng = new System.Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var input = new float[SampleCount * 6];
         var target = new float[SampleCount * 4];
         for (int i = 0; i < SampleCount; i++)

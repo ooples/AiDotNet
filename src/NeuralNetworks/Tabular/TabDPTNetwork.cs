@@ -84,9 +84,6 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new TabDPTOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -119,6 +116,7 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabDPTOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // Decay the step toward the end of training. Built bare, the rate stayed fixed, so once the
         // model reached its floor the optimizer kept taking full-size steps and oscillated there:
@@ -169,8 +167,6 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Accelerate(input, () =>
         {

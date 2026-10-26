@@ -70,9 +70,6 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
     private readonly GenerativeAdversarialNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the list of recent generator loss values for monitoring training progress.
     /// </summary>
@@ -787,9 +784,6 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // For a GAN, prediction means generating data using the generator.
         // Use the GENERATOR's input type (not the GAN-level Architecture.InputType)

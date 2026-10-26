@@ -78,7 +78,7 @@ internal static class CifarFederatedBenchmarkSuiteRunner
             throw new ArgumentOutOfRangeException(nameof(cifar.ShardsPerClient), "Shards per client must be positive when specified.");
         }
 
-        var dataDirectoryPath = ResolveDatasetDirectory(cifar.DataDirectoryPath!, suite);
+        var dataDirectoryPath = ResolveDatasetDirectory((cifar.DataDirectoryPath ?? throw new InvalidOperationException("cifar.DataDirectoryPath is null where it is required.")), suite);
         var numOps = MathHelper.GetNumericOperations<T>();
 
         var random = RandomHelper.CreateSeededRandom(unchecked((seed * 16777619) ^ (int)suite));

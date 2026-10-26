@@ -77,9 +77,6 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 {
     private readonly LLaVAOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -285,8 +282,20 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         }
         catch
         {
-            try { languageModel?.Dispose(); } catch { }
-            try { visionEncoder?.Dispose(); } catch { }
+            try { languageModel?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "LLaVA construction failed and releasing its languageModel also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
+            try { visionEncoder?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "LLaVA construction failed and releasing its visionEncoder also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
             throw;
         }
     }
@@ -1154,9 +1163,6 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         SetTrainingMode(false);
         return Accelerate(input, () =>

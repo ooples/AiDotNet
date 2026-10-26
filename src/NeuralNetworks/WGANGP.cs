@@ -95,9 +95,6 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     // with `public new`, so its result depends on the static type of the reference.
     private readonly WGANGPOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private readonly List<T> _criticLosses = new List<T>();
     private readonly List<T> _generatorLosses = new List<T>();
 
@@ -986,9 +983,6 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // A GAN predicts by generating, so hand back an IMAGE rather than the generator's flat
         // projection — the same shape the critic and the training targets use.

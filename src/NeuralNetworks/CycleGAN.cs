@@ -81,9 +81,6 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
     // this hook used and therefore the serialization order. Removed under AIDN082.
     private readonly CycleGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions()
         => new()
         {
@@ -615,9 +612,6 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return GeneratorAtoB.Predict(input);
     }

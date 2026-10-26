@@ -3025,7 +3025,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// than about the method.
     /// </remarks>
     protected Random CreateSearchRandom()
-        => Options.Seed.HasValue ? new Random(Options.Seed.Value) : new Random();
+        => Options.Seed.HasValue ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Options.Seed.Value) : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
     /// <summary>
     /// A standard normal sample, by the Box-Muller transform.

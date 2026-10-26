@@ -79,8 +79,8 @@ internal sealed class SegmentationVisualizer
             writer.WriteLine(new string('=', title.Length));
         }
 
-        int height = masks?.Shape[1] ?? classMap!.Shape[0];
-        int width = masks?.Shape[2] ?? classMap!.Shape[1];
+        int height = masks?.Shape[1] ?? (classMap ?? throw new InvalidOperationException("classMap is null where it is required.")).Shape[0];
+        int width = masks?.Shape[2] ?? (classMap ?? throw new InvalidOperationException("classMap is null where it is required.")).Shape[1];
         int horizontalStep = Math.Max(1, (int)Math.Ceiling(width / (double)Math.Max(1, maxWidth)));
         int verticalStep = horizontalStep * 2;
 
@@ -113,7 +113,7 @@ internal sealed class SegmentationVisualizer
             return -1;
         }
 
-        int cls = (int)Math.Round(numOps.ToDouble(classMap![y, x]));
+        int cls = (int)Math.Round(numOps.ToDouble((classMap ?? throw new InvalidOperationException("classMap is null where it is required."))[y, x]));
         return cls <= 0 ? -1 : cls;
     }
 

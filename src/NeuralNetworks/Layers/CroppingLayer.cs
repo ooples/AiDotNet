@@ -228,79 +228,7 @@ public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => false;
 
     /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0) throw new ArgumentException("CroppingLayer requires an input tensor.");
-        var input = inputs[0];
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        int[] inputShape = input._shape;
-        int[] outputShape = CalculateOutputShape(inputShape, _cropTop, _cropBottom, _cropLeft, _cropRight);
-        int outputSize = 1;
-        foreach (var dim in outputShape) outputSize *= dim;
-
-        // Generate linear index mapping from output to input on CPU
-        int[] indices = new int[outputSize];
-        int rank = inputShape.Length;
-        int[] outputStrides = new int[rank];
-        int[] inputStrides = new int[rank];
-
-        outputStrides[rank - 1] = 1;
-        inputStrides[rank - 1] = 1;
-        for (int i = rank - 2; i >= 0; i--)
-        {
-            outputStrides[i] = outputStrides[i + 1] * outputShape[i + 1];
-            inputStrides[i] = inputStrides[i + 1] * inputShape[i + 1];
-        }
-
-        System.Threading.Tasks.Parallel.For(0, outputSize, i =>
-        {
-            int remaining = i;
-            int inputIdx = 0;
-
-            for (int d = 0; d < rank; d++)
-            {
-                int dimIdx = remaining / outputStrides[d];
-                remaining %= outputStrides[d];
-
-                // Calculate input index by adding top/left crop offsets for each dimension
-                inputIdx += (dimIdx + _cropTop[d] + _cropLeft[d]) * inputStrides[d];
-            }
-            indices[i] = inputIdx;
-        });
-
-        using var indicesBuffer = backend.AllocateIntBuffer(indices);
-
-        // Perform GPU-resident crop via gather operation
-        var result = gpuEngine.GatherGpu(input, indicesBuffer, outputSize, 1);
-        result = gpuEngine.ReshapeGpu(result, outputShape);
-
-        var fusedOp = MapActivationToFused();
-        if (fusedOp != FusedActivationType.None)
-        {
-            var activated = gpuEngine.ActivationGpu(result, fusedOp);
-            result.Dispose();
-            result = activated;
-        }
-
-        if (IsTrainingMode)
-        {
-            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-            _gpuCachedInputShape = (int[])inputShape.Clone();
-        }
-
-        return result;
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CroppingLayer{T}"/> class with the specified
@@ -429,45 +357,6 @@ public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Calculates the output shape after applying the cropping operations.
-    /// </summary>
-    /// <param name="inputShape">The shape of the input data.</param>
-    /// <param name="cropTop">The amount to crop from the top of each dimension.</param>
-    /// <param name="cropBottom">The amount to crop from the bottom of each dimension.</param>
-    /// <param name="cropLeft">The amount to crop from the left of each dimension.</param>
-    /// <param name="cropRight">The amount to crop from the right of each dimension.</param>
-    /// <returns>The calculated output shape after cropping.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the output shape of the data after applying all the specified cropping operations.
-    /// The shape of each dimension is reduced by the sum of the corresponding cropping values.
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how big your data will be after trimming the edges.
-    /// 
-    /// For each dimension of your data:
-    /// - Start with the original size
-    /// - Subtract how much you're trimming from the top
-    /// - Subtract how much you're trimming from the bottom
-    /// - Subtract how much you're trimming from the left
-    /// - Subtract how much you're trimming from the right
-    /// - The result is the new size for that dimension
-    ///
-    /// For example, if you start with an image that's 28×28 pixels and crop 2 pixels from each side,
-    /// the output will be 24×24 pixels (28 - 2 - 2 = 24).
-    /// </para>
-    /// </remarks>
-    private static int[] CalculateOutputShape(int[] inputShape, int[] cropTop, int[] cropBottom, int[] cropLeft, int[] cropRight)
-    {
-        int[] outputShape = new int[inputShape.Length];
-        for (int i = 0; i < inputShape.Length; i++)
-        {
-            outputShape[i] = inputShape[i] - cropTop[i] - cropBottom[i] - cropLeft[i] - cropRight[i];
-        }
-
-        return outputShape;
-    }
-
-    /// <summary>
     /// Processes the input data through the cropping layer.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>
@@ -571,11 +460,6 @@ public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
     private int[]? _originalInputShape;
 
     /// <summary>
-    /// Cached input shape for GPU backward pass.
-    /// </summary>
-    private int[]? _gpuCachedInputShape;
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
@@ -598,7 +482,6 @@ public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
     {
         // Clear cached data for autodiff and GPU backward
         _lastInput = null;
-        _gpuCachedInputShape = null;
     }
 
 }

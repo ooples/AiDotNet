@@ -78,9 +78,6 @@ public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new TabPFNOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -113,6 +110,7 @@ public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabPFNOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // TabPFN (Hollmann et al., ICLR 2023) trains its transformer at 1e-4. Built bare, the
         // optimizer ran on framework defaults; the rate now comes from TabPFNOptions.LearningRate,
@@ -159,8 +157,6 @@ public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Accelerate(input, () =>
         {

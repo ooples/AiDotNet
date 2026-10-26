@@ -37,11 +37,16 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
     /// </remarks>
     [ComponentType(ComponentType.DocumentStore)]
     [PipelineStage(PipelineStage.Indexing)]
-    public class PineconeDocumentStore<T> : DocumentStoreBase<T>
+    public class PineconeDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     {
         private const string ContentKey = "_content";
 
         private readonly HttpClient _httpClient;
+
+        // Disposed only when this store created it; a client the caller passed belongs to the caller.
+        private readonly bool _ownsHttpClient;
+
+        private bool _disposed;
         private readonly string _indexName;
         private readonly string _namespace;
         private int _vectorDimension;
@@ -95,7 +100,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             _documentCount = 0;
             _vectorDimension = 0;
 
-            _httpClient = httpClient ?? (handler != null ? new HttpClient(handler) : new HttpClient());
+            _ownsHttpClient = httpClient is null;
+            // A caller's handler stays the caller's: the client this store creates around it does not dispose it.
+            _httpClient = httpClient ?? (handler != null ? new HttpClient(handler, disposeHandler: false) : new HttpClient());
             if (_httpClient.BaseAddress == null)
             {
                 if (string.IsNullOrWhiteSpace(url))
@@ -284,8 +291,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 if (string.IsNullOrEmpty(id))
                     continue;
 
-                var doc = ParseMetadata(id!, match?["metadata"] as JObject);
-                var score = match?["score"] != null ? Convert.ToDouble(match!["score"], CultureInfo.InvariantCulture) : 0.0;
+                var doc = ParseMetadata((id ?? throw new InvalidOperationException("id is null where it is required.")), match?["metadata"] as JObject);
+                var score = match?["score"] != null ? Convert.ToDouble(match["score"], CultureInfo.InvariantCulture) : 0.0;
                 doc.RelevanceScore = NumOps.FromDouble(score);
                 doc.HasRelevanceScore = true;
                 results.Add(doc);
@@ -315,7 +322,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
                 if (value == null || value is string || value is bool)
                 {
-                    filter[kvp.Key] = new Dictionary<string, object> { ["$eq"] = value! };
+                    filter[kvp.Key] = new Dictionary<string, object> { ["$eq"] = (value ?? throw new InvalidOperationException("value is null where it is required.")) };
                 }
                 else if (IsNumeric(value))
                 {
@@ -497,7 +504,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 if (_namespace.Length > 0)
                     path += $"&namespace={Uri.EscapeDataString(_namespace)}";
                 if (!string.IsNullOrEmpty(paginationToken))
-                    path += $"&paginationToken={Uri.EscapeDataString(paginationToken!)}";
+                    path += $"&paginationToken={Uri.EscapeDataString(paginationToken)}";
 
                 var info = await SendAsync(HttpMethod.Get, path, null, cancellationToken).ConfigureAwait(false);
                 EnsureSuccess(info, "list");
@@ -505,13 +512,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 var root = JObject.Parse(info.Body);
                 var ids = (root["vectors"] as JArray)?
                     .Select(v => v?["id"]?.ToString())
-                    .Where(id => !string.IsNullOrEmpty(id))
-                    .Select(id => id!)
+                    .OfType<string>()
+                    .Where(id => id.Length > 0)
                     .ToList() ?? new List<string>();
 
                 foreach (var id in ids)
                 {
-                    var doc = await GetByIdCoreImplAsync(id, cancellationToken).ConfigureAwait(false);
+                    var doc = await GetByIdCoreImplAsync((id ?? throw new InvalidOperationException("id is null where it is required.")), cancellationToken).ConfigureAwait(false);
                     if (doc != null)
                         all.Add(doc);
                 }
@@ -608,6 +615,24 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
             public HttpStatusCode Status { get; }
             public string Body { get; }
+        }
+
+        /// <summary>Releases the HTTP client when this store created it.</summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>Releases the HTTP client when this store created it.</summary>
+        /// <param name="disposing">Whether managed resources are being released.</param>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+            if (disposing && _ownsHttpClient)
+                _httpClient.Dispose();
+            _disposed = true;
         }
     }
 }

@@ -61,9 +61,6 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     private readonly LiquidStateMachineOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the size of the reservoir (number of neurons).
     /// </summary>
@@ -345,10 +342,6 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     {
         // Clear any stored state from previous predictions (must be done before GPU path too)
         ResetState();
-
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         Tensor<T> current = input;
 

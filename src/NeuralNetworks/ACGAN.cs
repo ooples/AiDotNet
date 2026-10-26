@@ -73,9 +73,6 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     // in declaration order, which is the order this hook used. Removed under AIDN082.
     private readonly ACGANOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CreateStandardGanAdamOptions()
         => new()
         {
@@ -534,9 +531,6 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Generator.Predict is a NESTED Predict: when the inference arena is enabled this
         // opens a nested TensorArena and detaches the generator's output to a GC-owned tensor,

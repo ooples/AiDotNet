@@ -63,7 +63,10 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// The feed-forward neural network component of the decoder layer.
     /// </summary>
     private readonly FeedForwardLayer<T> _feedForward1;
-    private FeedForwardLayer<T> _feedForward2;
+    private FeedForwardLayer<T>? _feedForward2;
+
+    private FeedForwardLayer<T> FeedForward2Layer => _feedForward2 ?? throw new InvalidOperationException(
+        "DecoderLayer._feedForward2 is used before the layer has built its sublayers.");
 
     /// <summary>
     /// Layer normalization applied after self-attention.
@@ -152,7 +155,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     {
         return _feedForward2 ?? throw new InvalidOperationException(
             $"DecoderLayer.{caller} was called before the layer's shape was resolved " +
-            $"(_feedForward2 is null). The lazy ctor defers _feedForward2 construction " +
+            $"(_feedForward2 is null). The lazy ctor defers FeedForward2Layer construction " +
             $"until OnFirstForward sees the real input. Run a Forward pass once, or " +
             $"deserialize into a fresh unresolved instance (which calls ResolveFromShape " +
             $"and triggers OnFirstForward), before invoking parameter / optimizer / " +
@@ -167,11 +170,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         _feedForward1.ClearGradients(); ff2.ClearGradients();
         _norm1.ClearGradients(); _norm2.ClearGradients(); _norm3.ClearGradients();
     }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>Construction state: the 'attentionSize' the layer was built with.</summary>
     private readonly int _attentionSize;
@@ -200,7 +198,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         // rebuilds it once input size is known.
         _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, activation);
         _feedForwardInputSize = -1;
-        _feedForward2 = null!;
+        _feedForward2 = null;
 
         InputSize = -1;
 
@@ -229,7 +227,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         InputSize = inputSize;
         _feedForwardInputSize = inputSize;
         _feedForward2 = new FeedForwardLayer<T>(inputSize, (IActivationFunction<T>?)null);
-        RegisterSubLayer(_feedForward2);
+        RegisterSubLayer(FeedForward2Layer);
 
         var inputShape = input.Shape.ToArray();
         ResolveShapes(inputShape, inputShape);
@@ -256,7 +254,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
             // before that grow disagrees with the post-Forward count, breaking
             // SetParameters distribution during Deserialize. Skip ff2 here
             // and resolve it explicitly below using ff1's resolved output dim.
-            if (object.ReferenceEquals(sub, _feedForward2)) continue;
+            if (object.ReferenceEquals(sub, FeedForward2Layer)) continue;
 
             // LayerNormalizationLayer deliberately IGNORES a speculative ResolveShapesOnly walk --
             // it returns without resolving and without throwing, because a chain-level walk is only
@@ -311,13 +309,13 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         // Resolve ff2 with its actual input shape: ff1's output last-dim
         // (feedForwardSize). Use GetOutputShape so we don't need a back-channel
         // field for feedForwardSize.
-        if (!_feedForward2.IsShapeResolved)
+        if (!FeedForward2Layer.IsShapeResolved)
         {
             var ff1OutputShape = _feedForward1.GetOutputShape();
             int ff2InputSize = ff1OutputShape[ff1OutputShape.Length - 1];
             if (ff2InputSize > 0)
             {
-                _feedForward2.ResolveShapesOnly(new[] { ff2InputSize });
+                FeedForward2Layer.ResolveShapesOnly(new[] { ff2InputSize });
             }
         }
     }
@@ -341,7 +339,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         var ffActivation = activation ?? (IVectorActivationFunction<T>)new ReLUActivation<T>();
         _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, ffActivation);
         _feedForwardInputSize = -1;
-        _feedForward2 = null!;
+        _feedForward2 = null;
 
         InputSize = -1;
 
@@ -493,7 +491,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
         var ffExpanded = _feedForward1.Forward(normalized2);
-        var feedForwardOutput = _feedForward2.Forward(ffExpanded);
+        var feedForwardOutput = FeedForward2Layer.Forward(ffExpanded);
         var output = _norm3.Forward(normalized2.Add(feedForwardOutput));
 
         // Restore original tensor shape
@@ -510,64 +508,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
             outputShape[_originalInputShape.Length - 2] = output.Shape[1];
             outputShape[_originalInputShape.Length - 1] = output.Shape[2];
             output = output.Reshape(outputShape);
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Performs the GPU-resident forward pass of the decoder layer.
-    /// </summary>
-    /// <param name="inputs">The GPU input tensors: [decoderInput, encoderOutput].</param>
-    /// <returns>The GPU output tensor after self-attention, cross-attention, and FFN.</returns>
-    /// <remarks>
-    /// All computations stay on GPU. Chains: SelfAttention → Norm1 → CrossAttention → Norm2 → FFN → Norm3.
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length < 2)
-            throw new ArgumentException("DecoderLayer requires two inputs: [decoderInput, encoderOutput]", nameof(inputs));
-
-        var gpuEngine = Engine as DirectGpuTensorEngine;
-        if (gpuEngine == null)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var decoderInput = inputs[0];
-        var encoderOutput = inputs[1];
-
-        // 1. Self-attention: decoder attends to itself
-        var selfAttentionOutput = _selfAttention.ForwardGpu(decoderInput);
-
-        // 2. First residual connection + layer norm
-        var residual1 = gpuEngine.AddGpu(decoderInput, selfAttentionOutput);
-        var normalized1 = _norm1.ForwardGpu(residual1);
-
-        // 3. Cross-attention: decoder attends to encoder output
-        var crossAttentionOutput = _crossAttention.ForwardGpu(normalized1, encoderOutput);
-
-        // 4. Second residual connection + layer norm
-        var residual2 = gpuEngine.AddGpu(normalized1, crossAttentionOutput);
-        var normalized2 = _norm2.ForwardGpu(residual2);
-
-        // 5. Feed-forward network: two linear layers
-        var ffHidden = _feedForward1.ForwardGpu(normalized2);
-        var ffOutput = _feedForward2.ForwardGpu(ffHidden);
-
-        // 6. Third residual connection + layer norm
-        var residual3 = gpuEngine.AddGpu(normalized2, ffOutput);
-        var output = _norm3.ForwardGpu(residual3);
-
-        // Cache state for backward pass only during training
-        if (IsTrainingMode)
-        {
-            _gpuDecoderInput = decoderInput;
-            _gpuEncoderOutput = encoderOutput;
-            _gpuNormalized1 = normalized1;
-            _gpuNormalized2 = normalized2;
-            _gpuResidual1 = residual1;
-            _gpuResidual2 = residual2;
-            _lastInput = decoderInput;
-            _lastEncoderOutput = encoderOutput;
         }
 
         return output;

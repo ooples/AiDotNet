@@ -314,8 +314,82 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _modelOptions = value;
             // Only while no layer exists yet: restarting the construction scope after layers were built
             // would hand later layers the seeds earlier ones already used, so they would initialise alike.
-            if (_layers is null || _layers.Count == 0)
+            if (!HasBuiltLayers())
                 ApplyOptionsSeed(value?.Seed);
+            else
+                KeepOptionsSeedForWiring(value?.Seed);
+        }
+    }
+
+    /// <summary>
+    /// Keeps an options seed that arrived after layers were built, for the layers' seed wiring to apply.
+    /// </summary>
+    /// <remarks>
+    /// Restarting the construction scope now would hand later layers the seeds earlier ones already used, so the seed
+    /// is not applied that way; dropping it was the defect. NeuralNetwork&lt;T&gt; builds its layers in its own
+    /// constructor, so every subclass that assigns Options in its constructor body (BayesianNeuralNetwork among them)
+    /// ignored Options.Seed: two models with the same seed started from different weights. The seed now reaches the
+    /// layers when they are first used (<see cref="CompleteOwnOptionsSeedDeferral"/>) or trained.
+    /// </remarks>
+    private void KeepOptionsSeedForWiring(int? seed)
+    {
+        if (Architecture is { HasExplicitRandomSeed: true } || seed == _optionsSeed)
+            return;
+        _optionsSeed = seed;
+        _optionsSeedAwaitsWiring = !_layerRandomSeedsWired;
+    }
+
+    // Set when an options seed arrived after the layers were built and has not been wired into them yet.
+    private bool _optionsSeedAwaitsWiring;
+
+    /// <summary>
+    /// Whether this model has built a layer yet: one in <see cref="Layers"/>, or one kept anywhere else (a field, a
+    /// generated group, a text encoder) that already drew its seed from this model's construction scope.
+    /// </summary>
+    /// <remarks>
+    /// The scope's own count answers the second half, so nothing walks the model's members. Enumerating
+    /// <see cref="GetExtraTrainableLayers"/> here broke construction: the setter runs inside the derived constructor,
+    /// and generated enumerations read properties that throw until assigned (every native Florence-2 and GOT-OCR2).
+    /// Caller-built layers are excluded: the position is recorded after they are seeded, and an options seed is meant
+    /// to re-seed them.
+    /// </remarks>
+    private bool HasBuiltLayers()
+        => _layers is { Count: > 0 }
+            || AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.HasDrawnSince(_constructionScopePosition);
+
+    // The construction scope's position right after this model reset it and seeded its caller-built layers.
+    private (int Generation, int SeedsDrawn) _constructionScopePosition;
+
+    // The seed sequence this model's construction armed; layers it builds on first use continue it.
+    private Random? _constructionSequence;
+
+    private void RecordConstructionScope()
+    {
+        _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
+        _constructionSequence = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CurrentSequence;
+    }
+
+    /// <summary>
+    /// Builds the layers on first use, drawing their seeds from this model's own construction sequence rather than
+    /// whatever sequence the thread's scope holds by then.
+    /// </summary>
+    /// <remarks>
+    /// A model whose constructor leaves <see cref="InitializeLayers"/> to the first use drew its layer seeds from the
+    /// model constructed last on the thread: a BayesianNeuralNetwork with Options.Seed = 7 got different weights from
+    /// another with the same seed built right after it. Continuing the model's own sequence gives exactly the seeds
+    /// it would have drawn had nothing been constructed in between.
+    /// </remarks>
+    private void InitializeLayersFromConstructionSequence()
+    {
+        var enclosing = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResumeSequence(_constructionSequence);
+        try
+        {
+            InitializeLayers();
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(enclosing);
         }
     }
 
@@ -386,7 +460,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private Interfaces.ICreditRule<T>? _creditRule;
 
     /// <summary>Deterministic RNG seeding the credit rule's fixed feedback matrices (allocated once).</summary>
-    private Random _creditRuleRandom = new(12345);
+    /// <remarks>
+    /// Built through RandomHelper like the seeded assignment in <see cref="SetCreditRule"/>, so both paths
+    /// produce the same runtime type. Constructing Random directly here made a model saved after
+    /// SetCreditRule carry a different random type than a freshly constructed one, and the state registry
+    /// rejects that mismatch when the model is deserialized.
+    /// </remarks>
+    private Random _creditRuleRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(12345);
 
     /// <summary>
     /// Selects a pluggable credit-assignment rule for training. Passing <c>null</c> restores the default
@@ -399,7 +479,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _creditRule = rule;
         if (seed.HasValue)
         {
-            _creditRuleRandom = new Random(seed.Value);
+            _creditRuleRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value);
         }
     }
 
@@ -679,6 +759,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
         SeedCallerBuiltLayers();
+        RecordConstructionScope();
+        // Most models keep their options in a field of their own and expose them only through GetOptions(), which
+        // the derived constructor fills after this one returns, so their Options.Seed reached nothing. The first
+        // layer to ask for a seed once those options exist applies their seed (see TryApplyConstructionOptionsSeed).
+        // The model is held weakly: the deferral lives on the thread until the next construction resets it.
+        if (architecture is not { HasExplicitRandomSeed: true })
+        {
+            var constructing = new WeakReference<NeuralNetworkBase<T>>(this);
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.DeferToModelSeed(
+                () => !constructing.TryGetTarget(out var model) || model.TryApplyConstructionOptionsSeed());
+        }
         _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
@@ -955,6 +1046,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private AiDotNet.Models.Parameters.ParameterLayoutSnapshot BuildParameterLayout()
     {
         EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
 
         var slots = new List<AiDotNet.Models.Parameters.ParameterSlotDescriptor>();
@@ -1125,7 +1217,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         //
         // EnsureParametersReady first, for the same reason ParameterCount calls it first: a model
         // that builds its layers lazily has nothing to walk until it has run its own initializer.
+        // Reading the parameters materialises lazy weights, so the options seed of a model that kept its options
+        // to itself has to reach its layers before that (see CompleteOwnOptionsSeedDeferral).
         EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
 
         // Size the flat buffer from the SAME quantity that fills it — each
@@ -1225,10 +1320,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             long total = Layers.Sum(layer => (long)ActualLayerLength(layer));
             total += GetExtraTrainableLayers()
                 .Where(layer => layer is not null)
-                .Sum(layer => (long)ActualLayerLength(layer!));
+                .Sum(layer => (long)ActualLayerLength((layer ?? throw new InvalidOperationException("layer is null where it is required."))));
             total += GetExtraTrainableTensors()
                 .Where(tensor => tensor is not null)
-                .Sum(tensor => (long)tensor!.Length);
+                .Sum(tensor => (long)tensor.Length);
             total += ParameterComponents.Sum(component => (long)component.GetParameters().Length);
             return ParameterCountHelper.ToFlatVectorSize(total);
         }
@@ -1520,10 +1615,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             if (layerBase.InputPorts.Count > 1)
             {
-                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                // The running activation feeds the layer's first (primary) port under that port's own name: a layer
+                // whose primary port is not called "input" (TransformerDecoderLayer's "decoder_input") would reject it.
+                string primaryPort = layerBase.InputPorts[0].Name;
+                var namedInputs = new Dictionary<string, Tensor<T>> { [primaryPort] = current };
                 foreach (var port in layerBase.InputPorts)
                 {
-                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                    if (port.Name != primaryPort && auxiliaryInputs.TryGetValue(port.Name, out var aux))
                         namedInputs[port.Name] = aux;
                 }
                 current = layerBase.ForwardGpu(namedInputs);
@@ -1958,10 +2056,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var layer = Layers[i];
             if (layer is LayerBase<T> typedLayer && typedLayer.InputPorts.Count > 1)
             {
-                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                // The running activation feeds the layer's first (primary) port under that port's own name: a layer
+                // whose primary port is not called "input" (TransformerDecoderLayer's "decoder_input") would reject it.
+                string primaryPort = typedLayer.InputPorts[0].Name;
+                var namedInputs = new Dictionary<string, Tensor<T>> { [primaryPort] = current };
                 foreach (var port in typedLayer.InputPorts)
                 {
-                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                    if (port.Name != primaryPort && auxiliaryInputs.TryGetValue(port.Name, out var aux))
                         namedInputs[port.Name] = aux;
                 }
                 current = typedLayer.Forward(namedInputs);
@@ -2016,72 +2117,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Checks if all layers in the network support GPU execution.
-    /// Used to determine if the GPU-resident optimization path can be used.
-    /// </summary>
-    /// <returns>True if all layers can execute on GPU; false otherwise.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method checks if every layer in your network can run on the GPU.
-    /// If even one layer needs the CPU, we can't use the fast GPU-only path.
-    /// </para>
-    /// </remarks>
-    protected virtual bool CanUseGpuResidentPath()
-    {
-        return Layers.All(layer => layer.CanExecuteOnGpu);
-    }
-
-    /// <summary>
-    /// Attempts to perform a GPU-resident forward pass with automatic fallback to CPU.
-    /// Use this in derived class Forward() methods to get GPU optimization with minimal code.
-    /// </summary>
-    /// <param name="input">The input tensor to process.</param>
-    /// <param name="result">The output tensor if GPU path succeeded.</param>
-    /// <returns>True if GPU path was used successfully; false if CPU path should be used.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Derived Classes:</b> Call this at the start of your Forward() method:
-    /// </para>
-    /// <code>
-    /// public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)
-    /// {
-    ///     if (TryForwardGpuOptimized(input, out var result))
-    ///         return result;
-    ///     
-    ///     // CPU fallback path
-    ///     ...
-    /// }
-    /// </code>
-    /// </remarks>
-    protected bool TryForwardGpuOptimized(Tensor<T> input, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Tensor<T>? result)
-    {
-        result = null;
-
-        if (Engine is not DirectGpuTensorEngine)
-            return false;
-
-        if (!CanUseGpuResidentPath())
-            return false;
-
-        try
-        {
-            // Fix for #1625: the previous `using var gpuResult = ForwardGpu(input)` disposed
-            // the GPU tensor before the caller could read its values, so every Predict call
-            // returned all-zero output. The returned tensor's lifetime now belongs to the
-            // caller (which is how every other Predict path works — the result is the model's
-            // output, not an intermediate that can be safely freed).
-            result = ForwardGpu(input);
-            return true;
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
-        {
-            // Log GPU failure for diagnostics before falling back to CPU path
-            System.Diagnostics.Debug.WriteLine($"[NeuralNetworkBase] GPU forward failed ({ex.GetType().Name}): {ex.Message}");
-            return false;
-        }
     }
 
     /// <summary>
@@ -2148,102 +2183,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 Engine.GetType().Name);
         }
 
-        // Upload input to GPU once
-        Tensor<T>? current = null;
-        bool ownsCurrentTensor = false;
-
-        try
-        {
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                var layer = Layers[i];
-
-                if (layer.CanExecuteOnGpu)
-                {
-                    // Layer supports GPU-resident execution
-                    if (current is null)
-                    {
-                        // First GPU layer - upload input
-                        current = gpuEngine.UploadToGpu(input, GpuTensorRole.Activation);
-                        ownsCurrentTensor = true;
-                    }
-
-                    var next = layer.ForwardGpu(current);
-
-                    // Dispose intermediate if we own it (but not the input).
-                    if (ownsCurrentTensor && current is not null)
-                    {
-                        // If `next` aliases current's backing (zero-copy reshape view, e.g. FlattenLayer),
-                        // rebind it onto an independent tensor first so the dispose is safe (see helper).
-                        next = RebindGpuAliasBeforeDispose(current, next);
-                        current.Dispose();
-                    }
-
-                    current = next;
-                    ownsCurrentTensor = true;
-                }
-                else
-                {
-                    // Layer doesn't support GPU - fall back to CPU
-                    Tensor<T> cpuInput;
-                    if (current is not null)
-                    {
-                        // Download current GPU tensor to CPU
-                        cpuInput = current;
-                        if (ownsCurrentTensor)
-                        {
-                            current.Dispose();
-                        }
-                        current = null;
-                        ownsCurrentTensor = false;
-                    }
-                    else
-                    {
-                        // Haven't uploaded yet, use original input
-                        cpuInput = input;
-                    }
-
-                    // Execute on CPU
-                    var cpuOutput = layer.Forward(cpuInput);
-
-                    // Check if next layer supports GPU
-                    bool nextLayerSupportsGpu = i + 1 < Layers.Count &&
-                        Layers[i + 1].CanExecuteOnGpu;
-
-                    if (nextLayerSupportsGpu || i == Layers.Count - 1)
-                    {
-                        // Upload result to GPU for next layer or final output
-                        current = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
-                        ownsCurrentTensor = true;
-                    }
-                    else
-                    {
-                        // Keep on CPU for next CPU layer
-                        input = cpuOutput; // Reuse input variable for next iteration
-                    }
-                }
-            }
-
-            // Ensure we return a GPU tensor
-            if (current is null)
-            {
-                // All layers were CPU - upload final result
-                current = gpuEngine.UploadToGpu(input, GpuTensorRole.Activation);
-            }
-
-            return current;
-        }
-        catch (Exception)
-        {
-            // Clean up on error
-            if (ownsCurrentTensor && current is not null)
-            {
-                current.Dispose();
-            }
-            throw;
-        }
+        // Upload the input once; every layer's Forward then runs on the device its operands live on, so the
+        // activations stay on the GPU between layers. No intermediate is disposed here: a layer may keep its
+        // input for its backward pass, and the per-layer GPU overrides that managed their own buffers computed
+        // different outputs from Forward, which is why they were removed.
+        var current = gpuEngine.UploadToGpu(input, GpuTensorRole.Activation);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
     }
-
     /// <summary>
     /// Performs a forward pass using deferred execution for optimized GPU performance.
     /// Operations are recorded and batched into an execution graph that runs with a single sync point.
@@ -4286,7 +4234,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (IsDeferredOrAgnosticShape(architectureInputShape))
             return true;
 
-        if (AreShapesCompatible(architectureInputShape!, layerInputShape!))
+        if (AreShapesCompatible((architectureInputShape ?? throw new InvalidOperationException("architectureInputShape is null where it is required.")), (layerInputShape ?? throw new InvalidOperationException("layerInputShape is null where it is required."))))
             return true;
 
         // Flat-reshape boundary: architecture may declare a structured
@@ -4307,7 +4255,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // layer declaring [2, 8] fed by a flat [16]) must use an explicit
         // ReshapeLayer, mirroring the layer-to-layer "no implicit flatten"
         // contract — so it is NOT accepted here.
-        if (layerInputShape!.Length == 1 && TotalElementsMatch(architectureInputShape!, layerInputShape!))
+        if (layerInputShape.Length == 1 && TotalElementsMatch(architectureInputShape, layerInputShape))
             return true;
 
         return false;
@@ -4345,7 +4293,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return true;
         }
 
-        int[] outputShape = layerOutputShape!;
+        int[] outputShape = (layerOutputShape ?? throw new InvalidOperationException("layerOutputShape is null where it is required."));
 
         // Partially-deferred shapes — e.g. a transposed-conv generator that
         // emits [3, -1, -1] until first Forward resolves H/W from runtime
@@ -4371,7 +4319,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // keeps the surface narrow: any future "d > 0 but doesn't
         // match" path still gets the clear "output shape ... must match
         // architecture output size" error.
-        if (outputShape.Any(d => d < 0))
+        if ((outputShape ?? throw new InvalidOperationException("outputShape is null where it is required.")).Any(d => d < 0))
         {
             error = string.Empty;
             return true;
@@ -4735,7 +4683,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         bool currentIsLazy = IsDeferredOrAgnosticShape(currentInputShape);
         if (!currentIsLazy
             && !IsDeferredOrAgnosticShape(prevOutputShape)
-            && !AreShapesCompatible(prevOutputShape!, currentInputShape!))
+            && !AreShapesCompatible((prevOutputShape ?? throw new InvalidOperationException("prevOutputShape is null where it is required.")), (currentInputShape ?? throw new InvalidOperationException("currentInputShape is null where it is required."))))
             return false;
 
         // Special checks for specific layer combinations
@@ -4764,7 +4712,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // leading dims <= 1, which silently strips a leading -1 too —
             // turning [-1, 32] into [32] and breaking the product check.
             // Closes the #1330 InferenceOptimizerIntegrationTests cluster.
-            if (AreShapesCompatible(reshapeLayer.GetOutputShape(), currentInputShape!))
+            if (AreShapesCompatible(reshapeLayer.GetOutputShape(), (currentInputShape ?? throw new InvalidOperationException("currentInputShape is null where it is required."))))
                 return true;
 
             // Fall back to product-of-known-dims for the implicit-flatten
@@ -4774,7 +4722,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // a -1 in any non-leading position still survives and short-
             // circuits the comparison.
             var reshapeOutputShape = TrimLeadingBatchLikeDimensions(reshapeLayer.GetOutputShape());
-            var normalizedCurrentInputShape = TrimLeadingBatchLikeDimensions(currentInputShape!);
+            var normalizedCurrentInputShape = TrimLeadingBatchLikeDimensions(currentInputShape);
 
             if (reshapeOutputShape.Any(d => d <= 0) || normalizedCurrentInputShape.Any(d => d <= 0))
                 return true;
@@ -5412,7 +5360,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // double up the entire network.
             if (!_layerOnlyInitialized && Layers.Count == 0)
             {
-                InitializeLayers();
+                InitializeLayersFromConstructionSequence();
                 BindLayerGraphReferences();
                 ReconcileCanonicalNestedNetworkLayerViews();
                 ReportLayerContractMismatches();
@@ -5435,7 +5383,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Architecture.InitializeFromCachedData();
 
             // Initialize network-specific layers
-            InitializeLayers();
+            InitializeLayersFromConstructionSequence();
             BindLayerGraphReferences();
             ReconcileCanonicalNestedNetworkLayerViews();
             ReportLayerContractMismatches();
@@ -5569,7 +5517,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     public void MaterializeParameters()
     {
+        // Drawing the weights is the last moment a pending options seed can still decide them.
         EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
 
         if (Layers is not null)
@@ -5592,6 +5542,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
     {
         EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
         if (intent != AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe)
             MaterializeParameters();
@@ -5759,7 +5710,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // across ALL model families, not just whichever layer breaks first.
         int[] lastGoodShape = currentShape;
 
-        for (int i = 0; hasOwnLayers && i < Layers!.Count; i++)
+        for (int i = 0; hasOwnLayers && i < (Layers ?? throw new InvalidOperationException("Layers is null where it is required.")).Count; i++)
         {
             var layer = Layers[i];
             if (layer is null) continue;
@@ -5772,7 +5723,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 int[]? rootOutput = null;
                 try { rootOutput = layer.GetOutputShape(); }
-                catch { }
+                catch (Exception ex)
+                {
+                    // A root whose shape waits for its first input stops the walk below, as an unknown shape does.
+                    System.Diagnostics.Trace.TraceInformation(
+                        $"Shape walk: {layer.GetType().Name} could not report its output shape yet " +
+                        $"({ex.GetType().Name}: {ex.Message}).");
+                }
 
                 if (rootOutput is null
                     || rootOutput.Length == 0
@@ -6346,6 +6303,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         Tensor<T> output;
         Graph.LayerForwardObserver<T>? trace = null;
+        // Read before this trace is installed: an enclosing observer (named-activation collection)
+        // keeps folding off for the re-run below too, so the re-run would only record every layer twice.
+        bool enclosedByObserver = Graph.LayerForwardObserver<T>.Current is not null;
         try
         {
             trace = new Graph.LayerForwardObserver<T>();
@@ -6355,14 +6315,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Never let the diagnostic stand between a caller and their prediction.
         }
 
+        // The traced forward is the DIAGNOSTIC's, not the caller's. An observer suppresses
+        // convolution/batch-norm folding (ConvolutionBatchNormFolding.TryForward: a folded pair is
+        // one layer, so a trace of it would not show the dataflow being validated), and a folded
+        // convolution differs from the separate operations by rounding. Returning the observed
+        // forward therefore made a model's FIRST prediction differ from every later one by about
+        // 1e-5 - caught by PSENet's Predict_ShouldBeDeterministic, whose own message said the first
+        // inference had taken a materially different path. So the observed pass feeds the validator
+        // and is discarded, and the caller gets an unobserved forward that folds exactly as call two
+        // will. The cost is one extra forward, once per model instance that folds: what it costs to keep this
+        // diagnostic from changing what Predict returns, which the summary above promises.
+        Tensor<T> observed;
         try
         {
-            output = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
+            observed = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
         }
         finally
         {
             trace?.Dispose();
         }
+
+        // Outside the trace, so folding applies here exactly as it will on every subsequent call.
+        // Only when the trace actually suppressed a fold: otherwise the pass above already took the
+        // untraced path, and a second forward would draw a stochastic layer's randomness twice (a
+        // seeded Monte Carlo dropout call then differed from the next one). Under an enclosing
+        // observer the re-run would take the same unfolded path, so it is skipped there too.
+        output = trace is null || !trace.SuppressedFolding || enclosedByObserver
+            ? observed
+            : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
 
         // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
         // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
@@ -6919,6 +6899,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
+        RequireArchitectureAgreesWithInput();
+        // A model that assembles its layers lazily does so here; the seed must be wired onto those layers.
+        EnsureParametersReady();
+        CompleteOwnOptionsSeedDeferral();
+
         // Inference semantics belong in the NON-VIRTUAL funnel. Keeping this transition inside the
         // default PredictCore meant every model that correctly overrode PredictCore (diffusion,
         // multimodal, structured-output models) bypassed eval/no-grad mode entirely. Besides making
@@ -6945,7 +6930,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         using var noGrad = new NoGradScope<T>();
         try
         {
-            return PredictInInferenceMode(input);
+            var output = PredictInInferenceMode(input);
+            RequireArchitectureAgreesWithOutput(output);
+            return output;
         }
         finally
         {
@@ -6959,6 +6946,62 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 _deferLazyShapeResolutionToForward = priorDefer;
             }
         }
+    }
+
+    /// <summary>
+    /// Whether this model sizes its layers from its options rather than from its architecture, so an architecture
+    /// stating other sizes must be refused rather than ignored (#2147).
+    /// </summary>
+    /// <remarks>
+    /// When true, the architecture's <c>InputSize</c> is checked once against
+    /// <see cref="ArchitectureInputSizesFromOptions"/>, and its <c>OutputSize</c> once against the first output the
+    /// model produces (see <see cref="ArchitectureAgreement.RequireStatedSizeObserved"/>). A model whose layers are
+    /// sized from the architecture leaves this false: the two cannot disagree.
+    /// </remarks>
+    protected virtual bool SizesLayersFromOptions => false;
+
+    /// <summary>
+    /// The sizes an architecture's <c>InputSize</c> may state for this model, each one of its options (#2147); null when
+    /// the model's input has no size fixed by its options.
+    /// </summary>
+    /// <remarks>
+    /// The input a model takes cannot stand in for these: a text model takes token ids of any length, so an
+    /// architecture stating its embedding width describes it correctly although no input tensor has that width. Each
+    /// model names the option values a caller may mean - a text encoder its embedding width and its maximum sequence
+    /// length, a portfolio model its asset count. A model that names none is never refused on its input.
+    /// </remarks>
+    protected virtual IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions => null;
+
+    // 0 until the architecture has been checked against an input (or an output); each check runs once.
+    private int _architectureInputChecked;
+    private int _architectureOutputChecked;
+
+    /// <summary>
+    /// Throws when this model sizes its layers from its options and the architecture states an <c>InputSize</c> that is
+    /// none of <see cref="ArchitectureInputSizesFromOptions"/> (#2147). Runs once, on the first
+    /// <see cref="Predict(Tensor{T})"/> or Train.
+    /// </summary>
+    protected virtual void RequireArchitectureAgreesWithInput()
+    {
+        if (!SizesLayersFromOptions || Architecture is null) return;
+        if (System.Threading.Volatile.Read(ref _architectureInputChecked) != 0) return;
+        if (ArchitectureInputSizesFromOptions is { Count: > 0 } sizes)
+            ArchitectureAgreement.RequireStatedSizeDeclared(GetType().Name, Architecture.InputSize, sizes);
+        System.Threading.Volatile.Write(ref _architectureInputChecked, 1);
+    }
+
+    /// <summary>
+    /// Throws when this model sizes its layers from its options and the architecture states an <c>OutputSize</c> the
+    /// model does not produce (#2147). Runs once, on the first output.
+    /// </summary>
+    /// <param name="output">An output the model produced.</param>
+    protected void RequireArchitectureAgreesWithOutput(Tensor<T> output)
+    {
+        if (!SizesLayersFromOptions || Architecture is null || output is null) return;
+        if (System.Threading.Volatile.Read(ref _architectureOutputChecked) != 0) return;
+        ArchitectureAgreement.RequireStatedSizeObserved(GetType().Name, nameof(Architecture.OutputSize),
+            Architecture.OutputSize, output._shape);
+        System.Threading.Volatile.Write(ref _architectureOutputChecked, 1);
     }
 
     /// <summary>
@@ -7075,6 +7118,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         var arena = _inferenceRecycleArena;
         if (arena is null) return boundary;
+        // Nothing to recycle when the forward has rented no host scratch from the arena: a GPU-resident forward keeps
+        // its intermediates on the device. Detaching anyway downloaded every layer boundary to a fresh host array for
+        // the next layer to upload again (a 4-layer 512-wide Transformer on DirectGpuTensorEngine: 38-39 ms and
+        // 50.9 MB per Predict against 30-33 ms and 23.6 MB with recycling off).
+        if (arena.PeakBackingBytes == 0) return boundary;
         // The arena carries the boundary out of the recyclable scratch region (via its cross-arena
         // persistent pool, so it survives the Reset AND is reused across calls — no per-forward GC
         // churn), then Resets the scratch pool so the next layer reuses this layer's buffers.
@@ -7597,7 +7645,98 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// explicit seed if it has one, otherwise the options seed, otherwise the architecture's fallback.
     /// </summary>
     private int? EffectiveRandomSeed =>
-        Architecture is { HasExplicitRandomSeed: true } ? Architecture.RandomSeed : _optionsSeed ?? Architecture?.RandomSeed;
+        Architecture is { HasExplicitRandomSeed: true }
+            ? Architecture.RandomSeed
+            : _optionsSeed ?? OwnOptionsSeed ?? Architecture?.RandomSeed;
+
+    /// <summary>
+    /// The seed of the options a derived model keeps in a field of its own and returns from <see cref="GetOptions"/>
+    /// without assigning <see cref="Options"/>; null when the model's options are the base's or carry no seed.
+    /// </summary>
+    private int? OwnOptionsSeed
+        => GetOptions() is { } own && !ReferenceEquals(own, _modelOptions) ? own.Seed : null;
+
+    // Settled once the constructor's deferral has been resolved after construction, so the completion path
+    // below costs one bool test on the surfaces that call it.
+    private bool _ownOptionsSeedCompleted;
+
+    /// <summary>
+    /// Finishes the constructor's options-seed deferral for a model that never asked the construction scope for a
+    /// seed: one that keeps a distinct options object and builds no layer of its own, only copying the layers of
+    /// <see cref="NeuralNetworkArchitecture{T}.Layers"/>. No <see cref="Layers.LayerBase{T}"/> constructor runs to
+    /// trigger the deferred callback there, so its <see cref="Models.Options.ModelOptions.Seed"/> reached nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The deferral cannot run itself: the base gets no hook once the derived constructor has stored its options, so
+    /// the surfaces that first materialise a caller-built layer's weights -- a parameter read and a prediction --
+    /// call this first. The training forward already covers itself through <see cref="EnsureLayerRandomSeedsWired"/>,
+    /// whose <see cref="EffectiveRandomSeed"/> falls back to <see cref="OwnOptionsSeed"/>.
+    /// </para>
+    /// <para>
+    /// It wires the layer seeds from that fallback rather than restarting the thread's construction scope the way
+    /// <see cref="ApplyOptionsSeed"/> does: a model that reads a nested backbone's parameters while still being
+    /// constructed itself must keep its own scope. A model whose options are the base's has no own options seed, so
+    /// this changes nothing for it.
+    /// </para>
+    /// </remarks>
+    private void CompleteOwnOptionsSeedDeferral()
+    {
+        if (_optionsSeedAwaitsWiring)
+        {
+            _optionsSeedAwaitsWiring = false;
+            EnsureLayerRandomSeedsWired();
+            return;
+        }
+
+        if (_ownOptionsSeedCompleted || _optionsSeed is not null || _layerRandomSeedsWired)
+            return;
+
+        if (Architecture is { HasExplicitRandomSeed: true })
+        {
+            _ownOptionsSeedCompleted = true;
+            return;
+        }
+
+        // Not latched while the model has no own options seed: a derived constructor that reads its own parameters
+        // gets here before it has stored its options, and settling then would drop the seed for good.
+        if (OwnOptionsSeed is null)
+            return;
+
+        _ownOptionsSeedCompleted = true;
+        EnsureLayerRandomSeedsWired();
+    }
+
+    /// <summary>
+    /// Applies the seed of the options a derived model returns from <see cref="GetOptions"/>, for the layer
+    /// initialization scope's deferral (see the constructor). Returns <c>false</c> while the model's options are the
+    /// base's, and <c>true</c> once it has applied its own options' seed, found none, or a layer already exists.
+    /// </summary>
+    /// <remarks>
+    /// It runs inside a layer's constructor while the model is still being built, so it reads nothing but
+    /// <see cref="GetOptions"/>. It used to enumerate <see cref="GetExtraTrainableLayers"/> to find layers kept outside
+    /// <see cref="Layers"/>, and a generated enumeration reads properties that throw until the model has assigned
+    /// them: every native Florence-2 and GOT-OCR2 failed to construct.
+    /// </remarks>
+    private bool TryApplyConstructionOptionsSeed()
+    {
+        // The Options setter's rule (HasBuiltLayers): a seed applies only while no layer exists yet. A model that already holds layers
+        // has finished building them, and a layer asking now belongs to something constructed after it on this
+        // thread (a standalone backbone after a detector), which must not inherit this model's seed.
+        if (_optionsSeed is not null || HasBuiltLayers())
+            return true;
+        var own = GetOptions();
+        // A layer asking before the model's own options exist is one the model built first, wherever it keeps it
+        // (Layers or a field of its own), so by the same rule the seed no longer applies; the deferral ends here rather
+        // than handing that seed to an unrelated layer requested after construction.
+        if (own is null)
+            return true;
+        if (ReferenceEquals(own, _modelOptions))
+            return false;
+        if (own.Seed is int seed)
+            ApplyOptionsSeed(seed);
+        return true;
+    }
 
     /// <summary>
     /// Seeds this model from its options, so <see cref="Models.Options.ModelOptions.Seed"/> reproduces the
@@ -7631,12 +7770,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _optionsSeed = null;
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
             SeedCallerBuiltLayers();
+            RecordConstructionScope();
             return;
         }
 
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
         SeedCallerBuiltLayers();
+        RecordConstructionScope();
     }
 
     // The caller-built layers this model gave a seed, so a later options seed can replace those seeds and no others.
@@ -8453,7 +8594,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             int lastLayer = Layers.Count - 1;
             for (int i = 0; i < Layers.Count; i++)
             {
-                c = Layers[i].Forward(c);
+                // A convolution, batch norm and optional ReLU run as one folded convolution in inference
+                // (InferenceFusionSettings.FoldBatchNormIntoConvolution); i moves to the last layer consumed.
+                if (ConvolutionBatchNormFolding<T>.TryForwardSequence(Layers, i, c, out var folded, out int consumed))
+                {
+                    c = folded;
+                    i += consumed - 1;
+                }
+                else
+                {
+                    c = Layers[i].Forward(c);
+                }
                 // #1824: recycle this layer's forward scratch before the next
                 // layer allocates, keeping the arena's live working set at
                 // ~one layer instead of the whole depth. No-op unless running
@@ -10738,6 +10889,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Guard.NotNull(input);
         Guard.NotNull(expectedOutput);
         ThrowIfCannotTrain();
+        RequireArchitectureAgreesWithInput();
         // Seed the stochastic layers before any step runs. ForwardForTraining wires them, but a learning rule that
         // runs its own forwards (CLAP's two towers through the shared stepper) never reached it, so its dropout,
         // SpecAugment and fusion draws came from an unseeded generator and the same model trained differently in
@@ -12212,8 +12364,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                             : MixedPrecision.BitConverterHelper.Bf16RoundTrip(fp32Value);
                         fp32Span[i] = rounded;
                     }
-                    mpFp32Snapshots!.Add(snapshot);
-                    mpSnapshotTargets!.Add(param);
+                    mpFp32Snapshots.Add(snapshot);
+                    mpSnapshotTargets.Add(param);
                 }
 
                 for (int p = 0; p < trainableParams.Count; p++)
@@ -14912,8 +15064,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var pairType = GetGenericEnumerableElementTypes(value.GetType()).FirstOrDefault(IsKeyValuePair);
         if (pairType is null) return sequence;
 
-        var valueProperty = pairType.GetProperty(nameof(KeyValuePair<object, object>.Value))!;
-        return sequence.Cast<object>().Select(pair => valueProperty.GetValue(pair));
+        var valueProperty = pairType.GetProperty(nameof(KeyValuePair<object, object>.Value));
+        return sequence.Cast<object>().Select(pair => (valueProperty ?? throw new InvalidOperationException("valueProperty is null where it is required.")).GetValue(pair));
     }
 
     private static void ResetIfOptimizer(object? value, HashSet<object> resetOptimizers)
@@ -15556,7 +15708,39 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // initialized even though the shared parameter surface claimed to own them.
     // v7 adds partition sizes for nested layer lists so a fitted topology can be rebuilt without
     // flattening distinct blocks, teacher networks or encoder streams into one unusable collection.
-    private const int SerializationVersion = 7;
+    // v8 records the width parameters are stored at, right after the version. Every earlier version
+    // wrote each value as an 8-byte double whatever T was, so a float model's file was twice its
+    // parameters, and Serialize, which builds one byte array, overflowed it for any float model above
+    // ~268M parameters (UnifiedMultimodalNetwork's GetModelMetadata did, #2087). A float model now
+    // stores 4-byte floats, exactly; every other T keeps 8-byte doubles.
+    private const int SerializationVersion = 8;
+
+    /// <summary>How the parameter values of a serialized network are stored (format v8 and later).</summary>
+    private enum SerializedParameterEncoding : byte
+    {
+        /// <summary>8-byte IEEE doubles: every format before v8, and every T other than float.</summary>
+        Float64 = 0,
+
+        /// <summary>4-byte IEEE floats, exact for a float network.</summary>
+        Float32 = 1,
+    }
+
+    private static SerializedParameterEncoding ParameterEncodingForT
+        => typeof(T) == typeof(float) ? SerializedParameterEncoding.Float32 : SerializedParameterEncoding.Float64;
+
+    private static int ParameterWidth(SerializedParameterEncoding encoding)
+        => encoding == SerializedParameterEncoding.Float32 ? sizeof(float) : sizeof(double);
+
+    private static void WriteParameterValue(BinaryWriter writer, T value, SerializedParameterEncoding encoding)
+    {
+        if (encoding == SerializedParameterEncoding.Float32) writer.Write(Convert.ToSingle(value));
+        else writer.Write(Convert.ToDouble(value));
+    }
+
+    private T ReadParameterValue(BinaryReader reader, SerializedParameterEncoding encoding)
+        => encoding == SerializedParameterEncoding.Float32
+            ? NumOps.FromDouble(reader.ReadSingle())
+            : NumOps.FromDouble(reader.ReadDouble());
 
     // Mirrors System.Array.MaxLength (introduced in .NET 6). Hardcoded
     // here so the check still compiles on net471, where Array.MaxLength
@@ -15610,15 +15794,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Compute the parameter payload ahead of time; rough overhead for
         // type-name strings, shape ints, metadata etc. is tiny vs the
         // parameter doubles, but budget ~64 KB per layer just in case.
+        var encoding = ParameterEncodingForT;
+        int width = ParameterWidth(encoding);
         long paramBytes = 0;
         foreach (var layer in Layers)
         {
-            paramBytes += (long)layer.ParameterCount * sizeof(double);
+            paramBytes += (long)layer.ParameterCount * width;
             if (layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extras)
             {
-                paramBytes += (long)extras.ExtraParameterCount * sizeof(double);
+                paramBytes += (long)extras.ExtraParameterCount * width;
             }
         }
+        // Additional layers serialize through LayerBase.Serialize, which always writes
+        // 8-byte doubles, so their share is sized at that width rather than the encoding's.
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
@@ -15639,6 +15827,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         writer.Write(SerializationMagic);
         writer.Write(SerializationVersion);
+        writer.Write((byte)encoding);
 
         // Write the number of layers
         writer.Write(Layers.Count);
@@ -15708,7 +15897,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             writer.Write(parameters.Length);
             foreach (var param in parameters)
             {
-                writer.Write(Convert.ToDouble(param));
+                WriteParameterValue(writer, param, encoding);
             }
 
             // Write any optional extra parameter blocks required to fully reconstruct the layer (e.g., frozen base weights in LoRA adapters).
@@ -15718,7 +15907,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 writer.Write(extraParameters.Length);
                 foreach (var param in extraParameters)
                 {
-                    writer.Write(Convert.ToDouble(param));
+                    WriteParameterValue(writer, param, encoding);
                 }
             }
             else
@@ -15777,9 +15966,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         int first = reader.ReadInt32();
         int layerCount;
 
+        var encoding = SerializedParameterEncoding.Float64;
         if (first == SerializationMagic)
         {
             version = reader.ReadInt32();
+            if (version >= 8)
+            {
+                encoding = (SerializedParameterEncoding)reader.ReadByte();
+                if (encoding != SerializedParameterEncoding.Float64 && encoding != SerializedParameterEncoding.Float32)
+                    throw new InvalidDataException($"Serialized network declares unknown parameter encoding {(byte)encoding}.");
+            }
             layerCount = reader.ReadInt32();
         }
         else
@@ -15840,7 +16036,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 parametersVector = new Vector<T>(paramCount);
                 for (int j = 0; j < paramCount; j++)
                 {
-                    parametersVector[j] = NumOps.FromDouble(reader.ReadDouble());
+                    parametersVector[j] = ReadParameterValue(reader, encoding);
                 }
             }
 
@@ -15869,7 +16065,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     extraParametersVector = new Vector<T>(extraCount);
                     for (int j = 0; j < extraCount; j++)
                     {
-                        extraParametersVector[j] = NumOps.FromDouble(reader.ReadDouble());
+                        extraParametersVector[j] = ReadParameterValue(reader, encoding);
                     }
                 }
             }
@@ -16232,7 +16428,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 Dictionary<string, object>? metadata = metadataCount == 0
                     ? null
                     : new Dictionary<string, object>(metadataCount, StringComparer.Ordinal);
-                for (int m = 0; m < metadataCount; m++) metadata![reader.ReadString()] = reader.ReadString();
+                for (int m = 0; m < metadataCount; m++) (metadata ?? throw new InvalidOperationException("metadata is null where it is required."))[reader.ReadString()] = reader.ReadString();
                 int stateLength = reader.ReadInt32();
                 byte[] state = reader.ReadBytes(stateLength);
                 if (state.Length != stateLength)
@@ -16289,9 +16485,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 replacements.Add(layer);
             }
             if (savedPartitionSizes is not null)
-                targetGroup.ReplacePartitioned!(replacements, savedPartitionSizes);
+                (targetGroup.ReplacePartitioned ?? throw new InvalidOperationException("targetGroup.ReplacePartitioned is null where it is required."))(replacements, savedPartitionSizes);
             else
-                targetGroup.Replace!(replacements);
+                (targetGroup.Replace ?? throw new InvalidOperationException("targetGroup.Replace is null where it is required."))(replacements);
         }
 
         InvalidateParameterCountCache();
@@ -16767,13 +16963,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // is also strictly faster — no 2 GB allocate/free cycle, no
         // redundant double-conversion loop — so we also take it whenever
         // the new instance has an identically-shaped Layers list.
+        var encoding = ParameterEncodingForT;
+        int width = ParameterWidth(encoding);
         long paramBytes = 0;
         bool hasCustomLayer = false;
         for (int i = 0; i < _layers.Count; i++)
         {
-            paramBytes += (long)_layers[i].ParameterCount * sizeof(double);
+            paramBytes += (long)_layers[i].ParameterCount * width;
             if (_layers[i] is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> ext)
-                paramBytes += (long)ext.ExtraParameterCount * sizeof(double);
+                paramBytes += (long)ext.ExtraParameterCount * width;
 
             // Detect layers whose concrete type lives outside AiDotNet — the
             // DeserializationHelper's hard-coded type registry only knows the
@@ -18669,9 +18867,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     : layer.GetParameters().Length;
 
             var layerCounts = restoreLayers.Select(ActualParameterLength).ToList();
-            var extraLayerCounts = restoreExtraLayers.Select(layer => ActualParameterLength(layer!)).ToList();
+            var extraLayerCounts = restoreExtraLayers.Select(layer => ActualParameterLength((layer ?? throw new InvalidOperationException("layer is null where it is required.")))).ToList();
             int extraTensorCount = ParameterCountHelper.ToFlatVectorSize(
-                restoreExtraTensors.Sum(tensor => (long)tensor!.Length));
+                restoreExtraTensors.Sum(tensor => (long)tensor.Length));
             int componentCount = ParameterCountHelper.ToFlatVectorSize(
                 restoreComponents.Sum(component => (long)component.GetParameters().Length));
             long total = layerCounts.Sum(count => (long)count)
@@ -18739,12 +18937,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (extraCount == 0) continue;
             var extraParameters = new Vector<T>(extraCount);
             srcSpan.Slice(currentIndex, extraCount).CopyTo(extraParameters.AsWritableSpan());
-            restoreExtraLayers[i]!.SetParameters(extraParameters);
+            (restoreExtraLayers[i] ?? throw new InvalidOperationException("restoreExtraLayers[i] is null where it is required.")).SetParameters(extraParameters);
             currentIndex += extraCount;
         }
         foreach (var tensor in restoreExtraTensors)
         {
-            if (tensor!.Length == 0) continue;
+            if (tensor.Length == 0) continue;
             srcSpan.Slice(currentIndex, tensor.Length).CopyTo(tensor.AsWritableSpan());
             currentIndex += tensor.Length;
         }

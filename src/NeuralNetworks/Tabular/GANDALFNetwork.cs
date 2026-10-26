@@ -71,9 +71,6 @@ public partial class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
     /// </summary>
     public new GANDALFOptions<T> Options => _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets the number of trees in the ensemble.
     /// </summary>
@@ -129,6 +126,7 @@ public partial class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new GANDALFOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // WeightDecay is a published knob on GANDALFOptions; a bare AdamOptimizer
         // ignored it entirely. AdamW applies it as decoupled decay, and its learning-rate
@@ -209,9 +207,6 @@ public partial class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: forward pass through each layer sequentially
         return Accelerate(input, () =>

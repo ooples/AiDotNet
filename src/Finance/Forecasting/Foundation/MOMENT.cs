@@ -136,9 +136,6 @@ public partial class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly MOMENTOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics, captured by
     // ApplyInstanceNormalization so ForwardNative can restore each instance's level on the
     // way out. Without the reverse step the forecast head emits in normalized space, so the
@@ -460,7 +457,7 @@ public partial class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
@@ -817,7 +814,7 @@ public partial class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         EnsureReconstructionHead();
         var encoded = ForwardEncoder(input);
         var current = encoded;
-        foreach (var layer in _reconstructionHead!)
+        foreach (var layer in (_reconstructionHead ?? throw new InvalidOperationException("_reconstructionHead is null where it is required.")))
             current = layer.Forward(current);
         return current;
     }

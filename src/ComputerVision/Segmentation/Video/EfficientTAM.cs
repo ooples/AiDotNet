@@ -84,7 +84,6 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
         => SpatialStrideContract(inputRank, 16);
 
     private readonly EfficientTAMOptions _options;
-    public override ModelOptions GetOptions() => _options;
     protected override double DefaultLearningRate => _options.LearningRate;
     protected override double DefaultWeightDecay => _options.WeightDecay;
 

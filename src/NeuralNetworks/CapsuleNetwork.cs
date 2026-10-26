@@ -74,9 +74,6 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
     /// </remarks>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private ILossFunction<T> _lossFunction { get; set; }
 
     /// <summary>
@@ -232,9 +229,6 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Accelerate(input, () =>
         {

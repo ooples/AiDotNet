@@ -68,9 +68,6 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
 {
     private readonly TransformerOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
     /// </summary>
@@ -656,9 +653,6 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
     /// </remarks>
     protected override Tensor<T> PredictEager(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return RunLayerWalk(input);
     }

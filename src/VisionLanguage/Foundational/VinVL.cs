@@ -74,8 +74,6 @@ public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
 {
     private readonly VinVLOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -94,6 +92,7 @@ public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VinVLOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -116,6 +115,7 @@ public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VinVLOptions();
+        Options = _options;
         _useNativeMode = true;
         // VinVL trains Oscar+'s BERT-style single-stream fusion encoder with
         // AdamW at transformer-scale hyperparameters. Honor the public options

@@ -77,13 +77,19 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Sandler et al. 2018, Training setup: RMSProp with both decay and momentum set to 0.9, weight decay 0.00004, initial learning rate 0.045 decayed by 0.98 per epoch, batch size 96. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
+    protected override bool SizesLayersFromOptions => true;
+
+    /// <inheritdoc/>
+    /// <remarks>An architecture may state the image it is configured for, height x width x channels (#2147).</remarks>
+    protected override IReadOnlyCollection<int>? ArchitectureInputSizesFromOptions =>
+        new[] { _configuration.InputHeight * _configuration.InputWidth * _configuration.InputChannels };
+
     private readonly MobileNetV2Options _options;
 
     /// <inheritdoc/>
     protected override bool FusedTrainingDisabledByConfiguration => _options is not null && _options.DisableFusedOptimizerStep;
-
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
 
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -257,7 +263,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         else
         {
             // Use MobileNetV2-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV2Layers(Architecture, _configuration));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV2Layers(_configuration));
         }
 
         SetAllLayersEvalMode();
@@ -276,9 +282,6 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     /// <returns>The output class logits.</returns>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Accept 3D [C, H, W] (single unbatched sample) or 4D [B, C, H, W].
         // Internal layers — especially BatchNormalizationLayer —

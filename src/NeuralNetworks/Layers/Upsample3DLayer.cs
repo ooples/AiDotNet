@@ -143,14 +143,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    /// <remarks>
-    /// Upsample3D supports GPU execution via CUDA, OpenCL, and HIP backends using nearest neighbor interpolation.
-    /// </remarks>
-    protected override bool SupportsGpuExecution => true;
-
     #endregion
 
     #region Private Fields
@@ -160,16 +152,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     [Scratch]
     private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached GPU input shape for backward pass.
-    /// </summary>
-    private int[]? _gpuInputShape;
-
-    /// <summary>
-    /// Whether batch dimension was added in ForwardGpu.
-    /// </summary>
-    private bool _addedBatchDimension;
     private int[]? _originalInputShape;
 
     #endregion
@@ -365,75 +347,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
         return output;
     }
 
-    /// <summary>
-    /// Performs GPU-resident forward pass of 3D upsampling, keeping all data on GPU.
-    /// </summary>
-    /// <param name="inputs">The input tensors on GPU (uses first input).</param>
-    /// <returns>The upsampled output as a GPU-resident tensor.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
-
-        var input = inputs[0];
-
-        // Support any rank >= 4
-        if (input.Shape.Length < 4)
-            throw new ArgumentException($"Upsample3D layer requires at least 4D tensor [C,D,H,W]. Got rank {input.Shape.Length}.");
-
-        Tensor<T> input5D;
-        bool addedBatch = false;
-        _originalInputShape = input._shape;
-        int rank = input.Shape.Length;
-
-        if (rank == 4)
-        {
-            addedBatch = true;
-            input5D = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
-        }
-        else if (rank == 5)
-        {
-            input5D = input;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 4; d++)
-                flatBatch *= input.Shape[d];
-            input5D = input.Reshape(new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
-        }
-
-        _gpuInputShape = input5D._shape;
-        _addedBatchDimension = addedBatch;
-
-        // Store _lastInput for backward pass
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
-        var output = gpuEngine.NearestNeighborUpsample3DGpu<T>(input5D, ScaleDepth, ScaleHeight, ScaleWidth);
-
-        // Restore original tensor rank
-        if (_originalInputShape.Length > 5)
-        {
-            var outputShape = new int[_originalInputShape.Length];
-            for (int d = 0; d < _originalInputShape.Length - 4; d++)
-                outputShape[d] = _originalInputShape[d];
-            outputShape[_originalInputShape.Length - 4] = output.Shape[1];
-            outputShape[_originalInputShape.Length - 3] = output.Shape[2];
-            outputShape[_originalInputShape.Length - 2] = output.Shape[3];
-            outputShape[_originalInputShape.Length - 1] = output.Shape[4];
-            return output.Reshape(outputShape);
-        }
-        if (addedBatch)
-        {
-            return output.Reshape(new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
-        }
-        return output;
-    }
-
     #endregion
 
     #region Backward Pass
@@ -452,8 +365,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         _lastInput = null;
-        _gpuInputShape = null;
-        _addedBatchDimension = false;
     }
 
     #endregion

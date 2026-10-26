@@ -80,6 +80,14 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => VIDEO_LATENT_SCALE;
 
     /// <inheritdoc />
+    /// <remarks>Revision 2: the deepest encoder and decoder blocks keep the resolution (8x, not 16x).</remarks>
+    protected override int ArchitectureRevision => 2;
+
+    /// <inheritdoc />
+    protected override string ArchitectureRevisionNote =>
+        "Revision 2 keeps the resolution in the deepest encoder and decoder blocks (a 3x3 stride-1 convolution where " +
+        "revision 1 had a stride-2 one and a 4x4 stride-2 deconvolution), so the VAE compresses 8x as it reports.";
+
     /// <inheritdoc />
     public override bool SupportsTiling => true;
 
@@ -127,8 +135,8 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
 
         // Dummy spatial size used only to pre-resolve the lazy conv layers below.
         // 64 is large enough that every (kernelSize, padding) pair still satisfies
-        // inH + 2*padding >= kernelSize even after four stride-2 downsamples
-        // (64 → 32 → 16 → 8 → 4). Conv parameter shapes depend only on
+        // inH + 2*padding >= kernelSize after the three stride-2 downsamples
+        // (64 → 32 → 16 → 8). Conv parameter shapes depend only on
         // (inChannels, outChannels, kernelSize), so this dummy H/W is purely
         // a vehicle for shape resolution — actual H/W is determined by the
         // real input on the first Encode/Decode call.
@@ -146,16 +154,19 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
         _encoderLayers.Add(encoderEntry);
 
         int prevChannels = channels;
-        foreach (int mult in multipliers)
+        // CogVideoX's VAE compresses space 8x: every block but the last halves the resolution, which is what
+        // DownsampleFactor reports (a stride-2 last block gave 16x).
+        for (int b = 0; b < multipliers.Length; b++)
         {
-            int outChannels = _baseChannels * mult;
+            int outChannels = _baseChannels * multipliers[b];
+            bool downsample = b < multipliers.Length - 1;
             var convDown = new ConvolutionalLayer<T>(
                 outputDepth: outChannels,
-                kernelSize: 3, stride: 2, padding: 1,
+                kernelSize: 3, stride: downsample ? 2 : 1, padding: 1,
                 activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
             convDown.ResolveFromShape(new[] { 1, prevChannels, currentH, currentH });
             _encoderLayers.Add(convDown);
-            currentH = (currentH + 2 - 3) / 2 + 1;  // stride-2 pad-1 ker-3 → H/2
+            if (downsample) currentH = (currentH + 2 - 3) / 2 + 1;  // stride-2 pad-1 ker-3 → H/2
             prevChannels = outChannels;
             channels = outChannels;
         }
@@ -181,13 +192,19 @@ public partial class ImprovedVideoVAE<T> : VAEModelBase<T>
         for (int i = multipliers.Length - 1; i >= 0; i--)
         {
             int outChannels = i == 0 ? _baseChannels : _baseChannels * multipliers[i - 1];
-            var deconv = new DeconvolutionalLayer<T>(
-                outputDepth: outChannels,
-                kernelSize: 4, stride: 2, padding: 1,
-                activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
-            deconv.ResolveFromShape(new[] { 1, prevChannels, decH, decH });
-            _decoderLayers.Add(deconv);
-            decH *= 2;  // stride-2 deconv → H*2
+            // The deepest block keeps the latent resolution, mirroring the encoder; the other three double it.
+            LayerBase<T> up = i == multipliers.Length - 1
+                ? new ConvolutionalLayer<T>(
+                    outputDepth: outChannels,
+                    kernelSize: 3, stride: 1, padding: 1,
+                    activationFunction: (IActivationFunction<T>)new GELUActivation<T>())
+                : new DeconvolutionalLayer<T>(
+                    outputDepth: outChannels,
+                    kernelSize: 4, stride: 2, padding: 1,
+                    activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
+            up.ResolveFromShape(new[] { 1, prevChannels, decH, decH });
+            _decoderLayers.Add(up);
+            if (i != multipliers.Length - 1) decH *= 2;  // stride-2 deconv → H*2
             prevChannels = outChannels;
             channels = outChannels;
         }

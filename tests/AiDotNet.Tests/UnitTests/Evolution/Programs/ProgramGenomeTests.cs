@@ -145,7 +145,7 @@ public sealed class ProgramGenomeTests
     public void NullSourceIsRejected()
     {
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => new ProgramGenome(null));
+        Assert.Throws<ArgumentNullException>(() => new ProgramGenome(global::AiDotNet.Tests.TestNull.Of<string>()));
 #pragma warning restore CS8600, CS8625
     }
 

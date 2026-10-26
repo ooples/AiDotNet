@@ -42,8 +42,6 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly EmotiVoiceOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     // Not readonly: DeserializeNetworkSpecificData rebuilds the optimizer
     // after the hydrated _options is populated so the reloaded model honours
     // the persisted Learning rate / Adam β₁ / β₂ / ε / weight decay hyper-
@@ -60,6 +58,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new EmotiVoiceOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -82,6 +81,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new EmotiVoiceOptions();
+        Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;

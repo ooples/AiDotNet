@@ -472,11 +472,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="SubpixelConvolutionalLayer{T}"/> class with scalar activation function.
     /// </summary>
     /// <param name="inputDepth">The number of channels in the input tensor.</param>
@@ -817,109 +812,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
         {
             // 3D input [C, H, W] should produce 3D output [OutputDepth, outH, outW]
             return Engine.Reshape(result, new[] { _outputDepth, result.Shape[2], result.Shape[3] });
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Performs the GPU-resident forward pass of the subpixel convolutional layer.
-    /// </summary>
-    /// <param name="inputs">The GPU input tensors.</param>
-    /// <returns>The GPU output tensor after convolution, pixel shuffle, and activation.</returns>
-    /// <remarks>
-    /// All computations stay on GPU: Conv2D → PixelShuffle (reshape+permute+reshape) → Activation.
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var gpuEngine = Engine as DirectGpuTensorEngine;
-        if (gpuEngine == null)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Mirror Forward()'s lazy-init gate. OnFirstForward owns
-        // _kernels / _biases allocation (lazy ctor leaves _inputDepth=-1
-        // and the weight tensors as 0-length placeholders); GPU-first
-        // execution would otherwise dispatch the depth-to-space kernel
-        // with zero-initialized weights and produce a black output.
-        if (!IsShapeResolved) OnFirstForward(input);
-
-        var shape = input._shape;
-
-        // Ensure 4D [B, C, H, W] format
-        Tensor<T> input4D;
-        bool addedBatch = false;
-        if (shape.Length == 3)
-        {
-            // 3D [C, H, W] -> 4D [1, C, H, W]
-            addedBatch = true;
-            input4D = gpuEngine.ReshapeGpu(input, new[] { 1, shape[0], shape[1], shape[2] });
-        }
-        else
-        {
-            input4D = input;
-        }
-
-        int batch = input4D.Shape[0];
-        int height = input4D.Shape[2];
-        int width = input4D.Shape[3];
-
-        // Step 1: Convolution without activation (pixel shuffle must come before activation)
-        int padSize = _kernelSize / 2;
-        var convOutput = gpuEngine.FusedConv2DGpu(
-            input4D,
-            _kernels,
-            _biases,
-            1, 1,           // stride
-            padSize, padSize, // padding
-            1, 1,           // dilation
-            FusedActivationType.None);  // No activation yet
-
-        // Step 2: PixelShuffle [B, C*r², H, W] → [B, C, H*r, W*r]
-        int r = _upscaleFactor;
-        int outChannels = _outputDepth;
-        int outHeight = height * r;
-        int outWidth = width * r;
-
-        // PixelShuffle: [B, C*r², H, W] → [B, C, r, r, H, W] → [B, C, H, r, W, r] → [B, C, H*r, W*r]
-        var reshaped1 = gpuEngine.ReshapeGpu(convOutput, new[] { batch, outChannels, r, r, height, width });
-        var permuted = gpuEngine.PermuteGpu(reshaped1, new[] { 0, 1, 4, 2, 5, 3 }); // [B, C, H, r, W, r]
-        var shuffled = gpuEngine.ReshapeGpu(permuted, new[] { batch, outChannels, outHeight, outWidth });
-
-        // Step 3: Apply activation
-        var fusedActivation = GetFusedActivationType();
-        Tensor<T> result;
-        if (fusedActivation != FusedActivationType.None)
-        {
-            result = gpuEngine.ActivationGpu(shuffled, fusedActivation);
-        }
-        else
-        {
-            result = shuffled;
-        }
-
-        // Cache GPU tensors for backward pass during training
-        if (IsTrainingMode)
-        {
-            _gpuInput = input4D;
-            _gpuConvOutput = convOutput;
-            _gpuShuffled = shuffled;
-            _gpuActivationOutput = result;
-            _gpuAddedBatch = addedBatch;
-            _gpuBatch = batch;
-            _gpuHeight = height;
-            _gpuWidth = width;
-            _gpuActivationType = fusedActivation;
-        }
-
-        // Remove batch dimension if it was added
-        if (addedBatch)
-        {
-            result = gpuEngine.ReshapeGpu(result, new[] { outChannels, outHeight, outWidth });
         }
 
         return result;

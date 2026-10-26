@@ -76,9 +76,6 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets whether auxiliary loss (memory addressing regularization) should be used during training.
     /// </summary>
@@ -922,9 +919,6 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Reset memory and layer state for deterministic inference -- UNLESS a sequence is being
         // carried. ProcessSequence suppresses the reset precisely so memory, the temporal links and

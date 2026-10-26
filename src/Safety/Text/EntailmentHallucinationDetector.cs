@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -277,9 +278,9 @@ public class EntailmentHallucinationDetector<T> : TextSafetyModuleBase<T>
 
         // Check if same context words appear with different numbers
         var words1 = new HashSet<string>(
-            sent1.Split(' ').Where(w => w.Length > 3 && !double.TryParse(w, out _)));
+            sent1.Split(' ').Where(w => w.Length > 3 && !double.TryParse(w, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out _)));
         var words2 = new HashSet<string>(
-            sent2.Split(' ').Where(w => w.Length > 3 && !double.TryParse(w, out _)));
+            sent2.Split(' ').Where(w => w.Length > 3 && !double.TryParse(w, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out _)));
 
         int shared = 0;
         foreach (var w in words1)
@@ -319,7 +320,7 @@ public class EntailmentHallucinationDetector<T> : TextSafetyModuleBase<T>
                     i++;
                 }
                 string numStr = text.Substring(start, i - start).Replace(",", "");
-                if (double.TryParse(numStr, out double num))
+                if (double.TryParse(numStr, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out double num))
                 {
                     numbers.Add(num);
                 }

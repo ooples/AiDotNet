@@ -220,23 +220,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     [Scratch]
     private Tensor<T>? _lastProjectedValues = null;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuInput2D;
-    [ExternalState]
-    private Tensor<T>? _gpuQ;
-    [ExternalState]
-    private Tensor<T>? _gpuK;
-    [ExternalState]
-    private Tensor<T>? _gpuV;
-    [ExternalState]
-    private Tensor<T>? _gpuContextFlat;
-    [ExternalState]
-    private Tensor<T>? _gpuAttentionWeights;
-    private int _gpuBatchSize;
-    private int _gpuSeqLength;
-    private int _gpuEmbeddingDim;
-
     /// <summary>
     /// Tensor of weights for transforming input into query representations.
     /// Shape: [embeddingDimension, embeddingDimension]
@@ -404,11 +387,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Indicates whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Indicates whether this layer supports GPU-resident execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => _attentionGroupSize == 1;
 
     /// <summary>
     /// Gets the number of attention heads in this layer.
@@ -1735,162 +1713,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
 
-    /// <summary>
-    /// GPU-resident forward pass for multi-head attention.
-    /// Performs all projections and attention computation on GPU without downloading intermediate results.
-    /// </summary>
-    /// <param name="input">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident output tensor.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        // Materialize lazy Q/K/V/O weights before GPU projection matmuls.
-        // Without this, a fresh lazy-init MHA entering the GPU path would
-        // use [0,0] placeholder tensors and produce wrong outputs.
-        EnsureInitialized();
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Handle input shape - flatten to 3D [batch, seq, embedding]
-        int[] inputShape = input._shape;
-        int seqLength, embeddingDimension, batchSize;
-
-        if (inputShape.Length == 2)
-        {
-            // 2D input: [seq, embedding] -> treat as batch=1
-            batchSize = 1;
-            seqLength = inputShape[0];
-            embeddingDimension = inputShape[1];
-        }
-        else if (inputShape.Length >= 3)
-        {
-            // 3D+ input: flatten batch dimensions
-            batchSize = 1;
-            for (int i = 0; i < inputShape.Length - 2; i++)
-                batchSize *= inputShape[i];
-            seqLength = inputShape[^2];
-            embeddingDimension = inputShape[^1];
-        }
-        else
-        {
-            throw new ArgumentException("Input must be at least 2D [seq, embedding]");
-        }
-
-        // 1. Reshape input to 3D for processing
-        var input3D = gpuEngine.ReshapeGpu(input, new[] { batchSize, seqLength, embeddingDimension });
-
-        // Cross-attention: keys come from inputs[1] and values from inputs[2] (default: the keys' source), as in
-        // ForwardTracedMany. This path used to project keys and values from the query input regardless, so every
-        // GPU cross-attention silently computed self-attention.
-        var keySource = inputs.Length > 1 ? inputs[1] : input;
-        var valueSource = inputs.Length > 2 ? inputs[2] : keySource;
-        int keyLength = keySource._shape[^2];
-        if (valueSource._shape[^2] != keyLength)
-            throw new ArgumentException("Keys and values must have the same sequence length.", nameof(inputs));
-        var key3D = ReferenceEquals(keySource, input)
-            ? input3D
-            : gpuEngine.ReshapeGpu(keySource, new[] { batchSize, keyLength, embeddingDimension });
-        var value3D = ReferenceEquals(valueSource, keySource)
-            ? key3D
-            : gpuEngine.ReshapeGpu(valueSource, new[] { batchSize, keyLength, embeddingDimension });
-
-        // 2. Project to Q, K, V using batched matrix multiplication
-        var queries = gpuEngine.BatchedMatMulGpu(input3D, _queryWeights);
-        var keys = gpuEngine.BatchedMatMulGpu(key3D, _keyWeights);
-        var values = gpuEngine.BatchedMatMulGpu(value3D, _valueWeights);
-
-        // 3. Reshape to [batch, seq, heads, headDim]
-        var qReshaped = gpuEngine.ReshapeGpu(queries, new[] { batchSize, seqLength, _headCount, _headDimension });
-        var kReshaped = gpuEngine.ReshapeGpu(keys, new[] { batchSize, keyLength, _headCount, _headDimension });
-        var vReshaped = gpuEngine.ReshapeGpu(values, new[] { batchSize, keyLength, _headCount, _headDimension });
-
-        // 4. Transpose to [batch, heads, seq, headDim] for attention
-        var qPermuted = gpuEngine.PermuteGpu(qReshaped, new[] { 0, 2, 1, 3 });
-        var kPermuted = gpuEngine.PermuteGpu(kReshaped, new[] { 0, 2, 1, 3 });
-        var vPermuted = gpuEngine.PermuteGpu(vReshaped, new[] { 0, 2, 1, 3 });
-
-        // 5. Compute scaled dot-product attention
-        // Use overload that returns attention weights during training for backward pass
-        double scale = 1.0 / Math.Sqrt(_headDimension);
-        Tensor<T> attentionOutput;
-        Tensor<T>? attentionWeightsGpu = null;
-
-        if (IsTrainingMode)
-        {
-            // Training mode: get attention weights for backward pass
-            attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(
-                qPermuted, kPermuted, vPermuted, scale, out attentionWeightsGpu, isCausal: UseCausalMask);
-        }
-        else
-        {
-            // Inference mode: no need for attention weights
-            attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(qPermuted, kPermuted, vPermuted, scale, isCausal: UseCausalMask);
-        }
-
-        // 6. Transpose back to [batch, seq, heads, headDim]
-        var contextPermuted = gpuEngine.PermuteGpu(attentionOutput, new[] { 0, 2, 1, 3 });
-
-        // 7. Reshape to [batch, seq, embedding]
-        var contextFlat = gpuEngine.ReshapeGpu(contextPermuted, new[] { batchSize, seqLength, embeddingDimension });
-
-        // 8. Apply output projection
-        var outputProjected = gpuEngine.BatchedMatMulGpu(contextFlat, _outputWeights);
-
-        // 9. Add output bias
-        var outputWithBias = gpuEngine.AddBiasGpu(outputProjected, _outputBias);
-
-        // Cache state for backward pass only during training
-        // Skip this expensive download during inference (50% overhead reduction)
-        if (IsTrainingMode)
-        {
-            // Cache GPU tensors for GPU-resident backward pass
-            // Reshape input3D to 2D for backward pass weight gradients
-            _gpuInput2D = gpuEngine.ReshapeGpu(input3D, new[] { batchSize * seqLength, embeddingDimension });
-            _gpuQ = qPermuted;
-            _gpuK = kPermuted;
-            _gpuV = vPermuted;
-            _gpuContextFlat = contextFlat;
-            _gpuAttentionWeights = attentionWeightsGpu;
-            _gpuBatchSize = batchSize;
-            _gpuSeqLength = seqLength;
-            _gpuEmbeddingDim = embeddingDimension;
-
-            // Also cache CPU tensors for fallback backward pass
-            _lastInput = input3D;
-
-            // Cache projected Q, K, V for backward pass
-            _lastProjectedQueries = qPermuted;
-            _lastProjectedKeys = kPermuted;
-            _lastProjectedValues = vPermuted;
-
-            // Cache attention context for output weights gradient
-            _lastAttentionContext = contextFlat;
-
-            // Cache attention weights for backward pass
-            _lastAttentionScores = attentionWeightsGpu;
-
-            _lastOutput = outputWithBias;
-        }
-
-        // 10. Reshape back to original batch dimensions if needed
-        if (inputShape.Length != 3 || inputShape[0] != batchSize)
-        {
-            int[] outputShape = new int[inputShape.Length];
-            for (int i = 0; i < inputShape.Length - 2; i++)
-                outputShape[i] = inputShape[i];
-            outputShape[^2] = seqLength;
-            outputShape[^1] = embeddingDimension;
-            return gpuEngine.ReshapeGpu(outputWithBias, outputShape);
-        }
-
-        return outputWithBias;
-    }
-
 
     [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _queryWeightsVelocity;
@@ -1947,11 +1769,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 gpuEngine.RegisterPersistentTensor(_outputBiasVelocity, PersistentTensorRole.OptimizerState);
             }
 
-            gpuEngine.SgdMomentumUpdateGpu(_queryWeights, _queryWeightsGradient, _queryWeightsVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_keyWeights, _keyWeightsGradient, _keyWeightsVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_valueWeights, _valueWeightsGradient, _valueWeightsVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_outputWeights, _outputWeightsGradient, _outputWeightsVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_outputBias, _outputBiasGradient, _outputBiasVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_queryWeights, _queryWeightsGradient, _queryWeightsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_keyWeights, _keyWeightsGradient, (_keyWeightsVelocity ?? throw new InvalidOperationException("_keyWeightsVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_valueWeights, _valueWeightsGradient, (_valueWeightsVelocity ?? throw new InvalidOperationException("_valueWeightsVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_outputWeights, _outputWeightsGradient, (_outputWeightsVelocity ?? throw new InvalidOperationException("_outputWeightsVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_outputBias, _outputBiasGradient, (_outputBiasVelocity ?? throw new InvalidOperationException("_outputBiasVelocity is null where it is required.")), lr, 0.0f, 0.0f);
         }
         else
         {
@@ -2005,14 +1827,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _valueWeightsGradient = null;
         _outputWeightsGradient = null;
         _outputBiasGradient = null;
-
-        // Clear GPU cached tensors
-        _gpuInput2D = null;
-        _gpuQ = null;
-        _gpuK = null;
-        _gpuV = null;
-        _gpuContextFlat = null;
-        _gpuAttentionWeights = null;
     }
 
     /// <summary>

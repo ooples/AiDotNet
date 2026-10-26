@@ -231,7 +231,8 @@ public static class LayerCloning
 
     internal static Random CloneRandom(Random source)
     {
-        var clone = (Random)MemberwiseCloneMethod.Invoke(source, null)!;
+        var clone = MemberwiseCloneMethod.Invoke(source, null) as Random
+            ?? throw new InvalidOperationException("MemberwiseClone of a Random did not return a Random.");
 
         // .NET Framework's Random stores its mutable seed table in an int[]; modern runtimes use
         // primitive state fields or a private implementation object. Deep-copy both representations
@@ -252,7 +253,7 @@ public static class LayerCloning
             }
         }
 
-        return clone;
+        return (clone ?? throw new InvalidOperationException("clone is null where it is required."));
     }
 
     private static int? DeriveCloneSeed(int? sourceSeed)

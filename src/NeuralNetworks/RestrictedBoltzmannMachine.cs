@@ -60,9 +60,6 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
 {
     private readonly RestrictedBoltzmannMachineOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <inheritdoc />
     public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.ContrastiveDivergence;
 
@@ -636,9 +633,6 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // For RBMs, "prediction" is typically extracting the hidden layer representation.
         // RBMs operate on [0,1] valued inputs (Bernoulli visible units).

@@ -156,7 +156,7 @@ public class BezierTextRepresentationTests
     public void FittingRejectsInputThatCannotDetermineACurve()
     {
         Assert.Throws<ArgumentException>(() => CubicBezierCurve<double>.Fit(new[] { (1.0, 1.0) }));
-        Assert.Throws<ArgumentNullException>(() => CubicBezierCurve<double>.Fit(null!));
+        Assert.Throws<ArgumentNullException>(() => CubicBezierCurve<double>.Fit(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<(double X, double Y)>>()));
         Assert.Throws<ArgumentException>(() =>
             new CubicBezierCurve<double>(new[] { (0.0, 0.0), (1.0, 1.0), (2.0, 2.0) }));
     }
@@ -307,7 +307,7 @@ public class BezierTextRepresentationTests
         var top = StraightEdge(1.0, 6.0, 2.0);
         var cp = BezierAlign.ControlPointTensor(top, StraightEdge(1.0, 6.0, 6.0));
 
-        Assert.Throws<ArgumentNullException>(() => BezierAlign.Sample<double>(null!, features, cp, 2, 2));
+        Assert.Throws<ArgumentNullException>(() => BezierAlign.Sample<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.Engines.IEngine>(), features, cp, 2, 2));
         Assert.Throws<ArgumentException>(() =>
             BezierAlign.Sample(Engine, features, new Tensor<double>(new[] { 4, 2 }), 2, 2));
 

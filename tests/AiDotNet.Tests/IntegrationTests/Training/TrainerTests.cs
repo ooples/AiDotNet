@@ -181,7 +181,7 @@ trainer:
         public async Task Trainer_WithNullConfig_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new Trainer<double>((TrainingRecipeConfig)null));
+            Assert.Throws<ArgumentNullException>(() => new Trainer<double>(global::AiDotNet.Tests.TestNull.Of<TrainingRecipeConfig>()));
         }
 
         [Fact(Timeout = 120000)]

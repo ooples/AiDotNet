@@ -60,7 +60,6 @@ public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguag
     #region Fields
 
     private readonly MusicFlamingoOptions _options;
-    public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
@@ -88,6 +87,7 @@ public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguag
         : base(architecture)
     {
         _options = options ?? new MusicFlamingoOptions();
+        Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -102,6 +102,7 @@ public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguag
         : base(architecture)
     {
         _options = options ?? new MusicFlamingoOptions();
+        Options = _options;
         _useNativeMode = true;
         // The options declare the training learning rate; the optimizer's generic default (0.01) is 100 times it,
         // which is what made a two-step training probe raise the loss on this 105M-parameter model.
@@ -224,7 +225,8 @@ public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguag
     private Tensor<T> EncodePrompt(string prompt)
     {
         var emb = new Tensor<T>([_options.LLMHiddenDim]);
-        int hash = prompt.GetHashCode();
+        // A stable hash: string.GetHashCode() changes per process, so the same prompt would encode differently each run (#2361).
+        int hash = AiDotNet.Helpers.StableHash.Seed(prompt);
         for (int i = 0; i < _options.LLMHiddenDim; i++)
             emb[i] = NumOps.FromDouble(Math.Sin((hash + i) * 0.1) * 0.5);
         return emb;

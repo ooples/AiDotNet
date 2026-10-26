@@ -56,7 +56,7 @@ public class MambaBlockTests
         await Task.CompletedTask;
         int inner = 4;
         int state = 3;
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
 
         Tensor<double> Rand(int[] shape, double scale = 1.0)
         {
@@ -112,7 +112,7 @@ public class MambaBlockTests
         var block = new MambaBlock<double>(seqLen, modelDim, stateDim, expandFactor: 2);
 
         var p = block.GetParameters();
-        var rng = new Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         for (int i = 0; i < p.Length; i++)
         {
             p[i] = (rng.NextDouble() * 2 - 1) * 0.3;
@@ -120,7 +120,7 @@ public class MambaBlockTests
         block.SetParameters(p);
 
         var input = new Tensor<double>(new[] { 1, seqLen, modelDim });
-        var rng2 = new Random(321);
+        var rng2 = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(321);
         for (int i = 0; i < input.Length; i++)
         {
             input[i] = rng2.NextDouble() * 2 - 1;
@@ -395,7 +395,7 @@ public class MambaBlockTests
     private static Tensor<float> CreateRandomTensor(int[] shape)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1);
@@ -406,7 +406,7 @@ public class MambaBlockTests
     private static Tensor<double> CreateRandomDoubleTensor(int[] shape)
     {
         var tensor = new Tensor<double>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = random.NextDouble() * 2 - 1;

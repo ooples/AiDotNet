@@ -66,7 +66,7 @@ public class StreamingTrainingTests
 
     private static (Tensor<float> input, Tensor<float> target) FixedSample()
     {
-        var rng = new Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         // Post-patch-embedding token features [batch, num_tokens, VisionDim] — Helix's
         // documented input contract (see ModelFamily HelixTests). Width MUST equal
         // VisionDim (256) so the lazy vision LayerNorm gamma matches.

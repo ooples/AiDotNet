@@ -62,9 +62,6 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
 {
     private readonly NEATOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <inheritdoc />
     /// <remarks>
     /// Every non-input node is passed through <see cref="ApplySigmoid"/>, including
@@ -336,7 +333,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
                 var genome = GetBestGenome();
                 int n = genome?.Connections?.Count ?? 0;
                 var values = new Vector<T>(n);
-                for (int i = 0; i < n; i++) values[i] = genome!.Connections[i].Weight;
+                for (int i = 0; i < n; i++) values[i] = (genome ?? throw new InvalidOperationException("genome is null where it is required.")).Connections[i].Weight;
                 return values;
             },
             values =>
@@ -345,7 +342,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
                 int n = genome?.Connections?.Count ?? 0;
                 for (int i = 0; i < n && i < values.Length; i++)
                 {
-                    genome!.Connections[i].Weight = values[i];
+                    (genome ?? throw new InvalidOperationException("genome is null where it is required.")).Connections[i].Weight = values[i];
                 }
             }));
     }
@@ -848,9 +845,6 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Get the best genome (the one with highest fitness)
         var bestGenome = RequireBestGenome();

@@ -70,9 +70,6 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 {
     private readonly AudioVisualEventLocalizationOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Constants
 
     private const int DEFAULT_EMBEDDING_DIM = 512;
@@ -1562,9 +1559,6 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Accelerate(input, () =>
         {

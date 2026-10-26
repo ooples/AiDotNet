@@ -64,9 +64,6 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
 {
     private readonly SignatureInformedTransformerOptions<T> _options;
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>Gets the path-signature transform, including the pairwise signed-area (lead-lag) measure.</summary>
     public PathSignatureTransform<T> Signatures { get; }
 
@@ -156,7 +153,6 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         }
 
         Layers.AddRange(LayerHelper<T>.CreateDefaultSignatureInformedTransformerLayers(
-            Architecture,
             NumFeatures,
             _options.ModelDimension,
             _options.NumHeads,

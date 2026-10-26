@@ -30,7 +30,7 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         var queryX = new Matrix<double>(queryRows, featureCount);
         var queryY = new Vector<double>(queryRows);
 
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int i = 0; i < supportRows; i++)
         {
@@ -78,7 +78,7 @@ public class MetaLearningNewAlgorithmsIntegrationTests
         var supportY = new Tensor<double>(new[] { supportRows });
         var queryY = new Tensor<double>(new[] { queryRows });
 
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int i = 0; i < supportRows; i++)
         {

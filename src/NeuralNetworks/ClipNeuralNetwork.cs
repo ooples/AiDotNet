@@ -58,9 +58,6 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
 {
     private readonly ClipOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     private string _imageEncoderPath;
     private string _textEncoderPath;
     private readonly ITokenizer _tokenizer;
@@ -183,9 +180,6 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));
-
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         var imageData = new double[input.Length];
         for (int i = 0; i < input.Length; i++)

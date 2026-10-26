@@ -55,7 +55,7 @@ public class CTGANGeneratorTests
     private static (Matrix<double> data, ColumnMetadata[] columns) BuildBimodalDataset(int perMode = 150)
     {
         int rows = perMode * 2;
-        var rng = new Random(Seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed);
         var data = new Matrix<double>(rows, 2);
         for (int i = 0; i < perMode; i++) { data[i, 0] = -5.0 + 0.5 * SampleNormal(rng); data[i, 1] = 0; }
         for (int i = 0; i < perMode; i++) { data[perMode + i, 0] = 5.0 + 0.5 * SampleNormal(rng); data[perMode + i, 1] = 1; }

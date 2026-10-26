@@ -76,9 +76,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
 {
     private readonly AudioVisualCorrespondenceOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Constants
 
     private const int DEFAULT_EMBEDDING_DIM = 512;
@@ -1126,9 +1123,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Accelerate(input, () =>
         {

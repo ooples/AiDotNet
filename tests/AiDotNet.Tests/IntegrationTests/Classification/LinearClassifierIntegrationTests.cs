@@ -436,7 +436,7 @@ public class LinearClassifierIntegrationTests
         var x = new Matrix<double>(20, 10);
         var y = new Vector<double>(20);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 20; i++)
         {
             // Only first 2 features are relevant

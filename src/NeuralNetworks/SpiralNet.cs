@@ -84,9 +84,6 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
     /// </summary>
     private SpiralNetOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Cached spiral indices for each resolution level.
     /// </summary>
@@ -147,6 +144,7 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
         ValidateOptions(options);
 
         _options = options;
+        Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification);
         // Default Adam at learning rate 5e-3 (vs the 1e-3 library default). The
         // mesh-convolution stack learns slowly at 1e-3, so a short fixed-pair
@@ -373,9 +371,6 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
     /// <exception cref="InvalidOperationException">Thrown when spiral indices are not set.</exception>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         if (_spiralIndicesPerLevel.Count == 0)
         {

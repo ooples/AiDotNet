@@ -66,8 +66,6 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
     }
     private TabularQLearningOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Random _random;
     private double _epsilon;
@@ -89,6 +87,7 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
         }
 
         _options = options;
+        Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _random = RandomHelper.CreateSecureRandom();
         _epsilon = _options.EpsilonStart;

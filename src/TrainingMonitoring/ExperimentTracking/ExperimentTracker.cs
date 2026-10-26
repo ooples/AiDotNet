@@ -1,6 +1,7 @@
 #if !NET6_0_OR_GREATER
 #pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604
 #endif
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -180,7 +181,7 @@ public class ExperimentTracker : IExperimentTracker
         }
 
         var runId = GenerateRunId();
-        var experiment = _experiments[_activeExperiment!];
+        var experiment = _experiments[(_activeExperiment ?? throw new InvalidOperationException("_activeExperiment is null where it is required."))];
 
         var run = new RunInfo
         {
@@ -815,7 +816,13 @@ public class ExperimentTracker : IExperimentTracker
         if (field.StartsWith("metrics."))
         {
             var metricKey = field.Substring(8);
-            if (double.TryParse(valueStr, out var value))
+            // A metric bound is written with a '.' decimal point. One that does not parse ("0,5") is refused: skipping it
+            // would silently drop the predicate and return unfiltered runs (#2359).
+            if (!double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+            {
+                throw new ArgumentException(
+                    $"The filter value \"{valueStr}\" for {field} is not a number written with a '.' decimal point.", nameof(filter));
+            }
             {
                 query = op switch
                 {

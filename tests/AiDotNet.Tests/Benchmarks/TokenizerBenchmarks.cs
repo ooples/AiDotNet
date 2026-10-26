@@ -16,18 +16,18 @@ namespace AiDotNet.Tests.Benchmarks;
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 10)]
 public class TokenizerBenchmarks
 {
-    private BpeTokenizer _bpeTokenizer = null!;
-    private WordPieceTokenizer _wordPieceTokenizer = null!;
-    private SentencePieceTokenizer _sentencePieceTokenizer = null!;
-    private UnigramTokenizer _unigramTokenizer = null!;
-    private CharacterTokenizer _characterTokenizer = null!;
+    private BpeTokenizer _bpeTokenizer = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Algorithms.BpeTokenizer>();
+    private WordPieceTokenizer _wordPieceTokenizer = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Algorithms.WordPieceTokenizer>();
+    private SentencePieceTokenizer _sentencePieceTokenizer = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Algorithms.SentencePieceTokenizer>();
+    private UnigramTokenizer _unigramTokenizer = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Algorithms.UnigramTokenizer>();
+    private CharacterTokenizer _characterTokenizer = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Algorithms.CharacterTokenizer>();
 
-    private string _shortText = null!;
-    private string _mediumText = null!;
-    private string _longText = null!;
-    private List<string> _batchTexts = null!;
+    private string _shortText = global::AiDotNet.Tests.TestNull.Of<string>();
+    private string _mediumText = global::AiDotNet.Tests.TestNull.Of<string>();
+    private string _longText = global::AiDotNet.Tests.TestNull.Of<string>();
+    private List<string> _batchTexts = global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.List<string>>();
 
-    private List<int> _tokenIdsForDecoding = null!;
+    private List<int> _tokenIdsForDecoding = global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.List<int>>();
 
     [GlobalSetup]
     public void Setup()
@@ -215,7 +215,7 @@ public class TokenizerBenchmarks
             "model", "training", "inference", "batch", "parallel", "efficient"
         };
 
-        var random = new System.Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var sb = new StringBuilder();
 
         for (int i = 0; i < wordCount; i++)
@@ -235,9 +235,9 @@ public class TokenizerBenchmarks
 [SimpleJob(launchCount: 1, warmupCount: 2, iterationCount: 5)]
 public class TokenizerMemoryBenchmarks
 {
-    private string _largeText = null!;
-    private BpeTokenizer _bpeTokenizer = null!;
-    private WordPieceTokenizer _wordPieceTokenizer = null!;
+    private string _largeText = global::AiDotNet.Tests.TestNull.Of<string>();
+    private BpeTokenizer _bpeTokenizer = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Algorithms.BpeTokenizer>();
+    private WordPieceTokenizer _wordPieceTokenizer = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Algorithms.WordPieceTokenizer>();
 
     [GlobalSetup]
     public void Setup()
@@ -285,7 +285,7 @@ public class TokenizerMemoryBenchmarks
             "language", "processing", "deep", "neural", "network"
         };
 
-        var random = new System.Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var sb = new StringBuilder(wordCount * 8);
 
         for (int i = 0; i < wordCount; i++)
@@ -305,7 +305,7 @@ public class TokenizerMemoryBenchmarks
             "machine", "learning", "artificial", "intelligence"
         };
 
-        var random = new System.Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var sb = new StringBuilder();
 
         for (int i = 0; i < wordCount; i++)
@@ -325,8 +325,8 @@ public class TokenizerMemoryBenchmarks
 [SimpleJob(launchCount: 1, warmupCount: 2, iterationCount: 5)]
 public class TokenizerPaddingBenchmarks
 {
-    private BpeTokenizer _tokenizer = null!;
-    private List<string> _variableLengthTexts = null!;
+    private BpeTokenizer _tokenizer = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tokenization.Algorithms.BpeTokenizer>();
+    private List<string> _variableLengthTexts = global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.List<string>>();
 
     [GlobalSetup]
     public void Setup()
@@ -338,7 +338,7 @@ public class TokenizerPaddingBenchmarks
         _tokenizer = BpeTokenizer.Train(corpus, 1000);
 
         // Create texts of varying lengths
-        var random = new System.Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         _variableLengthTexts = Enumerable.Range(0, 100)
             .Select(_ => GenerateText(random.Next(10, 500)))
             .ToList();
@@ -394,7 +394,7 @@ public class TokenizerPaddingBenchmarks
             "machine", "learning", "artificial", "intelligence"
         };
 
-        var random = new System.Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var sb = new StringBuilder();
 
         for (int i = 0; i < wordCount; i++)

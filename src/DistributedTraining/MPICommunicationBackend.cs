@@ -120,7 +120,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
         catch (Exception ex)
         {
             // MPI.NET not available, will use fallback
-            Console.WriteLine($"MPI.NET not available: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning($"MPI.NET not available: {ex}");
         }
 
         // Fallback to single-process mode
@@ -152,7 +152,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: Error during MPI shutdown: {ex.Message}");
+                System.Diagnostics.Trace.TraceWarning($"Warning: Error during MPI shutdown: {ex}");
             }
         }
 
@@ -343,7 +343,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
 
             if (scatterMethod != null)
             {
-                var result = (T[]?)scatterMethod.Invoke(_mpiCommunicator, new object[] { sendArray!, root });
+                var result = (T[]?)scatterMethod.Invoke(_mpiCommunicator, new object[] { (sendArray ?? throw new InvalidOperationException("sendArray is null where it is required.")), root });
 
                 if (result != null)
                 {

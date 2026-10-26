@@ -313,7 +313,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, pull requests)
         if: github.event_name == 'pull_request'
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: none
@@ -322,7 +322,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, whole library)
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: none
@@ -330,7 +330,7 @@ jobs:
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -400,7 +400,7 @@ jobs:
       # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
       # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
       - name: Initialize CodeQL (traced build)
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: manual
@@ -422,7 +422,7 @@ jobs:
           dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           category: "/language:csharp-traced"
           upload: always
@@ -789,7 +789,14 @@ jobs:
     # The whole test matrix waits on this job through `needs`, and it makes uncapped network calls
     # (gh run list, gh run download). Without a cap it inherits the 360-minute default, so one
     # stalled artifact download parks all 116 shards for six hours.
-    timeout-minutes: 15
+    # The cap guards against that stall, not against the selection itself, and at 15 minutes it had
+    # grown tighter than the work: a PR carrying a master merge selected for 14m14s, set every
+    # output, uploaded its report, and was killed 4 seconds into its last bookkeeping step. A job
+    # killed by a timeout reports `cancelled`, which the validation gate reads as "did not run to
+    # completion", so build, build-compat and size-check were all skipped and the gate failed a run
+    # whose selection had actually succeeded. Thirty minutes still fails a genuine stall in half an
+    # hour rather than six, with headroom over the largest selection observed.
+    timeout-minutes: 30
     permissions:
       actions: read
       contents: read
@@ -2066,11 +2073,21 @@ jobs:
           run-id: ${{ steps.baseline.outputs.baseline_run_id }}
           github-token: ${{ github.token }}
 
+      # The expected shard matrix goes to a file, not an environment variable: with test-level filters it outgrew
+      # Linux's 128 KiB limit on a single environment string, and the next step then failed to start at all
+      # ("An error occurred trying to start process '/usr/bin/pwsh' ... Argument list too long"). A run script is
+      # written to a file before it executes, so the expression expanded here has no such limit.
+      - name: Write expected shard matrix
+        shell: pwsh
+        run: |
+          @'
+          ${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}
+          '@ | Set-Content -LiteralPath expected-shard-matrix.json -Encoding utf8
+
       - name: Build final test report and enforce regression policy
         id: analyze
         shell: pwsh
         env:
-          EXPECTED_SHARD_MATRIX: ${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}
           CURRENT_SHA: ${{ github.sha }}
           COMPARE: ${{ steps.comparison.outputs.compare }}
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
@@ -2113,7 +2130,7 @@ jobs:
           # run reported "115 shards, 115 passed, 0 failed" while Integration D had died. Shards
           # that selection deliberately skipped are not in this matrix, so anything expected and
           # absent here died rather than being skipped. #2086.
-          $matrixJson = $env:EXPECTED_SHARD_MATRIX
+          $matrixJson = Get-Content -LiteralPath expected-shard-matrix.json -Raw
           $expectedShardNames = @(
             & ./.github/scripts/get-selected-shard-names.ps1 -MatrixJson $matrixJson
           )
@@ -2569,14 +2586,17 @@ jobs:
 
           # The matrix result only says failure/cancelled. Preserve every concrete shard conclusion
           # so a cancelled or OOM-killed shard with no TRX cannot disappear from the totals.
+          # 50 per page, not 100: once a run of this size has been re-run, GitHub answers every
+          # per_page=100 jobs request with HTTP 502 (PR #2332, run 39550124921), while 50 succeeds.
           $jobs = @()
           $page = 1
+          $perPage = 50
           do {
             $response = Invoke-GitHubApiWithRetry -Headers $headers -Uri `
-              "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?per_page=100&page=$page"
+              "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?per_page=$perPage&page=$page"
             $jobs += @($response.jobs)
             $page++
-          } while ($response.jobs.Count -eq 100)
+          } while ($response.jobs.Count -eq $perPage)
           @($jobs) | ConvertTo-Json -Depth 8 | Set-Content current-jobs.json
 
           $baselinePath = '.github/ci-test-baseline.json'

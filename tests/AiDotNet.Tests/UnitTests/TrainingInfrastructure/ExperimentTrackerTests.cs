@@ -88,7 +88,7 @@ public class ExperimentTrackerTests : IDisposable
     public async Task CreateExperiment_WithNullName_ThrowsArgumentException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => _tracker.CreateExperiment(null!));
+        Assert.Throws<ArgumentException>(() => _tracker.CreateExperiment(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -192,7 +192,7 @@ public class ExperimentTrackerTests : IDisposable
     public async Task StartRun_WithNullExperimentId_ThrowsArgumentException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => _tracker.StartRun(null!));
+        Assert.Throws<ArgumentException>(() => _tracker.StartRun(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]

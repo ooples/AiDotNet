@@ -80,9 +80,6 @@ public partial class MeshCNN<T> : GraphModelLayoutBase<T>
     /// </summary>
     private readonly MeshCNNOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Cached edge adjacency for the current mesh being processed.
     /// </summary>
@@ -312,9 +309,6 @@ public partial class MeshCNN<T> : GraphModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return WalkLayersWithMeshReshape(input, activations: null);
     }

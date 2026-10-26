@@ -85,9 +85,6 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphAttentionNetworkOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -745,9 +742,6 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out bool wasReshaped);
         var adjacencyMatrix = EnsureAdjacencyMatrix(normalizedInput);

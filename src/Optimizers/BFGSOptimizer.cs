@@ -458,7 +458,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             _previousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
         }
         parameterSpan.CopyTo(_previousParameters.AsWritableSpan());
-        clippedGradient.AsSpan().CopyTo(_previousGradient!.AsWritableSpan());
+        clippedGradient.AsSpan().CopyTo((_previousGradient ?? throw new InvalidOperationException("_previousGradient is null where it is required.")).AsWritableSpan());
 
         return direction;
     }

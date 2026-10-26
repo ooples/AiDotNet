@@ -69,7 +69,6 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly OpenVocabSAMOptions _options;
-    public override ModelOptions GetOptions() => _options;
 
     #region Fields
     // Only OpenVocabSAM's OWN configuration lives here. _height, _width, _channels, _numClasses,

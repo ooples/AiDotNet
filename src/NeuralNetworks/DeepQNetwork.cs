@@ -63,9 +63,6 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     /// <summary>
     /// Gets or sets the number of possible actions the agent can take in the environment.
     /// </summary>
@@ -514,9 +511,6 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // CPU path: forward pass through all layers (wrapped in the #1622 verify-then-trust compiled
         // gate; no-op unless acceleration is engaged).

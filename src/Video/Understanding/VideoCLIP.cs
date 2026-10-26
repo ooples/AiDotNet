@@ -88,9 +88,6 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 {
     private readonly VideoCLIPVideoOptions _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
     private readonly int _height;

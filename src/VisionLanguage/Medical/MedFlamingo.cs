@@ -71,8 +71,6 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly MedFlamingoOptions _options;
 
-    public override ModelOptions GetOptions() => _options;
-
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -87,6 +85,7 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         : base(architecture)
     {
         _options = options ?? new MedFlamingoOptions();
+        Options = _options;
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -109,6 +108,7 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         : base(architecture)
     {
         _options = options ?? new MedFlamingoOptions();
+        Options = _options;
         _useNativeMode = true;
         // Declared, not routed. The paper's "8-bit AdamW" is a memory-reduction form of AdamW --
         // the same algorithm with quantized moment state -- adopted to fit the model on the
