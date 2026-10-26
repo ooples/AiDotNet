@@ -182,6 +182,14 @@ internal sealed class MegaTts3WaveVae<T>
 
     /// <summary><c>encode_latent</c>: a latent <c>[1, frames, latent]</c> drawn from the posterior with Gaussian
     /// <paramref name="noise"/> of the same shape (the mean when null).</summary>
+    public Tensor<T> EncodeLatent(Tensor<T> audio, Func<int[], Tensor<T>> draw)
+    {
+        var (mean, logVariance) = Encode(audio);
+        var std = _engine.TensorExp(_engine.TensorMultiplyScalar(logVariance, NumOps.FromDouble(0.5)));
+        return _engine.TensorAdd(mean, _engine.TensorMultiply(std, draw(mean.Shape.ToArray())));
+    }
+
+    /// <summary><c>encode_latent</c> with a given draw <paramref name="noise"/> (the mean when null).</summary>
     public Tensor<T> EncodeLatent(Tensor<T> audio, Tensor<T>? noise)
     {
         var (mean, logVariance) = Encode(audio);
