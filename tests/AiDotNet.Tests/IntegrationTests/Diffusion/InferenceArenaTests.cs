@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -113,9 +114,23 @@ public class InferenceArenaTests
             for (int i = 0; i < 6; i++)
             {
                 int inputSeed = 2 + i;
-                var worker = new System.Threading.Thread(() => predictor.PredictNoise(Sample(1, inputSeed), 500));
+                // Join does not carry an exception back from a raw Thread, so a throw inside the worker would go
+                // unhandled there and take the test host down instead of failing this theory case.
+                Exception? workerFailure = null;
+                var worker = new System.Threading.Thread(() =>
+                {
+                    try
+                    {
+                        predictor.PredictNoise(Sample(1, inputSeed), 500);
+                    }
+                    catch (Exception ex)
+                    {
+                        workerFailure = ex;
+                    }
+                });
                 worker.Start();
                 worker.Join();
+                Assert.True(workerFailure is null, $"{name}: worker {i} threw {workerFailure}");
             }
 
             Assert.Equal(6L, predictor.InferenceArenaForwards);

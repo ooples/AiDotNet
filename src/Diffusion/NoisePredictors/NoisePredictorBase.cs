@@ -482,7 +482,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     // holds at most MaxIdleInferenceArenas and retires stale ones as they come back.
     private readonly Stack<InferenceArenaSlot> _idleInferenceArenas = new();
     private static readonly int MaxIdleInferenceArenas = Math.Max(1, Environment.ProcessorCount);
+    // Scratch, both: ModelStateGenerator persists a supported unannotated field by default, so these would be
+    // emitted as DeclareInt32/DeclareInt64 and a checkpoint would carry -- and restore -- an arena generation and a
+    // forward count from the run that saved it. Neither means anything to the model that loads it.
+    [Scratch]
     private int _inferenceArenaGeneration;
+    [Scratch]
     private long _inferenceArenaForwards;
 
     /// <summary>Forwards this predictor ran inside its inference arena. Test/diagnostic hook.</summary>
@@ -571,6 +576,14 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// </remarks>
     private Tensor<T> RunEagerInference(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
     {
+        // TRAINING, checked here rather than only in PredictCompiledMulti: the single-input PredictCompiled reaches
+        // this method directly, so a subclass that calls it from a forward a tape is recording would have got
+        // InferenceMode activations and arena memory the Reset below recycles, and a backward over that yields wrong
+        // or missing gradients with nothing raised. Returned RAW, not through DetachPlanOutput, because that clones
+        // and a clone is off the tape.
+        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
+            return eagerFallback();
+
         if (!InferenceArenaEnabled || TensorArena.Current is not null
             || System.Threading.Volatile.Read(ref _streamingEngaged) != 0)
             return DetachPlanOutput(eagerFallback());
