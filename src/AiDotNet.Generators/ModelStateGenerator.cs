@@ -128,6 +128,9 @@ public class ModelStateGenerator : IIncrementalGenerator
         bool hasExplicitState = false;
         bool hasScratchState = false;
         var registrations = ParameterMemberSemanticModel.GetRegistrationClassifications(type);
+        // Members this type's own Dispose assigns are object lifetime, not model state; see
+        // GetDisposeAssignedMembers for why a checkpoint must not carry them.
+        var disposeAssigned = ParameterMemberSemanticModel.GetDisposeAssignedMembers(type);
 
         foreach (var member in type.GetMembers())
         {
@@ -267,7 +270,11 @@ public class ModelStateGenerator : IIncrementalGenerator
                 || classification.Kind is ParameterMemberSemanticModel.Kind.Scratch
                 or ParameterMemberSemanticModel.Kind.Alias
                 or ParameterMemberSemanticModel.Kind.External
-                or ParameterMemberSemanticModel.Kind.Conflicting)
+                or ParameterMemberSemanticModel.Kind.Conflicting
+                // Dispose state, unless the author declared it as something persisted -- an explicit declaration
+                // still wins, so this only decides the members nobody has classified.
+                || (classification.Kind == ParameterMemberSemanticModel.Kind.Unclassified
+                    && disposeAssigned.Contains(member.Name)))
             {
                 continue;
             }
