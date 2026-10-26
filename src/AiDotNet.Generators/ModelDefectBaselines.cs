@@ -236,7 +236,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.CodecBased.FishSpeechV15<T>",
             "AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T>",
             "AiDotNet.TextToSpeech.CodecBased.IndexTTS<T>",
-            "AiDotNet.TextToSpeech.CodecBased.Llasa<T>",
             "AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T>",
             "AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T>",
             "AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T>",
