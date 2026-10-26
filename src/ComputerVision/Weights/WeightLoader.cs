@@ -197,43 +197,40 @@ public class WeightLoader
     };
 
     /// <summary>
-    /// Loads PyTorch weights from legacy pickle format.
+    /// Loads PyTorch weights from the legacy (pre-1.6, non-ZIP) format of <c>torch.save</c>.
     /// </summary>
+    /// <remarks>
+    /// <c>torch.serialization._legacy_save</c> writes five pickles (the magic number, the protocol version, the system
+    /// information, the object with storages as persistent ids, and the sorted storage keys) and then, for each key in that
+    /// order, the storage's element count (int64) and its raw bytes. Tensors are views into the storages, as in the ZIP
+    /// format, and nested dictionaries are flattened with dotted names.
+    /// </remarks>
     private Dictionary<string, Tensor<float>> LoadPyTorchPickleFormat(Stream stream, BinaryReader reader)
     {
+        stream.Position = 0;
+        new PickleParser(reader).Parse();                      // magic number
+        new PickleParser(reader).Parse();                      // protocol version
+        new PickleParser(reader).Parse();                      // system information
+        var root = new PickleParser(reader).Parse();
+        var keys = new PickleParser(reader).Parse() as System.Collections.IEnumerable
+            ?? throw new InvalidDataException("The legacy PyTorch file has no storage key list.");
+        var tensors = new List<(string Name, TensorData Data)>();
+        CollectTensors(root, string.Empty, tensors);
+        var sizes = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (_, data) in tensors) sizes[data.StorageKey] = GetDTypeSize(data.DType);
+        var storages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var keyObject in keys)
+        {
+            string key = keyObject?.ToString() ?? throw new InvalidDataException("A null storage key.");
+            long count = reader.ReadInt64();
+            if (!sizes.TryGetValue(key, out int elementSize))
+                throw new InvalidDataException($"The legacy PyTorch file's storage '{key}' has no tensor to give its type.");
+            storages[key] = reader.ReadBytes(checked((int)(count * elementSize)));
+        }
         var weights = new Dictionary<string, Tensor<float>>();
-
-        // Read pickle protocol header
-        byte proto = reader.ReadByte();
-        if (proto != 0x80) // PROTO opcode
-        {
-            stream.Position = 0;
-        }
-        else
-        {
-            byte version = reader.ReadByte();
-        }
-
-        // Parse pickle stream
-        var pickleParser = new PickleParser(reader);
-        var stateDict = pickleParser.Parse();
-
-        // Convert parsed objects to tensors
-        if (stateDict is Dictionary<string, object> dict)
-        {
-            foreach (var kvp in dict)
-            {
-                if (kvp.Value is TensorData tensorData)
-                {
-                    var tensor = CreateTensorFromData(tensorData);
-                    if (tensor != null)
-                    {
-                        weights[kvp.Key] = tensor;
-                    }
-                }
-            }
-        }
-
+        foreach (var (name, data) in tensors)
+            weights[name] = MaterializeStrided(storages.TryGetValue(data.StorageKey, out var bytes) ? bytes
+                : throw new InvalidDataException($"The legacy PyTorch file has no storage '{data.StorageKey}' for tensor '{name}'."), data);
         return weights;
     }
 
@@ -564,16 +561,6 @@ public class WeightLoader
         }
 
         return (shape, dtype, fortranOrder);
-    }
-
-    private Tensor<float>? CreateTensorFromData(TensorData data)
-    {
-        if (data.Data == null || data.Shape == null)
-        {
-            return null;
-        }
-
-        return ParseTensorData(data.Data.ToArray(), data.Shape, data.DType);
     }
 }
 
