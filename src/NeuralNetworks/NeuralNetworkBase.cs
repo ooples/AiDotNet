@@ -6949,6 +6949,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // so the recycling fires ONLY for the arena THIS Predict created for THIS inference
         // forward — never an outer training/composite arena (whose live tape/step tensors a
         // mid-forward Reset would corrupt). Save/restore makes it nesting-safe.
+        // EXPERIMENT (#653): AIDOTNET_INFERENCE_ARENA_KEEP=1 keeps one detached arena per model and thread across
+        // calls (Activate + Reset) instead of creating and disposing one per call.
+        if (s_keepInferenceArena && TensorArena.Current is null)
+        {
+            var kept = _keptInferenceArena.Value ??= TensorArena.CreateDetached();
+            var prevKept = _inferenceRecycleArena;
+            Tensor<T> keptOutput;
+            using (kept.Activate())
+            {
+                _inferenceRecycleArena = InferenceArenaSettings.RecycleLayerScratch ? kept : null;
+                try { keptOutput = DetachFromArena(PredictCore(input)); }
+                finally { _inferenceRecycleArena = prevKept; }
+            }
+            kept.Reset();
+            return keptOutput;
+        }
+
         using var arena = TensorArena.Create();
         var prevRecycle = _inferenceRecycleArena;
         _inferenceRecycleArena =
@@ -6964,6 +6981,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         return DetachFromArena(output);
     }
+
+    private static readonly bool s_keepInferenceArena =
+        System.Environment.GetEnvironmentVariable("AIDOTNET_INFERENCE_ARENA_KEEP") == "1";
+    private readonly System.Threading.ThreadLocal<TensorArena?> _keptInferenceArena = new();
 
     /// <summary>
     /// The <c>TensorArena</c> the current inference <see cref="Predict"/> call created for this

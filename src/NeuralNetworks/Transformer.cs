@@ -690,6 +690,9 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
     /// the single-input <c>Forward</c> the generic walk would call degenerates their
     /// cross-attention to a second self-attention, silently discarding the encoder.
     /// </remarks>
+    internal static readonly bool AllocDiag = System.Environment.GetEnvironmentVariable("AIDOTNET_LAYER_ALLOC_DIAG") == "1";
+    internal static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long Forward, long Recycle)> AllocByLayer = new();
+
     private Tensor<T> RunLayerWalk(Tensor<T> input)
     {
         Tensor<T> output = input;
@@ -710,6 +713,7 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
         // The layer list structure: input projection, positional encoding, dropout, then encoder/decoder blocks
         for (int i = 0; i < Layers.Count; i++)
         {
+            long __a0 = AllocDiag ? GC.GetTotalAllocatedBytes(true) : 0;
             if (Layers[i] is DecoderLayer<T> decoderLayer)
             {
                 seenDecoder = true;
@@ -739,8 +743,14 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
             // output capture below so `encoderOutput` (assigned from `output`) is the detached
             // GC copy and survives every subsequent per-layer Reset until a decoder consumes it.
             // Skip the last layer — Predict detaches the final output. No-op when not recycling.
+            long __a1 = AllocDiag ? GC.GetTotalAllocatedBytes(true) : 0;
             if (recycle && i < lastLayer)
                 output = DetachAndRecycleBetweenLayers(output);
+            if (AllocDiag)
+            {
+                long __a2 = GC.GetTotalAllocatedBytes(true);
+                AllocByLayer.AddOrUpdate($"{i}:{Layers[i].GetType().Name}", (__a1 - __a0, __a2 - __a1), (_, v) => (v.Item1 + __a1 - __a0, v.Item2 + __a2 - __a1));
+            }
 
             // Track encoder output for cross-attention in decoders.
             // The encoder output we want is the LAST encoder block's
