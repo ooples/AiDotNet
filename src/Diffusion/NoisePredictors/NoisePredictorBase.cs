@@ -496,9 +496,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// <para>
     /// Safety: the first forward of each input shape runs outside the arena, so lazily initialized weights and any
     /// buffer a layer caches across calls (a preallocated output, an embedding cache) live in ordinary memory, not in
-    /// arena memory that the next reset would hand out again. The output is deep-copied after the arena is deactivated,
-    /// so the caller's copy is ordinary memory too. The arena is not used under an arena the caller already activated,
-    /// or while transparent weight streaming is engaged (rehydrated weights must not land in arena memory).
+    /// arena memory that the next reset would hand out again, and the arena forward runs in an <c>InferenceMode</c>
+    /// scope so no layer caches a backward activation in arena memory. The output is deep-copied after the arena is
+    /// deactivated, so the caller's copy is ordinary memory too. The arena is not used under an arena the caller
+    /// already activated (DiffusionModelBase.Generate runs its denoising loop in its own per-step arena, so this
+    /// covers callers that drive the predictor directly), or while transparent weight streaming is engaged
+    /// (rehydrated weights must not land in arena memory).
     /// </para>
     /// </remarks>
     private Tensor<T> RunEagerInference(Tensor<T>[] inputs, Func<Tensor<T>> eagerFallback)
@@ -534,6 +537,9 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         if (slot is null) _inferenceArenas.Value = slot = new InferenceArenaSlot { Generation = generation };
 
         Tensor<T> result;
+        // InferenceMode, as DiffusionModelBase.Generate's per-step arena uses (#1668): no layer populates a
+        // backward-activation cache, so nothing keeps a reference into arena memory across the Reset below.
+        using (InferenceMode.Enter())
         using (slot.Arena.Activate())
             result = eagerFallback();
         System.Threading.Interlocked.Increment(ref _inferenceArenaForwards);

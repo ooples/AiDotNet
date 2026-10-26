@@ -58,7 +58,7 @@ public class InferenceArenaTests
         {
             var now = kept[i].ToArray();
             for (int j = 0; j < now.Length; j++)
-                Assert.True(BitConverter.SingleToInt32Bits(now[j]) == BitConverter.SingleToInt32Bits(whenReturned[i][j]),
+                Assert.True(AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(now[j]) == AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(whenReturned[i][j]),
                     $"{label}: call {i} element {j} changed after later predictions: {now[j]} vs {whenReturned[i][j]}");
         }
     }
@@ -83,7 +83,7 @@ public class InferenceArenaTests
             {
                 Assert.Equal(reference[i].Length, withArena[i].Length);
                 for (int j = 0; j < reference[i].Length; j++)
-                    Assert.True(BitConverter.SingleToInt32Bits(reference[i][j]) == BitConverter.SingleToInt32Bits(withArena[i][j]),
+                    Assert.True(AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(reference[i][j]) == AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(withArena[i][j]),
                         $"{name} call {i} element {j}: {withArena[i][j]} with the arena vs {reference[i][j]} without");
             }
             // A returned prediction still holds its values after every later call reused the arena.
