@@ -7001,6 +7001,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         var arena = _inferenceRecycleArena;
         if (arena is null) return boundary;
+        // Nothing to recycle when the forward has rented no host scratch from the arena: a GPU-resident forward keeps
+        // its intermediates on the device. Detaching anyway downloaded every layer boundary to a fresh host array for
+        // the next layer to upload again (a 4-layer 512-wide Transformer on DirectGpuTensorEngine: 38-39 ms and
+        // 50.9 MB per Predict against 30-33 ms and 23.6 MB with recycling off).
+        if (arena.PeakBackingBytes == 0) return boundary;
         // The arena carries the boundary out of the recyclable scratch region (via its cross-arena
         // persistent pool, so it survives the Reset AND is reused across calls — no per-forward GC
         // churn), then Resets the scratch pool so the next layer reuses this layer's buffers.
