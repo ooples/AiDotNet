@@ -10055,17 +10055,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "OrpheusTTS" && model.TypeParameterCount == 1)
             {
-                // Orpheus keeps its LLaMA-3B/SNAC paper-scale defaults in production.
-                // Generated invariants use the same configurable codec-LM topology at
-                // a size that fits the 16 GB GitHub runner.
+                // Orpheus is Llama 3.2 3B over SNAC 24 kHz; keep the language model at width 16 with one layer (its vocabulary
+                // stays the tokenizer's 156,940) and SNAC at widths 2-32 that still hop 512 samples. An untrained model almost
+                // never writes a well-formed seven-token frame (each token must fall in its slot's 4096 of 156,940), which the
+                // release drops, so the fixture restricts each sampled token to its slot (ConstrainToAudioTokens) and writes
+                // five frames (35 tokens).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 8, outputSize: 80), " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
                     "new AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions { " +
-                    "TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, " +
-                    "NumHeads = 4, NumCodebooks = 1, CodebookSize = 80, " +
-                    "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
+                    "HiddenDim = 16, Layers = 1, Heads = 2, KeyValueHeads = 1, HeadDim = 8, Intermediate = 32, MaxNewTokens = 35, " +
+                    "ConstrainToAudioTokens = true, CodecEncoderDim = 2, CodecDecoderDim = 32, CodecCodebookDim = 2 })";
             }
             else if (model.ClassName == "ParlerTTS" && model.TypeParameterCount == 1)
             {
@@ -16327,6 +16328,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "OrpheusTTS")
+                {
+                    // Orpheus reads a text's token ids and trains on a recording: eight ids, and 4800 samples (0.2 s at
+                    // 24 kHz, three SNAC frames). Its sampled codes vary with the text, so the text-sensitivity probes compare
+                    // the deterministic training objective, as for OuteTTS.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 4800 };");
+                    // Orpheus fine-tunes at the release's 5e-5: fifteen steps lower the tiny model's loss from 11.965333 to
+                    // 11.950703, a steady descent of 1.2e-3 of itself, more than twice the threshold below but far from 1%.
+                    sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.9995;");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                        ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "EmotiVoice")
                 {
                     // EmotiVoice reads phoneme ids and trains on the recording (its mel spectrogram for the aligner, a segment
@@ -16427,7 +16447,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
@@ -21841,7 +21861,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "CSM" or "Bark" or "BarkModel" or "OrpheusTTS"
+        return className is "GPTSoVITS" or "CSM" or "Bark" or "BarkModel"
             or "FireRedTTS" or "FishSpeech" or "FishSpeechV15"
             or "UniAudio" or "Zonos" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
@@ -21875,7 +21895,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Amphion" => 32,
             "Dia" => 32,
             "Bark" or "BarkModel" => 32,
-            "OrpheusTTS" => 80,
             "CosyVoice3" => 16,
             "CosyVoiceClone" => 16,
             "Chatterbox" => 16,

@@ -48,9 +48,17 @@ public class WeightLoader
             ".safetensors" => LoadSafeTensors(filePath),
             ".npy" => LoadNumPySingle(filePath),
             ".npz" => LoadNumPyArchive(filePath),
-            ".bin" => LoadBinaryWeights(filePath),
+            // Hugging Face's pytorch_model.bin is a torch.save zip archive; other .bin files use the custom binary layout.
+            ".bin" => IsZipArchive(filePath) ? LoadPyTorchWeights(filePath) : LoadBinaryWeights(filePath),
             _ => throw new NotSupportedException($"Unsupported weight file format: {extension}")
         };
+    }
+
+    private static bool IsZipArchive(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        var magic = new byte[4];
+        return stream.Read(magic, 0, 4) == 4 && magic[0] == (byte)'P' && magic[1] == (byte)'K' && magic[2] == 3 && magic[3] == 4;
     }
 
     /// <summary>
