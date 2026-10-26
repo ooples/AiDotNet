@@ -121,7 +121,7 @@ public class ModelRepository : IModelRepository
     {
         // Use reflection to get the model's input/output dimensions
         // We need to handle different generic types dynamically
-        var modelType = entry.Model.GetType();
+        var modelType = (entry.Model ?? throw new System.InvalidOperationException("entry.Model is null where it is required.")).GetType();
         var inputDimProperty = modelType.GetProperty("InputDimension");
         var outputDimProperty = modelType.GetProperty("OutputDimension");
 

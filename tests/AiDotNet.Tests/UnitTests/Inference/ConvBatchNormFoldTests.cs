@@ -70,7 +70,7 @@ public class ConvBatchNormFoldTests
     [Fact]
     public void FoldBatchNorm_RemovesLayer_AndPreservesOutput()
     {
-        var rng = new Random(20260530);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260530);
         var model = BuildConvBnModel();
 
         // Give gamma/beta non-trivial values (default gamma=1, beta=0 would make BN
@@ -136,7 +136,7 @@ public class ConvBatchNormFoldTests
     [Fact]
     public void FoldBatchNorm_IntoDense_PreservesOutput()
     {
-        var rng = new Random(20260601);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260601);
         // Dense(16→8, IDENTITY) → BatchNorm → Dense(4). BN folds into the first Dense.
         var layers = new System.Collections.Generic.List<ILayer<float>>
         {

@@ -175,7 +175,8 @@ public class ConstructorAgreementRatchetTests
         var spans = new List<(int, int)>();
         var signature = new Regex(
             @"^\s*(?:public|private|protected|internal)\s+" + Regex.Escape(typeName) + @"\s*\(",
-            RegexOptions.Compiled);
+            RegexOptions.Compiled,
+            System.TimeSpan.FromSeconds(1));
 
         int i = 0;
         while (i < lines.Length)

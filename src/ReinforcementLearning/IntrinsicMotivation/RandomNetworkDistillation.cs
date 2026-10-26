@@ -45,7 +45,7 @@ public sealed class RandomNetworkDistillation<T> : IIntrinsicRewardModule<T>
         _hidden = Math.Max(1, hiddenSize);
         _output = Math.Max(1, outputSize);
         _learningRate = learningRate;
-        _rng = seed.HasValue ? new Random(seed.Value) : new Random();
+        _rng = seed.HasValue ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value) : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc />

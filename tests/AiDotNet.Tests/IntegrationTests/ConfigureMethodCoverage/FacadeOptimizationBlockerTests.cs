@@ -46,7 +46,7 @@ public sealed class FacadeOptimizationBlockerTests
     {
         // #53: gradient-boosted trees keep their trained state (_trees / _binThresholds) OUTSIDE the parameter
         // vector, so quantizing via WithParameters used to drop it and Predict threw "Model must be trained".
-        var rng = new Random(11);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         var rows = 80;
         var cols = 3;
         var x = new Matrix<double>(rows, cols);
@@ -80,7 +80,7 @@ public sealed class FacadeOptimizationBlockerTests
         // GetColumnVectors. It must now train + predict through the facade.
         const int n = 48;
         const int lookback = 16;
-        var rng = new Random(5);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
         var xin = new double[n * lookback];
         var yin = new double[n];
         for (var s = 0; s < n; s++)

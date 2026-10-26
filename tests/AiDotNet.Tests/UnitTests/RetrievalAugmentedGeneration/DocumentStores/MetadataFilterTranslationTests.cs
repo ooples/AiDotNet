@@ -29,18 +29,18 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         {
             var json = JObject.Parse(JsonConvert.SerializeObject(
                 QdrantDocumentStore<float>.TranslateFilter(MetadataFilter.Eq("category", "science"))));
-            var cond = (JArray)json["must"]!;
-            Assert.Equal("metadata.category", (string?)cond[0]!["key"]);
-            Assert.Equal("science", (string?)cond[0]!["match"]!["value"]);
+            var cond = (JArray)(json["must"] ?? throw new InvalidOperationException("(JArray)json[\"must\"] is null where it is required."));
+            Assert.Equal("metadata.category", (string?)(cond ?? throw new InvalidOperationException("cond is null where it is required."))[0]?["key"]);
+            Assert.Equal("science", (string?)(cond[0]?["match"] ?? throw new InvalidOperationException("cond[0]?[\"match\"] is null where it is required."))["value"]);
         }
 
         [Fact]
         public void Qdrant_AndOfEqAndRange()
         {
             var json = JObject.Parse(JsonConvert.SerializeObject(QdrantDocumentStore<float>.TranslateFilter(Sample)));
-            var must = (JArray)json["must"]!;
-            Assert.Equal("metadata.category", (string?)must[0]!["key"]);
-            Assert.Equal(2020.0, (double)must[1]!["range"]!["gte"]!);
+            var must = (JArray)(json["must"] ?? throw new InvalidOperationException("(JArray)json[\"must\"] is null where it is required."));
+            Assert.Equal("metadata.category", (string?)(must ?? throw new InvalidOperationException("must is null where it is required."))[0]?["key"]);
+            Assert.Equal(2020.0, (double)(must[1]?["range"]?["gte"] ?? throw new InvalidOperationException("must[1]?[\"range\"][\"gte\"] is null where it is required.")));
         }
 
         [Fact]
@@ -60,12 +60,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             var inJson = JObject.Parse(JsonConvert.SerializeObject(QdrantDocumentStore<float>.TranslateFilter(
                 MetadataFilter.In("author", new object[] { "A", "B" }))));
-            var anyArr = (JArray)inJson["must"]![0]!["match"]!["any"]!;
-            Assert.Equal(2, anyArr.Count);
+            var anyArr = (JArray)(inJson["must"]?[0]?["match"]?["any"] ?? throw new InvalidOperationException("(JArray)inJson[\"must\"]?[0]?[\"match\"][\"any\"] is null where it is required."));
+            Assert.Equal(2, (anyArr ?? throw new InvalidOperationException("anyArr is null where it is required.")).Count);
 
             var exists = JObject.Parse(JsonConvert.SerializeObject(QdrantDocumentStore<float>.TranslateFilter(
                 MetadataFilter.Exists("author"))));
-            Assert.Equal("metadata.author", (string?)((JArray)exists["must_not"]!)[0]!["is_empty"]!["key"]);
+            Assert.Equal("metadata.author", (string?)(((JArray)(exists["must_not"] ?? throw new InvalidOperationException("exists[\"must_not\"] is null where it is required.")))[0]?["is_empty"] ?? throw new InvalidOperationException("((JArray)exists[\"must_not\"])[0]?[\"is_empty\"] is null where it is required."))["key"]);
         }
 
         // ------------------------------------------------------------------
@@ -76,9 +76,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         public void Pinecone_AndOfEqAndGte()
         {
             var json = JObject.Parse(JsonConvert.SerializeObject(PineconeDocumentStore<float>.TranslateFilter(Sample)));
-            var and = (JArray)json["$and"]!;
-            Assert.Equal("science", (string?)and[0]!["category"]!["$eq"]);
-            Assert.Equal(2020.0, (double)and[1]!["year"]!["$gte"]!);
+            var and = (JArray)(json["$and"] ?? throw new InvalidOperationException("(JArray)json[\"$and\"] is null where it is required."));
+            Assert.Equal("science", (string?)(and[0]?["category"] ?? throw new InvalidOperationException("and[0]?[\"category\"] is null where it is required."))["$eq"]);
+            Assert.Equal(2020.0, (double)(and[1]?["year"]?["$gte"] ?? throw new InvalidOperationException("and[1]?[\"year\"][\"$gte\"] is null where it is required.")));
         }
 
         [Fact]
@@ -86,7 +86,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         {
             var json = JObject.Parse(JsonConvert.SerializeObject(
                 PineconeDocumentStore<float>.TranslateFilter(MetadataFilter.Eq("category", "science").Not())));
-            Assert.Equal("science", (string?)json["category"]!["$ne"]);
+            Assert.Equal("science", (string?)(json["category"] ?? throw new InvalidOperationException("json[\"category\"] is null where it is required."))["$ne"]);
         }
 
         [Fact]
@@ -94,7 +94,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         {
             var nin = JObject.Parse(JsonConvert.SerializeObject(
                 PineconeDocumentStore<float>.TranslateFilter(MetadataFilter.In("author", new object[] { "A", "B" }).Not())));
-            Assert.Equal(2, ((JArray)nin["author"]!["$nin"]!).Count);
+            Assert.Equal(2, ((JArray)(nin["author"]?["$nin"] ?? throw new InvalidOperationException("(JArray)nin[\"author\"][\"$nin\"] is null where it is required."))).Count);
 
             var demorgan = JObject.Parse(JsonConvert.SerializeObject(
                 PineconeDocumentStore<float>.TranslateFilter(Sample.Not())));
@@ -106,11 +106,11 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         {
             var inJson = JObject.Parse(JsonConvert.SerializeObject(
                 PineconeDocumentStore<float>.TranslateFilter(MetadataFilter.In("author", new object[] { "A", "B" }))));
-            Assert.Equal(2, ((JArray)inJson["author"]!["$in"]!).Count);
+            Assert.Equal(2, ((JArray)(inJson["author"]?["$in"] ?? throw new InvalidOperationException("(JArray)inJson[\"author\"][\"$in\"] is null where it is required."))).Count);
 
             var exists = JObject.Parse(JsonConvert.SerializeObject(
                 PineconeDocumentStore<float>.TranslateFilter(MetadataFilter.Exists("author"))));
-            Assert.True((bool)exists["author"]!["$exists"]!);
+            Assert.True((bool)(exists["author"]?["$exists"] ?? throw new InvalidOperationException("exists[\"author\"][\"$exists\"] is null where it is required.")));
         }
 
         // ------------------------------------------------------------------
@@ -287,9 +287,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         public void Elasticsearch_And_Term_And_Range()
         {
             var json = JObject.Parse(JsonConvert.SerializeObject(ElasticsearchVectorFilterBuilder.Build(Sample)));
-            var must = (JArray)json["bool"]!["must"]!;
-            Assert.Equal("science", (string?)must[0]!["term"]!["metadata.category"]);
-            Assert.Equal(2020, (int)must[1]!["range"]!["metadata.year"]!["gte"]!);
+            var must = json["bool"]?["must"] as JArray
+                ?? throw new InvalidOperationException("The query has no bool.must array.");
+            Assert.Equal("science", (string?)(must[0]?["term"] ?? throw new InvalidOperationException("must[0]?[\"term\"] is null where it is required."))["metadata.category"]);
+            Assert.Equal(2020, (int)(must[1]?["range"]?["metadata.year"]?["gte"] ?? throw new InvalidOperationException("must[1]?[\"range\"][\"metadata.year\"][\"gte\"] is null where it is required.")));
         }
 
         [Fact]
@@ -297,19 +298,19 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         {
             var not = JObject.Parse(JsonConvert.SerializeObject(
                 ElasticsearchVectorFilterBuilder.Build(MetadataFilter.Eq("c", "x").Not())));
-            Assert.NotNull(not["bool"]!["must_not"]);
+            Assert.NotNull((not["bool"] ?? throw new InvalidOperationException("not[\"bool\"] is null where it is required."))["must_not"]);
 
             var or = JObject.Parse(JsonConvert.SerializeObject(
                 ElasticsearchVectorFilterBuilder.Build(MetadataFilter.Eq("c", "x").Or(MetadataFilter.Eq("c", "y")))));
-            Assert.Equal(1, (int)or["bool"]!["minimum_should_match"]!);
+            Assert.Equal(1, (int)(or["bool"]?["minimum_should_match"] ?? throw new InvalidOperationException("or[\"bool\"][\"minimum_should_match\"] is null where it is required.")));
 
             var inJson = JObject.Parse(JsonConvert.SerializeObject(
                 ElasticsearchVectorFilterBuilder.Build(MetadataFilter.In("a", new object[] { "x", "y" }))));
-            Assert.Equal(2, ((JArray)inJson["terms"]!["metadata.a"]!).Count);
+            Assert.Equal(2, (inJson["terms"]?["metadata.a"] as JArray)?.Count);
 
             var exists = JObject.Parse(JsonConvert.SerializeObject(
                 ElasticsearchVectorFilterBuilder.Build(MetadataFilter.Exists("a"))));
-            Assert.Equal("metadata.a", (string?)exists["exists"]!["field"]);
+            Assert.Equal("metadata.a", (string?)(exists["exists"] ?? throw new InvalidOperationException("exists[\"exists\"] is null where it is required."))["field"]);
         }
 #endif
     }

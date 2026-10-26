@@ -454,7 +454,7 @@ internal static class FinanceModelTestFactory
 
         Assert.NotNull(exception);
         Assert.True(exception is FileNotFoundException || exception is InvalidOperationException,
-            $"Unexpected ONNX constructor exception type: {exception!.GetType().Name}");
+            $"Unexpected ONNX constructor exception type: {exception.GetType().Name}");
     }
 
     internal static void RunTradingAgentSmokeTest<T>(Type modelType)

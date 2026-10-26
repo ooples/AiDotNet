@@ -989,7 +989,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         }
 
         var biasReshaped = Engine.Reshape(_convBias, new[] { 1, 1, _innerDimension });
-        return Engine.TensorAdd(acc!, biasReshaped);
+        return Engine.TensorAdd((acc ?? throw new InvalidOperationException("acc is null where it is required.")), biasReshaped);
     }
 
     /// <summary>
@@ -1081,19 +1081,19 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
 
         T negLR = NumOps.Negate(learningRate);
         Engine.TensorAddInPlace(_inputProjectionWeights, Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient, negLR));
-        Engine.TensorAddInPlace(_inputProjectionBias, Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_convWeights, Engine.TensorMultiplyScalar(_convWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_convBias, Engine.TensorMultiplyScalar(_convBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_bProjectionWeights, Engine.TensorMultiplyScalar(_bProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_cProjectionWeights, Engine.TensorMultiplyScalar(_cProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_aLog, Engine.TensorMultiplyScalar(_aLogGradient!, negLR));
-        Engine.TensorAddInPlace(_dtProjectionWeights, Engine.TensorMultiplyScalar(_dtProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_dtProjectionBias, Engine.TensorMultiplyScalar(_dtProjectionBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_dParam, Engine.TensorMultiplyScalar(_dParamGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_normGamma, Engine.TensorMultiplyScalar(_normGammaGradient!, negLR));
-        Engine.TensorAddInPlace(_normBeta, Engine.TensorMultiplyScalar(_normBetaGradient!, negLR));
+        Engine.TensorAddInPlace(_inputProjectionBias, Engine.TensorMultiplyScalar((_inputProjectionBiasGradient ?? throw new InvalidOperationException("_inputProjectionBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_convWeights, Engine.TensorMultiplyScalar((_convWeightsGradient ?? throw new InvalidOperationException("_convWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_convBias, Engine.TensorMultiplyScalar((_convBiasGradient ?? throw new InvalidOperationException("_convBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_bProjectionWeights, Engine.TensorMultiplyScalar((_bProjectionWeightsGradient ?? throw new InvalidOperationException("_bProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_cProjectionWeights, Engine.TensorMultiplyScalar((_cProjectionWeightsGradient ?? throw new InvalidOperationException("_cProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_aLog, Engine.TensorMultiplyScalar((_aLogGradient ?? throw new InvalidOperationException("_aLogGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_dtProjectionWeights, Engine.TensorMultiplyScalar((_dtProjectionWeightsGradient ?? throw new InvalidOperationException("_dtProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_dtProjectionBias, Engine.TensorMultiplyScalar((_dtProjectionBiasGradient ?? throw new InvalidOperationException("_dtProjectionBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_dParam, Engine.TensorMultiplyScalar((_dParamGradient ?? throw new InvalidOperationException("_dParamGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar((_outputProjectionWeightsGradient ?? throw new InvalidOperationException("_outputProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar((_outputProjectionBiasGradient ?? throw new InvalidOperationException("_outputProjectionBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_normGamma, Engine.TensorMultiplyScalar((_normGammaGradient ?? throw new InvalidOperationException("_normGammaGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_normBeta, Engine.TensorMultiplyScalar((_normBetaGradient ?? throw new InvalidOperationException("_normBetaGradient is null where it is required.")), negLR));
 
         // Re-register against the new tensor instances created above so the autodiff registry tracks the
         // live weights (now the full parameter set, matching GetParameters).

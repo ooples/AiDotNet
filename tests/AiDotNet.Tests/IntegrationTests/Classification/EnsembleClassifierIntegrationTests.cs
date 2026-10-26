@@ -23,7 +23,7 @@ public class EnsembleClassifierIntegrationTests
         var x = new Matrix<double>(40, 3);
         var y = new Vector<double>(40);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 40; i++)
         {
             // Class determined by first feature with some noise
@@ -112,7 +112,7 @@ public class EnsembleClassifierIntegrationTests
         var x = new Matrix<double>(20, 10);
         var y = new Vector<double>(20);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 20; i++)
         {
             y[i] = (i < 10) ? 0 : 1;
@@ -762,7 +762,7 @@ public class EnsembleClassifierIntegrationTests
         var x = new Matrix<double>(20, 5);
         var y = new Vector<double>(20);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 20; i++)
         {
             y[i] = (i < 10) ? 0 : 1;

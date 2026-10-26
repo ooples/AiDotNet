@@ -20,7 +20,7 @@ public class TakagiDecompositionIntegrationTests
 
     private static Matrix<double> CreateSymmetricMatrix(int size, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(size, size);
 
         for (int i = 0; i < size; i++)
@@ -37,7 +37,7 @@ public class TakagiDecompositionIntegrationTests
 
     private static Matrix<double> CreatePositiveDefiniteMatrix(int size, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var temp = new Matrix<double>(size, size);
 
         for (int i = 0; i < size; i++)

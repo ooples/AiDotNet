@@ -131,8 +131,8 @@ public sealed class ProgramGenomeDistanceTests
         Assert.NotEqual(edit.VersionHash, new ProgramLineEditDistance(maxComparedLines: 7).VersionHash);
 
 #pragma warning disable CS8625
-        Assert.Throws<ArgumentNullException>(() => tokens.Distance(genome, null));
-        Assert.Throws<ArgumentNullException>(() => edit.Distance(null, genome));
+        Assert.Throws<ArgumentNullException>(() => tokens.Distance(genome, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Evolution.Programs.ProgramGenome>()));
+        Assert.Throws<ArgumentNullException>(() => edit.Distance(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Evolution.Programs.ProgramGenome>(), genome));
 #pragma warning restore CS8625
     }
 

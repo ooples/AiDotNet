@@ -112,7 +112,7 @@ public class PlaygroundExampleCompilationTests
         Assert.False(string.IsNullOrEmpty(exampleServicePath), "Could not find ExampleService.cs.");
 
         var example = Assert.Single(
-            ExtractCodeExamples(File.ReadAllText(exampleServicePath!)),
+            ExtractCodeExamples(File.ReadAllText(exampleServicePath)),
             candidate => candidate.Id == exampleId);
 
         var errors = CompileCode(example.Id, example.Code);

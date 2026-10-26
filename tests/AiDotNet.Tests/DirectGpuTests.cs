@@ -129,7 +129,7 @@ public class DirectGpuTests
             var B = new float[K * N];
 
             // Initialize with random values
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < A.Length; i++)
                 A[i] = (float)(rand.NextDouble() * 2 - 1);
             for (int i = 0; i < B.Length; i++)
@@ -195,7 +195,7 @@ public class DirectGpuTests
             var A = new float[M * K];
             var B = new float[K * N];
 
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < A.Length; i++)
                 A[i] = (float)(rand.NextDouble() * 2 - 1);
             for (int i = 0; i < B.Length; i++)
@@ -272,7 +272,7 @@ public class DirectGpuTests
             var A = new float[M * K];
             var B = new float[K * N];
 
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < A.Length; i++)
                 A[i] = (float)(rand.NextDouble() * 2 - 1);
             for (int i = 0; i < B.Length; i++)
@@ -412,7 +412,7 @@ public class DirectGpuTests
             // Create test data
             var A = new float[M * K];
             var B = new float[K * N];
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < A.Length; i++)
                 A[i] = (float)(rand.NextDouble() * 2 - 1);
             for (int i = 0; i < B.Length; i++)
@@ -646,7 +646,7 @@ public class DirectGpuTests
         // Create test data with predictable values
         var A = new float[M * K];
         var B = new float[K * N];
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < A.Length; i++)
             A[i] = (float)(rand.NextDouble() * 2 - 1);
         for (int i = 0; i < B.Length; i++)
@@ -765,7 +765,7 @@ public class DirectGpuTests
 
             var A = new float[M * K];
             var B = new float[K * N];
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < A.Length; i++)
                 A[i] = (float)(rand.NextDouble() * 2 - 1);
             for (int i = 0; i < B.Length; i++)
@@ -996,7 +996,7 @@ public class DirectGpuTests
             // Allocate test buffers
             var dataA = new float[M * K];
             var dataB = new float[K * N];
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < dataA.Length; i++) dataA[i] = (float)(rand.NextDouble() * 2 - 1);
             for (int i = 0; i < dataB.Length; i++) dataB[i] = (float)(rand.NextDouble() * 2 - 1);
 
@@ -1203,7 +1203,7 @@ public class DirectGpuTests
 
             var dataA = new float[M * K];
             var dataB = new float[K * N];
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < dataA.Length; i++) dataA[i] = (float)(rand.NextDouble() * 2 - 1);
             for (int i = 0; i < dataB.Length; i++) dataB[i] = (float)(rand.NextDouble() * 2 - 1);
 

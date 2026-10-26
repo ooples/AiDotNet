@@ -32,7 +32,7 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
     {
         const int samples = 100;
         const int classes = 3;
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Build [samples, classes] probability tensor (rows sum to 1) + class-index labels.
         var predTensor = new Tensor<double>(new[] { samples, classes });
@@ -69,7 +69,7 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
     public void Issue1186_BinaryProbabilities_StillWork()
     {
         const int samples = 100;
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
 
         var predTensor = new Tensor<double>(new[] { samples });
         var actualTensor = new Tensor<double>(new[] { samples });
@@ -122,7 +122,7 @@ public class CalibratedProbabilityFitDetectorIssue1186Tests
 
         var predTensor = new Tensor<double>(new[] { samples, classes });
         var actualTensor = new Tensor<double>(new[] { samples });
-        var rng = new Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         for (int i = 0; i < samples; i++)
         {
             double p0 = rng.NextDouble();

@@ -50,7 +50,7 @@ public class DataSamplingIntegrationTests
     public async Task StratifiedSampler_NullLabels_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new StratifiedSampler(null, numClasses: 2));
+            new StratifiedSampler(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<int>>(), numClasses: 2));
     }
 
     [Fact(Timeout = 120000)]
@@ -126,7 +126,7 @@ public class DataSamplingIntegrationTests
     public async Task StratifiedBatchSampler_NullLabels_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new StratifiedBatchSampler(null, numClasses: 2, batchSize: 4));
+            new StratifiedBatchSampler(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<int>>(), numClasses: 2, batchSize: 4));
     }
 
     [Fact(Timeout = 120000)]

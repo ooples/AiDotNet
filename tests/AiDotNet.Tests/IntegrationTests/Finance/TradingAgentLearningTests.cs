@@ -45,7 +45,7 @@ public class TradingAgentLearningTests
 
     private static Vector<double> State(int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var state = new Vector<double>(StateSize);
         for (var i = 0; i < StateSize; i++)
         {

@@ -265,7 +265,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
         int negativeCount = 0;
         for (int i = 0; i < n; i++)
         {
-            if (NumOps.Equals(_yTrain![i], NumOps.One)) positiveCount++;
+            if (NumOps.Equals((_yTrain ?? throw new InvalidOperationException("_yTrain is null where it is required."))[i], NumOps.One)) positiveCount++;
             else if (NumOps.Equals(_yTrain[i], NumOps.Negate(NumOps.One))) negativeCount++;
         }
 
@@ -285,7 +285,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
             var members = new List<int>();
             for (int i = 0; i < n; i++)
             {
-                if (NumOps.Equals(_yTrain![i], label)) members.Add(i);
+                if (NumOps.Equals((_yTrain ?? throw new InvalidOperationException("_yTrain is null where it is required."))[i], label)) members.Add(i);
             }
 
             if (members.Count == 0) continue;

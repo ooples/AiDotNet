@@ -646,7 +646,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
                 { "NumStacks", _options.NumStacks },
                 { "LookbackWindow", _options.LookbackWindow },
                 { "ForecastHorizon", _options.ForecastHorizon },
-                { "PoolingKernelSizes", _options.PoolingKernelSizes! },
+                { "PoolingKernelSizes", _options.PoolingKernelSizes },
                 { "ProductionReady", true }
             }
         };

@@ -486,7 +486,7 @@ public class TransformerShapeCompatibilityTests
         var beta = new Tensor<double>([dim]);
 
         // Initialize with non-zero, non-uniform values
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             input[i] = random.NextDouble() * 10.0 - 5.0; // Values between -5 and 5

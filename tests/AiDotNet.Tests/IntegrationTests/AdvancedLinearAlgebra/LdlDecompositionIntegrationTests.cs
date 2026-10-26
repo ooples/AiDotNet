@@ -19,7 +19,7 @@ public class LdlDecompositionIntegrationTests
 
     private static Matrix<double> CreateSymmetricMatrix(int size, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(size, size);
         for (int i = 0; i < size; i++)
         {
@@ -36,7 +36,7 @@ public class LdlDecompositionIntegrationTests
     private static Matrix<double> CreateSpdMatrix(int size, int seed = 42)
     {
         // Create SPD matrix via A^T*A + epsilon*I
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var B = new Matrix<double>(size, size);
         for (int i = 0; i < size; i++)
         {

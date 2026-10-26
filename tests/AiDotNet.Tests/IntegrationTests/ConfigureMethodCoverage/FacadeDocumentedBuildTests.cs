@@ -107,7 +107,7 @@ public sealed class FacadeDocumentedBuildTests
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureModel(new MultipleRegression<double>());
 
-        Assert.Throws<ArgumentNullException>(() => builder.Build(null!, y));
+        Assert.Throws<ArgumentNullException>(() => builder.Build(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>(), y));
     }
 
     [Fact]

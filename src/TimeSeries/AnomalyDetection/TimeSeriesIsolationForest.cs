@@ -446,7 +446,7 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
             var sample = features.GetRow(i);
             double totalPathLength = 0;
 
-            foreach (var tree in _forest!)
+            foreach (var tree in (_forest ?? throw new InvalidOperationException("_forest is null where it is required.")))
             {
                 totalPathLength += ComputePathLength(tree, sample, 0);
             }
@@ -473,9 +473,9 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         double splitValue = _numOps.ToDouble(tree.SplitValue);
 
         if (sampleValue < splitValue)
-            return ComputePathLength(tree.Left!, sample, currentDepth + 1);
+            return ComputePathLength((tree.Left ?? throw new InvalidOperationException("tree.Left is null where it is required.")), sample, currentDepth + 1);
         else
-            return ComputePathLength(tree.Right!, sample, currentDepth + 1);
+            return ComputePathLength((tree.Right ?? throw new InvalidOperationException("tree.Right is null where it is required.")), sample, currentDepth + 1);
     }
 
     /// <summary>
@@ -540,8 +540,8 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         {
             writer.Write(tree.FeatureIndex);
             writer.Write(_numOps.ToDouble(tree.SplitValue));
-            SerializeTree(writer, tree.Left!);
-            SerializeTree(writer, tree.Right!);
+            SerializeTree(writer, (tree.Left ?? throw new InvalidOperationException("tree.Left is null where it is required.")));
+            SerializeTree(writer, (tree.Right ?? throw new InvalidOperationException("tree.Right is null where it is required.")));
         }
     }
 

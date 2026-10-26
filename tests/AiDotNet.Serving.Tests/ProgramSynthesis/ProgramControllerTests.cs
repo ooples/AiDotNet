@@ -21,7 +21,7 @@ public sealed class ProgramControllerTests
             executor: new FakeProgramSandboxExecutor(_ => Task.FromResult(new ProgramExecuteResponse { Success = true, Language = ProgramLanguage.Generic, ExitCode = 0 })),
             evaluator: new FakeServingProgramEvaluator(_ => Task.FromResult(new ProgramEvaluateIoResponse { Success = true, Language = ProgramLanguage.CSharp })));
 
-        var result = await controller.Execute(null!, CancellationToken.None);
+        var result = await controller.Execute(global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Execution.ProgramExecuteRequest>(), CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var payload = Assert.IsType<ProgramExecuteResponse>(badRequest.Value);
@@ -94,7 +94,7 @@ public sealed class ProgramControllerTests
             executor: new FakeProgramSandboxExecutor(_ => Task.FromResult(new ProgramExecuteResponse { Success = true, Language = ProgramLanguage.Generic, ExitCode = 0 })),
             evaluator: new FakeServingProgramEvaluator(_ => Task.FromResult(new ProgramEvaluateIoResponse { Success = true, Language = ProgramLanguage.CSharp })));
 
-        var result = await controller.EvaluateIo(null!, CancellationToken.None);
+        var result = await controller.EvaluateIo(global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Execution.ProgramEvaluateIoRequest>(), CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         var payload = Assert.IsType<ProgramEvaluateIoResponse>(badRequest.Value);

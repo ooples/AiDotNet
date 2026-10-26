@@ -1452,7 +1452,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
             FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
             FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
-            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!, 0.01f),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, (_lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu is null where it is required.")), 0.01f),
             FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
             FusedActivationType.None => gradOutput, // Identity activation - gradient passes through unchanged
             _ => gradOutput // Fallback for unsupported activations

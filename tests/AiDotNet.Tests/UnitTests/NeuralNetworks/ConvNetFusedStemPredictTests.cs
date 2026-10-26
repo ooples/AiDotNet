@@ -50,7 +50,7 @@ public class ConvNetFusedStemPredictTests
     public void Predict_FusedConvStem_MatchesGenericForward(int batch, BiasMode biasMode)
     {
         var model = BuildCnn(biasMode);
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var data = new float[batch * 1 * 16 * 16];
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() * 2 - 1);
         var input = new Tensor<float>(data, new[] { batch, 1, 16, 16 });

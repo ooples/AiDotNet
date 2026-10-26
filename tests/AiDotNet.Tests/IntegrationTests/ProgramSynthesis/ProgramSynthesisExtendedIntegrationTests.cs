@@ -1203,7 +1203,7 @@ public class ProgramSynthesisExtendedIntegrationTests
         Assert.Equal(0.95, result.Results[0].Score);
         Assert.Equal(CodeMatchType.Semantic, result.Results[0].MatchType);
         Assert.NotNull(result.Results[0].Provenance);
-        Assert.Equal("repo-1", result.Results[0].Provenance.RepoId);
+        Assert.Equal("repo-1", (result.Results[0].Provenance ?? throw new InvalidOperationException("result.Results[0].Provenance is null where it is required.")).RepoId);
     }
 
     [Fact(Timeout = 120000)]

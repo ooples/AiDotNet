@@ -36,7 +36,7 @@ public class MetaLearningCoverageIntegrationTests
         var queryX = new Matrix<double>(queryRows, featureCount);
         var queryY = new Vector<double>(queryRows);
 
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int i = 0; i < supportRows; i++)
         {
@@ -84,7 +84,7 @@ public class MetaLearningCoverageIntegrationTests
         var supportY = new Tensor<double>(new[] { supportRows });
         var queryY = new Tensor<double>(new[] { queryRows });
 
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int i = 0; i < supportRows; i++)
         {
@@ -129,7 +129,7 @@ public class MetaLearningCoverageIntegrationTests
         var supportY = new Tensor<double>(new[] { numClasses });
         var queryY = new Tensor<double>(new[] { numClasses });
 
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < inputRows; i++)
         {
             for (int j = 0; j < featureCount; j++)
@@ -164,7 +164,7 @@ public class MetaLearningCoverageIntegrationTests
     {
         var method = declaringType.GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
-        return (T)method!.Invoke(instance, args)!;
+        return (T)(method.Invoke(instance, args) ?? throw new InvalidOperationException("(T)method.Invoke(instance, args) is null where it is required."));
     }
 
     [Fact(Timeout = 120000)]
@@ -1079,10 +1079,10 @@ public class MetaLearningCoverageIntegrationTests
 
         var memoryField = typeof(NTMAlgorithm<double, Matrix<double>, Tensor<double>>).GetField("_memory", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(memoryField);
-        var internalMemory = (NTMMemory<double>)memoryField!.GetValue(algorithm)!;
+        var internalMemory = (NTMMemory<double>)(memoryField.GetValue(algorithm) ?? throw new InvalidOperationException("(NTMMemory<double>)memoryField.GetValue(algorithm) is null where it is required."));
         var internalWeights = new Vector<double>(options.MemorySize);
         internalWeights[0] = 1.0;
-        internalMemory.Write(internalWeights, erase, add);
+        (internalMemory ?? throw new InvalidOperationException("internalMemory is null where it is required.")).Write(internalWeights, erase, add);
         var regularized = InvokePrivate<double>(
             algorithm,
             typeof(NTMAlgorithm<double, Matrix<double>, Tensor<double>>),

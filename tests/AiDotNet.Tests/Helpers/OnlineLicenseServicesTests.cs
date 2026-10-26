@@ -56,7 +56,7 @@ public class OnlineLicenseServicesTests
         var result = OnlineLicenseServices.TryValidateCachedOfflineToken(ServerKey);
 
         Assert.NotNull(result);
-        Assert.Equal(LicenseKeyStatus.Active, result!.Status);
+        Assert.Equal(LicenseKeyStatus.Active, result.Status);
         Assert.True(result.HasCapability("model:save"));
         Assert.True(result.HasCapability("tensors:save"));
     }

@@ -96,7 +96,7 @@ public sealed class TensorParallelServingWiringTests
         var tp = TensorParallelPartitioner<double>.TryBuild(
             model, worldSize: 2, blockSize: 16, numBlocks: 512, out var reason, useGpu: GpuPagedAttention.IsAvailable);
         Assert.True(tp is not null, $"model should be partitionable (reason: {reason})");
-        var composite = new CompositePagedKVCache<double>(tp!.RankCaches);
+        var composite = new CompositePagedKVCache<double>(tp.RankCaches);
         var direct = GenerateDirect(tp, composite, prompt, maxNew);
 
         Assert.Equal(maxNew, served.Length);

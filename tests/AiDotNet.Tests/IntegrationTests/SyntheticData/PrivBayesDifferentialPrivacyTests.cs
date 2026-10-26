@@ -52,7 +52,7 @@ public class PrivBayesDifferentialPrivacyTests
     /// </summary>
     private static (Matrix<double> Data, List<ColumnMetadata> Columns) CreateData(int seed = 7)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new Matrix<double>(Rows, Cols);
         for (int i = 0; i < Rows; i++)
         {

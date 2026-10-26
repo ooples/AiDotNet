@@ -205,7 +205,7 @@ public class DirectGpuCorrectnessTests
         {
             _output.WriteLine("DirectGpu not available - skipping test.");
             engine.Dispose();
-            backend = null!;
+            backend = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend>();
             return false;
         }
 

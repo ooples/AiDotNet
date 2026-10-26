@@ -323,7 +323,7 @@ public class Phase3GateTests
         var context = new Tensor<float>(new[] { 2, 32, 64 });
 
         // Initialize with random values
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < query.Length; i++)
         {
             query[i] = (float)(rand.NextDouble() - 0.5);
@@ -357,7 +357,7 @@ public class Phase3GateTests
         var query = new Tensor<float>(new[] { 1, 8, 32 });
         var context = new Tensor<float>(new[] { 1, 16, 32 });
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < query.Length; i++)
         {
             query[i] = (float)(rand.NextDouble() - 0.5);
@@ -384,7 +384,7 @@ public class Phase3GateTests
         var query = new Tensor<float>(new[] { 1, 8, 32 });
         var context = new Tensor<float>(new[] { 1, 16, 32 });
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < query.Length; i++)
         {
             query[i] = (float)(rand.NextDouble() - 0.5);
@@ -422,7 +422,7 @@ public class Phase3GateTests
         // Input: [batch, seqLen, embeddingDim]
         var input = new Tensor<float>(new[] { 2, 16, 64 });
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             input[i] = (float)(rand.NextDouble() - 0.5);
@@ -449,7 +449,7 @@ public class Phase3GateTests
 
         var input = new Tensor<float>(new[] { 1, 8, 32 });
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             input[i] = (float)(rand.NextDouble() - 0.5);
@@ -483,7 +483,7 @@ public class Phase3GateTests
         // Adjacency matrix: [numNodes, numNodes]
         var adjacency = new Tensor<float>(new[] { 10, 10 });
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             input[i] = (float)(rand.NextDouble() - 0.5);
@@ -594,7 +594,7 @@ public class Phase3GateTests
         var query = new Tensor<float>(new[] { 4, 32, 64 });
         var context = new Tensor<float>(new[] { 4, 64, 64 });
 
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < query.Length; i++)
         {
             query[i] = (float)(rand.NextDouble() - 0.5);

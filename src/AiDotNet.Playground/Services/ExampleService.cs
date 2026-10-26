@@ -7089,7 +7089,7 @@ var options = new ProtoNetsOptions<double, Matrix<double>, Vector<double>>(model
 var protoNets = new ProtoNetsAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
 // 4. Create a 2-way 2-shot task
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 var supportX = new Matrix<double>(4, 3);
 var supportY = new Vector<double>(4);
 var queryX = new Matrix<double>(4, 3);
@@ -7161,7 +7161,7 @@ var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
 var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
 // 4. Create multiple tasks (MAML learns across task distribution)
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 var tasks = new IMetaLearningTask<double, Matrix<double>, Vector<double>>[3];
 for (int t = 0; t < 3; t++)
 {
@@ -7236,7 +7236,7 @@ var options = new CNPOptions<double, Matrix<double>, Vector<double>>(model)
 var cnp = new CNPAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
 // 3. Create a regression task (sine wave approximation)
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 var supportX = new Matrix<double>(4, 3);
 var supportY = new Vector<double>(4);
 var queryX = new Matrix<double>(4, 3);
@@ -7366,7 +7366,7 @@ var options = new FreqPriorOptions<double, Matrix<double>, Vector<double>>(model
 var freqPrior = new FreqPriorAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
 // Create tasks from two ""domains"" (different data distributions)
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 var tasks = new IMetaLearningTask<double, Matrix<double>, Vector<double>>[4];
 for (int t = 0; t < 4; t++)
 {

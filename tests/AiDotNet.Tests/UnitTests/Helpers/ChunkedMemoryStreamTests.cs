@@ -15,7 +15,7 @@ public class ChunkedMemoryStreamTests
     private static byte[] Pattern(int length, int seed)
     {
         var data = new byte[length];
-        new Random(seed).NextBytes(data);
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed).NextBytes(data);
         return data;
     }
 

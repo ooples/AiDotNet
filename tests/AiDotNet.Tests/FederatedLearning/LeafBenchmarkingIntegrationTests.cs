@@ -90,12 +90,12 @@ public class LeafBenchmarkingIntegrationTests
                 .BuildAsync();
 
             Assert.NotNull(result.BenchmarkReport);
-            var report = result.BenchmarkReport!;
+            var report = result.BenchmarkReport;
             var leafSuite = GetSuite(report, BenchmarkSuite.LEAF);
 
             Assert.Equal(BenchmarkExecutionStatus.Succeeded, leafSuite.Status);
             Assert.NotNull(leafSuite.DataSelection);
-            Assert.Equal(2, leafSuite.DataSelection!.ClientsUsed);
+            Assert.Equal(2, leafSuite.DataSelection.ClientsUsed);
             Assert.Equal(2, leafSuite.DataSelection.TrainSamplesUsed);
             Assert.Equal(2, leafSuite.DataSelection.TestSamplesUsed);
             Assert.Equal(3, leafSuite.DataSelection.FeatureCount);

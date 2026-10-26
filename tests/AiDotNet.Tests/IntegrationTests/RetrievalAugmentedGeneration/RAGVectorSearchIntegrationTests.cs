@@ -364,7 +364,7 @@ public class RAGVectorSearchIntegrationTests
 
         // Add 50 random unit vectors
         var vectors = new Dictionary<string, Vector<double>>();
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
         {
             double angle = random.NextDouble() * 2 * Math.PI;

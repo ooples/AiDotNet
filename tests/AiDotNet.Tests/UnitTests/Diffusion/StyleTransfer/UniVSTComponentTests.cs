@@ -174,7 +174,7 @@ public class UniVSTComponentTests
         const int c = 2, n = 8;
         var content = new Tensor<double>(new[] { c, n });
         var style = new Tensor<double>(new[] { c, n });
-        var rng = new Random(5);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
         for (int i = 0; i < c * n; i++) content[i] = rng.NextDouble() * 3.0;
         for (int i = 0; i < c * n; i++) style[i] = (rng.NextDouble() * 10.0) - 5.0;
 

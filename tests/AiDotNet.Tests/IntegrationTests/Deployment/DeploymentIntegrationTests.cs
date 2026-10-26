@@ -657,7 +657,7 @@ public class DeploymentIntegrationTests
     {
         var exporter = new OnnxModelExporter<double, double[], double[]>();
 
-        var errors = exporter.GetValidationErrors(null!);
+        var errors = exporter.GetValidationErrors(null);
 
         Assert.Single(errors);
         Assert.Contains("null", errors[0].ToLower());
@@ -669,7 +669,7 @@ public class DeploymentIntegrationTests
         var exporter = new OnnxModelExporter<double, double[], double[]>();
         var config = new ExportConfiguration();
 
-        Assert.Throws<ArgumentNullException>(() => exporter.ExportToBytes(null!, config));
+        Assert.Throws<ArgumentNullException>(() => exporter.ExportToBytes(null, config));
     }
 
     #endregion

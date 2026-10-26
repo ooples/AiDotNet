@@ -55,7 +55,7 @@ public class QueryByCommitteeTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new QueryByCommittee<double>(null!));
+            new QueryByCommittee<double>(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>>()));
     }
 
     [Fact(Timeout = 60000)]

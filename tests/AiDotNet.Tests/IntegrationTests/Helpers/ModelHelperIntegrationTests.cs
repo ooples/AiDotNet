@@ -437,7 +437,7 @@ public class ModelHelperIntegrationTests
         Matrix<double>? nullMatrix = null;
 
         Assert.Throws<InvalidOperationException>(() =>
-            ModelHelper<double, Matrix<double>, Vector<double>>.GetColumnVectors(nullMatrix!, new[] { 0 }));
+            ModelHelper<double, Matrix<double>, Vector<double>>.GetColumnVectors((nullMatrix ?? throw new InvalidOperationException("nullMatrix is null where it is required.")), new[] { 0 }));
     }
 
     #endregion

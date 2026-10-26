@@ -49,7 +49,7 @@ public class InferenceArenaLayerRecycleTests
 
     private static Tensor<double> Batch(int batch, int seqLen, int embDim, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new double[batch * seqLen * embDim];
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble() * 2 - 1;
         return new Tensor<double>(data, new[] { batch, seqLen, embDim });

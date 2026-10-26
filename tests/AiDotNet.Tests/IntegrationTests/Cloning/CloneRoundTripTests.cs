@@ -97,7 +97,7 @@ public class CloneRoundTripTests
             object original;
             try
             {
-                original = Activator.CreateInstance(type)!;
+                original = (Activator.CreateInstance(type) ?? throw new InvalidOperationException("Activator.CreateInstance(type) is null where it is required."));
             }
             catch (Exception ex) when (ex is MissingMethodException or TargetInvocationException
                 or ArgumentException or NotSupportedException)
@@ -112,7 +112,7 @@ public class CloneRoundTripTests
             // generic falls through to the reflected plan -- so this exercises the engine and the
             // fallback, but not yet the generated plan for these types.
             var plan = CloneRegistry.GetPlan(type);
-            var populated = Populate(original, plan);
+            var populated = Populate((original ?? throw new InvalidOperationException("original is null where it is required.")), plan);
 
             object clone;
             try
@@ -352,8 +352,8 @@ public class CloneRoundTripTests
             var sample = SampleValue(element2, null);
             if (sample is null) return null;
 
-            var list = (IList)Activator.CreateInstance(underlying)!;
-            list.Add(sample);
+            var list = (IList)(Activator.CreateInstance(underlying) ?? throw new InvalidOperationException("(IList)Activator.CreateInstance(underlying) is null where it is required."));
+            (list ?? throw new InvalidOperationException("list is null where it is required.")).Add(sample);
             return list;
         }
 

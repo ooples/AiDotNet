@@ -33,8 +33,8 @@ public class PhaseAndProvenanceTests
 
         Assert.NotNull(pre);
         Assert.NotNull(fine);
-        Assert.Equal(2e-3, pre!.LearningRate, precision: 12);
-        Assert.Equal(2e-5, fine!.LearningRate, precision: 12);
+        Assert.Equal(2e-3, pre.LearningRate, precision: 12);
+        Assert.Equal(2e-5, fine.LearningRate, precision: 12);
         Assert.Equal(128, pre.ReferenceBatchSize);
         Assert.Equal(32, fine.ReferenceBatchSize);
     }
@@ -47,7 +47,7 @@ public class PhaseAndProvenanceTests
         var fine = PaperOptimizerFactory.Find(new TwoStage(), phase: TrainingPhase.FineTuning);
 
         Assert.NotNull(fine);
-        Assert.NotEqual(2e-3, fine!.LearningRate);
+        Assert.NotEqual(2e-3, fine.LearningRate);
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class PhaseAndProvenanceTests
         var second = PaperOptimizerFactory.Find(new InheritingStages(), phase: TrainingPhase.FineTuning);
 
         Assert.NotNull(second);
-        Assert.Equal(5e-5, second!.LearningRate, precision: 12);      // its own
+        Assert.Equal(5e-5, second.LearningRate, precision: 12);      // its own
         Assert.Equal(OptimizerKind.AdamW, second.Optimizer);           // inherited
         Assert.Equal(0.98, second.Beta2, precision: 12);               // inherited
         Assert.Equal(LearningRateSchedulerType.CosineAnnealing, second.Schedule); // inherited
@@ -87,7 +87,7 @@ public class PhaseAndProvenanceTests
         var recipe = PaperOptimizerFactory.Find(new Searched());
 
         Assert.NotNull(recipe);
-        Assert.Equal(RecipeProvenance.Searched, recipe!.Provenance);
+        Assert.Equal(RecipeProvenance.Searched, recipe.Provenance);
         Assert.Equal(3, recipe.SearchedValues.Length);
         Assert.Contains(5e-4, recipe.SearchedValues);
         Assert.True(recipe.DeclaresAnyHyperparameter);

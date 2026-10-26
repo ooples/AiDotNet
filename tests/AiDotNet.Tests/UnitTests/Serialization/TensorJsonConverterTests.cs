@@ -38,7 +38,7 @@ public class TensorJsonConverterTests
         converter.WriteJson(writer, value: null, serializer);
 
         Assert.NotNull(writer.Token);
-        Assert.Equal(JTokenType.Null, writer.Token!.Type);
+        Assert.Equal(JTokenType.Null, writer.Token.Type);
     }
 
     [Fact(Timeout = 60000)]
@@ -125,7 +125,7 @@ public class TensorJsonConverterTests
         var roundTrip = JsonConvert.DeserializeObject<Tensor<double>>(json, settings);
 
         Assert.NotNull(roundTrip);
-        Assert.Equal(tensor.Shape.ToArray(), roundTrip!.Shape.ToArray());
+        Assert.Equal(tensor.Shape.ToArray(), roundTrip.Shape.ToArray());
         Assert.Equal(tensor.ToArray(), roundTrip.ToArray());
     }
 
@@ -145,7 +145,7 @@ public class TensorJsonConverterTests
         var fallback = JsonConvert.DeserializeObject<NoVectorConstructorTensor<double>>(json, settings);
 
         Assert.NotNull(fallback);
-        Assert.Equal(tensor.Shape.ToArray(), fallback!.Shape.ToArray());
+        Assert.Equal(tensor.Shape.ToArray(), fallback.Shape.ToArray());
         Assert.Equal(tensor.ToArray(), fallback.ToArray());
     }
 

@@ -78,7 +78,7 @@ public class CORALDomainAdapter<T> : IDomainAdapter<T>
         var centeredSource = CenterData(sourceData, sourceMean);
 
         // Apply CORAL transformation
-        var adapted = centeredSource.Multiply(_transformationMatrix!);
+        var adapted = centeredSource.Multiply((_transformationMatrix ?? throw new InvalidOperationException("_transformationMatrix is null where it is required.")));
 
         // Add back the target mean
         var targetMean = ComputeMean(targetData);

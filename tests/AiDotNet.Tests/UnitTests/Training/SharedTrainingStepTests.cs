@@ -28,7 +28,7 @@ public class SharedTrainingStepTests
         Tensor<float> draw;
         using (var recording = CompiledStepRandom<float>.BeginRecording())
         {
-            draw = CompiledStepRandom<float>.StandardNormal(new[] { 4, 4 }, new Random(7));
+            draw = CompiledStepRandom<float>.StandardNormal(new[] { 4, 4 }, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7));
             CompiledStepRandom<float>.Attach(plan, recording);
         }
 
@@ -45,7 +45,7 @@ public class SharedTrainingStepTests
     public void DrawOutsideARecordingIsNotRetained()
     {
         var plan = new object();
-        CompiledStepRandom<float>.StandardNormal(new[] { 3 }, new Random(1));
+        CompiledStepRandom<float>.StandardNormal(new[] { 3 }, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1));
         using (var recording = CompiledStepRandom<float>.BeginRecording())
             CompiledStepRandom<float>.Attach(plan, recording);
 
@@ -61,12 +61,12 @@ public class SharedTrainingStepTests
     public void FusedPlanRedrawsPerStepNoiseLikeTheEagerStep()
     {
         var (fusedLayer, eagerLayer) = TwinLayers();
-        var fusedRandom = new Random(123);
-        var eagerRandom = new Random(123);
+        var fusedRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
+        var eagerRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         var fusedOptimizer = Sgd();
         var eagerOptimizer = Sgd();
         var stepper = new TapeTrainingStepper<float>(new object());
-        var data = new Random(5);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
 
         for (int step = 0; step < 4; step++)
         {
@@ -88,7 +88,7 @@ public class SharedTrainingStepTests
     {
         var (layer, _) = TwinLayers();
         var stepper = new TapeTrainingStepper<float>(new object());
-        var data = new Random(9);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9);
         var before = layer.GetParameters().ToArray();
 
         stepper.Step(new FusedTrainingStepRequest<float>
@@ -117,7 +117,7 @@ public class SharedTrainingStepTests
         var (layer, _) = TwinLayers();
         var stepper = new TapeTrainingStepper<float>(new object());
         var optimizer = Sgd();
-        var data = new Random(11);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         var engine = AiDotNetEngine.Current;
 
         Tensor<float> HostScaledForward(Tensor<float> x)
@@ -164,7 +164,7 @@ public class SharedTrainingStepTests
         var eagerAdamA = Adam();
         var eagerAdamB = Adam();
         var owner = new object();
-        var data = new Random(21);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(21);
 
         for (int step = 0; step < 4; step++)
         {
@@ -200,7 +200,7 @@ public class SharedTrainingStepTests
     public void AccumulatedStepEqualsOneUpdateFromTheMeanObjective()
     {
         var (accumulated, reference) = TwinLayers();
-        var data = new Random(31);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(31);
         var inputs = new Tensor<float>[3];
         var targets = new Tensor<float>[3];
         for (int i = 0; i < inputs.Length; i++)
@@ -247,12 +247,12 @@ public class SharedTrainingStepTests
         var engine = AiDotNetEngine.Current;
         var weights = new Tensor<float>(new[] { Features, 1 });
         for (int i = 0; i < Features; i++) weights[i] = 1f; // ||w|| = 2 for four features
-        var data = new Random(41);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(41);
         var real = RandomTensor(data, Batch, Features);
         var fake = RandomTensor(data, Batch, Features);
 
         var penalty = WassersteinCriticStep<float>.GradientPenalty(
-            engine, real, fake, x => engine.TensorMatMul(x, weights), new Random(3));
+            engine, real, fake, x => engine.TensorMatMul(x, weights), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3));
 
         double norm = Math.Sqrt(Features);
         Assert.Equal((norm - 1.0) * (norm - 1.0), penalty[0], 3);
@@ -267,12 +267,12 @@ public class SharedTrainingStepTests
     public void CriticStepReplayMatchesAFreshTraceOnEveryBatch()
     {
         var (replayed, fresh) = CriticTwins();
-        var replayedRandom = new Random(42);
-        var freshRandom = new Random(42);
+        var replayedRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        var freshRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var replayedOptimizer = Sgd();
         var replayOwner = new object();
         WganGpFusedStep<float>? replayedPrimitive = null;
-        var data = new Random(43);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
         for (int step = 0; step < 4; step++)
         {
@@ -303,7 +303,7 @@ public class SharedTrainingStepTests
     public void DpSgdStepWithoutNoiseOrActiveClipEqualsTheMeanGradientStep()
     {
         var (privateLayer, reference) = TwinLayers();
-        var data = new Random(51);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(51);
         var inputs = new Tensor<float>[4];
         var targets = new Tensor<float>[4];
         for (int i = 0; i < inputs.Length; i++)
@@ -320,7 +320,7 @@ public class SharedTrainingStepTests
             (output, slots) => MeanSquaredError(output, slots[1]),
             clipNorm: 1e6,
             noiseMultiplier: 0.0,
-            random: new Random(1),
+            random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1),
             optimizer: Sgd());
 
         float referenceLoss = TapeTrainingStepper<float>.EagerAccumulatedObjectiveStep(
@@ -359,7 +359,7 @@ public class SharedTrainingStepTests
         layer.Forward(new Tensor<float>(new[] { Batch, Features }));
         var stepper = new TapeTrainingStepper<float>(new object());
         var optimizer = Adam();
-        var data = new Random(31);
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(31);
         int interval = FusedTrainingSession<float>.PersistenceRecheckInterval;
 
         for (int step = 0; step < interval + 4; step++)

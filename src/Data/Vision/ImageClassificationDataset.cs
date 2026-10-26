@@ -304,14 +304,14 @@ public class ImageClassificationDataset<T> : InputOutputDataLoaderBase<T, Tensor
 
         return (
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Take(trainSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Take(trainSize).ToArray())),
+                ExtractTensorBatch((LoadedFeatures ?? throw new InvalidOperationException("LoadedFeatures is null where it is required.")), shuffled.Take(trainSize).ToArray()),
+                ExtractTensorBatch((LoadedLabels ?? throw new InvalidOperationException("LoadedLabels is null where it is required.")), shuffled.Take(trainSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize).Take(valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize).Take(valSize).ToArray())),
+                ExtractTensorBatch(LoadedFeatures, shuffled.Skip(trainSize).Take(valSize).ToArray()),
+                ExtractTensorBatch(LoadedLabels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize + valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize + valSize).ToArray()))
+                ExtractTensorBatch(LoadedFeatures, shuffled.Skip(trainSize + valSize).ToArray()),
+                ExtractTensorBatch(LoadedLabels, shuffled.Skip(trainSize + valSize).ToArray()))
         );
     }
 

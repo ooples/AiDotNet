@@ -128,7 +128,13 @@ public sealed class PlanCache
         {
             System.Diagnostics.Trace.TraceWarning(
                 $"PlanCache: save failed for '{path}': {ex.GetType().Name}: {ex.Message}");
-            try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+            try { if (File.Exists(tmpPath)) File.Delete(tmpPath); }
+            catch (Exception cleanupError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"PlanCache: removing the partial file '{tmpPath}' failed: " +
+                    $"{cleanupError.GetType().Name}: {cleanupError.Message}");
+            }
         }
     }
 

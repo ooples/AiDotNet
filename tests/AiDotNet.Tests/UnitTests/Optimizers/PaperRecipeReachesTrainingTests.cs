@@ -101,7 +101,7 @@ public class PaperRecipeReachesTrainingTests
 
         Type[] types;
         try { types = assembly.GetTypes(); }
-        catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
+        catch (ReflectionTypeLoadException ex) { types = ex.Types.OfType<Type>().ToArray(); }
 
         var declared = types
             .Where(t => t.GetCustomAttributes(typeof(AiDotNet.Attributes.PaperOptimizerAttribute), false).Length > 0)
