@@ -40,6 +40,21 @@ public partial class T5FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _wo = NormalTensor(new[] { ffDim, dim }, Math.Pow(ffDim, -0.5), random);
         RegisterTrainableParameter(_wi, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_wo, PersistentTensorRole.Weights);
+        NoteConstructorInitialization(_wi, _wo);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Drawn in the constructor, so a caller who builds this into an explicit layer list drew before the model
+    /// existed; the model's seed arrives afterwards and the draw is redone from it, in the same order.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        var drawn = new[] { _wi, _wo };
+        if (!TryBeginSeededReinitialization(drawn, out var random)) return;
+        NormalTensor(new[] { _dim, _ffDim }, Math.Pow(_dim, -0.5), random).AsSpan().CopyTo(_wi.AsWritableSpan());
+        NormalTensor(new[] { _ffDim, _dim }, Math.Pow(_ffDim, -0.5), random).AsSpan().CopyTo(_wo.AsWritableSpan());
+        CompleteSeededReinitialization(drawn);
     }
 
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2
@@ -199,6 +214,7 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         RegisterTrainableParameter(_encoderBiasHorizontal, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_encoderBiasVertical, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_decoderBias, PersistentTensorRole.Weights);
+        NoteConstructorInitialization(_shared, _encoderBias1D, _encoderBiasHorizontal, _encoderBiasVertical, _decoderBias);
 
         _patchEmbedding = new ConvolutionalLayer<T>(dim, patchSize, patchSize, 0, (IActivationFunction<T>)new IdentityActivation<T>());
         // The cell tables index quantised box corners, not the patch features built above.
@@ -272,6 +288,31 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         }
         : null;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The five tables above are drawn in the constructor, so a caller who builds this into an explicit layer
+    /// list drew them before the model existed; the model's seed arrives afterwards and they are redone from it,
+    /// in the same order. The sub-layers built below hold their own seeds and are wired separately.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        var drawn = new[] { _shared, _encoderBias1D, _encoderBiasHorizontal, _encoderBiasVertical, _decoderBias };
+        // The tables are redrawn only while untouched; the children are seeded either way, since each guards its own.
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            double biasStd = Math.Pow(_dim, -0.5);
+            NormalTensor(new[] { _vocabSize, _dim }, 1.0, random).AsSpan().CopyTo(_shared.AsWritableSpan());
+            NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBias1D.AsWritableSpan());
+            NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBiasHorizontal.AsWritableSpan());
+            NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_encoderBiasVertical.AsWritableSpan());
+            NormalTensor(new[] { _numBuckets, _numHeads }, biasStd, random).AsSpan().CopyTo(_decoderBias.AsWritableSpan());
+            CompleteSeededReinitialization(drawn);
+        }
+
+        // The patch convolution, the two cell embeddings and every encoder/decoder block were built in this
+        // constructor too, so they drew before the model existed and need the seed as much as the tables do.
+        PropagateSeedToSubLayers();
+    }
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2 || input.Shape[1] != 5)
