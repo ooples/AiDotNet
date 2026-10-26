@@ -175,17 +175,17 @@ internal sealed class LinearProgramStandardForm<T>
 
         for (int r = 0; r < inequalityRowCount; r++)
         {
-            var (row, shift) = ProjectRow(program.InequalityMatrix!, r, mappings, variableCount);
+            var (row, shift) = ProjectRow((program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required.")), r, mappings, variableCount);
             rows.Add(row);
-            rightHandSides.Add(NumOps.Subtract(program.InequalityBounds![r], shift));
+            rightHandSides.Add(NumOps.Subtract((program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."))[r], shift));
             isEquality.Add(false);
         }
 
         for (int r = 0; r < equalityRowCount; r++)
         {
-            var (row, shift) = ProjectRow(program.EqualityMatrix!, r, mappings, variableCount);
+            var (row, shift) = ProjectRow((program.EqualityMatrix ?? throw new InvalidOperationException("program.EqualityMatrix is null where it is required.")), r, mappings, variableCount);
             rows.Add(row);
-            rightHandSides.Add(NumOps.Subtract(program.EqualityBounds![r], shift));
+            rightHandSides.Add(NumOps.Subtract((program.EqualityBounds ?? throw new InvalidOperationException("program.EqualityBounds is null where it is required."))[r], shift));
             isEquality.Add(true);
         }
 

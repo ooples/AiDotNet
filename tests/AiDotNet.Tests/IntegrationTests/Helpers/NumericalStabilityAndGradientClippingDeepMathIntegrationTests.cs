@@ -833,7 +833,7 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AreGradientsVanishing_Null_True()
     {
-        Assert.True(GradientClippingHelper.AreGradientsVanishing<double>(null));
+        Assert.True(GradientClippingHelper.AreGradientsVanishing<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     #endregion

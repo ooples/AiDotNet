@@ -457,13 +457,13 @@ public sealed class NonlinearModelPredictiveController<T>
                 if (lowerBounds is not null)
                 {
                     lowerBounds[index] = NumOps.Subtract(
-                        _options.InputLowerBounds![i], inputs[k][i]);
+                        (_options.InputLowerBounds ?? throw new InvalidOperationException("_options.InputLowerBounds is null where it is required."))[i], inputs[k][i]);
                 }
 
                 if (upperBounds is not null)
                 {
                     upperBounds[index] = NumOps.Subtract(
-                        _options.InputUpperBounds![i], inputs[k][i]);
+                        (_options.InputUpperBounds ?? throw new InvalidOperationException("_options.InputUpperBounds is null where it is required."))[i], inputs[k][i]);
                 }
             }
         }

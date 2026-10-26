@@ -502,7 +502,7 @@ public class PointCloudDeepMathIntegrationTests
 
     private static Tensor<double> CreateRandomTensor(int rows, int cols, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new double[rows * cols];
         for (int i = 0; i < data.Length; i++)
         {

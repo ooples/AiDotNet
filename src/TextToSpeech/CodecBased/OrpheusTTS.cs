@@ -67,14 +67,12 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>Creates an ONNX-backed Orpheus for inference.</summary>
     public OrpheusTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, OrpheusTTSOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new OrpheusTTSOptions();
+        _options = options ?? new OrpheusTTSOptions(); Options = _options;
         _useNativeMode = false;
         ConfigureBase();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -88,7 +86,7 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public OrpheusTTS(NeuralNetworkArchitecture<T> architecture, OrpheusTTSOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new OrpheusTTSOptions();
+        _options = options ?? new OrpheusTTSOptions(); Options = _options;
         _useNativeMode = true;
         ConfigureBase();
         InitializeLayers();

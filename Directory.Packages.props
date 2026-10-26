@@ -400,14 +400,16 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
 
          Bumped 0.140.0 to 0.141.0 for AiDotNet.Tensors #1458, one exp kernel on every CPU vendor: Intel CPUs with
          fast gathers took a table exp that rounds differently from the polynomial one AMD takes, and Adam amplified
-         the difference into another trajectory (SegNeXt's train/test-gap invariant failed only on Intel runners). -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.141.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.141.0" />
-    <PackageVersion Include="AiDotNet.Evolution" Version="0.5.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.141.0" />
+         the difference into another trajectory (SegNeXt's train/test-gap invariant failed only on Intel runners).
+
+         0.143.0 and Evolution 0.6.0 arrive from master's dependency bumps (#2372). -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.143.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.143.0" />
+    <PackageVersion Include="AiDotNet.Evolution" Version="0.6.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.143.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
@@ -421,16 +423,16 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0-preview.1.25120.3" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0-preview.1.25120.3" />
-    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.14" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
     <!-- Entity Framework Core -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
     <PackageVersion Include="Npgsql" Version="10.0.1" />
     <PackageVersion Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
@@ -466,7 +468,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
     <PackageVersion Include="Stripe.net" Version="52.4.2" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
     <!-- Code analysis (default version; source generators may override) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />

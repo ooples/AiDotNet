@@ -646,7 +646,7 @@ public class StatisticsHelperIntegrationTests
     public async Task DetermineBestFitDistribution_ReturnsValidResult()
     {
         // Arrange - normally distributed data
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var values = new Vector<double>(Enumerable.Range(0, 100)
             .Select(_ => random.NextDouble() * 10 - 5).ToArray());
 

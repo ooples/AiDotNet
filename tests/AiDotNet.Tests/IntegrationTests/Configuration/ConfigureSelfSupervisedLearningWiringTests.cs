@@ -52,7 +52,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
 
     private static (Matrix<double> x, Vector<double> y) BuildDataset(int rows = 20, int features = 3)
     {
-        var rng = new Random(11);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         var xData = new double[rows, features];
         var yData = new double[rows];
         for (int r = 0; r < rows; r++)
@@ -97,7 +97,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
         Assert.Equal(1, pretrainCalls);
         Assert.NotNull(capturedBaseModel);
         Assert.NotNull(capturedConfig);
-        Assert.Equal("stub", capturedConfig!.Method?.Name);
+        Assert.Equal("stub", capturedConfig.Method?.Name);
         Assert.Equal(1, capturedConfig.PretrainingEpochs);
     }
 
@@ -146,7 +146,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
             .ConfigureSelfSupervisedLearning(
                 configure: null,
                 pretrainAction: (m, c, ct) =>
-                    Task.FromResult<IFullModel<double, Matrix<double>, Vector<double>>>(null!));
+                    Task.FromResult<IFullModel<double, Matrix<double>, Vector<double>>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await builder.BuildAsync());
         Assert.Contains("pretrainAction", ex.Message);
@@ -159,7 +159,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
         Assert.Throws<ArgumentNullException>(() =>
             builder.ConfigureSelfSupervisedLearning(
                 configure: null,
-                pretrainAction: null!));
+                pretrainAction: global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>, AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningConfig<double>, System.Threading.CancellationToken, System.Threading.Tasks.Task<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -213,7 +213,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
             .BuildAsync();
 
         Assert.NotNull(capturedConfig);
-        Assert.Same(method, capturedConfig!.Method);
+        Assert.Same(method, capturedConfig.Method);
     }
 
     /// <summary>
@@ -242,7 +242,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
             .BuildAsync();
 
         Assert.NotNull(capturedConfig);
-        Assert.Same(method, capturedConfig!.Method);      // survived the second call
+        Assert.Same(method, capturedConfig.Method);      // survived the second call
         Assert.Equal(3, capturedConfig.PretrainingEpochs); // and the second call's settings landed
     }
 
@@ -250,7 +250,7 @@ public class ConfigureSelfSupervisedLearningWiringTests
     public void ConfigureSSLMethod_NullArgument_ThrowsArgumentNull()
     {
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
-        Assert.Throws<ArgumentNullException>(() => builder.ConfigureSelfSupervisedLearningMethod(null!));
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureSelfSupervisedLearningMethod(global::AiDotNet.Tests.TestNull.Of<AiDotNet.SelfSupervisedLearning.ISelfSupervisedLearningMethod<double>>()));
     }
 
     [Fact(Timeout = 120000)]

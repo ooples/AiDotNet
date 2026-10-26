@@ -656,7 +656,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Fixed seed for reproducibility of test runs.
         // Note: during development, occasionally run with different seeds (or add parameterized
         // tests) to catch bugs that only appear under certain random initializations.
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int totalElements = 1;
         foreach (var dim in tensor.Shape.ToArray())
         {

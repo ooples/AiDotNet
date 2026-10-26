@@ -870,7 +870,7 @@ internal class PickleParser
                         var siKey = _stack.Pop();
                         if (_stack.Peek() is Dictionary<string, object?> siDict && siKey != null)
                         {
-                            siDict[siKey.ToString()!] = siValue;
+                            siDict[(siKey.ToString() ?? throw new InvalidOperationException("siKey.ToString() is null where it is required."))] = siValue;
                         }
                         break;
 
@@ -883,7 +883,7 @@ internal class PickleParser
                                 var key = setItems[i];
                                 if (key != null)
                                 {
-                                    sisDict[key.ToString()!] = setItems[i + 1];
+                                    sisDict[(key.ToString() ?? throw new InvalidOperationException("key.ToString() is null where it is required."))] = setItems[i + 1];
                                 }
                             }
                         }
@@ -1059,7 +1059,7 @@ internal class PickleParser
             var key = items[i];
             if (key != null)
             {
-                dict[key.ToString()!] = items[i + 1];
+                dict[(key.ToString() ?? throw new InvalidOperationException("key.ToString() is null where it is required."))] = items[i + 1];
             }
         }
 

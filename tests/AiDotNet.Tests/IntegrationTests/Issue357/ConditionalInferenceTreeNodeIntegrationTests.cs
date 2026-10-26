@@ -195,8 +195,8 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
         // Verify p-values at each level
         Assert.Equal(0.01, root.PValue, Tolerance);
-        Assert.Equal(0.03, ((ConditionalInferenceTreeNode<double>)root.Left!).PValue, Tolerance);
-        Assert.Equal(0.0, ((ConditionalInferenceTreeNode<double>)root.Right!).PValue, Tolerance);
+        Assert.Equal(0.03, ((ConditionalInferenceTreeNode<double>)root.Left).PValue, Tolerance);
+        Assert.Equal(0.0, ((ConditionalInferenceTreeNode<double>)root.Right).PValue, Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -240,11 +240,11 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
         if (input[node.FeatureIndex] <= node.SplitValue)
         {
-            return TraverseTree(node.Left!, input);
+            return TraverseTree((node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")), input);
         }
         else
         {
-            return TraverseTree(node.Right!, input);
+            return TraverseTree((node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")), input);
         }
     }
 
@@ -302,8 +302,8 @@ public class ConditionalInferenceTreeNodeIntegrationTests
 
         // Check that all internal nodes have significant p-values
         Assert.True(root.PValue < 0.05);
-        Assert.True(((ConditionalInferenceTreeNode<double>)root.Left!).PValue < 0.05);
-        Assert.True(((ConditionalInferenceTreeNode<double>)root.Right!).PValue < 0.05);
+        Assert.True(((ConditionalInferenceTreeNode<double>)root.Left).PValue < 0.05);
+        Assert.True(((ConditionalInferenceTreeNode<double>)root.Right).PValue < 0.05);
     }
 
     [Fact(Timeout = 120000)]
@@ -333,7 +333,7 @@ public class ConditionalInferenceTreeNodeIntegrationTests
         // Root is significant
         Assert.True(root.PValue < 0.05);
         // Left child split is NOT significant
-        Assert.True(((ConditionalInferenceTreeNode<double>)root.Left!).PValue > 0.05);
+        Assert.True(((ConditionalInferenceTreeNode<double>)root.Left).PValue > 0.05);
     }
 
     #endregion

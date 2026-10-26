@@ -180,7 +180,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
                 int offset = m * _subDimension;
                 Array.Copy(full, offset, sub, 0, _subDimension);
 
-                var centroids = _codebooks![m];
+                var centroids = (_codebooks ?? throw new InvalidOperationException("_codebooks is null where it is required."))[m];
                 int best = 0;
                 double bestDist = double.MaxValue;
                 for (int c = 0; c < centroids.Length; c++)
@@ -213,7 +213,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
             for (int m = 0; m < _subspaceCount; m++)
             {
                 int offset = m * _subDimension;
-                var centroid = _codebooks![m][code[m]];
+                var centroid = (_codebooks ?? throw new InvalidOperationException("_codebooks is null where it is required."))[m][code[m]];
                 for (int i = 0; i < _subDimension; i++)
                     values[offset + i] = _numOps.FromDouble(centroid[i]);
             }
@@ -250,7 +250,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
                 int offset = m * _subDimension;
                 Array.Copy(full, offset, sub, 0, _subDimension);
 
-                var centroids = _codebooks![m];
+                var centroids = (_codebooks ?? throw new InvalidOperationException("_codebooks is null where it is required."))[m];
                 var row = new double[centroids.Length];
                 for (int c = 0; c < centroids.Length; c++)
                     row[c] = SquaredDistance(sub, centroids[c]);

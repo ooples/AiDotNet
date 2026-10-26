@@ -553,8 +553,8 @@ public abstract class ReinforcementLearningTestBase<T>
             "This agent's action space did not yield two distinct actions for one state, so a "
             + "reward difference between actions cannot be expressed here.");
 
-        var (favouringA, stepsA) = PolicyAfterRewarding(state, actionA!, actionB!);
-        var (favouringB, stepsB) = PolicyAfterRewarding(state, actionB!, actionA!);
+        var (favouringA, stepsA) = PolicyAfterRewarding(state, actionA, actionB);
+        var (favouringB, stepsB) = PolicyAfterRewarding(state, actionB, actionA);
 
         Skip.If(favouringA is null || favouringB is null,
             $"Neither run reached the agent's own training gate (A stopped at {stepsA} steps, B at "
@@ -581,7 +581,7 @@ public abstract class ReinforcementLearningTestBase<T>
         // and leaves the coordinate that does. For a discrete agent the axis is e_A - e_B and the
         // projection is just "how much more probability mass A has than B", which is the same
         // question the distance form was asking.
-        var axis = new double[Math.Min(actionA!.Length, actionB!.Length)];
+        var axis = new double[Math.Min(actionA.Length, actionB.Length)];
         double axisNormSquared = 0.0;
         for (int i = 0; i < axis.Length; i++)
         {
@@ -620,7 +620,7 @@ public abstract class ReinforcementLearningTestBase<T>
         // produces the SAME greedy action twice and the separation collapses to zero, where the
         // absolute form let such a policy through whenever its drift happened to straddle the
         // midpoint.
-        double separation = Along(favouringA!) - Along(favouringB!);
+        double separation = Along(favouringA) - Along(favouringB);
 
         Assert.True(separation >= MinimumRewardSeparation,
             "The policy did not move towards whichever action was rewarded. Along the A-B axis -- on "

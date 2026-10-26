@@ -57,11 +57,11 @@ public static class DeserializationHelper
         }
         catch (ReflectionTypeLoadException ex)
         {
-            discovered = ex.Types.Where(t => t is not null).Select(t => t!).ToArray();
+            discovered = ex.Types.OfType<Type>().ToArray();
 
             var unloadable = (ex.LoaderExceptions ?? Array.Empty<Exception?>())
                 .Where(e => e is not null)
-                .Select(e => e!.Message)
+                .Select(e => (e ?? throw new InvalidOperationException("e is null where it is required.")).Message)
                 .Distinct(StringComparer.Ordinal)
                 .Take(5)
                 .ToArray();
@@ -2692,7 +2692,7 @@ public static class DeserializationHelper
                         "filters" => filters,
                         "padding" => padding,
                         "strides" => strides,
-                        _ => p.HasDefaultValue ? (int)p.DefaultValue! : throw new InvalidOperationException(
+                        _ => p.HasDefaultValue && p.DefaultValue is int defaultValue ? defaultValue : throw new InvalidOperationException(
                             $"ConvLSTMLayer ctor parameter '{n}' has no metadata mapping " +
                             $"and no default value."),
                     };
@@ -3281,7 +3281,7 @@ public static class DeserializationHelper
                 var parsed = TryGetEnum<SequenceTokenSliceLayer<T>.Position>(additionalParams, "Position");
                 if (parsed is null)
                 {
-                    var raw = additionalParams!["Position"];
+                    var raw = (additionalParams ?? throw new InvalidOperationException("additionalParams is null where it is required."))["Position"];
                     throw new InvalidOperationException(
                         $"Invalid SequenceTokenSliceLayer Position metadata '{raw}' " +
                         $"(type {raw?.GetType().Name ?? "null"}). Expected one of: " +
@@ -3360,11 +3360,11 @@ public static class DeserializationHelper
             // identity, deserializing a DIFFERENT model than was saved — reject instead.
             if (hasResidualScalarActivation && residualScalarActivation is null)
                 throw new InvalidOperationException(
-                    $"ResidualLayer metadata contains ScalarActivationType='{additionalParams!["ScalarActivationType"]}' " +
+                    $"ResidualLayer metadata contains ScalarActivationType='{(additionalParams ?? throw new InvalidOperationException("additionalParams is null where it is required."))["ScalarActivationType"]}' " +
                     "but it could not be restored; refusing to silently substitute identity.");
             if (hasResidualVectorActivation && residualVectorActivation is null)
                 throw new InvalidOperationException(
-                    $"ResidualLayer metadata contains VectorActivationType='{additionalParams!["VectorActivationType"]}' " +
+                    $"ResidualLayer metadata contains VectorActivationType='{(additionalParams ?? throw new InvalidOperationException("additionalParams is null where it is required."))["VectorActivationType"]}' " +
                     "but it could not be restored; refusing to silently substitute identity.");
 
             // Preferred path: reconstruct the inner layer by its REAL type from the
@@ -3939,7 +3939,7 @@ public static class DeserializationHelper
 
             // net471's nullable-flow analysis does not learn the non-null state from
             // string.IsNullOrWhiteSpace, even though the guard above has returned.
-            var parts = value!.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+            var parts = (value ?? throw new InvalidOperationException("value is null where it is required.")).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(part => part.Trim())
                 .ToArray();
             var result = new int[parts.Length];
@@ -4977,19 +4977,19 @@ public static class DeserializationHelper
         var hgm = Activator.CreateInstance(hgmType)
             ?? throw new InvalidOperationException("Could not allocate HeterogeneousGraphMetadata.");
 
-        hgmType.GetProperty("NodeTypes")!.SetValue(hgm, new[] { "default" });
-        hgmType.GetProperty("EdgeTypes")!.SetValue(hgm, new[] { "default" });
+        (hgmType.GetProperty("NodeTypes") ?? throw new InvalidOperationException("hgmType.GetProperty(\"NodeTypes\") is null where it is required.")).SetValue(hgm, new[] { "default" });
+        (hgmType.GetProperty("EdgeTypes") ?? throw new InvalidOperationException("hgmType.GetProperty(\"EdgeTypes\") is null where it is required.")).SetValue(hgm, new[] { "default" });
 
         var nodeFeats = new System.Collections.Generic.Dictionary<string, int> { ["default"] = 64 };
-        hgmType.GetProperty("NodeTypeFeatures")!.SetValue(hgm, nodeFeats);
+        (hgmType.GetProperty("NodeTypeFeatures") ?? throw new InvalidOperationException("hgmType.GetProperty(\"NodeTypeFeatures\") is null where it is required.")).SetValue(hgm, nodeFeats);
 
         // EdgeTypeSchema is Dictionary<string, (string, string)>. Build via reflection.
         var schemaType = typeof(System.Collections.Generic.Dictionary<,>)
             .MakeGenericType(typeof(string), typeof(ValueTuple<string, string>));
         var schema = Activator.CreateInstance(schemaType);
         var addMethod = schemaType.GetMethod("Add");
-        addMethod!.Invoke(schema, new object?[] { "default", ("default", "default") });
-        hgmType.GetProperty("EdgeTypeSchema")!.SetValue(hgm, schema);
+        (addMethod ?? throw new InvalidOperationException("addMethod is null where it is required.")).Invoke(schema, new object?[] { "default", ("default", "default") });
+        (hgmType.GetProperty("EdgeTypeSchema") ?? throw new InvalidOperationException("hgmType.GetProperty(\"EdgeTypeSchema\") is null where it is required.")).SetValue(hgm, schema);
 
         return hgm;
     }

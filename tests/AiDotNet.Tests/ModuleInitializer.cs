@@ -152,7 +152,7 @@ internal static class TestModuleInitializer
         if (!string.IsNullOrWhiteSpace(_envLicenseKey))
         {
             var _envResult = new AiDotNet.Helpers.LicenseValidator(
-                new AiDotNet.Models.AiDotNetLicenseKey(_envLicenseKey!) { ServerUrl = string.Empty }).Validate();
+                new AiDotNet.Models.AiDotNetLicenseKey(_envLicenseKey) { ServerUrl = string.Empty }).Validate();
             _envKeyOfflineUsable = _envResult.Status == AiDotNet.Enums.LicenseKeyStatus.Active
                 && (_envResult.Capabilities.Count == 0
                     || _envResult.HasCapability(AiDotNet.Helpers.LicenseCapabilities.ModelSave));

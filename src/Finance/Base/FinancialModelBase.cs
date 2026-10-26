@@ -560,7 +560,11 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         // Forecast, so none can return without it (#2147).
         RequireArchitectureAgreesWithInput();
         var forecast = ForecastCore(input, quantiles);
-        RequireArchitectureAgreesWithOutput(forecast);
+        // A point forecast is what the architecture's OutputSize describes. A quantile forecast lays Q values out per
+        // series, so its last axis is series x Q and would be refused against a correct architecture; the check waits
+        // for the first point forecast instead.
+        if (quantiles is null || quantiles.Length == 0)
+            RequireArchitectureAgreesWithOutput(forecast);
         return forecast;
     }
 

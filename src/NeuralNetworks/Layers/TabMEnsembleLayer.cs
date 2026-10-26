@@ -150,7 +150,7 @@ public partial class TabMEnsembleLayer<T> : LayerBase<T>, IShapeContract
 
         // First layer tiles the batch across members ([batch, F] -> [batch*k, h0]); subsequent
         // layers run member-aware on the already-expanded batch with a ReLU between layers.
-        var current = _ensembleLayers![0].Forward(x);
+        var current = (_ensembleLayers ?? throw new InvalidOperationException("_ensembleLayers is null where it is required."))[0].Forward(x);
         for (int l = 1; l < _ensembleLayers.Length; l++)
         {
             current = Engine.ReLU(current);

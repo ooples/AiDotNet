@@ -505,16 +505,16 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
 
         T negLR = NumOps.Negate(learningRate);
         Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_queryNormScale, Engine.TensorMultiplyScalar(_queryNormScaleGradient!, negLR));
-        Engine.TensorAddInPlace(_keyNormScale, Engine.TensorMultiplyScalar(_keyNormScaleGradient!, negLR));
-        Engine.TensorAddInPlace(_gammas, Engine.TensorMultiplyScalar(_gammasGradient!, negLR));
-        Engine.TensorAddInPlace(_outputNormScale, Engine.TensorMultiplyScalar(_outputNormScaleGradient!, negLR));
-        Engine.TensorAddInPlace(_outputGateWeights, Engine.TensorMultiplyScalar(_outputGateWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar((_keyWeightsGradient ?? throw new InvalidOperationException("_keyWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar((_valueWeightsGradient ?? throw new InvalidOperationException("_valueWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_queryNormScale, Engine.TensorMultiplyScalar((_queryNormScaleGradient ?? throw new InvalidOperationException("_queryNormScaleGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_keyNormScale, Engine.TensorMultiplyScalar((_keyNormScaleGradient ?? throw new InvalidOperationException("_keyNormScaleGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_gammas, Engine.TensorMultiplyScalar((_gammasGradient ?? throw new InvalidOperationException("_gammasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputNormScale, Engine.TensorMultiplyScalar((_outputNormScaleGradient ?? throw new InvalidOperationException("_outputNormScaleGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputGateWeights, Engine.TensorMultiplyScalar((_outputGateWeightsGradient ?? throw new InvalidOperationException("_outputGateWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputGateBias, Engine.TensorMultiplyScalar((_outputGateBiasGradient ?? throw new InvalidOperationException("_outputGateBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar((_outputProjectionWeightsGradient ?? throw new InvalidOperationException("_outputProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar((_outputProjectionBiasGradient ?? throw new InvalidOperationException("_outputProjectionBiasGradient is null where it is required.")), negLR));
 
         // Clamp gammas to valid range
         for (int h = 0; h < _numHeads; h++)

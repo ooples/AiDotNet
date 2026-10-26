@@ -45,7 +45,7 @@ public class GraphTraceTests
             x => TensorOperations<double>.Square(TensorOperations<double>.Tanh(x));
 
         var graph = GraphTrace.Trace(expression, [3]);
-        var replayed = GraphTrace.Compile<double>(graph!, "TestLayer", "expression");
+        var replayed = GraphTrace.Compile<double>((graph ?? throw new InvalidOperationException("graph is null where it is required.")), "TestLayer", "expression");
 
         var input = Probe(0.25, -1.5, 2.0);
         var expected = Run(expression, input);
@@ -68,7 +68,7 @@ public class GraphTraceTests
         var graph = GraphTrace.Trace(expression, [4]);
         Assert.NotNull(graph);
 
-        var replayed = GraphTrace.Compile<double>(graph!, "TestLayer", "expression");
+        var replayed = GraphTrace.Compile<double>(graph, "TestLayer", "expression");
         var input = Probe(1.0, 2.0, 3.0, 4.0);
 
         var expected = Run(expression, input);

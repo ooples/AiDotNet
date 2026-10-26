@@ -44,7 +44,7 @@ public class FeedForwardCompiledMlpPredictTests
         const int inSize = 6, h = 5, outSize = 3;
         var model = BuildMlp(inSize, h, outSize);
 
-        var rng = new Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         var inData = new float[batch * inSize];
         for (int i = 0; i < inData.Length; i++) inData[i] = (float)(rng.NextDouble() * 2 - 1);
         var input = new Tensor<float>(inData, new[] { batch, inSize });

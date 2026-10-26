@@ -43,7 +43,7 @@ public sealed class GpuTransformerWeightParityTests
 
     private static (Tensor<float> x, Tensor<float> y) MakeData(int n, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<float>(new[] { n, Ctx });
         var y = new Tensor<float>(new[] { n, V });
         for (int i = 0; i < n; i++)

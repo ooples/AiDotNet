@@ -199,7 +199,7 @@ public class ModelsController : ControllerBase
                 // native token-ID endpoint.
                 try
                 {
-                    var tokenizerPath = Path.GetFullPath(Path.Combine(modelsRoot, request.TokenizerPath!));
+                    var tokenizerPath = Path.GetFullPath(Path.Combine(modelsRoot, request.TokenizerPath));
                     if (!IsWithinRoot(tokenizerPath, modelsRoot))
                     {
                         _logger.LogWarning(

@@ -119,7 +119,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     if (hasMomentum)
                     {
                         // AiDotNet schema: v ← momentum · v + lr · g; θ ← θ − v.
-                        T vOld = velocity![paramBase + c];
+                        T vOld = (velocity ?? throw new InvalidOperationException("velocity is null where it is required."))[paramBase + c];
                         T vNew = ops.Add(ops.Multiply(momT, vOld), ops.Multiply(lrT, g));
                         velocity[paramBase + c] = vNew;
                         param[paramBase + c] = ops.Subtract(theta, vNew);
@@ -141,7 +141,10 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         double lr, double momentum, double weightDecay, bool hasMomentum)
     {
         var paramSpan = ((Tensor<double>)(object)param).Data.Span;
-        var velSpan = hasMomentum ? ((Tensor<double>)(object)velocity!).Data.Span : default;
+        var velSpan = hasMomentum
+            ? ((object?)velocity as Tensor<double>
+                ?? throw new InvalidOperationException("SGD momentum is enabled but its velocity is not allocated.")).Data.Span
+            : default;
         bool hasWd = weightDecay > 0.0;
         int vocabSize = paramSpan.Length / embeddingDim;
 
@@ -183,7 +186,10 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         float lr, float momentum, float weightDecay, bool hasMomentum)
     {
         var paramSpan = ((Tensor<float>)(object)param).Data.Span;
-        var velSpan = hasMomentum ? ((Tensor<float>)(object)velocity!).Data.Span : default;
+        var velSpan = hasMomentum
+            ? ((object?)velocity as Tensor<float>
+                ?? throw new InvalidOperationException("SGD momentum is enabled but its velocity is not allocated.")).Data.Span
+            : default;
         bool hasWd = weightDecay > 0f;
         int vocabSize = paramSpan.Length / embeddingDim;
 

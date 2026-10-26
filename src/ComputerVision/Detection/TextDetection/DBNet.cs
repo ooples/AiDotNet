@@ -65,8 +65,8 @@ public partial class DBNet<T> : TextDetectorBase<T>
         _hiddenDim = GetHiddenDim(options.Size);
         _k = k;
 
-        // ResNet backbone
-        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+        // ResNet backbone: DB-ResNet-50 by default, DB-ResNet-18 (also in the paper) when the options say so.
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetBackboneSelection.Resolve(options.Backbone) });
 
         // Feature pyramid (the paper's FPN, mmocr FPNC): the fused map has _hiddenDim channels at 1/4
         // resolution - 256 at the default size, as in the paper.

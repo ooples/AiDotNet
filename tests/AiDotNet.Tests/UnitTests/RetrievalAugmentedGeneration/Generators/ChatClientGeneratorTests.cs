@@ -64,13 +64,13 @@ public class ChatClientGeneratorTests
 
         Assert.Equal("Transformers use self-attention [1].", text);
         Assert.NotNull(fake.LastMessages);
-        Assert.Equal(2, fake.LastMessages!.Count);
+        Assert.Equal(2, fake.LastMessages.Count);
         Assert.Equal(ChatRole.System, fake.LastMessages[0].Role);
         Assert.Equal("You are terse.", fake.LastMessages[0].Text);
         Assert.Equal(ChatRole.User, fake.LastMessages[1].Role);
         Assert.Equal("How do transformers work?", fake.LastMessages[1].Text);
-        Assert.Equal(0.2, fake.LastOptions!.Temperature);
-        Assert.Equal(256, fake.LastOptions!.MaxOutputTokens);
+        Assert.Equal(0.2, (fake.LastOptions ?? throw new InvalidOperationException("fake.LastOptions is null where it is required.")).Temperature);
+        Assert.Equal(256, fake.LastOptions.MaxOutputTokens);
     }
 
     [Fact]
@@ -81,8 +81,8 @@ public class ChatClientGeneratorTests
 
         gen.Generate("q");
 
-        Assert.Single(fake.LastMessages!);
-        Assert.Equal(ChatRole.User, fake.LastMessages![0].Role);
+        Assert.Single((fake.LastMessages ?? throw new InvalidOperationException("fake.LastMessages is null where it is required.")));
+        Assert.Equal(ChatRole.User, fake.LastMessages[0].Role);
     }
 
     [Fact]
@@ -113,5 +113,5 @@ public class ChatClientGeneratorTests
 
     [Fact]
     public void Constructor_NullChatClient_Throws()
-        => Assert.Throws<ArgumentNullException>(() => new ChatClientGenerator<double>(null!));
+        => Assert.Throws<ArgumentNullException>(() => new ChatClientGenerator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Agentic.Models.IChatClient<double>>()));
 }

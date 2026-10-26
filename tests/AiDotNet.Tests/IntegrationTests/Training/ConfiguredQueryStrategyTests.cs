@@ -81,7 +81,7 @@ public class ConfiguredQueryStrategyTests
 
         Assert.NotNull(result.ActiveLearningSelection);
         Assert.Equal(3, result.ActiveLearningSelection?.SelectedIndices.Length ?? -1);
-        Assert.Equal(10, result.ActiveLearningSelection.Ranking.Count);
+        Assert.Equal(10, (result.ActiveLearningSelection ?? throw new InvalidOperationException("result.ActiveLearningSelection is null where it is required.")).Ranking.Count);
         Assert.Equal("decreasing-query", result.ActiveLearningSelection.StrategyName);
     }
 }

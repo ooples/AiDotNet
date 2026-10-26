@@ -129,7 +129,7 @@ public class AdamOptimizerAnomalyGuardTests
                 _ => p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null,
             };
         }
-        return ctor.Invoke(args)!;
+        return ctor.Invoke(args);
     }
 
     private static bool InvokeAnyGradientIsAnomalous(
@@ -148,15 +148,15 @@ public class AdamOptimizerAnomalyGuardTests
                 BindingFlags.NonPublic | BindingFlags.Instance,
                 binder: null,
                 types: new[] { typeof(AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<double>) },
-                modifiers: null)!;
-        return (bool)method.Invoke(opt, new[] { context })!;
+                modifiers: null);
+        return (bool)((method ?? throw new InvalidOperationException("method is null where it is required.")).Invoke(opt, new[] { context }) ?? throw new InvalidOperationException("(method ?? throw new InvalidOperationException(\"method is null where it is re... is null where it is required."));
     }
 
     private static bool InvokeShouldRunAnomalyGuard(
         AdamOptimizer<double, Tensor<double>, Tensor<double>> opt)
     {
         var method = typeof(AdamOptimizer<double, Tensor<double>, Tensor<double>>)
-            .GetMethod("ShouldRunAnomalyGuard", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        return (bool)method.Invoke(opt, null)!;
+            .GetMethod("ShouldRunAnomalyGuard", BindingFlags.NonPublic | BindingFlags.Instance);
+        return (bool)((method ?? throw new InvalidOperationException("method is null where it is required.")).Invoke(opt, null) ?? throw new InvalidOperationException("(method ?? throw new InvalidOperationException(\"method is null where it is re... is null where it is required."));
     }
 }

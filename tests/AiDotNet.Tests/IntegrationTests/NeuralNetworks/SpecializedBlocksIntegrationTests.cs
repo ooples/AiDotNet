@@ -518,7 +518,7 @@ public class SpecializedBlocksIntegrationTests
     private static Tensor<T> CreateRandomTensor<T>(int[] shape) where T : struct, IComparable<T>
     {
         var tensor = new Tensor<T>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < tensor.Length; i++)
         {

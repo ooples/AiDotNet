@@ -312,8 +312,8 @@ public sealed partial class APNet2GeneratorLoss<T> : LossFunctionBase<T>
         EnsureDftBasis(bins);
 
         // real = x . cos, imaginary = -x . sin  (the standard analysis convention).
-        var realOut = Engine.TensorMatMul(stacked, _dftCos!);
-        var imaginaryOut = Engine.TensorNegate(Engine.TensorMatMul(stacked, _dftSin!));
+        var realOut = Engine.TensorMatMul(stacked, (_dftCos ?? throw new InvalidOperationException("_dftCos is null where it is required.")));
+        var imaginaryOut = Engine.TensorNegate(Engine.TensorMatMul(stacked, (_dftSin ?? throw new InvalidOperationException("_dftSin is null where it is required."))));
 
         if (realOut.Shape[0] != expectedFrames) return null;
 

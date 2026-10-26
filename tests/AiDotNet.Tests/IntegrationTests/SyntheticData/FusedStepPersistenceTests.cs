@@ -27,16 +27,16 @@ public class FusedStepPersistenceTests
     public void TabDDPM_fused_plan_keeps_its_optimizer_step_across_batches_and_epochs()
     {
         DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); } catch (Exception) { }
+        try { gpu = new DirectGpuTensorEngine(); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"FusedStepPersistenceTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
         Skip.IfNot(gpu is not null && gpu.SupportsGpu, "The fused multi-slot path needs a GPU engine.");
         var priorEngine = AiDotNetEngine.Current;
         var codec = TensorCodecOptions.Current;
         bool savedCompilation = codec.EnableCompilation;
-        AiDotNetEngine.Current = gpu!;
+        AiDotNetEngine.Current = gpu;
         codec.EnableCompilation = true;
         try
         {
-            var random = new Random(7);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
             var data = new Matrix<float>(Rows, 5);
             for (int i = 0; i < Rows; i++)
             {
@@ -60,13 +60,13 @@ public class FusedStepPersistenceTests
 
             generator.Fit(data, columns, Epochs);
 
-            var step = typeof(TabDDPMGenerator<float>)
-                .GetField("_fusedMultiSlotStep", BindingFlags.NonPublic | BindingFlags.Instance)!
+            var step = (typeof(TabDDPMGenerator<float>)
+                .GetField("_fusedMultiSlotStep", BindingFlags.NonPublic | BindingFlags.Instance) ?? throw new InvalidOperationException("typeof(TabDDPMGenerator<float>) .GetField(\"_fusedMultiSlotStep\", BindingFlags... is null where it is required."))
                 .GetValue(generator);
             // On a GPU engine with compilation on, the fused path must engage; an eager fallback is the regression
             // this test exists to catch, not a reason to skip it.
             Assert.NotNull(step);
-            var multiSlot = (AiDotNet.Training.MultiSlotFusedStep<float>)step!;
+            var multiSlot = (AiDotNet.Training.MultiSlotFusedStep<float>)step;
 
             // One fused step per row per epoch, none declined to the eager tape.
             Assert.Equal(0, multiSlot.DeclinedStepCount);
@@ -75,16 +75,16 @@ public class FusedStepPersistenceTests
             // The plan's own optimizer step: one per row per epoch. A plan rebuilt per batch restarted it (and the Adam
             // moments) at every batch, leaving at most one batch's worth. The multi-slot step trains through the
             // shared fused session, whose configured plan is the compiled step's.
-            var plan = typeof(AiDotNet.Training.CompiledTapeTrainingStep<float>)
-                .GetProperty("_configuredPlan", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
+            var plan = (typeof(AiDotNet.Training.CompiledTapeTrainingStep<float>)
+                .GetProperty("_configuredPlan", BindingFlags.NonPublic | BindingFlags.Static) ?? throw new InvalidOperationException("typeof(AiDotNet.Training.CompiledTapeTrainingStep<float>) .GetProperty(\"_conf... is null where it is required.")).GetValue(null);
             Assert.NotNull(plan);
-            int optimizerStep = (int)plan!.GetType()
-                .GetField("_optimizerStep", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(plan)!;
+            int optimizerStep = (int)((plan.GetType()
+                .GetField("_optimizerStep", BindingFlags.NonPublic | BindingFlags.Instance) ?? throw new InvalidOperationException("plan.GetType() .GetField(\"_optimizerStep\", BindingFlags.NonPublic | BindingFl... is null where it is required.")).GetValue(plan) ?? throw new InvalidOperationException("(plan.GetType() .GetField(\"_optimizerStep\", BindingFlags.NonPublic | BindingF... is null where it is required."));
             Assert.True(optimizerStep > BatchSize,
                 $"fused optimizer step counter is {optimizerStep} after {Epochs} epochs of {Rows} rows in batches of " +
                 $"{BatchSize}: the plan's optimizer state was restarted between batches.");
-            int skipped = (int)plan.GetType().GetProperty("NonFiniteStepsSkipped")!.GetValue(plan)!;
-            var graphExec = (IntPtr)plan.GetType().GetField("_stepGraphExec", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(plan)!;
+            int skipped = (int)((plan.GetType().GetProperty("NonFiniteStepsSkipped") ?? throw new InvalidOperationException("plan.GetType().GetProperty(\"NonFiniteStepsSkipped\") is null where it is required.")).GetValue(plan) ?? throw new InvalidOperationException("(plan.GetType().GetProperty(\"NonFiniteStepsSkipped\") ?? throw new InvalidOper... is null where it is required."));
+            var graphExec = (IntPtr)((plan.GetType().GetField("_stepGraphExec", BindingFlags.NonPublic | BindingFlags.Instance) ?? throw new InvalidOperationException("plan.GetType().GetField(\"_stepGraphExec\", BindingFlags.NonPublic | BindingFla... is null where it is required.")).GetValue(plan) ?? throw new InvalidOperationException("(plan.GetType().GetField(\"_stepGraphExec\", BindingFlags.NonPublic | BindingFl... is null where it is required."));
             Console.WriteLine($"TabDDPM fused step: optimizer steps {optimizerStep}, whole-step CUDA graph engaged: {graphExec != IntPtr.Zero}");
             Assert.True(skipped == 0, $"{skipped} fused step(s) were discarded for non-finite gradients");
             Assert.Equal(Rows * Epochs, optimizerStep);

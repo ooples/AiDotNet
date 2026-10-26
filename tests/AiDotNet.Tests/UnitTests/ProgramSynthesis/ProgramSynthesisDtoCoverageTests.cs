@@ -152,7 +152,7 @@ public sealed class ProgramSynthesisDtoCoverageTests
 
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
         {
-            type = Nullable.GetUnderlyingType(type)!;
+            type = Nullable.GetUnderlyingType(type);
             return CreateSimpleValue(type);
         }
 
@@ -163,7 +163,7 @@ public sealed class ProgramSynthesisDtoCoverageTests
 
         if (type.IsArray)
         {
-            return Array.CreateInstance(type.GetElementType()!, 0);
+            return Array.CreateInstance(type.GetElementType(), 0);
         }
 
         if (!type.IsAbstract && type.GetConstructor(Type.EmptyTypes) is not null)

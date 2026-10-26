@@ -58,7 +58,7 @@ public class GeneralizedLinearMixedModelTests : RegressionModelTestBase
         await Task.Yield();
 
         var model = (GeneralizedLinearMixedModel<double>)CreateModel();
-        var (x, y) = ModelTestHelpers.GenerateLinearData(40, 3, new Random(42), noise: 0.05);
+        var (x, y) = ModelTestHelpers.GenerateLinearData(40, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42), noise: 0.05);
         model.Train(x, y);
 
         var clone = (GeneralizedLinearMixedModel<double>)model.Clone();

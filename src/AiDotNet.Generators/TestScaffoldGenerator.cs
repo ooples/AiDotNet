@@ -5092,11 +5092,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return null;
     }
 
+    // The whole argument value, up to the comma or parenthesis that ends it. Matching only `\d+` removed the first
+    // number of an expression: `inputDepth: 3, outputSize: 256 * 256 * 3)` became `inputDepth: 3 * 256 * 3)`, so
+    // OpenSora's fixture declared 2304 input channels and every training test threw (#2365). A value containing a
+    // parenthesis or comma (a call, a nested expression) is not matched at all, so nothing is ever cut in half.
     private static readonly System.Text.RegularExpressions.Regex StatedOutputSize =
-        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*\d+|outputSize:\s*\d+,\s*",
+        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*[^,()]+?(?=\s*[,)])|outputSize:\s*[^,()]+?,\s*",
             System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
 
-    /// <summary>Removes every <c>outputSize: n</c> argument from a generated constructor expression (#2147).</summary>
+    /// <summary>Removes every <c>outputSize: value</c> argument from a generated constructor expression (#2147).</summary>
     private static string OmitStatedOutputSize(string expression) => StatedOutputSize.Replace(expression, string.Empty);
 
     private static bool InheritsFromAnyExcludedBase(INamedTypeSymbol type)
@@ -13619,8 +13623,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // six seconds per call on a CPU fixture. Sixteen steps exercise the same decoder.
                 bool pinInputSize = family == TestFamily.ObjectDetection || family == TestFamily.TextDetection;
                 bool pinDecodeLength = family == TestFamily.OCR;
-                constructorExpr = pinInputSize
-                    ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ InputSize = new[] {{ 64, 64 }} }})"
+                // DETR, DINO and DBNet build a ResNet trunk, ResNet-50 by default; at the fixture's 64x64 that
+                // trunk is most of each model, and the three together kept Generated D within a few hundred MB of
+                // the 16 GB runner (DINO's copy invariants alone reached 11.5 GB). ResNet-18 is one of DBNet's own
+                // paper configurations and exercises the same trunk code. DINO additionally carries the paper's
+                // full transformer (900 queries, 6+6 layers, d=256), bounded here like every other generated
+                // fixture's widths; production defaults are untouched.
+                // DETR also takes the library's Nano size (d=128, 3+3 layers, 50 queries) through its existing
+                // ModelSize knob: 9.3 GB -> 4.3 GB. Not DBNet: at Nano two random images decode to identical
+                // regions, so DetectBatch_EqualsDetectingEachImageAlone cannot tell batch items apart, and Nano saved
+                // DBNet only 0.6 GB. DINO's transformer is bounded through DINOOptions below.
+                string backbone = model.ClassName == "DETR"
+                    ? ", Backbone = AiDotNet.Models.Options.BackboneType.ResNet18, Size = AiDotNet.Models.Options.ModelSize.Nano"
+                    : model.ClassName is "DINO" or "DBNet"
+                        ? ", Backbone = AiDotNet.Models.Options.BackboneType.ResNet18"
+                        : string.Empty;
+                constructorExpr = model.ClassName == "DINO"
+                    ? $"new {typeName}<double>(new AiDotNet.Models.Options.DINOOptions<double> {{ InputSize = new[] {{ 64, 64 }}{backbone}, "
+                      + "HiddenDimension = 64, NumHeads = 8, NumEncoderLayers = 1, NumDecoderLayers = 1, FeedForwardDimension = 128, "
+                      + "NumQueries = 16, NumSamplingPoints = 4, DenoisingQueries = 8 })"
+                    : pinInputSize
+                    ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ InputSize = new[] {{ 64, 64 }}{backbone} }})"
                     : pinDecodeLength
                         ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ MaxSequenceLength = 16 }})"
                         : $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName}())";
@@ -18716,6 +18739,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
             sb.AppendLine("        VerifySemanticDetectionTraining();");
             sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact(Timeout = 300000)]");
+            sb.AppendLine("    public System.Threading.Tasks.Task TrainDetections_OverfitsOneImage_ToFullMeanAveragePrecision()");
+            sb.AppendLine("        => VerifyOverfitsOneImageToFullMeanAveragePrecision();");
         }
         if (model.HasVectorOnlyConstructor)
         {
@@ -18778,7 +18805,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 generated,
                 @"[ \t]*protected override int MoreData(Short|Long)Iterations => \d+;[ \t]*\r?\n",
                 string.Empty,
-                System.Text.RegularExpressions.RegexOptions.Multiline);
+                System.Text.RegularExpressions.RegexOptions.Multiline,
+                System.TimeSpan.FromSeconds(1));
 
             int classBrace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
             if (classBrace >= 0)
@@ -18809,7 +18837,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     generated,
                     @"[ \t]*protected override int " + memberName + @" => \d+;[ \t]*\r?\n",
                     string.Empty,
-                    System.Text.RegularExpressions.RegexOptions.Multiline);
+                    System.Text.RegularExpressions.RegexOptions.Multiline,
+                    System.TimeSpan.FromSeconds(1));
 
                 int brace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
                 if (brace >= 0)
@@ -18936,7 +18965,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var line in lines)
         {
             var match = System.Text.RegularExpressions.Regex.Match(
-                line, @"^\s*protected override [^\s]+(?:<[^>]*>)?(?:\[\])? ([A-Za-z_][A-Za-z0-9_]*)\s*=>");
+                line, @"^\s*protected override [^\s]+(?:<[^>]*>)?(?:\[\])? ([A-Za-z_][A-Za-z0-9_]*)\s*=>",
+                System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
 
             if (match.Success && !seen.Add(match.Groups[1].Value))
                 continue;
@@ -23148,7 +23178,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("            // Return deterministic, normalized probability-like output.");
         sb.AppendLine("            int batch = input.Shape[0];");
         sb.AppendLine("            int numClasses = 4;");
-        sb.AppendLine("            var rng = new System.Random(batch);");
+        sb.AppendLine("            var rng = global::AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(batch);");
         sb.AppendLine($"            var data = new {numericType}[batch * numClasses];");
         sb.AppendLine("            for (int i = 0; i < batch; i++)");
         sb.AppendLine("            {");

@@ -538,16 +538,16 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
 
         T negLR = NumOps.Negate(learningRate);
         Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_featureMapW1, Engine.TensorMultiplyScalar(_featureMapW1Gradient!, negLR));
-        Engine.TensorAddInPlace(_featureMapB1, Engine.TensorMultiplyScalar(_featureMapB1Gradient!, negLR));
-        Engine.TensorAddInPlace(_featureMapW2, Engine.TensorMultiplyScalar(_featureMapW2Gradient!, negLR));
-        Engine.TensorAddInPlace(_featureMapB2, Engine.TensorMultiplyScalar(_featureMapB2Gradient!, negLR));
-        Engine.TensorAddInPlace(_outputGateWeights, Engine.TensorMultiplyScalar(_outputGateWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar((_keyWeightsGradient ?? throw new InvalidOperationException("_keyWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar((_valueWeightsGradient ?? throw new InvalidOperationException("_valueWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_featureMapW1, Engine.TensorMultiplyScalar((_featureMapW1Gradient ?? throw new InvalidOperationException("_featureMapW1Gradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_featureMapB1, Engine.TensorMultiplyScalar((_featureMapB1Gradient ?? throw new InvalidOperationException("_featureMapB1Gradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_featureMapW2, Engine.TensorMultiplyScalar((_featureMapW2Gradient ?? throw new InvalidOperationException("_featureMapW2Gradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_featureMapB2, Engine.TensorMultiplyScalar((_featureMapB2Gradient ?? throw new InvalidOperationException("_featureMapB2Gradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputGateWeights, Engine.TensorMultiplyScalar((_outputGateWeightsGradient ?? throw new InvalidOperationException("_outputGateWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputGateBias, Engine.TensorMultiplyScalar((_outputGateBiasGradient ?? throw new InvalidOperationException("_outputGateBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar((_outputProjectionWeightsGradient ?? throw new InvalidOperationException("_outputProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar((_outputProjectionBiasGradient ?? throw new InvalidOperationException("_outputProjectionBiasGradient is null where it is required.")), negLR));
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);

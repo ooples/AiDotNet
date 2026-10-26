@@ -17,7 +17,7 @@ public class InputContractTests
         Assert.Equal(LayerInputDomainKind.Deferred, domain.Kind);
         Assert.False(domain.IsResolved);
         Assert.Throws<InputContractBindingException>(() =>
-            InputContractTensorFactory.CreateValid<double>([4], domain, new Random(1)));
+            InputContractTensorFactory.CreateValid<double>([4], domain, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1)));
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public class InputContractTests
     {
         await Task.Yield();
         var domain = LayerInputDomain.Indices(17);
-        var tensor = InputContractTensorFactory.CreateValid<double>([2, 8], domain, new Random(7));
+        var tensor = InputContractTensorFactory.CreateValid<double>([2, 8], domain, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7));
 
         InputContractValidator.ValidateValues(tensor, domain, "Lookup", "token_ids");
         for (int i = 0; i < tensor.Length; i++) Assert.InRange(tensor[i], 0, 16);
@@ -62,7 +62,7 @@ public class InputContractTests
         var tensor = InputContractTensorFactory.CreateValid<double>(
             [64],
             LayerInputDomain.Continuous,
-            new Random(42));
+            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42));
 
         Assert.Contains(tensor.ToArray(), value => value < 0.0);
         Assert.Contains(tensor.ToArray(), value => value > 0.0);
@@ -211,7 +211,7 @@ public class InputContractTests
 
         var inputs = InputContractTensorFactory.CreateValidInputs<double>(
             contract,
-            new Random(9));
+            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9));
 
         Assert.Equal(2, inputs.Count);
         Assert.Contains("query", inputs.Keys);
@@ -264,7 +264,7 @@ public class InputContractTests
         using (InputDomainProviderRegistry.Register(new UnitIntervalProvider()))
         {
             Assert.True(domain.IsResolved);
-            var valid = InputContractTensorFactory.CreateValid<double>([4], domain, new Random(3));
+            var valid = InputContractTensorFactory.CreateValid<double>([4], domain, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3));
             InputContractValidator.ValidateValues(valid, domain, "Probability", "weights");
 
             var nearby = InputContractTensorFactory.CreateNearby(valid, domain);

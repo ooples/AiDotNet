@@ -43,7 +43,7 @@ public class ModelTypeRegistryTests
     public async Task Register_ThrowsOnNullName()
     {
         Assert.Throws<ArgumentException>(() =>
-            ModelTypeRegistry.Register(null, typeof(StubModelSerializer)));
+            ModelTypeRegistry.Register(global::AiDotNet.Tests.TestNull.Of<string>(), typeof(StubModelSerializer)));
     }
 
     [Fact(Timeout = 60000)]
@@ -57,7 +57,7 @@ public class ModelTypeRegistryTests
     public async Task Register_ThrowsOnNullType()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelTypeRegistry.Register("SomeName", null));
+            ModelTypeRegistry.Register("SomeName", global::AiDotNet.Tests.TestNull.Of<System.Type>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -70,7 +70,7 @@ public class ModelTypeRegistryTests
     [Fact(Timeout = 60000)]
     public async Task Resolve_ReturnsNullForNullName()
     {
-        var result = ModelTypeRegistry.Resolve(null);
+        var result = ModelTypeRegistry.Resolve(global::AiDotNet.Tests.TestNull.Of<string>());
         Assert.Null(result);
     }
 
@@ -96,7 +96,7 @@ public class ModelTypeRegistryTests
     public async Task RegisterFactory_ThrowsOnNullName()
     {
         Assert.Throws<ArgumentException>(() =>
-            ModelTypeRegistry.RegisterFactory(null, t => null));
+            ModelTypeRegistry.RegisterFactory(global::AiDotNet.Tests.TestNull.Of<string>(), t => global::AiDotNet.Tests.TestNull.Of<global::AiDotNet.Interfaces.IModelSerializer>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -112,14 +112,14 @@ public class ModelTypeRegistryTests
     public async Task RegisterAssembly_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelTypeRegistry.RegisterAssembly(null));
+            ModelTypeRegistry.RegisterAssembly(global::AiDotNet.Tests.TestNull.Of<System.Reflection.Assembly>()));
     }
 
     [Fact(Timeout = 60000)]
     public async Task CreateInstance_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelTypeRegistry.CreateInstance<double>(null));
+            ModelTypeRegistry.CreateInstance<double>(global::AiDotNet.Tests.TestNull.Of<System.Type>()));
     }
 
     [Fact(Timeout = 60000)]

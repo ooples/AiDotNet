@@ -115,8 +115,8 @@ public class RetrieverFusionAndRoutingTests
         _ = selfQuery.Retrieve("laptops released in 2020", 3, new Dictionary<string, object>()).ToList();
 
         Assert.Equal("laptops", baseRetriever.LastQuery);
-        Assert.True(baseRetriever.LastFilters!.ContainsKey("year"));
-        Assert.Equal(2020L, baseRetriever.LastFilters!["year"]);
+        Assert.True((baseRetriever.LastFilters ?? throw new InvalidOperationException("baseRetriever.LastFilters is null where it is required.")).ContainsKey("year"));
+        Assert.Equal(2020L, baseRetriever.LastFilters["year"]);
     }
 
     [Fact]
@@ -128,6 +128,6 @@ public class RetrieverFusionAndRoutingTests
 
         _ = selfQuery.Retrieve("laptops in 2020", 3, new Dictionary<string, object> { ["year"] = 1999L }).ToList();
 
-        Assert.Equal(1999L, baseRetriever.LastFilters!["year"]); // caller wins
+        Assert.Equal(1999L, (baseRetriever.LastFilters ?? throw new InvalidOperationException("baseRetriever.LastFilters is null where it is required."))["year"]); // caller wins
     }
 }

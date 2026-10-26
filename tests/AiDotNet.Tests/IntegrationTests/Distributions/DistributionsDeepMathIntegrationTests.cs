@@ -1080,7 +1080,7 @@ public class DistributionsDeepMathIntegrationTests
     public async Task Normal_SampleMean_ApproachesTheoreticalMean()
     {
         var dist = new NormalDistribution<double>(5.0, 4.0);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 10000;
         double sum = 0;
         for (int i = 0; i < n; i++)
@@ -1095,7 +1095,7 @@ public class DistributionsDeepMathIntegrationTests
     public async Task Exponential_SampleMean_ApproachesTheoreticalMean()
     {
         var dist = new ExponentialDistribution<double>(2.0);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 10000;
         double sum = 0;
         for (int i = 0; i < n; i++)
@@ -1110,7 +1110,7 @@ public class DistributionsDeepMathIntegrationTests
     public async Task Beta_Samples_InUnitInterval()
     {
         var dist = new BetaDistribution<double>(2.0, 5.0);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 1000; i++)
         {
             double s = dist.Sample(rng);
@@ -1122,7 +1122,7 @@ public class DistributionsDeepMathIntegrationTests
     public async Task Poisson_SampleMean_ApproachesLambda()
     {
         var dist = new PoissonDistribution<double>(5.0);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 10000;
         double sum = 0;
         for (int i = 0; i < n; i++)

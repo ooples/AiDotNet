@@ -75,14 +75,12 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private readonly List<LayerBase<T>> _codecLayers = new();
     private readonly List<LayerBase<T>> _alignerLayers = new();
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>Creates an ONNX-backed OuteTTS for inference.</summary>
     public OuteTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, OuteTTSOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new OuteTTSOptions();
+        _options = options ?? new OuteTTSOptions(); Options = _options;
         _useNativeMode = false;
         ConfigureBase();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -96,7 +94,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public OuteTTS(NeuralNetworkArchitecture<T> architecture, OuteTTSOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new OuteTTSOptions();
+        _options = options ?? new OuteTTSOptions(); Options = _options;
         _useNativeMode = true;
         ConfigureBase();
         InitializeLayers();

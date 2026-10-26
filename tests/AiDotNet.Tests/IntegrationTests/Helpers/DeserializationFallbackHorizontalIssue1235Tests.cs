@@ -66,7 +66,7 @@ public class DeserializationFallbackHorizontalIssue1235Tests
 
         Assert.NotNull(instance);
         var closed = genericLayerType.MakeGenericType(typeof(float));
-        Assert.True(closed.IsAssignableFrom(instance!.GetType()),
+        Assert.True(closed.IsAssignableFrom(instance.GetType()),
             $"Expected an instance of {closed.Name}, got {instance.GetType().Name}.");
     }
 
@@ -98,7 +98,7 @@ public class DeserializationFallbackHorizontalIssue1235Tests
 
         Assert.NotNull(instance);
         var closed = genericLayerType.MakeGenericType(typeof(float));
-        Assert.True(closed.IsAssignableFrom(instance!.GetType()),
+        Assert.True(closed.IsAssignableFrom(instance.GetType()),
             $"Expected an instance of {closed.Name}, got {instance.GetType().Name}.");
     }
 

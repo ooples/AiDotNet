@@ -25,7 +25,7 @@ public class FederatedFairnessAndContributionTests
     private static Dictionary<int, Tensor<double>> CreateClientModels(int clientCount, int modelSize, double divergenceScale = 0.1)
     {
         var models = new Dictionary<int, Tensor<double>>();
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int c = 0; c < clientCount; c++)
         {
@@ -55,7 +55,7 @@ public class FederatedFairnessAndContributionTests
     private static Dictionary<int, List<Tensor<double>>> CreateClientHistories(int clientCount, int rounds, int modelSize)
     {
         var histories = new Dictionary<int, List<Tensor<double>>>();
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int c = 0; c < clientCount; c++)
         {
@@ -139,7 +139,7 @@ public class FederatedFairnessAndContributionTests
     [Fact(Timeout = 60000)]
     public async Task ShapleyValue_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new ShapleyValueEvaluator<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new ShapleyValueEvaluator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.ContributionEvaluationOptions>()));
     }
 
     // ========== DataShapleyEvaluator Tests ==========
@@ -192,7 +192,7 @@ public class FederatedFairnessAndContributionTests
     [Fact(Timeout = 60000)]
     public async Task DataShapley_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new DataShapleyEvaluator<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new DataShapleyEvaluator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.ContributionEvaluationOptions>()));
     }
 
     // ========== PrototypicalContributionEvaluator Tests ==========
@@ -239,7 +239,7 @@ public class FederatedFairnessAndContributionTests
     [Fact(Timeout = 60000)]
     public async Task Prototypical_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new PrototypicalContributionEvaluator<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new PrototypicalContributionEvaluator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.ContributionEvaluationOptions>()));
     }
 
     // ========== GroupFairnessConstraint Tests ==========
@@ -314,7 +314,7 @@ public class FederatedFairnessAndContributionTests
     [Fact(Timeout = 60000)]
     public async Task GroupFairness_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new GroupFairnessConstraint<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new GroupFairnessConstraint<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedFairnessOptions>()));
     }
 
     // ========== ContributionBasedIncentive Tests ==========

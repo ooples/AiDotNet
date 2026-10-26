@@ -63,7 +63,7 @@ public class TeeIntegrationTests
     {
         var provider = new SimulatedTeeProvider<double>();
 
-        Assert.Throws<ArgumentNullException>(() => provider.Initialize(null));
+        Assert.Throws<ArgumentNullException>(() => provider.Initialize(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.TeeOptions>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -123,7 +123,7 @@ public class TeeIntegrationTests
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
 
-        Assert.Throws<ArgumentException>(() => provider.SealData(null));
+        Assert.Throws<ArgumentException>(() => provider.SealData(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -205,7 +205,7 @@ public class TeeIntegrationTests
         var provider = new SimulatedTeeProvider<double>();
         provider.Initialize(new TeeOptions { SimulationMode = true });
 
-        Assert.Throws<ArgumentNullException>(() => provider.GenerateAttestationQuote(null));
+        Assert.Throws<ArgumentNullException>(() => provider.GenerateAttestationQuote(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -269,7 +269,7 @@ public class TeeIntegrationTests
     public async Task TeeSecureAggregation_Constructor_NullProvider_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new TeeSecureAggregation<double>(null, new TeeOptions()));
+            new TeeSecureAggregation<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.TEE.ITeeProvider<double>>(), new TeeOptions()));
     }
 
     [Fact(Timeout = 120000)]
@@ -278,7 +278,7 @@ public class TeeIntegrationTests
         var provider = new SimulatedTeeProvider<double>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            new TeeSecureAggregation<double>(provider, null));
+            new TeeSecureAggregation<double>(provider, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.TeeOptions>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -392,8 +392,8 @@ public class TeeIntegrationTests
     [InlineData(typeof(ArmCcaTeeProvider<double>))]
     public void AllProviders_CanInitializeAndSealUnseal(Type providerType)
     {
-        var provider = (TeeProviderBase<double>)Activator.CreateInstance(providerType);
-        provider.Initialize(new TeeOptions { SimulationMode = true });
+        var provider = (TeeProviderBase<double>)(Activator.CreateInstance(providerType) ?? throw new InvalidOperationException("(TeeProviderBase<double>)Activator.CreateInstance(providerType) is null where it is required."));
+        (provider ?? throw new InvalidOperationException("provider is null where it is required.")).Initialize(new TeeOptions { SimulationMode = true });
 
         var plaintext = new byte[] { 10, 20, 30, 40, 50, 60, 70, 80 };
         var sealed_ = provider.SealData(plaintext);
@@ -409,9 +409,9 @@ public class TeeIntegrationTests
     [InlineData(typeof(ArmCcaTeeProvider<double>))]
     public void AllProviders_MaxEnclaveMemory_IsPositive(Type providerType)
     {
-        var provider = (TeeProviderBase<double>)Activator.CreateInstance(providerType);
+        var provider = (TeeProviderBase<double>)(Activator.CreateInstance(providerType) ?? throw new InvalidOperationException("(TeeProviderBase<double>)Activator.CreateInstance(providerType) is null where it is required."));
 
-        long maxMem = provider.GetMaxEnclaveMemory();
+        long maxMem = (provider ?? throw new InvalidOperationException("provider is null where it is required.")).GetMaxEnclaveMemory();
 
         Assert.True(maxMem > 0, $"{providerType.Name} should report positive max memory");
     }

@@ -709,7 +709,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             if (propagate)
             {
                 var x0 = PredictOriginalSample(latents, prediction, timestep);
-                x0 = PropagateBidirectionally(x0, forwardFlows!, backwardFlows!);
+                x0 = PropagateBidirectionally(x0, (forwardFlows ?? throw new InvalidOperationException("forwardFlows is null where it is required.")), (backwardFlows ?? throw new InvalidOperationException("backwardFlows is null where it is required.")));
                 latents = StepFromOriginalSample(x0, prediction, stepIndex);
             }
             else
@@ -821,14 +821,17 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
                 predictions[frame] = predictions[frame] is null
                     ? framePrediction
                     : Engine.TensorMultiplyScalar(
-                        Engine.TensorAdd(predictions[frame]!, framePrediction),
+                        Engine.TensorAdd((predictions[frame] ?? throw new InvalidOperationException("predictions[frame] is null where it is required.")), framePrediction),
                         NumOps.FromDouble(0.5));
             }
         }
 
         if (predictions.Any(static p => p is null))
             throw new InvalidOperationException("Temporal window schedule did not cover every frame.");
-        return Engine.TensorConcatenate(predictions.Select(static p => p!).ToArray(), axis: 2);
+        return Engine.TensorConcatenate(
+            predictions.Select(static p => p ?? throw new InvalidOperationException(
+                "Temporal window schedule did not cover every frame.")).ToArray(),
+            axis: 2);
     }
 
     private Tensor<T> PredictOriginalSample(
@@ -945,7 +948,10 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
                 [batch, channels, 1, height, width]);
         }
 
-        return Engine.TensorConcatenate(output.Select(static x => x!).ToArray(), axis: 2);
+        return Engine.TensorConcatenate(
+            output.Select(static x => x ?? throw new InvalidOperationException(
+                "Flow propagation left a frame without an output.")).ToArray(),
+            axis: 2);
     }
 
     private Tensor<T> ExtractFlowFrame(Tensor<T> flows, int frameIndex)

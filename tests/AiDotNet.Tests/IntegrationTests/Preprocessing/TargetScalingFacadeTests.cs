@@ -36,7 +36,7 @@ public class TargetScalingFacadeTests
             .BuildAsync();
 
         Assert.True(result.PreprocessingInfo is not null, "PreprocessingInfo missing on the result");
-        Assert.True(result.PreprocessingInfo!.IsTargetFitted,
+        Assert.True(result.PreprocessingInfo.IsTargetFitted,
             $"Target pipeline not fitted/carried: TargetPipeline={(result.PreprocessingInfo.TargetPipeline is null ? "null" : "set-unfitted")}");
 
         var probe = new Matrix<double>(2, 1);

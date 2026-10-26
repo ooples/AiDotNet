@@ -68,7 +68,7 @@ public class FusedLrScheduleMappingTests
         Assert.NotNull(fused);
         AssertStepForStepParity(
             new StepLRScheduler(baseLearningRate: 0.1, stepSize: 7, gamma: 0.5),
-            fused!, steps: 50, label: "StepLR");
+            fused, steps: 50, label: "StepLR");
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class FusedLrScheduleMappingTests
             new CyclicLRScheduler(
                 baseLearningRate: 0.001, maxLearningRate: 0.1, stepSizeUp: 10, stepSizeDown: 10,
                 mode: CyclicLRScheduler.CyclicMode.Triangular),
-            fused!, steps: 60, label: "CyclicLR(Triangular)");
+            fused, steps: 60, label: "CyclicLR(Triangular)");
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public class FusedLrScheduleMappingTests
             new LinearWarmupScheduler(
                 baseLearningRate: 0.002, warmupSteps: 10,
                 decayMode: LinearWarmupScheduler.DecayMode.Constant),
-            fused!, steps: 40, label: "LinearWarmup(Constant)");
+            fused, steps: 40, label: "LinearWarmup(Constant)");
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class FusedLrScheduleMappingTests
             new LinearWarmupScheduler(
                 baseLearningRate: 0.1, warmupSteps: 8, totalSteps: 50,
                 decayMode: LinearWarmupScheduler.DecayMode.Linear, endLr: 0.001),
-            fused!, steps: 60, label: "LinearWarmup(Linear)");
+            fused, steps: 60, label: "LinearWarmup(Linear)");
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class FusedLrScheduleMappingTests
                 baseLearningRate: 0.05, warmupSteps: 12, totalSteps: 80,
                 warmupInitLr: 1e-5,
                 decayMode: LinearWarmupScheduler.DecayMode.Cosine, endLr: 1e-4),
-            fused!, steps: 90, label: "LinearWarmup(Cosine)");
+            fused, steps: 90, label: "LinearWarmup(Cosine)");
     }
 
     [Fact]
@@ -168,12 +168,12 @@ public class FusedLrScheduleMappingTests
         Assert.NotNull(cosFused);
         AssertStepForStepParity(
             new CosineAnnealingLRScheduler(baseLearningRate: 0.1, tMax: 50),
-            cosFused!, steps: 50, label: "CosineAnnealing");
+            cosFused, steps: 50, label: "CosineAnnealing");
 
         var expFused = MapToFused(new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.95));
         Assert.NotNull(expFused);
         AssertStepForStepParity(
             new ExponentialLRScheduler(baseLearningRate: 0.1, gamma: 0.95),
-            expFused!, steps: 40, label: "Exponential");
+            expFused, steps: 40, label: "Exponential");
     }
 }

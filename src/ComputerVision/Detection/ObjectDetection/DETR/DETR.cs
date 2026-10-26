@@ -50,6 +50,13 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
     private readonly int _hiddenDim;
     private readonly NMS<T> _nms;
     private readonly DETRSetLoss<T> _detectionLoss;
+
+    /// <summary>
+    /// The paper's optimizer (Carion et al. 2020, Section 4): AdamW at learning rate 1e-4 with weight decay 1e-4.
+    /// The paper gives the backbone 1e-5; this single optimizer applies the transformer's rate to every parameter.
+    /// </summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperAdamW(1e-4, 1e-4);
     private readonly int _trainingClassCount;
     private readonly int _trainingQueryCount;
 
@@ -71,8 +78,8 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
             throw new ArgumentException("DETR's class head is a softmax with a no-object class; use a softmax cross-entropy set loss.", nameof(options));
         _detectionLoss = new DETRSetLoss<T>(checked(options.NumClasses + 1), lossOptions);
 
-        // Initialize backbone (ResNet-50 by default)
-        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+        // The paper's ResNet-50 unless the options name another ResNet (DETR also reports ResNet-101).
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetBackboneSelection.Resolve(options.Backbone) });
 
         // Project backbone features to hidden dimension
         int backboneChannels = Backbone.OutputChannels[^1];

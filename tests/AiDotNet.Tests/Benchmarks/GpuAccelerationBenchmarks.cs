@@ -183,40 +183,40 @@ public class GpuAccelerationBenchmarks
     [Benchmark(Description = "GEMM_Small_CPU")]
     public Matrix<float> MatrixMultiply_Small_CPU()
     {
-        return (Matrix<float>)_cpuEngine!.MatrixMultiply(_matrixA_Small!, _matrixB_Small!);
+        return (Matrix<float>)(_cpuEngine ?? throw new InvalidOperationException("_cpuEngine is null where it is required.")).MatrixMultiply((_matrixA_Small ?? throw new InvalidOperationException("_matrixA_Small is null where it is required.")), (_matrixB_Small ?? throw new InvalidOperationException("_matrixB_Small is null where it is required.")));
     }
 
     [Benchmark(Description = "GEMM_Small_GPU")]
     public Matrix<float>? MatrixMultiply_Small_GPU()
     {
         if (_gpuEngine == null) return null;
-        return (Matrix<float>)_gpuEngine.MatrixMultiply(_matrixA_Small!, _matrixB_Small!);
+        return (Matrix<float>)_gpuEngine.MatrixMultiply((_matrixA_Small ?? throw new InvalidOperationException("_matrixA_Small is null where it is required.")), (_matrixB_Small ?? throw new InvalidOperationException("_matrixB_Small is null where it is required.")));
     }
 
     [Benchmark(Description = "GEMM_Large_CPU")]
     public Matrix<float> MatrixMultiply_Large_CPU()
     {
-        return (Matrix<float>)_cpuEngine!.MatrixMultiply(_matrixA_Large!, _matrixB_Large!);
+        return (Matrix<float>)(_cpuEngine ?? throw new InvalidOperationException("_cpuEngine is null where it is required.")).MatrixMultiply((_matrixA_Large ?? throw new InvalidOperationException("_matrixA_Large is null where it is required.")), (_matrixB_Large ?? throw new InvalidOperationException("_matrixB_Large is null where it is required.")));
     }
 
     [Benchmark(Description = "GEMM_Large_GPU")]
     public Matrix<float>? MatrixMultiply_Large_GPU()
     {
         if (_gpuEngine == null) return null;
-        return (Matrix<float>)_gpuEngine.MatrixMultiply(_matrixA_Large!, _matrixB_Large!);
+        return (Matrix<float>)_gpuEngine.MatrixMultiply((_matrixA_Large ?? throw new InvalidOperationException("_matrixA_Large is null where it is required.")), (_matrixB_Large ?? throw new InvalidOperationException("_matrixB_Large is null where it is required.")));
     }
 
     [Benchmark(Description = "GEMV_Large_CPU")]
     public Vector<float> MatrixVectorMultiply_CPU()
     {
-        return (Vector<float>)_cpuEngine!.MatrixVectorMultiply(_matrixA_Large!, _vector_Large!);
+        return (Vector<float>)(_cpuEngine ?? throw new InvalidOperationException("_cpuEngine is null where it is required.")).MatrixVectorMultiply((_matrixA_Large ?? throw new InvalidOperationException("_matrixA_Large is null where it is required.")), (_vector_Large ?? throw new InvalidOperationException("_vector_Large is null where it is required.")));
     }
 
     [Benchmark(Description = "GEMV_Large_GPU")]
     public Vector<float>? MatrixVectorMultiply_GPU()
     {
         if (_gpuEngine == null) return null;
-        return (Vector<float>)_gpuEngine.MatrixVectorMultiply(_matrixA_Large!, _vector_Large!);
+        return (Vector<float>)_gpuEngine.MatrixVectorMultiply((_matrixA_Large ?? throw new InvalidOperationException("_matrixA_Large is null where it is required.")), (_vector_Large ?? throw new InvalidOperationException("_vector_Large is null where it is required.")));
     }
 
     #endregion
@@ -226,27 +226,27 @@ public class GpuAccelerationBenchmarks
     [Benchmark(Description = "Conv2D_CPU")]
     public Tensor<float> Convolution2D_CPU()
     {
-        return (Tensor<float>)_cpuEngine!.Conv2D(_inputTensor_Conv!, _kernelTensor_Conv!, stride: 1, padding: 1, dilation: 1);
+        return (Tensor<float>)(_cpuEngine ?? throw new InvalidOperationException("_cpuEngine is null where it is required.")).Conv2D((_inputTensor_Conv ?? throw new InvalidOperationException("_inputTensor_Conv is null where it is required.")), (_kernelTensor_Conv ?? throw new InvalidOperationException("_kernelTensor_Conv is null where it is required.")), stride: 1, padding: 1, dilation: 1);
     }
 
     [Benchmark(Description = "Conv2D_GPU")]
     public Tensor<float>? Convolution2D_GPU()
     {
         if (_gpuEngine == null) return null;
-        return (Tensor<float>)_gpuEngine.Conv2D(_inputTensor_Conv!, _kernelTensor_Conv!, stride: 1, padding: 1, dilation: 1);
+        return (Tensor<float>)_gpuEngine.Conv2D((_inputTensor_Conv ?? throw new InvalidOperationException("_inputTensor_Conv is null where it is required.")), (_kernelTensor_Conv ?? throw new InvalidOperationException("_kernelTensor_Conv is null where it is required.")), stride: 1, padding: 1, dilation: 1);
     }
 
     [Benchmark(Description = "MaxPool2D_CPU")]
     public Tensor<float> MaxPool2D_CPU()
     {
-        return (Tensor<float>)_cpuEngine!.MaxPool2D(_inputTensor_Pool!, poolSize: 2, stride: 2, padding: 0);
+        return (Tensor<float>)(_cpuEngine ?? throw new InvalidOperationException("_cpuEngine is null where it is required.")).MaxPool2D((_inputTensor_Pool ?? throw new InvalidOperationException("_inputTensor_Pool is null where it is required.")), poolSize: 2, stride: 2, padding: 0);
     }
 
     [Benchmark(Description = "MaxPool2D_GPU")]
     public Tensor<float>? MaxPool2D_GPU()
     {
         if (_gpuEngine == null) return null;
-        return (Tensor<float>)_gpuEngine.MaxPool2D(_inputTensor_Pool!, poolSize: 2, stride: 2, padding: 0);
+        return (Tensor<float>)_gpuEngine.MaxPool2D((_inputTensor_Pool ?? throw new InvalidOperationException("_inputTensor_Pool is null where it is required.")), poolSize: 2, stride: 2, padding: 0);
     }
 
     #endregion
@@ -256,27 +256,27 @@ public class GpuAccelerationBenchmarks
     [Benchmark(Description = "ConvLayer_Forward_CPU")]
     public Tensor<float> ConvolutionalLayer_Forward_CPU()
     {
-        return _convLayer_CPU!.Forward(_inputTensor_Conv!);
+        return (_convLayer_CPU ?? throw new InvalidOperationException("_convLayer_CPU is null where it is required.")).Forward((_inputTensor_Conv ?? throw new InvalidOperationException("_inputTensor_Conv is null where it is required.")));
     }
 
     [Benchmark(Description = "ConvLayer_Forward_GPU")]
     public Tensor<float>? ConvolutionalLayer_Forward_GPU()
     {
         if (_convLayer_GPU == null) return null;
-        return _convLayer_GPU.Forward(_inputTensor_Conv!);
+        return _convLayer_GPU.Forward((_inputTensor_Conv ?? throw new InvalidOperationException("_inputTensor_Conv is null where it is required.")));
     }
 
     [Benchmark(Description = "PoolLayer_Forward_CPU")]
     public Tensor<float> PoolingLayer_Forward_CPU()
     {
-        return _poolLayer_CPU!.Forward(_inputTensor_Pool!);
+        return (_poolLayer_CPU ?? throw new InvalidOperationException("_poolLayer_CPU is null where it is required.")).Forward((_inputTensor_Pool ?? throw new InvalidOperationException("_inputTensor_Pool is null where it is required.")));
     }
 
     [Benchmark(Description = "PoolLayer_Forward_GPU")]
     public Tensor<float>? PoolingLayer_Forward_GPU()
     {
         if (_poolLayer_GPU == null) return null;
-        return _poolLayer_GPU.Forward(_inputTensor_Pool!);
+        return _poolLayer_GPU.Forward((_inputTensor_Pool ?? throw new InvalidOperationException("_inputTensor_Pool is null where it is required.")));
     }
 
     #endregion
@@ -286,27 +286,27 @@ public class GpuAccelerationBenchmarks
     [Benchmark(Description = "VectorOps_Add_Large_CPU")]
     public Vector<float> VectorAdd_Large_CPU()
     {
-        return (Vector<float>)_cpuEngine!.Add(_optimizerParams!, _optimizerGradient!);
+        return (Vector<float>)(_cpuEngine ?? throw new InvalidOperationException("_cpuEngine is null where it is required.")).Add((_optimizerParams ?? throw new InvalidOperationException("_optimizerParams is null where it is required.")), (_optimizerGradient ?? throw new InvalidOperationException("_optimizerGradient is null where it is required.")));
     }
 
     [Benchmark(Description = "VectorOps_Add_Large_GPU")]
     public Vector<float>? VectorAdd_Large_GPU()
     {
         if (_gpuEngine == null) return null;
-        return (Vector<float>)_gpuEngine.Add(_optimizerParams!, _optimizerGradient!);
+        return (Vector<float>)_gpuEngine.Add((_optimizerParams ?? throw new InvalidOperationException("_optimizerParams is null where it is required.")), (_optimizerGradient ?? throw new InvalidOperationException("_optimizerGradient is null where it is required.")));
     }
 
     [Benchmark(Description = "VectorOps_Multiply_Large_CPU")]
     public Vector<float> VectorMultiply_Large_CPU()
     {
-        return (Vector<float>)_cpuEngine!.Multiply(_optimizerParams!, _optimizerGradient!);
+        return (Vector<float>)(_cpuEngine ?? throw new InvalidOperationException("_cpuEngine is null where it is required.")).Multiply((_optimizerParams ?? throw new InvalidOperationException("_optimizerParams is null where it is required.")), (_optimizerGradient ?? throw new InvalidOperationException("_optimizerGradient is null where it is required.")));
     }
 
     [Benchmark(Description = "VectorOps_Multiply_Large_GPU")]
     public Vector<float>? VectorMultiply_Large_GPU()
     {
         if (_gpuEngine == null) return null;
-        return (Vector<float>)_gpuEngine.Multiply(_optimizerParams!, _optimizerGradient!);
+        return (Vector<float>)_gpuEngine.Multiply((_optimizerParams ?? throw new InvalidOperationException("_optimizerParams is null where it is required.")), (_optimizerGradient ?? throw new InvalidOperationException("_optimizerGradient is null where it is required.")));
     }
 
     #endregion

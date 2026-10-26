@@ -218,7 +218,7 @@ public class QuantizedAttentionTests
         int rows = 4;
         int cols = 8;
         var weights = new float[rows * cols];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < weights.Length; i++)
         {
             weights[i] = (float)(random.NextDouble() * 2 - 1);
@@ -254,7 +254,7 @@ public class QuantizedAttentionTests
         int cols = 16;
         int groupSize = 8;
         var weights = new float[rows * cols];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < weights.Length; i++)
         {
             weights[i] = (float)(random.NextDouble() * 2 - 1);
@@ -401,7 +401,7 @@ public class QuantizedAttentionTests
         int rows = 64;
         int cols = 64;
         var weights = new float[rows * cols];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < weights.Length; i++)
         {
             // Weights in range [-1, 1] with reasonable magnitude
@@ -516,7 +516,7 @@ public class QuantizedAttentionTests
     private static Tensor<float> CreateRandomTensor(int[] shape)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1);

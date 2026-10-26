@@ -73,10 +73,10 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
     // are provenance only; traversing them as child layers would expose the original full-precision
     // attention weights through an inference-only layer whose parameter contract is intentionally 0.
     [ExternalState]
-    private readonly AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<float> _source = null!;
+    private readonly AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<float>? _source;
     // The two constructors take different source layer types, which cannot share one field.
     [ExternalState]
-    private readonly AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<float> _sourceGrouped = null!;
+    private readonly AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<float>? _sourceGrouped;
 
     /// <summary>
     /// Creates a quantized attention layer from a trained <see cref="MultiHeadAttentionLayer{T}"/>.
@@ -177,7 +177,7 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
 
     /// <summary>
     /// Enumerates (numWeights, numOutRows) for each projection (Q, K, V, O).
-    /// Internal accessor used by <see cref="Int8InferenceModel"/> for storage-byte accounting.
+    /// Internal accessor used by <see cref="QuantizedLayerStats"/> for storage-byte accounting.
     /// </summary>
     internal IEnumerable<(long NumWeights, int NumOutRows)> GetProjectionDimensions()
     {
