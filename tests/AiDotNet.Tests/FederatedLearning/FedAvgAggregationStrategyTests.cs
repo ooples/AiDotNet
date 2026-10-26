@@ -139,11 +139,11 @@ public class FedAvgAggregationStrategyTests
     {
         // Arrange
         var strategy = new FedAvgAggregationStrategy<double>();
-        Dictionary<int, Dictionary<string, double[]>>? nullModels = null;
+        Dictionary<int, Dictionary<string, double[]>> nullModels = TestNull.Of<Dictionary<int, Dictionary<string, double[]>>>();
         var clientWeights = new Dictionary<int, double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => strategy.Aggregate(nullModels!, clientWeights));
+        Assert.Throws<ArgumentException>(() => strategy.Aggregate(nullModels, clientWeights));
     }
 
     [Fact(Timeout = 60000)]

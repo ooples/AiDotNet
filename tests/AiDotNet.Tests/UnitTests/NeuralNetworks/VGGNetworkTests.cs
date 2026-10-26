@@ -222,7 +222,7 @@ public class VGGNetworkTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new VGGNetwork<float>(architecture, null!));
+            new VGGNetwork<float>(architecture, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Configuration.VGGConfiguration>()));
     }
 
     [Fact(Timeout = 120000)]

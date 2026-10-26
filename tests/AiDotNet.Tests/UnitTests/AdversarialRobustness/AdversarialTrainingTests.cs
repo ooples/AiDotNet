@@ -138,7 +138,7 @@ public class AdversarialTrainingTests
     [Fact(Timeout = 60000)]
     public async Task Constructor_WithNullOptions_ThrowsException()
     {
-        Assert.Throws<ArgumentNullException>(() => new AdversarialTraining<double, Vector<double>, Vector<double>>(null!));
+        Assert.Throws<ArgumentNullException>(() => new AdversarialTraining<double, Vector<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.AdversarialDefenseOptions<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -164,7 +164,7 @@ public class AdversarialTrainingTests
         var data = CreateInputs(3, 4);
         var labels = CreateLabels(new[] { 0, 1, 2 });
 
-        Assert.Throws<ArgumentNullException>(() => defense.ApplyDefense(data, labels, null!));
+        Assert.Throws<ArgumentNullException>(() => defense.ApplyDefense(data, labels, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -327,7 +327,7 @@ public class AdversarialTrainingTests
         var labels = CreateLabels(new[] { 0, 1, 2 });
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(null!, testData, labels, attack));
+        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), testData, labels, attack));
     }
 
     [Fact(Timeout = 60000)]
@@ -339,7 +339,7 @@ public class AdversarialTrainingTests
         var labels = CreateLabels(new[] { 0, 1, 2 });
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, null!, labels, attack));
+        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>[]>(), labels, attack));
     }
 
     [Fact(Timeout = 60000)]
@@ -351,7 +351,7 @@ public class AdversarialTrainingTests
         var testData = CreateInputs(3, 4);
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, null!, attack));
+        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>[]>(), attack));
     }
 
     [Fact(Timeout = 60000)]
@@ -363,7 +363,7 @@ public class AdversarialTrainingTests
         var testData = CreateInputs(3, 4);
         var labels = CreateLabels(new[] { 0, 1, 2 });
 
-        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, labels, null!));
+        Assert.Throws<ArgumentNullException>(() => defense.EvaluateRobustness(model, testData, labels, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IAdversarialAttack<double, AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -466,7 +466,7 @@ public class AdversarialTrainingTests
     {
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>());
 
-        Assert.Throws<ArgumentNullException>(() => defense.Deserialize(null!));
+        Assert.Throws<ArgumentNullException>(() => defense.Deserialize(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 60000)]

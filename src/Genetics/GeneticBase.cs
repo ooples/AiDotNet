@@ -745,9 +745,9 @@ public abstract partial class GeneticBase<T, TInput, TOutput> :
         return Population
             .OrderByDescending(i => FitnessCalculator.IsHigherScoreBetter ? i.GetFitness() : InvertFitness(i.GetFitness()))
             .Take(count)
-            .Select(i => i.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>)
-            .Where(i => i != null)  // Filter out any null values
-            .ToList()!;
+            .Select(i => i.Clone())
+            .OfType<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>()
+            .ToList();
     }
 
     /// <summary>
@@ -998,9 +998,9 @@ public abstract partial class GeneticBase<T, TInput, TOutput> :
         return Population
             .OrderByDescending(i => FitnessCalculator.IsHigherScoreBetter ? i.GetFitness() : InvertFitness(i.GetFitness()))
             .Take(selectionSize)
-            .Select(i => i.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>)
-            .Where(i => i != null)
-            .ToList()!;
+            .Select(i => i.Clone())
+            .OfType<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>()
+            .ToList();
     }
 
     /// <summary>
@@ -1511,7 +1511,7 @@ public abstract partial class GeneticBase<T, TInput, TOutput> :
             if (hasBestIndividual)
             {
                 // BestIndividual is guaranteed to be non-null here because of the check above
-                byte[] individualData = SerializeIndividual(BestIndividual!);
+                byte[] individualData = SerializeIndividual((BestIndividual ?? throw new InvalidOperationException("BestIndividual is null where it is required.")));
                 writer.Write(individualData.Length);
                 writer.Write(individualData);
             }

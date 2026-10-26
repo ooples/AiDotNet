@@ -237,7 +237,7 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
             var datasetPath = _options.DatasetPath;
             if (!string.IsNullOrWhiteSpace(datasetPath))
             {
-                var loaded = await HumanEvalDataLoader.LoadFromFileAsync(datasetPath!).ConfigureAwait(false);
+                var loaded = await HumanEvalDataLoader.LoadFromFileAsync((datasetPath ?? throw new InvalidOperationException("datasetPath is null where it is required."))).ConfigureAwait(false);
                 _cachedProblems = loaded
                     .Where(p => !string.IsNullOrWhiteSpace(p.Prompt))
                     .Select(p => new BenchmarkProblem

@@ -87,7 +87,7 @@ public sealed class ServingCodeTaskResultRedactorTests
         var redacted = (CodeBugFixingResult)redactor.Redact(result, ctx);
         Assert.Equal("1234", redacted.FixedCode);
         Assert.NotNull(redacted.Diff);
-        Assert.Equal("abcd", redacted.Diff!.UnifiedDiff);
+        Assert.Equal("abcd", redacted.Diff.UnifiedDiff);
         Assert.Single(redacted.Diff.Edits);
         Assert.Equal("edit", redacted.Diff.Edits[0].Text);
         Assert.Single(redacted.FixedIssues);
@@ -139,7 +139,7 @@ public sealed class ServingCodeTaskResultRedactorTests
         Assert.Equal("sugg", redacted.FixSuggestions[0].Summary);
         var diff = redacted.FixSuggestions[0].Diff;
         Assert.NotNull(diff);
-        Assert.Equal("unif", diff!.UnifiedDiff);
+        Assert.Equal("unif", diff.UnifiedDiff);
         Assert.Single(diff.Edits);
         Assert.Equal("edit", diff.Edits[0].Text);
 

@@ -28,7 +28,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
 
         private static List<(string Id, Vector<double>)> GenerateVectors(int count, int dim, int seed)
         {
-            var rng = new Random(seed);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
             var list = new List<(string, Vector<double>)>(count);
             for (int i = 0; i < count; i++)
             {
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         [Fact(Timeout = 60000)]
         public async Task Constructor_WithNullMetric_Throws()
         {
-            Assert.Throws<ArgumentNullException>(() => new GpuFlatIndex<double>(null!));
+            Assert.Throws<ArgumentNullException>(() => new GpuFlatIndex<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -190,7 +190,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         public async Task Search_NullQuery_Throws()
         {
             var gpu = new GpuFlatIndex<double>(new CosineSimilarityMetric<double>());
-            Assert.Throws<ArgumentNullException>(() => gpu.Search(null!, 5));
+            Assert.Throws<ArgumentNullException>(() => gpu.Search(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), 5));
         }
 
         [Fact(Timeout = 60000)]

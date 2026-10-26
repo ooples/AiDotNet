@@ -418,10 +418,10 @@ public class PreprocessingDeepMathIntegrationTests
 
         double mean = 30.0;
         double std = Math.Sqrt(200.0);
-        Assert.True(Math.Abs(clipper.Means[0] - mean) < 1e-10, $"Mean: expected {mean}, got {clipper.Means[0]}");
-        Assert.True(Math.Abs(clipper.StandardDeviations[0] - std) < 1e-10, $"Std: expected {std}, got {clipper.StandardDeviations[0]}");
-        Assert.True(Math.Abs(clipper.LowerBounds[0] - (mean - 2.0 * std)) < 1e-10);
-        Assert.True(Math.Abs(clipper.UpperBounds[0] - (mean + 2.0 * std)) < 1e-10);
+        Assert.True(Math.Abs((clipper.Means ?? throw new InvalidOperationException("clipper.Means is null where it is required."))[0] - mean) < 1e-10, $"Mean: expected {mean}, got {clipper.Means[0]}");
+        Assert.True(Math.Abs((clipper.StandardDeviations ?? throw new InvalidOperationException("clipper.StandardDeviations is null where it is required."))[0] - std) < 1e-10, $"Std: expected {std}, got {clipper.StandardDeviations[0]}");
+        Assert.True(Math.Abs((clipper.LowerBounds ?? throw new InvalidOperationException("clipper.LowerBounds is null where it is required."))[0] - (mean - 2.0 * std)) < 1e-10);
+        Assert.True(Math.Abs((clipper.UpperBounds ?? throw new InvalidOperationException("clipper.UpperBounds is null where it is required."))[0] - (mean + 2.0 * std)) < 1e-10);
     }
 
     [Fact(Timeout = 120000)]
@@ -511,7 +511,7 @@ public class PreprocessingDeepMathIntegrationTests
         clipper.Fit(data);
 
         double populationStd = 5.0;
-        Assert.True(Math.Abs(clipper.StandardDeviations[0] - populationStd) < 1e-10,
+        Assert.True(Math.Abs((clipper.StandardDeviations ?? throw new InvalidOperationException("clipper.StandardDeviations is null where it is required."))[0] - populationStd) < 1e-10,
             $"ZScoreClipper should use population std={populationStd}, got {clipper.StandardDeviations[0]}");
     }
 
@@ -534,11 +534,11 @@ public class PreprocessingDeepMathIntegrationTests
 
         clipper.Fit(data);
 
-        Assert.True(Math.Abs(clipper.Q1Values[0] - 3.0) < 1e-10, $"Q1: expected 3, got {clipper.Q1Values[0]}");
-        Assert.True(Math.Abs(clipper.Q3Values[0] - 7.0) < 1e-10, $"Q3: expected 7, got {clipper.Q3Values[0]}");
-        Assert.True(Math.Abs(clipper.IQRValues[0] - 4.0) < 1e-10, $"IQR: expected 4, got {clipper.IQRValues[0]}");
-        Assert.True(Math.Abs(clipper.LowerBounds[0] - (-3.0)) < 1e-10, $"Lower: expected -3, got {clipper.LowerBounds[0]}");
-        Assert.True(Math.Abs(clipper.UpperBounds[0] - 13.0) < 1e-10, $"Upper: expected 13, got {clipper.UpperBounds[0]}");
+        Assert.True(Math.Abs((clipper.Q1Values ?? throw new InvalidOperationException("clipper.Q1Values is null where it is required."))[0] - 3.0) < 1e-10, $"Q1: expected 3, got {clipper.Q1Values[0]}");
+        Assert.True(Math.Abs((clipper.Q3Values ?? throw new InvalidOperationException("clipper.Q3Values is null where it is required."))[0] - 7.0) < 1e-10, $"Q3: expected 7, got {clipper.Q3Values[0]}");
+        Assert.True(Math.Abs((clipper.IQRValues ?? throw new InvalidOperationException("clipper.IQRValues is null where it is required."))[0] - 4.0) < 1e-10, $"IQR: expected 4, got {clipper.IQRValues[0]}");
+        Assert.True(Math.Abs((clipper.LowerBounds ?? throw new InvalidOperationException("clipper.LowerBounds is null where it is required."))[0] - (-3.0)) < 1e-10, $"Lower: expected -3, got {clipper.LowerBounds[0]}");
+        Assert.True(Math.Abs((clipper.UpperBounds ?? throw new InvalidOperationException("clipper.UpperBounds is null where it is required."))[0] - 13.0) < 1e-10, $"Upper: expected 13, got {clipper.UpperBounds[0]}");
     }
 
     [Fact(Timeout = 120000)]
@@ -587,9 +587,9 @@ public class PreprocessingDeepMathIntegrationTests
 
         clipper.Fit(data);
 
-        Assert.True(Math.Abs(clipper.Q1Values[0] - 17.5) < 1e-10, $"Q1: expected 17.5, got {clipper.Q1Values[0]}");
-        Assert.True(Math.Abs(clipper.Q3Values[0] - 32.5) < 1e-10, $"Q3: expected 32.5, got {clipper.Q3Values[0]}");
-        Assert.True(Math.Abs(clipper.IQRValues[0] - 15.0) < 1e-10, $"IQR: expected 15, got {clipper.IQRValues[0]}");
+        Assert.True(Math.Abs((clipper.Q1Values ?? throw new InvalidOperationException("clipper.Q1Values is null where it is required."))[0] - 17.5) < 1e-10, $"Q1: expected 17.5, got {clipper.Q1Values[0]}");
+        Assert.True(Math.Abs((clipper.Q3Values ?? throw new InvalidOperationException("clipper.Q3Values is null where it is required."))[0] - 32.5) < 1e-10, $"Q3: expected 32.5, got {clipper.Q3Values[0]}");
+        Assert.True(Math.Abs((clipper.IQRValues ?? throw new InvalidOperationException("clipper.IQRValues is null where it is required."))[0] - 15.0) < 1e-10, $"IQR: expected 15, got {clipper.IQRValues[0]}");
     }
 
     #endregion
@@ -756,8 +756,8 @@ public class PreprocessingDeepMathIntegrationTests
 
         scaler.Fit(data);
 
-        Assert.True(Math.Abs(scaler.Mean[0] - 4.0) < 1e-10, $"Mean: expected 4, got {scaler.Mean[0]}");
-        Assert.True(Math.Abs(scaler.StandardDeviation[0] - 2.0) < 1e-10, $"Std: expected 2, got {scaler.StandardDeviation[0]}");
+        Assert.True(Math.Abs((scaler.Mean ?? throw new InvalidOperationException("scaler.Mean is null where it is required."))[0] - 4.0) < 1e-10, $"Mean: expected 4, got {scaler.Mean[0]}");
+        Assert.True(Math.Abs((scaler.StandardDeviation ?? throw new InvalidOperationException("scaler.StandardDeviation is null where it is required."))[0] - 2.0) < 1e-10, $"Std: expected 2, got {scaler.StandardDeviation[0]}");
     }
 
     [Fact(Timeout = 120000)]
@@ -768,8 +768,8 @@ public class PreprocessingDeepMathIntegrationTests
 
         scaler.Fit(data);
 
-        Assert.True(Math.Abs(scaler.DataMin[0] - 3.0) < 1e-10, $"DataMin: expected 3, got {scaler.DataMin[0]}");
-        Assert.True(Math.Abs(scaler.DataMax[0] - 11.0) < 1e-10, $"DataMax: expected 11, got {scaler.DataMax[0]}");
+        Assert.True(Math.Abs((scaler.DataMin ?? throw new InvalidOperationException("scaler.DataMin is null where it is required."))[0] - 3.0) < 1e-10, $"DataMin: expected 3, got {scaler.DataMin[0]}");
+        Assert.True(Math.Abs((scaler.DataMax ?? throw new InvalidOperationException("scaler.DataMax is null where it is required."))[0] - 11.0) < 1e-10, $"DataMax: expected 11, got {scaler.DataMax[0]}");
     }
 
     #endregion
@@ -885,8 +885,8 @@ public class PreprocessingDeepMathIntegrationTests
         standardScaler.Fit(data);
         zScoreClipper.Fit(data);
 
-        double stdScalerStd = standardScaler.StandardDeviation[0];
-        double zScoreClipperStd = zScoreClipper.StandardDeviations[0];
+        double stdScalerStd = (standardScaler.StandardDeviation ?? throw new InvalidOperationException("standardScaler.StandardDeviation is null where it is required."))[0];
+        double zScoreClipperStd = (zScoreClipper.StandardDeviations ?? throw new InvalidOperationException("zScoreClipper.StandardDeviations is null where it is required."))[0];
 
         // StandardScaler uses sample std (n-1)
         Assert.True(Math.Abs(stdScalerStd - Math.Sqrt(2.5)) < 1e-10,

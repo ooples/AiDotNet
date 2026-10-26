@@ -47,7 +47,7 @@ public class FederatedLearningHeterogeneityCorrectionIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.Equal(algorithm == FederatedHeterogeneityCorrection.Scaffold ? "SCAFFOLD" : algorithm.ToString(), metadata!.HeterogeneityCorrectionUsed);
+        Assert.Equal(algorithm == FederatedHeterogeneityCorrection.Scaffold ? "SCAFFOLD" : algorithm.ToString(), metadata.HeterogeneityCorrectionUsed);
         Assert.True(metadata.RoundsCompleted >= 1);
     }
 

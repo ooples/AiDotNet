@@ -23,7 +23,7 @@ public class LstmFusedTrainingWiringTests
 {
     private static Tensor<float> Rand(int[] shape, int seed, float scale = 0.4f)
     {
-        var rng = new System.Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<float>(shape);
         var s = t.AsWritableSpan();
         for (int i = 0; i < s.Length; i++) s[i] = (float)(rng.NextDouble() * 2 - 1) * scale;
@@ -96,7 +96,7 @@ public class LstmFusedTrainingWiringTests
         var probe = network.Predict(input);
         var target = new Tensor<float>(new[] { seq, outputs });
         var tg = target.AsWritableSpan();
-        var trng = new System.Random(99);
+        var trng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
         for (int i = 0; i < tg.Length; i++) tg[i] = (float)(trng.NextDouble() * 2 - 1);
 
         float lossBefore = Mse(probe, target);

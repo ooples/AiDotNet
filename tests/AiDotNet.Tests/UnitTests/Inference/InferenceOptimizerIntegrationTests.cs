@@ -125,7 +125,7 @@ public class InferenceOptimizerIntegrationTests
 
         // KV cache memory should be proportionally smaller:
         // 2 KV heads vs 8 total heads = 4x smaller cache
-        var cacheStats = kvCache!.GetStatistics();
+        var cacheStats = kvCache.GetStatistics();
         Assert.True((double)cacheStats["MaxMemoryMB"] > 0);
     }
 

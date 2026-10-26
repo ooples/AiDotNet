@@ -83,7 +83,7 @@ public class ClipImagePreprocessorTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            _preprocessor.Preprocess(null!));
+            _preprocessor.Preprocess(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -299,7 +299,7 @@ public class ClipImagePreprocessorTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            _preprocessor.PreprocessBatch(null!).ToList());
+            _preprocessor.PreprocessBatch(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>>()).ToList());
     }
 
     [Fact(Timeout = 60000)]
@@ -381,7 +381,7 @@ public class ClipImagePreprocessorTests
 
     private static void FillWithRandomValues(Tensor<float> tensor, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 255);

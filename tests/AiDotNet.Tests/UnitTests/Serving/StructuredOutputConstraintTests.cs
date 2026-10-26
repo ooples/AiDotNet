@@ -241,7 +241,7 @@ public class StructuredOutputConstraintTests
         var result = await batcher.GenerateAsync(request);
 
         Assert.NotNull(result.LogProbs);
-        Assert.Equal(result.GeneratedTokens.Count, result.LogProbs!.Count);
+        Assert.Equal(result.GeneratedTokens.Count, result.LogProbs.Count);
 
         var first = result.LogProbs[0];
         Assert.Equal(5, first.TokenId);                 // greedy picked the top-logit token

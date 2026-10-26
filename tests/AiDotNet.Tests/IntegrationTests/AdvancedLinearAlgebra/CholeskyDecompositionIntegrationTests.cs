@@ -22,7 +22,7 @@ public class CholeskyDecompositionIntegrationTests
     /// </summary>
     private static Matrix<double> CreateSpdMatrix(int size, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var A = new Matrix<double>(size, size);
 
         // Create a random matrix
@@ -285,7 +285,7 @@ public class CholeskyDecompositionIntegrationTests
     {
         // Arrange - Simulate a covariance matrix (common use case)
         int n = 5;
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var data = new double[100, n];
 
         // Generate random data

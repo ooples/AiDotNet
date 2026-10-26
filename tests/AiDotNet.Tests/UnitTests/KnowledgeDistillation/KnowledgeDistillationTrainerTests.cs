@@ -60,7 +60,7 @@ public class KnowledgeDistillationTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new KnowledgeDistillationTrainer<double>(null!, distillationLoss));
+            new KnowledgeDistillationTrainer<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.ITeacherModel<AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), distillationLoss));
     }
 
     [Fact(Timeout = 60000)]
@@ -71,7 +71,7 @@ public class KnowledgeDistillationTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new KnowledgeDistillationTrainer<double>(teacher, null!));
+            new KnowledgeDistillationTrainer<double>(teacher, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDistillationStrategy<double>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -124,7 +124,7 @@ public class KnowledgeDistillationTrainerTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            trainer.TrainBatch(studentForward, studentBackward, null!, null));
+            trainer.TrainBatch(studentForward, studentBackward, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), null));
     }
 
     [Fact(Timeout = 60000)]

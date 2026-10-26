@@ -135,7 +135,7 @@ public sealed class TwoStageDetectionLoss<T>
 
     /// <summary>Builds one detection stage's region-of-interest loss for one image.</summary>
     /// <param name="classLogits">Raw logits [proposals, foreground classes + 1]; index 0 is background.</param>
-    /// <param name="boxDeltas">Class-specific deltas [proposals, (classes + 1) * 4].</param>
+    /// <param name="boxDeltas">Class-specific deltas [proposals, (classes + 1) * 4], or class-agnostic [proposals, 4].</param>
     /// <param name="proposals">The boxes this stage received [proposals, 4] in input pixels (corner format).</param>
     /// <param name="gold">Object boxes in input pixels, as (x1, y1, x2, y2).</param>
     /// <param name="goldClasses">Each object's foreground class, aligned with <paramref name="gold"/>.</param>
@@ -170,8 +170,12 @@ public sealed class TwoStageDetectionLoss<T>
             throw new ArgumentException("Proposals must be [proposals, 4].", nameof(proposals));
         if (classLogits.Rank != 2 || classLogits.Shape[0] != count || classLogits.Shape[1] != width)
             throw new ArgumentException($"Class logits must be [proposals, {width}].", nameof(classLogits));
-        if (boxDeltas.Rank != 2 || boxDeltas.Shape[0] != count || boxDeltas.Shape[1] != width * 4)
-            throw new ArgumentException($"Box deltas must be [proposals, {width * 4}].", nameof(boxDeltas));
+        // Class-specific deltas [proposals, (classes + 1) * 4] (Faster/Mask R-CNN), or class-agnostic [proposals, 4]
+        // (Cascade R-CNN's stages), where every foreground RoI regresses through the same four outputs.
+        if (boxDeltas.Rank != 2 || boxDeltas.Shape[0] != count || (boxDeltas.Shape[1] != width * 4 && boxDeltas.Shape[1] != 4))
+            throw new ArgumentException($"Box deltas must be [proposals, {width * 4}] or class-agnostic [proposals, 4].", nameof(boxDeltas));
+        bool classAgnostic = boxDeltas.Shape[1] == 4 && width != 1;
+        int deltaWidth = boxDeltas.Shape[1];
         foreach (int goldClass in goldClasses)
             if (goldClass < 0 || goldClass >= _foregroundClasses)
                 throw new ArgumentException("Every object class must be a foreground class of the detector.", nameof(goldClasses));
@@ -215,12 +219,14 @@ public sealed class TwoStageDetectionLoss<T>
         {
             var deltaIndices = new int[foregroundRows.Count * 4];
             var targets = new T[foregroundRows.Count * 4];
+            var regressionWeights = _options.BoxRegressionWeights(stage);
             for (int i = 0; i < foregroundRows.Count; i++)
             {
                 int r = foregroundRows[i];
-                int column = (goldClasses[match[r]] + 1) * 4;
-                for (int k = 0; k < 4; k++) deltaIndices[i * 4 + k] = r * width * 4 + column + k;
-                WriteDeltas(targets, i * 4, boxes[r], gold[match[r]]);
+                int column = classAgnostic ? 0 : (goldClasses[match[r]] + 1) * 4;
+                for (int k = 0; k < 4; k++) deltaIndices[i * 4 + k] = r * deltaWidth + column + k;
+                var delta = EncodeDeltas(boxes[r], gold[match[r]]);
+                for (int k = 0; k < 4; k++) targets[i * 4 + k] = NumOps.FromDouble(delta[k] * regressionWeights[k]);
             }
             var flat = engine.Reshape(boxDeltas, new[] { boxDeltas.Length });
             var predicted = engine.Reshape(CvTensorOps<T>.Select(flat, deltaIndices, 0), new[] { foregroundRows.Count, 4 });
@@ -235,6 +241,12 @@ public sealed class TwoStageDetectionLoss<T>
         }
         return engine.TensorMultiplyScalar(loss, NumOps.FromDouble(_options.StageLossWeights[stage]));
     }
+
+    /// <summary>
+    /// The (wx, wy, ww, wh) <paramref name="stage"/>'s regression targets are scaled by; a decoder divides that stage's
+    /// predicted deltas by them.
+    /// </summary>
+    internal double[] StageBoxRegressionWeights(int stage) => _options.BoxRegressionWeights(stage);
 
     /// <summary>R-CNN box deltas of <paramref name="gold"/> relative to <paramref name="reference"/>.</summary>
     internal static double[] EncodeDeltas(double[] reference, double[] gold)

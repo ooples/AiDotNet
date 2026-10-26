@@ -141,7 +141,7 @@ public static class InputContractShapeResolver
             // divisor is not allowed to round it away - the model would reject the rounded extent.
             if (IsExactAxis(exact, axis))
             {
-                shape[axis] = exact![axis];
+                shape[axis] = (exact ?? throw new InvalidOperationException("exact is null where it is required."))[axis];
                 continue;
             }
 
@@ -597,7 +597,7 @@ public static class InputContractValidator
 
             Validate(tensor, port, ownerName);
             if (!string.IsNullOrWhiteSpace(port.ShapeConstraint.SameShapeAs)
-                && inputs.TryGetValue(port.ShapeConstraint.SameShapeAs!, out var related)
+                && inputs.TryGetValue((port.ShapeConstraint.SameShapeAs ?? throw new InvalidOperationException("port.ShapeConstraint.SameShapeAs is null where it is required.")), out var related)
                 && !SameShape(tensor.Shape.ToArray(), related.Shape.ToArray()))
             {
                 throw new InputContractViolationException(

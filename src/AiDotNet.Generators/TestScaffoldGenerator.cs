@@ -5016,11 +5016,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return null;
     }
 
+    // The whole argument value, up to the comma or parenthesis that ends it. Matching only `\d+` removed the first
+    // number of an expression: `inputDepth: 3, outputSize: 256 * 256 * 3)` became `inputDepth: 3 * 256 * 3)`, so
+    // OpenSora's fixture declared 2304 input channels and every training test threw (#2365). A value containing a
+    // parenthesis or comma (a call, a nested expression) is not matched at all, so nothing is ever cut in half.
     private static readonly System.Text.RegularExpressions.Regex StatedOutputSize =
-        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*\d+|outputSize:\s*\d+,\s*",
+        new System.Text.RegularExpressions.Regex(@",\s*outputSize:\s*[^,()]+?(?=\s*[,)])|outputSize:\s*[^,()]+?,\s*",
             System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
 
-    /// <summary>Removes every <c>outputSize: n</c> argument from a generated constructor expression (#2147).</summary>
+    /// <summary>Removes every <c>outputSize: value</c> argument from a generated constructor expression (#2147).</summary>
     private static string OmitStatedOutputSize(string expression) => StatedOutputSize.Replace(expression, string.Empty);
 
     private static bool InheritsFromAnyExcludedBase(INamedTypeSymbol type)
@@ -17757,6 +17761,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
             sb.AppendLine("        VerifySemanticDetectionTraining();");
             sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact(Timeout = 300000)]");
+            sb.AppendLine("    public System.Threading.Tasks.Task TrainDetections_OverfitsOneImage_ToFullMeanAveragePrecision()");
+            sb.AppendLine("        => VerifyOverfitsOneImageToFullMeanAveragePrecision();");
         }
         if (model.HasVectorOnlyConstructor)
         {
@@ -17819,7 +17827,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 generated,
                 @"[ \t]*protected override int MoreData(Short|Long)Iterations => \d+;[ \t]*\r?\n",
                 string.Empty,
-                System.Text.RegularExpressions.RegexOptions.Multiline);
+                System.Text.RegularExpressions.RegexOptions.Multiline,
+                System.TimeSpan.FromSeconds(1));
 
             int classBrace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
             if (classBrace >= 0)
@@ -17850,7 +17859,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     generated,
                     @"[ \t]*protected override int " + memberName + @" => \d+;[ \t]*\r?\n",
                     string.Empty,
-                    System.Text.RegularExpressions.RegexOptions.Multiline);
+                    System.Text.RegularExpressions.RegexOptions.Multiline,
+                    System.TimeSpan.FromSeconds(1));
 
                 int brace = generated.IndexOf('{', generated.IndexOf("class ", System.StringComparison.Ordinal));
                 if (brace >= 0)
@@ -17977,7 +17987,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var line in lines)
         {
             var match = System.Text.RegularExpressions.Regex.Match(
-                line, @"^\s*protected override [^\s]+(?:<[^>]*>)?(?:\[\])? ([A-Za-z_][A-Za-z0-9_]*)\s*=>");
+                line, @"^\s*protected override [^\s]+(?:<[^>]*>)?(?:\[\])? ([A-Za-z_][A-Za-z0-9_]*)\s*=>",
+                System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
 
             if (match.Success && !seen.Add(match.Groups[1].Value))
                 continue;
@@ -22194,7 +22205,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("            // Return deterministic, normalized probability-like output.");
         sb.AppendLine("            int batch = input.Shape[0];");
         sb.AppendLine("            int numClasses = 4;");
-        sb.AppendLine("            var rng = new System.Random(batch);");
+        sb.AppendLine("            var rng = global::AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(batch);");
         sb.AppendLine($"            var data = new {numericType}[batch * numClasses];");
         sb.AppendLine("            for (int i = 0; i < batch; i++)");
         sb.AppendLine("            {");

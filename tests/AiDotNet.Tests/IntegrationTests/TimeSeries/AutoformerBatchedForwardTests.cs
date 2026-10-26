@@ -23,7 +23,7 @@ public class AutoformerBatchedForwardTests
 
     private static double[][] Windows(int count, int length, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         return Enumerable.Range(0, count).Select(s =>
             Enumerable.Range(0, length).Select(t => Math.Sin(0.5 * (s + t)) + 0.4 * (rng.NextDouble() - 0.5)).ToArray()).ToArray();
     }
@@ -125,7 +125,7 @@ public class AutoformerBatchedPredictTests
         }
         else
         {
-            var rng = new Random(3);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
             input = new Matrix<double>(17, 12);       // out-of-sample rows longer than the lookback
             for (int i = 0; i < 17; i++) for (int j = 0; j < 12; j++) input[i, j] = Math.Sin(0.3 * (i + j)) + 0.1 * rng.NextDouble();
         }

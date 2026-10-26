@@ -104,7 +104,7 @@ public class AdamPathDivergenceH6DiagnosticTests
     public void Adam_FlatVsTape_SameInputs_SameOutputs_SingleStep()
     {
         const int n = 8;
-        var rng = new Random(0xADA);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0xADA);
         var initialParams = new float[n];
         var fixedGrad = new float[n];
         for (int i = 0; i < n; i++)
@@ -180,7 +180,7 @@ public class AdamPathDivergenceH6DiagnosticTests
     {
         const int n = 8;
         const int numSteps = 5;
-        var rng = new Random(0xBEAD);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0xBEAD);
         var initialParams = new float[n];
         var grads = new float[numSteps][];
         for (int i = 0; i < n; i++) initialParams[i] = (float)(rng.NextDouble() * 2 - 1);

@@ -25,7 +25,7 @@ public class AutoformerBatchedEquivalenceTests
 
     private static Tensor<double> Rand(int[] shape, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int total = 1;
         foreach (var s in shape) total *= s;
         var data = new Vector<double>(total);

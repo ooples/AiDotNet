@@ -152,7 +152,7 @@ public class DefaultModelCacheIntegrationTests
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.GetCachedStepData(null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.GetCachedStepData(global::AiDotNet.Tests.TestNull.Of<string>()));
         Assert.Equal("key", ex.ParamName);
     }
 
@@ -164,7 +164,7 @@ public class DefaultModelCacheIntegrationTests
         var stepData = CreateStepData();
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData(null!, stepData));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData(global::AiDotNet.Tests.TestNull.Of<string>(), stepData));
         Assert.Equal("key", ex.ParamName);
     }
 
@@ -175,7 +175,7 @@ public class DefaultModelCacheIntegrationTests
         var cache = new DefaultModelCache<double, Matrix<double>, Vector<double>>();
 
         // Act & Assert
-        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData("key", null!));
+        var ex = Assert.Throws<ArgumentNullException>(() => cache.CacheStepData("key", global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.OptimizationStepData<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
         Assert.Equal("stepData", ex.ParamName);
     }
 

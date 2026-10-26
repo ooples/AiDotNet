@@ -318,7 +318,7 @@ public class TrialStateManagerTests : IDisposable
     [Fact(Timeout = 60000)]
     public async Task Constructor_NullPath_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new TrialStateManager(null!));
+        Assert.Throws<ArgumentNullException>(() => new TrialStateManager(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]

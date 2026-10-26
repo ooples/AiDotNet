@@ -554,15 +554,15 @@ public partial class XLearner<T> : CausalModelBase<T>
     {
         base.LoadAdditionalModelData(modelDataObj);
         if (modelDataObj["BiasControl"] is not null)
-            BiasControl = NumOps.FromDouble(modelDataObj["BiasControl"]!.ToObject<double>());
+            BiasControl = NumOps.FromDouble((modelDataObj["BiasControl"] ?? throw new InvalidOperationException("modelDataObj[\"BiasControl\"] is null where it is required.")).ToObject<double>());
         if (modelDataObj["BiasTreated"] is not null)
-            BiasTreated = NumOps.FromDouble(modelDataObj["BiasTreated"]!.ToObject<double>());
+            BiasTreated = NumOps.FromDouble((modelDataObj["BiasTreated"] ?? throw new InvalidOperationException("modelDataObj[\"BiasTreated\"] is null where it is required.")).ToObject<double>());
         if (modelDataObj["BiasTau0"] is not null)
-            BiasTau0 = NumOps.FromDouble(modelDataObj["BiasTau0"]!.ToObject<double>());
+            BiasTau0 = NumOps.FromDouble((modelDataObj["BiasTau0"] ?? throw new InvalidOperationException("modelDataObj[\"BiasTau0\"] is null where it is required.")).ToObject<double>());
         if (modelDataObj["BiasTau1"] is not null)
-            BiasTau1 = NumOps.FromDouble(modelDataObj["BiasTau1"]!.ToObject<double>());
+            BiasTau1 = NumOps.FromDouble((modelDataObj["BiasTau1"] ?? throw new InvalidOperationException("modelDataObj[\"BiasTau1\"] is null where it is required.")).ToObject<double>());
         if (modelDataObj["BiasPropensity"] is not null)
-            BiasPropensity = NumOps.FromDouble(modelDataObj["BiasPropensity"]!.ToObject<double>());
+            BiasPropensity = NumOps.FromDouble((modelDataObj["BiasPropensity"] ?? throw new InvalidOperationException("modelDataObj[\"BiasPropensity\"] is null where it is required.")).ToObject<double>());
 
         var rows = new[]
         {

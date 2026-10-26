@@ -15,7 +15,7 @@ public sealed class BatchNormalizationSingleImageTests
     [Fact]
     public void SingleImage_NormalizesEachChannelOverItsPositions_AndUpdatesRunningStatistics()
     {
-        var rng = new Random(2);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2);
         var x = new Tensor<double>(new[] { 1, 4, 8, 8 });
         for (int i = 0; i < x.Length; i++) x[i] = 100 * (rng.NextDouble() - 0.5) + 7 * (i / 64);
         var bn = new BatchNormalizationLayer<double>();

@@ -208,7 +208,7 @@ public class DiscriminantAnalysisIntegrationTests
         var x = new Matrix<double>(100, 2);
         var y = new Vector<double>(100);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Class 0: centered at (-2, -2)
         for (int i = 0; i < 50; i++)
@@ -417,7 +417,7 @@ public class DiscriminantAnalysisIntegrationTests
         var x = new Matrix<double>(40, 2);
         var y = new Vector<double>(40);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Both classes: spherical Gaussian with same variance
         for (int i = 0; i < 20; i++)

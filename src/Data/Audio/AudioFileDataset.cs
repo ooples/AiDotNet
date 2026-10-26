@@ -226,8 +226,8 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     private InMemoryDataLoader<T, Tensor<T>, Tensor<T>> CreateSubset(int[] indices)
     {
         return new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-            ExtractTensorBatch(LoadedFeatures!, indices),
-            ExtractTensorBatch(LoadedLabels!, indices));
+            ExtractTensorBatch((LoadedFeatures ?? throw new InvalidOperationException("LoadedFeatures is null where it is required.")), indices),
+            ExtractTensorBatch((LoadedLabels ?? throw new InvalidOperationException("LoadedLabels is null where it is required.")), indices));
     }
 
     private T[] LoadAudioSamples(string filePath)

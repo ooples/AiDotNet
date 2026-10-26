@@ -375,7 +375,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
             // AiModelResult is a facade wrapper that does not implement IParameterizable,
             // but its inner Model does.
             var innerModel = modelResult.Model
-                ?? throw new InvalidOperationException("Loaded model has no inner model.");
+                ?? throw new System.InvalidOperationException("Loaded model has no inner model.");
             var globalModel = InterfaceGuard.Parameterizable(innerModel).WithParameters(globalBaseline);
 
             var clientModels = new Dictionary<int, IFullModel<T, Matrix<T>, Vector<T>>>();
@@ -492,7 +492,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
             }
 
             var runArtifactPath = state.RunArtifactPath;
-            var directory = Path.GetDirectoryName(runArtifactPath) ?? throw new InvalidOperationException("Invalid run artifact path.");
+            var directory = Path.GetDirectoryName(runArtifactPath) ?? throw new System.InvalidOperationException("Invalid run artifact path.");
             var protectedDir = Path.Combine(directory, ".protected");
             var storeKey = $"run:{state.RunId}";
 
@@ -507,7 +507,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
             throw new ArgumentException("Source path is required.", nameof(sourcePath));
         }
 
-        var root = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? throw new InvalidOperationException("Invalid model artifact path.");
+        var root = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? throw new System.InvalidOperationException("Invalid model artifact path.");
         var runDir = Path.Combine(root, ".runs");
         Directory.CreateDirectory(runDir);
 
@@ -589,7 +589,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
             // SaveModel is the licensed user-facing boundary and intentionally cannot be suppressed;
             // this coordinator round-trip is server infrastructure already inside InternalOperation.
             var innerModel = modelResult.Model
-                ?? throw new InvalidOperationException("Loaded model has no inner model.");
+                ?? throw new System.InvalidOperationException("Loaded model has no inner model.");
             Helpers.InterfaceGuard.Parameterizable(innerModel).SetParameters(ToVector<T>(globalParameters));
             File.WriteAllBytes(artifactPath, modelResult.Serialize());
         }

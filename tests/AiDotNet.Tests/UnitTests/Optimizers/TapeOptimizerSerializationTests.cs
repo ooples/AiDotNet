@@ -293,9 +293,9 @@ public class TapeOptimizerSerializationTests
 
             Assert.NotNull(expected);
             Assert.NotNull(actual);
-            for (int i = 0; i < expected!.Length; i++)
+            for (int i = 0; i < expected.Length; i++)
             {
-                Assert.True(Math.Abs(expected[i] - actual![i]) < 1e-12,
+                Assert.True(Math.Abs(expected[i] - actual[i]) < 1e-12,
                     $"{optimizerName} restored a different averaged iterate at parameter {p} index {i}: " +
                     $"expected {expected[i]:R}, actual {actual[i]:R}.");
             }

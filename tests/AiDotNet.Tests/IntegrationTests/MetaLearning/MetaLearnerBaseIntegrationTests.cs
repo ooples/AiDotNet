@@ -29,7 +29,7 @@ public class MetaLearnerBaseIntegrationTests
         var queryX = new Matrix<double>(queryRows, featureCount);
         var queryY = new Vector<double>(queryRows);
 
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int i = 0; i < supportRows; i++)
         {
@@ -77,8 +77,8 @@ public class MetaLearnerBaseIntegrationTests
     {
         var options = new MetaLearnerOptionsBase<double>();
 
-        Assert.Throws<ArgumentNullException>(() => new TestMetaLearner(null!, options));
-        Assert.Throws<ArgumentNullException>(() => new TestMetaLearner(new LinearVectorModel(3), null!));
+        Assert.Throws<ArgumentNullException>(() => new TestMetaLearner(null, options));
+        Assert.Throws<ArgumentNullException>(() => new TestMetaLearner(new LinearVectorModel(3), null));
     }
 
     [Fact(Timeout = 120000)]
@@ -94,7 +94,7 @@ public class MetaLearnerBaseIntegrationTests
     {
         var learner = new TestMetaLearner(new LinearVectorModel(3), new MetaLearnerOptionsBase<double>());
 
-        Assert.Throws<ArgumentNullException>(() => learner.Evaluate(null!));
+        Assert.Throws<ArgumentNullException>(() => learner.Evaluate(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Data.Structures.TaskBatch<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -275,7 +275,7 @@ public class MetaLearnerBaseIntegrationTests
         var converted = learner.CallConvertToVector(vector);
 
         Assert.NotNull(converted);
-        Assert.Equal(vector.Length, converted!.Length);
+        Assert.Equal(vector.Length, converted.Length);
         Assert.Equal(vector[0], converted[0]);
         Assert.Equal(vector[1], converted[1]);
     }

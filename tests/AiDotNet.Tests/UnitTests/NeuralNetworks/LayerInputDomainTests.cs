@@ -111,7 +111,7 @@ public class LayerInputDomainTests
 
         var layer = NewEmbedding();
         int[] continuousShape = [2, VocabularySize];
-        var rng = new Random(20260810);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260810);
         var input = new Tensor<double>(continuousShape);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 
@@ -142,7 +142,7 @@ public class LayerInputDomainTests
         var layer = NewEmbedding();
         var domain = layer.GetInputDomain(null);
 
-        var rng = new Random(20260810);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260810);
         var input = new Tensor<double>(new[] { 1, 6 });
         for (int i = 0; i < input.Length; i++)
             input[i] = rng.Next(domain.MinInclusive, domain.MaxExclusive);
@@ -164,7 +164,7 @@ public class LayerInputDomainTests
 
         var layer = NewEmbedding();
 
-        var rng = new Random(20260810);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260810);
         var input = new Tensor<double>(new[] { 1, 6 });
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 

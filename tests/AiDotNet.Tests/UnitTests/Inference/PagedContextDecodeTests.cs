@@ -33,7 +33,7 @@ public class PagedContextDecodeTests
 
         // Deterministic non-degenerate weights so different inputs yield different outputs.
         var p = layer.GetParameters();
-        var rng = new Random(20260616);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260616);
         var pv = new float[p.Length];
         for (int i = 0; i < pv.Length; i++) pv[i] = (float)(rng.NextDouble() - 0.5) * 0.2f;
         layer.SetParameters(new Vector<float>(pv));
@@ -53,7 +53,7 @@ public class PagedContextDecodeTests
 
     private static float[] RandomSequence(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new float[SeqLen * EmbDim];
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() - 0.5);
         return data;
@@ -187,7 +187,7 @@ public class PagedContextDecodeTests
             new InferenceForwardContext(5001, 0));
         warmedCache.FreeSequence(5001);
 
-        var rng = new Random(556);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(556);
         var restoredValues = new float[warmed.GetParameters().Length];
         for (int i = 0; i < restoredValues.Length; i++)
             restoredValues[i] = (float)(rng.NextDouble() - 0.5) * 0.3f;

@@ -79,7 +79,7 @@ public class iMAMLAlgorithmTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(null!));
+            new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.MetaLearning.Options.iMAMLOptions<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -90,7 +90,7 @@ public class iMAMLAlgorithmTests
         var algorithm = new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
+        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Data.Structures.TaskBatch<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -145,7 +145,7 @@ public class iMAMLAlgorithmTests
         var algorithm = new iMAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
+        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IMetaLearningTask<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]

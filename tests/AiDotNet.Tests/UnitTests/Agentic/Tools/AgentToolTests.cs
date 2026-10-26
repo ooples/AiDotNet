@@ -27,27 +27,27 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
         {
             await Task.Yield();
 
-            Assert.Equal("string", (string)JsonSchemaGenerator.ForType(typeof(string))["type"]);
-            Assert.Equal("integer", (string)JsonSchemaGenerator.ForType(typeof(int))["type"]);
-            Assert.Equal("number", (string)JsonSchemaGenerator.ForType(typeof(double))["type"]);
-            Assert.Equal("boolean", (string)JsonSchemaGenerator.ForType(typeof(bool))["type"]);
+            Assert.Equal("string", (JsonSchemaGenerator.ForType(typeof(string))["type"] ?? throw new InvalidOperationException("(string)JsonSchemaGenerator.ForType(typeof(string))[\"type\"] is null where it is required.")).ToString());
+            Assert.Equal("integer", (JsonSchemaGenerator.ForType(typeof(int))["type"] ?? throw new InvalidOperationException("(string)JsonSchemaGenerator.ForType(typeof(int))[\"type\"] is null where it is required.")).ToString());
+            Assert.Equal("number", (JsonSchemaGenerator.ForType(typeof(double))["type"] ?? throw new InvalidOperationException("(string)JsonSchemaGenerator.ForType(typeof(double))[\"type\"] is null where it is required.")).ToString());
+            Assert.Equal("boolean", (JsonSchemaGenerator.ForType(typeof(bool))["type"] ?? throw new InvalidOperationException("(string)JsonSchemaGenerator.ForType(typeof(bool))[\"type\"] is null where it is required.")).ToString());
 
             var enumSchema = JsonSchemaGenerator.ForType(typeof(Color));
-            Assert.Equal("string", (string)enumSchema["type"]);
-            Assert.Equal(new[] { "Red", "Green", "Blue" }, ((JArray)enumSchema["enum"]).Select(t => (string)t));
+            Assert.Equal("string", (enumSchema["type"] ?? throw new InvalidOperationException("(string)enumSchema[\"type\"] is null where it is required.")).ToString());
+            Assert.Equal(new[] { "Red", "Green", "Blue" }, ((JArray)(enumSchema["enum"] ?? throw new InvalidOperationException("(JArray)enumSchema[\"enum\"] is null where it is required."))).Select(t => (t ?? throw new InvalidOperationException("(string)t is null where it is required.")).ToString()));
 
             var arraySchema = JsonSchemaGenerator.ForType(typeof(int[]));
-            Assert.Equal("array", (string)arraySchema["type"]);
-            Assert.Equal("integer", (string)arraySchema["items"]["type"]);
+            Assert.Equal("array", (arraySchema["type"] ?? throw new InvalidOperationException("(string)arraySchema[\"type\"] is null where it is required.")).ToString());
+            Assert.Equal("integer", (arraySchema["items"]?["type"] ?? throw new InvalidOperationException("(string)arraySchema[\"items\"][\"type\"] is null where it is required.")).ToString());
 
             var objSchema = JsonSchemaGenerator.ForType(typeof(Address));
-            Assert.Equal("object", (string)objSchema["type"]);
-            Assert.Equal("string", (string)objSchema["properties"]["Street"]["type"]);
-            Assert.Equal("integer", (string)objSchema["properties"]["Zip"]["type"]);
+            Assert.Equal("object", (objSchema["type"] ?? throw new InvalidOperationException("(string)objSchema[\"type\"] is null where it is required.")).ToString());
+            Assert.Equal("string", (objSchema["properties"]?["Street"]?["type"] ?? throw new InvalidOperationException("(string)objSchema[\"properties\"][\"Street\"][\"type\"] is null where it is required.")).ToString());
+            Assert.Equal("integer", (objSchema["properties"]?["Zip"]?["type"] ?? throw new InvalidOperationException("(string)objSchema[\"properties\"][\"Zip\"][\"type\"] is null where it is required.")).ToString());
 
             var dictSchema = JsonSchemaGenerator.ForType(typeof(Dictionary<string, int>));
-            Assert.Equal("object", (string)dictSchema["type"]);
-            Assert.Equal("integer", (string)dictSchema["additionalProperties"]["type"]);
+            Assert.Equal("object", (dictSchema["type"] ?? throw new InvalidOperationException("(string)dictSchema[\"type\"] is null where it is required.")).ToString());
+            Assert.Equal("integer", (dictSchema["additionalProperties"]?["type"] ?? throw new InvalidOperationException("(string)dictSchema[\"additionalProperties\"][\"type\"] is null where it is required.")).ToString());
         }
 
         // ---- JsonSchemaGenerator: parameters / required ----
@@ -63,19 +63,19 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
 
             var addSchema = JsonSchemaGenerator.ForParameters(
                 ((Func<int, int, int>)Add).Method.GetParameters());
-            Assert.Equal(new[] { "a", "b" }, ((JArray)addSchema["required"]).Select(t => (string)t).OrderBy(x => x));
+            Assert.Equal(new[] { "a", "b" }, ((JArray)(addSchema["required"] ?? throw new InvalidOperationException("(JArray)addSchema[\"required\"] is null where it is required."))).Select(t => (t ?? throw new InvalidOperationException("(string)t is null where it is required.")).ToString()).OrderBy(x => x));
 
             var defaultSchema = JsonSchemaGenerator.ForParameters(
                 ((Func<int, int, int>)WithDefault).Method.GetParameters());
-            var required = ((JArray)defaultSchema["required"]).Select(t => (string)t).ToList();
+            var required = ((JArray)(defaultSchema["required"] ?? throw new InvalidOperationException("(JArray)defaultSchema[\"required\"] is null where it is required."))).Select(t => (t ?? throw new InvalidOperationException("(string)t is null where it is required.")).ToString()).ToList();
             Assert.Contains("a", required);
             Assert.DoesNotContain("b", required); // has default -> optional
 
             var describeSchema = JsonSchemaGenerator.ForParameters(
                 ((Func<string, CancellationToken, string>)Describe).Method.GetParameters());
-            Assert.NotNull(describeSchema["properties"]["city"]);
-            Assert.Null(describeSchema["properties"]["ct"]); // CancellationToken excluded
-            Assert.Equal("the city", (string)describeSchema["properties"]["city"]["description"]);
+            Assert.NotNull((describeSchema["properties"] ?? throw new InvalidOperationException("describeSchema[\"properties\"] is null where it is required."))["city"]);
+            Assert.Null((describeSchema["properties"] ?? throw new InvalidOperationException("describeSchema[\"properties\"] is null where it is required."))["ct"]); // CancellationToken excluded
+            Assert.Equal("the city", (describeSchema["properties"]?["city"]?["description"] ?? throw new InvalidOperationException("(string)describeSchema[\"properties\"][\"city\"][\"description\"] is null where it is required.")).ToString());
         }
 
         // ---- DelegateAgentTool: invocation ----

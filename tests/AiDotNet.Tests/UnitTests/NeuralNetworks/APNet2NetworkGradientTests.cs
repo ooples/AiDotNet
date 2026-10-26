@@ -77,7 +77,7 @@ public class APNet2NetworkGradientTests
 
         Assert.NotNull(targetParameter);
         Assert.True(targetCoordinate >= 0);
-        double original = targetParameter![targetCoordinate];
+        double original = targetParameter[targetCoordinate];
         const double epsilon = 1e-6;
         targetParameter[targetCoordinate] = original + epsilon;
         double plus = loss.ComputeTapeLoss(model.ForwardForTraining(input), target)[0];

@@ -105,7 +105,7 @@ public class LossBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEstima
         // Return cached scores if available
         if (CacheScores && HasCachedScores && (CachedScores ?? throw new InvalidOperationException("CachedScores has not been initialized.")).Length == dataset.Count)
         {
-            return CachedScores!;
+            return CachedScores;
         }
 
         var difficulties = new T[dataset.Count];

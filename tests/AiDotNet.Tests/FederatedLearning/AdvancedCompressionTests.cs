@@ -25,7 +25,7 @@ public class AdvancedCompressionTests
     private static Tensor<double> CreateGradient(int size, double scale = 1.0)
     {
         var values = new double[size];
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < size; i++)
         {
             values[i] = (rng.NextDouble() * 2.0 - 1.0) * scale;
@@ -111,7 +111,7 @@ public class AdvancedCompressionTests
     [Fact(Timeout = 60000)]
     public async Task PowerSGD_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new PowerSGDCompressor<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new PowerSGDCompressor<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.AdvancedCompressionOptions>()));
     }
 
     // ========== GradientSketchCompressor Tests ==========
@@ -186,7 +186,7 @@ public class AdvancedCompressionTests
     [Fact(Timeout = 60000)]
     public async Task GradientSketch_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new GradientSketchCompressor<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new GradientSketchCompressor<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.AdvancedCompressionOptions>()));
     }
 
     // ========== ErrorFeedbackCompressor Tests ==========
@@ -268,7 +268,7 @@ public class AdvancedCompressionTests
     [Fact(Timeout = 60000)]
     public async Task ErrorFeedback_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new ErrorFeedbackCompressor<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new ErrorFeedbackCompressor<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.AdvancedCompressionOptions>()));
     }
 
     // ========== AdaptiveCompressor Tests ==========
@@ -343,7 +343,7 @@ public class AdvancedCompressionTests
     [Fact(Timeout = 60000)]
     public async Task Adaptive_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new AdaptiveCompressor<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new AdaptiveCompressor<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.AdvancedCompressionOptions>()));
     }
 
     // ========== Options Tests ==========

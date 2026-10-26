@@ -41,7 +41,7 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
             .BuildAsync();
 
         Assert.NotNull(result.ReasoningConfig);
-        Assert.Equal(sentinel, result.ReasoningConfig!.MaxSteps);
+        Assert.Equal(sentinel, result.ReasoningConfig.MaxSteps);
     }
 
     /// <summary>

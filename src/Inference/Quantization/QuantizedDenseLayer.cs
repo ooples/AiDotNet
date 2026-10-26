@@ -132,7 +132,7 @@ internal sealed partial class QuantizedDenseLayer : LayerBase<float>, IShapeCont
 
     /// <summary>
     /// Total quantized weight count (rows * cols). Internal accessor used by
-    /// <see cref="Int8InferenceModel"/> to compute artifact byte counts.
+    /// <see cref="QuantizedLayerStats"/> to compute artifact byte counts.
     /// </summary>
     internal long WeightCount => (long)_outputSize * _inputSize;
 
@@ -148,7 +148,7 @@ internal sealed partial class QuantizedDenseLayer : LayerBase<float>, IShapeCont
         // (batch, sequence, ...) into a single row dimension. Without this rank-3
         // [batch, seq, embDim] inputs collapsed to [batch, seq*embDim] and broke the input
         // size invariant (regressed pre-existing tests once we wired Transformer<float> end-
-        // to-end through Int8InferenceModel).
+        // to-end through the INT8 inference path).
         bool inputWas1D = input.Rank == 1;
         int actualInputSize = input.Shape[^1];
         if (actualInputSize != _inputSize)

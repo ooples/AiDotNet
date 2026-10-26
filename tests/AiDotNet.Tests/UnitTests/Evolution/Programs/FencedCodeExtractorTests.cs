@@ -180,8 +180,8 @@ public sealed class FencedCodeExtractorTests
     public void NullResponseIsRejected()
     {
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => FencedCodeExtractor.Extract(null, ProgramLanguage.Python));
-        Assert.Throws<ArgumentNullException>(() => FencedCodeExtractor.ExtractBlocks(null));
+        Assert.Throws<ArgumentNullException>(() => FencedCodeExtractor.Extract(global::AiDotNet.Tests.TestNull.Of<string>(), ProgramLanguage.Python));
+        Assert.Throws<ArgumentNullException>(() => FencedCodeExtractor.ExtractBlocks(global::AiDotNet.Tests.TestNull.Of<string>()));
 #pragma warning restore CS8600, CS8625
     }
 }

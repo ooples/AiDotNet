@@ -186,8 +186,8 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     private Vector<T> HeunCorrectorStep(Vector<T> modelOutput, Vector<T> sampleIntermediate)
     {
-        var d1 = _prevDerivative!;
-        var originalSample = _prevSample!;
+        var d1 = _prevDerivative;
+        var originalSample = _prevSample;
         T dt = _prevDt;
         T sigmaNext = _prevSigmaNext;
         int timestep = _prevTimestep;
@@ -207,11 +207,11 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
 
         // Average the two derivatives (Heun's corrector)
         var half = NumOps.FromDouble(0.5);
-        var dAvg = Engine.Add(Engine.Multiply(d1, half), Engine.Multiply(d2, half));
+        var dAvg = Engine.Add(Engine.Multiply((d1 ?? throw new InvalidOperationException("d1 is null where it is required.")), half), Engine.Multiply(d2, half));
 
         // Take corrected step from the ORIGINAL sample
         var correctedStep = Engine.Multiply(dAvg, dt);
-        return Engine.Add(originalSample, correctedStep);
+        return Engine.Add((originalSample ?? throw new InvalidOperationException("originalSample is null where it is required.")), correctedStep);
     }
 
     /// <summary>

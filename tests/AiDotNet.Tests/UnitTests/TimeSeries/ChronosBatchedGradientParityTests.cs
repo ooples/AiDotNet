@@ -28,7 +28,7 @@ public sealed class ChronosBatchedGradientParityTests
 
     private static (List<Vector<double>> Windows, List<double> Targets) Samples(int windowLength, int count, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var windows = new List<Vector<double>>(); var targets = new List<double>();
         for (int s = 0; s < count; s++)
         {
@@ -116,7 +116,7 @@ public sealed class ChronosBatchedPredictTests
         for (int i = 0; i < 80; i++) { trainX[i, 0] = i; trainY[i] = Math.Sin(i * 0.3) + 0.02 * i; }
         model.Train(trainX, trainY);
 
-        var rng = new Random(windowLength);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(windowLength);
         var input = new Matrix<double>(23, windowLength);
         for (int i = 0; i < input.Rows; i++)
             for (int j = 0; j < windowLength; j++) input[i, j] = Math.Sin(0.3 * (i + j)) + 0.2 * rng.NextDouble();

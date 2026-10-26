@@ -327,7 +327,7 @@ public partial class COPKMeans<T> : ClusteringBase<T>
     private bool ViolatesConstraints(int pointIdx, int cluster, int[] labels)
     {
         // Check must-link constraints
-        foreach (var (i, j) in _mustLinkClosure!)
+        foreach (var (i, j) in (_mustLinkClosure ?? throw new InvalidOperationException("_mustLinkClosure is null where it is required.")))
         {
             if (i == pointIdx || j == pointIdx)
             {
@@ -340,7 +340,7 @@ public partial class COPKMeans<T> : ClusteringBase<T>
         }
 
         // Check cannot-link constraints
-        foreach (var (i, j) in _cannotLinkClosure!)
+        foreach (var (i, j) in (_cannotLinkClosure ?? throw new InvalidOperationException("_cannotLinkClosure is null where it is required.")))
         {
             if (i == pointIdx || j == pointIdx)
             {
@@ -359,7 +359,7 @@ public partial class COPKMeans<T> : ClusteringBase<T>
     {
         int violations = 0;
 
-        foreach (var (i, j) in _mustLinkClosure!)
+        foreach (var (i, j) in (_mustLinkClosure ?? throw new InvalidOperationException("_mustLinkClosure is null where it is required.")))
         {
             if (labels[i] != labels[j])
             {
@@ -367,7 +367,7 @@ public partial class COPKMeans<T> : ClusteringBase<T>
             }
         }
 
-        foreach (var (i, j) in _cannotLinkClosure!)
+        foreach (var (i, j) in (_cannotLinkClosure ?? throw new InvalidOperationException("_cannotLinkClosure is null where it is required.")))
         {
             if (labels[i] == labels[j])
             {

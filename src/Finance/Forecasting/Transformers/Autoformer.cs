@@ -645,7 +645,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
             current = seasonal;
         }
 
-        current = AddTensors(current, _trendComponent!);
+        current = AddTensors(current, _trendComponent);
 
         if (_finalNorm is not null)
         {

@@ -33,7 +33,7 @@ public class ClientSelectionStrategyTests
         Assert.Equal(2, selected.Count);
         Assert.All(selected, id => Assert.Contains(id, request.CandidateClientIds));
 
-        var groupKeys = request.ClientGroupKeys!;
+        var groupKeys = request.ClientGroupKeys;
         var selectedGroups = selected.Select(id => groupKeys[id]).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         Assert.Equal(selected.Count, selectedGroups.Count);
     }

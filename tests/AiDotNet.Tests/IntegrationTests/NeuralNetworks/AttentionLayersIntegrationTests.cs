@@ -861,7 +861,7 @@ public class AttentionLayersIntegrationTests
     private static Tensor<T> CreateRandomTensor<T>(int[] shape) where T : struct, IComparable<T>
     {
         var tensor = new Tensor<T>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < tensor.Length; i++)
         {
@@ -875,7 +875,7 @@ public class AttentionLayersIntegrationTests
     private static Tensor<float> CreateMaskTensor(int[] shape)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Create a causal mask (lower triangular)
         for (int b = 0; b < shape[0]; b++)
@@ -896,7 +896,7 @@ public class AttentionLayersIntegrationTests
     private static Tensor<float> CreateRandomAdjacencyMatrix(int numNodes)
     {
         var tensor = new Tensor<float>([numNodes, numNodes]);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Create a random adjacency matrix (sparse, symmetric)
         for (int i = 0; i < numNodes; i++)

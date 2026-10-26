@@ -51,7 +51,7 @@ public static class LayerFactoryRegistry<T>
             }
             catch (ReflectionTypeLoadException e)
             {
-                types = e.Types.Where(t => t is not null).ToArray()!;
+                types = e.Types.OfType<Type>().ToArray();
             }
             catch (Exception)
             {

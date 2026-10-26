@@ -195,7 +195,7 @@ public class ParameterManifestTests
 
         registry.SetParameters(new Vector<double>(new[] { 10d, 20d, 30d, 40d }));
 
-        Assert.Equal(new[] { 30d, 40d }, tail!.ToArray());
+        Assert.Equal(new[] { 30d, 40d }, (tail ?? throw new InvalidOperationException("tail is null where it is required.")).ToArray());
         Assert.Equal(4, registry.ParameterCount);
     }
 
@@ -397,7 +397,7 @@ public class ParameterManifestTests
         Assert.NotNull(state);
         Assert.Equal(3, state.Feature);
         Assert.Equal(1.25, state.Threshold);
-        var child = Assert.Single(state.Children!);
+        var child = Assert.Single((state.Children ?? throw new InvalidOperationException("state.Children is null where it is required.")));
         Assert.Equal(7, child.Feature);
         Assert.Equal(-0.5, child.Threshold);
     }
@@ -882,7 +882,7 @@ public class ParameterManifestTests
         Assert.Contains(layout, slot =>
             slot.Readiness == ParameterReadiness.ShapeResolvedUnmaterialized);
         Assert.Equal(
-            layout.Sum(slot => slot.ParameterCount!.Value),
+            layout.Sum(slot => (slot.ParameterCount ?? throw new InvalidOperationException("slot.ParameterCount is null where it is required."))),
             layer.GetParameters().Length);
     }
 
