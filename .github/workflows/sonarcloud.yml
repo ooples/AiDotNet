@@ -313,7 +313,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, pull requests)
         if: github.event_name == 'pull_request'
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: none
@@ -322,7 +322,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, whole library)
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: none
@@ -330,7 +330,7 @@ jobs:
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -400,7 +400,7 @@ jobs:
       # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
       # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
       - name: Initialize CodeQL (traced build)
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: manual
@@ -422,7 +422,7 @@ jobs:
           dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           category: "/language:csharp-traced"
           upload: always
@@ -2073,11 +2073,21 @@ jobs:
           run-id: ${{ steps.baseline.outputs.baseline_run_id }}
           github-token: ${{ github.token }}
 
+      # The expected shard matrix goes to a file, not an environment variable: with test-level filters it outgrew
+      # Linux's 128 KiB limit on a single environment string, and the next step then failed to start at all
+      # ("An error occurred trying to start process '/usr/bin/pwsh' ... Argument list too long"). A run script is
+      # written to a file before it executes, so the expression expanded here has no such limit.
+      - name: Write expected shard matrix
+        shell: pwsh
+        run: |
+          @'
+          ${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}
+          '@ | Set-Content -LiteralPath expected-shard-matrix.json -Encoding utf8
+
       - name: Build final test report and enforce regression policy
         id: analyze
         shell: pwsh
         env:
-          EXPECTED_SHARD_MATRIX: ${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}
           CURRENT_SHA: ${{ github.sha }}
           COMPARE: ${{ steps.comparison.outputs.compare }}
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
@@ -2120,7 +2130,7 @@ jobs:
           # run reported "115 shards, 115 passed, 0 failed" while Integration D had died. Shards
           # that selection deliberately skipped are not in this matrix, so anything expected and
           # absent here died rather than being skipped. #2086.
-          $matrixJson = $env:EXPECTED_SHARD_MATRIX
+          $matrixJson = Get-Content -LiteralPath expected-shard-matrix.json -Raw
           $expectedShardNames = @(
             & ./.github/scripts/get-selected-shard-names.ps1 -MatrixJson $matrixJson
           )

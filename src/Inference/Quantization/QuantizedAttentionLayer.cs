@@ -177,7 +177,7 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
 
     /// <summary>
     /// Enumerates (numWeights, numOutRows) for each projection (Q, K, V, O).
-    /// Internal accessor used by <see cref="Int8InferenceModel"/> for storage-byte accounting.
+    /// Internal accessor used by <see cref="QuantizedLayerStats"/> for storage-byte accounting.
     /// </summary>
     internal IEnumerable<(long NumWeights, int NumOutRows)> GetProjectionDimensions()
     {
