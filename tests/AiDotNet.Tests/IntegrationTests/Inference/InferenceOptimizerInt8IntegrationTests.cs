@@ -1,9 +1,12 @@
-﻿using System;
+﻿// FromTrained_RejectsNullModel passes null on purpose to check the ArgumentNullException contract.
+#nullable disable
+using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Configuration;
 using AiDotNet.Enums;
-using AiDotNet.Inference.Quantization;
+using AiDotNet.Inference;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -13,11 +16,15 @@ using Xunit.Abstractions;
 namespace AiDotNet.Tests.IntegrationTests.Inference;
 
 /// <summary>
-/// Integration tests for the public <see cref="Int8InferenceModel"/> surface introduced in
-/// AiDotNet#1342. Verifies that quantizing a trained float network produces:
+/// Integration tests for INT8 weight-only inference (AiDotNet#1342) through the path the facade
+/// takes: <see cref="InferenceOptimizer{T}"/> with the default configuration plus
+/// <see cref="InferenceQuantizationMode.WeightOnlyInt8"/>. Verifies that quantizing a trained float
+/// network produces:
 ///   1. Quality: INT8 output stays within tolerance of the FP32 baseline.
-///   2. Storage: INT8 weight bytes are ~4x smaller than FP32 weight bytes.
-///   3. Surface: <c>Predict</c> runs end-to-end without exposing internal sealed types.
+///   2. Storage: INT8 weight bytes are ~4x smaller than FP32 weight bytes, as the optimizer reports.
+///   3. Surface: <c>Predict</c> runs end-to-end on the rewritten model.
+/// These used to exercise a separate whole-model wrapper, Int8InferenceModel, that nothing in the
+/// library called; it duplicated this path and was removed (#1632).
 /// </summary>
 // The Category=SerialPerf classes each measure throughput or CPU/wall engagement, and xUnit
 // parallelizes ACROSS collections, so a class left out of this one runs CONCURRENTLY with the
@@ -39,13 +46,40 @@ namespace AiDotNet.Tests.IntegrationTests.Inference;
 // test itself, so a runner invoked with different settings, or a future change to that json,
 // cannot quietly start running these timing-sensitive classes beside each other again.
 [Collection("NonParallelIntegration")]
-public class Int8InferenceModelIntegrationTests
+public class InferenceOptimizerInt8IntegrationTests
 {
     private readonly ITestOutputHelper _output;
 
-    public Int8InferenceModelIntegrationTests(ITestOutputHelper output)
+    public InferenceOptimizerInt8IntegrationTests(ITestOutputHelper output)
     {
         _output = output;
+    }
+
+    /// <summary>The rewritten model and the INT8 storage the optimizer reported for it.</summary>
+    private sealed record Int8Result(
+        NeuralNetworkBase<float> Model, int QuantizedLayerCount, long QuantizedWeightBytes, long OriginalWeightBytes)
+    {
+        public Tensor<float> Predict(Tensor<float> input) => Model.Predict(input);
+
+        public double CompressionRatio => QuantizedWeightBytes == 0 ? 1.0 : (double)OriginalWeightBytes / QuantizedWeightBytes;
+    }
+
+    /// <summary>
+    /// Optimizes <paramref name="trained"/> for inference as the facade does — the default configuration — with
+    /// INT8 weight-only quantization switched on, and reads the storage figures off the optimizer's statistics.
+    /// </summary>
+    private static Int8Result Quantize(NeuralNetworkBase<float> trained, bool cloneModel = true)
+    {
+        var config = InferenceOptimizationConfig.Default;
+        config.InferenceQuantization = InferenceQuantizationMode.WeightOnlyInt8;
+        var optimizer = new InferenceOptimizer<float>(config);
+        var (model, _) = optimizer.OptimizeForInference(trained, cloneModel);
+        var stats = optimizer.GetStatistics();
+        return new Int8Result(
+            model,
+            (int)stats["Int8QuantizedLayerCount"],
+            (long)stats["Int8QuantizedWeightBytes"],
+            (long)stats["Int8OriginalWeightBytes"]);
     }
 
     private static Tensor<float> CreateRandomInput(int seqLen, int embDim, int seed = 1342)
@@ -98,7 +132,7 @@ public class Int8InferenceModelIntegrationTests
         var fp32 = BuildAndWarmTransformer(seqLen, embDim, numHeads);
         var input = CreateRandomInput(seqLen, embDim, seed: 11);
 
-        var int8 = Int8InferenceModel.FromTrained(fp32);
+        var int8 = Quantize(fp32);
         var output = int8.Predict(input);
 
         Assert.NotNull(output);
@@ -122,7 +156,7 @@ public class Int8InferenceModelIntegrationTests
         var fp32Output = fp32.Predict(input);
 
         // Quantize a CLONE so the FP32 baseline above is untouched.
-        var int8 = Int8InferenceModel.FromTrained(fp32, cloneModel: true);
+        var int8 = Quantize(fp32, cloneModel: true);
         var int8Output = int8.Predict(input);
 
         Assert.Equal(fp32Output.Shape.ToArray(), int8Output.Shape.ToArray());
@@ -159,7 +193,7 @@ public class Int8InferenceModelIntegrationTests
         int numHeads = 8;
 
         var fp32 = BuildAndWarmTransformer(seqLen, embDim, numHeads, seed: 47);
-        var int8 = Int8InferenceModel.FromTrained(fp32);
+        var int8 = Quantize(fp32);
 
         Assert.True(int8.QuantizedWeightBytes > 0, "Quantized weight bytes must be non-zero.");
         Assert.True(int8.OriginalWeightBytes > 0, "Original weight bytes must be non-zero.");
@@ -238,7 +272,7 @@ public class Int8InferenceModelIntegrationTests
         // flipped the default to false would silently turn this
         // into a quantized-vs-quantized comparison and the <50x
         // guard would lose all signal. (PR #1348 review comment.)
-        var int8 = Int8InferenceModel.FromTrained(fp32, cloneModel: true);
+        var int8 = Quantize(fp32, cloneModel: true);
         var input = CreateRandomInput(seqLen, embDim, seed: 31);
 
         // Warmup both paths to amortize JIT, plan cache, etc.
@@ -313,7 +347,7 @@ public class Int8InferenceModelIntegrationTests
     public async Task FromTrained_RejectsNullModel()
     {
         await Task.Yield();
-        Assert.Throws<ArgumentNullException>(() => Int8InferenceModel.FromTrained(global::AiDotNet.Tests.TestNull.Of<AiDotNet.NeuralNetworks.NeuralNetworkBase<float>>()));
+        Assert.Throws<ArgumentNullException>(() => Quantize(global::AiDotNet.Tests.TestNull.Of<NeuralNetworkBase<float>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -328,7 +362,7 @@ public class Int8InferenceModelIntegrationTests
         int originalLayerCount = fp32.Layers.Count;
         var originalLayerTypes = fp32.Layers.Select(l => l.GetType()).ToArray();
 
-        var int8 = Int8InferenceModel.FromTrained(fp32, cloneModel: true);
+        var int8 = Quantize(fp32, cloneModel: true);
 
         // Original model must still have FP32 attention / dense layers.
         Assert.Equal(originalLayerCount, fp32.Layers.Count);
@@ -350,7 +384,7 @@ public class Int8InferenceModelIntegrationTests
         int numHeads = 4;
 
         var fp32 = BuildAndWarmTransformer(seqLen, embDim, numHeads, seed: 71);
-        var int8 = Int8InferenceModel.FromTrained(fp32);
+        var int8 = Quantize(fp32);
 
         Assert.True(int8.OriginalWeightBytes > int8.QuantizedWeightBytes,
             "Original weight bytes must exceed quantized weight bytes for any non-trivial network.");
