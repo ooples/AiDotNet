@@ -256,21 +256,42 @@ internal static class ParameterMemberSemanticModel
         foreach (var syntaxReference in owner.DeclaringSyntaxReferences)
         {
             if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
-            foreach (var method in declaration.DescendantNodes().OfType<MethodDeclarationSyntax>())
-            {
-                string methodName = method.Identifier.ValueText;
-                if (methodName is not "Dispose" and not "DisposeAsync") continue;
 
-                foreach (var assignment in method.DescendantNodes().OfType<AssignmentExpressionSyntax>())
-                {
-                    string? target = assignment.Left switch
+            // Members, not DescendantNodes: a NESTED class's Dispose is not this type's, and scanning it would
+            // drop a member of the outer type that merely shares a name with something the nested one tears down.
+            foreach (var method in declaration.Members
+                .OfType<MethodDeclarationSyntax>()
+                .Where(method => method.Identifier.ValueText is "Dispose" or "DisposeAsync"))
+            {
+                // Names the method binds itself -- locals, including out/pattern declarations, and parameters.
+                // An assignment to one of those is not an assignment to the member it shadows, and treating it as
+                // one would silently take a real member out of the payload.
+                var shadowed = new HashSet<string>(
+                    method.DescendantNodes()
+                        .OfType<VariableDeclaratorSyntax>()
+                        .Select(declarator => declarator.Identifier.ValueText)
+                        .Concat(method.DescendantNodes()
+                            .OfType<SingleVariableDesignationSyntax>()
+                            .Select(designation => designation.Identifier.ValueText))
+                        .Concat(method.ParameterList.Parameters
+                            .Select(parameter => parameter.Identifier.ValueText)),
+                    StringComparer.Ordinal);
+
+                foreach (string target in method.DescendantNodes()
+                    .OfType<AssignmentExpressionSyntax>()
+                    .Select(assignment => assignment.Left switch
                     {
-                        IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                        // A bare identifier only counts when the method does not bind that name itself.
+                        IdentifierNameSyntax identifier when !shadowed.Contains(identifier.Identifier.ValueText)
+                            => identifier.Identifier.ValueText,
+                        // this.X is unambiguous whatever the method binds.
                         MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } access
                             => access.Name.Identifier.ValueText,
                         _ => null
-                    };
-                    if (target is not null && memberNames.Contains(target)) assigned.Add(target);
+                    })
+                    .Where(target => target is not null && memberNames.Contains(target))!)
+                {
+                    assigned.Add(target);
                 }
             }
         }
