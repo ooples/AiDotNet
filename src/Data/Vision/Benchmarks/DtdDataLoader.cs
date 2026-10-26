@@ -72,7 +72,7 @@ public class DtdDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
         // Build class index from the unique class subdirectory names (sorted).
         string imagesDir = Path.Combine(root, "images");
         var classNames = Directory.GetDirectories(imagesDir)
-            .Select(d => Path.GetFileName(d)!)
+            .Select(d => Path.GetFileName(d))
             .OrderBy(s => s, StringComparer.Ordinal)
             .Take(NumClasses).ToArray();
         var classIdx = new Dictionary<string, int>(classNames.Length, StringComparer.OrdinalIgnoreCase);

@@ -355,9 +355,9 @@ public sealed class BranchAndBoundSolver<T>
         {
             for (int column = 0; column < program.VariableCount; column++)
             {
-                matrix[row, column] = program.InequalityMatrix![row, column];
+                matrix[row, column] = (program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required."))[row, column];
             }
-            bounds[row] = program.InequalityBounds![row];
+            bounds[row] = (program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."))[row];
         }
 
         int nextRow = existingRows;

@@ -55,9 +55,9 @@ public class FinanceSearchSpaceIntegrationTests
 
         var patchRange = searchSpace["PatchLength"];
         Assert.Equal(ParameterType.Integer, patchRange.Type);
-        Assert.Equal(4.0, ToDouble(patchRange.MinValue));
-        Assert.Equal(32.0, ToDouble(patchRange.MaxValue));
-        Assert.Equal(16.0, ToDouble(patchRange.DefaultValue));
+        Assert.Equal(4.0, ToDouble((patchRange.MinValue ?? throw new InvalidOperationException("patchRange.MinValue is null where it is required."))));
+        Assert.Equal(32.0, ToDouble((patchRange.MaxValue ?? throw new InvalidOperationException("patchRange.MaxValue is null where it is required."))));
+        Assert.Equal(16.0, ToDouble((patchRange.DefaultValue ?? throw new InvalidOperationException("patchRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -71,7 +71,7 @@ public class FinanceSearchSpaceIntegrationTests
 
         var likelihoodRange = searchSpace["LikelihoodType"];
         Assert.Equal(ParameterType.Categorical, likelihoodRange.Type);
-        Assert.Contains("Gaussian", likelihoodRange.CategoricalValues.Cast<string>());
+        Assert.Contains("Gaussian", (likelihoodRange.CategoricalValues ?? throw new InvalidOperationException("likelihoodRange.CategoricalValues is null where it is required.")).Cast<string>());
         Assert.Contains("StudentT", likelihoodRange.CategoricalValues.Cast<string>());
     }
 
@@ -99,9 +99,9 @@ public class FinanceSearchSpaceIntegrationTests
 
         var confRange = searchSpace["ConfidenceLevel"];
         Assert.Equal(ParameterType.Float, confRange.Type);
-        Assert.Equal(0.90, ToDouble(confRange.MinValue));
-        Assert.Equal(0.99, ToDouble(confRange.MaxValue));
-        Assert.Equal(0.95, ToDouble(confRange.DefaultValue));
+        Assert.Equal(0.90, ToDouble((confRange.MinValue ?? throw new InvalidOperationException("confRange.MinValue is null where it is required."))));
+        Assert.Equal(0.99, ToDouble((confRange.MaxValue ?? throw new InvalidOperationException("confRange.MaxValue is null where it is required."))));
+        Assert.Equal(0.95, ToDouble((confRange.DefaultValue ?? throw new InvalidOperationException("confRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -114,8 +114,8 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(searchSpace.ContainsKey("RelaxationFactor"));
 
         var stepsRange = searchSpace["NumDecisionSteps"];
-        Assert.Equal(3.0, ToDouble(stepsRange.MinValue));
-        Assert.Equal(10.0, ToDouble(stepsRange.MaxValue));
+        Assert.Equal(3.0, ToDouble((stepsRange.MinValue ?? throw new InvalidOperationException("stepsRange.MinValue is null where it is required."))));
+        Assert.Equal(10.0, ToDouble((stepsRange.MaxValue ?? throw new InvalidOperationException("stepsRange.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -128,8 +128,8 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(searchSpace.ContainsKey("NumAttentionHeads"));
 
         var embRange = searchSpace["EmbeddingDim"];
-        Assert.Equal(8.0, ToDouble(embRange.MinValue));
-        Assert.Equal(64.0, ToDouble(embRange.MaxValue));
+        Assert.Equal(8.0, ToDouble((embRange.MinValue ?? throw new InvalidOperationException("embRange.MinValue is null where it is required."))));
+        Assert.Equal(64.0, ToDouble((embRange.MaxValue ?? throw new InvalidOperationException("embRange.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -152,8 +152,8 @@ public class FinanceSearchSpaceIntegrationTests
         Assert.True(searchSpace.ContainsKey("NumAttentionHeads"));
 
         var ffRange = searchSpace["FeedForwardDim"];
-        Assert.Equal(64.0, ToDouble(ffRange.MinValue));
-        Assert.Equal(512.0, ToDouble(ffRange.MaxValue));
+        Assert.Equal(64.0, ToDouble((ffRange.MinValue ?? throw new InvalidOperationException("ffRange.MinValue is null where it is required."))));
+        Assert.Equal(512.0, ToDouble((ffRange.MaxValue ?? throw new InvalidOperationException("ffRange.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -176,7 +176,7 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastLR = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["LearningRate"];
         var riskLR = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["LearningRate"];
 
-        Assert.True(ToDouble(riskLR.MaxValue) <= ToDouble(forecastLR.MaxValue),
+        Assert.True(ToDouble((riskLR.MaxValue ?? throw new InvalidOperationException("riskLR.MaxValue is null where it is required."))) <= ToDouble((forecastLR.MaxValue ?? throw new InvalidOperationException("forecastLR.MaxValue is null where it is required."))),
             "Risk max LR should be <= forecast max LR");
     }
 
@@ -195,8 +195,8 @@ public class FinanceSearchSpaceIntegrationTests
             {
                 if (range.Type == ParameterType.Float || range.Type == ParameterType.Integer)
                 {
-                    double min = ToDouble(range.MinValue);
-                    double max = ToDouble(range.MaxValue);
+                    double min = ToDouble((range.MinValue ?? throw new InvalidOperationException("range.MinValue is null where it is required.")));
+                    double max = ToDouble((range.MaxValue ?? throw new InvalidOperationException("range.MaxValue is null where it is required.")));
                     Assert.True(min < max,
                         $"SearchSpace[{modelType}][{name}]: min ({min}) should be < max ({max})");
                 }
@@ -217,8 +217,8 @@ public class FinanceSearchSpaceIntegrationTests
                 if (range.DefaultValue is not null)
                 {
                     double defaultVal = ToDouble(range.DefaultValue);
-                    double minVal = ToDouble(range.MinValue);
-                    double maxVal = ToDouble(range.MaxValue);
+                    double minVal = ToDouble((range.MinValue ?? throw new InvalidOperationException("range.MinValue is null where it is required.")));
+                    double maxVal = ToDouble((range.MaxValue ?? throw new InvalidOperationException("range.MaxValue is null where it is required.")));
                     Assert.True(defaultVal >= minVal && defaultVal <= maxVal,
                         $"Default {name}={defaultVal} outside [{minVal}, {maxVal}]");
                 }
@@ -252,9 +252,9 @@ public class FinanceSearchSpaceIntegrationTests
 
         var samplesRange = searchSpace["NumSamples"];
         Assert.Equal(ParameterType.Integer, samplesRange.Type);
-        Assert.Equal(50.0, ToDouble(samplesRange.MinValue));
-        Assert.Equal(200.0, ToDouble(samplesRange.MaxValue));
-        Assert.Equal(100.0, ToDouble(samplesRange.DefaultValue));
+        Assert.Equal(50.0, ToDouble((samplesRange.MinValue ?? throw new InvalidOperationException("samplesRange.MinValue is null where it is required."))));
+        Assert.Equal(200.0, ToDouble((samplesRange.MaxValue ?? throw new InvalidOperationException("samplesRange.MaxValue is null where it is required."))));
+        Assert.Equal(100.0, ToDouble((samplesRange.DefaultValue ?? throw new InvalidOperationException("samplesRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -264,10 +264,10 @@ public class FinanceSearchSpaceIntegrationTests
         var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>));
 
         var likelihoodRange = searchSpace["LikelihoodType"];
-        var values = likelihoodRange.CategoricalValues.Cast<string>().ToList();
+        var values = (likelihoodRange.CategoricalValues ?? throw new InvalidOperationException("likelihoodRange.CategoricalValues is null where it is required.")).Cast<string>().ToList();
         Assert.Contains("NegativeBinomial", values);
         Assert.Equal(3, values.Count);
-        Assert.Equal("Gaussian", (string)likelihoodRange.DefaultValue);
+        Assert.Equal("Gaussian", (string)(likelihoodRange.DefaultValue ?? throw new InvalidOperationException("(string)likelihoodRange.DefaultValue is null where it is required.")));
     }
 
     [Fact(Timeout = 120000)]
@@ -278,9 +278,9 @@ public class FinanceSearchSpaceIntegrationTests
 
         var stackRange = searchSpace["NumStacks"];
         Assert.Equal(ParameterType.Integer, stackRange.Type);
-        Assert.Equal(5.0, ToDouble(stackRange.MinValue));
-        Assert.Equal(50.0, ToDouble(stackRange.MaxValue));
-        Assert.Equal(30.0, ToDouble(stackRange.DefaultValue));
+        Assert.Equal(5.0, ToDouble((stackRange.MinValue ?? throw new InvalidOperationException("stackRange.MinValue is null where it is required."))));
+        Assert.Equal(50.0, ToDouble((stackRange.MaxValue ?? throw new InvalidOperationException("stackRange.MaxValue is null where it is required."))));
+        Assert.Equal(30.0, ToDouble((stackRange.DefaultValue ?? throw new InvalidOperationException("stackRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -291,8 +291,8 @@ public class FinanceSearchSpaceIntegrationTests
 
         var blocksRange = searchSpace["NumBlocksPerStack"];
         Assert.Equal(ParameterType.Integer, blocksRange.Type);
-        Assert.Equal(1.0, ToDouble(blocksRange.MinValue));
-        Assert.Equal(5.0, ToDouble(blocksRange.MaxValue));
+        Assert.Equal(1.0, ToDouble((blocksRange.MinValue ?? throw new InvalidOperationException("blocksRange.MinValue is null where it is required."))));
+        Assert.Equal(5.0, ToDouble((blocksRange.MaxValue ?? throw new InvalidOperationException("blocksRange.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -303,9 +303,9 @@ public class FinanceSearchSpaceIntegrationTests
 
         var relaxRange = searchSpace["RelaxationFactor"];
         Assert.Equal(ParameterType.Float, relaxRange.Type);
-        Assert.Equal(1.0, ToDouble(relaxRange.MinValue));
-        Assert.Equal(2.0, ToDouble(relaxRange.MaxValue));
-        Assert.Equal(1.5, ToDouble(relaxRange.DefaultValue));
+        Assert.Equal(1.0, ToDouble((relaxRange.MinValue ?? throw new InvalidOperationException("relaxRange.MinValue is null where it is required."))));
+        Assert.Equal(2.0, ToDouble((relaxRange.MaxValue ?? throw new InvalidOperationException("relaxRange.MaxValue is null where it is required."))));
+        Assert.Equal(1.5, ToDouble((relaxRange.DefaultValue ?? throw new InvalidOperationException("relaxRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -315,7 +315,7 @@ public class FinanceSearchSpaceIntegrationTests
         var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabTransformer<>));
 
         var embRange = searchSpace["EmbeddingDim"];
-        Assert.Equal(32.0, ToDouble(embRange.DefaultValue));
+        Assert.Equal(32.0, ToDouble((embRange.DefaultValue ?? throw new InvalidOperationException("embRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -326,9 +326,9 @@ public class FinanceSearchSpaceIntegrationTests
 
         var attnRange = searchSpace["NumAttentionHeads"];
         Assert.Equal(ParameterType.Integer, attnRange.Type);
-        Assert.Equal(1.0, ToDouble(attnRange.MinValue));
-        Assert.Equal(8.0, ToDouble(attnRange.MaxValue));
-        Assert.Equal(4.0, ToDouble(attnRange.DefaultValue));
+        Assert.Equal(1.0, ToDouble((attnRange.MinValue ?? throw new InvalidOperationException("attnRange.MinValue is null where it is required."))));
+        Assert.Equal(8.0, ToDouble((attnRange.MaxValue ?? throw new InvalidOperationException("attnRange.MaxValue is null where it is required."))));
+        Assert.Equal(4.0, ToDouble((attnRange.DefaultValue ?? throw new InvalidOperationException("attnRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -338,7 +338,7 @@ public class FinanceSearchSpaceIntegrationTests
         var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.ITransformer<>));
 
         var ffRange = searchSpace["FeedForwardDim"];
-        Assert.Equal(256.0, ToDouble(ffRange.DefaultValue));
+        Assert.Equal(256.0, ToDouble((ffRange.DefaultValue ?? throw new InvalidOperationException("ffRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -350,7 +350,7 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastHidden = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["HiddenSize"];
         var riskHidden = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["HiddenSize"];
 
-        Assert.True(ToDouble(riskHidden.MaxValue) <= ToDouble(forecastHidden.MaxValue),
+        Assert.True(ToDouble((riskHidden.MaxValue ?? throw new InvalidOperationException("riskHidden.MaxValue is null where it is required."))) <= ToDouble((forecastHidden.MaxValue ?? throw new InvalidOperationException("forecastHidden.MaxValue is null where it is required."))),
             "Risk HiddenSize max should be <= forecast HiddenSize max");
     }
 
@@ -363,7 +363,7 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastLayers = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["NumLayers"];
         var riskLayers = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["NumLayers"];
 
-        Assert.True(ToDouble(riskLayers.MaxValue) <= ToDouble(forecastLayers.MaxValue),
+        Assert.True(ToDouble((riskLayers.MaxValue ?? throw new InvalidOperationException("riskLayers.MaxValue is null where it is required."))) <= ToDouble((forecastLayers.MaxValue ?? throw new InvalidOperationException("forecastLayers.MaxValue is null where it is required."))),
             "Risk NumLayers max should be <= forecast NumLayers max");
     }
 
@@ -383,7 +383,7 @@ public class FinanceSearchSpaceIntegrationTests
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         var tabNetDropout = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>))["DropoutRate"];
 
-        Assert.Equal(0.4, ToDouble(tabNetDropout.MaxValue));
+        Assert.Equal(0.4, ToDouble((tabNetDropout.MaxValue ?? throw new InvalidOperationException("tabNetDropout.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -392,7 +392,7 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var forecastDropout = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["DropoutRate"];
 
-        Assert.Equal(0.5, ToDouble(forecastDropout.MaxValue));
+        Assert.Equal(0.5, ToDouble((forecastDropout.MaxValue ?? throw new InvalidOperationException("forecastDropout.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -401,7 +401,7 @@ public class FinanceSearchSpaceIntegrationTests
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         var tabNetBatch = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>))["BatchSize"];
 
-        Assert.Equal(64.0, ToDouble(tabNetBatch.DefaultValue));
+        Assert.Equal(64.0, ToDouble((tabNetBatch.DefaultValue ?? throw new InvalidOperationException("tabNetBatch.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -410,7 +410,7 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var forecastBatch = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["BatchSize"];
 
-        Assert.Equal(32.0, ToDouble(forecastBatch.DefaultValue));
+        Assert.Equal(32.0, ToDouble((forecastBatch.DefaultValue ?? throw new InvalidOperationException("forecastBatch.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -419,7 +419,7 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var epochs = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["Epochs"];
 
-        Assert.Equal(500.0, ToDouble(epochs.MaxValue));
+        Assert.Equal(500.0, ToDouble((epochs.MaxValue ?? throw new InvalidOperationException("epochs.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -428,7 +428,7 @@ public class FinanceSearchSpaceIntegrationTests
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         var epochs = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["Epochs"];
 
-        Assert.Equal(300.0, ToDouble(epochs.MaxValue));
+        Assert.Equal(300.0, ToDouble((epochs.MaxValue ?? throw new InvalidOperationException("epochs.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -437,7 +437,7 @@ public class FinanceSearchSpaceIntegrationTests
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         var epochs = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>))["Epochs"];
 
-        Assert.Equal(200.0, ToDouble(epochs.MaxValue));
+        Assert.Equal(200.0, ToDouble((epochs.MaxValue ?? throw new InvalidOperationException("epochs.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -456,8 +456,8 @@ public class FinanceSearchSpaceIntegrationTests
                     && range.DefaultValue is not null)
                 {
                     double defaultVal = ToDouble(range.DefaultValue);
-                    double minVal = ToDouble(range.MinValue);
-                    double maxVal = ToDouble(range.MaxValue);
+                    double minVal = ToDouble((range.MinValue ?? throw new InvalidOperationException("range.MinValue is null where it is required.")));
+                    double maxVal = ToDouble((range.MaxValue ?? throw new InvalidOperationException("range.MaxValue is null where it is required.")));
                     Assert.True(defaultVal >= minVal && defaultVal <= maxVal,
                         $"[{modelType}] Default {name}={defaultVal} outside [{minVal}, {maxVal}]");
                 }
@@ -479,8 +479,8 @@ public class FinanceSearchSpaceIntegrationTests
             {
                 if (range.Type == ParameterType.Float || range.Type == ParameterType.Integer)
                 {
-                    double min = ToDouble(range.MinValue);
-                    double max = ToDouble(range.MaxValue);
+                    double min = ToDouble((range.MinValue ?? throw new InvalidOperationException("range.MinValue is null where it is required.")));
+                    double max = ToDouble((range.MaxValue ?? throw new InvalidOperationException("range.MaxValue is null where it is required.")));
                     Assert.True(min < max,
                         $"[{modelType}] {name}: min ({min}) should be < max ({max})");
                 }
@@ -494,7 +494,7 @@ public class FinanceSearchSpaceIntegrationTests
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var hidden = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["HiddenSize"];
 
-        Assert.Equal(128.0, ToDouble(hidden.DefaultValue));
+        Assert.Equal(128.0, ToDouble((hidden.DefaultValue ?? throw new InvalidOperationException("hidden.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -503,7 +503,7 @@ public class FinanceSearchSpaceIntegrationTests
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
         var hidden = space.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["HiddenSize"];
 
-        Assert.Equal(64.0, ToDouble(hidden.DefaultValue));
+        Assert.Equal(64.0, ToDouble((hidden.DefaultValue ?? throw new InvalidOperationException("hidden.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -543,7 +543,7 @@ public class FinanceSearchSpaceIntegrationTests
 
         var patchTST3 = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
         // Should get fresh default, not the modified one
-        Assert.Equal(0.001, ToDouble(patchTST3["LearningRate"].DefaultValue));
+        Assert.Equal(0.001, ToDouble((patchTST3["LearningRate"].DefaultValue ?? throw new InvalidOperationException("patchTST3[\"LearningRate\"].DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -552,7 +552,7 @@ public class FinanceSearchSpaceIntegrationTests
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         var tabNetLR = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>))["LearningRate"];
 
-        Assert.Equal(0.05, ToDouble(tabNetLR.MaxValue));
+        Assert.Equal(0.05, ToDouble((tabNetLR.MaxValue ?? throw new InvalidOperationException("tabNetLR.MaxValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]
@@ -561,8 +561,8 @@ public class FinanceSearchSpaceIntegrationTests
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
         var confRange = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["ConfidenceLevel"];
 
-        Assert.True(ToDouble(confRange.MinValue) > 0.0);
-        Assert.True(ToDouble(confRange.MaxValue) < 1.0);
+        Assert.True(ToDouble((confRange.MinValue ?? throw new InvalidOperationException("confRange.MinValue is null where it is required."))) > 0.0);
+        Assert.True(ToDouble((confRange.MaxValue ?? throw new InvalidOperationException("confRange.MaxValue is null where it is required."))) < 1.0);
     }
 
     #endregion
@@ -612,7 +612,7 @@ public class FinanceSearchSpaceIntegrationTests
 
         // Risk domain custom should use risk defaults (smaller max LR)
         var lr = defaultSpace["LearningRate"];
-        Assert.Equal(0.01, ToDouble(lr.MaxValue));
+        Assert.Equal(0.01, ToDouble((lr.MaxValue ?? throw new InvalidOperationException("lr.MaxValue is null where it is required."))));
     }
 
     #endregion
@@ -969,7 +969,7 @@ public class FinanceSearchSpaceIntegrationTests
 
         env.Reset();
 
-        Assert.Throws<ArgumentNullException>(() => env.Step(null));
+        Assert.Throws<ArgumentNullException>(() => env.Step(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -1729,7 +1729,7 @@ public class FinanceSearchSpaceIntegrationTests
     public async Task TradingEnvironmentFactory_NullProvider_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
-        MarketDataProvider<double> nullProvider = null;
+        MarketDataProvider<double> nullProvider = TestNull.Of<MarketDataProvider<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
             TradingEnvironmentFactory.CreateStockTradingEnvironment(
@@ -1741,7 +1741,7 @@ public class FinanceSearchSpaceIntegrationTests
     public async Task TradingEnvironmentFactory_NullPortfolioProviders_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
-        IReadOnlyList<MarketDataProvider<double>> nullProviders = null;
+        IReadOnlyList<MarketDataProvider<double>> nullProviders = TestNull.Of<IReadOnlyList<MarketDataProvider<double>>>();
 
         Assert.Throws<ArgumentNullException>(() =>
             TradingEnvironmentFactory.CreatePortfolioTradingEnvironment(
@@ -1752,7 +1752,7 @@ public class FinanceSearchSpaceIntegrationTests
     public async Task TradingEnvironmentFactory_NullMarketMakingProvider_ThrowsArgumentNullException()
     {
         var numOps = MathHelper.GetNumericOperations<double>();
-        MarketDataProvider<double> nullProvider = null;
+        MarketDataProvider<double> nullProvider = TestNull.Of<MarketDataProvider<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
             TradingEnvironmentFactory.CreateMarketMakingEnvironment(
@@ -1822,14 +1822,14 @@ public class FinanceSearchSpaceIntegrationTests
     public async Task MarketDataProvider_AddNull_ThrowsArgumentNullException()
     {
         var provider = new MarketDataProvider<double>();
-        Assert.Throws<ArgumentNullException>(() => provider.Add(null));
+        Assert.Throws<ArgumentNullException>(() => provider.Add(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Finance.Data.MarketDataPoint<double>>()));
     }
 
     [Fact(Timeout = 120000)]
     public async Task MarketDataProvider_AddRangeNull_ThrowsArgumentNullException()
     {
         var provider = new MarketDataProvider<double>();
-        Assert.Throws<ArgumentNullException>(() => provider.AddRange(null));
+        Assert.Throws<ArgumentNullException>(() => provider.AddRange(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.Finance.Data.MarketDataPoint<double>>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -2130,10 +2130,10 @@ public class FinanceSearchSpaceIntegrationTests
         var tabNet = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>));
         var tabTransformer = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabTransformer<>));
 
-        Assert.Equal(ToDouble(tabNet["LearningRate"].MinValue), ToDouble(tabTransformer["LearningRate"].MinValue));
-        Assert.Equal(ToDouble(tabNet["LearningRate"].MaxValue), ToDouble(tabTransformer["LearningRate"].MaxValue));
-        Assert.Equal(ToDouble(tabNet["BatchSize"].MinValue), ToDouble(tabTransformer["BatchSize"].MinValue));
-        Assert.Equal(ToDouble(tabNet["BatchSize"].MaxValue), ToDouble(tabTransformer["BatchSize"].MaxValue));
+        Assert.Equal(ToDouble((tabNet["LearningRate"].MinValue ?? throw new InvalidOperationException("tabNet[\"LearningRate\"].MinValue is null where it is required."))), ToDouble((tabTransformer["LearningRate"].MinValue ?? throw new InvalidOperationException("tabTransformer[\"LearningRate\"].MinValue is null where it is required."))));
+        Assert.Equal(ToDouble((tabNet["LearningRate"].MaxValue ?? throw new InvalidOperationException("tabNet[\"LearningRate\"].MaxValue is null where it is required."))), ToDouble((tabTransformer["LearningRate"].MaxValue ?? throw new InvalidOperationException("tabTransformer[\"LearningRate\"].MaxValue is null where it is required."))));
+        Assert.Equal(ToDouble((tabNet["BatchSize"].MinValue ?? throw new InvalidOperationException("tabNet[\"BatchSize\"].MinValue is null where it is required."))), ToDouble((tabTransformer["BatchSize"].MinValue ?? throw new InvalidOperationException("tabTransformer[\"BatchSize\"].MinValue is null where it is required."))));
+        Assert.Equal(ToDouble((tabNet["BatchSize"].MaxValue ?? throw new InvalidOperationException("tabNet[\"BatchSize\"].MaxValue is null where it is required."))), ToDouble((tabTransformer["BatchSize"].MaxValue ?? throw new InvalidOperationException("tabTransformer[\"BatchSize\"].MaxValue is null where it is required."))));
     }
 
     #endregion

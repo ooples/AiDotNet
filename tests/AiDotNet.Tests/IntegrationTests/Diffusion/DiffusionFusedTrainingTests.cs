@@ -43,7 +43,7 @@ public class DiffusionFusedTrainingTests
                 TrainingSampleSpace = AiDotNet.Enums.DiffusionTrainingSampleSpace.Latent,
             };
 
-            var rng = new Random(9);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9);
             var latents = new Tensor<double>([3, 4, 8, 8]);
             for (int i = 0; i < latents.Length; i++) latents[i] = rng.NextDouble() * 2 - 1;
             for (int step = 0; step < Steps; step++) model.Train(latents, latents);

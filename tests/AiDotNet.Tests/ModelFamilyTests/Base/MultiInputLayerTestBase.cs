@@ -32,7 +32,7 @@ public abstract class MultiInputLayerTestBase<T>
 
     protected static Tensor<T> CreateRandomTensor(int[] shape, int seed = 42)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = ToT(rng.NextDouble() * 2.0 - 1.0);

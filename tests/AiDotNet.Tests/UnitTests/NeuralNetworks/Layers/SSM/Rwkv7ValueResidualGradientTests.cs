@@ -33,7 +33,7 @@ public class Rwkv7ValueResidualGradientTests
 
     private static Tensor<double> Rand(int[] shape, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() * 0.2 - 0.1;
         return t;

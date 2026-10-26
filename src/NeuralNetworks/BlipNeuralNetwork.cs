@@ -420,9 +420,27 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         catch
         {
             // Attempt every release while preserving the original construction error.
-            try { textDecoder?.Dispose(); } catch { }
-            try { textEncoder?.Dispose(); } catch { }
-            try { visionEncoder?.Dispose(); } catch { }
+            try { textDecoder?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "BLIP construction failed and releasing its textDecoder also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
+            try { textEncoder?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "BLIP construction failed and releasing its textEncoder also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
+            try { visionEncoder?.Dispose(); }
+            catch (Exception disposeError)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "BLIP construction failed and releasing its visionEncoder also failed " +
+                    $"({disposeError.GetType().Name}: {disposeError.Message}).");
+            }
 
             throw;
         }

@@ -979,7 +979,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         bool hasTeacherTarget = _teacherForcingTarget is not null;
         if (hasTeacherTarget)
         {
-            ValidateTeacherForcingTarget(_teacherForcingTarget!);
+            ValidateTeacherForcingTarget((_teacherForcingTarget ?? throw new InvalidOperationException("_teacherForcingTarget is null where it is required.")));
         }
 
         for (int step = 0; step < _forecastHorizon; step++)
@@ -997,7 +997,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
 
             bool useTeacher = hasTeacherTarget && _random.NextDouble() < teacherForcingRatio;
             decoderInput = useTeacher
-                ? Engine.TensorNarrow(_teacherForcingTarget!, 1, step, 1)
+                ? Engine.TensorNarrow((_teacherForcingTarget ?? throw new InvalidOperationException("_teacherForcingTarget is null where it is required.")), 1, step, 1)
                 : prediction;
         }
 

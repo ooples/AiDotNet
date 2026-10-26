@@ -241,7 +241,7 @@ public sealed class SandboxedProgramFitnessEvaluatorTests
             () => new SandboxedProgramFitnessEvaluator(engine, Array.Empty<ProgramInputOutputExample>()));
 #pragma warning disable CS8625
         Assert.Throws<ArgumentNullException>(
-            () => new SandboxedProgramFitnessEvaluator(null, new[] { Example("a", "b") }));
+            () => new SandboxedProgramFitnessEvaluator(global::AiDotNet.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine>(), new[] { Example("a", "b") }));
 #pragma warning restore CS8625
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new SandboxedProgramFitnessEvaluator(

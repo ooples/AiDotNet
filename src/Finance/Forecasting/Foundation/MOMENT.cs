@@ -814,7 +814,7 @@ public partial class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         EnsureReconstructionHead();
         var encoded = ForwardEncoder(input);
         var current = encoded;
-        foreach (var layer in _reconstructionHead!)
+        foreach (var layer in (_reconstructionHead ?? throw new InvalidOperationException("_reconstructionHead is null where it is required.")))
             current = layer.Forward(current);
         return current;
     }

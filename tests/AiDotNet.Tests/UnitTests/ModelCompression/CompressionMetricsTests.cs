@@ -317,7 +317,7 @@ namespace AiDotNetTests.UnitTests.ModelCompression
             metrics.CalculateDerivedMetrics();
 
             // Act & Assert
-            Assert.True(metrics.IsBetterThan(null!));
+            Assert.True(metrics.IsBetterThan(global::AiDotNet.Tests.TestNull.Of<AiDotNet.ModelCompression.CompressionMetrics<double>>()));
         }
 
         [Fact(Timeout = 60000)]

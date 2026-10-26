@@ -62,20 +62,20 @@ public class ModelFileHeaderTests
     {
         var model = new StubModelSerializer();
         Assert.Throws<ArgumentNullException>(() =>
-            ModelFileHeader.WrapWithHeader(null, model, Array.Empty<int>(), Array.Empty<int>(), SerializationFormat.Binary));
+            ModelFileHeader.WrapWithHeader(global::AiDotNet.Tests.TestNull.Of<byte[]>(), model, Array.Empty<int>(), Array.Empty<int>(), SerializationFormat.Binary));
     }
 
     [Fact(Timeout = 60000)]
     public async Task WrapWithHeader_ThrowsOnNullModel()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            ModelFileHeader.WrapWithHeader(new byte[] { 1, 2, 3 }, null, Array.Empty<int>(), Array.Empty<int>(), SerializationFormat.Binary));
+            ModelFileHeader.WrapWithHeader(new byte[] { 1, 2, 3 }, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IModelSerializer>(), Array.Empty<int>(), Array.Empty<int>(), SerializationFormat.Binary));
     }
 
     [Fact(Timeout = 60000)]
     public async Task HasHeader_ReturnsFalseForNull()
     {
-        Assert.False(ModelFileHeader.HasHeader((byte[])null));
+        Assert.False(ModelFileHeader.HasHeader(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -159,7 +159,7 @@ public class ModelFileHeaderTests
     {
         // 1 MB payload
         var payload = new byte[1024 * 1024];
-        new Random(42).NextBytes(payload);
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42).NextBytes(payload);
         var model = new StubModelSerializer { Payload = payload };
 
         byte[] wrapped = ModelFileHeader.WrapWithHeader(
@@ -179,7 +179,7 @@ public class ModelFileHeaderTests
     [Fact(Timeout = 60000)]
     public async Task ReadHeader_ThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => ModelFileHeader.ReadHeader(null));
+        Assert.Throws<ArgumentNullException>(() => ModelFileHeader.ReadHeader(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -193,7 +193,7 @@ public class ModelFileHeaderTests
     [Fact(Timeout = 60000)]
     public async Task ExtractPayload_ThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => ModelFileHeader.ExtractPayload(null));
+        Assert.Throws<ArgumentNullException>(() => ModelFileHeader.ExtractPayload(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -332,7 +332,7 @@ public class ModelFileHeaderTests
         var model = new StubModelSerializer { Payload = new byte[] { 0x01 } };
 
         byte[] wrapped = ModelFileHeader.WrapWithHeader(
-            model.Payload, model, null, null, SerializationFormat.Binary);
+            model.Payload, model, global::AiDotNet.Tests.TestNull.Of<int[]>(), global::AiDotNet.Tests.TestNull.Of<int[]>(), SerializationFormat.Binary);
 
         ModelFileInfo info = ModelFileHeader.ReadHeader(wrapped);
 

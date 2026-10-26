@@ -100,11 +100,11 @@ public class CorpusBenchmarkingIntegrationTests
                 .BuildAsync();
 
             Assert.NotNull(result.BenchmarkReport);
-            var suite = GetSuite(result.BenchmarkReport!, BenchmarkSuite.Reddit);
+            var suite = GetSuite(result.BenchmarkReport, BenchmarkSuite.Reddit);
             Assert.Equal(BenchmarkExecutionStatus.Succeeded, suite.Status);
             Assert.Equal(1.0, GetMetric(suite, BenchmarkMetric.TotalEvaluated));
             Assert.NotNull(suite.DataSelection);
-            Assert.Equal(10, suite.DataSelection!.FeatureCount);
+            Assert.Equal(10, suite.DataSelection.FeatureCount);
         }
         finally
         {
@@ -162,11 +162,11 @@ public class CorpusBenchmarkingIntegrationTests
                 .BuildAsync();
 
             Assert.NotNull(result.BenchmarkReport);
-            var suite = GetSuite(result.BenchmarkReport!, BenchmarkSuite.StackOverflow);
+            var suite = GetSuite(result.BenchmarkReport, BenchmarkSuite.StackOverflow);
             Assert.Equal(BenchmarkExecutionStatus.Succeeded, suite.Status);
             Assert.Equal(1.0, GetMetric(suite, BenchmarkMetric.TotalEvaluated));
             Assert.NotNull(suite.DataSelection);
-            Assert.Equal(3, suite.DataSelection!.FeatureCount);
+            Assert.Equal(3, suite.DataSelection.FeatureCount);
         }
         finally
         {

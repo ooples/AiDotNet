@@ -789,7 +789,14 @@ jobs:
     # The whole test matrix waits on this job through `needs`, and it makes uncapped network calls
     # (gh run list, gh run download). Without a cap it inherits the 360-minute default, so one
     # stalled artifact download parks all 116 shards for six hours.
-    timeout-minutes: 15
+    # The cap guards against that stall, not against the selection itself, and at 15 minutes it had
+    # grown tighter than the work: a PR carrying a master merge selected for 14m14s, set every
+    # output, uploaded its report, and was killed 4 seconds into its last bookkeeping step. A job
+    # killed by a timeout reports `cancelled`, which the validation gate reads as "did not run to
+    # completion", so build, build-compat and size-check were all skipped and the gate failed a run
+    # whose selection had actually succeeded. Thirty minutes still fails a genuine stall in half an
+    # hour rather than six, with headroom over the largest selection observed.
+    timeout-minutes: 30
     permissions:
       actions: read
       contents: read

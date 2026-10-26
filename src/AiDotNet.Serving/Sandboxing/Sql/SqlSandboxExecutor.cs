@@ -345,12 +345,12 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
     {
         if (!string.IsNullOrWhiteSpace(connectionStringOverride))
         {
-            return (connectionStringOverride!, null);
+            return (connectionStringOverride, null);
         }
 
         if (!string.IsNullOrWhiteSpace(_options.PostgresConnectionString))
         {
-            return (_options.PostgresConnectionString!, null);
+            return (_options.PostgresConnectionString, null);
         }
 
         if (!_options.EnableDockerFallback)
@@ -367,12 +367,12 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
     {
         if (!string.IsNullOrWhiteSpace(connectionStringOverride))
         {
-            return (connectionStringOverride!, null);
+            return (connectionStringOverride, null);
         }
 
         if (!string.IsNullOrWhiteSpace(_options.MySqlConnectionString))
         {
-            return (_options.MySqlConnectionString!, null);
+            return (_options.MySqlConnectionString, null);
         }
 
         if (!_options.EnableDockerFallback)

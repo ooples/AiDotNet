@@ -199,7 +199,7 @@ public class OnnxModelDownloader : IOnnxModelDownloader, IDisposable
         return Directory.GetDirectories(_cacheDirectory)
             .Select(dir => Path.GetFileName(dir))
             .Where(name => !string.IsNullOrEmpty(name))
-            .ToList()!;
+            .ToList();
     }
 
     /// <summary>
@@ -216,8 +216,9 @@ public class OnnxModelDownloader : IOnnxModelDownloader, IDisposable
 
         return Directory.GetFiles(modelCacheDir)
             .Select(Path.GetFileName)
-            .Where(name => !string.IsNullOrEmpty(name))
-            .ToList()!;
+            .OfType<string>()
+            .Where(name => name.Length > 0)
+            .ToList();
     }
 
     private string GetModelCacheDirectory(string modelId)

@@ -190,8 +190,8 @@ public class InferenceOptimizerTests
 
         Assert.True(anyApplied);
         Assert.NotNull(optimizer.DraftModel);
-        Assert.Contains("NGramDraftModel", optimizer.DraftModel!.GetType().Name);
-        Assert.True(optimizer.DraftModel!.VocabSize > 0);
+        Assert.Contains("NGramDraftModel", optimizer.DraftModel.GetType().Name);
+        Assert.True(optimizer.DraftModel.VocabSize > 0);
     }
 
     [Fact(Timeout = 60000)]
@@ -216,7 +216,7 @@ public class InferenceOptimizerTests
         Assert.True(anyApplied);
         Assert.NotNull(optimizer.DraftModel);
         Assert.Same(customDraft, optimizer.DraftModel);
-        Assert.Equal(123, optimizer.DraftModel!.VocabSize);
+        Assert.Equal(123, optimizer.DraftModel.VocabSize);
     }
 
     [Fact(Timeout = 60000)]

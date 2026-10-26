@@ -703,8 +703,8 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         backend.AdamaxUpdate(
             parameters,
             gradients,
-            _gpuM!,
-            _gpuU!,
+            (_gpuM ?? throw new InvalidOperationException("_gpuM is null where it is required.")),
+            (_gpuU ?? throw new InvalidOperationException("_gpuU is null where it is required.")),
             (float)NumOps.ToDouble(CurrentLearningRate),
             (float)_options.Beta1,
             (float)_options.Beta2,

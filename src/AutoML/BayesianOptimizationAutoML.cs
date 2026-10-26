@@ -274,7 +274,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
 
             var values = goodTrials
                 .Select(t => t.Parameters.TryGetValue(name, out var v) ? v : null)
-                .Where(v => v is not null)
+                .OfType<object>()
                 .ToList();
 
             if (values.Count == 0)
@@ -285,10 +285,10 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
 
             candidate[name] = range.Type switch
             {
-                ParameterType.Categorical => SampleCategorical(values!, range),
-                ParameterType.Boolean => SampleCategorical(values!, range),
-                ParameterType.Integer => SampleNumeric(values!, range, integer: true),
-                ParameterType.Float or ParameterType.Continuous => SampleNumeric(values!, range, integer: false),
+                ParameterType.Categorical => SampleCategorical(values, range),
+                ParameterType.Boolean => SampleCategorical(values, range),
+                ParameterType.Integer => SampleNumeric(values, range, integer: true),
+                ParameterType.Float or ParameterType.Continuous => SampleNumeric(values, range, integer: false),
                 _ => AutoMLParameterSampler.Sample(Random, new Dictionary<string, ParameterRange>(StringComparer.Ordinal) { [name] = range })[name]
             };
         }

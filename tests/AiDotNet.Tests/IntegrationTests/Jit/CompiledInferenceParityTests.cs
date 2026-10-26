@@ -273,7 +273,7 @@ public class CompiledInferenceParityTests : IDisposable
 
     private static Tensor<float> MakeInput(int[] shape, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int len = 1;
         foreach (var d in shape) len *= d;
         var data = new float[len];

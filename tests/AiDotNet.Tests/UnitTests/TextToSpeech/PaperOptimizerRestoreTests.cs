@@ -35,7 +35,7 @@ public sealed class PaperOptimizerRestoreTests
     {
         using var source = create(sourceOptions);
         sourceOptions.LearningRate = learningRate;
-        using var target = create((TOptions)Activator.CreateInstance(typeof(TOptions))!);
+        using var target = create((TOptions)(Activator.CreateInstance(typeof(TOptions)) ?? throw new InvalidOperationException("(TOptions)Activator.CreateInstance(typeof(TOptions)) is null where it is required.")));
 
         using (ModelPersistenceGuard.InternalOperation())
         {

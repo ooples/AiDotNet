@@ -109,7 +109,7 @@ public class MetricWithCI<T>
         get
         {
             if (!HasConfidenceInterval) return default;
-            return NumOps.Subtract(UpperBound!, LowerBound!);
+            return NumOps.Subtract((UpperBound ?? throw new InvalidOperationException("UpperBound is null where it is required.")), (LowerBound ?? throw new InvalidOperationException("LowerBound is null where it is required.")));
         }
     }
 
@@ -121,7 +121,7 @@ public class MetricWithCI<T>
         get
         {
             if (!HasConfidenceInterval) return default;
-            var width = NumOps.Subtract(UpperBound!, LowerBound!);
+            var width = NumOps.Subtract((UpperBound ?? throw new InvalidOperationException("UpperBound is null where it is required.")), (LowerBound ?? throw new InvalidOperationException("LowerBound is null where it is required.")));
             return NumOps.Divide(width, NumOps.FromDouble(2.0));
         }
     }
@@ -183,8 +183,8 @@ public class MetricWithCI<T>
             return valueStr;
         }
 
-        var lowerStr = NumOps.ToDouble(LowerBound!).ToString($"F{decimalPlaces}");
-        var upperStr = NumOps.ToDouble(UpperBound!).ToString($"F{decimalPlaces}");
+        var lowerStr = NumOps.ToDouble((LowerBound ?? throw new InvalidOperationException("LowerBound is null where it is required."))).ToString($"F{decimalPlaces}");
+        var upperStr = NumOps.ToDouble((UpperBound ?? throw new InvalidOperationException("UpperBound is null where it is required."))).ToString($"F{decimalPlaces}");
 
         return $"{valueStr} [{lowerStr}, {upperStr}]";
     }
@@ -201,8 +201,8 @@ public class MetricWithCI<T>
             return valueStr;
         }
 
-        var lowerStr = (NumOps.ToDouble(LowerBound!) * 100).ToString($"F{decimalPlaces}") + "%";
-        var upperStr = (NumOps.ToDouble(UpperBound!) * 100).ToString($"F{decimalPlaces}") + "%";
+        var lowerStr = (NumOps.ToDouble((LowerBound ?? throw new InvalidOperationException("LowerBound is null where it is required."))) * 100).ToString($"F{decimalPlaces}") + "%";
+        var upperStr = (NumOps.ToDouble((UpperBound ?? throw new InvalidOperationException("UpperBound is null where it is required."))) * 100).ToString($"F{decimalPlaces}") + "%";
 
         return $"{valueStr} [{lowerStr}, {upperStr}]";
     }
@@ -234,12 +234,12 @@ public class MetricWithCI<T>
         if (Direction == MetricDirection.HigherIsBetter)
         {
             // This metric's lower bound > other's upper bound
-            return NumOps.Compare(LowerBound!, other.UpperBound!) > 0;
+            return NumOps.Compare((LowerBound ?? throw new InvalidOperationException("LowerBound is null where it is required.")), (other.UpperBound ?? throw new InvalidOperationException("other.UpperBound is null where it is required."))) > 0;
         }
         else
         {
             // This metric's upper bound < other's lower bound
-            return NumOps.Compare(UpperBound!, other.LowerBound!) < 0;
+            return NumOps.Compare((UpperBound ?? throw new InvalidOperationException("UpperBound is null where it is required.")), (other.LowerBound ?? throw new InvalidOperationException("other.LowerBound is null where it is required."))) < 0;
         }
     }
 }

@@ -403,13 +403,13 @@ public partial class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInfe
         {
             return _currentTask;
         }
-        if (!_taskAdapters.ContainsKey(requested!))
+        if (!_taskAdapters.ContainsKey((requested ?? throw new InvalidOperationException("requested is null where it is required."))))
         {
             throw new ArgumentException(
                 $"LoRA task '{requested}' has not been added. Available tasks: {string.Join(", ", _taskAdapters.Keys)}",
                 nameof(requested));
         }
-        return requested!;
+        return requested;
     }
 
     private static bool AllSame(string?[] tasks)

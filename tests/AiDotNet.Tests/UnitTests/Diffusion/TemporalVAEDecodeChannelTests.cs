@@ -24,7 +24,7 @@ public class TemporalVAEDecodeChannelTests
 
     private static Tensor<float> MakeVideo(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         // 8x spatial downsample (2^3) → latent spatial 4 (survives without collapsing to 1x1).
         var video = new Tensor<float>(new[] { 1, 3, 4, 32, 32 });
         for (int i = 0; i < video.Length; i++) video[i] = (float)(rng.NextDouble() * 2 - 1);

@@ -83,7 +83,7 @@ public class AnswerRelevanceMetric<T> : RAGMetricBase<T>
             $"Generate {_numQuestions} distinct questions that the following answer would correctly and " +
             "completely answer. Put each question on its own line.\n\n" +
             $"Answer: {answerText}\n\nQuestions:";
-        var reply = _generator!.Generate(prompt);
+        var reply = (_generator ?? throw new InvalidOperationException("_generator is null where it is required.")).Generate(prompt);
         var questions = ParseListLines(reply);
         if (questions.Count == 0)
             return NumOps.Zero;
@@ -91,7 +91,7 @@ public class AnswerRelevanceMetric<T> : RAGMetricBase<T>
         double total = 0.0;
         foreach (var question in questions)
         {
-            total += Math.Max(0.0, EmbeddingCosine(_embeddingModel!, question, query));
+            total += Math.Max(0.0, EmbeddingCosine((_embeddingModel ?? throw new InvalidOperationException("_embeddingModel is null where it is required.")), question, query));
         }
 
         return NumOps.FromDouble(total / questions.Count);

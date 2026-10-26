@@ -46,7 +46,7 @@ public class HybridSamplingTests
     public async Task Constructor_NullStrategies_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new HybridSampling<double>(null!));
+        Assert.Throws<ArgumentNullException>(() => new HybridSampling<double>(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<(AiDotNet.Interfaces.IActiveLearningStrategy<double> Strategy, double Weight)>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -219,7 +219,7 @@ public class HybridSamplingTests
         var pool = CreateTestPool(numSamples: 10, featureSize: 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => hybrid.SelectSamples(null!, pool, batchSize: 3));
+        Assert.Throws<ArgumentNullException>(() => hybrid.SelectSamples(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>(), pool, batchSize: 3));
     }
 
     [Fact(Timeout = 60000)]
@@ -231,7 +231,7 @@ public class HybridSamplingTests
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => hybrid.SelectSamples(model, null!, batchSize: 3));
+        Assert.Throws<ArgumentNullException>(() => hybrid.SelectSamples(model, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), batchSize: 3));
     }
 
     [Fact(Timeout = 60000)]
@@ -313,7 +313,7 @@ public class HybridSamplingTests
         var pool = CreateTestPool(numSamples: 10, featureSize: 5);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => hybrid.ComputeInformativenessScores(null!, pool));
+        Assert.Throws<ArgumentNullException>(() => hybrid.ComputeInformativenessScores(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>(), pool));
     }
 
     [Fact(Timeout = 60000)]
@@ -325,7 +325,7 @@ public class HybridSamplingTests
         var model = new MockNeuralNetwork(parameterCount: 10, outputSize: 3);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => hybrid.ComputeInformativenessScores(model, null!));
+        Assert.Throws<ArgumentNullException>(() => hybrid.ComputeInformativenessScores(model, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     [Fact(Timeout = 60000)]

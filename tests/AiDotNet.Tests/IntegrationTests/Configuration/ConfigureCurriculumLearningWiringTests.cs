@@ -77,7 +77,7 @@ public class ConfigureCurriculumLearningWiringTests
 
     private static (Matrix<double> x, Vector<double> y) BuildDataset(int rows = 16, int features = 3)
     {
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var xData = new double[rows, features];
         var yData = new double[rows];
         for (int r = 0; r < rows; r++)

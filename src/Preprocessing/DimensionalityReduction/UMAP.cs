@@ -468,7 +468,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private void OptimizeLayout(double[,] graph, Random random)
     {
         int n = _nSamples;
-        var embedding = _embedding!;
+        var embedding = _embedding;
 
         // Build edge list for efficient sampling
         var edges = new List<(int i, int j, double weight)>();
@@ -517,7 +517,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double distSq = 0;
                 for (int d = 0; d < _nComponents; d++)
                 {
-                    double diff = embedding[i, d] - embedding[j, d];
+                    double diff = (embedding ?? throw new InvalidOperationException("embedding is null where it is required."))[i, d] - embedding[j, d];
                     distSq += diff * diff;
                 }
 
@@ -534,7 +534,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
                 for (int d = 0; d < _nComponents; d++)
                 {
-                    double grad = gradCoeff * (embedding[i, d] - embedding[j, d]);
+                    double grad = gradCoeff * ((embedding ?? throw new InvalidOperationException("embedding is null where it is required."))[i, d] - embedding[j, d]);
                     grad = Math.Max(-4, Math.Min(4, grad)); // Clip gradient
 
                     embedding[i, d] -= alpha * grad;
@@ -551,7 +551,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     distSq = 0;
                     for (int d = 0; d < _nComponents; d++)
                     {
-                        double diff = embedding[i, d] - embedding[k, d];
+                        double diff = (embedding ?? throw new InvalidOperationException("embedding is null where it is required."))[i, d] - embedding[k, d];
                         distSq += diff * diff;
                     }
 
@@ -567,7 +567,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
                     for (int d = 0; d < _nComponents; d++)
                     {
-                        double grad = gradCoeff * (embedding[i, d] - embedding[k, d]);
+                        double grad = gradCoeff * ((embedding ?? throw new InvalidOperationException("embedding is null where it is required."))[i, d] - embedding[k, d]);
                         grad = Math.Max(-4, Math.Min(4, grad)); // Clip gradient
 
                         embedding[i, d] += alpha * grad;

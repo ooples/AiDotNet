@@ -69,7 +69,7 @@ public sealed class Conv3DPackageIntegrationTests : IDisposable
         {
             Assert.True(gradients.TryGetValue(source, out var gradient));
             Assert.NotNull(gradient);
-            Assert.Contains(gradient!.AsSpan().ToArray(), value => Math.Abs(value) > 1e-12);
+            Assert.Contains(gradient.AsSpan().ToArray(), value => Math.Abs(value) > 1e-12);
             Assert.All(gradient.AsSpan().ToArray(), value =>
                 Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
         }

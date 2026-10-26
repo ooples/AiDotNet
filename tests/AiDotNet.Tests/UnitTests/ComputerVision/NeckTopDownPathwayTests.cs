@@ -21,7 +21,7 @@ public class NeckTopDownPathwayTests
 
     private static List<Tensor<double>> Stages()
     {
-        var r = new Random(11);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         var stages = new List<Tensor<double>>();
         for (int i = 0; i < StageChannels.Length; i++)
         {

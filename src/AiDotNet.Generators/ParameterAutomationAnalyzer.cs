@@ -269,8 +269,8 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                     var lowPrecisionBackingNames = new System.Collections.Generic.HashSet<string>(
                         type.GetMembers()
                             .Select(GetTrainableLowPrecisionBacking)
-                            .Where(name => !string.IsNullOrWhiteSpace(name))
-                            .Select(name => name!),
+                            .OfType<string>()
+                            .Where(name => !string.IsNullOrWhiteSpace(name)),
                         System.StringComparer.Ordinal);
                     foreach (var member in type.GetMembers())
                     {
@@ -493,7 +493,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                     ParameterMemberSemanticModel.ClassifyWithRegistrations(
                                         targets[0], registrations);
                                 bool layerAlias = IsLayerLike(memberType) && IsLayerLike(
-                                    ParameterMemberSemanticModel.GetMemberType(targets[0])!);
+                                    (ParameterMemberSemanticModel.GetMemberType(targets[0]) ?? throw new System.InvalidOperationException("ParameterMemberSemanticModel.GetMemberType(targets[0]) is null where it is required.")));
                                 if ((targetClassification.Kind is ParameterMemberSemanticModel.Kind.Unclassified
                                      && !layerAlias)
                                     || targetClassification.Kind is ParameterMemberSemanticModel.Kind.Conflicting

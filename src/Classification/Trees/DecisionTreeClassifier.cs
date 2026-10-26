@@ -506,11 +506,11 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
 
         if (NumOps.Compare(sample[node.FeatureIndex], node.Threshold) <= 0)
         {
-            return TraverseTree(sample, node.Left!);
+            return TraverseTree(sample, (node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")));
         }
         else
         {
-            return TraverseTree(sample, node.Right!);
+            return TraverseTree(sample, (node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")));
         }
     }
 

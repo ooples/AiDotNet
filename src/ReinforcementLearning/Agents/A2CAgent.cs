@@ -349,7 +349,7 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 int actSize = _a2cOptions.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
                 var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
-                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, actionsTensor!);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, (actionsTensor ?? throw new InvalidOperationException("actionsTensor is null where it is required.")));
             }
             else
             {

@@ -78,7 +78,7 @@ public class FeatureUnionIntegrationTests
         var union = new FeatureUnion<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => union.Add("test", null!));
+        Assert.Throws<ArgumentNullException>(() => union.Add("test", global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDataTransformer<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Matrix<double>>>()));
     }
 
     [Fact(Timeout = 120000)]

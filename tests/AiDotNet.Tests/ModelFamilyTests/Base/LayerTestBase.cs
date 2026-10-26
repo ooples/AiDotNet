@@ -159,7 +159,7 @@ public abstract class LayerTestBase<T>
             try { types = assembly.GetTypes(); }
             catch (ReflectionTypeLoadException ex)
             {
-                types = ex.Types.Where(t => t is not null).ToArray()!;
+                types = ex.Types.OfType<Type>().ToArray();
             }
             catch { continue; }
 
@@ -186,7 +186,7 @@ public abstract class LayerTestBase<T>
                     }
                     catch (NotSupportedException) { }
                 }
-                catch { }
+                catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"LayerTestBase: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
             }
         }
 
@@ -548,13 +548,13 @@ public abstract class LayerTestBase<T>
 
         foreach (var word in ShapeConstraintVocabulary)
         {
-            if (message!.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (message.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
         }
 
         // Several image/video validators state their contract as an explicit tensor signature,
         // e.g. "Expected [B,F,3,8,8], got ...". The bracket is what makes this shape-specific;
         // plain "expected" remains insufficient and cannot hide an arbitrary argument failure.
-        return message!.IndexOf("expected [", System.StringComparison.OrdinalIgnoreCase) >= 0
+        return message.IndexOf("expected [", System.StringComparison.OrdinalIgnoreCase) >= 0
             || message.IndexOf("expects [", System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
@@ -785,7 +785,7 @@ public abstract class LayerTestBase<T>
         // the invariant we're testing only has meaning post-resolution.
         using (var probeInput = CreateConformingInput(layer, InputShape, seed: 17))
         {
-            try { layer.Forward(probeInput); } catch { }
+            try { layer.Forward(probeInput); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"LayerTestBase: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
         }
 
         if (layer.ParameterCount == 0) return; // Genuinely non-trainable layers.

@@ -276,7 +276,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     {
         // === Vectorized using IEngine (Phase B: US-GPU-015) ===
         var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        _accumulatedSquaredGradients = (Vector<T>)Engine.Add(_accumulatedSquaredGradients!, gradSquared);
+        _accumulatedSquaredGradients = (Vector<T>)Engine.Add((_accumulatedSquaredGradients ?? throw new InvalidOperationException("_accumulatedSquaredGradients is null where it is required.")), gradSquared);
     }
 
     /// <summary>
@@ -318,7 +318,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
         // Calculate adaptive learning rates: lr / (sqrt(accSqGrad) + eps)
-        var sqrtAccSqGrad = (Vector<T>)Engine.Sqrt(_accumulatedSquaredGradients!);
+        var sqrtAccSqGrad = (Vector<T>)Engine.Sqrt((_accumulatedSquaredGradients ?? throw new InvalidOperationException("_accumulatedSquaredGradients is null where it is required.")));
         var epsilonVec = Vector<T>.CreateDefault(sqrtAccSqGrad.Length, epsilon);
         var denominator = (Vector<T>)Engine.Add(sqrtAccSqGrad, epsilonVec);
         var currentLrVec = Vector<T>.CreateDefault(sqrtAccSqGrad.Length, CurrentLearningRate);
@@ -641,7 +641,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         backend.AdagradUpdate(
             parameters,
             gradients,
-            _gpuAccumulatedGrad!,
+            (_gpuAccumulatedGrad ?? throw new InvalidOperationException("_gpuAccumulatedGrad is null where it is required.")),
             (float)NumOps.ToDouble(CurrentLearningRate),
             (float)_options.Epsilon,
             0.0f, // Adagrad doesn't have weight decay in these options

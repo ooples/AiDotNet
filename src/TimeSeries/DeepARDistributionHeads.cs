@@ -488,7 +488,7 @@ internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, I
         }
 
         // Mean of per-knot pinball terms (keeps the loss scale independent of grid size).
-        return Engine.TensorMultiplyScalar(loss!, NumOps.FromDouble(1.0 / _k));
+        return Engine.TensorMultiplyScalar((loss ?? throw new InvalidOperationException("loss is null where it is required.")), NumOps.FromDouble(1.0 / _k));
     }
 
     public override DeepARPredictiveDist<T> PredictNorm(Tensor<T> hLast, T lastObsNorm)

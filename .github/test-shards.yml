@@ -1525,6 +1525,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.TemporalVAEDecodeChannelTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureLayerAgreementTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.OptionsSeedReassignmentTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.LazyLayerSeedSequenceTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.CallerBuiltLayerSeedingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.StepOnTapeClippingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.NetworkSerializationParameterWidthTests.|

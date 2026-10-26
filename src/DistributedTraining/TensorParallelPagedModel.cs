@@ -529,7 +529,7 @@ internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLa
     // decode (single query) or prefill (causal, multiple queries) kernel, writing the context into context_r.
     private void GpuAttention(int r, int l, int sid, double[] q, double[] k, double[] v, int seqLen, int basePos, double[] context_r)
     {
-        var g = _gpuAttn![r]![l]!;
+        var g = (_gpuAttn ?? throw new InvalidOperationException("_gpuAttn is null where it is required."))[r][l];
         // K/V are the (possibly narrower) KV-head slice; the query is the full query-head slice.
         for (int t = 0; t < seqLen; t++)
         {
@@ -537,21 +537,21 @@ internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLa
             var kf = new float[_localKVDim];
             var vf = new float[_localKVDim];
             for (int d = 0; d < _localKVDim; d++) { kf[d] = (float)k[src + d]; vf[d] = (float)v[src + d]; }
-            g.Append(sid, kf, vf);
+            (g ?? throw new InvalidOperationException("g is null where it is required.")).Append(sid, kf, vf);
         }
 
         if (seqLen == 1)
         {
             var qf = new float[_localDim];
             for (int d = 0; d < _localDim; d++) qf[d] = (float)q[d];
-            var ctx = g.Decode(sid, qf, basePos + 1);
+            var ctx = (g ?? throw new InvalidOperationException("g is null where it is required.")).Decode(sid, qf, basePos + 1);
             for (int d = 0; d < _localDim && d < ctx.Length; d++) context_r[d] = ctx[d];
         }
         else
         {
             var qf = new float[seqLen * _localDim];
             for (int i = 0; i < qf.Length; i++) qf[i] = (float)q[i];
-            var ctx = g.Prefill(sid, qf, seqLen, basePos);
+            var ctx = (g ?? throw new InvalidOperationException("g is null where it is required.")).Prefill(sid, qf, seqLen, basePos);
             for (int i = 0; i < seqLen * _localDim && i < ctx.Length; i++) context_r[i] = ctx[i];
         }
     }

@@ -107,7 +107,7 @@ public class PreprocessingPipelineIntegrationTests
         var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => pipeline.Add("step", null!));
+        Assert.Throws<ArgumentNullException>(() => pipeline.Add("step", global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDataTransformer<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Matrix<double>>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -207,7 +207,7 @@ public class PreprocessingPipelineIntegrationTests
         pipeline.Add(new StandardScaler<double>());
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => pipeline.Fit(null!));
+        Assert.Throws<ArgumentNullException>(() => pipeline.Fit(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -255,7 +255,7 @@ public class PreprocessingPipelineIntegrationTests
         pipeline.Fit(data);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => pipeline.Transform(null!));
+        Assert.Throws<ArgumentNullException>(() => pipeline.Transform(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -339,7 +339,7 @@ public class PreprocessingPipelineIntegrationTests
         pipeline.Add(new StandardScaler<double>());
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => pipeline.FitTransform(null!));
+        Assert.Throws<ArgumentNullException>(() => pipeline.FitTransform(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>()));
     }
 
     #endregion
@@ -561,7 +561,7 @@ public class PreprocessingPipelineIntegrationTests
 
         // Create a 1000x100 matrix
         var data = new double[1000, 100];
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 1000; i++)
         {
             for (int j = 0; j < 100; j++)
@@ -1098,7 +1098,7 @@ public class PreprocessingPipelineIntegrationTests
         var scaler = new StandardScaler<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => scaler.Fit(null!));
+        Assert.Throws<ArgumentNullException>(() => scaler.Fit(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>()));
     }
 
     #endregion

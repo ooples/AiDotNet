@@ -65,7 +65,7 @@ public class VctkDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
 
         var allowed = string.IsNullOrEmpty(_options.SpeakerFilter)
             ? null
-            : new HashSet<string>(_options.SpeakerFilter!.Split(',').Select(s => s.Trim()),
+            : new HashSet<string>((_options.SpeakerFilter ?? throw new InvalidOperationException("_options.SpeakerFilter is null where it is required.")).Split(',').Select(s => s.Trim()),
                 StringComparer.OrdinalIgnoreCase);
 
         // Canonical roots used to defend against symlink/path-escape via untrusted speaker

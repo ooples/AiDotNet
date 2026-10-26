@@ -47,7 +47,7 @@ public class BenchmarkValidationTests
 
         // Create background data centered at origin
         var background = new Matrix<double>(20, NumFeatures);
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 20; i++)
         {
             for (int j = 0; j < NumFeatures; j++)
@@ -298,7 +298,7 @@ public class BenchmarkValidationTests
         Func<Vector<double>, Vector<double>> layerActivationFunc = v =>
         {
             var activations = new double[layerHeight * layerWidth * numChannels];
-            var rand = new Random(42);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < activations.Length; i++)
             {
                 activations[i] = rand.NextDouble(); // Positive activations (after ReLU in CNN)
@@ -310,7 +310,7 @@ public class BenchmarkValidationTests
         Func<Vector<double>, int, Vector<double>> layerGradientFunc = (v, targetClass) =>
         {
             var gradients = new double[layerHeight * layerWidth * numChannels];
-            var rand = new Random(42 + targetClass);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42 + targetClass);
             for (int i = 0; i < gradients.Length; i++)
             {
                 gradients[i] = rand.NextDouble() * 2 - 1; // Can be negative
@@ -463,7 +463,7 @@ public class BenchmarkValidationTests
         // Takes targetClass parameter for IG signature
         Func<Vector<double>, int, Vector<double>> noisyGradientFunc = (v, targetClass) =>
         {
-            var rand = new Random(42 + targetClass);
+            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42 + targetClass);
             var grads = new double[v.Length];
             for (int i = 0; i < v.Length; i++)
             {

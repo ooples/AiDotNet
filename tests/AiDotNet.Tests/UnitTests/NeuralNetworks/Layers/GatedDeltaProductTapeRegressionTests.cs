@@ -56,7 +56,7 @@ public class GatedDeltaProductTapeRegressionTests
             double numerical = (plus - minus) / (2.0 * step);
             strongestMagnitude = Math.Max(strongestMagnitude, Math.Abs(numerical));
 
-            double scale = Math.Max(1.0, Math.Max(Math.Abs(numerical), Math.Abs(analytical![i])));
+            double scale = Math.Max(1.0, Math.Max(Math.Abs(numerical), Math.Abs(analytical[i])));
             double relativeError = Math.Abs(numerical - analytical[i]) / scale;
             if (relativeError >= 1e-3)
                 mismatches.Add(

@@ -20,7 +20,7 @@ public class MissingLayersIntegrationTests
 
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var length = 1;
         foreach (var dim in shape)
         {
@@ -160,7 +160,7 @@ public class MissingLayersIntegrationTests
 
         Assert.Equal(new[] { targetEdges, inputChannels }, output.Shape.ToArray());
         Assert.NotNull(layer.RemainingEdgeIndices);
-        Assert.Equal(targetEdges, layer.RemainingEdgeIndices!.Length);
+        Assert.Equal(targetEdges, layer.RemainingEdgeIndices.Length);
         Assert.NotNull(layer.UpdatedAdjacency);
     }
 

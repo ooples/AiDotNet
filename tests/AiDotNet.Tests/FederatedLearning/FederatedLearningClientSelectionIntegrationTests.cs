@@ -61,7 +61,7 @@ public class FederatedLearningClientSelectionIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.Equal(2, metadata!.RoundsCompleted);
+        Assert.Equal(2, metadata.RoundsCompleted);
         Assert.All(metadata.RoundMetrics, r =>
         {
             Assert.True(r.SelectedClientIds.Count >= 1);

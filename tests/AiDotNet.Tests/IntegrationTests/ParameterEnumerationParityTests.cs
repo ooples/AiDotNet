@@ -441,10 +441,10 @@ public class ParameterEnumerationParityTests
             // int on four, and returning int32 where the signature says int64 is invalid IL.
             var dm = new System.Reflection.Emit.DynamicMethod(
                 "CallBaseParameterCount", typeof(long), new[] { typeof(object) },
-                getter.DeclaringType!, skipVisibility: true);
+                (getter.DeclaringType ?? throw new InvalidOperationException("getter.DeclaringType is null where it is required.")), skipVisibility: true);
             var il = dm.GetILGenerator();
             il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
-            il.Emit(System.Reflection.Emit.OpCodes.Castclass, getter.DeclaringType!);
+            il.Emit(System.Reflection.Emit.OpCodes.Castclass, getter.DeclaringType);
             il.Emit(System.Reflection.Emit.OpCodes.Call, getter);   // NOT callvirt
             if (getter.ReturnType == typeof(int)) il.Emit(System.Reflection.Emit.OpCodes.Conv_I8);
             il.Emit(System.Reflection.Emit.OpCodes.Ret);
@@ -461,10 +461,10 @@ public class ParameterEnumerationParityTests
 
             var dm = new System.Reflection.Emit.DynamicMethod(
                 "CallBaseGetParameters", typeof(object), new[] { typeof(object) },
-                method.DeclaringType!, skipVisibility: true);
+                (method.DeclaringType ?? throw new InvalidOperationException("method.DeclaringType is null where it is required.")), skipVisibility: true);
             var il = dm.GetILGenerator();
             il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
-            il.Emit(System.Reflection.Emit.OpCodes.Castclass, method.DeclaringType!);
+            il.Emit(System.Reflection.Emit.OpCodes.Castclass, method.DeclaringType);
             il.Emit(System.Reflection.Emit.OpCodes.Call, method);   // NOT callvirt
             if (method.ReturnType.IsValueType) il.Emit(System.Reflection.Emit.OpCodes.Box, method.ReturnType);
             il.Emit(System.Reflection.Emit.OpCodes.Ret);
@@ -511,15 +511,15 @@ public class ParameterEnumerationParityTests
             if (invoker is null) { note = "no inherited GetParameters"; return false; }
 
             var baseVec = invoker(instance);
-            var ownVec = instance.GetType()
+            var ownVec = (instance.GetType()
                 .GetMethod("GetParameters", BindingFlags.Public | BindingFlags.Instance,
-                    binder: null, types: Type.EmptyTypes, modifiers: null)!
+                    binder: null, types: Type.EmptyTypes, modifiers: null) ?? throw new InvalidOperationException("instance.GetType() .GetMethod(\"GetParameters\", BindingFlags.Public | BindingF... is null where it is required."))
                 .Invoke(instance, null);
 
             if (baseVec is null || ownVec is null) { note = "null vector"; return false; }
 
-            var lenProp = baseVec.GetType().GetProperty("Length")!;
-            baseLength = Convert.ToInt64(lenProp.GetValue(baseVec));
+            var lenProp = baseVec.GetType().GetProperty("Length");
+            baseLength = Convert.ToInt64((lenProp ?? throw new InvalidOperationException("lenProp is null where it is required.")).GetValue(baseVec));
             long ownLength = Convert.ToInt64(lenProp.GetValue(ownVec));
             if (baseLength != ownLength) { note = $"length {ownLength} vs base {baseLength}"; return false; }
 

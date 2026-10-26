@@ -95,7 +95,7 @@ public class SecureAggregationTests
     {
         var secureAggregation = new SecureAggregation<double>(parameterCount: 1, randomSeed: 123);
 
-        Assert.Throws<ArgumentException>(() => secureAggregation.GeneratePairwiseSecrets(null!));
+        Assert.Throws<ArgumentException>(() => secureAggregation.GeneratePairwiseSecrets(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.List<int>>()));
         Assert.Throws<ArgumentException>(() => secureAggregation.GeneratePairwiseSecrets(new List<int> { 1 }));
     }
 
@@ -153,8 +153,8 @@ public class SecureAggregationTests
         var b = bob.ExportParameters(includePrivateParameters: true);
 
         byte[] platform = alice.DeriveKeyMaterial(bob.PublicKey);
-        byte[] bouncy = AiDotNet.FederatedLearning.Cryptography.P521Sha256Agreement.Derive(a.D!, b.Q.X!, b.Q.Y!);
-        byte[] reverse = AiDotNet.FederatedLearning.Cryptography.P521Sha256Agreement.Derive(b.D!, a.Q.X!, a.Q.Y!);
+        byte[] bouncy = AiDotNet.FederatedLearning.Cryptography.P521Sha256Agreement.Derive((a.D ?? throw new InvalidOperationException("a.D is null where it is required.")), (b.Q.X ?? throw new InvalidOperationException("b.Q.X is null where it is required.")), (b.Q.Y ?? throw new InvalidOperationException("b.Q.Y is null where it is required.")));
+        byte[] reverse = AiDotNet.FederatedLearning.Cryptography.P521Sha256Agreement.Derive((b.D ?? throw new InvalidOperationException("b.D is null where it is required.")), (a.Q.X ?? throw new InvalidOperationException("a.Q.X is null where it is required.")), (a.Q.Y ?? throw new InvalidOperationException("a.Q.Y is null where it is required.")));
 
         Assert.Equal(32, platform.Length);
         Assert.Equal(platform, bouncy);

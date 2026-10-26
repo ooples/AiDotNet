@@ -398,7 +398,7 @@ public partial class SLearner<T> : CausalModelBase<T>
     {
         base.LoadAdditionalModelData(modelDataObj);
         if (modelDataObj["Bias"] is not null)
-            _bias = NumOps.FromDouble(modelDataObj["Bias"]!.ToObject<double>());
+            _bias = NumOps.FromDouble((modelDataObj["Bias"] ?? throw new InvalidOperationException("modelDataObj[\"Bias\"] is null where it is required.")).ToObject<double>());
         if (modelDataObj["Weights"] is Newtonsoft.Json.Linq.JArray weightArr)
         {
             _weights = new Tensor<T>([weightArr.Count]);

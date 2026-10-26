@@ -347,7 +347,7 @@ public class InferenceOptimizerInt8IntegrationTests
     public async Task FromTrained_RejectsNullModel()
     {
         await Task.Yield();
-        Assert.Throws<ArgumentNullException>(() => Quantize(null));
+        Assert.Throws<ArgumentNullException>(() => Quantize(global::AiDotNet.Tests.TestNull.Of<NeuralNetworkBase<float>>()));
     }
 
     [Fact(Timeout = 120000)]
