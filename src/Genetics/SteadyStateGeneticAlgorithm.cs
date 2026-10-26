@@ -66,7 +66,7 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
             }
         }
 
-        return sortedPopulation!;
+        return sortedPopulation;
     }
 
     public override ModelMetadata<T> GetMetaData()

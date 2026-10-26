@@ -28,11 +28,21 @@ public class PipelineStep<T, TInput>
     [JsonProperty]
     public string Name { get; set; }
 
+    // Serialized under the property's name. The deserialization constructor leaves it unset until the JSON fills it.
+    [JsonProperty(nameof(Transformer), TypeNameHandling = TypeNameHandling.Auto)]
+    private IDataTransformer<T, TInput, TInput>? _transformer;
+
     /// <summary>
     /// Gets or sets the transformer for this pipeline step.
     /// </summary>
-    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
-    public IDataTransformer<T, TInput, TInput> Transformer { get; set; }
+    /// <exception cref="InvalidOperationException">The step was deserialized without a transformer.</exception>
+    [JsonIgnore]
+    public IDataTransformer<T, TInput, TInput> Transformer
+    {
+        get => _transformer ?? throw new InvalidOperationException(
+            $"Pipeline step '{Name}' has no transformer; it was deserialized from data that did not include one.");
+        set => _transformer = value;
+    }
 
     /// <summary>
     /// Creates a new pipeline step. Parameterless constructor for deserialization.
@@ -40,7 +50,6 @@ public class PipelineStep<T, TInput>
     public PipelineStep()
     {
         Name = string.Empty;
-        Transformer = null!;
     }
 
     /// <summary>

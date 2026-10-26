@@ -55,7 +55,7 @@ public class FederatedLearningServerOptimizerIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.Equal(optimizerName.ToString(), metadata!.ServerOptimizerUsed);
+        Assert.Equal(optimizerName.ToString(), metadata.ServerOptimizerUsed);
         Assert.Equal(2, metadata.RoundsCompleted);
     }
 

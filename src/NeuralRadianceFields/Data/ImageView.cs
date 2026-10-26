@@ -44,7 +44,7 @@ public sealed class ImageView<T>
     /// using <c>T?</c> because T is unconstrained (may be reference-nullable or value-
     /// nullable) and mixing produces ambiguous overload resolution at call sites.
     /// </summary>
-    public T FocalLength { get; init; } = default!;
+    public T FocalLength { get; init; } = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Optional EXIF metadata bundle (35mm-equivalent focal length in mm + sensor width). When
@@ -66,14 +66,14 @@ public sealed class ImageView<T>
         Tensor<T> photo,
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
-        T focalLength = default!,
+        T? focalLength = default,
         ExifIntrinsics? exif = null,
         LearnedPrior<T>? prior = null)
     {
         Photo          = photo          ?? throw new ArgumentNullException(nameof(photo));
         CameraPosition = cameraPosition ?? throw new ArgumentNullException(nameof(cameraPosition));
         CameraRotation = cameraRotation ?? throw new ArgumentNullException(nameof(cameraRotation));
-        FocalLength    = focalLength;
+        FocalLength    = focalLength ?? AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
         Exif           = exif;
         Prior          = prior;
 

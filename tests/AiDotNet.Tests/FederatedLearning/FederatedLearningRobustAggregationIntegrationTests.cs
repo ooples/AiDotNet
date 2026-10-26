@@ -58,7 +58,7 @@ public class FederatedLearningRobustAggregationIntegrationTests
 
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
-        Assert.Equal(aggregationStrategy == FederatedAggregationStrategy.Rfa ? "RFA" : aggregationStrategy.ToString(), metadata!.AggregationStrategyUsed);
+        Assert.Equal(aggregationStrategy == FederatedAggregationStrategy.Rfa ? "RFA" : aggregationStrategy.ToString(), metadata.AggregationStrategyUsed);
         Assert.True(metadata.RoundsCompleted >= 1);
     }
 

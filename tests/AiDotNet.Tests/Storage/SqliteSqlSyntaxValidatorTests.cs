@@ -68,6 +68,6 @@ public class SqliteSqlSyntaxValidatorTests
     [InlineData(null)]
     public void IsValidSql_EmptyOrNullInput_MatchesGenericFallbackConvention(string? sql)
     {
-        Assert.True(_validator.IsValidSql(sql!));
+        Assert.True(_validator.IsValidSql(sql));
     }
 }

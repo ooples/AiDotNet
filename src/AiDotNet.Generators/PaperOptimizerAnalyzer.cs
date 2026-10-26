@@ -396,7 +396,7 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
     {
         foreach (var named in attribute.NamedArguments.Where(named => named.Key == "Phase" && named.Value.Value is not null))
         {
-            return named.Value.Value.ToString() ?? string.Empty;
+            return (named.Value.Value ?? throw new InvalidOperationException("named.Value.Value is null where it is required.")).ToString() ?? string.Empty;
         }
 
         return string.Empty;

@@ -416,7 +416,7 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
                 return _previousDirection;
             }
 
-            T previousLengthSquared = _previousGradient!.DotProduct(_previousGradient);
+            T previousLengthSquared = (_previousGradient ?? throw new InvalidOperationException("_previousGradient is null where it is required.")).DotProduct(_previousGradient);
             if (!numOps.GreaterThan(previousLengthSquared, numOps.FromDouble(1e-30)))
             {
                 _previousDirection =
@@ -436,7 +436,7 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
             for (int i = 0; i < _size; i++)
             {
                 direction[i] = numOps.Add(
-                    numOps.Negate(gradient[i]), numOps.Multiply(beta, _previousDirection![i]));
+                    numOps.Negate(gradient[i]), numOps.Multiply(beta, (_previousDirection ?? throw new InvalidOperationException("_previousDirection is null where it is required."))[i]));
             }
 
             _previousDirection = direction;

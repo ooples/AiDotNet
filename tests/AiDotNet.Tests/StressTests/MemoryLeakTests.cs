@@ -79,7 +79,7 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
-        using var disposableEngine = engine!;
+        using var disposableEngine = engine;
 
         if (!disposableEngine.SupportsGpu)
         {
@@ -145,7 +145,7 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
-        using var disposableEngine = engine!;
+        using var disposableEngine = engine;
 
         if (!disposableEngine.SupportsGpu)
         {
@@ -202,7 +202,7 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
-        using var disposableEngine = engine!;
+        using var disposableEngine = engine;
 
         if (!disposableEngine.SupportsGpu)
         {
@@ -306,7 +306,7 @@ public class MemoryLeakTests
             return; // GPU not available
         }
 
-        using var disposableEngine = engine!;
+        using var disposableEngine = engine;
 
         if (!disposableEngine.SupportsGpu)
         {

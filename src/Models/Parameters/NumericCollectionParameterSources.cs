@@ -526,7 +526,7 @@ public sealed class KeyedScalarCollectionParameterSource<T, TKey> :
             var key = JsonConvert.DeserializeObject<TKey>(reader.ReadString());
             if (key is null)
                 throw new InvalidDataException($"Keyed parameter topology contains a null key at index {i}.");
-            values!.Add(key, default!);
+            (values ?? throw new InvalidOperationException("values is null where it is required.")).Add(key, MathHelper.GetNumericOperations<T>().Zero);
         }
     }
 }
@@ -675,9 +675,9 @@ public sealed class NestedKeyedScalarCollectionParameterSource<T, TOuterKey, TIn
                 if (innerKey is null)
                     throw new InvalidDataException(
                         $"Nested parameter topology contains a null inner key at {outerIndex}/{innerIndex}.");
-                inner.Add(innerKey, default!);
+                inner.Add(innerKey, MathHelper.GetNumericOperations<T>().Zero);
             }
-            values!.Add(outerKey, inner);
+            (values ?? throw new InvalidOperationException("values is null where it is required.")).Add(outerKey, inner);
         }
     }
 }

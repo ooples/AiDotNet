@@ -122,7 +122,7 @@ public static class ShapeInference
         var candidates = InputLayouts(type)
             .Select(layout => layout.AxesForRank(shape.Count))
             .Where(axes => axes is not null)
-            .Select(axes => axes!)
+            .Select(axes => axes)
             .ToList();
 
         if (candidates.Count == 0) return null;
@@ -130,7 +130,7 @@ public static class ShapeInference
         // Distinct by the axis sequence: two declarations that resolve to the SAME axes at this rank are
         // not an ambiguity, they are the same answer written twice.
         var distinct = candidates
-            .GroupBy(a => string.Join(",", a))
+            .GroupBy(a => string.Join(",", (a ?? throw new InvalidOperationException("a is null where it is required."))))
             .Select(g => g.First())
             .ToList();
 
@@ -138,7 +138,7 @@ public static class ShapeInference
 
         var chosen = distinct[0];
         var named = new Dictionary<TensorAxis, int>();
-        for (int i = 0; i < chosen.Length && i < shape.Count; i++)
+        for (int i = 0; i < (chosen ?? throw new InvalidOperationException("chosen is null where it is required.")).Length && i < shape.Count; i++)
         {
             // A repeated role (two Other axes, say) cannot be addressed unambiguously by name, so the
             // whole naming is refused rather than silently keeping the last one.

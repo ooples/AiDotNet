@@ -73,7 +73,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() =>
-                new FileDocumentStore<float>(3, null));
+                new FileDocumentStore<float>(3, global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.DocumentStores.FileDocumentStoreOptions>()));
         }
 
         [Fact(Timeout = 60000)]

@@ -38,7 +38,7 @@ public class BiaffineNERCloneRegressionTests
         model.SetTrainingMode(false);
 
         var input = new Tensor<double>([8, 32]);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++) input[i] = random.NextDouble();
 
         var expectedLabels = model.Predict(input);

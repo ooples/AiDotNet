@@ -22,7 +22,7 @@ public class VolumeRenderingGradientTests
 
     private static (Tensor<double> Rgb, Tensor<double> Density, double[] Near, double[] Far, double[] Ts) Field(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var rgb = new Tensor<double>(new[] { Rays * Samples, 3 });
         var density = new Tensor<double>(new[] { Rays * Samples, 1 });
         for (int i = 0; i < rgb.Length; i++) rgb[i] = rng.NextDouble();

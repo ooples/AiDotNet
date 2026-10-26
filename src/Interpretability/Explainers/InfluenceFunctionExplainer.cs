@@ -634,8 +634,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         // Public entry points (ComputeInfluence, ComputeAverageInfluence, etc.) call
         // EnsureHvpAvailable first, so by the time we reach this method _hvpFunction
         // is guaranteed non-null. The null-forgiving assert keeps the contract local.
-        var hvp = _hvpFunction!;
-        return hvp(input, target, vector);
+        var hvp = _hvpFunction;
+        return (hvp ?? throw new InvalidOperationException("hvp is null where it is required."))(input, target, vector);
     }
 
     /// <summary>

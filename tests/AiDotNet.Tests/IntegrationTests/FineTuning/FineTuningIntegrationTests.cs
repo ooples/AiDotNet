@@ -395,7 +395,7 @@ public class FineTuningIntegrationTests
         var data = CreateSFTData(SampleCount);
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            sft.FineTuneAsync(null!, data));
+            sft.FineTuneAsync(null, data));
     }
 
     [Fact(Timeout = 120000)]

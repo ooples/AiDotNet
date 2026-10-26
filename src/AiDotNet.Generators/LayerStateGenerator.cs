@@ -126,8 +126,9 @@ public class LayerStateGenerator : IIncrementalGenerator
                 static (node, _) => node is ConstructorDeclarationSyntax c
                     && c.ParameterList.Parameters.Count > 0,
                 static (ctx, _) => Analyze(ctx))
-            .Where(static m => m is not null)
-            .Select(static (m, _) => m!);
+            .SelectMany(static (m, _) => m is null
+                ? ImmutableArray<LayerModel>.Empty
+                : ImmutableArray.Create(m));
 
         context.RegisterSourceOutput(candidates.Collect(), Emit);
     }

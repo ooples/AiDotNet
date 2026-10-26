@@ -205,9 +205,9 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
         for (int r = 0; r < originalCount; r++)
         {
             var row = new Vector<T>(variableCount);
-            for (int c = 0; c < variableCount; c++) row[c] = program.InequalityMatrix![r, c];
+            for (int c = 0; c < variableCount; c++) row[c] = (program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required."))[r, c];
             rows.Add(row);
-            bounds.Add(program.InequalityBounds![r]);
+            bounds.Add((program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."))[r]);
             origin.Add(r);
         }
 
@@ -327,7 +327,7 @@ public sealed class ActiveSetQuadraticProgramSolver<T> : IQuadraticProgramSolver
             int row = variableCount + e;
             for (int c = 0; c < variableCount; c++)
             {
-                T coefficient = program.EqualityMatrix![e, c];
+                T coefficient = (program.EqualityMatrix ?? throw new InvalidOperationException("program.EqualityMatrix is null where it is required."))[e, c];
                 system[row, c] = coefficient;
                 system[c, row] = coefficient;
             }

@@ -49,7 +49,7 @@ public class MedicalASRMechanismTests
 
     private static Tensor<double> Features(int frames = 8, int width = 8, int seed = 4)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>([frames, width]);
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() - 0.5;
         return t;
@@ -177,7 +177,7 @@ public class MedicalASRMechanismTests
 
             var before = model.GetParameters();
             var target = new Tensor<double>(output.Shape.ToArray());
-            var rng = new Random(7);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
             for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
 
             model.Train(input, target);
@@ -193,7 +193,7 @@ public class MedicalASRMechanismTests
     {
         var model = Model();
         var audio = new Tensor<double>([64]);
-        var rng = new Random(11);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         for (int i = 0; i < audio.Length; i++) audio[i] = rng.NextDouble() - 0.5;
 
         var result = model.Transcribe(audio);

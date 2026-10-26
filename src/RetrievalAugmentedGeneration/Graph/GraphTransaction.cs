@@ -290,16 +290,16 @@ public class GraphTransaction<T> : IDisposable
         switch (op.Type)
         {
             case GraphOperationType.AddNode:
-                _wal.LogAddNode(op.Node!);
+                _wal.LogAddNode((op.Node ?? throw new InvalidOperationException("op.Node is null where it is required.")));
                 break;
             case GraphOperationType.AddEdge:
-                _wal.LogAddEdge(op.Edge!);
+                _wal.LogAddEdge((op.Edge ?? throw new InvalidOperationException("op.Edge is null where it is required.")));
                 break;
             case GraphOperationType.RemoveNode:
-                _wal.LogRemoveNode(op.NodeId!);
+                _wal.LogRemoveNode((op.NodeId ?? throw new InvalidOperationException("op.NodeId is null where it is required.")));
                 break;
             case GraphOperationType.RemoveEdge:
-                _wal.LogRemoveEdge(op.EdgeId!);
+                _wal.LogRemoveEdge((op.EdgeId ?? throw new InvalidOperationException("op.EdgeId is null where it is required.")));
                 break;
         }
     }

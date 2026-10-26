@@ -46,7 +46,7 @@ public class SurvivalAnalysisExtendedIntegrationTests
     private static (Matrix<double> x, Vector<double> times, Vector<int> events) CreateCovariateData(
         int n, double riskFactor, int seed)
     {
-        var rand = new Random(seed);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(n, 2);
         var times = new Vector<double>(n);
         var events = new Vector<int>(n);

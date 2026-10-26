@@ -64,7 +64,7 @@ public class CROWNVerificationTests
     public async Task Constructor_WithNullOptions_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new CROWNVerification<double, Vector<double>, Vector<double>>(null!));
+        Assert.Throws<ArgumentNullException>(() => new CROWNVerification<double, Vector<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.CertifiedDefenseOptions<double>>()));
     }
 
     #endregion
@@ -79,7 +79,7 @@ public class CROWNVerificationTests
         var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => crown.CertifyPrediction(null!, mockModel));
+        Assert.Throws<ArgumentNullException>(() => crown.CertifyPrediction(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), mockModel));
     }
 
     [Fact(Timeout = 60000)]
@@ -90,7 +90,7 @@ public class CROWNVerificationTests
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => crown.CertifyPrediction(input, null!));
+        Assert.Throws<ArgumentNullException>(() => crown.CertifyPrediction(input, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -197,7 +197,7 @@ public class CROWNVerificationTests
         var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => crown.CertifyBatch(null!, mockModel));
+        Assert.Throws<ArgumentNullException>(() => crown.CertifyBatch(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>[]>(), mockModel));
     }
 
     [Fact(Timeout = 60000)]
@@ -208,7 +208,7 @@ public class CROWNVerificationTests
         var inputs = new Vector<double>[] { new Vector<double>(3), new Vector<double>(3) };
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => crown.CertifyBatch(inputs, null!));
+        Assert.Throws<ArgumentNullException>(() => crown.CertifyBatch(inputs, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -254,7 +254,7 @@ public class CROWNVerificationTests
         var mockModel = new MockFullModel(3, 2);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => crown.ComputeCertifiedRadius(null!, mockModel));
+        Assert.Throws<ArgumentNullException>(() => crown.ComputeCertifiedRadius(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), mockModel));
     }
 
     [Fact(Timeout = 60000)]
@@ -265,7 +265,7 @@ public class CROWNVerificationTests
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => crown.ComputeCertifiedRadius(input, null!));
+        Assert.Throws<ArgumentNullException>(() => crown.ComputeCertifiedRadius(input, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -326,7 +326,7 @@ public class CROWNVerificationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            crown.EvaluateCertifiedAccuracy(null!, labels, mockModel, 0.1));
+            crown.EvaluateCertifiedAccuracy(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>[]>(), labels, mockModel, 0.1));
     }
 
     [Fact(Timeout = 60000)]
@@ -339,7 +339,7 @@ public class CROWNVerificationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            crown.EvaluateCertifiedAccuracy(testData, null!, mockModel, 0.1));
+            crown.EvaluateCertifiedAccuracy(testData, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>[]>(), mockModel, 0.1));
     }
 
     [Fact(Timeout = 60000)]
@@ -352,7 +352,7 @@ public class CROWNVerificationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            crown.EvaluateCertifiedAccuracy(testData, labels, null!, 0.1));
+            crown.EvaluateCertifiedAccuracy(testData, labels, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Vector<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), 0.1));
     }
 
     [Fact(Timeout = 60000)]
@@ -441,7 +441,7 @@ public class CROWNVerificationTests
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => crown.Deserialize(null!));
+        Assert.Throws<ArgumentNullException>(() => crown.Deserialize(global::AiDotNet.Tests.TestNull.Of<byte[]>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -488,7 +488,7 @@ public class CROWNVerificationTests
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => crown.SaveModel(null!));
+        Assert.Throws<ArgumentException>(() => crown.SaveModel(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -508,7 +508,7 @@ public class CROWNVerificationTests
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => crown.LoadModel(null!));
+        Assert.Throws<ArgumentException>(() => crown.LoadModel(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]

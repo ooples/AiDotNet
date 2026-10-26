@@ -32,7 +32,7 @@ public sealed class GpuPagedAttentionKernelTests
         const int heads = 2, headDim = 4, blockSize = 16, seqLen = 5;
         int dim = heads * headDim;
         float scale = 1.0f / MathF.Sqrt(headDim);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         var cache = new DevicePagedKVCache(backend, maxBlocks: 8, blockSize: blockSize, heads: heads, headDim: headDim);
         int seqId = 1;

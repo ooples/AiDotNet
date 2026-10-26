@@ -595,7 +595,7 @@ public class ScalerIntegrationTests
 
         // Assert - Median of [1,2,3,4,5] is 3
         Assert.NotNull(scaler.Median);
-        Assert.True(Math.Abs(scaler.Median![0] - 3.0) < Tolerance);
+        Assert.True(Math.Abs(scaler.Median[0] - 3.0) < Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -672,8 +672,8 @@ public class ScalerIntegrationTests
 
         // Assert - Max abs of column 0 is 5, column 1 is 20
         Assert.NotNull(scaler.MaxAbsolute);
-        Assert.True(Math.Abs(scaler.MaxAbsolute![0] - 5.0) < Tolerance);
-        Assert.True(Math.Abs(scaler.MaxAbsolute![1] - 20.0) < Tolerance);
+        Assert.True(Math.Abs(scaler.MaxAbsolute[0] - 5.0) < Tolerance);
+        Assert.True(Math.Abs(scaler.MaxAbsolute[1] - 20.0) < Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -827,7 +827,7 @@ public class ScalerIntegrationTests
         var scaler = new StandardScaler<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => scaler.Fit(null!));
+        Assert.Throws<ArgumentNullException>(() => scaler.Fit(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Matrix<double>>()));
     }
 
     [Fact(Timeout = 120000)]

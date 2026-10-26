@@ -57,11 +57,11 @@ public sealed class GraphCaptureCompatibilityTests
     private static object DifferentValue(Type type, object? current)
     {
         if (type == typeof(bool))
-            return !(bool)current!;
+            return !(bool)(current ?? throw new InvalidOperationException("current is null where it is required."));
         if (type == typeof(int))
-            return (int)current! + 7;
+            return (int)(current ?? throw new InvalidOperationException("current is null where it is required.")) + 7;
         if (type == typeof(float))
-            return (float)current! + 0.25f;
+            return (float)(current ?? throw new InvalidOperationException("current is null where it is required.")) + 0.25f;
         if (type.IsEnum)
         {
             var values = Enum.GetValues(type);

@@ -157,9 +157,9 @@ public class Pr2010ReviewFollowUpTests
         Assert.Equal(3, nonlinearCopy.SqpIterations);
         Assert.Equal(0.5, nonlinearCopy.StepSize);
         Assert.Equal(1e-7, nonlinearCopy.Tolerance);
-        Assert.Equal(-2.0, nonlinearCopy.InputLowerBounds![0]);
-        Assert.Equal(2.0, nonlinearCopy.InputUpperBounds![0]);
-        Assert.Equal(1.0, nonlinearCopy.TerminalCost![0, 0]);
+        Assert.Equal(-2.0, (nonlinearCopy.InputLowerBounds ?? throw new InvalidOperationException("nonlinearCopy.InputLowerBounds is null where it is required."))[0]);
+        Assert.Equal(2.0, (nonlinearCopy.InputUpperBounds ?? throw new InvalidOperationException("nonlinearCopy.InputUpperBounds is null where it is required."))[0]);
+        Assert.Equal(1.0, (nonlinearCopy.TerminalCost ?? throw new InvalidOperationException("nonlinearCopy.TerminalCost is null where it is required."))[0, 0]);
         Assert.False(nonlinearCopy.WarmStart);
     }
 
@@ -299,8 +299,8 @@ public class Pr2010ReviewFollowUpTests
         bounds[0] = 99.0;
 
         Assert.Equal(1.0, program.Objective[0]);
-        Assert.Equal(3.0, program.InequalityMatrix![0, 0]);
-        Assert.Equal(4.0, program.InequalityBounds![0]);
+        Assert.Equal(3.0, (program.InequalityMatrix ?? throw new InvalidOperationException("program.InequalityMatrix is null where it is required."))[0, 0]);
+        Assert.Equal(4.0, (program.InequalityBounds ?? throw new InvalidOperationException("program.InequalityBounds is null where it is required."))[0]);
         Assert.Throws<ArgumentException>(() => new LinearProgram<double>(
             V(1.0), lowerBounds: V(double.PositiveInfinity)));
         Assert.Throws<ArgumentException>(() => new LinearProgram<double>(
@@ -413,7 +413,7 @@ public class Pr2010ReviewFollowUpTests
         var solution = new InteriorPointSolver<double>().Solve(program);
 
         Assert.Equal(LinearProgramStatus.Optimal, solution.Status);
-        Assert.Equal(-1.0, solution.Solution![0], 5);
+        Assert.Equal(-1.0, (solution.Solution ?? throw new InvalidOperationException("solution.Solution is null where it is required."))[0], 5);
     }
 
     [Fact(Timeout = 120000)]
@@ -439,7 +439,7 @@ public class Pr2010ReviewFollowUpTests
         var solution = new BranchAndBoundSolver<decimal>().Solve(program);
 
         Assert.Equal(LinearProgramStatus.Optimal, solution.Status);
-        Assert.Equal(0m, solution.Solution![0]);
+        Assert.Equal(0m, (solution.Solution ?? throw new InvalidOperationException("solution.Solution is null where it is required."))[0]);
     }
 
     [Fact(Timeout = 120000)]

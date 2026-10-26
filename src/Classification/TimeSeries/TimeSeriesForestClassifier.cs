@@ -233,11 +233,11 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
                 votes[c] = 0;
             }
 
-            foreach (var tree in _trees!)
+            foreach (var tree in (_trees ?? throw new InvalidOperationException("_trees is null where it is required.")))
             {
                 var features = ExtractIntervalFeaturesForSample(sequences, i,
                     tree.IntervalStart, tree.IntervalEnd, tree.ChannelIdx);
-                var pred = PredictTree(tree.Root!, features);
+                var pred = PredictTree((tree.Root ?? throw new InvalidOperationException("tree.Root is null where it is required.")), features);
                 int classIdx = GetClassIndexFromLabel(pred);
                 if (classIdx >= 0)
                 {
@@ -276,11 +276,11 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         {
             var voteCounts = new double[NumClasses];
 
-            foreach (var tree in _trees!)
+            foreach (var tree in (_trees ?? throw new InvalidOperationException("_trees is null where it is required.")))
             {
                 var features = ExtractIntervalFeaturesForSample(sequences, i,
                     tree.IntervalStart, tree.IntervalEnd, tree.ChannelIdx);
-                var pred = PredictTree(tree.Root!, features);
+                var pred = PredictTree((tree.Root ?? throw new InvalidOperationException("tree.Root is null where it is required.")), features);
                 int classIdx = GetClassIndexFromLabel(pred);
                 if (classIdx >= 0)
                 {
@@ -712,11 +712,11 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         double value = NumOps.ToDouble(features[node.FeatureIndex]);
         if (value <= node.Threshold)
         {
-            return PredictTree(node.Left!, features);
+            return PredictTree((node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")), features);
         }
         else
         {
-            return PredictTree(node.Right!, features);
+            return PredictTree((node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")), features);
         }
     }
 

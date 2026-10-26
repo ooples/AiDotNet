@@ -89,7 +89,7 @@ public class PpoMaskedUpdateTests
             _ => OneLegal(),
             afterSelect: mask =>
             {
-                for (var i = 0; i < mask!.Length; i++)
+                for (var i = 0; i < (mask ?? throw new InvalidOperationException("mask is null where it is required.")).Length; i++)
                 {
                     mask[i] = true;
                 }

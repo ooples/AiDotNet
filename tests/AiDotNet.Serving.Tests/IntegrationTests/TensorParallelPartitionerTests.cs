@@ -99,7 +99,7 @@ public sealed class TensorParallelPartitionerTests
         int[] singleRef = ArgmaxPerPosition(model.Predict(single));
         var tpSingle = TensorParallelPartitioner<double>.TryBuild(model, worldSize: 2, blockSize: 16, numBlocks: 64, out _);
         Assert.NotNull(tpSingle);
-        for (int r = 0; r < tpSingle!.RankCaches.Length; r++) tpSingle.RankCaches[r].AllocateSequence(2, 1);
+        for (int r = 0; r < tpSingle.RankCaches.Length; r++) tpSingle.RankCaches[r].AllocateSequence(2, 1);
         int[] singleTp = ArgmaxPerPosition(tpSingle.PredictWithContext(single, new InferenceForwardContext(sequenceId: 2, position: 0)));
         Assert.Equal(singleRef, singleTp);
 
@@ -116,7 +116,7 @@ public sealed class TensorParallelPartitionerTests
             var tp = TensorParallelPartitioner<double>.TryBuild(model, worldSize, blockSize: 16, numBlocks: 64, out var reason);
             Assert.True(tp is not null, $"partitioner should recognize the transformer stack for ws={worldSize} (reason: {reason})");
 
-            for (int r = 0; r < tp!.RankCaches.Length; r++) tp.RankCaches[r].AllocateSequence(1, prompt.Shape[1]);
+            for (int r = 0; r < tp.RankCaches.Length; r++) tp.RankCaches[r].AllocateSequence(1, prompt.Shape[1]);
             var ctx = new InferenceForwardContext(sequenceId: 1, position: 0);
             int[] tpArgmax = ArgmaxPerPosition(tp.PredictWithContext(prompt, ctx));
 

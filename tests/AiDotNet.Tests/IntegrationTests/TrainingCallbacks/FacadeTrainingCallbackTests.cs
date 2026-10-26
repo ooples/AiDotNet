@@ -54,7 +54,7 @@ public class FacadeTrainingCallbackTests
 
     private static (Tensor<float> x, Tensor<float> y) BuildData()
     {
-        var rng = new System.Random(1234);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1234);
         var x = new Tensor<float>(new[] { N, InDim });
         var y = new Tensor<float>(new[] { N, 1 });
         for (int i = 0; i < N; i++)
@@ -175,7 +175,7 @@ public class FacadeTrainingCallbackTests
         Assert.Equal(2, epochEndCount); // epoch 0 (continue) + epoch 1 (abort)
         Assert.True(result.EarlyStopTriggered);
         Assert.NotNull(result.StopReason);
-        Assert.Contains("abort", result.StopReason!, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("abort", result.StopReason, System.StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact(Timeout = 120000)]
@@ -200,7 +200,7 @@ public class FacadeTrainingCallbackTests
         Assert.NotNull(result);
         Assert.True(result.EarlyStopTriggered, "NaN training should be aborted by HealthMonitorCallback.");
         Assert.NotNull(health.AbortReason);
-        Assert.Contains("NaN", health.AbortReason!, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("NaN", health.AbortReason, System.StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(result.StopReason);
     }
 
@@ -259,7 +259,7 @@ public class FacadeTrainingCallbackTests
         // well before maxEpochs. With plateau LR reductions enabled, each reduction grants a fresh patience
         // window, so training must run STRICTLY MORE epochs before it finally gives up.
         var (x, y) = BuildData();
-        var noise = new System.Random(99);
+        var noise = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
         for (int i = 0; i < N; i++) y[i, 0] = (float)(noise.NextDouble() * 2 - 1);
 
         int epochsBaseline = 0;
@@ -297,7 +297,7 @@ public class FacadeTrainingCallbackTests
 
     private static (Tensor<float> x, Tensor<float> y, int[] labels) BuildMajorityData(int n, int seed)
     {
-        var rng = new System.Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<float>(new[] { n, ProbeCtx });
         var y = new Tensor<float>(new[] { n, ProbeV });
         var labels = new int[n];
@@ -325,7 +325,7 @@ public class FacadeTrainingCallbackTests
         {
             var xi = new Tensor<float>(new[] { 1, ProbeCtx });
             for (int c = 0; c < ProbeCtx; c++) xi[0, c] = vx[i, c];
-            var pred = predMethod!.Invoke(result, new object[] { xi }) as Tensor<float>;
+            var pred = predMethod.Invoke(result, new object[] { xi }) as Tensor<float>;
             if (pred is null) continue;
             var flat = pred.ToArray();
             int off = System.Math.Max(0, flat.Length - ProbeV);
@@ -385,7 +385,7 @@ public class FacadeTrainingCallbackTests
         Assert.True(losses.Count >= 2, $"expected per-epoch loss stream, got {losses.Count}");
         Assert.All(losses, l => Assert.False(double.IsNaN(l) || double.IsInfinity(l)));
 
-        double accAfter = HeldOutAccuracy(result!, vx, vlabels);
+        double accAfter = HeldOutAccuracy(result, vx, vlabels);
         double chance = 1.0 / ProbeV;
         // REAL learning: held-out accuracy clearly beats chance AND clearly beats the untrained baseline.
         Assert.True(accAfter > 0.50,
@@ -416,7 +416,7 @@ public class FacadeTrainingCallbackTests
             .BuildAsync();
 
         Assert.NotNull(result);
-        double accAfter = HeldOutAccuracy(result!, vx, vlabels);
+        double accAfter = HeldOutAccuracy(result, vx, vlabels);
         Assert.True(accAfter > 0.50,
             $"direct-path transformer did not learn the held-out task: acc={accAfter:F4} (chance={1.0 / ProbeV:F4})");
         Assert.True(accAfter > accBefore + 0.20,
@@ -438,7 +438,7 @@ public class FacadeTrainingCallbackTests
         // 2.0 > 1.0 + 1.0 * 0.5  =>  diverging; must return false and record a "diverging" reason.
         Assert.False(health.OnEpochEnd(Progress(3, 2.0f)));
         Assert.NotNull(health.AbortReason);
-        Assert.Contains("diverging", health.AbortReason!, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("diverging", health.AbortReason, System.StringComparison.OrdinalIgnoreCase);
     }
 
     private static TrainingProgress<float> Progress(int epoch, float loss) =>
@@ -456,7 +456,7 @@ public class FacadeTrainingCallbackTests
         // throwing, which must fail CLOSED (return false) rather than be treated as healthy.
         Assert.False(health.OnEpochEnd(Progress(0, 1.0f)));
         Assert.NotNull(health.AbortReason);
-        Assert.Contains("health check failed", health.AbortReason!, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("health check failed", health.AbortReason, System.StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact(Timeout = 120000)]
@@ -491,7 +491,7 @@ public class FacadeTrainingCallbackTests
             // Mixed-precision status is populated and reports that FP16 engaged.
             Assert.False(string.IsNullOrEmpty(result.MixedPrecisionStatus));
             Assert.True(result.MixedPrecisionEngaged, $"FP16 should have engaged; status='{result.MixedPrecisionStatus}'.");
-            Assert.Contains("engaged", result.MixedPrecisionStatus!, System.StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("engaged", result.MixedPrecisionStatus, System.StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

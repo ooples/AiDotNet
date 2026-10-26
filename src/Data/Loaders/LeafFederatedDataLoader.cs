@@ -57,7 +57,7 @@ public sealed class LeafFederatedDataLoader<T> :
         get
         {
             EnsureLoaded();
-            return _clientData!;
+            return (_clientData ?? throw new InvalidOperationException("_clientData is null where it is required."));
         }
     }
 
@@ -69,7 +69,7 @@ public sealed class LeafFederatedDataLoader<T> :
         get
         {
             EnsureLoaded();
-            return _clientIdToUserId!;
+            return (_clientIdToUserId ?? throw new InvalidOperationException("_clientIdToUserId is null where it is required."));
         }
     }
 
@@ -81,7 +81,7 @@ public sealed class LeafFederatedDataLoader<T> :
         get
         {
             EnsureLoaded();
-            return _trainSplit!;
+            return (_trainSplit ?? throw new InvalidOperationException("_trainSplit is null where it is required."));
         }
     }
 
@@ -163,17 +163,17 @@ public sealed class LeafFederatedDataLoader<T> :
     {
         EnsureLoaded();
 
-        var matrix = LoadedFeatures!;
-        var vector = LoadedLabels!;
+        var matrix = LoadedFeatures;
+        var vector = LoadedLabels;
 
-        var batchX = new Matrix<T>(indices.Length, matrix.Columns);
+        var batchX = new Matrix<T>(indices.Length, (matrix ?? throw new InvalidOperationException("matrix is null where it is required.")).Columns);
         var batchY = new Vector<T>(indices.Length);
 
         for (int i = 0; i < indices.Length; i++)
         {
             int rowIndex = indices[i];
             batchX.SetRow(i, matrix.GetRow(rowIndex));
-            batchY[i] = vector[rowIndex];
+            batchY[i] = (vector ?? throw new InvalidOperationException("vector is null where it is required."))[rowIndex];
         }
 
         return (batchX, batchY);
@@ -213,17 +213,17 @@ public sealed class LeafFederatedDataLoader<T> :
     {
         EnsureLoaded();
 
-        var fullX = LoadedFeatures!;
-        var fullY = LoadedLabels!;
+        var fullX = LoadedFeatures;
+        var fullY = LoadedLabels;
 
-        var subsetX = new Matrix<T>(indices.Length, fullX.Columns);
+        var subsetX = new Matrix<T>(indices.Length, (fullX ?? throw new InvalidOperationException("fullX is null where it is required.")).Columns);
         var subsetY = new Vector<T>(indices.Length);
 
         for (int i = 0; i < indices.Length; i++)
         {
             int rowIndex = indices[i];
             subsetX.SetRow(i, fullX.GetRow(rowIndex));
-            subsetY[i] = fullY[rowIndex];
+            subsetY[i] = (fullY ?? throw new InvalidOperationException("fullY is null where it is required."))[rowIndex];
         }
 
         return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(subsetX, subsetY);

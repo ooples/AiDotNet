@@ -44,7 +44,7 @@ public class Florence2BehaviourTests
 
     private static Tensor<double> Image(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var image = new Tensor<double>(new[] { 3, 64, 64 });
         for (int i = 0; i < image.Length; i++) image[i] = rng.NextDouble();
         return image;
@@ -52,7 +52,7 @@ public class Florence2BehaviourTests
 
     private static Tensor<double> Random2D(int rows, int cols, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(new[] { rows, cols });
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() - 0.5;
         return t;
@@ -137,7 +137,7 @@ public class Florence2BehaviourTests
         // Position embeddings are added before the mean, so mean(x + pos) = mean(x) + mean(pos): swapping two
         // positions' features leaves the first token alone and moves the per-position tokens.
         using var projector = new Florence2ProjectorLayer<double>(4, 6, 2);
-        var rng = new Random(9);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9);
         using var map = new Tensor<double>(new[] { 4, 2, 2 });
         for (int i = 0; i < map.Length; i++) map[i] = rng.NextDouble() - 0.5;
         using var swapped = map.Clone();

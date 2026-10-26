@@ -23,7 +23,7 @@ public class CoreLayersIntegrationTests
     /// </summary>
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var length = 1;
         foreach (var dim in shape) length *= dim;
         var flatData = new float[length];
@@ -756,7 +756,7 @@ public class CoreLayersIntegrationTests
 
         // Create input with positive and negative values
         var input = new Tensor<float>([2, 8, 16]);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
             input[i] = (float)(random.NextDouble() * 2 - 1); // [-1, 1]

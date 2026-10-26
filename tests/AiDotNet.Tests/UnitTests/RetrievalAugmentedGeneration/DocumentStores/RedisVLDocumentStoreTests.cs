@@ -103,7 +103,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             var index = "v_idx_" + Guid.NewGuid().ToString("N").Substring(0, 8);
             using var store = new RedisVLDocumentStore<float>(
-                conn!, index, vectorDimension: 3, DistanceMetricType.Cosine,
+                conn, index, vectorDimension: 3, DistanceMetricType.Cosine,
                 filterableFields: new[]
                 {
                     new RedisVectorField("category", RedisVectorFieldType.Tag),
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                     new Dictionary<string, object> { ["author"] = "jones" }).ToList();
                 Assert.All(byAuthor, d => Assert.Equal("jones", d.Metadata["author"].ToString()));
 
-                Assert.Equal("beta", store.GetById("b")!.Content);
+                Assert.Equal("beta", (store.GetById("b") ?? throw new InvalidOperationException("store.GetById(\"b\") is null where it is required.")).Content);
                 Assert.True(store.Remove("b"));
                 Assert.Equal(2, store.DocumentCount);
                 Assert.Equal(2, store.GetAll().Count());

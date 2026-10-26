@@ -286,7 +286,7 @@ public class ScalerMathTests
     {
         // Create data with known statistical properties
         // Column 0: range [1, 10], Column 1: range [-5, 5], Column 2: range [100, 200]
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 50;
         var data = new Matrix<double>(n, 3);
         for (int i = 0; i < n; i++)
@@ -300,7 +300,7 @@ public class ScalerMathTests
 
     private static Matrix<double> CreateDataWithOutliers()
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 50;
         var data = new Matrix<double>(n, 2);
         for (int i = 0; i < n - 2; i++)

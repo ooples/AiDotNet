@@ -209,7 +209,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            attack.GenerateAdversarialExample(null!, label, model));
+            attack.GenerateAdversarialExample(null, label, model));
     }
 
     [Fact(Timeout = 120000)]
@@ -223,7 +223,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            attack.GenerateAdversarialExample(input, null!, model));
+            attack.GenerateAdversarialExample(input, null, model));
     }
 
     [Fact(Timeout = 120000)]
@@ -237,7 +237,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            attack.GenerateAdversarialExample(input, label, null!));
+            attack.GenerateAdversarialExample(input, label, null));
     }
 
     #endregion
@@ -613,7 +613,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            defense.ApplyDefense(null!, labels, model));
+            defense.ApplyDefense(null, labels, model));
     }
 
     [Fact(Timeout = 120000)]
@@ -796,7 +796,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            smoothing.CertifyPrediction(null!, model));
+            smoothing.CertifyPrediction(null, model));
     }
 
     [Fact(Timeout = 120000)]
@@ -809,7 +809,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            smoothing.CertifyPrediction(input, null!));
+            smoothing.CertifyPrediction(input, null));
     }
 
     #endregion
@@ -1318,7 +1318,7 @@ public class AdversarialRobustnessIntegrationTests
         var filter = new SafetyFilter<double>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => filter.ValidateInput(null!));
+        Assert.Throws<ArgumentNullException>(() => filter.ValidateInput(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -1329,7 +1329,7 @@ public class AdversarialRobustnessIntegrationTests
         var filter = new SafetyFilter<double>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => filter.FilterOutput(null!));
+        Assert.Throws<ArgumentNullException>(() => filter.FilterOutput(null));
     }
 
     #endregion
@@ -1480,7 +1480,7 @@ public class AdversarialRobustnessIntegrationTests
         var classifier = new RuleBasedContentClassifier<double>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => classifier.Classify(null!));
+        Assert.Throws<ArgumentNullException>(() => classifier.Classify(null));
     }
 
     [Fact(Timeout = 120000)]

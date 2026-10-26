@@ -472,7 +472,7 @@ public class VideoExtendedIntegrationTests
         var clip = MakeClip(numFrames: 3, seed: 3);
         _ = model.EnhanceVideo(clip);
         Assert.NotNull(frame0AlignInput);
-        var baselineSlice = ExtractSecondOrderSlice(frame0AlignInput!);
+        var baselineSlice = ExtractSecondOrderSlice(frame0AlignInput);
 
         frame0AlignInput = null;
         var perturbed = new Tensor<double>([3, 3, SecondOrderHW, SecondOrderHW]);
@@ -482,7 +482,7 @@ public class VideoExtendedIntegrationTests
         for (int i = 2 * frameStride; i < 3 * frameStride; i++) ps[i] += 0.5;
         _ = model.EnhanceVideo(perturbed);
         Assert.NotNull(frame0AlignInput);
-        var changedSlice = ExtractSecondOrderSlice(frame0AlignInput!);
+        var changedSlice = ExtractSecondOrderSlice(frame0AlignInput);
 
         double maxDelta = 0.0;
         for (int i = 0; i < baselineSlice.Length; i++)

@@ -75,7 +75,7 @@ public class ReptileTrainerTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(null!));
+            new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.MetaLearning.Options.ReptileOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>()));
     }
 
     #endregion
@@ -123,7 +123,7 @@ public class ReptileTrainerTests
         var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(null!));
+        Assert.Throws<ArgumentException>(() => algorithm.MetaTrain(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Data.Structures.TaskBatch<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -165,7 +165,7 @@ public class ReptileTrainerTests
         var algorithm = new ReptileAlgorithm<double, Tensor<double>, Tensor<double>>(options);
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
+        Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IMetaLearningTask<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>()));
     }
 
     #endregion

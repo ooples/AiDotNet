@@ -88,7 +88,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     {
         await Task.Yield();
 
-        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_diff1650.txt"), s + System.Environment.NewLine); } catch { } }
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_diff1650.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
 
         // The AiDotNet test harness defaults to CpuEngine; explicitly auto-detect/activate the GPU so this
         // test actually exercises the CUDA deferred path (set AIDOTNET_DIRECTGPU_BACKENDS=cuda to constrain
@@ -209,7 +209,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
                 var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
                 if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; }
             }
-            catch { }
+            catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
             if (!isCuda) return;
 
             var sink = new System.Collections.Concurrent.ConcurrentQueue<(string section, double ms)>();
@@ -226,7 +226,8 @@ public class DiffusionGpuExecutionGraphFallbackTests
             var totals = new System.Collections.Generic.Dictionary<string, (double ms, int n)>();
             foreach (var (section, ms) in sink)
             {
-                var key = System.Text.RegularExpressions.Regex.Replace(section, @"\[\d+\]", "");
+                var key = System.Text.RegularExpressions.Regex.Replace(
+                    section, @"\[\d+\]", "", System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
                 var cur = totals.TryGetValue(key, out var v) ? v : (0.0, 0);
                 totals[key] = (cur.Item1 + ms, cur.Item2 + 1);
             }
@@ -235,7 +236,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
             foreach (var kv in System.Linq.Enumerable.OrderByDescending(totals, k => k.Value.ms))
                 sb.AppendLine($"{kv.Key,-24} {kv.Value.ms,9:F2} ms  {100 * kv.Value.ms / grand,5:F1}%  (n={kv.Value.n})");
             sb.AppendLine($"{"TOTAL",-24} {grand,9:F2} ms");
-            try { System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_section_profile.txt"), sb.ToString()); } catch { }
+            try { System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_section_profile.txt"), sb.ToString()); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
         }
         finally { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = prevEngine; }
     }
@@ -253,7 +254,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
                 var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
                 if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; }
             }
-            catch { }
+            catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
             if (!isCuda) return;
 
             const int seed = 42;
@@ -353,14 +354,14 @@ public class DiffusionGpuExecutionGraphFallbackTests
     {
         var hb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend;
         if (hb is null || !hb.SupportsHgemm || !hb.Fp16Im2colAvailable) return; // no FP16 GEMM / no im2col kernel here
-        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
 
         double worstRelL2 = 0;
         void Check(int inC, int outC, int hw)
         {
             int kh = 3, kw = 3, stride = 1, pad = 1, dil = 1;
             int oh = hw, ow = hw, N = oh * ow, K = inC * kh * kw, M = outC;
-            var rnd = new System.Random(7);
+            var rnd = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
             var inA = new float[inC * hw * hw]; var wA = new float[outC * inC * kh * kw];
             for (int i = 0; i < inA.Length; i++) inA[i] = (float)(rnd.NextDouble() - 0.5);
             for (int i = 0; i < wA.Length; i++) wA[i] = (float)(rnd.NextDouble() - 0.5) * 0.2f;
@@ -405,7 +406,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     public async Task Fp16Conv_TrajectoryMatchesFp32_OnCuda()
     {
         await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
-        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
 
         var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var prevOverride = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride;
@@ -417,7 +418,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
                 var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
                 if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; }
             }
-            catch { }
+            catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
             if (!isCuda) return;
             // FP16 conv engages only on the resident capture path; that path is the predictor's CUDA-graph stream
             // capture (AIDOTNET_DIFFUSION_CUDA_GRAPH=1, a static read at predictor load). Without it there is no
@@ -502,11 +503,11 @@ public class DiffusionGpuExecutionGraphFallbackTests
         {
             bool isCuda = false;
             try { var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine(); if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; } }
-            catch { }
+            catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
             if (!isCuda) return;
             if (System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") != "1") return;
 
-            void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
+            void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
             var shp = new[] { 1, 3, 16, 16 };
             // FP32 reference (also materializes the lazy weights so the Clone copies real weights).
             // 2 resolutions + attention at the downsampled level → exercises downsample/upsample/concat/attention
@@ -547,9 +548,9 @@ public class DiffusionGpuExecutionGraphFallbackTests
         try { be = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!be.IsAvailable) return; }
         catch { return; }
         if (!be.Fp16GroupNormSwishAvailable || !be.Fp16BroadcastAddChannelAvailable || !be.Fp16Im2colFromFp16Available || !be.Fp16HwIm2colAvailable) return;
-        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
         static double RelL2(float[] r, float[] g) { double sd = 0, sr = 0; for (int i = 0; i < r.Length; i++) { double d = (double)r[i] - g[i]; sd += d * d; sr += (double)r[i] * r[i]; } return System.Math.Sqrt(sd / System.Math.Max(sr, 1e-12)); }
-        var rnd = new System.Random(7);
+        var rnd = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
 
         // groupnorm-swish
         { int n = 2, c = 16, sp = 64, g = 4, len = n * c * sp;
@@ -593,7 +594,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     public async Task Fp16Act_TrajectoryMatchesFp32_OnCuda()
     {
         await Task.Yield(); // genuine async yield so [Fact(Timeout)] is enforced (xUnit v2)
-        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch { } }
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
         var prevEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var prevConv = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ConvOverride;
         var prevAct = AiDotNet.Tensors.Engines.DirectGpuTensorEngine.Fp16ActOverride;
@@ -601,7 +602,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
         {
             bool isCuda = false;
             try { var ge = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine(); if (ge.SupportsGpu) { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = ge; isCuda = true; } }
-            catch { }
+            catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
             if (!isCuda) return;
             if (System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") != "1") return;
 
@@ -648,13 +649,13 @@ public class DiffusionGpuExecutionGraphFallbackTests
         AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend backend;
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
-        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_tensorcore.txt"), s + System.Environment.NewLine); } catch { } }
+        void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_tensorcore.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
         Log($"SupportsHgemm={(backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend)?.SupportsHgemm}");
 
         const int iters = 100;
         void BenchGemm(int M, int N, int K)
         {
-            var rnd = new System.Random(3);
+            var rnd = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
             var aF = new float[M * K]; var bF = new float[K * N];
             for (int i = 0; i < aF.Length; i++) aF[i] = (float)(rnd.NextDouble() - 0.5);
             for (int i = 0; i < bF.Length; i++) bF[i] = (float)(rnd.NextDouble() - 0.5);
@@ -676,7 +677,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
         }
         void BenchWino(int inC, int outC, int hw)
         {
-            var rnd = new System.Random(3);
+            var rnd = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
             var inA = new float[1 * inC * hw * hw]; var wA = new float[outC * inC * 9];
             for (int i = 0; i < inA.Length; i++) inA[i] = (float)(rnd.NextDouble() - 0.5);
             for (int i = 0; i < wA.Length; i++) wA[i] = (float)(rnd.NextDouble() - 0.5) * 0.1f;
@@ -698,7 +699,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
         void BenchFullFp16(int inC, int outC, int hw)
         {
             int N = hw * hw, K = inC * 9, M = outC;
-            var rnd = new System.Random(5);
+            var rnd = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
             var inA = new float[inC * hw * hw]; var wA = new float[outC * inC * 9];
             for (int i = 0; i < inA.Length; i++) inA[i] = (float)(rnd.NextDouble() - 0.5);
             for (int i = 0; i < wA.Length; i++) wA[i] = (float)(rnd.NextDouble() - 0.5) * 0.1f;

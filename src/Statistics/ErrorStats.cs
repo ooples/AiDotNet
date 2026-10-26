@@ -27,6 +27,9 @@ public class ErrorStats<T>
     /// <summary>
     /// Provides mathematical operations for the generic type T.
     /// </summary>
+    /// <summary>The value every statistic holds until it is computed: zero, which is what <c>default</c> is for the numeric types.</summary>
+    private static readonly T ZeroValue = MathHelper.GetNumericOperations<T>().Zero;
+
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
@@ -37,7 +40,7 @@ public class ErrorStats<T>
     /// MAE measures the average size of errors without considering their direction (positive or negative).
     /// Lower values indicate better accuracy. If MAE = 5, your predictions are off by 5 units on average.</para>
     /// </remarks>
-    private T _mAE = default!;
+    private T _mAE = ZeroValue;
     public T MAE { get { EnsureFullStatsComputed(); return _mAE; } private set { _mAE = value; } }
 
     /// <summary>
@@ -48,7 +51,7 @@ public class ErrorStats<T>
     /// MSE squares the errors before averaging them, which penalizes large errors more heavily than small ones.
     /// Lower values indicate better accuracy. Because of squaring, the value is not in the same units as your data.</para>
     /// </remarks>
-    private T _mSE = default!;
+    private T _mSE = ZeroValue;
     public T MSE { get { EnsureFullStatsComputed(); return _mSE; } private set { _mSE = value; } }
 
     /// <summary>
@@ -60,7 +63,7 @@ public class ErrorStats<T>
     /// It's often preferred over MSE for interpretation because it's in the same units as your data.
     /// Like MAE, lower values indicate better accuracy.</para>
     /// </remarks>
-    private T _rMSE = default!;
+    private T _rMSE = ZeroValue;
     public T RMSE { get { EnsureFullStatsComputed(); return _rMSE; } private set { _rMSE = value; } }
 
     /// <summary>
@@ -72,7 +75,7 @@ public class ErrorStats<T>
     /// MAPE = 10 means that, on average, your predictions are off by 10% from the actual values.
     /// Note: MAPE can be problematic when actual values are close to zero.</para>
     /// </remarks>
-    private T _mAPE = default!;
+    private T _mAPE = ZeroValue;
     public T MAPE { get { EnsureFullStatsComputed(); return _mAPE; } private set { _mAPE = value; } }
 
     /// <summary>
@@ -84,7 +87,7 @@ public class ErrorStats<T>
     /// underestimate (negative value). Ideally, it should be close to zero, indicating no systematic bias.
     /// Unlike MAE, this doesn't take the absolute value, so positive and negative errors can cancel out.</para>
     /// </remarks>
-    private T _meanBiasError = default!;
+    private T _meanBiasError = ZeroValue;
     public T MeanBiasError { get { EnsureFullStatsComputed(); return _meanBiasError; } private set { _meanBiasError = value; } }
 
     /// <summary>
@@ -96,7 +99,7 @@ public class ErrorStats<T>
     /// This makes it less sensitive to outliers (extreme errors) than MAE.
     /// For example, if you have errors of [1, 2, 100], the median is 2, while the mean would be 34.3.</para>
     /// </remarks>
-    private T _medianAbsoluteError = default!;
+    private T _medianAbsoluteError = ZeroValue;
     public T MedianAbsoluteError { get { EnsureFullStatsComputed(); return _medianAbsoluteError; } private set { _medianAbsoluteError = value; } }
 
     /// <summary>
@@ -107,7 +110,7 @@ public class ErrorStats<T>
     /// MaxError tells you the worst-case error in your predictions.
     /// It can help you understand the potential maximum impact of prediction errors.</para>
     /// </remarks>
-    private T _maxError = default!;
+    private T _maxError = ZeroValue;
     public T MaxError { get { EnsureFullStatsComputed(); return _maxError; } private set { _maxError = value; } }
 
     /// <summary>
@@ -123,7 +126,7 @@ public class ErrorStats<T>
     /// </list>
     /// <para>This is especially useful for time series forecasting evaluation.</para>
     /// </remarks>
-    private T _theilUStatistic = default!;
+    private T _theilUStatistic = ZeroValue;
     public T TheilUStatistic { get { EnsureFullStatsComputed(); return _theilUStatistic; } private set { _theilUStatistic = value; } }
 
     /// <summary>
@@ -140,7 +143,7 @@ public class ErrorStats<T>
     /// </list>
     /// <para>Autocorrelation in errors suggests your model might be missing important patterns in the data.</para>
     /// </remarks>
-    private T _durbinWatsonStatistic = default!;
+    private T _durbinWatsonStatistic = ZeroValue;
     public T DurbinWatsonStatistic { get { EnsureFullStatsComputed(); return _durbinWatsonStatistic; } private set { _durbinWatsonStatistic = value; } }
 
     /// <summary>
@@ -152,7 +155,7 @@ public class ErrorStats<T>
     /// how many parameters (features) your model uses. It's useful for constructing confidence intervals
     /// around predictions and is adjusted downward based on the number of parameters in your model.</para>
     /// </remarks>
-    private T _sampleStandardError = default!;
+    private T _sampleStandardError = ZeroValue;
     public T SampleStandardError { get { EnsureFullStatsComputed(); return _sampleStandardError; } private set { _sampleStandardError = value; } }
 
     /// <summary>
@@ -164,7 +167,7 @@ public class ErrorStats<T>
     /// SampleStandardError, it doesn't adjust for model complexity. It gives you an idea of the
     /// typical size of the errors your model makes.</para>
     /// </remarks>
-    private T _populationStandardError = default!;
+    private T _populationStandardError = ZeroValue;
     public T PopulationStandardError { get { EnsureFullStatsComputed(); return _populationStandardError; } private set { _populationStandardError = value; } }
 
     /// <summary>
@@ -177,7 +180,7 @@ public class ErrorStats<T>
     /// <para>Think of it like buying a car: You want good performance (accuracy) but don't want to
     /// pay too much (complexity). AIC helps you find the best balance.</para>
     /// </remarks>
-    private T _aIC = default!;
+    private T _aIC = ZeroValue;
     public T AIC { get { EnsureFullStatsComputed(); return _aIC; } private set { _aIC = value; } }
 
     /// <summary>
@@ -190,7 +193,7 @@ public class ErrorStats<T>
     /// general patterns). Lower values are better.</para>
     /// <para>BIC is more cautious about adding complexity than AIC, like a budget-conscious car buyer.</para>
     /// </remarks>
-    private T _bIC = default!;
+    private T _bIC = ZeroValue;
     public T BIC { get { EnsureFullStatsComputed(); return _bIC; } private set { _bIC = value; } }
 
     /// <summary>
@@ -202,7 +205,7 @@ public class ErrorStats<T>
     /// model complexity. It's particularly useful when sample sizes are small.
     /// Like AIC and BIC, lower values are better.</para>
     /// </remarks>
-    private T _aICAlt = default!;
+    private T _aICAlt = ZeroValue;
     public T AICAlt { get { EnsureFullStatsComputed(); return _aICAlt; } private set { _aICAlt = value; } }
 
     /// <summary>
@@ -214,7 +217,7 @@ public class ErrorStats<T>
     /// (which is just RSS divided by the number of observations).
     /// Lower values indicate a better fit. It's used in calculating metrics like AIC and BIC.</para>
     /// </remarks>
-    private T _rSS = default!;
+    private T _rSS = ZeroValue;
     public T RSS { get { EnsureFullStatsComputed(); return _rSS; } private set { _rSS = value; } }
 
     /// <summary>
@@ -240,7 +243,7 @@ public class ErrorStats<T>
     /// Recall measures what fraction of actual positives your model identified.
     /// AUCPR considers how these trade off across different threshold settings.</para>
     /// </remarks>
-    private T _aUCPR = default!;
+    private T _aUCPR = ZeroValue;
     public T AUCPR { get { EnsureFullStatsComputed(); return _aUCPR; } private set { _aUCPR = value; } }
 
     /// <summary>
@@ -256,7 +259,7 @@ public class ErrorStats<T>
     /// </list>
     /// <para>It measures how well your model can distinguish between classes across different threshold settings.</para>
     /// </remarks>
-    private T _aUCROC = default!;
+    private T _aUCROC = ZeroValue;
     public T AUCROC { get { EnsureFullStatsComputed(); return _aUCROC; } private set { _aUCROC = value; } }
 
     /// <summary>
@@ -269,7 +272,7 @@ public class ErrorStats<T>
     /// <para>SMAPE treats positive and negative errors more symmetrically than MAPE,
     /// which can be important in some forecasting applications.</para>
     /// </remarks>
-    private T _sMAPE = default!;
+    private T _sMAPE = ZeroValue;
     public T SMAPE { get { EnsureFullStatsComputed(); return _sMAPE; } private set { _sMAPE = value; } }
 
     /// <summary>
@@ -282,7 +285,7 @@ public class ErrorStats<T>
     /// <para>MSLE penalizes underestimation (predicting too low) more heavily than overestimation.
     /// This is useful in scenarios where underestimating would be more problematic, like inventory forecasting.</para>
     /// </remarks>
-    private T _meanSquaredLogError = default!;
+    private T _meanSquaredLogError = ZeroValue;
     public T MeanSquaredLogError { get { EnsureFullStatsComputed(); return _meanSquaredLogError; } private set { _meanSquaredLogError = value; } }
 
     /// <summary>
@@ -298,7 +301,7 @@ public class ErrorStats<T>
     /// <para>CRPS is especially important for evaluating time series models like DeepAR, TFT, and Chronos
     /// that provide uncertainty estimates along with their predictions.</para>
     /// </remarks>
-    private T _cRPS = default!;
+    private T _cRPS = ZeroValue;
     public T CRPS { get { EnsureFullStatsComputed(); return _cRPS; } private set { _cRPS = value; } }
 
     /// <summary>
@@ -359,7 +362,7 @@ public class ErrorStats<T>
     /// data belongs to class A, a model that always predicts class A would have 95% accuracy
     /// despite being useless for class B.</para>
     /// </remarks>
-    private T _accuracy = default!;
+    private T _accuracy = ZeroValue;
     public T Accuracy { get { EnsureFullStatsComputed(); return _accuracy; } private set { _accuracy = value; } }
 
     /// <summary>
@@ -374,7 +377,7 @@ public class ErrorStats<T>
     /// <para>Precision is important when the cost of false positives is high. In the spam example,
     /// high precision means fewer important emails mistakenly marked as spam.</para>
     /// </remarks>
-    private T _precision = default!;
+    private T _precision = ZeroValue;
     public T Precision { get { EnsureFullStatsComputed(); return _precision; } private set { _precision = value; } }
 
     /// <summary>
@@ -389,7 +392,7 @@ public class ErrorStats<T>
     /// <para>Recall is important when the cost of false negatives is high. In a medical context,
     /// high recall means catching most cases of a disease, even if it means some false alarms.</para>
     /// </remarks>
-    private T _recall = default!;
+    private T _recall = ZeroValue;
     public T Recall { get { EnsureFullStatsComputed(); return _recall; } private set { _recall = value; } }
 
     /// <summary>
@@ -408,7 +411,7 @@ public class ErrorStats<T>
     /// </list>
     /// <para>It's calculated as 2 * (precision * recall) / (precision + recall).</para>
     /// </remarks>
-    private T _f1Score = default!;
+    private T _f1Score = ZeroValue;
     public T F1Score { get { EnsureFullStatsComputed(); return _f1Score; } private set { _f1Score = value; } }
 
     /// <summary>

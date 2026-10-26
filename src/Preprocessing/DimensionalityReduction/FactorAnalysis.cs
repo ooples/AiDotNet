@@ -619,7 +619,7 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = data.Columns;
         int k = _components.GetLength(1);
 
-        var loadings = _rotation == FactorRotation.None ? _components : _rotatedComponents!;
+        var loadings = _rotation == FactorRotation.None ? _components : _rotatedComponents;
 
         // Compute factor scores using Bartlett method: F = (W^T Ψ^-1 W)^-1 W^T Ψ^-1 X
         var WtPsiInv = new double[k, p];
@@ -627,7 +627,7 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             for (int i = 0; i < p; i++)
             {
-                WtPsiInv[j, i] = loadings[i, j] / _noiseVariance[i];
+                WtPsiInv[j, i] = (loadings ?? throw new InvalidOperationException("loadings is null where it is required."))[i, j] / _noiseVariance[i];
             }
         }
 
@@ -639,7 +639,7 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double sum = 0;
                 for (int l = 0; l < p; l++)
                 {
-                    sum += WtPsiInv[i, l] * loadings[l, j];
+                    sum += WtPsiInv[i, l] * (loadings ?? throw new InvalidOperationException("loadings is null where it is required."))[l, j];
                 }
                 WtPsiInvW[i, j] = sum;
             }

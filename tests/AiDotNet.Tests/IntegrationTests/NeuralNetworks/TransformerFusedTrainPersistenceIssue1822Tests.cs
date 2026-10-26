@@ -67,7 +67,7 @@ public class TransformerFusedTrainPersistenceIssue1822Tests
     // Deterministic learnable batch: target token = (last context token + 1) mod V.
     private static (Tensor<float> x, Tensor<float> y) MakeData()
     {
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var x = new Tensor<float>(new[] { N, Ctx });
         var y = new Tensor<float>(new[] { N, V });
         for (int i = 0; i < N; i++)

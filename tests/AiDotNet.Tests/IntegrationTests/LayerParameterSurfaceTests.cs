@@ -104,7 +104,7 @@ public class LayerParameterSurfaceTests
             try
             {
                 long declared = Convert.ToInt64(
-                    closed.GetProperty("ParameterCount")!.GetValue(layer));
+                    (closed.GetProperty("ParameterCount") ?? throw new InvalidOperationException("closed.GetProperty(\"ParameterCount\") is null where it is required.")).GetValue(layer));
 
                 // A layer whose shape is still deferred legitimately reports nothing from BOTH
                 // surfaces; that is agreement, not a violation, and it is the state the deferred
@@ -118,7 +118,7 @@ public class LayerParameterSurfaceTests
                 if (m is null) { noParameterApi++; continue; }
                 var vec = m.Invoke(layer, null);
                 long actual = vec is null ? 0
-                    : Convert.ToInt64(vec.GetType().GetProperty("Length")!.GetValue(vec));
+                    : Convert.ToInt64((vec.GetType().GetProperty("Length") ?? throw new InvalidOperationException("vec.GetType().GetProperty(\"Length\") is null where it is required.")).GetValue(vec));
 
                 checkedCount++;
                 if (declared == actual)
@@ -206,7 +206,7 @@ public class LayerParameterSurfaceTests
         var declared = TestConstructorArgs(closed);
         if (!string.IsNullOrWhiteSpace(declared))
         {
-            var fromDeclaration = Instantiate(closed, declared!);
+            var fromDeclaration = Instantiate(closed, declared);
             if (fromDeclaration is not null) return fromDeclaration;
         }
 
@@ -244,7 +244,7 @@ public class LayerParameterSurfaceTests
         }
 
         var dims = new List<int>();
-        foreach (var token in declared!.Split(','))
+        foreach (var token in declared.Split(','))
         {
             if (!int.TryParse(token.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
                     out int dim) || dim <= 0)
@@ -519,12 +519,12 @@ public class LayerParameterSurfaceTests
 
             if (evaluated.All(item => item is double))
             {
-                value = evaluated.Select(item => (int)(double)item!).ToArray();
+                value = evaluated.Select(item => (int)(double)(item ?? throw new InvalidOperationException("item is null where it is required."))).ToArray();
                 return true;
             }
             if (evaluated.All(item => item is int[]))
             {
-                value = evaluated.Select(item => (int[])item!).ToArray();
+                value = evaluated.Select(item => (int[])(item ?? throw new InvalidOperationException("(int[])item is null where it is required."))).ToArray();
                 return true;
             }
             return false;

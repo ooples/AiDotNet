@@ -36,7 +36,7 @@ public class KosmosBehaviourTests
 
     private static Tensor<double> Image(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var image = new Tensor<double>(new[] { 3, 28, 28 });
         for (int i = 0; i < image.Length; i++) image[i] = rng.NextDouble();
         return image;

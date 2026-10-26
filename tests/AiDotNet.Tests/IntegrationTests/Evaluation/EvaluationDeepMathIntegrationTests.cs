@@ -613,7 +613,7 @@ public class EvaluationDeepMathIntegrationTests
     public async Task MSE_IsAlwaysNonNegative()
     {
         var metric = new MSEMetric<double>();
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int trial = 0; trial < 10; trial++)
         {
@@ -632,7 +632,7 @@ public class EvaluationDeepMathIntegrationTests
         // RMSE >= MAE is a mathematical property (Cauchy-Schwarz inequality)
         var rmse = new RMSEMetric<double>();
         var mae = new MAEMetric<double>();
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int trial = 0; trial < 10; trial++)
         {

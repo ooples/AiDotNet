@@ -110,13 +110,13 @@ public class WordCharBiLSTMCRFTests
         // pass if the word table itself trains — if the per-timestep LSTM slice severed the tape (the
         // bug this PR fixes), gradient would never reach the word table and it would stay byte-for-byte
         // at its random initialization.
-        var wordEmbedBefore = model.EmbeddingFrontEnd!.WordEmbedding.GetParameters().Clone();
+        var wordEmbedBefore = (model.EmbeddingFrontEnd ?? throw new InvalidOperationException("model.EmbeddingFrontEnd is null where it is required.")).WordEmbedding.GetParameters().Clone();
         double accBefore = TokenAccuracy(model);
 
         TrainEpochs(model, epochs: 150);
         model.SetTrainingMode(false); // evaluate deterministically, not in training mode
 
-        var wordEmbedAfter = model.EmbeddingFrontEnd!.WordEmbedding.GetParameters();
+        var wordEmbedAfter = model.EmbeddingFrontEnd.WordEmbedding.GetParameters();
         double maxDelta = 0;
         for (int i = 0; i < wordEmbedBefore.Length; i++)
             maxDelta = Math.Max(maxDelta, Math.Abs(wordEmbedAfter[i] - wordEmbedBefore[i]));

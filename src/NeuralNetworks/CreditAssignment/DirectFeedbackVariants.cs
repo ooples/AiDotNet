@@ -38,7 +38,7 @@ internal sealed class DrtpCreditRule<T> : CreditRuleBase<T>
             if (layer.IsOutputLayer) continue;
             // Project the target, then negate: the descent direction matches DFA's error projection because
             // (prediction − target) ≈ −target while the prediction is still near-uniform.
-            var projected = ProjectThrough(target, feedback[layer.Index]!); // [B, C] · [C, M_i] = [B, M_i]
+            var projected = ProjectThrough(target, (feedback[layer.Index] ?? throw new InvalidOperationException("feedback[layer.Index] is null where it is required."))); // [B, C] · [C, M_i] = [B, M_i]
             for (int b = 0; b < projected.Rows; b++)
                 for (int j = 0; j < projected.Columns; j++)
                     projected[b, j] = ops.Negate(projected[b, j]);
@@ -81,7 +81,7 @@ internal sealed class NormalizedDfaCreditRule<T> : CreditRuleBase<T>
         foreach (var layer in context.Layers)
         {
             if (layer.IsOutputLayer) continue;
-            var projected = ProjectThrough(error, feedback[layer.Index]!); // [B, M_i]
+            var projected = ProjectThrough(error, (feedback[layer.Index] ?? throw new InvalidOperationException("feedback[layer.Index] is null where it is required."))); // [B, M_i]
             RescaleRowsToMatch(projected, error, ops);                      // depth-stable magnitude
             layer.TeachingSignal = ToTeachingSignal(projected, layer.OutputShape);
         }

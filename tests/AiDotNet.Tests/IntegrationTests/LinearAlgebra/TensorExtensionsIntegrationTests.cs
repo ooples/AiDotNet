@@ -204,7 +204,7 @@ public class TensorExtensionsIntegrationTests
     public async Task CreateXavierInitializedTensor_CorrectShape()
     {
         var shape = new[] { 3, 4 };
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var stddev = 0.5;
 
         var tensor = TensorExtensions.CreateXavierInitializedTensor<double>(shape, stddev, random);
@@ -217,7 +217,7 @@ public class TensorExtensionsIntegrationTests
     public async Task CreateXavierInitializedTensor_ValuesBoundedByStddev()
     {
         var shape = new[] { 100, 100 };
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var stddev = 0.1;
 
         var tensor = TensorExtensions.CreateXavierInitializedTensor<double>(shape, stddev, random);

@@ -204,13 +204,13 @@ internal static class LicenseRevocationProvider
         byte[] payloadBytes, sig;
         try
         {
-            payloadBytes = Base64UrlHelper.Decode(env.payload!);
-            sig = Base64UrlHelper.Decode(env.sig!);
+            payloadBytes = Base64UrlHelper.Decode((env.payload ?? throw new InvalidOperationException("env.payload is null where it is required.")));
+            sig = Base64UrlHelper.Decode((env.sig ?? throw new InvalidOperationException("env.sig is null where it is required.")));
         }
         catch (FormatException) { return null; }
 
         if (payloadBytes.Length == 0 || sig.Length != Ed25519SignatureSize) return null;
-        if (!LicensePublicKeyProvider.TryGetPublicKey(env.kid!, out byte[] publicKey)) return null;
+        if (!LicensePublicKeyProvider.TryGetPublicKey((env.kid ?? throw new InvalidOperationException("env.kid is null where it is required.")), out byte[] publicKey)) return null;
 
         try
         {

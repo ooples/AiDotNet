@@ -67,7 +67,7 @@ public class FixedSizePaddingStrategy : IPaddingStrategy
                 }
                 else
                 {
-                    paddedMatrix[i, j] = default(T)!;
+                    paddedMatrix[i, j] = zero;
                     attentionMask[i, j] = zero;
                 }
             }

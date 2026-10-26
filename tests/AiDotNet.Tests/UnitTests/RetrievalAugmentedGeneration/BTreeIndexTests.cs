@@ -45,7 +45,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public async Task Constructor_WithNullPath_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new BTreeIndex(null!));
+            Assert.Throws<ArgumentNullException>(() => new BTreeIndex(global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -89,7 +89,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             using var index = new BTreeIndex(indexPath);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => index.Add(null!, 100));
+            Assert.Throws<ArgumentException>(() => index.Add(global::AiDotNet.Tests.TestNull.Of<string>(), 100));
         }
 
         [Fact(Timeout = 60000)]
@@ -185,7 +185,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             using var index = new BTreeIndex(indexPath);
 
             // Act
-            var offset = index.Get(null!);
+            var offset = index.Get(global::AiDotNet.Tests.TestNull.Of<string>());
 
             // Assert
             Assert.Equal(-1, offset);
@@ -232,7 +232,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             using var index = new BTreeIndex(indexPath);
 
             // Act
-            var contains = index.Contains(null!);
+            var contains = index.Contains(global::AiDotNet.Tests.TestNull.Of<string>());
 
             // Assert
             Assert.False(contains);
@@ -281,7 +281,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             using var index = new BTreeIndex(indexPath);
 
             // Act
-            var result = index.Remove(null!);
+            var result = index.Remove(global::AiDotNet.Tests.TestNull.Of<string>());
 
             // Assert
             Assert.False(result);

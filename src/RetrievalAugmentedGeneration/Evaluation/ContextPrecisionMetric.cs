@@ -72,7 +72,7 @@ public class ContextPrecisionMetric<T> : RAGMetricBase<T>
         if (docs.Count == 0)
             return NumOps.Zero;
 
-        var reference = !string.IsNullOrWhiteSpace(groundTruth) ? groundTruth! : answer.Query;
+        var reference = !string.IsNullOrWhiteSpace(groundTruth) ? groundTruth : answer.Query;
         if (string.IsNullOrWhiteSpace(reference))
             return NumOps.Zero;
 
@@ -82,7 +82,7 @@ public class ContextPrecisionMetric<T> : RAGMetricBase<T>
 
         for (int i = 0; i < docs.Count; i++)
         {
-            bool relevant = IsRelevant(reference, docs[i].Content);
+            bool relevant = IsRelevant((reference ?? throw new InvalidOperationException("reference is null where it is required.")), docs[i].Content);
             if (relevant)
             {
                 relevantSoFar++;

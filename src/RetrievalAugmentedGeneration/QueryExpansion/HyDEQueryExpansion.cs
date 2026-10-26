@@ -76,7 +76,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
                 $"Write {style} that directly answers the following question, as if it were an excerpt from a " +
                 $"relevant document. Return only the passage, with no preamble or commentary.\n\n" +
                 $"Question: {query}\n\nPassage:";
-            var doc = _generator!.Generate(prompt);
+            var doc = (_generator ?? throw new InvalidOperationException("_generator is null where it is required.")).Generate(prompt);
             return string.IsNullOrWhiteSpace(doc) ? query : doc.Trim();
         }
 

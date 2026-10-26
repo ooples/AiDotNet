@@ -30,7 +30,7 @@ public class DataTransformsIntegrationTests
     public async Task IdentityTransform_Null_ReturnsNull()
     {
         var transform = new IdentityTransform<string>();
-        Assert.Null(transform.Apply(null));
+        Assert.Null(transform.Apply(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -64,7 +64,7 @@ public class DataTransformsIntegrationTests
     public async Task LambdaTransform_NullFunc_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new LambdaTransform<int, int>(null));
+            new LambdaTransform<int, int>(global::AiDotNet.Tests.TestNull.Of<System.Func<int, int>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -137,7 +137,7 @@ public class DataTransformsIntegrationTests
     public async Task Compose_NullTransforms_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new Compose<int>((ITransform<int, int>[])null));
+            new Compose<int>(global::AiDotNet.Tests.TestNull.Of<ITransform<int, int>[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -158,7 +158,7 @@ public class DataTransformsIntegrationTests
     public async Task Compose_NullEnumerable_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new Compose<int>((IEnumerable<ITransform<int, int>>)null));
+            new Compose<int>(global::AiDotNet.Tests.TestNull.Of<IEnumerable<ITransform<int, int>>>()));
     }
 
     [Fact(Timeout = 120000)]

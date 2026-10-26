@@ -72,7 +72,7 @@ public class ContextRecallMetric<T> : RAGMetricBase<T>
         if (docs.Count == 0)
             return NumOps.Zero;
 
-        var claims = SplitIntoSentences(groundTruth!);
+        var claims = SplitIntoSentences((groundTruth ?? throw new InvalidOperationException("groundTruth is null where it is required.")));
         if (claims.Count == 0)
             return NumOps.Zero;
 

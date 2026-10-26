@@ -218,14 +218,15 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         // Sum the mean pinball loss of every quantile's [B, H] slice of the [B, H*Q] forecast (all on the tape).
         Tensor<T> QuantilePinballLoss(Tensor<T> pred, Tensor<T> tgt)
         {
-            Tensor<T> total = null!;
+            Tensor<T>? total = null;
             for (int qi = 0; qi < numQuantiles; qi++)
             {
                 var sliceQi = Engine.TensorNarrow(pred, 1, qi * horizon, horizon); // [B, H]
                 var ql = quantileLosses[qi].ComputeTapeLoss(sliceQi, tgt);
-                total = qi == 0 ? ql : Engine.TensorAdd(total, ql);
+                total = total is null ? ql : Engine.TensorAdd(total, ql);
             }
-            return total;
+            // The options validation rejects an empty QuantileLevels, so at least one slice was summed.
+            return total ?? throw new InvalidOperationException("TemporalFusionTransformer has no quantile levels to train.");
         }
         var allParams = CollectAllTrainableParameters();
 

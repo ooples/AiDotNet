@@ -453,8 +453,12 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
                 {
                     File.Delete(tempFile);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    // A leftover temporary download is harmless, but it should not vanish silently.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"ShapeNetCore loader: deleting the temporary download '{tempFile}' failed " +
+                        $"({ex.GetType().Name}: {ex.Message}).");
                 }
             }
         }

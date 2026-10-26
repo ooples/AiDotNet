@@ -67,7 +67,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 var body = request.Content != null
                     ? await request.Content.ReadAsStringAsync().ConfigureAwait(false)
                     : string.Empty;
-                var path = request.RequestUri!.AbsolutePath;
+                var path = (request.RequestUri ?? throw new InvalidOperationException("request.RequestUri is null where it is required.")).AbsolutePath;
                 Requests.Add(new RecordedRequest(request.Method.Method, request.RequestUri.PathAndQuery, body));
 
                 foreach (var route in _routes)
@@ -123,10 +123,10 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal(4, store.VectorDimension);
             var create = handler.Requests.Single(r => r.Path.Contains("/collections/create"));
             var body = JObject.Parse(create.Body);
-            Assert.Equal(4, (int)body["dimension"]!);
+            Assert.Equal(4, (int)(body["dimension"] ?? throw new InvalidOperationException("body[\"dimension\"] is null where it is required.")));
             Assert.Equal("L2", (string?)body["metricType"]);
             Assert.Equal("VarChar", (string?)body["idType"]);
-            Assert.True((bool)body["enableDynamicField"]!);
+            Assert.True((bool)(body["enableDynamicField"] ?? throw new InvalidOperationException("body[\"enableDynamicField\"] is null where it is required.")));
         }
 
         [Fact]
@@ -144,11 +144,11 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var upsert = handler.Requests.Single(r => r.Path.Contains("/entities/upsert"));
             var body = JObject.Parse(upsert.Body);
             Assert.Equal("test", (string?)body["collectionName"]);
-            var row = body["data"]![0]!;
-            Assert.Equal("doc1", (string?)row["id"]);
+            var row = (body["data"] ?? throw new InvalidOperationException("body[\"data\"] is null where it is required."))[0];
+            Assert.Equal("doc1", (string?)(row ?? throw new InvalidOperationException("row is null where it is required."))["id"]);
             Assert.Equal("Hello world", (string?)row["content"]);
             Assert.Equal("science", (string?)row["m_category"]);
-            Assert.Equal(3, ((JArray)row["vector"]!).Count);
+            Assert.Equal(3, ((JArray)(row["vector"] ?? throw new InvalidOperationException("(JArray)row[\"vector\"] is null where it is required."))).Count);
         }
 
         [Fact]
@@ -175,9 +175,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             var search = handler.Requests.Single(r => r.Path.Contains("/entities/search"));
             var body = JObject.Parse(search.Body);
-            Assert.Equal(2, (int)body["limit"]!);
+            Assert.Equal(2, (int)(body["limit"] ?? throw new InvalidOperationException("body[\"limit\"] is null where it is required.")));
             Assert.Equal("vector", (string?)body["annsField"]);
-            Assert.Equal(3, ((JArray)body["data"]![0]!).Count);
+            Assert.Equal(3, ((JArray)(body["data"]?[0] ?? throw new InvalidOperationException("(JArray)body[\"data\"]?[0] is null where it is required."))).Count);
         }
 
         [Fact]
@@ -196,7 +196,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             };
             store.GetSimilarWithFilters(new Vector<float>(new float[] { 1, 0, 0 }), 10, filters).ToList();
 
-            var expr = (string)JObject.Parse(handler.Requests.Single(r => r.Path.Contains("/entities/search")).Body)["filter"]!;
+            var expr = (JObject.Parse(handler.Requests.Single(r => r.Path.Contains("/entities/search")).Body)["filter"] ?? throw new InvalidOperationException("(string)JObject.Parse(handler.Requests.Single(r => r.Path.Contains(\"/entities... is null where it is required.")).ToString();
             Assert.Contains("m_category == \"science\"", expr);
             Assert.Contains("m_year >= 2020", expr);
             Assert.Contains("m_tag in [\"a\", \"b\"]", expr);
@@ -215,12 +215,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var doc = store.GetById("doc1");
 
             Assert.NotNull(doc);
-            Assert.Equal("doc1", doc!.Id);
+            Assert.Equal("doc1", doc.Id);
             Assert.Equal("hi", doc.Content);
             Assert.Equal("v", doc.Metadata["k"].ToString());
 
             var query = handler.Requests.Single(r => r.Path.Contains("/entities/query"));
-            Assert.Contains("id == \"doc1\"", (string)JObject.Parse(query.Body)["filter"]!);
+            Assert.Contains("id == \"doc1\"", (JObject.Parse(query.Body)["filter"] ?? throw new InvalidOperationException("(string)JObject.Parse(query.Body)[\"filter\"] is null where it is required.")).ToString());
         }
 
         [Fact]
@@ -245,7 +245,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.True(store.Remove("doc1"));
 
             var delete = handler.Requests.Single(r => r.Path.Contains("/entities/delete"));
-            Assert.Contains("id == \"doc1\"", (string)JObject.Parse(delete.Body)["filter"]!);
+            Assert.Contains("id == \"doc1\"", (JObject.Parse(delete.Body)["filter"] ?? throw new InvalidOperationException("(string)JObject.Parse(delete.Body)[\"filter\"] is null where it is required.")).ToString());
         }
 
         [Fact]
@@ -311,7 +311,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             var token = Environment.GetEnvironmentVariable("MILVUS_TOKEN");
             var collection = "aidotnet_it_" + Guid.NewGuid().ToString("N");
-            var store = new MilvusDocumentStore<float>(collection, url!, token,
+            var store = new MilvusDocumentStore<float>(collection, url, token,
                 distanceMetric: DistanceMetricType.Cosine, vectorDimension: 4);
 
             try

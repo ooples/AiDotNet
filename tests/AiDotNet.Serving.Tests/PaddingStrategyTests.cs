@@ -30,7 +30,7 @@ public class PaddingStrategyTests
         Assert.Equal(3, paddedMatrix.Rows); // 3 vectors
         Assert.Equal(4, paddedMatrix.Columns); // Max length is 4
         Assert.NotNull(attentionMask);
-        Assert.Equal(3, attentionMask!.Rows);
+        Assert.Equal(3, attentionMask.Rows);
         Assert.Equal(4, attentionMask.Columns);
 
         // Check padding values
@@ -207,7 +207,7 @@ public class PaddingStrategyTests
     public async Task BucketPaddingStrategy_Constructor_ThrowsOnNullOrEmptyBucketSizes()
     {
         Assert.Throws<ArgumentException>(() =>
-            new BucketPaddingStrategy(null!));
+            new BucketPaddingStrategy(global::AiDotNet.Serving.Tests.TestNull.Of<int[]>()));
         Assert.Throws<ArgumentException>(() =>
             new BucketPaddingStrategy(Array.Empty<int>()));
     }
@@ -220,7 +220,7 @@ public class PaddingStrategyTests
         var vectors = new Vector<double>[]
         {
             new Vector<double>(new double[] { 1, 2, 3 }),
-            null!,
+            global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(),
             new Vector<double>(new double[] { 4, 5 })
         };
 
@@ -237,7 +237,7 @@ public class PaddingStrategyTests
         var vectors = new Vector<double>[]
         {
             new Vector<double>(new double[] { 1, 2, 3 }),
-            null!,
+            global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(),
             new Vector<double>(new double[] { 4, 5 })
         };
 
@@ -254,7 +254,7 @@ public class PaddingStrategyTests
         var vectors = new Vector<double>[]
         {
             new Vector<double>(new double[] { 1, 2, 3 }),
-            null!,
+            global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(),
             new Vector<double>(new double[] { 4, 5 })
         };
 

@@ -150,10 +150,10 @@ public class CheckpointGradientEquivalenceTests : System.IDisposable
         Assert.True(sourceFactoryCalled);
         Assert.True(gradients.TryGetValue(input, out var inputGradient));
         Assert.NotNull(inputGradient);
-        Assert.Contains(inputGradient!.AsSpan().ToArray(), value => System.Math.Abs(value) > 1e-12);
+        Assert.Contains(inputGradient.AsSpan().ToArray(), value => System.Math.Abs(value) > 1e-12);
         Assert.True(gradients.TryGetValue(selectedWeight, out var selectedGradient));
         Assert.NotNull(selectedGradient);
-        Assert.Contains(selectedGradient!.AsSpan().ToArray(), value => System.Math.Abs(value) > 1e-12);
+        Assert.Contains(selectedGradient.AsSpan().ToArray(), value => System.Math.Abs(value) > 1e-12);
         Assert.False(gradients.ContainsKey(frozenWeight));
     }
 

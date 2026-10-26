@@ -73,8 +73,8 @@ public class Gsm8kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             string? q = obj["question"]?.ToString();
             string? a = obj["answer"]?.ToString();
             if (string.IsNullOrEmpty(q) || string.IsNullOrEmpty(a)) continue;
-            questions.Add(q!);
-            answers.Add(a!);
+            questions.Add((q ?? throw new InvalidOperationException("q is null where it is required.")));
+            answers.Add((a ?? throw new InvalidOperationException("a is null where it is required.")));
         }
         return (questions, answers);
     }

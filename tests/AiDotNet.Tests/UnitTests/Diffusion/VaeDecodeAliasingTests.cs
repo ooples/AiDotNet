@@ -28,7 +28,7 @@ public class VaeDecodeAliasingTests
     private static Tensor<double> Textured(int seed)
     {
         var t = new Tensor<double>(new[] { 1, 3, 64, 64 });
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 2.0) - 1.0;
         return t;
     }
@@ -40,7 +40,7 @@ public class VaeDecodeAliasingTests
     private static Tensor<double> TexturedLatent(int seed)
     {
         var t = new Tensor<double>(new[] { 1, 4, 32, 32 });
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 2.0) - 1.0;
         return t;
     }

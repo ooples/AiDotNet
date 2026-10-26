@@ -77,10 +77,10 @@ public class AnomalyDetectionDeepMathIntegrationTests
         detector.Fit(data);
 
         // mean = 150/5 = 30
-        Assert.Equal(30.0, detector.Means![0], Tolerance);
+        Assert.Equal(30.0, (detector.Means ?? throw new InvalidOperationException("detector.Means is null where it is required."))[0], Tolerance);
 
         // pop_var = (100+400+900+1600+2500)/5 - 900 = 1100 - 900 = 200
-        Assert.Equal(Math.Sqrt(200.0), detector.StandardDeviations![0], Tolerance);
+        Assert.Equal(Math.Sqrt(200.0), (detector.StandardDeviations ?? throw new InvalidOperationException("detector.StandardDeviations is null where it is required."))[0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -293,8 +293,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         var detector = new ModifiedZScoreDetector<double>(contamination: 0.3);
         detector.Fit(data);
 
-        Assert.Equal(5.0, detector.Medians![0], Tolerance);
-        Assert.Equal(2.0, detector.MADs![0], Tolerance);
+        Assert.Equal(5.0, (detector.Medians ?? throw new InvalidOperationException("detector.Medians is null where it is required."))[0], Tolerance);
+        Assert.Equal(2.0, (detector.MADs ?? throw new InvalidOperationException("detector.MADs is null where it is required."))[0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -350,11 +350,11 @@ public class AnomalyDetectionDeepMathIntegrationTests
         var detector = new IQRDetector<double>(multiplier: 1.5, contamination: 0.2);
         detector.Fit(data);
 
-        Assert.Equal(6.0, detector.Q1![0], Tolerance);
-        Assert.Equal(14.0, detector.Q3![0], Tolerance);
-        Assert.Equal(8.0, detector.IQR![0], Tolerance);
-        Assert.Equal(-6.0, detector.LowerBounds![0], Tolerance);
-        Assert.Equal(26.0, detector.UpperBounds![0], Tolerance);
+        Assert.Equal(6.0, (detector.Q1 ?? throw new InvalidOperationException("detector.Q1 is null where it is required."))[0], Tolerance);
+        Assert.Equal(14.0, (detector.Q3 ?? throw new InvalidOperationException("detector.Q3 is null where it is required."))[0], Tolerance);
+        Assert.Equal(8.0, (detector.IQR ?? throw new InvalidOperationException("detector.IQR is null where it is required."))[0], Tolerance);
+        Assert.Equal(-6.0, (detector.LowerBounds ?? throw new InvalidOperationException("detector.LowerBounds is null where it is required."))[0], Tolerance);
+        Assert.Equal(26.0, (detector.UpperBounds ?? throw new InvalidOperationException("detector.UpperBounds is null where it is required."))[0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -395,9 +395,9 @@ public class AnomalyDetectionDeepMathIntegrationTests
         var detector = new IQRDetector<double>(multiplier: 1.5, contamination: 0.2);
         detector.Fit(data);
 
-        Assert.Equal(2.75, detector.Q1![0], Tolerance);
-        Assert.Equal(6.25, detector.Q3![0], Tolerance);
-        Assert.Equal(3.5, detector.IQR![0], Tolerance);
+        Assert.Equal(2.75, (detector.Q1 ?? throw new InvalidOperationException("detector.Q1 is null where it is required."))[0], Tolerance);
+        Assert.Equal(6.25, (detector.Q3 ?? throw new InvalidOperationException("detector.Q3 is null where it is required."))[0], Tolerance);
+        Assert.Equal(3.5, (detector.IQR ?? throw new InvalidOperationException("detector.IQR is null where it is required."))[0], Tolerance);
     }
 
     [Fact(Timeout = 120000)]
@@ -409,8 +409,8 @@ public class AnomalyDetectionDeepMathIntegrationTests
         var detector = new IQRDetector<double>(multiplier: 3.0, contamination: 0.2);
         detector.Fit(data);
 
-        Assert.Equal(-18.0, detector.LowerBounds![0], Tolerance);
-        Assert.Equal(38.0, detector.UpperBounds![0], Tolerance);
+        Assert.Equal(-18.0, (detector.LowerBounds ?? throw new InvalidOperationException("detector.LowerBounds is null where it is required."))[0], Tolerance);
+        Assert.Equal(38.0, (detector.UpperBounds ?? throw new InvalidOperationException("detector.UpperBounds is null where it is required."))[0], Tolerance);
 
         var scores = detector.ScoreAnomalies(data);
         Assert.Equal(1.5, scores[8], Tolerance);
@@ -696,7 +696,7 @@ public class AnomalyDetectionDeepMathIntegrationTests
         z.Fit(data);
 
         // mean = -10/10 = -1
-        Assert.Equal(-1.0, z.Means![0], Tolerance);
+        Assert.Equal(-1.0, (z.Means ?? throw new InvalidOperationException("z.Means is null where it is required."))[0], Tolerance);
 
         var scores = z.ScoreAnomalies(data);
         // |-10-(-1)| = 9, |8-(-1)| = 9 → same z-score

@@ -63,7 +63,7 @@ public class ImageTrainingPathTests
 
     [Fact]
     public void ImageTrainingDataLoaders_FromViews_NullThrows()
-        => Assert.Throws<ArgumentNullException>(() => ImageTrainingDataLoaders.FromViews<float>(null!));
+        => Assert.Throws<ArgumentNullException>(() => ImageTrainingDataLoaders.FromViews<float>(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.NeuralRadianceFields.Data.ImageView<float>>>()));
 
     [Fact]
     public void ImageTrainingDataLoaders_FromViews_EmptyThrows()
@@ -134,7 +134,7 @@ public class ImageTrainingPathTests
     {
         var nerf = new NeRF<float>();
         Assert.Throws<ArgumentNullException>(
-            () => nerf.TrainOnImageBatch(null!, raysPerBatch: 16, optimizerOptions: null));
+            () => nerf.TrainOnImageBatch(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDataLoader<AiDotNet.NeuralRadianceFields.Data.ImageView<float>, AiDotNet.NeuralRadianceFields.Data.PixelBatch<float>>>(), raysPerBatch: 16, optimizerOptions: null));
     }
 
     [Fact]

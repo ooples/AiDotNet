@@ -162,7 +162,7 @@ public sealed class Neo4jCypher
             return new Dictionary<string, object>();
         }
 
-        return JsonConvert.DeserializeObject<Dictionary<string, object>>(json!) ?? new Dictionary<string, object>();
+        return JsonConvert.DeserializeObject<Dictionary<string, object>>(json) ?? new Dictionary<string, object>();
     }
 
     /// <summary>Converts a UTC-normalized timestamp to Unix epoch milliseconds (stored as a Neo4j long).</summary>

@@ -178,7 +178,7 @@ public class TreeSHAPExplainer<T> : ILocalExplainer<T, TreeSHAPExplanation<T>>, 
             // Average SHAP values across ensemble
             shapValues = new double[_numFeatures];
 
-            foreach (var tree in _ensemble!)
+            foreach (var tree in (_ensemble ?? throw new InvalidOperationException("_ensemble is null where it is required.")))
             {
                 var treeShap = ComputeTreeSHAP(tree, instance);
                 for (int i = 0; i < _numFeatures; i++)
@@ -542,7 +542,7 @@ public class TreeSHAPExplainer<T> : ILocalExplainer<T, TreeSHAPExplanation<T>>, 
         else
         {
             double sum = 0;
-            foreach (var tree in _ensemble!)
+            foreach (var tree in (_ensemble ?? throw new InvalidOperationException("_ensemble is null where it is required.")))
             {
                 sum += NumOps.ToDouble(PredictTree(tree, instance));
             }

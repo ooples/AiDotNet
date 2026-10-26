@@ -55,7 +55,7 @@ public class MultiScaleDeformableAttentionTests
     [InlineData(4)]
     public void Forward_MatchesScalarReference(int referenceDim)
     {
-        var rng = new Random(11 + referenceDim);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11 + referenceDim);
         var attention = new MultiScaleDeformableAttention<double>(D, Levels, Heads, Points);
         var parameters = RandomizeParameters(attention, rng);
         var (query, reference, value) = RandomInputs(rng, referenceDim);
@@ -73,7 +73,7 @@ public class MultiScaleDeformableAttentionTests
     [InlineData(4)]
     public void TapeGradient_MatchesFiniteDifferences(int referenceDim)
     {
-        var rng = new Random(29 + referenceDim);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(29 + referenceDim);
         var attention = new MultiScaleDeformableAttention<double>(D, Levels, Heads, Points);
         RandomizeParameters(attention, rng);
         var (query, reference, value) = RandomInputs(rng, referenceDim);
@@ -116,7 +116,7 @@ public class MultiScaleDeformableAttentionTests
     public void Forward_RejectsMisplacedLevelStart()
     {
         var attention = new MultiScaleDeformableAttention<double>(D, Levels, Heads, Points);
-        var (query, reference, value) = RandomInputs(new Random(3), 2);
+        var (query, reference, value) = RandomInputs(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3), 2);
         Assert.Throws<ArgumentException>(() => attention.Forward(query, reference, value, Shapes, new[] { 0, 31, 39 }));
     }
 

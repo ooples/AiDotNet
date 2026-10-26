@@ -44,6 +44,13 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
     private readonly YOLOv8Head<T> _auxHead; // One-to-many head: trained jointly, dropped at inference.
     private readonly AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T> _detectionLoss;
 
+    /// <summary>
+    /// The paper's optimizer (Wang et al. 2024, training hyper-parameters in the appendix): SGD with momentum 0.937 at initial learning rate 0.01.
+    /// Its weight decay (0.0005) is not applied.
+    /// </summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperSgdMomentum(0.01, 0.937);
+
     [AiDotNet.Attributes.Scratch]
     private bool _auxHeadShapesResolved;
     private readonly int[] _strides;

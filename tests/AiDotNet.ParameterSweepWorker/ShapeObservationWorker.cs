@@ -50,7 +50,8 @@ internal static class ShapeObservationWorker
 
     private static ShapeObservationResult Observe(string assemblyQualifiedType, ShapeObservationPlan plan)
     {
-        var type = Type.GetType(assemblyQualifiedType, throwOnError: true)!;
+        var type = Type.GetType(assemblyQualifiedType, throwOnError: true)
+            ?? throw new InvalidOperationException($"Type {assemblyQualifiedType} could not be loaded.");
         var profiles = new List<ProfileObservation>(plan.Profiles.Length);
 
         foreach (var profile in plan.Profiles)

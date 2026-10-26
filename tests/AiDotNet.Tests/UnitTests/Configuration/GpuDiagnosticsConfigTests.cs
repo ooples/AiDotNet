@@ -261,8 +261,8 @@ public class GpuDiagnosticsConfigTests
     [Fact]
     public void LoggerToSink_ThrowsOnNullLogger()
     {
-        ILogger? logger = null;
-        Assert.Throws<ArgumentNullException>(() => logger!.ToSink());
+        ILogger logger = TestNull.Of<ILogger>();
+        Assert.Throws<ArgumentNullException>(() => logger.ToSink());
     }
 
     /// <summary>

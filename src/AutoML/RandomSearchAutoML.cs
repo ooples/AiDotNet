@@ -95,7 +95,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
 
                 var errorSamples = history
                     .Where(t => !t.Success && !string.IsNullOrWhiteSpace(t.ErrorMessage))
-                    .Select(t => t.ErrorMessage!)
+                    .Select(t => t.ErrorMessage)
                     .Distinct(StringComparer.Ordinal)
                     .Take(3)
                     .ToArray();

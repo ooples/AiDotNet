@@ -392,7 +392,7 @@ public class FeatureMappingIntegrationTests
     {
         // Arrange
         var mapper = new LinearFeatureMapper<double>();
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         var sourceData = CreateRandomMatrix(50, 20, random, mean: 0, stdDev: 1);
         var targetData = CreateRandomMatrix(50, 10, random, mean: 5, stdDev: 2);

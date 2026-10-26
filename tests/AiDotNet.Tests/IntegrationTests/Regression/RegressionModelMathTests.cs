@@ -29,7 +29,7 @@ public class RegressionModelMathTests
         // y = 3x + 2 with no noise
         var x = new Matrix<double>(50, 1);
         var y = new Vector<double>(50);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
         {
             x[i, 0] = random.NextDouble() * 10;
@@ -118,7 +118,7 @@ public class RegressionModelMathTests
         // y = 2*x^2 - 3*x + 1
         var x = new Matrix<double>(60, 1);
         var y = new Vector<double>(60);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 60; i++)
         {
             double xi = random.NextDouble() * 6 - 3;
@@ -365,7 +365,7 @@ public class RegressionModelMathTests
     public async Task PolynomialRegression_ThroughBuilder_ProducesAccuratePredictions()
     {
         // Quadratic data: y = 2x² - 3x + 1 + noise
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int trainSamples = 60;
         var x = new Matrix<double>(trainSamples, 1);
         var y = new Vector<double>(trainSamples);
@@ -387,7 +387,7 @@ public class RegressionModelMathTests
             .GetResult();
 
         // Generate test data with known quadratic targets
-        var testRandom = new Random(300);
+        var testRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(300);
         int testSamples = 10;
         var testX = new Matrix<double>(testSamples, 1);
         var testY = new Vector<double>(testSamples);
@@ -495,7 +495,7 @@ public class RegressionModelMathTests
     private static (Matrix<double> x, Vector<double> y) CreateLinearData(
         int samples, double[] coefficients, double intercept, double noise, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int features = coefficients.Length;
         var x = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
@@ -515,7 +515,7 @@ public class RegressionModelMathTests
 
     private static (Matrix<double> x, Vector<double> y) CreateNonLinearData(int samples, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(samples, 2);
         var y = new Vector<double>(samples);
 
@@ -530,7 +530,7 @@ public class RegressionModelMathTests
 
     private static Matrix<double> CreateRandomMatrix(int rows, int cols, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)

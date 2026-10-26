@@ -402,7 +402,7 @@ public readonly struct LayerStateBag
             Type definition = runtimeType.IsGenericType
                 ? runtimeType.GetGenericTypeDefinition()
                 : runtimeType;
-            writer.Write(definition.FullName ?? definition.Name);
+            writer.Write(definition.FullName is { } definitionName ? definitionName : definition.Name);
             WriteShape(writer, inputShape);
             WriteShape(writer, outputShape);
             writer.Write(metadata.Count);
@@ -774,7 +774,7 @@ public readonly struct LayerStateBag
         {
             var copy = (Array)array.Clone();
             visited[source] = copy;
-            if (!type.GetElementType()!.IsValueType)
+            if (!(type.GetElementType() ?? throw new InvalidOperationException("type.GetElementType() is null where it is required.")).IsValueType)
             {
                 // Array.GetValue(int) is valid only for rank-one arrays. Construction objects can
                 // legitimately contain rectangular arrays, so walk the actual bounds and preserve
@@ -845,9 +845,9 @@ public readonly struct LayerStateBag
         return structural;
     }
 
-    private static bool TryCloneParameterizedActivation(object source, out object clone)
+    private static bool TryCloneParameterizedActivation(object source, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? clone)
     {
-        clone = null!;
+        clone = null;
         Type type = source.GetType();
         bool isActivation = type.GetInterfaces().Any(iface =>
             iface.IsGenericType
@@ -1273,7 +1273,7 @@ public readonly struct LayerStateBag
         if (value is null) return string.Empty;
 
         Type type = value.GetType();
-        string assemblyQualified = type.AssemblyQualifiedName ?? type.FullName ?? string.Empty;
+        string assemblyQualified = type.AssemblyQualifiedName is { } qualifiedName ? qualifiedName : type.FullName ?? string.Empty;
         if (assemblyQualified.Length == 0) return string.Empty;
 
         // THE TYPE ALONE IS NOT THE COMPONENT. This class already refuses to rebuild a component

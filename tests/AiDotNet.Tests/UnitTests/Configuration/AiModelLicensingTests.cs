@@ -43,7 +43,7 @@ public class AiModelLicensingTests
     {
         await Task.Yield();
         var l = new AiModelLicensing();
-        Assert.Throws<ArgumentNullException>(() => l.ConfigureLicenseKey(null!));
+        Assert.Throws<ArgumentNullException>(() => l.ConfigureLicenseKey(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.AiDotNetLicenseKey>()));
     }
 
     [Fact(Timeout = 30000)]

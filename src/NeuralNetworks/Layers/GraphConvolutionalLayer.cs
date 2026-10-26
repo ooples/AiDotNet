@@ -1023,7 +1023,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
             if (_useBias)
-                gpuEngine.SgdMomentumUpdateGpu(_bias, _biasGradient!, _biasVelocity!, lr, 0.0f, 0.0f);
+                gpuEngine.SgdMomentumUpdateGpu(_bias, (_biasGradient ?? throw new InvalidOperationException("_biasGradient is null where it is required.")), (_biasVelocity ?? throw new InvalidOperationException("_biasVelocity is null where it is required.")), lr, 0.0f, 0.0f);
         }
         else
         {
@@ -1033,7 +1033,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             if (_useBias)
             {
-                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasGradient!, learningRate);
+                var scaledBiasGrad = Engine.TensorMultiplyScalar((_biasGradient ?? throw new InvalidOperationException("_biasGradient is null where it is required.")), learningRate);
                 Engine.TensorSubtractInPlace(_bias, scaledBiasGrad);
             }
 

@@ -49,7 +49,7 @@ public class AiModelDataPipelineTests
 
         Assert.NotNull(pipeline.PreprocessingPipeline);
         // AutoML defaults: 2 transformers — SimpleImputer(Mean) + StandardScaler.
-        Assert.Equal(2, pipeline.PreprocessingPipeline!.Count);
+        Assert.Equal(2, pipeline.PreprocessingPipeline.Count);
     }
 
     [Fact(Timeout = 30000)]
@@ -61,7 +61,7 @@ public class AiModelDataPipelineTests
         pipeline.ConfigurePreprocessing((IDataTransformer<double, Matrix<double>, Matrix<double>>?)null);
 
         Assert.NotNull(pipeline.PreprocessingPipeline);
-        Assert.Equal(2, pipeline.PreprocessingPipeline!.Count);
+        Assert.Equal(2, pipeline.PreprocessingPipeline.Count);
     }
 
     [Fact(Timeout = 30000)]
@@ -73,7 +73,7 @@ public class AiModelDataPipelineTests
         pipeline.ConfigurePreprocessing((PreprocessingPipeline<double, Matrix<double>, Matrix<double>>?)null);
 
         Assert.NotNull(pipeline.PreprocessingPipeline);
-        Assert.Equal(2, pipeline.PreprocessingPipeline!.Count);
+        Assert.Equal(2, pipeline.PreprocessingPipeline.Count);
     }
 
     [Fact(Timeout = 30000)]
@@ -88,7 +88,7 @@ public class AiModelDataPipelineTests
         pipeline.ConfigurePreprocessing(explicitPipeline);
 
         Assert.Same(explicitPipeline, pipeline.PreprocessingPipeline);
-        Assert.Equal(1, pipeline.PreprocessingPipeline!.Count);
+        Assert.Equal(1, (pipeline.PreprocessingPipeline ?? throw new InvalidOperationException("pipeline.PreprocessingPipeline is null where it is required.")).Count);
     }
 
     [Fact(Timeout = 30000)]
@@ -101,7 +101,7 @@ public class AiModelDataPipelineTests
 
         Assert.NotNull(pipeline.PostprocessingPipeline);
         // Postprocessing has no universal defaults — empty pipeline is correct.
-        Assert.Equal(0, pipeline.PostprocessingPipeline!.Count);
+        Assert.Equal(0, pipeline.PostprocessingPipeline.Count);
     }
 
     [Fact(Timeout = 30000)]
@@ -140,7 +140,7 @@ public class AiModelDataPipelineTests
         await Task.Yield();
         var pipeline = new AiModelDataPipeline<double, Matrix<double>, Vector<double>>();
 
-        Assert.Throws<ArgumentNullException>(() => pipeline.ConfigureDataLoader(null!));
+        Assert.Throws<ArgumentNullException>(() => pipeline.ConfigureDataLoader(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDataLoader<double>>()));
     }
 
     [Fact(Timeout = 30000)]
@@ -149,7 +149,7 @@ public class AiModelDataPipelineTests
         await Task.Yield();
         var pipeline = new AiModelDataPipeline<double, Matrix<double>, Vector<double>>();
 
-        Assert.Throws<ArgumentNullException>(() => pipeline.ConfigureDataPreparation(null!));
+        Assert.Throws<ArgumentNullException>(() => pipeline.ConfigureDataPreparation(global::AiDotNet.Tests.TestNull.Of<System.Action<AiDotNet.Preprocessing.DataPreparation.DataPreparationPipeline<double>>>()));
     }
 
     [Fact(Timeout = 30000)]
@@ -176,7 +176,7 @@ public class AiModelDataPipelineTests
 
         Assert.NotNull(pipeline.AugmentationConfig);
         // Matrix<double> auto-detects as Tabular modality, so TabularSettings should be populated.
-        Assert.NotNull(pipeline.AugmentationConfig!.TabularSettings);
+        Assert.NotNull(pipeline.AugmentationConfig.TabularSettings);
     }
 
     [Fact(Timeout = 30000)]
@@ -192,7 +192,7 @@ public class AiModelDataPipelineTests
         pipeline.ConfigureAugmentation(explicitConfig);
 
         Assert.Same(explicitConfig, pipeline.AugmentationConfig);
-        Assert.NotNull(pipeline.AugmentationConfig!.ImageSettings);
+        Assert.NotNull((pipeline.AugmentationConfig ?? throw new InvalidOperationException("pipeline.AugmentationConfig is null where it is required.")).ImageSettings);
     }
 
     [Fact(Timeout = 30000)]

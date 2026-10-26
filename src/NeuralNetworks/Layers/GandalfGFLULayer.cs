@@ -144,18 +144,18 @@ public partial class GandalfGFLULayer<T> : LayerBase<T>, IShapeContract
         {
             // (1) Learnable feature selection: softmax over the per-stage mask logits, broadcast
             // over the batch and applied to the running representation.
-            var maskRow = Engine.Reshape(_maskLogits![s], new[] { 1, _numFeatures });
+            var maskRow = Engine.Reshape((_maskLogits ?? throw new InvalidOperationException("_maskLogits is null where it is required."))[s], new[] { 1, _numFeatures });
             var mask = Engine.Softmax(maskRow);                           // [1, F]
             var feat = Engine.TensorMultiply(h, mask);           // [batch, F]
 
             // (2) Gated transformation (GLU): linear -> split into value/gate halves -> value ⊙ σ(gate).
-            var z = _inTransform![s].Forward(feat);                       // [batch, 2F]
-            var values = Engine.TensorMatMul(z, _valueSelector!);         // [batch, F]
-            var gates = Engine.TensorMatMul(z, _gateSelector!);           // [batch, F]
+            var z = (_inTransform ?? throw new InvalidOperationException("_inTransform is null where it is required."))[s].Forward(feat);                       // [batch, 2F]
+            var values = Engine.TensorMatMul(z, (_valueSelector ?? throw new InvalidOperationException("_valueSelector is null where it is required.")));         // [batch, F]
+            var gates = Engine.TensorMatMul(z, (_gateSelector ?? throw new InvalidOperationException("_gateSelector is null where it is required.")));           // [batch, F]
             var glu = Engine.TensorMultiply(values, Engine.Sigmoid(gates));
 
             // (3) Gated residual update: h <- g ⊙ glu + (1 - g) ⊙ h.
-            var g = Engine.Sigmoid(_gateTransform![s].Forward(feat));     // [batch, F]
+            var g = Engine.Sigmoid((_gateTransform ?? throw new InvalidOperationException("_gateTransform is null where it is required."))[s].Forward(feat));     // [batch, F]
             var oneMinusG = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(g, minusOne), one);
             h = Engine.TensorAdd(Engine.TensorMultiply(g, glu), Engine.TensorMultiply(oneMinusG, h));
         }

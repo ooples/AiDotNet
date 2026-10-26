@@ -76,7 +76,8 @@ public sealed class DistillationLossAdapter<T> : LossFunctionBase<T>
         return Engine.ReduceSum(product, allAxes, keepDims: false);
     }
 
-    private Matrix<T> LabelRow() => CurrentTrueLabel is null ? null! : ToRow(CurrentTrueLabel);
+    // Null when no true label is set: the strategies then distil from the teacher alone.
+    private Matrix<T>? LabelRow() => CurrentTrueLabel is null ? null : ToRow(CurrentTrueLabel);
 
     private static Matrix<T> ToRow(Vector<T> v)
     {

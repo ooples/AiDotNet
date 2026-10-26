@@ -265,8 +265,8 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>, IMaskedAc
         var info = new Dictionary<string, object>
         {
             ["step"] = _currentStep,
-            ["portfolioValue"] = _portfolioValue!,
-            ["cash"] = _cash!,
+            ["portfolioValue"] = (_portfolioValue ?? throw new InvalidOperationException("_portfolioValue is null where it is required.")),
+            ["cash"] = (_cash ?? throw new InvalidOperationException("_cash is null where it is required.")),
             ["positions"] = _positions
         };
 

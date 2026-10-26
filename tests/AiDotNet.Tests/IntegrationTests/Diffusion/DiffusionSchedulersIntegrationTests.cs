@@ -682,21 +682,21 @@ public class DiffusionSchedulersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AllSchedulers_NullConfig_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new DDIMScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new PNDMScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new DDPMScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new EulerDiscreteScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new EulerAncestralDiscreteScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new HeunDiscreteScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new DPMSolverMultistepScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new DPMSolverSinglestepScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new DPMSolverSDEScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new DEISMultistepScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new LMSDiscreteScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new UniPCScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new ConsistencyModelScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new FlowMatchingScheduler<double>(null));
-        Assert.Throws<ArgumentNullException>(() => new LCMScheduler<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new DDIMScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new PNDMScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new DDPMScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new EulerDiscreteScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new EulerAncestralDiscreteScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new HeunDiscreteScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new DPMSolverMultistepScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new DPMSolverSinglestepScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new DPMSolverSDEScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new DEISMultistepScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new LMSDiscreteScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new UniPCScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new ConsistencyModelScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new FlowMatchingScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
+        Assert.Throws<ArgumentNullException>(() => new LCMScheduler<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Diffusion.Schedulers.SchedulerConfig<double>>()));
     }
 
     [Fact(Timeout = 120000)]

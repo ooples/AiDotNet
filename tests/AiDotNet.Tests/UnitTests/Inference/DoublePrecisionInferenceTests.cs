@@ -208,7 +208,7 @@ public class DoublePrecisionInferenceTests
     private static Tensor<double> CreateRandomTensor(int[] shape)
     {
         var tensor = new Tensor<double>(shape);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = random.NextDouble() * 2 - 1;

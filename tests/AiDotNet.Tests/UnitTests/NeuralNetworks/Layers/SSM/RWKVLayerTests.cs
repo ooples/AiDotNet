@@ -216,7 +216,7 @@ public class RWKVLayerTests
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1);
@@ -227,7 +227,7 @@ public class RWKVLayerTests
     private static Tensor<double> CreateRandomDoubleTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<double>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = random.NextDouble() * 2 - 1;

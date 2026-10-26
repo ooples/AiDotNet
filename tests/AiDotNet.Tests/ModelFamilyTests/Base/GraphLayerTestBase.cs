@@ -35,7 +35,7 @@ public abstract class GraphLayerTestBase<T>
 
     protected static Tensor<T> CreateRandomTensor(int[] shape, int seed = 42)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = ToT(rng.NextDouble() * 4.0 + 1.0); // [1.0, 5.0] — large positive to survive ReLU after matmul
@@ -136,7 +136,7 @@ public abstract class GraphLayerTestBase<T>
 
     private static Tensor<T> CreateMixedSignTensor(int[] shape, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = ToT(rng.NextDouble() * 4.0 - 2.0); // [-2, 2]

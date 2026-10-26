@@ -25,7 +25,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new InMemoryDocumentStore<float>(vectorDimension: 3);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.Add(null!));
+            Assert.Throws<ArgumentNullException>(() => store.Add(global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Models.VectorDocument<float>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -35,7 +35,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new InMemoryDocumentStore<float>(vectorDimension: 3);
             var vectorDoc = new VectorDocument<float>
             {
-                Document = null!,
+                Document = global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Models.Document<float>>(),
                 Embedding = new Vector<float>(new float[] { 1, 2, 3 })
             };
 
@@ -51,7 +51,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var vectorDoc = new VectorDocument<float>
             {
                 Document = new Document<float>("doc1", "Test"),
-                Embedding = null!
+                Embedding = global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<float>>()
             };
 
             // Act & Assert
@@ -95,7 +95,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new InMemoryDocumentStore<float>(vectorDimension: 3);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.GetSimilar(null!, topK: 5));
+            Assert.Throws<ArgumentNullException>(() => store.GetSimilar(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<float>>(), topK: 5));
         }
 
         [Fact(Timeout = 60000)]
@@ -129,7 +129,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                store.GetSimilarWithFilters(queryVector, topK: 5, null!));
+                store.GetSimilarWithFilters(queryVector, topK: 5, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, object>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -139,7 +139,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new InMemoryDocumentStore<float>(vectorDimension: 3);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => store.GetById(null!));
+            Assert.Throws<ArgumentException>(() => store.GetById(global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -169,7 +169,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new InMemoryDocumentStore<float>(vectorDimension: 3);
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => store.Remove(null!));
+            Assert.Throws<ArgumentException>(() => store.Remove(global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -189,7 +189,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new InMemoryDocumentStore<float>(vectorDimension: 3);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => store.AddBatch(null!));
+            Assert.Throws<ArgumentNullException>(() => store.AddBatch(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Models.VectorDocument<float>>>()));
         }
 
         [Fact(Timeout = 60000)]

@@ -69,10 +69,10 @@ public sealed class CodeModelArchitectureSerializationTests
         var type = Type.GetType("AiDotNet.ProgramSynthesis.Engines.CodeModelArchitectureSerialization, AiDotNet");
         Assert.NotNull(type);
 
-        var method = type!.GetMethod("Write", BindingFlags.NonPublic | BindingFlags.Static);
+        var method = type.GetMethod("Write", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(method);
 
-        var generic = method!.MakeGenericMethod(typeof(double));
+        var generic = method.MakeGenericMethod(typeof(double));
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         generic.Invoke(null, new object[] { writer, architecture, includeUseDataFlow, includeEncoderDecoderLayerCounts });
@@ -90,10 +90,10 @@ public sealed class CodeModelArchitectureSerializationTests
         var type = Type.GetType("AiDotNet.ProgramSynthesis.Engines.CodeModelArchitectureSerialization, AiDotNet");
         Assert.NotNull(type);
 
-        var method = type!.GetMethod("ReadAndValidate", BindingFlags.NonPublic | BindingFlags.Static);
+        var method = type.GetMethod("ReadAndValidate", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(method);
 
-        var generic = method!.MakeGenericMethod(typeof(double));
+        var generic = method.MakeGenericMethod(typeof(double));
         using var ms = new MemoryStream(payload);
         using var reader = new BinaryReader(ms);
 

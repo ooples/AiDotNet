@@ -253,7 +253,7 @@ public class TapeStepAcceptanceTests
             "_trustRegionRadius",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(field);
-        return (double)field!.GetValue(optimizer)!;
+        return (double)(field.GetValue(optimizer) ?? throw new InvalidOperationException("field.GetValue(optimizer) is null where it is required."));
     }
 
     /// <summary>

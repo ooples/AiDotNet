@@ -946,21 +946,21 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
 
         T negLR = NumOps.Negate(learningRate);
         Engine.TensorAddInPlace(_aReal, Engine.TensorMultiplyScalar(_aRealGradient, negLR));
-        Engine.TensorAddInPlace(_aImag, Engine.TensorMultiplyScalar(_aImagGradient!, negLR));
-        Engine.TensorAddInPlace(_bReal, Engine.TensorMultiplyScalar(_bRealGradient!, negLR));
-        Engine.TensorAddInPlace(_bImag, Engine.TensorMultiplyScalar(_bImagGradient!, negLR));
-        Engine.TensorAddInPlace(_cReal, Engine.TensorMultiplyScalar(_cRealGradient!, negLR));
-        Engine.TensorAddInPlace(_cImag, Engine.TensorMultiplyScalar(_cImagGradient!, negLR));
-        Engine.TensorAddInPlace(_dParam, Engine.TensorMultiplyScalar(_dParamGradient!, negLR));
-        Engine.TensorAddInPlace(_logDelta, Engine.TensorMultiplyScalar(_logDeltaGradient!, negLR));
+        Engine.TensorAddInPlace(_aImag, Engine.TensorMultiplyScalar((_aImagGradient ?? throw new InvalidOperationException("_aImagGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_bReal, Engine.TensorMultiplyScalar((_bRealGradient ?? throw new InvalidOperationException("_bRealGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_bImag, Engine.TensorMultiplyScalar((_bImagGradient ?? throw new InvalidOperationException("_bImagGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_cReal, Engine.TensorMultiplyScalar((_cRealGradient ?? throw new InvalidOperationException("_cRealGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_cImag, Engine.TensorMultiplyScalar((_cImagGradient ?? throw new InvalidOperationException("_cImagGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_dParam, Engine.TensorMultiplyScalar((_dParamGradient ?? throw new InvalidOperationException("_dParamGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_logDelta, Engine.TensorMultiplyScalar((_logDeltaGradient ?? throw new InvalidOperationException("_logDeltaGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_inputProjectionWeights,
-            Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient!, negLR));
+            Engine.TensorMultiplyScalar((_inputProjectionWeightsGradient ?? throw new InvalidOperationException("_inputProjectionWeightsGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_inputProjectionBias,
-            Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
+            Engine.TensorMultiplyScalar((_inputProjectionBiasGradient ?? throw new InvalidOperationException("_inputProjectionBiasGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_outputProjectionWeights,
-            Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+            Engine.TensorMultiplyScalar((_outputProjectionWeightsGradient ?? throw new InvalidOperationException("_outputProjectionWeightsGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_outputProjectionBias,
-            Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+            Engine.TensorMultiplyScalar((_outputProjectionBiasGradient ?? throw new InvalidOperationException("_outputProjectionBiasGradient is null where it is required.")), negLR));
 
         // Register trainable parameters for tape-based autodiff
         // Register trainable parameters for tape-based autodiff. The state-space core belongs here

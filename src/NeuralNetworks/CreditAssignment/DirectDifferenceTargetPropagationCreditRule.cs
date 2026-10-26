@@ -65,7 +65,7 @@ internal sealed class DirectDifferenceTargetPropagationCreditRule<T> : CreditRul
         foreach (var layer in context.Layers)
         {
             if (layer.IsOutputLayer) continue; // engine trains the output layer with the exact loss gradient
-            var projected = ProjectThrough(error, directInverse[layer.Index]!); // [B, C] · [C, M_i] = [B, M_i]
+            var projected = ProjectThrough(error, (directInverse[layer.Index] ?? throw new InvalidOperationException("directInverse[layer.Index] is null where it is required."))); // [B, C] · [C, M_i] = [B, M_i]
             layer.TeachingSignal = ToTeachingSignal(projected, layer.OutputShape);
         }
     }

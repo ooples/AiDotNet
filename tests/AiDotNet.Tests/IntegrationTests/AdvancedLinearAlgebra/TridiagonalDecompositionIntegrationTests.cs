@@ -19,7 +19,7 @@ public class TridiagonalDecompositionIntegrationTests
 
     private static Matrix<double> CreateSymmetricMatrix(int size, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(size, size);
         for (int i = 0; i < size; i++)
         {

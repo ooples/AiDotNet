@@ -162,7 +162,7 @@ public class QuantileLossFitnessCalculatorTests
         var calculator = new QuantileLossFitnessCalculator<double, Vector<double>, Vector<double>>();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore((DataSetStats<double, Vector<double>, Vector<double>>)null!));
+        Assert.Throws<ArgumentNullException>(() => calculator.CalculateFitnessScore(global::AiDotNet.Tests.TestNull.Of<DataSetStats<double, Vector<double>, Vector<double>>>()));
     }
 
     [Fact(Timeout = 60000)]

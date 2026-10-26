@@ -45,6 +45,13 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
 {
     private readonly AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLoss<T> _detectionLoss;
 
+    /// <summary>
+    /// The paper's optimizer (Ren et al. 2015, Section 3.1.3): SGD with momentum 0.9 at learning rate 0.001, one
+    /// image per mini-batch as here. The paper's weight decay (0.0005) is not applied.
+    /// </summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperSgdMomentum(0.001, 0.9);
+
     [AiDotNet.Attributes.Scratch]
     private Random? _trainingRandom;
     private readonly RPN<T> _rpn;
@@ -268,6 +275,9 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         int numClasses = Options.NumClasses + 1; // Including background
 
         var candidateDetections = new List<Detection<T>>();
+        // The detection loss multiplies the stage's regression targets by these weights, so the predicted deltas are
+        // divided by them here; unit weights (the default) leave them raw.
+        var regressionWeights = _detectionLoss.StageBoxRegressionWeights(0);
 
         for (int i = 0; i < numProposals; i++)
         {
@@ -318,10 +328,10 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
 
             // Get box deltas for this class
             int deltaOffset = bestClass * 4;
-            double dx = NumOps.ToDouble(boxDeltas[i, deltaOffset]);
-            double dy = NumOps.ToDouble(boxDeltas[i, deltaOffset + 1]);
-            double dw = NumOps.ToDouble(boxDeltas[i, deltaOffset + 2]);
-            double dh = NumOps.ToDouble(boxDeltas[i, deltaOffset + 3]);
+            double dx = NumOps.ToDouble(boxDeltas[i, deltaOffset]) / regressionWeights[0];
+            double dy = NumOps.ToDouble(boxDeltas[i, deltaOffset + 1]) / regressionWeights[1];
+            double dw = NumOps.ToDouble(boxDeltas[i, deltaOffset + 2]) / regressionWeights[2];
+            double dh = NumOps.ToDouble(boxDeltas[i, deltaOffset + 3]) / regressionWeights[3];
 
             // Apply deltas
             double predCx = pcx + dx * pw;

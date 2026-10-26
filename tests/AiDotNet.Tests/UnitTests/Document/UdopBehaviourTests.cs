@@ -58,7 +58,7 @@ public class UdopBehaviourTests
 
     private static Tensor<double> Page(int seed, int size = 16)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var page = new Tensor<double>(new[] { 3, size, size });
         for (int i = 0; i < page.Length; i++) page[i] = rng.NextDouble();
         return page;

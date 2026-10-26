@@ -243,25 +243,25 @@ public partial class TabNetEncoderLayer<T> : LayerBase<T>, IShapeContract
         var x = Engine.Reshape(input, new[] { batch, _numFeatures });
 
         // Initial batch norm + initial feature transformer to seed the attention input.
-        var xbn = _inputBatchNorm!.Forward(x);
-        var ft0 = _initialFeatureTransformer!.Forward(xbn);
-        var att = Engine.TensorMatMul(ft0, _attentionSelector!); // [batch, n_a]
+        var xbn = (_inputBatchNorm ?? throw new InvalidOperationException("_inputBatchNorm is null where it is required.")).Forward(x);
+        var ft0 = (_initialFeatureTransformer ?? throw new InvalidOperationException("_initialFeatureTransformer is null where it is required.")).Forward(xbn);
+        var att = Engine.TensorMatMul(ft0, (_attentionSelector ?? throw new InvalidOperationException("_attentionSelector is null where it is required."))); // [batch, n_a]
 
         var prior = Tensor<T>.CreateDefault(new[] { batch, _numFeatures }, NumOps.One);
         Tensor<T>? aggregated = null;
 
         for (int step = 0; step < _numSteps; step++)
         {
-            var mask = _attentiveTransformers![step].Forward(att, prior);      // [batch, D]
+            var mask = (_attentiveTransformers ?? throw new InvalidOperationException("_attentiveTransformers is null where it is required."))[step].Forward(att, prior);      // [batch, D]
             prior = _attentiveTransformers[step].UpdatePriorScales(prior, mask);
             var masked = Engine.TensorMultiply(mask, xbn);                     // [batch, D]
-            var ft = _stepFeatureTransformers![step].Forward(masked);          // [batch, ftOut]
-            var decision = Engine.ReLU(Engine.TensorMatMul(ft, _decisionSelector!)); // [batch, n_d]
+            var ft = (_stepFeatureTransformers ?? throw new InvalidOperationException("_stepFeatureTransformers is null where it is required."))[step].Forward(masked);          // [batch, ftOut]
+            var decision = Engine.ReLU(Engine.TensorMatMul(ft, (_decisionSelector ?? throw new InvalidOperationException("_decisionSelector is null where it is required.")))); // [batch, n_d]
             aggregated = aggregated is null ? decision : Engine.TensorAdd(aggregated, decision);
-            att = Engine.TensorMatMul(ft, _attentionSelector!);                // [batch, n_a]
+            att = Engine.TensorMatMul(ft, _attentionSelector);                // [batch, n_a]
         }
 
-        return aggregated ?? Engine.TensorMatMul(ft0, _decisionSelector!);
+        return aggregated ?? Engine.TensorMatMul(ft0, (_decisionSelector ?? throw new InvalidOperationException("_decisionSelector is null where it is required.")));
     }
 
     /// <inheritdoc/>

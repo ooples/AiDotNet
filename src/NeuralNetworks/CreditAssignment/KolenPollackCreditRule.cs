@@ -69,8 +69,8 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
         Matrix<T> delta = ErrorMatrix(context); // [B, outFeatures_last]
         for (int j = last; j >= 1; j--)
         {
-            var b = feedback[j]!;                          // [outFeatures_j, inFeatures_j]
-            Matrix<T> teachingBelow = delta.Multiply(b);   // [B, inFeatures_j] == below layer's output space
+            var b = feedback[j];                          // [outFeatures_j, inFeatures_j]
+            Matrix<T> teachingBelow = delta.Multiply((b ?? throw new InvalidOperationException("b is null where it is required.")));   // [B, inFeatures_j] == below layer's output space
 
             var below = layers[j - 1];
             if (teachingBelow.Columns != below.FlatFeatureSize)
@@ -147,7 +147,7 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
             Matrix<T> current = layers[j].Weights ?? throw new NotSupportedException(
                 $"KolenPollack requires layer {j} to expose a single rank-2 forward weight matrix. " +
                 "Use CreditRule.DirectKolenPollack for attention, normalization, or composite layers.");
-            Matrix<T> b = feedback[j]!;
+            Matrix<T> b = (feedback[j] ?? throw new InvalidOperationException("feedback[j] is null where it is required."));
             Matrix<T>? previous = _previousForwardWeights[j];
 
             // B AND W HAVE THE SAME ORIENTATION, both [outFeatures, inFeatures]. EnsureFeedback
@@ -171,7 +171,7 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
             // reaches 0.42818514609183833 -- B + increment - decay * (B - W), which is the rule.
             if (previous is not null &&
                 previous.Rows == current.Rows && previous.Columns == current.Columns &&
-                b.Rows == current.Rows && b.Columns == current.Columns)
+                (b ?? throw new InvalidOperationException("b is null where it is required.")).Rows == current.Rows && b.Columns == current.Columns)
             {
                 for (int row = 0; row < b.Rows; row++)
                 {

@@ -106,12 +106,12 @@ public class LSTMVAETests
         // gradient must use the same bounded variance instead of evaluating exp(1000).
         var encoderField = typeof(LSTMVAE<double>).GetField("_encoder", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(encoderField);
-        object? encoderValue = encoderField!.GetValue(model);
+        object? encoderValue = encoderField.GetValue(model);
         Assert.NotNull(encoderValue);
-        object encoder = encoderValue!;
+        object encoder = encoderValue;
         FieldInfo? logVarBiasField = encoder.GetType().GetField("_logVarBias", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(logVarBiasField);
-        var logVarBias = Assert.IsType<Tensor<double>>(logVarBiasField!.GetValue(encoder));
+        var logVarBias = Assert.IsType<Tensor<double>>(logVarBiasField.GetValue(encoder));
         logVarBias[0] = 1000.0;
 
         string[] parameterFields = ["_weights", "_bias", "_meanWeights", "_meanBias", "_logVarWeights", "_logVarBias"];
@@ -120,7 +120,7 @@ public class LSTMVAETests
         {
             FieldInfo? parameterField = encoder.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(parameterField);
-            var parameter = Assert.IsType<Tensor<double>>(parameterField!.GetValue(encoder));
+            var parameter = Assert.IsType<Tensor<double>>(parameterField.GetValue(encoder));
             parametersBefore[fieldName] = parameter.ToArray();
         }
 
@@ -136,7 +136,7 @@ public class LSTMVAETests
         {
             FieldInfo? parameterField = encoder.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(parameterField);
-            var parameter = Assert.IsType<Tensor<double>>(parameterField!.GetValue(encoder));
+            var parameter = Assert.IsType<Tensor<double>>(parameterField.GetValue(encoder));
             for (int i = 0; i < parameter.Length; i++)
             {
                 Assert.True(!double.IsNaN(parameter[i]) && !double.IsInfinity(parameter[i]),

@@ -359,9 +359,9 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// so rebuilding these matrices on every settling iteration only creates avoidable work and GC churn.
     /// </summary>
     [Scratch]
-    private Matrix<T> _inputWeightsTransposed = null!;
+    private Matrix<T>? _inputWeightsTransposed;
     [Scratch]
-    private Matrix<T> _reservoirWeightsTransposed = null!;
+    private Matrix<T>? _reservoirWeightsTransposed;
 
     /// <summary>
     /// The weight matrix for reservoir-to-output connections.
@@ -685,6 +685,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <summary>
     /// Rebuilds derived matrix layouts after the fixed reservoir weights are initialized or restored.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_inputWeightsTransposed), nameof(_reservoirWeightsTransposed))]
     private void RefreshReservoirWeightCaches()
     {
         _inputWeightsTransposed = Engine.MatrixTranspose(_inputWeights);
@@ -761,6 +762,8 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     {
         // The fixed weight layouts are transposed once during initialization/deserialization rather than
         // once per settling step. A single prediction may need all 200 steps.
+        if (_inputWeightsTransposed is null || _reservoirWeightsTransposed is null)
+            RefreshReservoirWeightCaches();
         Vector<T> inputContribution = Engine.MatrixVectorMultiply(_inputWeightsTransposed, input);
 
         Vector<T> reservoirContribution = Engine.MatrixVectorMultiply(_reservoirWeightsTransposed, _currentState);

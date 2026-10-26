@@ -38,8 +38,8 @@ public class ComputationNodeBackwardTests
 
         for (int i = 0; i < 3; i++)
         {
-            Assert.Equal(b.Value[i], a.Gradient![i]);
-            Assert.Equal(a.Value[i], b.Gradient![i]);
+            Assert.Equal(b.Value[i], a.Gradient[i]);
+            Assert.Equal(a.Value[i], b.Gradient[i]);
         }
     }
 
@@ -57,7 +57,7 @@ public class ComputationNodeBackwardTests
         for (int i = 0; i < 3; i++)
         {
             double expected = Math.Exp(x.Value[i]) * (1.0 + x.Value[i]);
-            Assert.True(Math.Abs(x.Gradient![i] - expected) < 1e-12,
+            Assert.True(Math.Abs(x.Gradient[i] - expected) < 1e-12,
                 $"at {i}: got {x.Gradient[i]:G17}, closed form {expected:G17}");
         }
     }
@@ -74,7 +74,7 @@ public class ComputationNodeBackwardTests
         f.Backward();
 
         Assert.NotNull(x.Gradient);
-        Assert.Equal(2.0 * 1.5 + 1.0, x.Gradient![0], 12);
+        Assert.Equal(2.0 * 1.5 + 1.0, x.Gradient[0], 12);
         Assert.Equal(2.0 * -2.0 + 1.0, x.Gradient[1], 12);
     }
 
@@ -90,7 +90,7 @@ public class ComputationNodeBackwardTests
         loss.Backward();
 
         Assert.NotNull(w.Gradient);
-        for (int i = 0; i < 3; i++) Assert.Equal(x.Value[i], w.Gradient![i], 12);
+        for (int i = 0; i < 3; i++) Assert.Equal(x.Value[i], w.Gradient[i], 12);
 
         // Declared as not requiring a gradient, so nothing should have been computed for it.
         Assert.Null(x.Gradient);
@@ -122,7 +122,7 @@ public class ComputationNodeBackwardTests
             start[i] = original;
 
             double numeric = (up - down) / (2.0 * h);
-            Assert.True(Math.Abs(x.Gradient![i] - numeric) < 1e-7,
+            Assert.True(Math.Abs((x.Gradient ?? throw new InvalidOperationException("x.Gradient is null where it is required."))[i] - numeric) < 1e-7,
                 $"at {i}: autodiff {x.Gradient[i]:G17}, central difference {numeric:G17}");
         }
     }
@@ -144,7 +144,7 @@ public class ComputationNodeBackwardTests
         // Seeding with 2 rather than 1 asks for twice the derivative: d(x^2)/dx = 2x, so 4x here.
         f.Backward(TensorOf(2.0, 2.0));
 
-        Assert.Equal(4.0 * 3.0, x.Gradient![0], 12);
+        Assert.Equal(4.0 * 3.0, (x.Gradient ?? throw new InvalidOperationException("x.Gradient is null where it is required."))[0], 12);
         Assert.Equal(4.0 * -1.0, x.Gradient[1], 12);
     }
 
@@ -155,7 +155,7 @@ public class ComputationNodeBackwardTests
         var f = TensorOperations<double>.ElementwiseMultiply(x, x);
 
         f.Backward();
-        double once = x.Gradient![0];
+        double once = (x.Gradient ?? throw new InvalidOperationException("x.Gradient is null where it is required."))[0];
 
         f.Backward();
         double twice = x.Gradient[0];

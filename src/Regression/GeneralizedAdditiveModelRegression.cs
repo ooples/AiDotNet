@@ -283,11 +283,11 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
             if (storeFittedKnots)
             {
                 knots = CreateKnots(feature);
-                _trainingKnots!.Add(knots);
+                _trainingKnots.Add(knots);
             }
             else
             {
-                knots = _trainingKnots![i];
+                knots = _trainingKnots[i];
             }
 
             for (int j = 0; j < _options.NumSplines; j++)

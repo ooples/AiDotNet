@@ -22,7 +22,7 @@ public class AiModelBuilderAccuracyTests
         // Note: The builder's default NormalOptimizer performs feature selection,
         // which may select only a subset of features. With 2 features, if only
         // one is selected, R² will be lower but still significantly above baseline.
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int trainSamples = 100;
         int testSamples = 30;
 
@@ -64,7 +64,7 @@ public class AiModelBuilderAccuracyTests
         // Arrange: y = 2*x1 + 3*x2 + 1, use direct model training (no builder/optimizer)
         // to verify the model itself correctly recovers coefficients.
         // The builder's optimizer adds feature selection which complicates coefficient probing.
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var model = new RidgeRegression<double>();
 
         int samples = 100;
@@ -102,7 +102,7 @@ public class AiModelBuilderAccuracyTests
     {
         // Arrange: y = 5*x1 - 2*x2 with ZERO noise using direct model training.
         // Direct training bypasses the optimizer's feature selection for an exact test.
-        var random = new Random(77);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(77);
         int samples = 50;
         var x = new Matrix<double>(samples, 2);
         var y = new Vector<double>(samples);
@@ -138,7 +138,7 @@ public class AiModelBuilderAccuracyTests
         // Arrange: y = sin(x) on [0, 2π] — non-linear challenge.
         // Ridge regression can only fit a line, so R² won't be perfect,
         // but it should not be catastrophically bad.
-        var random = new Random(55);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(55);
         int trainSamples = 80;
         int testSamples = 20;
 
@@ -188,7 +188,7 @@ public class AiModelBuilderAccuracyTests
     public async Task LargeDataset_PredictionStability()
     {
         // Arrange: Train on 500 samples, verify prediction determinism
-        var random = new Random(99);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
         int samples = 500;
         var x = new Matrix<double>(samples, 4);
         var y = new Vector<double>(samples);
@@ -210,7 +210,7 @@ public class AiModelBuilderAccuracyTests
             .GetResult();
 
         var testData = new Matrix<double>(50, 4);
-        var testRng = new Random(500);
+        var testRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(500);
         for (int i = 0; i < 50; i++)
             for (int j = 0; j < 4; j++)
                 testData[i, j] = testRng.NextDouble() * 10;

@@ -24,7 +24,7 @@ public class LicenseKeyTests
     [Fact(Timeout = 60000)]
     public async Task AiDotNetLicenseKey_NullKey_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new AiDotNetLicenseKey(null));
+        Assert.Throws<ArgumentNullException>(() => new AiDotNetLicenseKey(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -265,6 +265,6 @@ public class LicenseKeyTests
     {
         var builder = new AiModelBuilder<double, double[], double>();
 
-        Assert.Throws<ArgumentNullException>(() => builder.ConfigureLicenseKey(null));
+        Assert.Throws<ArgumentNullException>(() => builder.ConfigureLicenseKey(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.AiDotNetLicenseKey>()));
     }
 }

@@ -154,7 +154,7 @@ public class TokenizationDeepIntegrationTests
     public async Task CharTokenizer_NullString_ReturnsEmptyList()
     {
         var tokenizer = CharacterTokenizer.CreateAscii();
-        var tokens = tokenizer.Tokenize(null);
+        var tokens = tokenizer.Tokenize(global::AiDotNet.Tests.TestNull.Of<string>());
         Assert.Empty(tokens);
     }
 
@@ -269,7 +269,7 @@ public class TokenizationDeepIntegrationTests
     {
         var tokenizer = BpeTokenizer.Train(new[] { "hello" }, vocabSize: 50);
         Assert.Empty(tokenizer.Tokenize(""));
-        Assert.Empty(tokenizer.Tokenize(null));
+        Assert.Empty(tokenizer.Tokenize(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -499,7 +499,7 @@ public class TokenizationDeepIntegrationTests
 
         var tokenizer = new WordPieceTokenizer(vocab, specialTokens);
         Assert.Empty(tokenizer.Tokenize(""));
-        Assert.Empty(tokenizer.Tokenize(null));
+        Assert.Empty(tokenizer.Tokenize(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -731,7 +731,7 @@ public class TokenizationDeepIntegrationTests
     public async Task BpeTokenizer_Train_NullCorpus_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            BpeTokenizer.Train(null, vocabSize: 50));
+            BpeTokenizer.Train(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<string>>(), vocabSize: 50));
     }
 
     [Fact(Timeout = 120000)]
@@ -745,7 +745,7 @@ public class TokenizationDeepIntegrationTests
     public async Task CharTokenizer_Train_NullCorpus_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            CharacterTokenizer.Train(null));
+            CharacterTokenizer.Train(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<string>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -759,7 +759,7 @@ public class TokenizationDeepIntegrationTests
     public async Task WordPiece_Train_NullCorpus_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            WordPieceTokenizer.Train(null, vocabSize: 50));
+            WordPieceTokenizer.Train(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<string>>(), vocabSize: 50));
     }
 
     [Fact(Timeout = 120000)]

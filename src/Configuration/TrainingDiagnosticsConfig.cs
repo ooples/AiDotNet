@@ -257,7 +257,7 @@ public static class TrainingDiagnosticsConfig
         if (string.IsNullOrWhiteSpace(val)) return TrainingDiagnosticLevel.Silent;
         // Trim leading/trailing whitespace so values from container env
         // templating (e.g. " perstep\n") still match.
-        val = val!.Trim();
+        val = val.Trim();
         if (val.Equals("minimal", StringComparison.OrdinalIgnoreCase))
             return TrainingDiagnosticLevel.Minimal;
         if (val.Equals("verbose", StringComparison.OrdinalIgnoreCase))

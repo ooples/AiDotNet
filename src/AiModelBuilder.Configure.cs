@@ -378,7 +378,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <inheritdoc />
     public IAiModelBuilder<T, TInput, TOutput> ConfigureLicenseKey(AiDotNetLicenseKey licenseKey)
     {
-        _licensing!.ConfigureLicenseKey(licenseKey);
+        (_licensing ?? throw new InvalidOperationException("_licensing is null where it is required.")).ConfigureLicenseKey(licenseKey);
         _licenseKey = _licensing.LicenseKey;
         _licenseValidator = _licensing.Validator;
         return this;
@@ -2374,7 +2374,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ? Math.Max(1, _optimizer.GetOptions().MaxIterations)
             : 100;
 
-        var rng = _allowNondeterminism ? new Random() : new Random(42);
+        var rng = _allowNondeterminism ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom() : AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int epoch = 0; epoch < epochs; epoch++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -2620,7 +2620,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var explorationStrategy = _rlOptions.ExplorationStrategy ?? _configuredExplorationStrategy;
         Random? explorationRng = explorationStrategy is null
             ? null
-            : (_rlOptions.Seed.HasValue ? new Random(_rlOptions.Seed.Value) : new Random());
+            : (_rlOptions.Seed.HasValue ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_rlOptions.Seed.Value) : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom());
 
         // Curiosity: an intrinsic-reward module adds a novelty bonus to each step's reward (order-
         // independent with ConfigureReinforcementLearning via the configured-field fallback).
@@ -2654,7 +2654,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 {
                     var greedyAction = rlAgent.SelectAction(state, explore: false);
                     action = explorationStrategy.GetExplorationAction(
-                        state, greedyAction, greedyAction.Length, explorationRng!);
+                        state, greedyAction, greedyAction.Length, (explorationRng ?? throw new InvalidOperationException("explorationRng is null where it is required.")));
                 }
                 else
                 {

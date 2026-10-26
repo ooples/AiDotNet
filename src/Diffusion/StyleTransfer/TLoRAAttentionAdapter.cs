@@ -151,7 +151,7 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
         _adapter = new TimestepDependentLora<T>(
             rank: Math.Max(1, Math.Min(rank, channels)),
             inputDim: channels, outputDim: channels,
-            totalTimesteps: totalTimesteps, random: random ?? new Random());
+            totalTimesteps: totalTimesteps, random: random ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom());
     }
 
     /// <summary>
@@ -243,10 +243,10 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
 
         // Undo the permutation: axis j of the permuted tensor came from forwardPermutation[j].
         var permutedShape = new int[shape.Length];
-        for (int d = 0; d < shape.Length; d++) permutedShape[d] = shape[forwardPermutation![d]];
+        for (int d = 0; d < shape.Length; d++) permutedShape[d] = shape[(forwardPermutation ?? throw new InvalidOperationException("forwardPermutation is null where it is required."))[d]];
 
         var inverse = new int[shape.Length];
-        for (int d = 0; d < shape.Length; d++) inverse[forwardPermutation![d]] = d;
+        for (int d = 0; d < shape.Length; d++) inverse[(forwardPermutation ?? throw new InvalidOperationException("forwardPermutation is null where it is required."))[d]] = d;
 
         return Engine.TensorPermute(Engine.Reshape(adapted, permutedShape), inverse);
     }

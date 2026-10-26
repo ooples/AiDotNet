@@ -222,12 +222,12 @@ public class ImageFolderDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             : RandomHelper.CreateSecureRandom();
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
 
-        var trainFeatures = ExtractTensorBatch(LoadedFeatures!, shuffled.Take(trainSize).ToArray());
-        var trainLabels = ExtractTensorBatch(LoadedLabels!, shuffled.Take(trainSize).ToArray());
-        var valFeatures = ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize).Take(valSize).ToArray());
-        var valLabels = ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize).Take(valSize).ToArray());
-        var testFeatures = ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize + valSize).ToArray());
-        var testLabels = ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize + valSize).ToArray());
+        var trainFeatures = ExtractTensorBatch((LoadedFeatures ?? throw new InvalidOperationException("LoadedFeatures is null where it is required.")), shuffled.Take(trainSize).ToArray());
+        var trainLabels = ExtractTensorBatch((LoadedLabels ?? throw new InvalidOperationException("LoadedLabels is null where it is required.")), shuffled.Take(trainSize).ToArray());
+        var valFeatures = ExtractTensorBatch(LoadedFeatures, shuffled.Skip(trainSize).Take(valSize).ToArray());
+        var valLabels = ExtractTensorBatch(LoadedLabels, shuffled.Skip(trainSize).Take(valSize).ToArray());
+        var testFeatures = ExtractTensorBatch(LoadedFeatures, shuffled.Skip(trainSize + valSize).ToArray());
+        var testLabels = ExtractTensorBatch(LoadedLabels, shuffled.Skip(trainSize + valSize).ToArray());
 
         return (
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(trainFeatures, trainLabels),

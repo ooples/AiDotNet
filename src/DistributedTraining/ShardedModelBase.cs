@@ -625,7 +625,7 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
             foreach (var parameter in constructor.GetParameters())
             {
                 if (!string.IsNullOrEmpty(parameter.Name))
-                    constructorParameters.Add(parameter.Name!);
+                    constructorParameters.Add(parameter.Name);
             }
         }
 

@@ -122,7 +122,7 @@ public sealed class LayerGradientPublishReuseTests
 
     private static Tensor<float> Input(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var input = new Tensor<float>(new[] { 6, 5 });
         for (int i = 0; i < input.Length; i++) input[i] = (float)(rng.NextDouble() * 2 - 1);
         return input;

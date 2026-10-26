@@ -327,7 +327,7 @@ public class DistributedTrainingIntegrationTests
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                backend.AllReduce(null!, ReductionOperation.Sum));
+                backend.AllReduce(null, ReductionOperation.Sum));
         }
         finally
         {
@@ -347,7 +347,7 @@ public class DistributedTrainingIntegrationTests
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                backend.AllGather(null!));
+                backend.AllGather(null));
         }
         finally
         {
@@ -435,7 +435,7 @@ public class DistributedTrainingIntegrationTests
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ShardingConfiguration<double>(null!));
+            new ShardingConfiguration<double>(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -607,7 +607,7 @@ public class DistributedTrainingIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            analyzer.AnalyzeParameters(null!));
+            analyzer.AnalyzeParameters(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -687,7 +687,7 @@ public class DistributedTrainingIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            analyzer.AnalyzeForDistribution(null!));
+            analyzer.AnalyzeForDistribution(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -844,7 +844,7 @@ public class DistributedTrainingIntegrationTests
 
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() =>
-            analyzer.ValidateGrouping(null!, totalParameterCount: 100));
+            analyzer.ValidateGrouping(null, totalParameterCount: 100));
     }
 
     [Fact(Timeout = 120000)]
@@ -1004,7 +1004,7 @@ public class DistributedTrainingIntegrationTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            CommunicationManager.Initialize<double>(null!));
+            CommunicationManager.Initialize<double>(null));
     }
 
     [Fact(Timeout = 120000)]
@@ -1159,7 +1159,7 @@ public class DistributedTrainingIntegrationTests
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                CommunicationManager.AllReduce<double>(null!, ReductionOperation.Sum));
+                CommunicationManager.AllReduce<double>(null, ReductionOperation.Sum));
         }
         finally
         {
@@ -1394,7 +1394,7 @@ public class DistributedTrainingIntegrationTests
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                backend.Send(null!, destinationRank: 1));
+                backend.Send(null, destinationRank: 1));
         }
         finally
         {
@@ -2119,7 +2119,7 @@ public class DistributedTrainingIntegrationTests
         var config = new ShardingConfiguration<double>(backend);
 
         Assert.Throws<ArgumentNullException>(() =>
-            new DDPModel<double, Vector<double>, Vector<double>>(null!, config));
+            new DDPModel<double, Vector<double>, Vector<double>>(null, config));
 
         backend.Shutdown();
     }
@@ -2130,7 +2130,7 @@ public class DistributedTrainingIntegrationTests
         var model = new MockDistributedModel(8);
 
         Assert.Throws<ArgumentNullException>(() =>
-            new DDPModel<double, Vector<double>, Vector<double>>(model, null!));
+            new DDPModel<double, Vector<double>, Vector<double>>(model, null));
     }
 
     [Fact(Timeout = 120000)]

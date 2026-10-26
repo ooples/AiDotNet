@@ -83,7 +83,7 @@ public sealed class DecoderEngineParityTests
 
             cpu = Checksum(model.Predict(window));
 
-            AiDotNetEngine.Current = gpu!;
+            AiDotNetEngine.Current = gpu;
             accelerated = Checksum(model.Predict(window));
         }
         finally

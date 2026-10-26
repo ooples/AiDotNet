@@ -634,7 +634,7 @@ public class RWKV7LanguageModelTests
     public async Task Options_CopyConstructor_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>(null));
+            new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -671,7 +671,7 @@ public class RWKV7LanguageModelTests
     private static Tensor<float> CreateTokenInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<float>(new[] { batchSize, seqLen });
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int b = 0; b < batchSize; b++)
             for (int t = 0; t < seqLen; t++)
@@ -684,7 +684,7 @@ public class RWKV7LanguageModelTests
     private static Tensor<float> CreateOneHotTarget(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<float>(new[] { batchSize, seqLen, vocabSize });
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int b = 0; b < batchSize; b++)
             for (int t = 0; t < seqLen; t++)
@@ -697,7 +697,7 @@ public class RWKV7LanguageModelTests
     private static Tensor<double> CreateTokenDoubleInput(int batchSize, int seqLen, int vocabSize, int seed = 42)
     {
         var tensor = new Tensor<double>(new[] { batchSize, seqLen });
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         for (int b = 0; b < batchSize; b++)
             for (int t = 0; t < seqLen; t++)
@@ -709,7 +709,7 @@ public class RWKV7LanguageModelTests
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
             tensor[i] = (float)(random.NextDouble() * 2 - 1);
         return tensor;

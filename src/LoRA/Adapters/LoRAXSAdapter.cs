@@ -425,16 +425,16 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 
         // LoRA-XS forward pass: U_r * Σ_r * R * V_r^T * input
         // Step 1: x1 = V_r^T * input [rank × batchSize]
-        _cachedVtInput = MatrixVectorMultiply(_frozenVt!.ToMatrix(), input);
+        _cachedVtInput = MatrixVectorMultiply((_frozenVt ?? throw new InvalidOperationException("_frozenVt is null where it is required.")).ToMatrix(), input);
 
         // Step 2: x2 = R * x1 [rank × batchSize]
         _cachedRVtInput = MatrixVectorMultiply(_trainableR.ToMatrix(), _cachedVtInput);
 
         // Step 3: x3 = Σ_r * x2 (diagonal multiplication) [rank × batchSize]
-        _cachedSigmaRVtInput = ApplySigmaScaling(_frozenSigma!.ToVector(), _cachedRVtInput);
+        _cachedSigmaRVtInput = ApplySigmaScaling((_frozenSigma ?? throw new InvalidOperationException("_frozenSigma is null where it is required.")).ToVector(), _cachedRVtInput);
 
         // Step 4: x4 = U_r * x3 [outputSize × batchSize]
-        Tensor<T> loraOutput = MatrixVectorMultiply(_frozenU!.ToMatrix(), _cachedSigmaRVtInput);
+        Tensor<T> loraOutput = MatrixVectorMultiply((_frozenU ?? throw new InvalidOperationException("_frozenU is null where it is required.")).ToMatrix(), _cachedSigmaRVtInput);
 
         // Apply LoRA scaling factor
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
@@ -526,7 +526,7 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 
         // Step 1: R * V_r^T — vectorized Engine.TensorMatMul
         var rTensor = _trainableR;
-        var vtTensor = _frozenVt!;
+        var vtTensor = _frozenVt;
         var RVtTensor = Engine.TensorMatMul(rTensor, vtTensor);
 
         // Step 2: Σ_r * (R * V_r^T) — diagonal scaling per row
@@ -540,7 +540,7 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Step 3: U_r * (Σ_r * R * V_r^T) — vectorized Engine.TensorMatMul
-        var uTensor = _frozenU!;
+        var uTensor = _frozenU;
         var loraWeightsTensor = Engine.TensorMatMul(uTensor, RVtTensor);
 
         // Apply scaling factor

@@ -50,7 +50,7 @@ public class KernelRegressionIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) GenerateSinusoidalData(int n, double noiseLevel = 0.0)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(n, 1);
         var y = new Vector<double>(n);
 
@@ -87,7 +87,7 @@ public class KernelRegressionIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) GenerateMultiDimensionalData(int n)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);
 

@@ -102,7 +102,7 @@ public sealed record LayerPort
         this.Required = Required;
         this.ValueDomain = ValueDomain ?? LayerInputDomain.Continuous;
         this.Role = Role;
-        this.StableId = string.IsNullOrWhiteSpace(StableId) ? this.Name : StableId!;
+        this.StableId = (string.IsNullOrWhiteSpace(StableId) ? this.Name : StableId ?? throw new InvalidOperationException("string.IsNullOrWhiteSpace(StableId) ? this.Name : StableId is null where it is required."));
         this.Source = Source;
         this.Variant = string.IsNullOrWhiteSpace(Variant) ? "default" : Variant;
         this.ShapeConstraint = ShapeConstraint ?? PortShapeConstraint.None;

@@ -116,7 +116,7 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
 
         for (int j = 0; j < m; j++)
         {
-            if (featureColumns![j] is null || featureColumns[j].Length != time)
+            if ((featureColumns ?? throw new InvalidOperationException("featureColumns is null where it is required."))[j] is null || featureColumns[j].Length != time)
             {
                 throw new ArgumentException(
                     $"All feature series must be non-null and match the asset-series length ({time}); feature {j} does not match.",
@@ -135,7 +135,7 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
 
             for (int j = 0; j < m; j++)
             {
-                data[(t * assets) + n + j] = FromDouble(featureColumns![j][t]);
+                data[(t * assets) + n + j] = FromDouble((featureColumns ?? throw new InvalidOperationException("featureColumns is null where it is required."))[j][t]);
             }
         }
 

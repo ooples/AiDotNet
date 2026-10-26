@@ -248,7 +248,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new ParentDocumentRetriever<double>(null!, model, 256, 2048, true));
+                new ParentDocumentRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IDocumentStore<double>>(), model, 256, 2048, true));
         }
 
         [Fact(Timeout = 60000)]
@@ -259,7 +259,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new ParentDocumentRetriever<double>(store, null!, 256, 2048, true));
+                new ParentDocumentRetriever<double>(store, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IEmbeddingModel<double>>(), 256, 2048, true));
         }
 
         [Fact(Timeout = 60000)]
@@ -437,7 +437,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null!).ToList());
+                retriever.Retrieve(global::AiDotNet.Tests.TestNull.Of<string>()).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -780,7 +780,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var model = new MockEmbeddingModel();
 
             var chunkWithNullParent = new Document<double>("chunk1", "null parent",
-                new Dictionary<string, object> { { "parent_id", null! } });
+                new Dictionary<string, object> { { "parent_id", global::AiDotNet.Tests.TestNull.Of<object>() } });
             chunkWithNullParent.RelevanceScore = 0.9;
             chunkWithNullParent.HasRelevanceScore = true;
             store.AddDocument(chunkWithNullParent);

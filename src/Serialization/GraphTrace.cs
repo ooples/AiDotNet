@@ -87,7 +87,7 @@ public static class GraphTrace
                 continue;
             }
 
-            sb.Append(node.OperationType!.Value.ToString());
+            sb.Append((node.OperationType ?? throw new InvalidOperationException("node.OperationType is null where it is required.")).ToString());
             sb.Append('(');
             for (var i = 0; i < node.Parents.Count; i++)
             {
@@ -234,7 +234,9 @@ public static class GraphTrace
         foreach (var method in candidates)
         {
             var bound = Bind<T>(method, parents, parameters);
-            if (bound is not null) return (ComputationNode<T>)method.Invoke(null, bound)!;
+            if (bound is not null)
+                return method.Invoke(null, bound) as ComputationNode<T>
+                    ?? throw new InvalidOperationException($"Replaying {method.Name} did not return a computation node.");
         }
 
         throw Bad(layerName, key,
@@ -330,7 +332,10 @@ public static class GraphTrace
     {
         internal static readonly ReferenceComparer<T> Instance = new();
 
-        public bool Equals(ComputationNode<T>? x, ComputationNode<T>? y) => ReferenceEquals(x, y);
+        public bool Equals(ComputationNode<T>? x, ComputationNode<T>? y) => SameNode(x, y);
+
+        // Identity through object-typed parameters: two distinct nodes are never equal, whatever they hold.
+        private static bool SameNode(object? left, object? right) => ReferenceEquals(left, right);
 
         public int GetHashCode(ComputationNode<T> obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }

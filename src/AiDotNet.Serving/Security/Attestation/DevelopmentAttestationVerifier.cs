@@ -103,9 +103,9 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
         try
         {
             var jwtParameters = _jwtParameters
-                ?? throw new InvalidOperationException("JWT validation parameters have not been configured.");
+                ?? throw new System.InvalidOperationException("JWT validation parameters have not been configured.");
             var jwtOptions = _jwtOptions
-                ?? throw new InvalidOperationException("JWT attestation options have not been configured.");
+                ?? throw new System.InvalidOperationException("JWT attestation options have not been configured.");
 
             var principal = _tokenHandler.ValidateToken(evidence.AttestationToken, jwtParameters, out _);
 

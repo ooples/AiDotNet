@@ -584,7 +584,7 @@ public class RAGRerankerMathIntegrationTests
     public async Task MMR_NullEmbeddingFunc_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new MaximalMarginalRelevanceReranker<double>(null!, lambda: 0.5));
+            new MaximalMarginalRelevanceReranker<double>(global::AiDotNet.Tests.TestNull.Of<System.Func<AiDotNet.RetrievalAugmentedGeneration.Models.Document<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), lambda: 0.5));
     }
 
     [Fact(Timeout = 120000)]
@@ -628,7 +628,7 @@ public class RAGRerankerMathIntegrationTests
     {
         var reranker = new DiversityReranker<double>(0.5);
 
-        Assert.Throws<ArgumentNullException>(() => reranker.Rerank("query", null!));
+        Assert.Throws<ArgumentNullException>(() => reranker.Rerank("query", global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Models.Document<double>>>()));
     }
 
     [Fact(Timeout = 120000)]

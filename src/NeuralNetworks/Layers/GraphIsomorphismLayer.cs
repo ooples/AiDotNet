@@ -413,7 +413,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         _mlpBias2Gradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
 
         // Gradient through MLP Layer 2 weights: hidden^T @ grad (batched then summed)
-        var hiddenBatchedT = Engine.TensorPermute(_lastMlpHidden!, [0, 2, 1]);
+        var hiddenBatchedT = Engine.TensorPermute((_lastMlpHidden ?? throw new InvalidOperationException("_lastMlpHidden is null where it is required.")), [0, 2, 1]);
         var weights2GradBatched = Engine.BatchMatMul(hiddenBatchedT, activationGradient);
         _mlpWeights2Gradient = Engine.ReduceSum(weights2GradBatched, [0], keepDims: false);
 
@@ -435,7 +435,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         _mlpBias1Gradient = Engine.ReduceSum(hiddenGrad, [0, 1], keepDims: false);
 
         // Gradient through MLP Layer 1 weights: aggregated^T @ hiddenGrad (batched then summed)
-        var aggBatchedT = Engine.TensorPermute(_lastAggregated!, [0, 2, 1]);
+        var aggBatchedT = Engine.TensorPermute((_lastAggregated ?? throw new InvalidOperationException("_lastAggregated is null where it is required.")), [0, 2, 1]);
         var weights1GradBatched = Engine.BatchMatMul(aggBatchedT, hiddenGrad);
         _mlpWeights1Gradient = Engine.ReduceSum(weights1GradBatched, [0], keepDims: false);
     }

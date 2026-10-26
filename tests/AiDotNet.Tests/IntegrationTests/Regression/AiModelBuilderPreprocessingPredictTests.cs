@@ -21,7 +21,7 @@ public class AiModelBuilderPreprocessingPredictTests
     {
         // Arrange: Create data with very different feature scales.
         // Feature 1: 0-1 range, Feature 2: 0-10000 range
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int samples = 80;
         var x = new Matrix<double>(samples, 2);
         var y = new Vector<double>(samples);
@@ -50,7 +50,7 @@ public class AiModelBuilderPreprocessingPredictTests
 
         // Create test data with the same scale characteristics
         var testData = new Matrix<double>(5, 2);
-        var testRng = new Random(100);
+        var testRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(100);
         for (int i = 0; i < 5; i++)
         {
             testData[i, 0] = testRng.NextDouble();
@@ -79,7 +79,7 @@ public class AiModelBuilderPreprocessingPredictTests
     {
         // Arrange: Train on known linear data y = 2*x + 3 with preprocessing.
         // Predictions should be in the ORIGINAL scale, not the standardized scale.
-        var random = new Random(77);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(77);
         int samples = 60;
         var x = new Matrix<double>(samples, 1);
         var y = new Vector<double>(samples);
@@ -122,7 +122,7 @@ public class AiModelBuilderPreprocessingPredictTests
     {
         // Arrange: Use pipeline with SimpleImputer + StandardScaler.
         // Training data has some NaN values that the imputer must handle.
-        var random = new Random(55);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(55);
         int samples = 60;
         var x = new Matrix<double>(samples, 3);
         var y = new Vector<double>(samples);
@@ -156,7 +156,7 @@ public class AiModelBuilderPreprocessingPredictTests
 
         // Test: predict with data containing NaN to exercise the imputer
         var testData = new Matrix<double>(3, 3);
-        var testRng = new Random(200);
+        var testRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(200);
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 3; j++)
                 testData[i, j] = testRng.NextDouble() * 10;
@@ -218,7 +218,7 @@ public class AiModelBuilderPreprocessingPredictTests
     private static (Matrix<double> x, Vector<double> y) CreateLinearDataset(
         int samples, int features, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 
@@ -242,7 +242,7 @@ public class AiModelBuilderPreprocessingPredictTests
 
     private static Matrix<double> CreateTestData(int rows, int cols, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)

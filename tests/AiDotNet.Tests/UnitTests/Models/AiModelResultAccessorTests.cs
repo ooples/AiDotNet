@@ -348,11 +348,11 @@ public class AiModelResultAccessorTests
         var actual = Wrap<double, Matrix<double>, Vector<double>>(model).GetClusterLabels();
 
         Assert.NotNull(actual);
-        Assert.Equal(data.Rows, actual!.Length);
+        Assert.Equal(data.Rows, actual.Length);
 
         var expected = model.Labels;
         Assert.NotNull(expected);
-        for (int i = 0; i < expected!.Length; i++)
+        for (int i = 0; i < expected.Length; i++)
         {
             Assert.Equal(expected[i], actual[i]);
         }

@@ -62,7 +62,7 @@ public class OptimizerConvergenceCheckPatternTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> Y) BuildQuadraticFixture()
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         const int n = 64;
         const int features = 2;
 

@@ -120,7 +120,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRAG<double>(null!, retriever));
+                new GraphRAG<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IGenerator<double>>(), retriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -131,7 +131,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new GraphRAG<double>(generator, null!));
+                new GraphRAG<double>(generator, global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -191,7 +191,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                graphRag.AddRelation(null!, "DISCOVERED", "Relativity"));
+                graphRag.AddRelation(global::AiDotNet.Tests.TestNull.Of<string>(), "DISCOVERED", "Relativity"));
         }
 
         [Fact(Timeout = 60000)]
@@ -217,7 +217,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                graphRag.AddRelation("Einstein", null!, "Relativity"));
+                graphRag.AddRelation("Einstein", global::AiDotNet.Tests.TestNull.Of<string>(), "Relativity"));
         }
 
         [Fact(Timeout = 60000)]
@@ -243,7 +243,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                graphRag.AddRelation("Einstein", "DISCOVERED", null!));
+                graphRag.AddRelation("Einstein", "DISCOVERED", global::AiDotNet.Tests.TestNull.Of<string>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -358,7 +358,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                graphRag.Retrieve(null!, 10));
+                graphRag.Retrieve(global::AiDotNet.Tests.TestNull.Of<string>(), 10));
         }
 
         [Fact(Timeout = 60000)]

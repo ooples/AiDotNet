@@ -218,7 +218,7 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         var xmlDoc = modelClass.GetDocumentationCommentXml();
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
-            summary = ExtractSummary(xmlDoc);
+            summary = ExtractSummary((xmlDoc ?? throw new System.InvalidOperationException("xmlDoc is null where it is required.")));
         }
 
         return new DiscoveryEntry(

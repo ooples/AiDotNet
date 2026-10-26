@@ -26,8 +26,10 @@ public class DenseLayerRegistrationSwapTests
     private static Tensor<double>[] RegisteredTensors(DenseLayer<double> layer)
     {
         var f = typeof(LayerBase<double>).GetField("_registeredTensors",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        return ((System.Collections.Generic.List<Tensor<double>>)f.GetValue(layer)!).ToArray();
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("LayerBase has no _registeredTensors field.");
+        return (f.GetValue(layer) as System.Collections.Generic.List<Tensor<double>>
+            ?? throw new InvalidOperationException("_registeredTensors is not a List<Tensor<double>>.")).ToArray();
     }
 
     [Fact]

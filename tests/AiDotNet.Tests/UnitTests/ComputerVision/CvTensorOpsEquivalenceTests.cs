@@ -33,7 +33,7 @@ public class CvTensorOpsEquivalenceTests
 
     private static Tensor<double> Rand(int[] shape, int seed)
     {
-        var r = new Random(seed); var t = new Tensor<double>(shape);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed); var t = new Tensor<double>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = r.NextDouble() * 4 - 2;
         return t;
     }
@@ -567,7 +567,7 @@ public class CvTensorOpsEquivalenceTests
             {
                 var q = Rand(new[] { nw, area, c }, ++seed); var k = Rand(new[] { nw, area, c }, ++seed); var v = Rand(new[] { nw, area, c }, ++seed);
                 int R = 2 * area; var table = Rand(new[] { R, heads }, ++seed);
-                var idx = new int[area, area]; var r = new Random(++seed);
+                var idx = new int[area, area]; var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(++seed);
                 for (int i = 0; i < area; i++) for (int j = 0; j < area; j++) idx[i, j] = r.Next(R);
                 var bias = CvTensorOps<double>.RelativePositionBias(table, idx);
                 Compare($"BiasedAttention nw{nw} a{area} c{c} h{heads}", RefBiasedAttention(q, k, v, heads, table, idx),
@@ -600,7 +600,7 @@ public class CvTensorOpsEquivalenceTests
         await Task.Yield();
         int seed = 6000;
             {
-                var rr = new Random(++seed);
+                var rr = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(++seed);
                 foreach (int nb in new[] { 1, 2 })
                 foreach (var (fh, fw) in new[] { (8, 8), (5, 7), (16, 12) })
                 foreach (var (ps, sr) in new[] { (2, 2), (7, 2), (3, 1) })
@@ -644,7 +644,8 @@ public class CvTensorOpsEquivalenceTests
 
     // ---- model-local rewrites ----
 
-    // Verbatim copy of CascadeRCNN.RefineBoxes before the rewrite.
+    // Copy of CascadeRCNN.RefineBoxes before the rewrite, reading the class-agnostic deltas the stages now
+    // regress (#2170; it used to read the first foreground class's columns 4..7 for every box).
     private static Tensor<double> RefRefineBoxes(Tensor<double> boxes, Tensor<double> deltas, int imageWidth, int imageHeight)
     {
         int numBoxes = boxes.Shape[0];
@@ -661,7 +662,7 @@ public class CvTensorOpsEquivalenceTests
             double pcx = px1 + pw / 2;
             double pcy = py1 + ph / 2;
 
-            int deltaOffset = 4; // Skip background class
+            const int deltaOffset = 0; // Class-agnostic: one (dx, dy, dw, dh) per box
             double dx = deltas[i, deltaOffset];
             double dy = deltas[i, deltaOffset + 1];
             double dw = deltas[i, deltaOffset + 2];
@@ -689,9 +690,9 @@ public class CvTensorOpsEquivalenceTests
     public async Task CascadeBoxRefinement_MatchesTheLoopItReplaced()
     {
         await Task.Yield();
-        var r = new Random(7001);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7001);
         foreach (int numBoxes in new[] { 1, 5, 17 })
-        foreach (int numClasses in new[] { 2, 4 })
+        foreach (int draw in new[] { 0, 1 })
         {
             const int imageWidth = 96, imageHeight = 64;
             var boxes = new Tensor<double>(new[] { numBoxes, 4 });
@@ -705,14 +706,54 @@ public class CvTensorOpsEquivalenceTests
             }
 
             // Wide enough to exceed the exp cap (4) and to push boxes off the image on every side.
-            var deltas = Rand(new[] { numBoxes, 4 * numClasses }, r.Next());
+            var deltas = Rand(new[] { numBoxes, 4 }, r.Next());
             for (int i = 0; i < deltas.Length; i++) deltas[i] *= 3;
 
-            Compare($"RefineBoxes n{numBoxes} c{numClasses}", RefRefineBoxes(boxes, deltas, imageWidth, imageHeight),
+            Compare($"RefineBoxes n{numBoxes} draw{draw}", RefRefineBoxes(boxes, deltas, imageWidth, imageHeight),
                 CascadeRCNN<double>.RefineBoxes(boxes, deltas, imageWidth, imageHeight), 1e-12);
         }
 
         AssertNoFailures();
+    }
+
+    /// <summary>
+    /// The weighted refinement every stage runs in production: the deltas regressed targets multiplied by the stage's
+    /// (wx, wy, ww, wh), so refining with those weights must equal refining with the deltas divided by them.
+    /// </summary>
+    [Fact]
+    public async Task CascadeBoxRefinement_WithRegressionWeights_DividesTheDeltasByThem()
+    {
+        await Task.Yield();
+        var r = RandomHelper.CreateSeededRandom(7002);
+        const int numBoxes = 9, imageWidth = 96, imageHeight = 64;
+        var boxes = new Tensor<double>(new[] { numBoxes, 4 });
+        for (int i = 0; i < numBoxes; i++)
+        {
+            double x1 = r.NextDouble() * imageWidth, y1 = r.NextDouble() * imageHeight;
+            boxes[i, 0] = x1;
+            boxes[i, 1] = y1;
+            boxes[i, 2] = x1 + 1 + r.NextDouble() * 40;
+            boxes[i, 3] = y1 + 1 + r.NextDouble() * 40;
+        }
+
+        // The second stage's reference weights, with deltas large enough that the scale cap still binds after
+        // dividing by 5.
+        var weights = new[] { 20.0, 20.0, 10.0, 10.0 };
+        var deltas = Rand(new[] { numBoxes, 4 }, r.Next());
+        var divided = new Tensor<double>(new[] { numBoxes, 4 });
+        for (int i = 0; i < numBoxes; i++)
+            for (int k = 0; k < 4; k++)
+            {
+                deltas[i, k] *= 60;
+                divided[i, k] = deltas[i, k] / weights[k];
+            }
+
+        Compare("RefineBoxes weighted", RefRefineBoxes(boxes, divided, imageWidth, imageHeight),
+            CascadeRCNN<double>.RefineBoxes(boxes, deltas, imageWidth, imageHeight, weights), 1e-12);
+        AssertNoFailures();
+
+        Assert.Throws<ArgumentException>(() =>
+            CascadeRCNN<double>.RefineBoxes(boxes, deltas, imageWidth, imageHeight, new[] { 10.0, 10.0, 5.0 }));
     }
 
     // Verbatim copy of DBNet.ApplyDifferentiableBinarization before the rewrite.
@@ -751,7 +792,7 @@ public class CvTensorOpsEquivalenceTests
 
     private static Tensor<double> Const(int[] shape, int seed)
     {
-        var r = new Random(seed); var t = new Tensor<double>(shape);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed); var t = new Tensor<double>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = r.NextDouble() * 2 - 1;
         return t;
     }
@@ -791,7 +832,7 @@ public class CvTensorOpsEquivalenceTests
         ["RoIAlignFeatures"] = (new[] { 2, 3, 6, 5 }, x => CvTensorOps<double>.RoIAlign(
             x, new double[] { 5, 7, 60, 70, -10, 3, 40, 50, 20, 20, 21, 90 }, new[] { 0, 1, 1 }, 1.0 / 16.0, 3, 2)),
         ["RpnOutputReshape"] = (new[] { 2, 12, 3, 4 }, x => RPN<double>.ReshapeRPNOutput(x, 2, 3, 4, 4)),
-        ["CascadeRefineBoxesDeltas"] = (new[] { 3, 8 }, d => CascadeRCNN<double>.RefineBoxes(CascadeInputBoxes(), d, 96, 64)),
+        ["CascadeRefineBoxesDeltas"] = (new[] { 3, 4 }, d => CascadeRCNN<double>.RefineBoxes(CascadeInputBoxes(), d, 96, 64)),
         ["DbBinarizationProbability"] = (new[] { 1, 1, 4, 5 }, p => DBNet<double>.ApplyDifferentiableBinarization(p, Const(new[] { 1, 1, 4, 5 }, 41), 5.0)),
         ["DbBinarizationThreshold"] = (new[] { 1, 1, 4, 5 }, t => DBNet<double>.ApplyDifferentiableBinarization(Const(new[] { 1, 1, 4, 5 }, 42), t, 5.0)),
         // CRNN's CTC objective: CTCLoss over log-softmax logits [batch, columns, classes]; targets

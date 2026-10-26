@@ -196,7 +196,7 @@ public partial class IsolationForest<T> : AnomalyDetectorBase<T>
             var point = X.GetRow(i);
             T avgPathLength = NumOps.Zero;
 
-            foreach (var tree in _trees!)
+            foreach (var tree in (_trees ?? throw new InvalidOperationException("_trees is null where it is required.")))
             {
                 avgPathLength = NumOps.Add(avgPathLength, PathLength(point, tree, 0));
             }
@@ -305,8 +305,8 @@ public partial class IsolationForest<T> : AnomalyDetectorBase<T>
         return node.IsExternal
             ? NumOps.FromDouble(currentDepth + AveragePathLength(node.Size))
             : NumOps.LessThan(point[node.SplitFeature], node.SplitValue)
-                ? PathLength(point, node.Left!, currentDepth + 1)
-                : PathLength(point, node.Right!, currentDepth + 1);
+                ? PathLength(point, (node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")), currentDepth + 1)
+                : PathLength(point, (node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")), currentDepth + 1);
     }
 
     /// <summary>

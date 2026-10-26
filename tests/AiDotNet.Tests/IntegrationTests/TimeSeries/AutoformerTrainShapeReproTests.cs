@@ -31,7 +31,7 @@ public class AutoformerTrainShapeReproTests
 {
     private static (Matrix<double> X, Vector<double> Y) SyntheticSeries(int n, int features, int seed = 11)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(n, features);
         var y = new Vector<double>(n);
         double level = 0.0;

@@ -268,7 +268,7 @@ public static class GpuDiagnosticsConfig
     {
         var val = System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_VERBOSE");
         if (string.IsNullOrWhiteSpace(val)) return GpuDiagnosticLevel.Silent;
-        if (val!.Equals("1", System.StringComparison.OrdinalIgnoreCase) ||
+        if (val.Equals("1", System.StringComparison.OrdinalIgnoreCase) ||
             val.Equals("true", System.StringComparison.OrdinalIgnoreCase) ||
             val.Equals("yes", System.StringComparison.OrdinalIgnoreCase) ||
             val.Equals("on", System.StringComparison.OrdinalIgnoreCase) ||

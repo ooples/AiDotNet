@@ -79,7 +79,7 @@ public class HybridDistillationStrategyTests
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            new HybridDistillationStrategy<double>(null!));
+            new HybridDistillationStrategy<double>(global::AiDotNet.Tests.TestNull.Of<(AiDotNet.Interfaces.IDistillationStrategy<double> Strategy, double Weight)[]>()));
     }
 
     [Fact(Timeout = 60000)]

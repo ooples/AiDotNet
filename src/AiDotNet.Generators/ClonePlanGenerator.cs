@@ -71,7 +71,7 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
             .Where(static symbol => IsCloneable(symbol));
 
         var collected = candidates.Collect();
-        context.RegisterSourceOutput(collected, static (spc, types) => Execute(spc, types!));
+        context.RegisterSourceOutput(collected, static (spc, types) => Execute(spc, types));
     }
 
     /// <summary>
@@ -159,10 +159,10 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
         // through different trees must not register two plans.
         var distinct = types
             .Where(t => t is not null)
-            .Select(t => t!)
-            .GroupBy(t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            .Select(t => t)
+            .GroupBy(t => (t ?? throw new System.InvalidOperationException("t is null where it is required.")).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
             .Select(g => g.First())
-            .OrderBy(t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
+            .OrderBy(t => (t ?? throw new System.InvalidOperationException("t is null where it is required.")).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), System.StringComparer.Ordinal)
             .ToList();
 
         var sb = new StringBuilder();
@@ -195,7 +195,7 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
         int registrationIndex = 0;
         foreach (var type in distinct)
         {
-            ReportShadowedPlanMembers(context, type);
+            ReportShadowedPlanMembers(context, (type ?? throw new System.InvalidOperationException("type is null where it is required.")));
 
             if (EmitRegistration(registrationMethods, type, registrationIndex))
             {

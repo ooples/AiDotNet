@@ -49,7 +49,7 @@ public class GLMRegressionIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) GenerateCountData(int n, double baseLambda = 5.0)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(n, 1);
         var y = new Vector<double>(n);
 
@@ -70,7 +70,7 @@ public class GLMRegressionIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) GenerateOverdispersedCountData(int n)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(n, 1);
         var y = new Vector<double>(n);
 
@@ -111,7 +111,7 @@ public class GLMRegressionIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) GenerateMultiFeatureNonLinearData(int n)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var X = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);
 

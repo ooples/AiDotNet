@@ -350,7 +350,7 @@ public class Issue1195CapabilityScopedLicensingTests
                     // tensor-layer scope (not NoopScope). When absent,
                     // it is NoopScope. Either way, dispose must succeed.
                     Assert.True(tensorsApiPresent
-                        || bridgeScope.GetType().FullName!.EndsWith("NoopScope", StringComparison.Ordinal),
+                        || (bridgeScope.GetType().FullName ?? throw new InvalidOperationException("bridgeScope.GetType().FullName is null where it is required.")).EndsWith("NoopScope", StringComparison.Ordinal),
                         "When the Tensors licensing API is absent, the bridge must return its NoopScope sentinel.");
                 }
             }

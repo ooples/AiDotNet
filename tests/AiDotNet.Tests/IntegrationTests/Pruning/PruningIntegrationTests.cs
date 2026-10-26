@@ -1097,7 +1097,7 @@ public class PruningIntegrationTests
         Assert.Equal(0.9, config.TargetSparsity);
         Assert.Equal(SparsityPattern.Structured2to4, config.Pattern);
         Assert.True(config.GradualPruning);
-        Assert.Equal(0.8, config.LayerSparsityTargets!["layer1"]);
+        Assert.Equal(0.8, config.LayerSparsityTargets["layer1"]);
         Assert.False(config.FineTuneAfterPruning);
     }
 
@@ -1165,7 +1165,7 @@ public class PruningIntegrationTests
 
         // Create weights
         var weights = new Matrix<double>(4, 4);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 4; j++)
                 weights[i, j] = random.NextDouble();
@@ -1201,7 +1201,7 @@ public class PruningIntegrationTests
         // Create weights and gradients
         var weights = new Matrix<double>(4, 4);
         var gradients = new Matrix<double>(4, 4);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 4; i++)
         {
             for (int j = 0; j < 4; j++)
@@ -1229,7 +1229,7 @@ public class PruningIntegrationTests
 
         // Create weights
         var weights = new Matrix<double>(4, 8);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 8; j++)
                 weights[i, j] = random.NextDouble();
@@ -1261,7 +1261,7 @@ public class PruningIntegrationTests
 
         // Step 1: Store initial weights
         var initialWeights = new Matrix<double>(4, 4);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 4; j++)
                 initialWeights[i, j] = random.NextDouble() * 0.1;
@@ -1311,7 +1311,7 @@ public class PruningIntegrationTests
 
         // Same weights for all
         var weights = new Matrix<double>(4, 4);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 4; j++)
                 weights[i, j] = random.NextDouble();
@@ -1459,7 +1459,7 @@ public class PruningIntegrationTests
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Vector<double>(new double[100]);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 100; i++)
             weights[i] = random.NextDouble();
 
@@ -1474,7 +1474,7 @@ public class PruningIntegrationTests
     {
         var strategy = new MagnitudePruningStrategy<double>();
         var weights = new Matrix<double>(100, 100);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 100; i++)
             for (int j = 0; j < 100; j++)
                 weights[i, j] = random.NextDouble();

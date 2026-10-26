@@ -295,9 +295,10 @@ internal sealed class InverseStft<T>
     private readonly IEngine _engine;
     private readonly int _fft;
     private readonly int _hop;
-    private readonly double[] _window;
-    private readonly Tensor<T> _cos;       // [bins, fft], windowed and scaled
-    private readonly Tensor<T> _sin;       // [bins, fft]
+    private readonly int _windowSize;
+    private double[] _window;
+    private Tensor<T> _cos;       // [bins, fft], windowed and scaled
+    private Tensor<T> _sin;       // [bins, fft]
     private readonly Tensor<T> _overlap;   // [fft, 1, 1, fft] identity for overlap-add
     private readonly int? _samePad;
 
@@ -307,11 +308,29 @@ internal sealed class InverseStft<T>
         _engine = engine;
         _fft = fftSize;
         _hop = hopSize;
-        int bins = fftSize / 2 + 1, offset = (fftSize - windowSize) / 2;
-        _window = new double[fftSize];
-        for (int n = 0; n < windowSize; n++) _window[offset + n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
-        _cos = new Tensor<T>(new[] { bins, fftSize });
-        _sin = new Tensor<T>(new[] { bins, fftSize });
+        _windowSize = windowSize;
+        var hann = new double[windowSize];
+        for (int n = 0; n < windowSize; n++) hann[n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
+        (_window, _cos, _sin) = Tables(hann);
+        _overlap = new Tensor<T>(new[] { fftSize, 1, 1, fftSize });
+        for (int c = 0; c < fftSize; c++) _overlap[c, 0, 0, c] = NumOps.One;
+    }
+
+    /// <summary>Replaces the Hann window with stored values (a checkpoint's <c>window</c> buffer, which PyTorch computed in
+    /// single precision).</summary>
+    internal void LoadWindow(double[] window)
+    {
+        if (window.Length != _windowSize) throw new ArgumentException($"Expected {_windowSize} window values, got {window.Length}.", nameof(window));
+        (_window, _cos, _sin) = Tables(window);
+    }
+
+    private (double[] Window, Tensor<T> Cos, Tensor<T> Sin) Tables(double[] window)
+    {
+        int fftSize = _fft, bins = fftSize / 2 + 1, offset = (fftSize - _windowSize) / 2;
+        var framed = new double[fftSize];
+        for (int n = 0; n < _windowSize; n++) framed[offset + n] = window[n];
+        var cos = new Tensor<T>(new[] { bins, fftSize });
+        var sin = new Tensor<T>(new[] { bins, fftSize });
         for (int k = 0; k < bins; k++)
         {
             // irfft: x[n] = (1/N)(X_0 + X_{N/2}(−1)^n + 2 Σ_k Re(X_k e^{2πikn/N})); the DC and Nyquist imaginary parts drop.
@@ -320,12 +339,11 @@ internal sealed class InverseStft<T>
             for (int n = 0; n < fftSize; n++)
             {
                 double a = 2 * Math.PI * k * n / fftSize;
-                _cos[k, n] = NumOps.FromDouble(weight * Math.Cos(a) * _window[n]);
-                _sin[k, n] = NumOps.FromDouble(realOnly ? 0.0 : -weight * Math.Sin(a) * _window[n]);
+                cos[k, n] = NumOps.FromDouble(weight * Math.Cos(a) * framed[n]);
+                sin[k, n] = NumOps.FromDouble(realOnly ? 0.0 : -weight * Math.Sin(a) * framed[n]);
             }
         }
-        _overlap = new Tensor<T>(new[] { fftSize, 1, 1, fftSize });
-        for (int c = 0; c < fftSize; c++) _overlap[c, 0, 0, c] = NumOps.One;
+        return (framed, cos, sin);
     }
 
     /// <summary>The waveform <c>[(frames − 1) · hop]</c> (<c>[frames · hop]</c> with "same" padding) of a spectrum given

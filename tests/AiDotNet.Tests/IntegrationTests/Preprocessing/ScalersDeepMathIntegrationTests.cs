@@ -463,7 +463,7 @@ public class ScalersDeepMathIntegrationTests
         scaler2.Fit(data2);
 
         // Median should be 3 for both
-        Assert.Equal(scaler1.Median![0], scaler2.Median![0], MediumTolerance);
+        Assert.Equal((scaler1.Median ?? throw new InvalidOperationException("scaler1.Median is null where it is required."))[0], (scaler2.Median ?? throw new InvalidOperationException("scaler2.Median is null where it is required."))[0], MediumTolerance);
     }
 
     #endregion

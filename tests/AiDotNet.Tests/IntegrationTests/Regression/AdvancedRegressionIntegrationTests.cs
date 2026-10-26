@@ -21,7 +21,7 @@ public class AdvancedRegressionIntegrationTests
     private static (Matrix<double> x, Vector<double> y) CreateLinearData(
         int n, double[] coefficients, double intercept, double noise, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int p = coefficients.Length;
         var x = new Matrix<double>(n, p);
         var y = new Vector<double>(n);
@@ -44,7 +44,7 @@ public class AdvancedRegressionIntegrationTests
     private static (Matrix<double> x, Vector<double> y) CreateNonLinearData(
         int n, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(n, 2);
         var y = new Vector<double>(n);
 
@@ -151,7 +151,7 @@ public class AdvancedRegressionIntegrationTests
         model.Train(x, y);
 
         var testX = new Matrix<double>(15, 1);
-        var random = new Random(99);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
         for (int i = 0; i < 15; i++) testX[i, 0] = random.NextDouble() * 10 - 5;
 
         var predictions = model.Predict(testX);
@@ -201,7 +201,7 @@ public class AdvancedRegressionIntegrationTests
         // y = 2*x1 - x2 + 3 + group_effect + noise
         int n = 60;
         int nGroups = 3;
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var x = new Matrix<double>(n, 3); // col 0,1 = fixed effects, col 2 = group
         var y = new Vector<double>(n);
 
@@ -268,7 +268,7 @@ public class AdvancedRegressionIntegrationTests
     public async Task DeepSurv_HigherRisk_HigherPrediction()
     {
         // Create data where higher x values → shorter survival
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 60;
         var x = new Matrix<double>(n, 1);
         var y = new Vector<double>(n);

@@ -617,7 +617,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // keeps the denominator non-decreasing and bounds Adam's post-convergence m̂/√v̂ drift on
         // stochastic objectives (VGAE reparameterization noise, GraphGenerationModel in the #1332
         // cluster). Updated in place here; semantics are unchanged.
-        var vMaxSpan = _options.UseAMSGrad ? _vMaxVector!.AsWritableSpan() : default;
+        var vMaxSpan = _options.UseAMSGrad ? (_vMaxVector ?? throw new InvalidOperationException("_vMaxVector is null where it is required.")).AsWritableSpan() : default;
         bool amsGrad = _options.UseAMSGrad;
         T learningRate = CurrentLearningRate;
 
@@ -802,9 +802,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     private sealed class Fp32AdamSlot
     {
-        public float[] P = default!;
-        public float[] M = default!;
-        public float[] V = default!;
+        public float[] P = Array.Empty<float>();
+        public float[] M = Array.Empty<float>();
+        public float[] V = Array.Empty<float>();
         public int N;
     }
     private readonly ConcurrentDictionary<Tensor<T>, Fp32AdamSlot> _fp32StepCache =
@@ -1146,7 +1146,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 double[]? gradArr = (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
                 double[]? mArr = (double[]?)(object?)m.GetLiveBackingArrayOrNull();
                 double[]? vArr = (double[]?)(object?)v.GetLiveBackingArrayOrNull();
-                double[]? vMaxArr = useAmsgrad ? (double[]?)(object?)vMax!.GetLiveBackingArrayOrNull() : null;
+                double[]? vMaxArr = useAmsgrad ? (double[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull() : null;
                 if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
@@ -1162,7 +1162,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                         if (useAmsgrad)
                         {
                             // AMSGrad (PyTorch amsgrad=True): running max of the RAW second moment, corrected after.
-                            double vMaxPrev = vMaxArr![i];
+                            double vMaxPrev = (vMaxArr ?? throw new InvalidOperationException("vMaxArr is null where it is required."))[i];
                             double vMaxNew = vNew > vMaxPrev ? vNew : vMaxPrev;
                             vMaxArr[i] = vMaxNew;
                             vHatEff = vMaxNew / bc2;
@@ -1196,7 +1196,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     ref double vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<double>();
                     if (useAmsgrad)
                     {
-                        var vMaxD = (Tensor<double>)(object)vMax!;
+                        var vMaxD = (object?)vMax as Tensor<double>
+                            ?? throw new InvalidOperationException("AMSGrad's running maximum of the second moment is not allocated.");
                         System.Span<double> vMaxSpan = vMaxD.AsWritableSpan();
                         vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
                     }
@@ -1233,7 +1234,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 float[]? gradArr = (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
                 float[]? mArr = (float[]?)(object?)m.GetLiveBackingArrayOrNull();
                 float[]? vArr = (float[]?)(object?)v.GetLiveBackingArrayOrNull();
-                float[]? vMaxArr = useAmsgrad ? (float[]?)(object?)vMax!.GetLiveBackingArrayOrNull() : null;
+                float[]? vMaxArr = useAmsgrad ? (float[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull() : null;
                 float fb1 = (float)b1, fb2 = (float)b2;
                 float f1mb1 = (float)oneMinusB1, f1mb2 = (float)oneMinusB2;
                 float fbc1 = (float)bc1, fbc2 = (float)bc2;
@@ -1246,7 +1247,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     // hand-rolled scalar loop; numerics are bit-near (FMA moment update).
                     AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
                         paramArr.AsSpan(0, n), gradArr.AsSpan(0, n), mArr.AsSpan(0, n), vArr.AsSpan(0, n),
-                        useAmsgrad ? vMaxArr!.AsSpan(0, n) : System.Span<float>.Empty,
+                        useAmsgrad ? vMaxArr.AsSpan(0, n) : System.Span<float>.Empty,
                         fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
 
                     // #3: memoize the resolved backing arrays for the steady-state fast path
@@ -1271,7 +1272,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     System.Span<float> mSpan = mF.AsWritableSpan();
                     System.Span<float> vSpan = vF.AsWritableSpan();
                     System.Span<float> vMaxSpan = useAmsgrad
-                        ? ((Tensor<float>)(object)vMax!).AsWritableSpan()
+                        ? ((object?)vMax as Tensor<float>
+                            ?? throw new InvalidOperationException("AMSGrad's running maximum of the second moment is not allocated.")).AsWritableSpan()
                         : System.Span<float>.Empty;
                     AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
                         paramSpan, gradSpan, mSpan, vSpan, vMaxSpan,
@@ -1542,8 +1544,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         backend.AdamUpdate(
             parameters,
             gradients,
-            _gpuM!,
-            _gpuV!,
+            (_gpuM ?? throw new InvalidOperationException("_gpuM is null where it is required.")),
+            (_gpuV ?? throw new InvalidOperationException("_gpuV is null where it is required.")),
             (float)_options.InitialLearningRate,
             (float)_options.Beta1,
             (float)_options.Beta2,

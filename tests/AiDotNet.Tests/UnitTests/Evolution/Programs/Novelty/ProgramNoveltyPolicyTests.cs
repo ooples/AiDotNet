@@ -226,9 +226,9 @@ public sealed class ProgramNoveltyPolicyTests
         var policy = new ProgramNoveltyPolicy();
 #pragma warning disable CS8625
         await Assert.ThrowsAsync<ArgumentNullException>(async () =>
-            await policy.EvaluateAsync(null, Array.Empty<ProgramGenome>()));
+            await policy.EvaluateAsync(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Evolution.Programs.ProgramGenome>(), Array.Empty<ProgramGenome>()));
         await Assert.ThrowsAsync<ArgumentException>(async () =>
-            await policy.EvaluateAsync(Genome("a"), new ProgramGenome[] { null }));
+            await policy.EvaluateAsync(Genome("a"), new ProgramGenome[] { global::AiDotNet.Tests.TestNull.Of<AiDotNet.Evolution.Programs.ProgramGenome>() }));
 #pragma warning restore CS8625
     }
 

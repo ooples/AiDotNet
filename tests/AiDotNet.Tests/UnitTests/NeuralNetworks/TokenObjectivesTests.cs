@@ -14,7 +14,7 @@ public class TokenObjectivesTests
 {
     private static Tensor<double> Logits(int rows, int vocab, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(new[] { rows, vocab });
         for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 4) - 2;
         return t;

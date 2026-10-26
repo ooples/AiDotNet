@@ -124,7 +124,7 @@ public class RpropOptimizerTests
 
         var stepSizes = optimizer.GetStepSizes();
         Assert.NotNull(stepSizes);
-        Assert.Equal(Delta0 * EtaMinus, stepSizes![0], 12);
+        Assert.Equal(Delta0 * EtaMinus, stepSizes[0], 12);
     }
 
     /// <summary>
@@ -152,7 +152,7 @@ public class RpropOptimizerTests
 
         var stepSizes = optimizer.GetStepSizes();
         Assert.NotNull(stepSizes);
-        Assert.Equal(halved, stepSizes![0], 12);           // NOT halved * EtaPlus
+        Assert.Equal(halved, stepSizes[0], 12);           // NOT halved * EtaPlus
 
         // Guard the assertion itself: the two candidate answers must actually be distinguishable here.
         Assert.NotEqual(halved, halved * EtaPlus, 6);
@@ -183,7 +183,7 @@ public class RpropOptimizerTests
 
         var stepSizes = optimizer.GetStepSizes();
         Assert.NotNull(stepSizes);
-        Assert.Equal(1.0, stepSizes![0], 12);
+        Assert.Equal(1.0, stepSizes[0], 12);
     }
 
     /// <summary>
@@ -204,7 +204,7 @@ public class RpropOptimizerTests
 
         var stepSizes = optimizer.GetStepSizes();
         Assert.NotNull(stepSizes);
-        Assert.Equal(MinStep, stepSizes![0], 12);
+        Assert.Equal(MinStep, stepSizes[0], 12);
     }
 
     /// <summary>
@@ -225,7 +225,7 @@ public class RpropOptimizerTests
 
         var stepSizes = optimizer.GetStepSizes();
         Assert.NotNull(stepSizes);
-        Assert.True(stepSizes![0] > Delta0, $"the consistent weight's step should have grown, was {stepSizes[0]}");
+        Assert.True(stepSizes[0] > Delta0, $"the consistent weight's step should have grown, was {stepSizes[0]}");
         Assert.True(stepSizes[1] < Delta0, $"the oscillating weight's step should have shrunk, was {stepSizes[1]}");
     }
 
@@ -243,7 +243,7 @@ public class RpropOptimizerTests
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.Rprop, config.Type);
 
         Assert.NotNull(config.Extras);
-        Assert.Equal((float)EtaPlus, config.Extras!.RpropEtaPlus, 6);
+        Assert.Equal((float)EtaPlus, config.Extras.RpropEtaPlus, 6);
         Assert.Equal((float)EtaMinus, config.Extras.RpropEtaMinus, 6);
         Assert.Equal((float)MinStep, config.Extras.RpropStepMin, 9);
         Assert.Equal((float)MaxStep, config.Extras.RpropStepMax, 3);
@@ -335,9 +335,9 @@ public class RpropOptimizerTests
         var restoredSteps = restored.GetStepSizes();
         Assert.NotNull(originalSteps);
         Assert.NotNull(restoredSteps);
-        for (int i = 0; i < originalSteps!.Length; i++)
+        for (int i = 0; i < originalSteps.Length; i++)
         {
-            Assert.Equal(originalSteps[i], restoredSteps![i], 12);
+            Assert.Equal(originalSteps[i], restoredSteps[i], 12);
         }
 
         // The next step depends on the remembered gradient too, so this checks both halves of the state.

@@ -75,10 +75,10 @@ public class BpeTokenizerTests
     public async Task Tokenize_NullText_ReturnsEmptyList()
     {
         // Arrange
-        string? text = null;
+        string text = TestNull.Of<string>();
 
         // Act
-        var tokens = _tokenizer.Tokenize(text!);
+        var tokens = _tokenizer.Tokenize(text);
 
         // Assert
         Assert.NotNull(tokens);
@@ -367,7 +367,7 @@ public class BpeTokenizerTests
     public async Task Train_NullCorpus_ThrowsArgumentNullException()
     {
         Assert.Throws<System.ArgumentNullException>(() =>
-            BpeTokenizer.Train(null!, 100));
+            BpeTokenizer.Train(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<string>>(), 100));
     }
 
     [Fact(Timeout = 60000)]

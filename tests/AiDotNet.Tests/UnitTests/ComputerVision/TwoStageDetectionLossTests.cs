@@ -160,6 +160,84 @@ public sealed class TwoStageDetectionLossTests
             }
     }
 
+    /// <summary>
+    /// Cascade R-CNN's stages regress class-agnostic deltas [proposals, 4] (#2170). With the same RoIs, logits and
+    /// sampling draw, that must be exactly the per-class loss whose object-class columns hold the same four values,
+    /// whichever class the object is, and every foreground row's four deltas receive the gradient.
+    /// </summary>
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 0)]
+    [InlineData(2, 1)]
+    public void StageLoss_WithClassAgnosticDeltas_EqualsThePerClassLossOnTheObjectColumns(int stage, int goldClass)
+    {
+        var proposals = new[]
+        {
+            new[] { 0.0, 0, 10, 10 }, new[] { 0.0, 0, 10, 14 }, new[] { 0.0, 0, 10, 18 },
+            new[] { 5.0, 0, 15, 10 }, new[] { 40.0, 40, 50, 50 }
+        };
+        var gold = new[] { new[] { 0.0, 0, 10, 10 } };
+        const int width = 3;
+        double[] logitValues = Enumerable.Range(0, 5 * width).Select(i => Math.Sin(i * 0.9) * 1.4).ToArray();
+        double[] agnosticValues = Enumerable.Range(0, 5 * 4).Select(i => Math.Cos(i * 0.37) * 1.3).ToArray();
+        var perClassValues = new double[5 * width * 4];
+        for (int r = 0; r < 5; r++)
+            for (int k = 0; k < 4; k++)
+                perClassValues[r * width * 4 + (goldClass + 1) * 4 + k] = agnosticValues[r * 4 + k];
+        var boxes = new Tensor<double>(proposals.SelectMany(box => box).ToArray(), new[] { 5, 4 });
+        var loss = new TwoStageDetectionLoss<double>(2, 3, new TwoStageDetectionLossOptions());
+
+        var perClass = loss.ComputeStageLoss(new Tensor<double>((double[])logitValues.Clone(), new[] { 5, width }),
+            new Tensor<double>(perClassValues, new[] { 5, width * 4 }), boxes, gold, new[] { goldClass }, stage,
+            RandomHelper.CreateSeededRandom(7));
+
+        var agnosticDeltas = new Tensor<double>((double[])agnosticValues.Clone(), new[] { 5, 4 });
+        using var tape = new GradientTape<double>();
+        var agnostic = loss.ComputeStageLoss(new Tensor<double>((double[])logitValues.Clone(), new[] { 5, width }),
+            agnosticDeltas, boxes, gold, new[] { goldClass }, stage, RandomHelper.CreateSeededRandom(7));
+        var gradient = tape.ComputeGradients(agnostic, new[] { agnosticDeltas })[agnosticDeltas];
+
+        Near(perClass[0], agnostic[0], 1e-12);
+        Assert.Contains(Enumerable.Range(0, 4), k => Math.Abs(gradient[0, k]) > 1e-6); // IoU 1.0: foreground at every stage.
+        for (int k = 0; k < 4; k++) Near(0, gradient[4, k], 1e-12);                   // IoU 0: never sampled.
+    }
+
+    /// <summary>
+    /// StageBoxRegressionWeights scales each stage's regression targets by its (wx, wy, ww, wh), as the reference
+    /// cascade does with (10, 10, 5, 5), (20, 20, 10, 10), (30, 30, 15, 15): the stage-1 term must be smooth-L1 of
+    /// the predicted deltas against the weighted targets, not the raw ones.
+    /// </summary>
+    [Fact]
+    public void StageLoss_ScalesTheRegressionTargetsByTheStageWeights()
+    {
+        var proposals = new[] { new[] { 0.0, 0, 10, 14 } }; // IoU 0.714 with the object: foreground at stage 1 (0.6).
+        var gold = new[] { new[] { 0.0, 0, 10, 10 } };
+        var weights = new[] { new[] { 10.0, 10, 5, 5 }, new[] { 20.0, 20, 10, 10 }, new[] { 30.0, 30, 15, 15 } };
+        var options = new TwoStageDetectionLossOptions { StageBoxRegressionWeights = weights, StageLossWeights = new[] { 1.0, 1.0, 1.0 } };
+        var loss = new TwoStageDetectionLoss<double>(1, 3, options);
+        double[] predicted = { 0.3, -0.2, 0.1, 0.05 };
+        var logits = new Tensor<double>(new[] { 0.4, -0.1 }, new[] { 1, 2 });
+        var objective = loss.ComputeStageLoss(logits, new Tensor<double>((double[])predicted.Clone(), new[] { 1, 4 }),
+            new Tensor<double>(proposals[0], new[] { 1, 4 }), gold, new[] { 0 }, 1, RandomHelper.CreateSeededRandom(7));
+
+        var target = TwoStageDetectionLoss<double>.EncodeDeltas(proposals[0], gold[0]);
+        double regression = 0;
+        for (int k = 0; k < 4; k++) regression += SmoothL1(predicted[k] - weights[1][k] * target[k]);
+        double classification = -LogSoftmax(new[] { 0.4, -0.1 })[1];
+        Near(classification + regression, objective[0], 1e-10);
+        Assert.Equal(weights[2], loss.StageBoxRegressionWeights(2));
+    }
+
+    [Theory]
+    [InlineData(new[] { 10.0, 10, 5 })]
+    [InlineData(new[] { 10.0, 0, 5, 5 })]
+    [InlineData(new[] { 10.0, double.NaN, 5, 5 })]
+    public void MalformedStageBoxRegressionWeights_AreRejected(double[] stageWeights)
+    {
+        var options = new TwoStageDetectionLossOptions { StageBoxRegressionWeights = new[] { stageWeights } };
+        Assert.ThrowsAny<ArgumentException>(() => new TwoStageDetectionLoss<double>(2, 1, options));
+    }
+
     [Theory]
     [InlineData(nameof(TwoStageDetectionLossOptions.RpnPositiveIoU), 1.2)]
     [InlineData(nameof(TwoStageDetectionLossOptions.RpnRegressionWeight), -1.0)]
