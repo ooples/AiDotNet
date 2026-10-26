@@ -54,6 +54,16 @@ internal sealed class DacResidualUnit<T>
         yield return ($"{prefix}.conv2", _conv2);
     }
 
+    /// <summary>The unit's modules under descript-audio-codec's own <c>nn.Sequential</c> names (<c>block.0</c>…<c>block.3</c>),
+    /// which Amphion's codec keeps.</summary>
+    internal IEnumerable<(string Name, LayerBase<T> Layer)> SequentialNamed(string prefix)
+    {
+        yield return ($"{prefix}.block.0", _snake1);
+        yield return ($"{prefix}.block.1", _conv1);
+        yield return ($"{prefix}.block.2", _snake2);
+        yield return ($"{prefix}.block.3", _conv2);
+    }
+
     public Tensor<T> Forward(Tensor<T> x)
     {
         var y = _conv2.Forward(_snake2.Forward(_conv1.Forward(_snake1.Forward(x))));
@@ -107,6 +117,24 @@ internal sealed class DacEncoder<T>
         }
         yield return ($"{prefix}.snake1", _snake);
         yield return ($"{prefix}.conv2", _last);
+    }
+
+    /// <summary>The encoder's modules under descript-audio-codec's own <c>nn.Sequential</c> names (<c>block.0</c> the first
+    /// convolution, <c>block.{i}.block.{0..4}</c> each stride's units, Snake and convolution, then Snake and the last
+    /// convolution), which Amphion's codec keeps.</summary>
+    internal IEnumerable<(string Name, LayerBase<T> Layer)> SequentialNamed(string prefix)
+    {
+        yield return ($"{prefix}.block.0", _first);
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            var (units, snake, down) = _blocks[i];
+            for (int u = 0; u < units.Length; u++)
+                foreach (var named in units[u].SequentialNamed($"{prefix}.block.{i + 1}.block.{u}")) yield return named;
+            yield return ($"{prefix}.block.{i + 1}.block.{units.Length}", snake);
+            yield return ($"{prefix}.block.{i + 1}.block.{units.Length + 1}", down);
+        }
+        yield return ($"{prefix}.block.{_blocks.Count + 1}", _snake);
+        yield return ($"{prefix}.block.{_blocks.Count + 2}", _last);
     }
 
     public Tensor<T> Forward(Tensor<T> x)
