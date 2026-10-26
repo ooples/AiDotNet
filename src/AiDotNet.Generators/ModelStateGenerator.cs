@@ -59,6 +59,26 @@ public class ModelStateGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    /// <summary>
+    /// A field the type's own Dispose assigns, declared as state that IS persisted. The two statements contradict
+    /// each other and inference cannot choose between them, so it is reported rather than guessed at.
+    /// </summary>
+    /// <remarks>
+    /// The unannotated case needs no diagnostic: GetDisposeAssignedMembers already keeps those out of the payload,
+    /// which is why this rule can be an error without failing the 655 files that declare a disposed flag and say
+    /// nothing about it. What it catches is the one shape that inference must not override -- somebody stating that
+    /// dispose-lifetime state is model state.
+    /// </remarks>
+    private static readonly DiagnosticDescriptor DisposeStateDeclaredAsPersisted = new(
+        "ADN0067",
+        "Dispose-assigned state is declared as persisted state",
+        "'{0}.{1}' is assigned by this type's Dispose, so it describes the instance being torn down, but it is "
+            + "declared {2} and would travel in a checkpoint. Restored into a fresh instance it can only "
+            + "misdescribe it. Mark it [Scratch], or stop assigning it in Dispose if it really is model state",
+        "AiDotNet.Serialization",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -197,6 +217,23 @@ public class ModelStateGenerator : IIncrementalGenerator
             var classification = ParameterMemberSemanticModel.ClassifyWithRegistrations(
                 member, registrations);
             hasScratchState |= classification.Kind == ParameterMemberSemanticModel.Kind.Scratch;
+
+            // Reported rather than resolved: inference keeps an UNCLASSIFIED dispose-assigned member out of the
+            // payload, but it must not override a declaration. "This is torn down with the instance" and "this is
+            // model state" cannot both hold, and only the author knows which they meant.
+            if (disposeAssigned.Contains(member.Name)
+                && classification.Kind is ParameterMemberSemanticModel.Kind.Trainable
+                    or ParameterMemberSemanticModel.Kind.Fitted
+                    or ParameterMemberSemanticModel.Kind.Frozen
+                    or ParameterMemberSemanticModel.Kind.Buffer)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    DisposeStateDeclaredAsPersisted,
+                    member.Locations.FirstOrDefault(),
+                    type.Name,
+                    member.Name,
+                    classification.Kind.ToString()));
+            }
             if (member is IFieldSymbol { IsReadOnly: true }
                 && !IsModelOptions(memberType)
                 && !IsSerializableModel(memberType)
@@ -272,7 +309,8 @@ public class ModelStateGenerator : IIncrementalGenerator
                 or ParameterMemberSemanticModel.Kind.External
                 or ParameterMemberSemanticModel.Kind.Conflicting
                 // Dispose state, unless the author declared it as something persisted -- an explicit declaration
-                // still wins, so this only decides the members nobody has classified.
+                // still wins, so this only decides the members nobody has classified. A declaration that says
+                // PERSISTED is a contradiction and is reported below rather than silently overridden.
                 || (classification.Kind == ParameterMemberSemanticModel.Kind.Unclassified
                     && disposeAssigned.Contains(member.Name)))
             {
