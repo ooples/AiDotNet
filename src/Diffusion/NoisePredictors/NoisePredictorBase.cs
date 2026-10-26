@@ -134,8 +134,15 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// or after <see cref="SetParameters"/> swaps weights. The host drops stale
     /// plans automatically when the version changes.
     /// </summary>
+    // Scratch: the compile host's cache key for "has the layer structure changed since that plan was traced".
+    // A checkpoint that restored it would hand a fresh process a version from the saving run, so a plan keyed to a
+    // DIFFERENT structure could pass the verify-then-trust gate's version check.
+    [Scratch]
     private int _layerStructureVersion;
 
+    // Scratch: object lifetime, not model state. Restored as true -- which a checkpoint taken from a disposed
+    // predictor would do -- every call on the freshly loaded model throws ObjectDisposedException.
+    [Scratch]
     private bool _disposed;
 
     /// <summary>
@@ -1203,10 +1210,17 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     // 0 = not engaged, 1 = engaged. Int (not bool) so the engage transition can be claimed
     // atomically via Interlocked.CompareExchange — concurrent callers on the same instance
     // then can't both reconfigure the process-global WeightRegistry.
+    // Scratch: this is a latch over PROCESS-GLOBAL state, so it cannot travel. Restored as 1 in a fresh process,
+    // MaybeEngageWeightStreaming returns early on it and the global WeightRegistry is never configured: the flag
+    // says streaming is engaged while nothing set it up, and the forward quietly runs without it.
+    [Scratch]
     private int _streamingEngaged;
 
     // 0 = no successful weight registration yet, 1 = resolved lazy weights have
     // been registered with the streaming pool at least once.
+    // Scratch, for the same reason: restored as 1, RegisterResolvedWeights returns early and the streaming pool
+    // never receives weights it has no record of.
+    [Scratch]
     private int _streamingWeightsRegistered;
 
     /// <summary>
