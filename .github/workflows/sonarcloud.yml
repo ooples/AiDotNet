@@ -313,7 +313,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, pull requests)
         if: github.event_name == 'pull_request'
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: none
@@ -322,7 +322,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, whole library)
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: none
@@ -330,7 +330,7 @@ jobs:
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -400,7 +400,7 @@ jobs:
       # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
       # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
       - name: Initialize CodeQL (traced build)
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           languages: csharp
           build-mode: manual
@@ -422,7 +422,7 @@ jobs:
           dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           category: "/language:csharp-traced"
           upload: always
