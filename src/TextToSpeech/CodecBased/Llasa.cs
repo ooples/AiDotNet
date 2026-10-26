@@ -79,14 +79,12 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
-    /// <inheritdoc />
-    public override ModelOptions GetOptions() => _options;
 
     /// <summary>Creates an ONNX-backed Llasa for inference.</summary>
     public Llasa(NeuralNetworkArchitecture<T> architecture, string modelPath, LlasaOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new LlasaOptions();
+        _options = options ?? new LlasaOptions(); Options = _options;
         _useNativeMode = false;
         ConfigureBase();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -100,7 +98,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
     public Llasa(NeuralNetworkArchitecture<T> architecture, LlasaOptions? options = null)
         : base(architecture)
     {
-        _options = options ?? new LlasaOptions();
+        _options = options ?? new LlasaOptions(); Options = _options;
         _useNativeMode = true;
         ConfigureBase();
         InitializeLayers();
