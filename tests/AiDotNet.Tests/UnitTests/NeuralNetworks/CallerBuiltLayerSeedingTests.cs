@@ -272,6 +272,41 @@ public class CallerBuiltLayerSeedingTests
         Assert.Equal(shifted, edited.GetParameters().ToArray());
     }
 
+    [Theory]
+    [MemberData(nameof(ComposedLayers))]
+    public void AChildSeedTheCallerChose_SurvivesTheParentsSeed_AndTheOthersKeepTheirs(string kind)
+    {
+        // A seed set on a child is the caller's choice and outranks the one its parent hands down. The parent still
+        // draws a seed for that child, so every other child gets exactly what it would have got.
+        var reference = Composed(kind);
+        reference.RandomSeed = 2290;
+        var expected = ChildSeeds(reference);
+        Assert.True(expected.Length > 1, $"{kind} needs two children for this check.");
+
+        var layer = Composed(kind);
+        var chosen = layer.GetSubLayers().OfType<LayerBase<double>>().First();
+        chosen.RandomSeed = 7;
+        layer.RandomSeed = 2290;
+
+        var actual = ChildSeeds(layer);
+        Assert.Equal(7, actual[0]);
+        Assert.Equal(expected.Skip(1), actual.Skip(1));
+    }
+
+    [Theory]
+    [MemberData(nameof(ComposedLayers))]
+    public void AParentsSecondSeed_ReplacesTheSeedsItsFirstHandedDown(string kind)
+    {
+        // An inherited seed is the parent's, not a choice of the caller's, so the parent's next seed replaces it.
+        var layer = Composed(kind);
+        layer.RandomSeed = 2290;
+        layer.RandomSeed = 2291;
+
+        var fresh = Composed(kind);
+        fresh.RandomSeed = 2291;
+        Assert.Equal(ChildSeeds(fresh), ChildSeeds(layer));
+    }
+
     [Fact]
     public void EqualModelSeeds_GiveEqualInitialWeights_ForACallerBuiltSsmStack()
     {

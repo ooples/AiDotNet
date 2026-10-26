@@ -666,8 +666,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         get => _randomSeed;
         set
         {
-            // Anyone setting the seed directly chose it; only AssignInitializationSeedFromScope marks a scope draw.
+            // Anyone setting the seed directly chose it; only AssignInitializationSeedFromScope marks a scope draw and
+            // only AssignInheritedSeed marks one handed down by a composed parent.
             RandomSeedCameFromConstructionScope = false;
+            _randomSeedInherited = false;
             if (_randomSeed == value) return;
             _randomSeed = value;
             // A changed seed denotes a new stream. Keeping the old Random instance here makes a
@@ -792,9 +794,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(assigned);
         foreach (var child in children)
         {
+            // Drawn for every child, so a child that keeps its own seed does not shift the seeds the others get.
+            int childSeed = subSeedRng.Next();
             if (child is LayerBase<T> seedable)
-                seedable.RandomSeed = subSeedRng.Next();
+                seedable.AssignInheritedSeed(childSeed);
         }
+    }
+
+    // Set while RandomSeed is one a composed parent handed down, which that parent's next seed may replace.
+    private bool _randomSeedInherited;
+
+    /// <summary>
+    /// Takes a seed from a composed parent unless a caller chose this layer's seed: one never set, drawn from a
+    /// construction scope, or inherited from an earlier parent seed is replaced; one assigned directly is kept.
+    /// </summary>
+    private void AssignInheritedSeed(int seed)
+    {
+        if (RandomSeed.HasValue && !RandomSeedCameFromConstructionScope && !_randomSeedInherited)
+            return;
+        RandomSeed = seed;
+        _randomSeedInherited = true;
     }
 
     /// <summary>
@@ -813,6 +832,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     {
         if (clone is null) throw new ArgumentNullException(nameof(clone));
         clone._initWeightsCallCounter = shareRandomState ? _initWeightsCallCounter : 0;
+        clone._randomSeedInherited = _randomSeedInherited;
         clone._seededRandom = shareRandomState && _seededRandom is not null
             ? LayerCloning.CloneRandom(_seededRandom)
             : null;
