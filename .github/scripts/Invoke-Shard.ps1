@@ -358,6 +358,23 @@ if ($serializeShard) {
   # remaining cause.)
   $env:DOTNET_gcServer = '0'
   Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
+
+  # CAP THE MANAGED HEAP below the runner's RAM, as heavy-timeout-nightly does (#2087). Uncapped, the GC let
+  # garbage accumulate until the 16 GB runner died: Generated D on 4592367280 lost ~13 GB of MemAvailable in ten
+  # seconds and the runner received a shutdown signal mid-class, with no test named. Measured locally, the
+  # generated DINO class peaked at 14-15 GB uncapped and ran in ~6.5 GB under a 6 GB cap with every test passing --
+  # most of that peak was collectable garbage. With the cap the runtime collects before the box runs out, and a
+  # test that truly needs more fails with OutOfMemoryException and a stack trace instead of taking the runner
+  # down. Tensor storage is managed arrays, which the limit covers.
+  $memTotalLine = Select-String -Path '/proc/meminfo' -Pattern '^MemTotal:\s+(\d+) kB' -ErrorAction SilentlyContinue
+  if ($null -ne $memTotalLine) {
+    $memTotalBytes = [long]$memTotalLine.Matches[0].Groups[1].Value * 1024
+    $heapCapBytes = [long]($memTotalBytes * 0.7)
+    $env:DOTNET_GCHeapHardLimit = '0x{0:X}' -f $heapCapBytes
+    Write-Host ("Heavy shard: managed heap cap {0:N0} MB of {1:N0} MB (DOTNET_GCHeapHardLimit)" -f ($heapCapBytes / 1MB), ($memTotalBytes / 1MB))
+  } else {
+    Write-Host "Heavy shard: no /proc/meminfo MemTotal, so no managed heap cap"
+  }
 }
 
 # Stream memory and active-test markers in-process so evidence survives a runner OOM;
