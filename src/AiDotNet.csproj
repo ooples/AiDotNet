@@ -377,6 +377,10 @@
 	<ItemGroup>
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\ftfy_tables.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.ftfy_tables.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\langdetect_profiles.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.langdetect_profiles.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_zh_tn_tagger.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_zh_tn_tagger.fst.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_zh_tn_verbalizer.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_zh_tn_verbalizer.fst.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_en_tn_tagger.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_en_tn_tagger.fst.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_en_tn_verbalizer.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_en_tn_verbalizer.fst.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\mecab_unidic_lite.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.mecab_unidic_lite.gz" />
 	  <EmbeddedResource Include="TextToSpeech\Latest\Resources\outetts_en_female_1_neutral.json" LogicalName="AiDotNet.TextToSpeech.Latest.outetts_en_female_1_neutral.json" />
 	  <EmbeddedResource Include="TextToSpeech\Latest\Resources\outetts_qwen3_added_tokens.json.gz" LogicalName="AiDotNet.TextToSpeech.Latest.outetts_qwen3_added_tokens.json.gz" />

@@ -35,13 +35,20 @@ internal sealed class MegaTts3G2p<T>
         SpeechStart = speechStart;
     }
 
+    /// <summary>Reads the checkpoint's tokenizer (<c>tokenizer.json</c>'s text) and its speech-start id.</summary>
+    public void LoadTokenizer(string tokenizerJson)
+    {
+        Tokenizer = ByteLevelBpeTokenizer.FromJson(tokenizerJson);
+        SpeechStart = Tokenizer.Encode("<Reserved_TTS_0>")[0];
+    }
+
     public LlamaNetwork<T> Network { get; }
 
     /// <summary>The checkpoint's tokenizer; the release reads <c>&lt;Reserved_TTS_0&gt;</c>'s id from it as the speech start.</summary>
-    public ByteLevelBpeTokenizer? Tokenizer { get; }
+    public ByteLevelBpeTokenizer? Tokenizer { get; private set; }
 
     /// <summary>The id the phone tokens are offset by.</summary>
-    public int SpeechStart { get; }
+    public int SpeechStart { get; private set; }
 
     /// <summary>The most tokens generated (the release's 256).</summary>
     public int MaxNewTokens { get; set; } = 256;
@@ -49,8 +56,9 @@ internal sealed class MegaTts3G2p<T>
     /// <summary>Builds the release's model from its checkpoint folder's <c>tokenizer.json</c>.</summary>
     public static MegaTts3G2p<T> FromTokenizer(IEngine engine, List<LayerBase<T>> layers, LlamaConfiguration configuration, string tokenizerJson)
     {
-        var tokenizer = ByteLevelBpeTokenizer.FromJson(tokenizerJson);
-        return new MegaTts3G2p<T>(engine, layers, configuration, tokenizer, tokenizer.Encode("<Reserved_TTS_0>")[0]);
+        var g2p = new MegaTts3G2p<T>(engine, layers, configuration, null, 0);
+        g2p.LoadTokenizer(tokenizerJson);
+        return g2p;
     }
 
     /// <summary>The release's prompt: the tokenized <c>&lt;BOT&gt;</c> + text + <c>&lt;BOS&gt;</c>.</summary>

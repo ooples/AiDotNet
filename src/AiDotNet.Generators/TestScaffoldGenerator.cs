@@ -444,6 +444,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// (name, whether it trains first, "constant" | "random" | "text" inputs); text inputs go through
     /// <paramref name="textToTokens"/>.
     /// </summary>
+    /// <summary>
+    /// Text-sensitivity probes that compare what the model says for two sentences, for a model whose training objective
+    /// reads no text (MegaTTS 3 trains on the phones its aligner reads from the recording), so the objective probes cannot
+    /// see the text.
+    /// </summary>
+    private static void AppendSynthesisSensitivityProbes(StringBuilder sb, (string Name, bool Trains)[] probes, string textToTokens)
+    {
+        foreach (var (name, trains) in probes)
+        {
+            sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+            sb.AppendLine($"    public override async System.Threading.Tasks.Task {name}()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+            sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+            sb.AppendLine("        using var network = CreateNetwork();");
+            if (trains)
+            {
+                sb.AppendLine("        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);");
+                sb.AppendLine("        var trainInput = CreateRandomTensor(EffectiveInputShape, rng);");
+                sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+                sb.AppendLine("        for (int i = 0; i < iterations; i++) TrainOn(network, trainInput, target);");
+            }
+            sb.AppendLine($"        var a = network.Predict({textToTokens}(\"the quick brown fox\"));");
+            sb.AppendLine($"        var b = network.Predict({textToTokens}(\"a completely different sentence\"));");
+            sb.AppendLine("        bool differs = a.Length != b.Length;");
+            sb.AppendLine("        for (int i = 0; !differs && i < a.Length; i++) differs = System.Math.Abs(ConvertToDouble(a[i]) - ConvertToDouble(b[i])) > 1e-10;");
+            sb.AppendLine("        Xunit.Assert.True(differs, \"The model says the same for two different sentences: the text never reaches the output.\");");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+    }
+
     private static void AppendObjectiveSensitivityProbes(StringBuilder sb, (string Name, bool Trains, string Inputs)[] probes,
         string textToTokens)
     {
@@ -7815,26 +7848,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "AcousticCodebookSize = 32, NumAcousticQuantizers = 2, NumStyleTags = 8, " +
                     "StyleEmbeddingDim = 32, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "MegaTTS3"
-                     && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
+            else if (model.ClassName == "MegaTTS3" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.Latest.", System.StringComparison.Ordinal))
             {
-                // MegaTTS3 builds the shared embedding -> text encoder -> codec LM -> token head
-                // graph. Its paper defaults are a 2048-wide, 24-layer decoder with an 8K token head;
-                // the complete fresh-process census measured it at 13.7 GiB in one train step before
-                // it hit the 180-second watchdog. Exercise every stage with the smallest useful
-                // public configuration, leaving production defaults untouched.
-                string codecOptionsType = "AiDotNet.TextToSpeech.Latest.MegaTTS3Options";
-                pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    $"new {codecOptionsType} {{ NumCodebooks = 1, CodebookSize = 16, " +
-                    "TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, NumLLMLayers = 2, " +
-                    "NumHeads = 4, VocabSize = 64, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                // MegaTTS 3 is five release networks (a 24-layer diffusion transformer, the duration language model, a
+                // Whisper aligner, a Qwen2-0.5B g2p model and the WaveVAE). An untrained g2p model writes no phones and an
+                // untrained aligner no alignment, so the fixture is the parity tests' tiny configuration with a front end
+                // trained to speak (tools/reference-data/megatts3_speaking_fixture.py) and half a second of noise as the
+                // voice.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.MegaTts3Fixture.Create<double>()";
             }
             else if ((model.ClassName == "FireRedTTS" || model.ClassName == "SparkTTS")
                      && model.TypeParameterCount == 1
@@ -16005,7 +16027,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine();
                 }
                 bool useCodecSmokeIterations =
-                    model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "MegaTTS3"
+                    model.ClassName is "Bark" or "BarkModel" or "FishSpeech"
                         or "XTTSv2Clone"
                         or "GLM4Voice" or "IndexTTS2" or "SeedTTS";
                 sb.AppendLine(useCodecSmokeIterations
@@ -16014,7 +16036,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
-                if (model.ClassName is "Bark" or "BarkModel" or "MegaTTS3"
+                if (model.ClassName is "Bark" or "BarkModel"
                     or "GLM4Voice" or "IndexTTS2" or "SeedTTS"
                     || IsValleCodecLMModel(model.ClassName))
                 {
@@ -16343,6 +16365,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
+                else if (model.ClassName == "MegaTTS3")
+                {
+                    // MegaTTS 3 reads a text's g2p token ids and trains on a 24 kHz recording: eight ids, and 240 samples
+                    // (the release pads a recording with 12000 zeros before aligning it). It trains on the phones its
+                    // aligner reads from the recording (Jiang et al. 2025, Sec. 3), so its objective does not read the text;
+                    // the text-sensitivity probes compare what it says for two sentences instead.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 240 };");
+                    AppendSynthesisSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true),
+                        ("ScaledInput_ShouldChangeOutput", false),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
                 else if (model.ClassName == "OuteTTS")
@@ -21934,7 +21972,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "SpeechGPT" or "SpiritLM"
             or "Amphion" or "Dia" or "GLM4Voice" or "WhisperSpeech"
             // SparkTTS exposes the same discrete codec-token contract.
-            or "SparkTTS" or "MegaTTS3"
+            or "SparkTTS"
             || IsValleCodecLMModel(className);
     }
 
@@ -21965,7 +22003,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // SparkTTS: the CI-smoke fixture pins NumCodebooks = 1, CodebookSize = 16, so its codec
             // head is 1 x 16 wide (production stays 1 x 4096).
             "SparkTTS" => 16,
-            "MegaTTS3" => 16,
             "FishSpeech" or "FishSpeechV15" => 32,
             "GLM4Voice" => 32,
             "UniAudio" => 32,
@@ -21993,7 +22030,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2"
                 or "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM" or "Zonos"
-                or "MegaTTS3" ? 64 : 256;
+                ? 64 : 256;
     }
 
     private static string GetValleCodecLMOptionsType(string className)
