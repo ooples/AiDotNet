@@ -291,6 +291,12 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
             // stays Q, K, V, O, bias - the order the generated parameter surface declares.
         }
 
+        // The caller chose this seed outright, so it must survive the model's later wiring. Assigning it here
+        // makes NoteConstructorInitialization below leave this layer ineligible for a reseed, which is what
+        // keeps a model-wired seed from redrawing over a deliberately seeded layer.
+        if (seed.HasValue)
+            RandomSeed = seed;
+
         NoteConstructorInitialization();
     }
 
@@ -327,16 +333,27 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     protected override void OnRandomSeedAssigned()
     {
         if (!_initializedWithoutSeed) return;
-        _initializedWithoutSeed = false;
         if (RandomSeed is not int assigned) return;
-        // A shared or external table is not ours to redraw, and once the projections exist the stream has
-        // already been consumed past the point a restart could reproduce.
-        if (!_ownsBiasTable || _projectionsAllocated) return;
+        // Once the projections exist the stream has been consumed past the point a restart could reproduce, so
+        // there is nothing left to redo. Until then this stays eligible: a seed assigned, then CHANGED before
+        // allocation has to take effect too, or Q/K/V/O would quietly come from the first seed's stream.
+        if (_projectionsAllocated) return;
+
+        // Restarted before the ownership check, not after it. A shared or external table is not ours to redraw,
+        // but Q/K/V/O draw from this same stream when they are allocated, so they have to come from the assigned
+        // seed either way; leaving the stream alone here gave two caller-built layers with the same seed
+        // different projections.
+        _rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(assigned);
+        if (!_ownsBiasTable) return;
+
+        // Only a table still holding exactly what construction drew is ours to redo; one trained, loaded or set
+        // since is left alone.
         if (ComputeParameterFingerprint(new[] { _relativeBiasTable }) != _unseededInitFingerprint) return;
 
-        _rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(assigned);
         var redrawn = SampleNormalTensor(new[] { _numBuckets, _numHeads }, std: 1.0 / Math.Sqrt(_hiddenSize));
         redrawn.AsSpan().CopyTo(_relativeBiasTable.AsWritableSpan());
+        // Refreshed so a later seed change can still tell an untouched table from an edited one.
+        _unseededInitFingerprint = ComputeParameterFingerprint(new[] { _relativeBiasTable });
     }
 
     /// <inheritdoc />

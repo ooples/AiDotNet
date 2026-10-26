@@ -92,6 +92,53 @@ public class CallerBuiltLayerSeedingTests
         return model.GetParameters().ToArray();
     }
 
+    private static double[] T5LayerWeights(int? constructorSeed, params int[] assignedSeeds)
+    {
+        var layer = new T5RelativeBiasAttentionLayer<double>(hiddenSize: Width, numHeads: 2, seed: constructorSeed);
+        foreach (var s in assignedSeeds)
+        {
+            layer.RandomSeed = s;
+        }
+
+        // Reading the parameters allocates Q/K/V/O, which is where the stream the seed restarted is consumed.
+        return layer.GetParameters().ToArray();
+    }
+
+    [Fact]
+    public void AnExplicitConstructorSeed_IsNotOverriddenByAnAssignedSeed()
+    {
+        // The caller chose the constructor seed, so the same one must win whatever is wired on afterwards.
+        Assert.Equal(T5LayerWeights(7, 2290), T5LayerWeights(7, 2291));
+    }
+
+    [Fact]
+    public void ASeedChangedBeforeAllocation_IsTheOneTheProjectionsUse()
+    {
+        // Assigning 2290 and then 2291 before anything is allocated has to land on 2291, not quietly keep 2290.
+        Assert.Equal(T5LayerWeights(null, 2291), T5LayerWeights(null, 2290, 2291));
+        Assert.NotEqual(T5LayerWeights(null, 2290), T5LayerWeights(null, 2290, 2291));
+    }
+
+    [Fact]
+    public void ASharedBiasTable_StillSeedsTheProjections()
+    {
+        // The shared table is not the layer's to redraw, but Q/K/V/O draw from the same stream, so an assigned
+        // seed still has to reach them: two layers sharing a table at one seed must agree.
+        static double[] WithSharedTable(int assigned)
+        {
+            var owner = new T5RelativeBiasAttentionLayer<double>(hiddenSize: Width, numHeads: 2, seed: 11);
+            var layer = new T5RelativeBiasAttentionLayer<double>(
+                hiddenSize: Width, numHeads: 2, sharedRelativeBiasTable: owner.GetRelativeBiasTable())
+            {
+                RandomSeed = assigned,
+            };
+            return layer.GetParameters().ToArray();
+        }
+
+        Assert.Equal(WithSharedTable(2290), WithSharedTable(2290));
+        Assert.NotEqual(WithSharedTable(2290), WithSharedTable(2291));
+    }
+
     [Fact]
     public void EqualModelSeeds_GiveEqualInitialWeights_ForACallerBuiltT5Stack()
     {
