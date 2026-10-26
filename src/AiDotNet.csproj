@@ -377,6 +377,7 @@
 	<ItemGroup>
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\maskgct_mandarin.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.maskgct_mandarin.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\maskgct_vocab.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.maskgct_vocab.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\openjtalk_rules.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.openjtalk_rules.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\ftfy_tables.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.ftfy_tables.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\langdetect_profiles.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.langdetect_profiles.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_zh_tn_tagger.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_zh_tn_tagger.fst.gz" />
