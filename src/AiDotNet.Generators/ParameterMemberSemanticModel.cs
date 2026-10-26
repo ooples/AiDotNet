@@ -253,9 +253,10 @@ internal static class ParameterMemberSemanticModel
         if (memberNames.Count == 0) return Array.Empty<string>();
 
         var assigned = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var syntaxReference in owner.DeclaringSyntaxReferences)
+        foreach (var declaration in owner.DeclaringSyntaxReferences
+            .Select(syntaxReference => syntaxReference.GetSyntax())
+            .OfType<ClassDeclarationSyntax>())
         {
-            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
 
             // Members, not DescendantNodes: a NESTED class's Dispose is not this type's, and scanning it would
             // drop a member of the outer type that merely shares a name with something the nested one tears down.
@@ -277,7 +278,7 @@ internal static class ParameterMemberSemanticModel
                             .Select(parameter => parameter.Identifier.ValueText)),
                     StringComparer.Ordinal);
 
-                foreach (string target in method.DescendantNodes()
+                assigned.UnionWith(method.DescendantNodes()
                     .OfType<AssignmentExpressionSyntax>()
                     .Select(assignment => assignment.Left switch
                     {
@@ -289,10 +290,7 @@ internal static class ParameterMemberSemanticModel
                             => access.Name.Identifier.ValueText,
                         _ => null
                     })
-                    .Where(target => target is not null && memberNames.Contains(target))!)
-                {
-                    assigned.Add(target);
-                }
+                    .Where(target => target is not null && memberNames.Contains(target))!);
             }
         }
 
@@ -306,9 +304,10 @@ internal static class ParameterMemberSemanticModel
             .Where(member => member is IFieldSymbol or IPropertySymbol)
             .Select(member => member.Name), StringComparer.Ordinal);
         var declarations = new Dictionary<string, List<(Kind Kind, string Name)>>(StringComparer.Ordinal);
-        foreach (var syntaxReference in owner.DeclaringSyntaxReferences)
+        foreach (var declaration in owner.DeclaringSyntaxReferences
+            .Select(syntaxReference => syntaxReference.GetSyntax())
+            .OfType<ClassDeclarationSyntax>())
         {
-            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
             foreach (var invocation in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
                 string? callName = invocation.Expression switch
