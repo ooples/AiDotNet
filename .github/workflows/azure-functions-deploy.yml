@@ -8,6 +8,10 @@ on:
     paths:
       - 'src/AiDotNet.Playground.Functions/**'
       - '.github/workflows/azure-functions-deploy.yml'
+      - 'scripts/verify-playground-package.py'
+      - 'scripts/check-playground-routes.py'
+      - 'scripts/test_playground_package.py'
+      - 'tests/AiDotNet.Playground.Functions.Tests/**'
   workflow_dispatch:  # Allow manual trigger
 
 concurrency:
@@ -19,6 +23,9 @@ env:
   AZURE_FUNCTIONAPP_PACKAGE_PATH: src/AiDotNet.Playground.Functions
   DOTNET_VERSION: '10.0.x'
 
+permissions:
+  contents: read
+
 jobs:
   build-and-deploy:
     name: Build and Deploy
@@ -28,10 +35,34 @@ jobs:
     # 4-core hosted runner, where CodeQL's traced net10.0 build of it takes about 26 minutes).
     # 15 minutes was sized for restoring a prebuilt AiDotNet package.
     timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7.0.1
+
+      - name: Check federated deployment configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Configure federated Azure deployment first; see docs/playground-webhook-recovery.md ($name is missing)."
+              exit 1
+            fi
+          done
+
+      - name: Sign in to Azure without publishing passwords
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2
+        with:
+          client-id: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
@@ -47,20 +78,27 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Restore dependencies
-        run: dotnet restore ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        run: dotnet restore tests/AiDotNet.Playground.Functions.Tests
 
-      - name: Build
-        run: dotnet build ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release --no-restore
+      - name: Build and test webhook and execution contracts
+        run: dotnet test tests/AiDotNet.Playground.Functions.Tests -c Release --no-restore -p:GeneratePackageOnBuild=false
 
       - name: Publish
         run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release -o ./publish --no-build
+
+      - name: Verify both required functions are packaged
+        run: |
+          python3 scripts/test_playground_package.py
+          python3 scripts/verify-playground-package.py ./publish
 
       - name: Deploy to Azure Functions
         uses: Azure/functions-action@v1
         with:
           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
           package: ./publish
-          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+
+      - name: Check public routes reject unsigned or empty requests
+        run: python3 scripts/check-playground-routes.py https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net
 
       - name: Deployment Summary
         if: success()

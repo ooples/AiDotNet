@@ -50,19 +50,35 @@ public class StripeWebhook
             requestBody = await reader.ReadToEndAsync();
         }
 
+        var signature = req.Headers["Stripe-Signature"].ToString();
+        if (string.IsNullOrWhiteSpace(signature))
+        {
+            return new BadRequestObjectResult("Invalid signature");
+        }
+
         Event stripeEvent;
         try
         {
             stripeEvent = EventUtility.ConstructEvent(
                 requestBody,
-                req.Headers["Stripe-Signature"],
-                webhookSecret
+                signature,
+                webhookSecret,
+                // The existing sandbox emits Clover snapshots. The three handled events
+                // use fields verified by our compatibility tests; do not accept arbitrary
+                // API versions when updating the SDK. Signature/timestamp checks remain on.
+                throwOnApiVersionMismatch: false
             );
         }
         catch (StripeException ex)
         {
             _logger.LogWarning(ex, "Stripe webhook signature verification failed");
             return new BadRequestObjectResult("Invalid signature");
+        }
+
+        if (stripeEvent.ApiVersion != StripeConfiguration.ApiVersion && stripeEvent.ApiVersion != "2026-02-25.clover")
+        {
+            _logger.LogWarning("Stripe webhook uses an unsupported API version");
+            return new BadRequestObjectResult("Unsupported webhook API version");
         }
 
         _logger.LogInformation("Received Stripe event: {EventType} ({EventId})", stripeEvent.Type, stripeEvent.Id);

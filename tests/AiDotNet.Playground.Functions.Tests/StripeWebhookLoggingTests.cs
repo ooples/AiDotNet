@@ -116,11 +116,15 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         AssertNoSensitiveData(logger.Entries);
     }
 
-    [Fact(Timeout = 60000)]
-    public async Task InvalidSignature_Rejected_WithoutEchoingSecretsOrPayload()
+    [Theory(Timeout = 60000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvalidSignature_Rejected_WithoutEchoingSecretsOrPayload(bool legacy)
     {
         var logger = new CapturingLogger<StripeWebhook>();
-        var request = SignedRequest(CheckoutCompletedEvent(), signingSecret: "whsec_attacker_guess");
+        var payload = CheckoutCompletedEvent();
+        if (legacy) payload = payload.Replace(StripeConfiguration.ApiVersion, "2026-02-25.clover", StringComparison.Ordinal);
+        var request = SignedRequest(payload, signingSecret: "whsec_attacker_guess");
 
         var result = await new StripeWebhook(logger).Run(request);
 
@@ -130,6 +134,95 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         Assert.DoesNotContain(WebhookSecret, responseBody, StringComparison.Ordinal);
         Assert.Empty(_supabaseRequests);
         AssertNoSensitiveData(logger.Entries);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("malformed-signature")]
+    public async Task MissingOrMalformedSignature_IsRejectedWithoutDatabaseRequests(string? signature)
+    {
+        var request = SignedRequest(CheckoutCompletedEvent());
+        request.Headers.Remove("Stripe-Signature");
+        if (signature is not null) request.Headers["Stripe-Signature"] = signature;
+
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(request);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(_supabaseRequests);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task MissingWebhookConfiguration_ReturnsRetryableFailure()
+    {
+        Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET", null);
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>())
+            .Run(SignedRequest(CheckoutCompletedEvent()));
+
+        Assert.Equal(StatusCodes.Status500InternalServerError, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        Assert.Empty(_supabaseRequests);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task SignedUnhandledEvent_IsAcknowledgedWithoutDatabaseRequests()
+    {
+        var payload = CheckoutCompletedEvent().Replace(EventTypes.CheckoutSessionCompleted, EventTypes.InvoiceCreated, StringComparison.Ordinal);
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(payload));
+
+        Assert.IsType<OkResult>(result);
+        Assert.Empty(_supabaseRequests);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ExistingCloverCheckout_UpdatesProfileWithSignatureVerification()
+    {
+        _supabaseUsersJson = JsonSerializer.Serialize(new
+        {
+            users = new[] { new { id = "00000000-0000-0000-0000-00000000abcd", email = CustomerEmail } }
+        });
+        var payload = CheckoutCompletedEvent().Replace(StripeConfiguration.ApiVersion, "2026-02-25.clover", StringComparison.Ordinal);
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(payload));
+        Assert.IsType<OkResult>(result);
+        Assert.Contains(_supabaseRequests, request => request.StartsWith("PATCH", StringComparison.Ordinal));
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData("2025-01-27.acacia")]
+    [InlineData("2099-01-01.future")]
+    public async Task OtherApiVersions_AreRejectedWithoutDatabaseRequests(string version)
+    {
+        var payload = CheckoutCompletedEvent().Replace(StripeConfiguration.ApiVersion, version, StringComparison.Ordinal);
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(payload));
+        Assert.Equal("Unsupported webhook API version", Assert.IsType<BadRequestObjectResult>(result).Value);
+        Assert.Empty(_supabaseRequests);
+    }
+
+    [Theory]
+    [InlineData(EventTypes.CustomerSubscriptionUpdated, "past_due")]
+    [InlineData(EventTypes.CustomerSubscriptionDeleted, "canceled")]
+    public void CloverSubscriptionSnapshots_PreserveFieldsUsedByTheHandler(string eventType, string status)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            id = "evt_legacy_subscription", @object = "event", api_version = "2026-02-25.clover", type = eventType,
+            data = new { @object = new { id = "sub_legacy", @object = "subscription", customer = CustomerId, status } }
+        });
+        var request = SignedRequest(payload);
+        var parsed = EventUtility.ConstructEvent(payload, request.Headers["Stripe-Signature"], WebhookSecret, throwOnApiVersionMismatch: false);
+        var subscription = Assert.IsType<Subscription>(parsed.Data.Object);
+        Assert.Equal(CustomerId, subscription.CustomerId);
+        Assert.Equal(status, subscription.Status);
+        Assert.Equal(eventType, parsed.Type);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ExpiredCloverSignature_IsRejectedWithoutDatabaseRequests()
+    {
+        var payload = CheckoutCompletedEvent().Replace(StripeConfiguration.ApiVersion, "2026-02-25.clover", StringComparison.Ordinal);
+        var request = SignedRequest(payload, timestampOverride: DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds());
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(request);
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(_supabaseRequests);
     }
 
     private static void AssertNoSensitiveData(IReadOnlyCollection<string> entries)
@@ -172,9 +265,9 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         }
     });
 
-    private static HttpRequest SignedRequest(string payload, string signingSecret = WebhookSecret)
+    private static HttpRequest SignedRequest(string payload, string signingSecret = WebhookSecret, long? timestampOverride = null)
     {
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var timestamp = timestampOverride ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(signingSecret));
         var signature = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes($"{timestamp}.{payload}")))
             .ToLowerInvariant();

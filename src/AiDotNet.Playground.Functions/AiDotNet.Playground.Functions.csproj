@@ -32,4 +32,8 @@
     <ProjectReference Include="..\AiDotNet.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="host.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
