@@ -39,7 +39,8 @@ internal static class ParameterSweepWorker
         long maximum,
         bool includeLayerBreakdown)
     {
-        var type = Type.GetType(assemblyQualifiedType, throwOnError: true)!;
+        var type = Type.GetType(assemblyQualifiedType, throwOnError: true)
+            ?? throw new InvalidOperationException($"Type {assemblyQualifiedType} could not be loaded.");
         var ctor = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
             .Where(c => c.GetParameters().Length == 0 || c.GetParameters().All(p => p.HasDefaultValue))
             .OrderBy(c => c.GetParameters().Length)

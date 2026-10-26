@@ -114,7 +114,7 @@ public readonly struct LayerShape : IEquatable<LayerShape>
             return false;
         }
 
-        concrete = (int[])_axes!.Clone();
+        concrete = (int[])(_axes ?? throw new InvalidOperationException("_axes is null where it is required.")).Clone();
         return true;
     }
 
@@ -127,7 +127,7 @@ public readonly struct LayerShape : IEquatable<LayerShape>
     /// <exception cref="InvalidOperationException">Thrown when any axis is dynamic.</exception>
     public int[] RequireConcrete(string reason)
     {
-        if (TryGetConcrete(out var concrete)) return concrete!;
+        if (TryGetConcrete(out var concrete)) return (concrete ?? throw new InvalidOperationException("concrete is null where it is required."));
 
         var described = new string[Rank];
         for (int i = 0; i < Rank; i++)

@@ -565,7 +565,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 // For mean: gradient flows back through A^T and is divided by degree
                 var adjTMean = Engine.TensorPermute(adjBatched, [0, 2, 1]);
                 var gradThroughAdj = Engine.BatchMatMul(adjTMean, aggGradient);
-                var safeDegrees = Engine.TensorMax(_lastDegrees!, NumOps.One);
+                var safeDegrees = Engine.TensorMax((_lastDegrees ?? throw new InvalidOperationException("_lastDegrees is null where it is required.")), NumOps.One);
                 var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                 // Broadcast degree to match feature dimension
                 int featureDim = aggGradient.Shape[2];
@@ -604,7 +604,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     {
         // Self weights gradient: input^T @ gradient (batched matmul then sum)
         // Use permute for batched transpose: [batch, nodes, features] -> [batch, features, nodes]
-        var inputBatchedT = Engine.TensorPermute(_lastInput!, [0, 2, 1]);
+        var inputBatchedT = Engine.TensorPermute((_lastInput ?? throw new InvalidOperationException("_lastInput is null where it is required.")), [0, 2, 1]);
         // Batched matmul: [batch, features, nodes] @ [batch, nodes, output] -> [batch, features, output]
         var selfWeightsGradBatched = Engine.BatchMatMul(inputBatchedT, gradient);
         // Sum over batch dimension
@@ -612,7 +612,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Neighbor weights gradient: aggregated^T @ gradient (batched matmul then sum)
         // Use permute for batched transpose: [batch, nodes, features] -> [batch, features, nodes]
-        var aggBatchedT = Engine.TensorPermute(_lastAggregated!, [0, 2, 1]);
+        var aggBatchedT = Engine.TensorPermute((_lastAggregated ?? throw new InvalidOperationException("_lastAggregated is null where it is required.")), [0, 2, 1]);
         // Batched matmul: [batch, features, nodes] @ [batch, nodes, output] -> [batch, features, output]
         var neighborWeightsGradBatched = Engine.BatchMatMul(aggBatchedT, gradient);
         // Sum over batch dimension

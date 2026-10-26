@@ -447,9 +447,10 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         try
         {
             // Create a batch matrix from all inputs
-            var inputVectors = requests.Select(r => (Vector<T>)r.Input).ToArray();
+            var inputVectors = requests.Select(r => r.Input as Vector<T>
+                ?? throw new System.InvalidOperationException("A batched request carries no Vector<T> input.")).ToArray();
             var batchSize = inputVectors.Length;
-            var inputDim = inputVectors[0].Length;
+            var inputDim = (inputVectors[0] ?? throw new System.InvalidOperationException("inputVectors[0] is null where it is required.")).Length;
 
             // Build the batch matrix (each row is one input)
             var batchMatrix = new Matrix<T>(batchSize, inputDim);
@@ -457,7 +458,7 @@ public class RequestBatcher : IRequestBatcher, IDisposable
             {
                 for (int j = 0; j < inputDim; j++)
                 {
-                    batchMatrix[i, j] = inputVectors[i][j];
+                    batchMatrix[i, j] = (inputVectors[i] ?? throw new System.InvalidOperationException("inputVectors[i] is null where it is required."))[j];
                 }
             }
 
@@ -551,7 +552,7 @@ public class RequestBatcher : IRequestBatcher, IDisposable
     /// </summary>
     private static void SetException(BatchRequest request, Exception exception)
     {
-        var tcsType = request.CompletionSource.GetType();
+        var tcsType = (request.CompletionSource ?? throw new System.InvalidOperationException("request.CompletionSource is null where it is required.")).GetType();
         var setExceptionMethod = tcsType.GetMethod("SetException", new[] { typeof(Exception) });
         setExceptionMethod?.Invoke(request.CompletionSource, new object[] { exception });
     }

@@ -109,13 +109,13 @@ public class KimiVLReviewRegressionIntegrationTests
     {
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(field);
-        return (int)field!.GetValue(instance)!;
+        return (int)field.GetValue(instance);
     }
 
     private static int InvokePrivateIntMethod(object instance, string methodName)
     {
         var method = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
-        return (int)method!.Invoke(instance, Array.Empty<object>())!;
+        return (int)method.Invoke(instance, Array.Empty<object>());
     }
 }

@@ -39,7 +39,7 @@ public class AbcNetSpottingTests
     private static Tensor<double> Image(int size, int seed)
     {
         var t = new Tensor<double>(new[] { 3, size, size });
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble();
         return t;
     }

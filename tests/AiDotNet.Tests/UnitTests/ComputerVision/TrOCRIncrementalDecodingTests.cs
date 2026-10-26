@@ -13,7 +13,7 @@ public class TrOCRIncrementalDecodingTests
 {
     private static Tensor<double> Random(int[] shape, int seed)
     {
-        var r = new Random(seed);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = r.NextDouble() * 2 - 1;
         return t;

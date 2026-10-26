@@ -26,7 +26,7 @@ public class DiffusionParameterChunkHelperTests
     [Fact]
     public void BufferToFlatVector_NullChunk_ThrowsArgumentException()
     {
-        IEnumerable<Tensor<double>> chunks = [new Tensor<double>([1]), null!];
+        IEnumerable<Tensor<double>> chunks = [new Tensor<double>([1]), global::AiDotNet.Tests.TestNull.Of<Tensor<double>>()];
 
         var ex = Assert.Throws<ArgumentException>(() => DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
 

@@ -537,8 +537,8 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     {
         int n = x.Rows;
         var propensityScores = EstimatePropensityScores(x);
-        var mu1 = PredictOutcome(x, _outcomeCoefficients1!);
-        var mu0 = PredictOutcome(x, _outcomeCoefficients0!);
+        var mu1 = PredictOutcome(x, (_outcomeCoefficients1 ?? throw new InvalidOperationException("_outcomeCoefficients1 is null where it is required.")));
+        var mu0 = PredictOutcome(x, (_outcomeCoefficients0 ?? throw new InvalidOperationException("_outcomeCoefficients0 is null where it is required.")));
 
         double sumDR = 0;
 
@@ -676,7 +676,7 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     {
         int n = x.Rows;
         var propensityScores = EstimatePropensityScores(x);
-        var mu0 = PredictOutcome(x, _outcomeCoefficients0!);
+        var mu0 = PredictOutcome(x, (_outcomeCoefficients0 ?? throw new InvalidOperationException("_outcomeCoefficients0 is null where it is required.")));
 
         double sumTreated = 0;
         double sumIPW = 0;
@@ -719,8 +719,8 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
 
         ValidateCausalData(x, treatment, outcome);
 
-        var mu1 = PredictOutcome(x, _outcomeCoefficients1!);
-        var mu0 = PredictOutcome(x, _outcomeCoefficients0!);
+        var mu1 = PredictOutcome(x, (_outcomeCoefficients1 ?? throw new InvalidOperationException("_outcomeCoefficients1 is null where it is required.")));
+        var mu0 = PredictOutcome(x, (_outcomeCoefficients0 ?? throw new InvalidOperationException("_outcomeCoefficients0 is null where it is required.")));
         var cate = new Vector<T>(x.Rows);
 
         return Engine.Subtract(mu1, mu0);

@@ -44,7 +44,7 @@ public class AiModelObservabilityTests
         var o = new AiModelObservability();
         o.ConfigureProfiling(null);
         Assert.NotNull(o.ProfilingConfig);
-        Assert.True(o.ProfilingConfig!.Enabled);
+        Assert.True(o.ProfilingConfig.Enabled);
     }
 
     [Fact(Timeout = 30000)]

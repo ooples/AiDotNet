@@ -66,8 +66,11 @@ public class QmixFusedTrainingTests
 
     private static Vector<double> AgentNetworkParameters(QMIXAgent<double> agent)
     {
-        var networks = (List<INeuralNetwork<double>>)typeof(QMIXAgent<double>)
-            .GetField("_agentNetworks", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(agent)!;
+        var networks = (typeof(QMIXAgent<double>)
+                .GetField("_agentNetworks", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?? throw new InvalidOperationException("QMIXAgent has no _agentNetworks field."))
+            .GetValue(agent) as List<INeuralNetwork<double>>
+            ?? throw new InvalidOperationException("QMIXAgent._agentNetworks is not a List<INeuralNetwork<double>>.");
         return new Vector<double>(networks.SelectMany(n => n.GetParameters().ToArray()).ToArray());
     }
 

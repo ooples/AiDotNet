@@ -220,7 +220,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
             // choose a different initialization deliberately.
             const int defaultSeed = 20250817;
 
-            var random = new Random((_options.Seed ?? defaultSeed) + i);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? defaultSeed) + i);
 
             Matrix<T> weight = new Matrix<T>(outputSize, inputSize);
             Vector<T> bias = new Vector<T>(outputSize);

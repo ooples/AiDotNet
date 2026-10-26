@@ -625,7 +625,7 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
                             args[i] = parameters[i].DefaultValue;
                         }
 
-                        return (ILayer<T>)ctor.Invoke(args)!;
+                        return (ILayer<T>)ctor.Invoke(args);
                     }
                 }
             }

@@ -205,7 +205,7 @@ public class LayerPortTests
 
         var input = new Tensor<double>([1, channels, spatial, spatial]);
         var timeEmbed = new Tensor<double>([1, timeEmbedDim]);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 0.5;
         for (int i = 0; i < timeEmbed.Length; i++) timeEmbed[i] = rng.NextDouble() * 2.0;
 

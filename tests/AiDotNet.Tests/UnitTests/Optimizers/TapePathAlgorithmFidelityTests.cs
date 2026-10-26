@@ -190,9 +190,9 @@ public class TapePathAlgorithmFidelityTests
         var field = instance.GetType().GetField(fieldName,
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(field);
-        var value = field!.GetValue(instance);
+        var value = field.GetValue(instance);
         Assert.NotNull(value);
-        return (Vector<double>)value!;
+        return (Vector<double>)value;
     }
 
     /// <summary>

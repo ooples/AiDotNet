@@ -37,7 +37,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, AdaptationSteps = 3, UseFirstOrder = true };
         var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(100);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(100);
         var losses = new List<double>();
 
         for (int epoch = 0; epoch < 20; epoch++)
@@ -66,7 +66,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, DistanceFunction = ProtoNetsDistanceFunction.Euclidean };
         var protonets = new ProtoNetsAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(200);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(200);
         var losses = new List<double>();
 
         for (int epoch = 0; epoch < 20; epoch++)
@@ -92,7 +92,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, RepresentationDim = 32 };
         var cnp = new CNPAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(300);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(300);
         var losses = new List<double>();
 
         for (int epoch = 0; epoch < 20; epoch++)
@@ -122,7 +122,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, AdaptationSteps = 5, UseFirstOrder = true };
         var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(400);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(400);
 
         // Train for several epochs
         for (int epoch = 0; epoch < 15; epoch++)
@@ -155,7 +155,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005 };
         var protonets = new ProtoNetsAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(500);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(500);
 
         // Train
         for (int epoch = 0; epoch < 10; epoch++)
@@ -211,7 +211,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, UseFirstOrder = true };
         var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var tasks = CreateClassificationTasks(InputDim, 2, 3, 4, 4, rng);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(tasks);
         return maml.MetaTrain(batch);
@@ -229,7 +229,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, AdaptationSteps = 3, UseFirstOrder = true };
         var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(600);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(600);
 
         // Train for a bit
         for (int i = 0; i < 5; i++)
@@ -263,7 +263,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, AdaptationSteps = 3, UseFirstOrder = true };
         var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(700);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(700);
         for (int i = 0; i < 5; i++)
         {
             var tasks = CreateClassificationTasks(InputDim, 2, 3, 4, 4, rng);
@@ -271,8 +271,8 @@ public class DeepCorrectnessTests
         }
 
         // Create two very different tasks
-        var task1 = CreateClassificationTask(InputDim, 2, 5, 5, new Random(111));
-        var task2 = CreateClassificationTask(InputDim, 2, 5, 5, new Random(222));
+        var task1 = CreateClassificationTask(InputDim, 2, 5, 5, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(111));
+        var task2 = CreateClassificationTask(InputDim, 2, 5, 5, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(222));
 
         var adapted1 = maml.Adapt(task1);
         var adapted2 = maml.Adapt(task2);
@@ -307,7 +307,7 @@ public class DeepCorrectnessTests
 
         var paramsBefore = model.GetParameters();
 
-        var rng = new Random(800);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(800);
         var tasks = CreateClassificationTasks(InputDim, 2, 3, 4, 4, rng);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(tasks);
         maml.MetaTrain(batch);
@@ -331,7 +331,7 @@ public class DeepCorrectnessTests
     [Fact(Timeout = 120000)]
     public async Task MultipleAlgorithms_GradientFlowConsistency()
     {
-        var rng = new Random(900);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(900);
         var task = CreateClassificationTask(InputDim, 2, 3, 4, rng);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
 
@@ -391,7 +391,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, AdaptationSteps = 3, UseFirstOrder = true };
         var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(1000);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1000);
 
         // 1-shot: only 1 example per class
         double totalLoss = 0;
@@ -420,7 +420,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.005, OuterLearningRate = 0.001, AdaptationSteps = 2, UseFirstOrder = true };
         var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(1100);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1100);
         var tasks = CreateClassificationTasks(highDim, 2, 3, 4, 4, rng);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(tasks);
 
@@ -442,7 +442,7 @@ public class DeepCorrectnessTests
         { InnerLearningRate = 0.01, OuterLearningRate = 0.005, UseFirstOrder = true };
         var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
 
-        var rng = new Random(1200);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1200);
         // Batch of 16 tasks
         var tasks = CreateClassificationTasks(InputDim, 2, 3, 4, 16, rng);
         var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(tasks);
@@ -598,7 +598,7 @@ public class DeepCorrectnessTests
         var supportX = new Vector<double>(16); // 4 examples * 4 features
         var supportY = new Vector<double>(4);
 
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 4; i++)
         {
             for (int d = 0; d < 4; d++)
@@ -695,7 +695,7 @@ public class DeepCorrectnessTests
         foreach (var (name, factory) in npAlgorithms)
         {
             var algo = factory();
-            var rng = new Random(42);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
             for (int epoch = 0; epoch < 5; epoch++)
             {

@@ -70,7 +70,7 @@ public class ChatClientGenerator<T> : GeneratorBase<T>, IStreamingGenerator<T>
         var messages = new List<ChatMessage>();
         if (!string.IsNullOrWhiteSpace(_systemPrompt))
         {
-            messages.Add(new ChatMessage(ChatRole.System, _systemPrompt!));
+            messages.Add(new ChatMessage(ChatRole.System, (_systemPrompt ?? throw new InvalidOperationException("_systemPrompt is null where it is required."))));
         }
 
         messages.Add(new ChatMessage(ChatRole.User, prompt));
@@ -127,7 +127,7 @@ public class ChatClientGenerator<T> : GeneratorBase<T>, IStreamingGenerator<T>
         {
             if (!string.IsNullOrEmpty(update.TextDelta))
             {
-                yield return update.TextDelta!;
+                yield return (update.TextDelta ?? throw new InvalidOperationException("update.TextDelta is null where it is required."));
             }
         }
     }

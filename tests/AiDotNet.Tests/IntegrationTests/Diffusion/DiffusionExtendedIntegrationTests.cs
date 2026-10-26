@@ -76,8 +76,8 @@ public class DiffusionExtendedIntegrationTests
         var copy = new DiffusionModelOptions<double>(opts);
 
         Assert.NotNull(copy.OptimizerFactory);
-        var first = opts.OptimizerFactory!();
-        var second = copy.OptimizerFactory!();
+        var first = opts.OptimizerFactory();
+        var second = copy.OptimizerFactory();
         Assert.NotSame(first, second);
         Assert.Equal(2, created);
     }

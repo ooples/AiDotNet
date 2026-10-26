@@ -119,7 +119,7 @@ public class AiModelBuilderPredictIntegrationTests
     public async Task BuildAsync_MultipleRegression_EndToEndPrediction()
     {
         // Arrange: Simple linear relationship y = 2*x1 + 3*x2 + noise
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var x = new Matrix<double>(30, 3);
         var y = new Vector<double>(30);
         for (int i = 0; i < 30; i++)
@@ -172,7 +172,7 @@ public class AiModelBuilderPredictIntegrationTests
             .BuildAsync();
 
         var newData = new Matrix<double>(5, 6);
-        var rng = new Random(100);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(100);
         for (int i = 0; i < 5; i++)
             for (int j = 0; j < 6; j++)
                 newData[i, j] = rng.NextDouble() * 10;
@@ -246,7 +246,7 @@ public class AiModelBuilderPredictIntegrationTests
 
         // Predict with full 10-column input
         var newData = new Matrix<double>(3, 10);
-        var rng = new Random(200);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(200);
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 10; j++)
                 newData[i, j] = rng.NextDouble() * 10;
@@ -303,7 +303,7 @@ public class AiModelBuilderPredictIntegrationTests
             .BuildAsync();
 
         var newData = new Matrix<double>(10, 8);
-        var rng = new Random(444);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(444);
         for (int i = 0; i < 10; i++)
             for (int j = 0; j < 8; j++)
                 newData[i, j] = rng.NextDouble() * 10;
@@ -609,7 +609,7 @@ public class AiModelBuilderPredictIntegrationTests
     private static (Matrix<double> x, Vector<double> y) CreateLinearDataset(
         int samples, int features, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 

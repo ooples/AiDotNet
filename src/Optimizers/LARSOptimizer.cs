@@ -731,7 +731,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         backend.LarsUpdate(
             parameters,
             gradients,
-            _gpuVelocity!,
+            (_gpuVelocity ?? throw new InvalidOperationException("_gpuVelocity is null where it is required.")),
             (float)NumOps.ToDouble(CurrentLearningRate),
             (float)_options.InitialMomentum,
             (float)_options.WeightDecay,

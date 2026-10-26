@@ -26,8 +26,8 @@ public class OnnxActivationLayerExportTests
     [InlineData(typeof(SoftmaxActivation<float>), "Softmax")]
     public void ConvertToOnnx_EmittsCorrectOpForEachSupportedActivation(System.Type activationType, string expectedOp)
     {
-        var activation = (AiDotNet.Interfaces.IActivationFunction<float>)System.Activator.CreateInstance(activationType)!;
-        var layer = new ActivationLayer<float>(activation);
+        var activation = (AiDotNet.Interfaces.IActivationFunction<float>)(System.Activator.CreateInstance(activationType) ?? throw new InvalidOperationException("(AiDotNet.Interfaces.IActivationFunction<float>)System.Activator.CreateInstan... is null where it is required."));
+        var layer = new ActivationLayer<float>((activation ?? throw new InvalidOperationException("activation is null where it is required.")));
 
         var builder = new OnnxGraphBuilder(new OnnxExportOptions());
         builder.AddFloatInput("input", new[] { -1, 4 });
@@ -72,8 +72,8 @@ public class OnnxActivationLayerExportTests
     [InlineData(typeof(TanhActivation<float>))]
     public void ActivationLayer_OnnxRoundTrip_MatchesAiDotNetOutputWithinTolerance(System.Type activationType)
     {
-        var activation = (AiDotNet.Interfaces.IActivationFunction<float>)System.Activator.CreateInstance(activationType)!;
-        var layer = new ActivationLayer<float>(activation);
+        var activation = (AiDotNet.Interfaces.IActivationFunction<float>)(System.Activator.CreateInstance(activationType) ?? throw new InvalidOperationException("(AiDotNet.Interfaces.IActivationFunction<float>)System.Activator.CreateInstan... is null where it is required."));
+        var layer = new ActivationLayer<float>((activation ?? throw new InvalidOperationException("activation is null where it is required.")));
 
         // Deterministic input crossing zero so ReLU, Sigmoid, Tanh all stress
         // their non-trivial regions.

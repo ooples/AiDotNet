@@ -462,7 +462,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                     var seenRelations = new HashSet<string>(StringComparer.Ordinal) { start.Name };
                     var current = start;
                     while (!string.IsNullOrWhiteSpace(current.SameShapeAs)
-                           && byName.TryGetValue(current.SameShapeAs!, out var related))
+                           && byName.TryGetValue((current.SameShapeAs ?? throw new InvalidOperationException("current.SameShapeAs is null where it is required.")), out var related))
                     {
                         if (!seenRelations.Add(related.Name))
                         {
@@ -557,7 +557,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                     invalid = true;
                 }
                 if (!string.IsNullOrWhiteSpace(minimumElementsMember)
-                    && !HasMember(type, minimumElementsMember!))
+                    && !HasMember(type, (minimumElementsMember ?? throw new InvalidOperationException("minimumElementsMember is null where it is required."))))
                 {
                     spc.ReportDiagnostic(Diagnostic.Create(
                         InvalidShapeConstraint,
@@ -567,7 +567,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
                     invalid = true;
                 }
                 else if (!string.IsNullOrWhiteSpace(minimumElementsMember)
-                         && FindMember(type, minimumElementsMember!) is { } shapeMember
+                         && FindMember(type, (minimumElementsMember ?? throw new InvalidOperationException("minimumElementsMember is null where it is required."))) is { } shapeMember
                          && !IsParameterlessIntValue(shapeMember))
                 {
                     spc.ReportDiagnostic(Diagnostic.Create(
@@ -679,7 +679,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             if (shapeConstraint is not null && !Declares(type, "GetInputShapeConstraint"))
             {
                 string elementExpression = !string.IsNullOrWhiteSpace(minimumElementsMember)
-                    ? MemberExpression(type, minimumElementsMember!)
+                    ? MemberExpression(type, (minimumElementsMember ?? throw new InvalidOperationException("minimumElementsMember is null where it is required.")))
                     : minimumElements.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 sb.AppendLine("    /// <summary>Generated from [ModelInputShapeConstraint].</summary>");
                 sb.Append("    public override global::AiDotNet.NeuralNetworks.ModelInputShapeConstraint GetInputShapeConstraint() => new(")
@@ -708,8 +708,8 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             .Where(y => y.Expression is not null)
             .Select(y => (
                 Yield: y,
-                Type: context.SemanticModel.GetTypeInfo(y.Expression!).Type as INamedTypeSymbol,
-                IsGraphRoot: IsGraphRoot(y.Expression!, context.SemanticModel)))
+                Type: context.SemanticModel.GetTypeInfo((y.Expression ?? throw new InvalidOperationException("y.Expression is null where it is required."))).Type as INamedTypeSymbol,
+                IsGraphRoot: IsGraphRoot(y.Expression, context.SemanticModel)))
             .Where(x => x.Type is not null)
             .OrderBy(x => x.Yield.SpanStart)
             .ToList();
@@ -717,7 +717,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         if (creations.Count < 2) return ImmutableArray<FactoryFinding>.Empty;
 
         var builder = ImmutableArray.CreateBuilder<FactoryFinding>();
-        Domain produced = DeclaredDomain(creations[0].Type!, Direction.Output, Domain.Continuous);
+        Domain produced = DeclaredDomain((creations[0].Type ?? throw new InvalidOperationException("creations[0].Type is null where it is required.")), Direction.Output, Domain.Continuous);
         for (int i = 1; i < creations.Count; i++)
         {
             var producer = creations[i - 1];
@@ -725,22 +725,22 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
             if (consumer.IsGraphRoot)
             {
                 produced = DeclaredDomain(
-                    consumer.Type!, Direction.Output, Domain.Continuous);
+                    (consumer.Type ?? throw new InvalidOperationException("consumer.Type is null where it is required.")), Direction.Output, Domain.Continuous);
                 continue;
             }
-            Domain required = DeclaredDomain(consumer.Type!, Direction.Input, Domain.Continuous);
+            Domain required = DeclaredDomain((consumer.Type ?? throw new InvalidOperationException("consumer.Type is null where it is required.")), Direction.Input, Domain.Continuous);
             if (!Accepts(required, produced))
             {
                 builder.Add(new FactoryFinding(
                     consumer.Yield.GetLocation(),
-                    producer.Type!.Name,
-                    consumer.Type!.Name,
+                    (producer.Type ?? throw new InvalidOperationException("producer.Type is null where it is required.")).Name,
+                    consumer.Type.Name,
                     produced,
                     required));
             }
 
             Domain declaredOutput = DeclaredDomain(
-                consumer.Type!, Direction.Output, Domain.Continuous);
+                consumer.Type, Direction.Output, Domain.Continuous);
             if (declaredOutput != Domain.Unspecified)
                 produced = declaredOutput;
         }
@@ -876,7 +876,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     {
         string shape = shapeOverride ?? (string.IsNullOrWhiteSpace(port.ShapeMember)
             ? (isInput ? "GetInputShape()" : "GetOutputShape()")
-            : MemberExpression(type, port.ShapeMember!));
+            : MemberExpression(type, (port.ShapeMember ?? throw new InvalidOperationException("port.ShapeMember is null where it is required."))));
         string domain = DomainExpression(
             port,
             shapeOverride ?? (isInput ? "GetInputShape()" : "null"));
@@ -1054,24 +1054,24 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
 
     private static IEnumerable<string> RequiredMembers(Port port)
     {
-        if (!string.IsNullOrWhiteSpace(port.MaxExclusiveMember)) yield return port.MaxExclusiveMember!;
-        if (!string.IsNullOrWhiteSpace(port.MaxExclusiveResolver)) yield return port.MaxExclusiveResolver!;
-        if (!string.IsNullOrWhiteSpace(port.DomainResolver)) yield return port.DomainResolver!;
-        if (!string.IsNullOrWhiteSpace(port.ShapeMember)) yield return port.ShapeMember!;
+        if (!string.IsNullOrWhiteSpace(port.MaxExclusiveMember)) yield return (port.MaxExclusiveMember ?? throw new InvalidOperationException("port.MaxExclusiveMember is null where it is required."));
+        if (!string.IsNullOrWhiteSpace(port.MaxExclusiveResolver)) yield return (port.MaxExclusiveResolver ?? throw new InvalidOperationException("port.MaxExclusiveResolver is null where it is required."));
+        if (!string.IsNullOrWhiteSpace(port.DomainResolver)) yield return (port.DomainResolver ?? throw new InvalidOperationException("port.DomainResolver is null where it is required."));
+        if (!string.IsNullOrWhiteSpace(port.ShapeMember)) yield return (port.ShapeMember ?? throw new InvalidOperationException("port.ShapeMember is null where it is required."));
     }
 
     private static string? ValidateMemberSignatures(INamedTypeSymbol type, Port port)
     {
         if (!string.IsNullOrWhiteSpace(port.MaxExclusiveMember))
         {
-            var member = FindMember(type, port.MaxExclusiveMember!);
+            var member = FindMember(type, (port.MaxExclusiveMember ?? throw new InvalidOperationException("port.MaxExclusiveMember is null where it is required.")));
             if (member is not null && !IsParameterlessIntValue(member))
                 return port.MaxExclusiveMember + "|an int field/property or a parameterless int method";
         }
 
         if (!string.IsNullOrWhiteSpace(port.MaxExclusiveResolver))
         {
-            var member = FindMember(type, port.MaxExclusiveResolver!);
+            var member = FindMember(type, (port.MaxExclusiveResolver ?? throw new InvalidOperationException("port.MaxExclusiveResolver is null where it is required.")));
             if (member is not IMethodSymbol method || !IsInt(method.ReturnType)
                 || method.Parameters.Length != 1 || !IsIntArray(method.Parameters[0].Type))
                 return port.MaxExclusiveResolver + "|a method with signature int Method(int[]?)";
@@ -1079,7 +1079,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
 
         if (!string.IsNullOrWhiteSpace(port.DomainResolver))
         {
-            var member = FindMember(type, port.DomainResolver!);
+            var member = FindMember(type, (port.DomainResolver ?? throw new InvalidOperationException("port.DomainResolver is null where it is required.")));
             if (member is not IMethodSymbol method || !IsLayerInputDomain(method.ReturnType)
                 || method.Parameters.Length != 1 || !IsIntArray(method.Parameters[0].Type))
                 return port.DomainResolver
@@ -1088,7 +1088,7 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
 
         if (!string.IsNullOrWhiteSpace(port.ShapeMember))
         {
-            var member = FindMember(type, port.ShapeMember!);
+            var member = FindMember(type, (port.ShapeMember ?? throw new InvalidOperationException("port.ShapeMember is null where it is required.")));
             bool valid = member switch
             {
                 IFieldSymbol field => IsIntArray(field.Type),
@@ -1226,8 +1226,8 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         if (argument.Kind != TypedConstantKind.Array || argument.IsNull)
             return Array.Empty<int>();
         return argument.Values
-            .Where(value => value.Value is int)
-            .Select(value => (int)value.Value!)
+            .Select(value => value.Value)
+            .OfType<int>()
             .ToArray();
     }
 

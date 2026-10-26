@@ -75,11 +75,11 @@ public class BroadcastBackwardRankTests
 
             // g[0] is read in the diagnostic line below, so an empty gradient would throw there
             // before the assertion that explains the failure could run.
-            Assert.True(g!.Length > 0,
+            Assert.True(g.Length > 0,
                 $"batch={batch}: the gradient for the [{string.Join("x", kvp.Key.Shape.ToArray())}] " +
                 "operand is empty.");
             int bad = 0;
-            for (int i = 0; i < g!.Length; i++) if (!Fin(g[i])) bad++;
+            for (int i = 0; i < g.Length; i++) if (!Fin(g[i])) bad++;
             _out.WriteLine($"batch={batch} operand[{string.Join("x", kvp.Key.Shape.ToArray())}] " +
                            $"grad[{string.Join("x", g.Shape.ToArray())}] nonFinite={bad}/{g.Length} g[0]={g[0]}");
             Assert.True(bad == 0,

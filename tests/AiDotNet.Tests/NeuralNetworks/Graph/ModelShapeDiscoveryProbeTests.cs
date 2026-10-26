@@ -259,7 +259,7 @@ public class ModelShapeDiscoveryProbeTests
 
                 var observations = profile.Observations
                     .Where(o => o.Output is not null)
-                    .Select(o => (o.Input, o.Output!))
+                    .Select(o => (o.Input, o.Output))
                     .ToList();
                 string? predictFailure = profile.Observations.FirstOrDefault(o => o.Output is null)?.Failure;
                 if (observations.Count < 2)
@@ -472,15 +472,15 @@ public class ModelShapeDiscoveryProbeTests
 
         foreach (var group in fits.GroupBy(f => f.Family))
         {
-            var fitted = group.Where(g => g.Relation.Axes is not null).Select(g => g.Relation.Axes!).ToList();
+            var fitted = group.Where(g => g.Relation.Axes is not null).Select(g => g.Relation.Axes).ToList();
             if (fitted.Count < 2) continue;
 
-            bool identical = fitted.All(a => a.SequenceEqual(fitted[0]));
+            bool identical = fitted.All(a => (a ?? throw new InvalidOperationException("a is null where it is required.")).SequenceEqual((fitted[0] ?? throw new InvalidOperationException("fitted[0] is null where it is required."))));
             if (identical) { verdicts.Add($"CONFIRMED in {group.Key} across {fitted.Count} profiles"); continue; }
 
             bool sameStructure = fitted.All(a =>
-                a.Count == fitted[0].Count
-                && a.Select(f => f.WithoutConstant()).SequenceEqual(fitted[0].Select(f => f.WithoutConstant())));
+                (a ?? throw new InvalidOperationException("a is null where it is required.")).Count == (fitted[0] ?? throw new InvalidOperationException("fitted[0] is null where it is required.")).Count
+                && a.Select(f => f.WithoutConstant()).SequenceEqual((fitted[0] ?? throw new InvalidOperationException("fitted[0] is null where it is required.")).Select(f => f.WithoutConstant())));
 
             verdicts.Add(sameStructure
                 ? $"PARAMETERISED in {group.Key} (structure holds, constants move with construction)"

@@ -508,7 +508,7 @@ public class DomainAdaptationIntegrationTests
         var mmdAdapter = new MMDDomainAdapter<double>(sigma: 1.0);
 
         // Create larger matrices (20 samples x 10 features)
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var sourceData = CreateRandomMatrix(20, 10, random, mean: 0, stdDev: 1);
         var targetData = CreateRandomMatrix(20, 10, random, mean: 5, stdDev: 2);
 

@@ -520,7 +520,7 @@ public sealed class LlmProgramVariationOperatorTests
     {
         var client = new FakeChatClient("ignored");
 #pragma warning disable CS8600, CS8625
-        Assert.Throws<ArgumentNullException>(() => new LlmProgramVariationOperator<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new LlmProgramVariationOperator<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Agentic.Models.IChatClient<double>>()));
 #pragma warning restore CS8600, CS8625
         Assert.Throws<ArgumentOutOfRangeException>(() => new LlmProgramVariationOperator<double>(
             client, null, new LlmProgramVariationOptions { MaxProposalRetries = -1 }));

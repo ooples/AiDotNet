@@ -705,7 +705,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         backend.LionUpdate(
             parameters,
             gradients,
-            _gpuM!,
+            (_gpuM ?? throw new InvalidOperationException("_gpuM is null where it is required.")),
             (float)_options.InitialLearningRate,
             (float)_options.Beta1,
             (float)_options.Beta2,

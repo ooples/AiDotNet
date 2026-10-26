@@ -126,12 +126,12 @@ namespace AiDotNetTests.UnitTests.AutoML
             var optionsField = typeof(AiModelBuilder<double, Matrix<double>, Vector<double>>)
                 .GetField("_autoMLOptions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             Assert.NotNull(optionsField);
-            optionsField!.SetValue(builder, options);
+            optionsField.SetValue(builder, options);
 
             await builder.BuildAsync();
 
             Assert.NotNull(capturedCandidates);
-            Assert.NotEmpty(capturedCandidates!);
+            Assert.NotEmpty(capturedCandidates);
             Assert.DoesNotContain(typeof(RandomForestRegression<>), capturedCandidates);
         }
     }

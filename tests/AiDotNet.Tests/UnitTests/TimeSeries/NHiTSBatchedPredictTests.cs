@@ -37,7 +37,7 @@ public sealed class NHiTSBatchedPredictTests
         }
         model.Train(trainX, trainY);
 
-        var rng = new Random(windowLength + rows);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(windowLength + rows);
         var input = new Matrix<double>(rows, windowLength);
         for (int i = 0; i < input.Rows; i++)
             for (int j = 0; j < windowLength; j++) input[i, j] = rng.NextDouble() * 2 - 1;

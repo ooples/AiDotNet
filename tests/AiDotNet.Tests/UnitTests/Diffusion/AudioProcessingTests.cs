@@ -155,7 +155,7 @@ public class AudioProcessingTests : DiffusionUnitTestBase
 
         int signalLength = 2048;
         var signal = new Tensor<float>(new[] { signalLength });
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < signalLength; i++)
         {
             signal[i] = (float)(random.NextDouble() - 0.5);

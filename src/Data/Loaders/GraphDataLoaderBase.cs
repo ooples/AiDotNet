@@ -154,7 +154,7 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
         {
             _currentGraphIndex = NumGraphs; // Mark as consumed
             AdvanceBatchIndex();
-            return LoadedGraphData!;
+            return (LoadedGraphData ?? throw new InvalidOperationException("LoadedGraphData is null where it is required."));
         }
 
         // For multi-graph datasets, return next graph
@@ -263,9 +263,9 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
         var testGraphs = testIndices.Select(i => LoadedGraphs[i]).ToList();
 
         // Split labels
-        var trainLabels = ExtractLabels(GraphLabels!, trainIndices);
-        var valLabels = ExtractLabels(GraphLabels!, valIndices);
-        var testLabels = ExtractLabels(GraphLabels!, testIndices);
+        var trainLabels = ExtractLabels((GraphLabels ?? throw new InvalidOperationException("GraphLabels is null where it is required.")), trainIndices);
+        var valLabels = ExtractLabels(GraphLabels, valIndices);
+        var testLabels = ExtractLabels(GraphLabels, testIndices);
 
         return new GraphClassificationTask<T>
         {

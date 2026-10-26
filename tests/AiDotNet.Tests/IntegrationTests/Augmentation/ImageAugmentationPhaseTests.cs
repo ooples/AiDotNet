@@ -1436,7 +1436,7 @@ public class ImageAugmentationPhaseTests
         var result = crop.ApplyWithTargets(sample, context);
 
         Assert.NotNull(result.BoundingBoxes);
-        Assert.True(result.BoundingBoxes!.Count >= 1);
+        Assert.True(result.BoundingBoxes.Count >= 1);
     }
 
     [Fact(Timeout = 120000)]

@@ -95,7 +95,7 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                     if (string.IsNullOrEmpty(lvl)) continue;
                     // "level" is e.g. "Level 3"; extract integer.
                     int parsedLevel = -1;
-                    foreach (var part in lvl!.Split(' '))
+                    foreach (var part in (lvl ?? throw new InvalidOperationException("lvl is null where it is required.")).Split(' '))
                         if (int.TryParse(part, out int n)) { parsedLevel = n; break; }
                     if (parsedLevel != _options.LevelFilter.Value) continue;
                 }
@@ -103,8 +103,8 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                 string? prob = obj["problem"]?.ToString();
                 string? sol = obj["solution"]?.ToString();
                 if (string.IsNullOrEmpty(prob) || string.IsNullOrEmpty(sol)) continue;
-                problems.Add(prob!);
-                solutions.Add(sol!);
+                problems.Add((prob ?? throw new InvalidOperationException("prob is null where it is required.")));
+                solutions.Add((sol ?? throw new InvalidOperationException("sol is null where it is required.")));
             }
         }
 

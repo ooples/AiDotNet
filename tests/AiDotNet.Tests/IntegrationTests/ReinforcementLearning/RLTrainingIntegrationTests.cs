@@ -69,7 +69,7 @@ public class RLTrainingIntegrationTests
         Assert.Equal(3, episodeCallbacks);
         Assert.Equal(1, trainingCallbacks);
         Assert.NotNull(summary);
-        Assert.Equal(3, summary!.TotalEpisodes);
+        Assert.Equal(3, summary.TotalEpisodes);
         Assert.Equal(3, summary.TotalSteps);
 
         var action = result.Predict(new Vector<double>(environment.ObservationSpaceDimension));
@@ -129,7 +129,7 @@ public class RLTrainingIntegrationTests
         Assert.Equal(2, episodeCallbacks);
         Assert.Equal(1, trainingCallbacks);
         Assert.NotNull(summary);
-        Assert.Equal(2, summary!.TotalEpisodes);
+        Assert.Equal(2, summary.TotalEpisodes);
         Assert.Equal(4, summary.TotalSteps);
 
         var action = result.Predict(new Vector<double>(environment.ObservationSpaceDimension));

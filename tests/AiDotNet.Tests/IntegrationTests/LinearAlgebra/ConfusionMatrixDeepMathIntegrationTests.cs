@@ -693,7 +693,7 @@ public class ConfusionMatrixDeepMathIntegrationTests
     public async Task LargeMatrix_10Class_MetricsConsistent()
     {
         var cm = new ConfusionMatrix<double>(10);
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         // Fill with mostly diagonal (correct) with some noise
         for (int i = 0; i < 1000; i++)

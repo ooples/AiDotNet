@@ -127,7 +127,7 @@ public sealed class DeepARDistributionHeadTests
     [Trait("category", "unit")]
     public void StudentT_sampler_is_finite_and_symmetric_on_average()
     {
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         int n = 20000;
         double sum = 0;
         for (var i = 0; i < n; i++)

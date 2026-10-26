@@ -22,7 +22,7 @@ public class NnDoubleInputDimTests
     private static (Tensor<double> X, Tensor<double> Y, Matrix<double> Xm, Vector<double> Yv, double VarY) MakeData()
     {
         const int n = 200, f = 3;
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var xData = new double[n * f];
         var yData = new double[n];
         for (int i = 0; i < n; i++)

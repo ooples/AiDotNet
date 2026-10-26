@@ -49,7 +49,7 @@ public abstract class DistillationStrategyTestBase<T>
     /// <summary>Creates teacher output logits matrix [batch, classes].</summary>
     protected virtual Matrix<T> CreateTeacherOutput()
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var data = new Matrix<T>(BatchSize, NumClasses);
         for (int i = 0; i < BatchSize; i++)
             for (int j = 0; j < NumClasses; j++)
@@ -60,7 +60,7 @@ public abstract class DistillationStrategyTestBase<T>
     /// <summary>Creates student output logits matrix [batch, classes].</summary>
     protected virtual Matrix<T> CreateStudentOutput()
     {
-        var rng = new Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         var data = new Matrix<T>(BatchSize, NumClasses);
         for (int i = 0; i < BatchSize; i++)
             for (int j = 0; j < NumClasses; j++)

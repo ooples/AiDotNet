@@ -251,7 +251,7 @@ public class AiModelBuilderLicensingTests : IDisposable
 
     private static (Matrix<double> x, Vector<double> y) CreateLinearDataset(int samples, int features, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 

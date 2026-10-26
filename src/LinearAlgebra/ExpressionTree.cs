@@ -606,7 +606,7 @@ public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, T
             }
             else
             {
-                return SelectRandomSubtree(tree.Right!);
+                return SelectRandomSubtree((tree.Right ?? throw new InvalidOperationException("tree.Right is null where it is required.")));
             }
         }
     }

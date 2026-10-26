@@ -14,7 +14,7 @@ namespace AiDotNet.Serving.Services;
 public interface ITokenizerRegistry
 {
     /// <summary>Tries to resolve the tokenizer registered for <paramref name="modelName"/>.</summary>
-    bool TryGet(string modelName, out ITokenizer tokenizer);
+    bool TryGet(string modelName, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ITokenizer? tokenizer);
 
     /// <summary>Loads a tokenizer from a local directory/file or a HuggingFace id and registers it.</summary>
     ITokenizer LoadAndRegister(string modelName, string pathOrName);
@@ -32,7 +32,8 @@ public sealed class TokenizerRegistry : ITokenizerRegistry
     private readonly ConcurrentDictionary<string, ITokenizer> _map = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
-    public bool TryGet(string modelName, out ITokenizer tokenizer) => _map.TryGetValue(modelName, out tokenizer!);
+    public bool TryGet(string modelName, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ITokenizer? tokenizer)
+        => _map.TryGetValue(modelName, out tokenizer);
 
     /// <inheritdoc/>
     public void Register(string modelName, ITokenizer tokenizer)

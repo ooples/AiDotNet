@@ -195,7 +195,7 @@ public class LayerShapeDiscoverySweepTests
                 if (witnesses.Count > 0)
                 {
                     var disagreements = witnesses
-                        .Select(w => (w.name, other: w.fit!.Findings[i].Relation?.ToString() ?? "UNRESOLVED"))
+                        .Select(w => (w.name, other: (w.fit ?? throw new InvalidOperationException("w.fit is null where it is required.")).Findings[i].Relation?.ToString() ?? "UNRESOLVED"))
                         .Where(x => !string.Equals(rendered, x.other, StringComparison.Ordinal))
                         .Select(x => $"{x.name} gives '{x.other}'")
                         .ToList();
@@ -600,7 +600,7 @@ public class LayerShapeDiscoverySweepTests
             // into four layers as their contract.
             var declaredPorts = layer.InputPorts;
             var inputs = new Dictionary<string, Tensor<double>>(StringComparer.Ordinal);
-            for (int i = 0; i < declaredPorts.Count; i++)
+            for (int i = 0; i < (declaredPorts ?? throw new InvalidOperationException("declaredPorts is null where it is required.")).Count; i++)
             {
                 var port = declaredPorts[i];
 

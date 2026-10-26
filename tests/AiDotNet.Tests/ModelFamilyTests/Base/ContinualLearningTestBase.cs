@@ -421,7 +421,7 @@ public abstract class ContinualLearningTestBase<T>
     /// <summary>Creates synthetic task training data.</summary>
     protected virtual (Tensor<T> inputs, Tensor<T> targets) CreateTestTaskData()
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int batchSize = 8;
         int dim = 4;
         var inputData = new T[batchSize * dim];

@@ -182,7 +182,7 @@ public class CommunitySummarizer<T>
             {
                 var report = TryGenerateReport(graph, members, keyEntityNames, keyRelations, dominantLabel);
                 if (!string.IsNullOrWhiteSpace(report))
-                    description = report!.Trim();
+                    description = (report ?? throw new InvalidOperationException("report is null where it is required.")).Trim();
             }
 
             summaries.Add(new CommunitySummary

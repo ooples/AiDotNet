@@ -21,7 +21,7 @@ public partial class OptimizerTrainSkipTests
         await Task.Yield();
         // A closed-form model (MultipleRegression) through Adam optimizer
         // should NOT take minutes — the cache should prevent redundant Train() calls.
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 500;
         int features = 4;
 
@@ -78,7 +78,7 @@ public partial class OptimizerTrainSkipTests
 
         var x = new Matrix<double>(50, 3);
         var y = new Vector<double>(50);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
         {
             for (int j = 0; j < 3; j++) x[i, j] = rng.NextDouble();
@@ -117,7 +117,7 @@ public partial class OptimizerTrainSkipTests
 
         var x = new Matrix<double>(20, 2);
         var y = new Vector<double>(20);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 20; i++)
         {
             for (int j = 0; j < 2; j++) x[i, j] = rng.NextDouble();

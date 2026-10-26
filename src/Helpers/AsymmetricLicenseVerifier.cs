@@ -100,7 +100,7 @@ internal static class AsymmetricLicenseVerifier
         if (!IsAsymmetricKeyFormat(key)) return false;
 
         // key is non-null and 3 parts here (IsAsymmetricKeyFormat guaranteed it).
-        var parts = key!.Split('.');
+        var parts = (key ?? throw new InvalidOperationException("key is null where it is required.")).Split('.');
         try
         {
             byte[] claimsBytes = Base64UrlHelper.Decode(parts[1]);

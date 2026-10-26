@@ -107,7 +107,7 @@ public class ApplyMomentumCorrectnessTests
             InitialMomentum = Momentum,
             UseAdaptiveLearningRate = false,
         };
-        return new StochasticGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null!, options);
+        return new StochasticGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(null, options);
     }
 
     /// <summary>
@@ -119,6 +119,6 @@ public class ApplyMomentumCorrectnessTests
         var method = optimizer.GetType().GetMethod(
             "ApplyMomentum", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
-        return (Vector<double>)method!.Invoke(optimizer, new object[] { gradient })!;
+        return (Vector<double>)(method.Invoke(optimizer, new object[] { gradient }) ?? throw new InvalidOperationException("(Vector<double>)method.Invoke(optimizer, new object[] { gradient }) is null where it is required."));
     }
 }

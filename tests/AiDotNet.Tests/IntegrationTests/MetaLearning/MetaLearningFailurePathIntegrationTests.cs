@@ -101,7 +101,7 @@ public class MetaLearningFailurePathIntegrationTests
     public async Task TaskBatch_Constructor_NullTasks_Throws()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new TaskBatch<double, Matrix<double>, Vector<double>>(null!));
+            new TaskBatch<double, Matrix<double>, Vector<double>>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IMetaLearningTask<double, AiDotNet.Tensors.LinearAlgebra.Matrix<double>, AiDotNet.Tensors.LinearAlgebra.Vector<double>>[]>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -251,7 +251,7 @@ public class MetaLearningFailurePathIntegrationTests
         static void AssertNullTaskThrows<TInput, TOutput>(
             IMetaLearner<double, TInput, TOutput> algorithm)
         {
-            Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
+            Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IMetaLearningTask<double, TInput, TOutput>>()));
         }
 
         AssertNullTaskThrows(new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(
@@ -389,7 +389,7 @@ public class MetaLearningFailurePathIntegrationTests
         static void AssertNullTaskThrows<TInput, TOutput>(
             IMetaLearner<double, TInput, TOutput> algorithm)
         {
-            Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(null!));
+            Assert.Throws<ArgumentNullException>(() => algorithm.Adapt(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IMetaLearningTask<double, TInput, TOutput>>()));
         }
 
         AssertNullTaskThrows(new ProtoNetsAlgorithm<double, Matrix<double>, Tensor<double>>(

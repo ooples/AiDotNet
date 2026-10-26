@@ -325,7 +325,7 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
             int totalEvents = leftEvents + rightEvents;
 
             // Expected events in left group under null
-            double expectedLeft = (double)(leftAtRisk * totalEvents) / totalAtRisk;
+            double expectedLeft = (double)leftAtRisk * totalEvents / totalAtRisk;
 
             observed += leftEvents;
             expected += expectedLeft;
@@ -368,7 +368,7 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
             // Get survival from each tree and average
             var survivalCurve = new double[times.Length];
 
-            foreach (var tree in _trees!)
+            foreach (var tree in (_trees ?? throw new InvalidOperationException("_trees is null where it is required.")))
             {
                 var leafSurvival = GetLeafSurvival(tree, x, i);
 
@@ -397,8 +397,8 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
 
         double value = NumOps.ToDouble(x[sampleIdx, node.SplitFeature]);
         return value <= node.SplitThreshold
-            ? GetLeafSurvival(node.Left!, x, sampleIdx)
-            : GetLeafSurvival(node.Right!, x, sampleIdx);
+            ? GetLeafSurvival((node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")), x, sampleIdx)
+            : GetLeafSurvival((node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")), x, sampleIdx);
     }
 
     /// <summary>

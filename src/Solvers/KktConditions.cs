@@ -308,19 +308,19 @@ public static class KktConditions
             return;
         }
 
-        if (matrix!.Columns != variableCount)
+        if ((matrix ?? throw new InvalidOperationException("matrix is null where it is required.")).Columns != variableCount)
         {
             throw new ArgumentException(
                 $"{matrixName} must have {variableCount} columns, but had {matrix.Columns}.",
                 matrixName);
         }
-        if (bounds!.Length != matrix.Rows)
+        if ((bounds ?? throw new InvalidOperationException("bounds is null where it is required.")).Length != matrix.Rows)
         {
             throw new ArgumentException(
                 $"{boundsName} length ({bounds.Length}) must match {matrixName} rows ({matrix.Rows}).",
                 boundsName);
         }
-        if (multipliers!.Length != matrix.Rows)
+        if ((multipliers ?? throw new InvalidOperationException("multipliers is null where it is required.")).Length != matrix.Rows)
         {
             throw new ArgumentException(
                 $"{multipliersName} length ({multipliers.Length}) must match {matrixName} rows ({matrix.Rows}).",

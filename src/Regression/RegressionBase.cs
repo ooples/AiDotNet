@@ -301,7 +301,7 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "HasIntercept", HasIntercept },
-                { "CoefficientNorm", Coefficients.Norm()! },
+                { "CoefficientNorm", (Coefficients.Norm() ?? throw new InvalidOperationException("Coefficients.Norm() is null where it is required.")) },
                 { "FeatureImportances", CalculateFeatureImportances().ToArray() }
             }
         };
@@ -420,7 +420,7 @@ public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableM
         var modelData = new Dictionary<string, object>
         {
             { "Coefficients", Coefficients.ToArray() },
-            { "Intercept", Intercept ?? NumOps.Zero! },
+            { "Intercept", (Intercept ?? NumOps.Zero ?? throw new InvalidOperationException("Intercept ?? NumOps.Zero is null where it is required.")) },
             { "RegularizationOptions", Regularization.GetOptions() }
         };
 

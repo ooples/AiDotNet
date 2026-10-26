@@ -166,7 +166,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new SelfCorrectingRetriever<double>(null!, retriever));
+                new SelfCorrectingRetriever<double>(null, retriever));
         }
 
         [Fact(Timeout = 60000)]
@@ -177,7 +177,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new SelfCorrectingRetriever<double>(generator, null!));
+                new SelfCorrectingRetriever<double>(generator, null));
         }
 
         [Theory]
@@ -240,7 +240,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                selfCorrector.RetrieveAndAnswer(null!, 10));
+                selfCorrector.RetrieveAndAnswer(null, 10));
         }
 
         [Fact(Timeout = 60000)]

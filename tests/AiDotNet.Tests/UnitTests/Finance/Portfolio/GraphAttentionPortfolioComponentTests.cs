@@ -56,7 +56,7 @@ public class GraphAttentionPortfolioComponentTests
     {
         // Unlike Pearson it is never negative: it measures the STRENGTH of dependence, not direction.
         var builder = new AssetGraphBuilder<double>();
-        var rng = new Random(17);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
 
         for (int trial = 0; trial < 12; trial++)
         {
@@ -170,7 +170,7 @@ public class GraphAttentionPortfolioComponentTests
         // The planarity constraint's whole point: edges collapse from n(n-1)/2 to 3(n-2). A filter
         // that returned more than that is not planar and has not filtered.
         var builder = new AssetGraphBuilder<double>();
-        var rng = new Random(n * 31);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(n * 31);
         var dense = new Tensor<double>(new[] { n, n });
         for (int i = 0; i < n; i++)
             for (int j = i + 1; j < n; j++)
@@ -194,7 +194,7 @@ public class GraphAttentionPortfolioComponentTests
     {
         var builder = new AssetGraphBuilder<double>();
         const int n = 10;
-        var rng = new Random(5);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
         var dense = new Tensor<double>(new[] { n, n });
         for (int i = 0; i < n; i++)
             for (int j = i + 1; j < n; j++)
@@ -288,7 +288,7 @@ public class GraphAttentionPortfolioComponentTests
         const int nodes = 4, features = 2;
 
         var projected = new Tensor<double>(new[] { nodes, features });
-        var rng = new Random(9);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9);
         for (int i = 0; i < projected.Length; i++) projected[i] = (rng.NextDouble() * 2.0) - 1.0;
 
         var a = Vec(0.3, -0.7, 0.5, 0.2);

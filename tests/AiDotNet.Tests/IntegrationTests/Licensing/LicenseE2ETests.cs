@@ -111,10 +111,10 @@ public class LicenseE2ETests : IDisposable
         // Step 1: Simulate writing a community key to the license file (as the website would instruct)
         var communityKey = LicenseTestSupport.SignedKey("filekey12345");
 
-        string dir = Path.GetDirectoryName(_licenseFilePath)!;
+        string dir = (Path.GetDirectoryName(_licenseFilePath) ?? throw new InvalidOperationException("Path.GetDirectoryName(_licenseFilePath) is null where it is required."));
         if (!Directory.Exists(dir))
         {
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory((dir ?? throw new InvalidOperationException("dir is null where it is required.")));
         }
 
         File.WriteAllText(_licenseFilePath, communityKey + Environment.NewLine);
@@ -330,10 +330,10 @@ public class LicenseE2ETests : IDisposable
 
         // Write license file
         var fileKey = "aidn.fromfileke1.abcdefghijklmnop";
-        string dir = Path.GetDirectoryName(_licenseFilePath)!;
+        string dir = (Path.GetDirectoryName(_licenseFilePath) ?? throw new InvalidOperationException("Path.GetDirectoryName(_licenseFilePath) is null where it is required."));
         if (!Directory.Exists(dir))
         {
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory((dir ?? throw new InvalidOperationException("dir is null where it is required.")));
         }
 
         File.WriteAllText(_licenseFilePath, fileKey + Environment.NewLine);
@@ -410,7 +410,7 @@ public class LicenseE2ETests : IDisposable
 
     private static (Matrix<double> x, Vector<double> y) CreateLinearDataset(int samples, int features, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 

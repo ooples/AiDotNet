@@ -236,10 +236,10 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
         Assert.True(postRecorder.FitCalls + postRecorder.FitTransformCalls > 0,
             "Self-supervised BuildAsync did not fit the configured postprocessing pipeline.");
         Assert.NotNull(result.PreprocessingInfo);
-        Assert.True(result.PreprocessingInfo!.IsFitted);
+        Assert.True(result.PreprocessingInfo.IsFitted);
         Assert.True(result.PreprocessingInfo.IsTargetFitted);
         Assert.NotNull(result.DeploymentConfiguration);
-        Assert.Equal(cacheSentinel, result.DeploymentConfiguration!.Caching?.MaxCacheSize);
+        Assert.Equal(cacheSentinel, result.DeploymentConfiguration.Caching?.MaxCacheSize);
         Assert.Same(model, result.Model);
     }
 

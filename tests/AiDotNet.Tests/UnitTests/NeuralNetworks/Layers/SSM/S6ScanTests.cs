@@ -243,7 +243,7 @@ public class S6ScanTests
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1) * 0.5f;
@@ -254,7 +254,7 @@ public class S6ScanTests
     private static Tensor<float> CreatePositiveTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 0.5 + 0.1);
@@ -265,7 +265,7 @@ public class S6ScanTests
     private static Tensor<double> CreateRandomDoubleTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<double>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (random.NextDouble() * 2 - 1) * 0.5;
@@ -276,7 +276,7 @@ public class S6ScanTests
     private static Tensor<double> CreatePositiveDoubleTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<double>(shape);
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = random.NextDouble() * 0.5 + 0.1;

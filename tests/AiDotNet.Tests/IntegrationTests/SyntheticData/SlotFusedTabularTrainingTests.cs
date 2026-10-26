@@ -95,7 +95,7 @@ public class SlotFusedTabularTrainingTests
 
     private static (Matrix<double> Data, List<ColumnMetadata> Columns) Data()
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var data = new Matrix<double>(24, 3);
         for (int i = 0; i < 24; i++)
         {
