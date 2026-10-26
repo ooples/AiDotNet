@@ -15,7 +15,7 @@ internal static class NatSpeechFrontEnd
     /// <summary>NATSpeech's punctuation (<c>PUNCS</c>).</summary>
     public const string Punctuation = "!,.?;:";
 
-    /// <summary><c>TokenTextEncoder</c>'s reserved tokens, ids 0\u20132.</summary>
+    /// <summary><c>TokenTextEncoder</c>'s reserved tokens, ids 0–2.</summary>
     public static readonly string[] Reserved = { "<pad>", "<EOS>", "<UNK>" };
 
     /// <summary>Every phone the English processor writes: g2p_en's ARPAbet with stress, the punctuation, "|" and
@@ -102,6 +102,52 @@ internal static class NatSpeechFrontEnd
 
     /// <summary>The phones of an English text.</summary>
     public static List<string> EnglishPhonesOf(string text) => EnglishWords(text).SelectMany(w => w.Phones).ToList();
+
+    private const string FullWidth = "：，。！？【】（）％＃＠＆１２３４５６７８９０";
+    private const string HalfWidth = ":,.!?[]()%#@&1234567890";
+    private static readonly Regex NotKeptChinese = new("[^ A-Za-z\u4e00-\u9fff" + Regex.Escape(Punctuation) + "]", RegexOptions.CultureInvariant);
+
+    /// <summary>The Chinese processor's <c>preprocess_text</c> (the authors' NATSpeech-family code, DiffSinger's
+    /// <c>txt_processors/zh.py</c>): full-width punctuation and digits to half width, non-standard words in Chinese
+    /// (<see cref="ChineseNswNormalizer"/>), quotes and brackets dropped, dashes to spaces, only letters, Han characters and
+    /// punctuation kept, repeated punctuation merged, and every space removed.</summary>
+    public static string PreprocessChinese(string text)
+    {
+        var builder = new StringBuilder(text.Length);
+        foreach (char c in text)
+        {
+            int i = FullWidth.IndexOf(c);
+            builder.Append(i >= 0 ? HalfWidth[i] : c);
+        }
+        text = ChineseNswNormalizer.Normalize(builder.ToString());
+        text = Quotes.Replace(text, "");
+        text = Dashes.Replace(text, " ");
+        text = NotKeptChinese.Replace(text, "");
+        text = RepeatedPunctuation.Replace(text, "$1");
+        text = AnyPunctuation.Replace(text, " $1 ");
+        return Spaces.Replace(text, "");
+    }
+
+    /// <summary>
+    /// The Chinese processor's <c>process</c> (with tones): "|", then for each pypinyin item its initial and its final with
+    /// the tone digit (5 for the neutral tone) and "|", or a non-Han run as itself and "|". Empty initials are dropped,
+    /// as encoding the space-joined phones drops them.
+    /// </summary>
+    public static List<string> ChinesePhonesOf(string text)
+    {
+        var phones = new List<string> { "|" };
+        foreach (var (initial, final) in Pypinyin050.Default.LazyPinyin(PreprocessChinese(text)))
+        {
+            if (initial == final) phones.Add(initial);
+            else
+            {
+                if (initial.Length > 0) phones.Add(initial);
+                phones.Add(final);
+            }
+            phones.Add("|");
+        }
+        return phones;
+    }
 
     /// <summary><c>TokenTextEncoder.encode</c> with <c>replace_oov='&lt;UNK&gt;'</c>.</summary>
     public static int[] Encode(IEnumerable<string> phones, IReadOnlyList<string> vocabulary)
