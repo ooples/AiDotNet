@@ -14,6 +14,14 @@ internal sealed record WhisperDimensions(int Mels, int AudioContext, int AudioSt
 
     /// <summary>The language tokens (99, or 100 from large-v3 on).</summary>
     public int NumLanguages => Vocabulary - 51765 - (IsMultilingual ? 1 : 0);
+
+    /// <summary>Logits through a separate biased projection (<c>decoder.out_proj</c>) instead of the token table, as
+    /// MegaTTS 3's aligner computes them.</summary>
+    public bool UntiedOutput { get; init; }
+
+    /// <summary>Encodes audio of any length up to the audio context (the positions cut to it), as MegaTTS 3's aligner does,
+    /// instead of requiring the 30-second window.</summary>
+    public bool VariableAudioLength { get; init; }
 }
 
 /// <summary>
@@ -81,6 +89,11 @@ internal sealed class OpenAiWhisperNetwork<T>
         for (int i = 0; i < d.TextLayers; i++) DecoderBlocks.Add(NewBlock(d.TextState, true));
         NormWeight = Values(d.TextState);
         NormBias = Values(d.TextState);
+        if (d.UntiedOutput)
+        {
+            OutputProjection = Linear(d.TextState, d.Vocabulary);
+            OutputBias = Values(d.Vocabulary);
+        }
         InitializeLikeReference(initialization);
     }
 
@@ -96,6 +109,8 @@ internal sealed class OpenAiWhisperNetwork<T>
     public List<Block> DecoderBlocks { get; } = new();
     public BiasFreeLinearLayer<T> NormWeight { get; }
     public BiasFreeLinearLayer<T> NormBias { get; }
+    public BiasFreeLinearLayer<T>? OutputProjection { get; }
+    public BiasFreeLinearLayer<T>? OutputBias { get; }
 
     /// <summary>The alignment heads (layer, head) whose cross-attention times words; by default every head of the
     /// decoder's second half, as openai-whisper sets them before a checkpoint names its own.</summary>
@@ -206,8 +221,11 @@ internal sealed class OpenAiWhisperNetwork<T>
         var x = Gelu(Conv1.Forward(_engine.Reshape(mel, new[] { 1, d.Mels, mel.Shape[^1] })));
         x = Gelu(Conv2.Forward(x));
         x = _engine.TensorPermute(x, new[] { 0, 2, 1 });
-        if (x.Shape[1] != d.AudioContext) throw new ArgumentException("incorrect audio shape", nameof(mel));
-        x = _engine.TensorAdd(x, _engine.Reshape(Value(AudioPositions), new[] { 1, d.AudioContext, d.AudioState }));
+        int frames = x.Shape[1];
+        if (d.VariableAudioLength ? frames > d.AudioContext : frames != d.AudioContext) throw new ArgumentException("incorrect audio shape", nameof(mel));
+        var positions = _engine.Reshape(Value(AudioPositions), new[] { 1, d.AudioContext, d.AudioState });
+        if (frames != d.AudioContext) positions = _engine.TensorSlice(positions, new[] { 0, 0, 0 }, new[] { 1, frames, d.AudioState });
+        x = _engine.TensorAdd(x, positions);
         foreach (var block in EncoderBlocks) x = RunBlock(block, x, null, d.AudioHeads, false, null, null);
         return LayerNorm(PostNormWeight, PostNormBias, x);
     }
@@ -226,6 +244,7 @@ internal sealed class OpenAiWhisperNetwork<T>
         foreach (var block in DecoderBlocks) x = RunBlock(block, x, audio, d.TextHeads, true, cache, crossScores);
         x = LayerNorm(NormWeight, NormBias, x);
         if (cache is not null) cache.Length = offset + n;
+        if (OutputProjection is not null) return Linear(OutputProjection, OutputBias, _engine.Reshape(x, new[] { n, d.TextState }));
         return _engine.TensorMatMul(_engine.Reshape(x, new[] { n, d.TextState }), _engine.TensorTranspose(table));
     }
 
@@ -278,6 +297,11 @@ internal sealed class OpenAiWhisperNetwork<T>
         for (int i = 0; i < DecoderBlocks.Count; i++) LoadBlock(DecoderBlocks[i], $"decoder.blocks.{i}", d.TextState);
         Vector(NormWeight, "decoder.ln.weight", new[] { d.TextState });
         Vector(NormBias, "decoder.ln.bias", new[] { d.TextState });
+        if (OutputProjection is not null)
+        {
+            Linear(OutputProjection, "decoder.out_proj.weight", d.TextState, d.Vocabulary);
+            Vector(OutputBias!, "decoder.out_proj.bias", new[] { d.Vocabulary });
+        }
     }
 
     /// <summary>
