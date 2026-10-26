@@ -18,6 +18,7 @@ sys.path.insert(0, "/amphion")
 sys.modules["LangSegment"] = types.SimpleNamespace(setfilters=lambda filters: None)
 
 import pyopenjtalk  # noqa: E402
+from pykakasi import kakasi  # noqa: E402
 from models.tts.maskgct.g2p.g2p_generation import g2p  # noqa: E402
 
 CASES = [
@@ -31,7 +32,22 @@ CASES = [
     "ＡＢＣとabcと１２３",
     "東京特許許可局長の許可が下りた。",
     "「こんにちは」と彼は言った…",
+    # words Open JTalk cannot read: pykakasi's reading (溶, 飼, 菴), or none (龘, 彁: unknown to both)
+    "溶と飼の字、菴に住む。",
+    "龘は難しい。",
+    "彁という字。",
+    "𠮷野家に行く。",
+    "鬱々とした日々。",
+    "αとβ。",
+    "ｘｙｚの話",
+    "魑魅魍魎の跋扈",
+    "薔薇と檸檬",
 ]
+
+# pykakasi 2.3.0's convert, which the front end falls back to: script changes, the kanwa dictionary, a reading
+# with a context (色 after そん), unknown kanji (and the character after one skipped), variant kanji, symbols.
+KAKASI_CASES = ["溶", "飼", "菴", "龘", "彁", "そん色ない", "色々", "溶液と以上", "ひらがなカタカナ漢字abc", "龘あい",
+                "𠮷野家", "々", "αβγ", "ｘｙｚ", "ー長音", "東京、大阪。", "髙橋", "葛󠄀城"]
 
 
 def main():
@@ -41,9 +57,11 @@ def main():
         labels = pyopenjtalk.make_label(features)
         phonemes, tokens = g2p(text, sentence=None, language="ja")
         cases.append({"text": text, "features": features, "labels": labels, "phonemes": phonemes, "tokens": tokens})
+    converter = kakasi()
+    kakasi_cases = [{"text": t, "segments": [[r["orig"], r["kana"]] for r in converter.convert(t)]} for t in KAKASI_CASES]
     path = "/repo/tests/AiDotNet.Tests/TextToSpeech/ReferenceData/maskgct_japanese_reference.json"
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        json.dump({"pyopenjtalk": pyopenjtalk.__version__, "cases": cases}, handle, ensure_ascii=False)
+        json.dump({"pyopenjtalk": pyopenjtalk.__version__, "cases": cases, "kakasi": kakasi_cases}, handle, ensure_ascii=False)
         handle.write("\n")
     for c in cases:
         print(len(c["features"]), len(c["labels"]), len(c["tokens"]))

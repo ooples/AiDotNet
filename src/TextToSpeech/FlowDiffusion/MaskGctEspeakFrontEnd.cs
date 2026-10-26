@@ -302,9 +302,11 @@ internal sealed class MaskGctEspeakFrontEnd
     /// characters and of Latin letters, other characters joining the run before them, each run phonemized in its language
     /// and followed by "|", a final English run ending in "_" losing that word separator and its id), the others through
     /// their cleaner. Returns the phone string and the vocabulary ids. <paramref name="chinese"/> phonemizes a Chinese run
-    /// given the whole sentence (MaskGCT's Mandarin front end).
+    /// given the whole sentence (MaskGCT's Mandarin front end); <paramref name="japanese"/> is <c>japanese_to_ipa</c>
+    /// (<see cref="MaskGctJapaneseFrontEnd"/>).
     /// </summary>
-    public (string Phonemes, int[] Tokens) G2P(string text, string language, Func<string, string, string>? chinese = null)
+    public (string Phonemes, int[] Tokens) G2P(string text, string language, Func<string, string, string>? chinese = null,
+        Func<string, string>? japanese = null)
     {
         switch (language)
         {
@@ -337,6 +339,8 @@ internal sealed class MaskGctEspeakFrontEnd
                 return WithTokens(German(text));
             case "ko":
                 return WithTokens(Korean(text));
+            case "ja":
+                return WithTokens((japanese ?? throw new InvalidOperationException("Japanese text needs MaskGCT's Japanese front end."))(text));
             default:
                 throw new ArgumentException($"MaskGCT's eSpeak front end has no language \"{language}\".", nameof(language));
         }
