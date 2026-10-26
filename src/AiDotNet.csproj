@@ -422,6 +422,7 @@
 	  <EmbeddedResource Include="Tokenization\Resources\bert-kor-base-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-kor-base-vocab.txt.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi221_kanwa.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi221_kanwa.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi221_itaiji.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi221_itaiji.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi230_kanwa_delta.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi230_kanwa_delta.tsv.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-japanese-v3-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-japanese-v3-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\simbert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\whisper-multilingual.tiktoken.gz" LogicalName="AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz" />
