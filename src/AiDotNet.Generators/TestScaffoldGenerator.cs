@@ -13623,8 +13623,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // six seconds per call on a CPU fixture. Sixteen steps exercise the same decoder.
                 bool pinInputSize = family == TestFamily.ObjectDetection || family == TestFamily.TextDetection;
                 bool pinDecodeLength = family == TestFamily.OCR;
-                constructorExpr = pinInputSize
-                    ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ InputSize = new[] {{ 64, 64 }} }})"
+                // DETR, DINO and DBNet build a ResNet trunk, ResNet-50 by default; at the fixture's 64x64 that
+                // trunk is most of each model, and the three together kept Generated D within a few hundred MB of
+                // the 16 GB runner (DINO's copy invariants alone reached 11.5 GB). ResNet-18 is one of DBNet's own
+                // paper configurations and exercises the same trunk code. DINO additionally carries the paper's
+                // full transformer (900 queries, 6+6 layers, d=256), bounded here like every other generated
+                // fixture's widths; production defaults are untouched.
+                // DETR also takes the library's Nano size (d=128, 3+3 layers, 50 queries) through its existing
+                // ModelSize knob: 9.3 GB -> 4.3 GB. Not DBNet: at Nano two random images decode to identical
+                // regions, so DetectBatch_EqualsDetectingEachImageAlone cannot tell batch items apart, and Nano saved
+                // DBNet only 0.6 GB. DINO's transformer is bounded through DINOOptions below.
+                string backbone = model.ClassName == "DETR"
+                    ? ", Backbone = AiDotNet.Models.Options.BackboneType.ResNet18, Size = AiDotNet.Models.Options.ModelSize.Nano"
+                    : model.ClassName is "DINO" or "DBNet"
+                        ? ", Backbone = AiDotNet.Models.Options.BackboneType.ResNet18"
+                        : string.Empty;
+                constructorExpr = model.ClassName == "DINO"
+                    ? $"new {typeName}<double>(new AiDotNet.Models.Options.DINOOptions<double> {{ InputSize = new[] {{ 64, 64 }}{backbone}, "
+                      + "HiddenDimension = 64, NumHeads = 8, NumEncoderLayers = 1, NumDecoderLayers = 1, FeedForwardDimension = 128, "
+                      + "NumQueries = 16, NumSamplingPoints = 4, DenoisingQueries = 8 })"
+                    : pinInputSize
+                    ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ InputSize = new[] {{ 64, 64 }}{backbone} }})"
                     : pinDecodeLength
                         ? $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName} {{ MaxSequenceLength = 16 }})"
                         : $"new {typeName}<double>(new {model.OptionsOnlyParamTypeName}())";
