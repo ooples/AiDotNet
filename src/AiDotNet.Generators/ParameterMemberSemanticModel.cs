@@ -230,6 +230,75 @@ internal static class ParameterMemberSemanticModel
         return null;
     }
 
+    /// <summary>
+    /// The members this type's own <c>Dispose</c> assigns. A field a type writes while disposing is OBJECT
+    /// LIFETIME, not model state: it describes the instance that is going away, so carrying it in a checkpoint and
+    /// restoring it into a fresh instance can only misdescribe that instance. The clearest case is the disposed
+    /// flag itself -- restored as <c>true</c>, every call on the freshly loaded model throws
+    /// <see cref="System.ObjectDisposedException"/>.
+    /// </summary>
+    /// <remarks>
+    /// Derived from <c>Dispose</c> rather than from a name, so a differently-named flag is covered and a field that
+    /// merely happens to be called <c>_disposed</c> without being dispose state is not. Matched syntactically, the
+    /// same way <see cref="GetRegistrationClassifications"/> matches registration calls: an assignment whose target
+    /// names a member of this type, inside a method named <c>Dispose</c> or <c>DisposeAsync</c> declared here.
+    /// Only the type's OWN declarations are read, so a base class's disposed flag is classified where it is
+    /// declared, which is where its state declaration is emitted too.
+    /// </remarks>
+    internal static IReadOnlyCollection<string> GetDisposeAssignedMembers(INamedTypeSymbol owner)
+    {
+        var memberNames = new HashSet<string>(owner.GetMembers()
+            .Where(member => member is IFieldSymbol or IPropertySymbol)
+            .Select(member => member.Name), StringComparer.Ordinal);
+        if (memberNames.Count == 0) return Array.Empty<string>();
+
+        var assigned = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var syntaxReference in owner.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+
+            // Members, not DescendantNodes: a NESTED class's Dispose is not this type's, and scanning it would
+            // drop a member of the outer type that merely shares a name with something the nested one tears down.
+            foreach (var method in declaration.Members
+                .OfType<MethodDeclarationSyntax>()
+                .Where(method => method.Identifier.ValueText is "Dispose" or "DisposeAsync"))
+            {
+                // Names the method binds itself -- locals, including out/pattern declarations, and parameters.
+                // An assignment to one of those is not an assignment to the member it shadows, and treating it as
+                // one would silently take a real member out of the payload.
+                var shadowed = new HashSet<string>(
+                    method.DescendantNodes()
+                        .OfType<VariableDeclaratorSyntax>()
+                        .Select(declarator => declarator.Identifier.ValueText)
+                        .Concat(method.DescendantNodes()
+                            .OfType<SingleVariableDesignationSyntax>()
+                            .Select(designation => designation.Identifier.ValueText))
+                        .Concat(method.ParameterList.Parameters
+                            .Select(parameter => parameter.Identifier.ValueText)),
+                    StringComparer.Ordinal);
+
+                foreach (string target in method.DescendantNodes()
+                    .OfType<AssignmentExpressionSyntax>()
+                    .Select(assignment => assignment.Left switch
+                    {
+                        // A bare identifier only counts when the method does not bind that name itself.
+                        IdentifierNameSyntax identifier when !shadowed.Contains(identifier.Identifier.ValueText)
+                            => identifier.Identifier.ValueText,
+                        // this.X is unambiguous whatever the method binds.
+                        MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } access
+                            => access.Name.Identifier.ValueText,
+                        _ => null
+                    })
+                    .Where(target => target is not null && memberNames.Contains(target))!)
+                {
+                    assigned.Add(target);
+                }
+            }
+        }
+
+        return assigned;
+    }
+
     internal static IReadOnlyDictionary<string, Classification> GetRegistrationClassifications(
         INamedTypeSymbol owner)
     {
