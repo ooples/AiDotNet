@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -135,6 +136,48 @@ public class InferenceArenaTests
 
             Assert.Equal(6L, predictor.InferenceArenaForwards);
             Assert.Equal(1, predictor.IdleInferenceArenaCount);
+        }
+        finally
+        {
+            NoisePredictorBase<float>.InferenceArenaEnabled = saved;
+        }
+    }
+
+    /// <summary>
+    /// A changed layer graph retires the warmed shapes AND the idle arenas: InvalidateCompiledPlans, which
+    /// SetParameterChunks runs, clears the warmed set, bumps the arena generation and disposes what is idle, so the
+    /// next forward for a shape warms outside the arena again rather than reusing memory sized for the old graph.
+    /// Dispose releases the idle arenas too, instead of leaving them to a finalizer.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Predictors))]
+    public void InvalidatingTheGraph_RetiresWarmedShapesAndIdleArenas(string name)
+    {
+        bool saved = NoisePredictorBase<float>.InferenceArenaEnabled;
+        try
+        {
+            NoisePredictorBase<float>.InferenceArenaEnabled = true;
+            var predictor = Create(name);
+
+            // First forward of a shape warms outside the arena; the second runs in one and returns it idle.
+            predictor.PredictNoise(Sample(1, 1), 3);
+            predictor.PredictNoise(Sample(1, 2), 3);
+            Assert.Equal(1L, predictor.InferenceArenaForwards);
+            Assert.Equal(1, predictor.IdleInferenceArenaCount);
+
+            predictor.SetParameterChunks(predictor.GetParameterChunks().ToList());
+            Assert.Equal(0, predictor.IdleInferenceArenaCount);
+
+            // The shape has to warm again, so this forward runs outside the arena and the count does not move.
+            predictor.PredictNoise(Sample(1, 3), 3);
+            Assert.Equal(1L, predictor.InferenceArenaForwards);
+
+            predictor.PredictNoise(Sample(1, 4), 3);
+            Assert.Equal(2L, predictor.InferenceArenaForwards);
+            Assert.Equal(1, predictor.IdleInferenceArenaCount);
+
+            predictor.Dispose();
+            Assert.Equal(0, predictor.IdleInferenceArenaCount);
         }
         finally
         {
