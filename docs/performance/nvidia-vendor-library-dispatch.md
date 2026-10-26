@@ -10,7 +10,7 @@ The goal is to need no external libraries. The vendor libraries stay only as mea
 
 | Operation | Route | Vendor library's role |
 |---|---|---|
-| GEMM: `DenseLayer`, `MatMul`, attention projections | A shape with a measured verdict runs the tuned generated kernel. Skinny and small shapes run the backend's narrow kernels. Any other shape goes to cuBLAS. | cuBLAS is **optional** (AiDotNet.Tensors #1316). When it cannot load or is turned off, the generated GEMM serves every shape, in FP32, FP16, BF16 and FP64. |
+| GEMM: `DenseLayer`, `MatMul`, attention projections | A shape with a measured verdict runs the tuned generated kernel. Skinny and small shapes run the backend's narrow kernels. Any other shape goes to cuBLAS. | cuBLAS is **optional**: when it cannot load or is turned off, the generated GEMM serves every shape, in FP32, FP16, BF16 and FP64. That coverage is AiDotNet.Tensors #1316's result, which added the FP16, BF16 and FP64 generated paths; it is not this page's. The probe below measured one float `DenseLayer` shape on one host. |
 | Conv2D forward and backward | The tuned convolution slot measures every candidate per shape and keeps the fastest (as `cudnn.benchmark` does in PyTorch). | cuDNN's algorithms are **candidates only** (#1457): never chosen by default, only when they win the measurement. |
 | BatchNorm | The backend's kernels, or cuDNN batch normalization when cuDNN loads. | cuDNN optional. |
 
@@ -35,7 +35,10 @@ The probe ran three layers on `DirectGpuTensorEngine` with `CudaBackend`:
 - an eval-mode `BatchNormalizationLayer<float>`;
 - a `DenseLayer<float>`: 1024 outputs on [256, 1024].
 
-After each, it recorded the vendor libraries loaded into the process and the backend's `LastGemmDispatchPath`:
+After each, it recorded the vendor libraries loaded into the process and the backend's `LastGemmDispatchPath`.
+The `AIDOTNET_DISABLE_CUBLAS=1` row ran in a **fresh process**, with the variable set before launch, rather than
+continuing the process that had just run the normal Dense case. It has to: that process already had cuBLAS
+loaded, so a `none` reading taken in it would say nothing about whether the GEMM needed cuBLAS.
 
 | After | Vendor libraries loaded | GEMM route |
 |---|---|---|
@@ -44,7 +47,9 @@ After each, it recorded the vendor libraries loaded into the process and the bac
 | Dense | `cublas64_13.dll`, `cublasLt64_13.dll` | `Cublas`: an untuned shape |
 | Dense, `AIDOTNET_DISABLE_CUBLAS=1` | none | the generated GEMM, identical output |
 
-Before AiDotNet.Tensors #1548 the last row reported `Cublas` although cuBLAS never loaded. It now reports `GeneratedFallback`.
+`LastGemmDispatchPath` is a `CudaGemmDispatchPath`, whose values are `None`, `Cublas`, `DirectPtxSgemm`,
+`DirectPtxTensorCore`, `NarrowGemm` and `DeclaredProgram`. With cuBLAS off the reading is therefore whichever
+generated route served the shape, not a distinct "fallback" value.
 
 ## Checking your own machine
 

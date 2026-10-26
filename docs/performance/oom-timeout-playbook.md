@@ -27,8 +27,10 @@ When you hit a new OOM/timeout shard, **first classify it** (this decides the fi
   outer arena → Breakthrough 1.
 - **OOM at `Clone()` / in `MoreData` / `Clone_ShouldProduceIdenticalOutput`** → double-
   materialized weights → Breakthrough 4 (COW).
-- **OOM at construction / weights alone exceed RAM** → Breakthroughs 5–6 (lazy construct +
-  weight/optimizer streaming).
+- **OOM at construction / weights alone exceed RAM** → Breakthrough 5 (lazy construct + weight
+  streaming). No optimizer state exists yet at construction, so Breakthrough 6 cannot shrink this one.
+- **OOM once training starts, after optimizer state is allocated** → Breakthrough 6 (streaming
+  optimizer variants), on top of Breakthrough 5.
 - **OOM/slow in the forward only** → Breakthrough 2 (forward caching allocator).
 - **Still OOM/timeout purely from FP64 cost after the above** → float-by-default (last lever).
 
@@ -98,8 +100,9 @@ diffusion noise predictors.
 
 ## Breakthrough 6 — Streaming first-order optimizer variants (#1603/#1609)
 
-Optimizer state (Adam m/v) otherwise 2–3×'s the weight memory resident. Streaming variants of every
-gradient-based optimizer keep that state bounded, paired with the streaming training path.
+Adam's optimizer state (m/v) otherwise needs two to three times the resident weight memory.
+Streaming variants of every gradient-based optimizer keep that state bounded, paired with the
+streaming training path.
 
 ## Breakthrough 7 — Diffusion denoise-loop + parallel-test specifics (#1668/#1674, #1620, #1671/#1677)
 
