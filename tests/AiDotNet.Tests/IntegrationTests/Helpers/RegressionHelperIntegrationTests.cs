@@ -358,7 +358,7 @@ public class RegressionHelperIntegrationTests
         var y = new Vector<double>(rows);
 
         // Fill with data
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < rows; i++)
         {
             y[i] = random.NextDouble() * 100;

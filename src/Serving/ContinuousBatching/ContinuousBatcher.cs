@@ -1474,7 +1474,7 @@ internal class ContinuousBatcher<T> : IDisposable
         {
             // Probe the model with a minimal input to infer the vocabulary dimension.
             var probe = CreateInputTensor([0]);
-            var logits = _model!(probe);
+            var logits = (_model ?? throw new InvalidOperationException("_model is null where it is required."))(probe);
             return logits.Shape.Length >= 1 ? logits.Shape[^1] : 0;
         }
         catch

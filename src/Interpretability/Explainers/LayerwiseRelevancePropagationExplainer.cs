@@ -207,7 +207,7 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
     private T[] ComputeFullLRP(Vector<T> input, int outputIndex)
     {
         // Get activations
-        var activations = _getLayerActivations!(input);
+        var activations = (_getLayerActivations ?? throw new InvalidOperationException("_getLayerActivations is null where it is required."))(input);
         int numLayers = activations.Length;
 
         // Initialize relevance at output layer
@@ -217,7 +217,7 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
         // Propagate backward through layers
         for (int layer = numLayers - 2; layer >= 0; layer--)
         {
-            var weights = _getLayerWeights!(layer);
+            var weights = (_getLayerWeights ?? throw new InvalidOperationException("_getLayerWeights is null where it is required."))(layer);
             var lowerActivations = activations[layer];
 
             var newRelevance = new double[lowerActivations.Length];

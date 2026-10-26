@@ -159,7 +159,7 @@ public class ConvolutionalLayerFastKernelRegressionTests
             "_optimizedMatchesReference",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(matchField);
-        bool actual = (bool)matchField.GetValue(layer)!;
+        bool actual = (bool)(matchField.GetValue(layer) ?? throw new InvalidOperationException("matchField.GetValue(layer) is null where it is required."));
         Assert.True(actual == expected, $"{message} Expected match={expected}, actual={actual}.");
     }
 
@@ -235,7 +235,7 @@ public class ConvolutionalLayerFastKernelRegressionTests
         Assert.NotNull(plans);
         var countProperty = plans.GetType().GetProperty("Count");
         Assert.NotNull(countProperty);
-        Assert.True((int)countProperty.GetValue(plans)! > 0,
+        Assert.True((int)(countProperty.GetValue(plans) ?? throw new InvalidOperationException("countProperty.GetValue(plans) is null where it is required.")) > 0,
             "Compiled training must cache a real graph plan; eager fallback does not prove graph replay.");
     }
 

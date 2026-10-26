@@ -58,11 +58,11 @@ public sealed class ProgramSynthesisServingClientTests
         Assert.True(response.Success);
         Assert.Equal(ProgramLanguage.CSharp, response.Language);
         Assert.NotNull(handler.LastRequest);
-        Assert.True(handler.LastRequest!.Headers.TryGetValues("X-Api-Key", out var values));
+        Assert.True(handler.LastRequest.Headers.TryGetValues("X-Api-Key", out var values));
         Assert.Contains("abc", values);
         Assert.NotNull(handler.LastRequest.Headers.Authorization);
-        Assert.Equal("Bearer", handler.LastRequest.Headers.Authorization!.Scheme);
-        Assert.Equal("token", handler.LastRequest.Headers.Authorization!.Parameter);
+        Assert.Equal("Bearer", handler.LastRequest.Headers.Authorization.Scheme);
+        Assert.Equal("token", handler.LastRequest.Headers.Authorization.Parameter);
     }
 
     [Fact(Timeout = 60000)]
@@ -108,7 +108,7 @@ public sealed class ProgramSynthesisServingClientTests
     {
         var handler = new RecordingHandler(request =>
         {
-            Assert.Equal("/api/program-synthesis/tasks/summarization", request.RequestUri!.AbsolutePath);
+            Assert.Equal("/api/program-synthesis/tasks/summarization", (request.RequestUri ?? throw new InvalidOperationException("request.RequestUri is null where it is required.")).AbsolutePath);
 
             var json = JsonConvert.SerializeObject(new CodeSummarizationResult
             {

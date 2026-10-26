@@ -33,7 +33,7 @@ public class FacadeModelOwnStepTests
 
     private static (Tensor<float> X, Tensor<float> Y) Data()
     {
-        var rng = new Random(20260927);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260927);
         var x = new Tensor<float>(new[] { Samples, Inputs });
         var y = new Tensor<float>(new[] { Samples, Outputs });
         for (int i = 0; i < x.Length; i++) x[i] = (float)(rng.NextDouble() * 2 - 1);

@@ -38,7 +38,7 @@ public class FacadeMultiDimInputBuildAsyncTests
     private static (Tensor<double> x, Tensor<double> y) GenerateImages(
         int samples, int side, int channels, int classes, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<double>(new[] { samples, channels, side, side });
         var y = new Tensor<double>(new[] { samples, classes });
         for (int n = 0; n < samples; n++)
@@ -167,7 +167,7 @@ public class FacadeMultiDimInputBuildAsyncTests
 
         // And it must reconstruct (forward pass resolves the lazy shapes).
         var inputData = new double[inputDim];
-        var rng = new Random(1468);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1468);
         for (int i = 0; i < inputDim; i++) inputData[i] = rng.NextDouble();
         var input = new Tensor<double>(inputData, new[] { inputDim });
 

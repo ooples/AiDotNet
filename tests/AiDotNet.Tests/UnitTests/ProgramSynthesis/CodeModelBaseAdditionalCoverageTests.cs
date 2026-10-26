@@ -21,7 +21,7 @@ public sealed class CodeModelBaseAdditionalCoverageTests
     {
         var model = new MinimalCodeModel(CreateArchitecture());
 
-        Assert.Throws<ArgumentNullException>(() => model.DecodeCode(null!));
+        Assert.Throws<ArgumentNullException>(() => model.DecodeCode(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
 
         var rank2 = new Tensor<double>([2, 2]);
         Assert.Throws<ArgumentException>(() => model.DecodeCode(rank2));

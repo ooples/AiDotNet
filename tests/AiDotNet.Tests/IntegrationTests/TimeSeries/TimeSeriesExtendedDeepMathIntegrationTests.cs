@@ -362,7 +362,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         // The ConstrainParameters method enforces this
         // We verify by training on volatile data and checking the model produces bounded forecasts
         var data = new double[50];
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 50; i++)
         {
             data[i] = rand.NextDouble() * 2.0 - 1.0; // Random values in [-1, 1]
@@ -469,7 +469,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
     public async Task GARCHModel_Forecast_ReturnsRequestedHorizon()
     {
         var data = new double[40];
-        var rand = new Random(123);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         for (int i = 0; i < 40; i++) data[i] = rand.NextDouble() * 0.5 - 0.25;
 
         var y = MakeVector(data);
@@ -499,7 +499,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
     public async Task GARCHModel_SerializeDeserialize_ProducesConsistentForecasts()
     {
         var data = new double[40];
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 40; i++) data[i] = rand.NextDouble() * 0.6 - 0.3;
 
         var y = MakeVector(data);
@@ -540,7 +540,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         // GARCH(2,1) uses 2 past squared residuals vs GARCH(1,1) using 1
         // Both should train successfully on the same data
         var data = new double[50];
-        var rand = new Random(55);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(55);
         for (int i = 0; i < 50; i++) data[i] = rand.NextDouble() * 0.8 - 0.4;
 
         var y = MakeVector(data);
@@ -587,7 +587,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         var model = new GARCHModel<double>(options);
 
         var data = new double[30];
-        var rand = new Random(77);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(77);
         for (int i = 0; i < 30; i++) data[i] = rand.NextDouble() * 0.4 - 0.2;
 
         model.Train(MakeFeatureMatrix(30), MakeVector(data));
@@ -600,7 +600,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
     public async Task GARCHModel_NegativeHorizon_ThrowsException()
     {
         var data = new double[30];
-        var rand = new Random(88);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(88);
         for (int i = 0; i < 30; i++) data[i] = rand.NextDouble() * 0.4 - 0.2;
 
         var options = new GARCHModelOptions<double>
@@ -619,7 +619,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
     public async Task GARCHModel_EvaluateModel_ReturnsMetrics()
     {
         var data = new double[40];
-        var rand = new Random(99);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
         for (int i = 0; i < 40; i++) data[i] = rand.NextDouble() * 0.6 - 0.3;
 
         var y = MakeVector(data);

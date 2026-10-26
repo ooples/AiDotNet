@@ -119,7 +119,7 @@ public class ClusteringMathTests
     public async Task DBSCAN_FindsDenseClusters_IdentifiesNoise()
     {
         // Two dense clusters with some noise points
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int n = 60;
         var data = new Matrix<double>(n + 5, 2); // 5 noise points
 
@@ -175,7 +175,7 @@ public class ClusteringMathTests
     private static Matrix<double> CreateClusteredData(
         double[,] clusterCenters, int pointsPerCluster, double spread, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int numClusters = clusterCenters.GetLength(0);
         int features = clusterCenters.GetLength(1);
         int totalPoints = numClusters * pointsPerCluster;

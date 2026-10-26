@@ -36,7 +36,7 @@ public class PortfolioAllocatorEndToEndTests
     private static Tensor<double> Panel(int steps, int assets, int seed)
     {
         var t = new Tensor<double>(new[] { steps, assets });
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 0.04) - 0.02;
         return t;
     }

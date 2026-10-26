@@ -202,7 +202,7 @@ public class ResNetNetworkTests
 
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() =>
-            new ResNetNetwork<float>(architecture, null!));
+            new ResNetNetwork<float>(architecture, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Configuration.ResNetConfiguration>()));
     }
 
     [Fact(Timeout = 120000)]

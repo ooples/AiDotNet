@@ -838,7 +838,7 @@ public sealed class InteriorPointSolver<T> : ILinearProgramSolver<T>, IQuadratic
 
         private Vector<T> ApplyKernelInverse(Vector<T> vector)
         {
-            if (_diagonalInverse is null) return _kernel!.Solve(vector);
+            if (_diagonalInverse is null) return (_kernel ?? throw new InvalidOperationException("_kernel is null where it is required.")).Solve(vector);
 
             var result = new Vector<T>(vector.Length);
             for (int i = 0; i < vector.Length; i++)

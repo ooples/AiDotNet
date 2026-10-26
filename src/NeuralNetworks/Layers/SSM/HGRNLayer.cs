@@ -380,19 +380,19 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorAddInPlace(_inputProjectionWeights,
             Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient, negLR));
         Engine.TensorAddInPlace(_inputProjectionBias,
-            Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
+            Engine.TensorMultiplyScalar((_inputProjectionBiasGradient ?? throw new InvalidOperationException("_inputProjectionBiasGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_forgetGateWeights,
-            Engine.TensorMultiplyScalar(_forgetGateWeightsGradient!, negLR));
+            Engine.TensorMultiplyScalar((_forgetGateWeightsGradient ?? throw new InvalidOperationException("_forgetGateWeightsGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_forgetGateBias,
-            Engine.TensorMultiplyScalar(_forgetGateBiasGradient!, negLR));
+            Engine.TensorMultiplyScalar((_forgetGateBiasGradient ?? throw new InvalidOperationException("_forgetGateBiasGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_inputGateWeights,
-            Engine.TensorMultiplyScalar(_inputGateWeightsGradient!, negLR));
+            Engine.TensorMultiplyScalar((_inputGateWeightsGradient ?? throw new InvalidOperationException("_inputGateWeightsGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_inputGateBias,
-            Engine.TensorMultiplyScalar(_inputGateBiasGradient!, negLR));
+            Engine.TensorMultiplyScalar((_inputGateBiasGradient ?? throw new InvalidOperationException("_inputGateBiasGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_outputProjectionWeights,
-            Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+            Engine.TensorMultiplyScalar((_outputProjectionWeightsGradient ?? throw new InvalidOperationException("_outputProjectionWeightsGradient is null where it is required.")), negLR));
         Engine.TensorAddInPlace(_outputProjectionBias,
-            Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+            Engine.TensorMultiplyScalar((_outputProjectionBiasGradient ?? throw new InvalidOperationException("_outputProjectionBiasGradient is null where it is required.")), negLR));
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);

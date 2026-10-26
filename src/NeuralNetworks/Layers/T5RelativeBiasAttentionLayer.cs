@@ -513,7 +513,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         }
 
         // [seqLen, seqLen] -> lookup against [numBuckets, numHeads] -> [seqLen, seqLen, numHeads]
-        var looked = Engine.TensorEmbeddingLookup<T, int>(_relativeBiasTable, _bucketIndices!);
+        var looked = Engine.TensorEmbeddingLookup<T, int>(_relativeBiasTable, (_bucketIndices ?? throw new InvalidOperationException("_bucketIndices is null where it is required.")));
         // Permute to [numHeads, seqLen, seqLen] so it broadcasts against
         // the [B, numHeads, seqLen, seqLen] attention scores inside
         // FlashAttention.

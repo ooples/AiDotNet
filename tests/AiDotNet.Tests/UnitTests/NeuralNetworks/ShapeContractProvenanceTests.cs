@@ -40,7 +40,7 @@ public class ShapeContractProvenanceTests
         var instance = Instantiate(layerType);
         if (instance is null) return;   // ctor shape varies; the declaration check above is the point
 
-        var actual = (ShapeRelationKind)prop!.GetValue(instance)!;
+        var actual = (ShapeRelationKind)(prop.GetValue(instance) ?? throw new InvalidOperationException("prop.GetValue(instance) is null where it is required."));
         Assert.True(actual == expected,
             $"{layerType.Name} declares {actual} but should declare {expected}. The relation is what " +
             "lets a declared output be read as a claim about the input, so weakening it to Unknown " +
@@ -55,14 +55,14 @@ public class ShapeContractProvenanceTests
     public void IdentityRelationInvertsToTheClaimedInput()
     {
         var layer = MakeDeclaring([8, 32, 32]);
-        var implied = typeof(LayerBase<double>)
-            .GetMethod("ImpliedInputShape", Any)!
+        var implied = (typeof(LayerBase<double>)
+            .GetMethod("ImpliedInputShape", Any) ?? throw new InvalidOperationException("typeof(LayerBase<double>) .GetMethod(\"ImpliedInputShape\", Any) is null where it is required."))
             .Invoke(layer, new object[] { new[] { 8, 32, 32 } }) as int[];
 
         Assert.True(implied is not null,
             "An Identity layer must be able to state the input its declared output implies; without " +
             "that inversion the failure text cannot distinguish a wrong layer from a wrong declaration.");
-        Assert.Equal(new[] { 8, 32, 32 }, implied!);
+        Assert.Equal(new[] { 8, 32, 32 }, implied);
     }
 
     /// <summary>
@@ -86,7 +86,7 @@ public class ShapeContractProvenanceTests
 
         // A shape-preserving layer told it outputs [8, 32, 32] by the walk, then handed [8, 8, 8].
         var layer = MakeDeclaring([8, 32, 32]);
-        relax!.Invoke(layer, null);
+        relax.Invoke(layer, null);
 
         var verify = typeof(LayerBase<double>)
             .GetMethods(Any)
@@ -104,7 +104,7 @@ public class ShapeContractProvenanceTests
     public void ChannelAxisIsStillEnforcedAfterRelaxing()
     {
         var layer = MakeDeclaring([8, 32, 32]);
-        typeof(LayerBase<double>).GetMethod("RelaxPropagatedSpatialAxes", Any)!.Invoke(layer, null);
+        (typeof(LayerBase<double>).GetMethod("RelaxPropagatedSpatialAxes", Any) ?? throw new InvalidOperationException("typeof(LayerBase<double>).GetMethod(\"RelaxPropagatedSpatialAxes\", Any) is null where it is required.")).Invoke(layer, null);
 
         var verify = typeof(LayerBase<double>)
             .GetMethods(Any)
@@ -189,12 +189,12 @@ public class ShapeContractProvenanceTests
     [Fact]
     public void FeatureOnlyPutsTheLayersOwnAxisLast()
     {
-        var implied = typeof(LayerBase<double>)
-            .GetMethod("ImpliedInputShape", Any)!
+        var implied = (typeof(LayerBase<double>)
+            .GetMethod("ImpliedInputShape", Any) ?? throw new InvalidOperationException("typeof(LayerBase<double>) .GetMethod(\"ImpliedInputShape\", Any) is null where it is required."))
             .Invoke(NewBlock(), [new[] { 12, HiddenSize }]) as int[];
 
         Assert.True(implied is not null, "FeatureOnly must be invertible: it preserves every leading axis.");
-        Assert.Equal([12, -1], implied!);
+        Assert.Equal([12, -1], implied);
     }
 
     private const int HiddenSize = 16;
@@ -209,8 +209,8 @@ public class ShapeContractProvenanceTests
     private static ActivationLayer<double> MakeDeclaring(int[] declared)
     {
         var layer = new ActivationLayer<double>((AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>());
-        typeof(LayerBase<double>)
-            .GetProperty("OutputShape", BindingFlags.Instance | BindingFlags.NonPublic)!
+        (typeof(LayerBase<double>)
+            .GetProperty("OutputShape", BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new InvalidOperationException("typeof(LayerBase<double>) .GetProperty(\"OutputShape\", BindingFlags.Instance |... is null where it is required."))
             .SetValue(layer, declared);
         return layer;
     }
@@ -229,7 +229,7 @@ public class ShapeContractProvenanceTests
                     .ToArray();
                 return ctor.Invoke(args);
             }
-            catch { }
+            catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"ShapeContractProvenanceTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
         }
         return null;
     }

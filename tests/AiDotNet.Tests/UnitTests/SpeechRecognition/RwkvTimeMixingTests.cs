@@ -27,7 +27,7 @@ public class RwkvTimeMixingTests
 
     private static Tensor<double> Sequence(int frames, int seed = 5)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>([frames, Channels]);
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() - 0.5;
         return t;

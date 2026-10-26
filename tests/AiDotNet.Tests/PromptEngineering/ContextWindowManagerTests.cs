@@ -57,7 +57,7 @@ public class ContextWindowManagerTests
     {
         var manager = new ContextWindowManager(4096);
 
-        var estimate = manager.EstimateTokens(null!);
+        var estimate = manager.EstimateTokens(global::AiDotNet.Tests.TestNull.Of<string>());
 
         Assert.Equal(0, estimate);
     }

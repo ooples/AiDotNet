@@ -125,7 +125,7 @@ public sealed class OpenAiController : ControllerBase
             return OpenAiError(StatusCodes.Status400BadRequest, ex.Message, "invalid_request_error", "model");
         }
         if (!TryPrepare(baseModel, out var ctx, out var error))
-            return error!;
+            return error;
 
         string prompt = ChatTemplate.Render(request.Messages.Select(m => (m.Role, m.TextContent())));
         // Builds a FRESH request every call. The structured-output / tool Constraint is a STATEFUL state
@@ -334,7 +334,7 @@ public sealed class OpenAiController : ControllerBase
         var sw = Stopwatch.StartNew();
 
         if (!TryPrepare(request.Model, out var ctx, out var error))
-            return error!;
+            return error;
 
         SpeculativeDecodingRequest sdr;
         try
@@ -450,9 +450,12 @@ public sealed class OpenAiController : ControllerBase
     }
 
     /// <summary>Resolves model, tokenizer, and generation capability, or returns an OpenAI error.</summary>
-    private bool TryPrepare(string modelName, out GenContext ctx, out IActionResult? error)
+    private bool TryPrepare(
+        string modelName,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out GenContext? ctx,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out IActionResult? error)
     {
-        ctx = null!;
+        ctx = null;
         error = null;
 
         if (string.IsNullOrWhiteSpace(modelName))
@@ -720,7 +723,7 @@ public sealed class OpenAiController : ControllerBase
         if (string.IsNullOrEmpty(eos)) return -1;
         try
         {
-            var ids = tokenizer.ConvertTokensToIds(new List<string> { eos! });
+            var ids = tokenizer.ConvertTokensToIds(new List<string> { eos });
             return ids.Count > 0 ? ids[0] : -1;
         }
         catch (Exception ex)

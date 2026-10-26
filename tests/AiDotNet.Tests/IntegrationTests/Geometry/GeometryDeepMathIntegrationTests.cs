@@ -735,7 +735,7 @@ public class GeometryDeepMathIntegrationTests
     public async Task PoissonDiskSample_MinDistanceRespected()
     {
         var points = new double[100, 3];
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 100; i++)
         {
             points[i, 0] = rng.NextDouble() * 10;
@@ -769,7 +769,7 @@ public class GeometryDeepMathIntegrationTests
     {
         // Dense cluster of points should merge into fewer
         var points = new double[100, 3];
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 100; i++)
         {
             points[i, 0] = rng.NextDouble() * 10;

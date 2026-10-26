@@ -105,7 +105,7 @@ public class TemporalSegmentNetworkModeratorTests
 
     private static List<Tensor<double>> Frames(int count, int seed = 3)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var frames = new List<Tensor<double>>(count);
         for (int f = 0; f < count; f++)
         {

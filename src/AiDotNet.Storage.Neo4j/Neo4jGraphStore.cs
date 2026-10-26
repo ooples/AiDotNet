@@ -340,7 +340,7 @@ public sealed class Neo4jGraphStore<T> : IGraphStore<T>, IDisposable
             label = "UNKNOWN";
         }
 
-        var graphNode = new GraphNode<T>(id, label!)
+        var graphNode = new GraphNode<T>(id, label)
         {
             Properties = Neo4jCypher.DeserializeProperties(ReadString(props, Neo4jCypher.PropProps)),
             Embedding = ReadEmbedding(props),
@@ -376,12 +376,12 @@ public sealed class Neo4jGraphStore<T> : IGraphStore<T>, IDisposable
 
         // Construct with the default (valid) weight, then assign the stored weight directly to stay
         // lossless without tripping the GraphEdge constructor's [0,1] weight guard.
-        var edge = new GraphEdge<T>(sourceId, targetId, relationType!);
+        var edge = new GraphEdge<T>(sourceId, targetId, relationType);
 
         var idValue = ReadString(props, Neo4jCypher.PropId);
         if (!string.IsNullOrEmpty(idValue))
         {
-            edge.Id = idValue!;
+            edge.Id = idValue;
         }
 
         if (props.TryGetValue(Neo4jCypher.PropWeight, out var weightRaw) && weightRaw != null)

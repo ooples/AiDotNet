@@ -35,7 +35,7 @@ public class AiModelBuilderErrorTests
     public async Task Predict_WrongDimensionInput_ThrowsDimensionError()
     {
         // Arrange: Train on 4-feature data
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var x = new Matrix<double>(50, 4);
         var y = new Vector<double>(50);
         for (int i = 0; i < 50; i++)

@@ -262,7 +262,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
             }
 
             var masked = RestrictLogits(
-                nextLogits!,
+                nextLogits,
                 0,
                 _options.SemanticVocabularySize,
                 generationOptions.AllowEarlyStop ? _options.SemanticPadTokenId : null);
@@ -341,16 +341,16 @@ public partial class BarkModel<T> : TtsModelBase<T>
             else if (!_options.UseKeyValueCache)
             {
                 nextLogits = _coarse.LastTokenLogits(
-                    _coarse.ForwardUncached(ToTokenTensor(windowContext!)));
+                    _coarse.ForwardUncached(ToTokenTensor((windowContext ?? throw new InvalidOperationException("windowContext is null where it is required.")))));
             }
 
             int codebook = step % _options.NumberOfCoarseCodebooks;
             int tokenStart = checked(_options.SemanticVocabularySize + codebook * _options.CodebookSize);
-            var masked = RestrictLogits(nextLogits!, tokenStart, tokenStart + _options.CodebookSize);
+            var masked = RestrictLogits((nextLogits ?? throw new InvalidOperationException("nextLogits is null where it is required.")), tokenStart, tokenStart + _options.CodebookSize);
             int sampled = Sample(masked, generationOptions.CoarseSampling, coarseRandom);
             flatOutput[step] = sampled - tokenStart;
             coarseContext.Add(sampled);
-            windowContext!.Add(sampled);
+            (windowContext ?? throw new InvalidOperationException("windowContext is null where it is required.")).Add(sampled);
 
             bool endsWindow = (step + 1) % _options.CoarseSlidingWindowLength == 0;
             if (_options.UseKeyValueCache && step + 1 < flattenedCount && !endsWindow)
@@ -409,7 +409,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
         {
             for (int frame = 0; frame < historyFrames; frame++)
             {
-                int sourceFrame = fineHistory!.GetLength(1) - historyFrames + frame;
+                int sourceFrame = (fineHistory ?? throw new InvalidOperationException("fineHistory is null where it is required.")).GetLength(1) - historyFrames + frame;
                 working[codebook, frame] = ValidateCodebookToken(
                     fineHistory[codebook, sourceFrame],
                     nameof(history));

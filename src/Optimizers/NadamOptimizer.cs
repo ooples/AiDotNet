@@ -296,13 +296,13 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // PyTorch NAdam at constant momentum and what the fused and GPU Nadam kernels compute.
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
-        var beta1TimesM = (Vector<T>)Engine.Multiply(_m!, beta1);
+        var beta1TimesM = (Vector<T>)Engine.Multiply((_m ?? throw new InvalidOperationException("_m is null where it is required.")), beta1);
         var oneMinusBeta1TimesGrad = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
         _m = (Vector<T>)Engine.Add(beta1TimesM, oneMinusBeta1TimesGrad);
 
         // Update biased second raw moment estimate: v = beta2 * v + (1 - beta2) * gradient^2
         var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var beta2TimesV = (Vector<T>)Engine.Multiply(_v!, beta2);
+        var beta2TimesV = (Vector<T>)Engine.Multiply((_v ?? throw new InvalidOperationException("_v is null where it is required.")), beta2);
         var oneMinusBeta2TimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
         _v = (Vector<T>)Engine.Add(beta2TimesV, oneMinusBeta2TimesGradSq);
 
@@ -733,8 +733,8 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         backend.NadamUpdate(
             parameters,
             gradients,
-            _gpuM!,
-            _gpuV!,
+            (_gpuM ?? throw new InvalidOperationException("_gpuM is null where it is required.")),
+            (_gpuV ?? throw new InvalidOperationException("_gpuV is null where it is required.")),
             (float)_options.InitialLearningRate,
             (float)_options.Beta1,
             (float)_options.Beta2,

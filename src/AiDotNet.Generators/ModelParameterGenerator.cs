@@ -1693,10 +1693,10 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
         if (DictionaryTypes(type, out var key, out var value))
         {
-            family = NumericFamilyFor(value!, elem);
+            family = NumericFamilyFor((value ?? throw new System.InvalidOperationException("value is null where it is required.")), elem);
             if (family is not null)
             {
-                var keyType = key!.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+                var keyType = (key ?? throw new System.InvalidOperationException("key is null where it is required.")).WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
                 return $"new Keyed{family}CollectionParameterSource<{elem}, {keyType}>(() => {name})";
             }
         }

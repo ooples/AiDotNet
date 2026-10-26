@@ -58,7 +58,7 @@ public class StockformerGradientDiagnosticTests
 
     private static Tensor<double> Input(int seed = 11)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(new[] { Assets, Window, Features });
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() - 0.5;
         return t;
@@ -66,7 +66,7 @@ public class StockformerGradientDiagnosticTests
 
     private static Tensor<double> Target(int seed = 12)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(new[] { Assets, 1 });
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() - 0.5;
         return t;

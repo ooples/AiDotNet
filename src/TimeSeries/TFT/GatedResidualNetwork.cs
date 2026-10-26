@@ -62,7 +62,7 @@ internal partial class GatedResidualNetwork<T> : AiDotNet.Interfaces.IParameterS
         _hiddenSize = hiddenSize;
         _outputSize = outputSize;
 
-        var random = seed.HasValue ? new Random(seed.Value) : RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(seed ?? 42);
 
         // He initialization for the ELU layer
         _w2 = CreateRandomTensor([_hiddenSize, _inputSize], Math.Sqrt(2.0 / _inputSize), random);

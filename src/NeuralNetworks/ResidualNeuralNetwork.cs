@@ -661,7 +661,7 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
         // stops rather than guess past a layer it cannot follow). That is a fact about the model,
         // not a failure to describe it, so it is reported as Dynamic instead of thrown over.
         var layerSizes = Layers
-            .Select(layer => layer.GetOutputLayerShape().TryGetConcrete(out var concrete) && concrete!.Length > 0
+            .Select(layer => layer.GetOutputLayerShape().TryGetConcrete(out var concrete) && (concrete ?? throw new InvalidOperationException("concrete is null where it is required.")).Length > 0
                 ? concrete[0]
                 : LayerShape.Dynamic)
             .ToList();

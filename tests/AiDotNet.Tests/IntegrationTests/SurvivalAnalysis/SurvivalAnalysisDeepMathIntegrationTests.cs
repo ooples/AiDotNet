@@ -431,7 +431,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         na.FitSurvival(features, times, events);
 
         var kmProbs = km.GetSurvivalProbabilities();
-        var naBaseline = na.GetBaselineSurvival(km.GetEventTimes()!);
+        var naBaseline = na.GetBaselineSurvival((km.GetEventTimes() ?? throw new InvalidOperationException("km.GetEventTimes() is null where it is required.")));
 
         Assert.NotNull(kmProbs);
 
@@ -468,7 +468,7 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         na.FitSurvival(features, times, events);
 
         var kmProbs = km.GetSurvivalProbabilities();
-        var naBaseline = na.GetBaselineSurvival(km.GetEventTimes()!);
+        var naBaseline = na.GetBaselineSurvival((km.GetEventTimes() ?? throw new InvalidOperationException("km.GetEventTimes() is null where it is required.")));
 
         Assert.NotNull(kmProbs);
 
@@ -1150,8 +1150,8 @@ public class SurvivalAnalysisDeepMathIntegrationTests
         na.FitSurvival(features, times, events);
 
         // Use PredictCumulativeHazard from base class (which computes -ln(S(t)))
-        var queryTimes = na.EventTimes!;
-        var survivalMatrix = na.PredictSurvival(queryTimes);
+        var queryTimes = na.EventTimes;
+        var survivalMatrix = na.PredictSurvival((queryTimes ?? throw new InvalidOperationException("queryTimes is null where it is required.")));
         var cumHazardMatrix = na.PredictCumulativeHazard(queryTimes);
 
         for (int t = 0; t < queryTimes.Length; t++)

@@ -15,7 +15,7 @@ public class TimeSformerDeclaredInputTests
 {
     private static Tensor<float> Random(int[] shape, int seed)
     {
-        var rng = new System.Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<float>(shape);
         var span = t.Data.Span;
         for (int i = 0; i < span.Length; i++)

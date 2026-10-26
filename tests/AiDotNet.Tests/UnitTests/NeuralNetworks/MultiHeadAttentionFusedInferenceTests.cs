@@ -27,7 +27,7 @@ public class MultiHeadAttentionFusedInferenceTests
 
     private static Tensor<float> RandomInput(int batch, int seq, int dModel, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var data = new float[batch * seq * dModel];
         for (int i = 0; i < data.Length; i++)
             data[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
@@ -94,7 +94,7 @@ public class MultiHeadAttentionFusedInferenceTests
         var layer = new MultiHeadAttentionLayer<float>(
             HeadCount, HeadDim, (IActivationFunction<float>)new IdentityActivation<float>());
 
-        var rng = new Random(20260602);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260602);
         var data = new float[SeqLen * DModel];
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
         var input = new Tensor<float>(data, new[] { SeqLen, DModel });
@@ -142,7 +142,7 @@ public class MultiHeadAttentionFusedInferenceTests
             sequencePooling: SequencePoolingMode.MeanPool);
         var model = new Transformer<float>(arch);
 
-        var rng = new Random(99);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
         var data = new float[batch * SeqLen * 32];
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
         var input = new Tensor<float>(data, new[] { batch, SeqLen, 32 });

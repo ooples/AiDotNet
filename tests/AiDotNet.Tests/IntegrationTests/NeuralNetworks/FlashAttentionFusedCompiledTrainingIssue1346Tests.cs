@@ -116,7 +116,7 @@ public class FlashAttentionFusedCompiledTrainingIssue1346Tests
     private static Tensor<float> BuildFingerprintInput(int classIndex, int seed)
     {
         var t = new Tensor<float>([1, SeqLen, EmbedDim]);
-        var rng = new System.Random(seed * 1000 + classIndex);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed * 1000 + classIndex);
         for (int s = 0; s < SeqLen; s++)
         {
             for (int e = 0; e < EmbedDim; e++)

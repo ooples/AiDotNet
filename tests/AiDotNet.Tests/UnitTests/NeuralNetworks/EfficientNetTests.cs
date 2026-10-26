@@ -426,7 +426,7 @@ public class EfficientNetTests
 
     private static void InitializeWithRandomValues(Tensor<float> tensor)
     {
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1);

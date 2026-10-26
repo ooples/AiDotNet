@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
@@ -84,6 +85,36 @@ public class InferenceOptimizerTests
         Assert.DoesNotContain(AttentionHosts(optimized), l => l is MultiHeadAttentionLayer<float>);
     }
 
+    /// <summary>
+    /// Under Auto masking the task type says whether a model generates, but a layer built causal stays causal: a
+    /// regression transformer whose attention was made causal must not be rewritten into one that attends to future
+    /// positions. Disabled still clears the mask.
+    /// </summary>
+    [Theory(Timeout = 60000)]
+    [InlineData(AttentionMaskingMode.Auto, true)]
+    [InlineData(AttentionMaskingMode.Disabled, false)]
+    public async Task InferenceOptimizer_FlashRewrite_KeepsTheSourceLayersCausalMask_UnderAuto(
+        AttentionMaskingMode masking, bool expectCausal)
+    {
+        await Task.Yield();
+        var model = CreateTinyTransformer(taskType: NeuralNetworkTaskType.Regression);
+        foreach (var mha in AttentionHosts(model).OfType<MultiHeadAttentionLayer<float>>())
+            mha.UseCausalMask = true;
+
+        var optimizer = new InferenceOptimizer<float>(new InferenceOptimizationConfig
+        {
+            EnableKVCache = false,
+            EnableFlashAttention = true,
+            AttentionMasking = masking
+        });
+        var (optimized, anyApplied) = optimizer.OptimizeForInference(model, cloneModel: false);
+
+        Assert.True(anyApplied);
+        var flash = AttentionHosts(optimized).OfType<FlashAttentionLayer<float>>().ToList();
+        Assert.NotEmpty(flash);
+        Assert.All(flash, layer => Assert.Equal(expectCausal, layer.Config.UseCausalMask));
+    }
+
     [Fact(Timeout = 60000)]
     public async Task InferenceOptimizer_RewritesMultiHeadAttention_ToCachedAttention_ForTextGeneration_WhenKVCacheEnabled()
     {
@@ -159,8 +190,8 @@ public class InferenceOptimizerTests
 
         Assert.True(anyApplied);
         Assert.NotNull(optimizer.DraftModel);
-        Assert.Contains("NGramDraftModel", optimizer.DraftModel!.GetType().Name);
-        Assert.True(optimizer.DraftModel!.VocabSize > 0);
+        Assert.Contains("NGramDraftModel", optimizer.DraftModel.GetType().Name);
+        Assert.True(optimizer.DraftModel.VocabSize > 0);
     }
 
     [Fact(Timeout = 60000)]
@@ -185,7 +216,7 @@ public class InferenceOptimizerTests
         Assert.True(anyApplied);
         Assert.NotNull(optimizer.DraftModel);
         Assert.Same(customDraft, optimizer.DraftModel);
-        Assert.Equal(123, optimizer.DraftModel!.VocabSize);
+        Assert.Equal(123, optimizer.DraftModel.VocabSize);
     }
 
     [Fact(Timeout = 60000)]

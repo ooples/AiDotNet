@@ -343,7 +343,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
 
             if (scatterMethod != null)
             {
-                var result = (T[]?)scatterMethod.Invoke(_mpiCommunicator, new object[] { sendArray!, root });
+                var result = (T[]?)scatterMethod.Invoke(_mpiCommunicator, new object[] { (sendArray ?? throw new InvalidOperationException("sendArray is null where it is required.")), root });
 
                 if (result != null)
                 {

@@ -16,6 +16,7 @@ namespace AiDotNet.Data.Text;
 /// </remarks>
 public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
 {
+
     private readonly StreamingTextDatasetOptions _options;
     private readonly string _dataPath;
     private int _sampleCount;
@@ -61,7 +62,8 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         {
             cancellationToken.ThrowIfCancellationRequested();
             string text = await FilePolyfill.ReadAllTextAsync(file, cancellationToken);
-            var words = System.Text.RegularExpressions.Regex.Split(text.ToLowerInvariant(), @"\s+");
+            // A whitespace split, without a regex: nothing to time out on a large file.
+            var words = text.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
             foreach (string word in words)
             {

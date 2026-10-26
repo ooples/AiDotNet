@@ -45,15 +45,16 @@ public class TransformerTrainingTraceTest
         // pattern: "test ran fine, but logs showed wrong optimizer".
         var optField = typeof(Transformer<float>).GetField("_optimizer",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        var opt = optField!.GetValue(model);
-        _output.WriteLine($"Default optimizer: {opt!.GetType().Name}");
+        var opt = (optField ?? throw new InvalidOperationException("optField is null where it is required.")).GetValue(model);
+        _output.WriteLine($"Default optimizer: {(opt ?? throw new InvalidOperationException("opt is null where it is required.")).GetType().Name}");
         Assert.Contains("Adam", opt.GetType().Name);
         Assert.DoesNotContain("GradientDescent", opt.GetType().Name);
-        var optOpts = opt.GetType().GetMethod("GetOptions")!.Invoke(opt, null);
-        _output.WriteLine($"Optimizer options: MaxIterations={optOpts!.GetType().GetProperty("MaxIterations")!.GetValue(optOpts)}, "
-            + $"InitialLR={optOpts.GetType().GetProperty("InitialLearningRate")!.GetValue(optOpts)}, "
-            + $"UseAdaptiveLR={optOpts.GetType().GetProperty("UseAdaptiveLearningRate")!.GetValue(optOpts)}, "
-            + $"LRDecay={optOpts.GetType().GetProperty("LearningRateDecay")!.GetValue(optOpts)}");
+        var optOpts = (opt.GetType().GetMethod("GetOptions") ?? throw new InvalidOperationException("opt.GetType().GetMethod(\"GetOptions\") is null where it is required.")).Invoke(opt, null)
+            ?? throw new InvalidOperationException("The optimizer returned no options.");
+        _output.WriteLine($"Optimizer options: MaxIterations={(optOpts.GetType().GetProperty("MaxIterations") ?? throw new InvalidOperationException("optOpts.GetType().GetProperty(\"MaxIterations\") is null where it is required.")).GetValue(optOpts)}, "
+            + $"InitialLR={(optOpts.GetType().GetProperty("InitialLearningRate") ?? throw new InvalidOperationException("optOpts.GetType().GetProperty(\"InitialLearningRate\") is null where it is required.")).GetValue(optOpts)}, "
+            + $"UseAdaptiveLR={(optOpts.GetType().GetProperty("UseAdaptiveLearningRate") ?? throw new InvalidOperationException("optOpts.GetType().GetProperty(\"UseAdaptiveLearningRate\") is null where it is required.")).GetValue(optOpts)}, "
+            + $"LRDecay={(optOpts.GetType().GetProperty("LearningRateDecay") ?? throw new InvalidOperationException("optOpts.GetType().GetProperty(\"LearningRateDecay\") is null where it is required.")).GetValue(optOpts)}");
 
         var input = new Tensor<float>([1, ctxLen]);
         for (int s = 0; s < ctxLen; s++) input[0, s] = (float)(s % vocab);

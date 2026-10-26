@@ -871,20 +871,20 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
 
         T negLR = NumOps.Negate(learningRate);
         Engine.TensorAddInPlace(_emaAlphaReal, Engine.TensorMultiplyScalar(_emaAlphaRealGradient, negLR));
-        Engine.TensorAddInPlace(_emaAlphaImag, Engine.TensorMultiplyScalar(_emaAlphaImagGradient!, negLR));
-        Engine.TensorAddInPlace(_emaInputWeights, Engine.TensorMultiplyScalar(_emaInputWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_emaInputBias, Engine.TensorMultiplyScalar(_emaInputBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_emaOutputWeights, Engine.TensorMultiplyScalar(_emaOutputWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_emaOutputBias, Engine.TensorMultiplyScalar(_emaOutputBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_tsNormGamma, Engine.TensorMultiplyScalar(_tsNormGammaGradient!, negLR));
-        Engine.TensorAddInPlace(_tsNormBeta, Engine.TensorMultiplyScalar(_tsNormBetaGradient!, negLR));
-        Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_gateWeights, Engine.TensorMultiplyScalar(_gateWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_emaAlphaImag, Engine.TensorMultiplyScalar((_emaAlphaImagGradient ?? throw new InvalidOperationException("_emaAlphaImagGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_emaInputWeights, Engine.TensorMultiplyScalar((_emaInputWeightsGradient ?? throw new InvalidOperationException("_emaInputWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_emaInputBias, Engine.TensorMultiplyScalar((_emaInputBiasGradient ?? throw new InvalidOperationException("_emaInputBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_emaOutputWeights, Engine.TensorMultiplyScalar((_emaOutputWeightsGradient ?? throw new InvalidOperationException("_emaOutputWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_emaOutputBias, Engine.TensorMultiplyScalar((_emaOutputBiasGradient ?? throw new InvalidOperationException("_emaOutputBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_tsNormGamma, Engine.TensorMultiplyScalar((_tsNormGammaGradient ?? throw new InvalidOperationException("_tsNormGammaGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_tsNormBeta, Engine.TensorMultiplyScalar((_tsNormBetaGradient ?? throw new InvalidOperationException("_tsNormBetaGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar((_queryWeightsGradient ?? throw new InvalidOperationException("_queryWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar((_keyWeightsGradient ?? throw new InvalidOperationException("_keyWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar((_valueWeightsGradient ?? throw new InvalidOperationException("_valueWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_gateWeights, Engine.TensorMultiplyScalar((_gateWeightsGradient ?? throw new InvalidOperationException("_gateWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_gateBias, Engine.TensorMultiplyScalar((_gateBiasGradient ?? throw new InvalidOperationException("_gateBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar((_outputProjectionWeightsGradient ?? throw new InvalidOperationException("_outputProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar((_outputProjectionBiasGradient ?? throw new InvalidOperationException("_outputProjectionBiasGradient is null where it is required.")), negLR));
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_emaInputWeights, PersistentTensorRole.Weights);

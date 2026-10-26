@@ -48,7 +48,7 @@ public sealed class ProgramSynthesisToolingCliTests
         }
         finally
         {
-            try { File.Delete(trainPath); } catch { }
+            try { File.Delete(trainPath); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"ProgramSynthesisToolingCliTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
         }
     }
 
@@ -71,8 +71,8 @@ public sealed class ProgramSynthesisToolingCliTests
 
     private static async Task<(int ExitCode, string StdOut, string StdErr)> InvokeAsync(string[] args)
     {
-        var programType = Type.GetType("AiDotNet.ProgramSynthesis.Tooling.Program, AiDotNet.ProgramSynthesis.Tooling", throwOnError: true)!;
-        var main = programType.GetMethod("Main", BindingFlags.Public | BindingFlags.Static);
+        var programType = Type.GetType("AiDotNet.ProgramSynthesis.Tooling.Program, AiDotNet.ProgramSynthesis.Tooling", throwOnError: true);
+        var main = (programType ?? throw new InvalidOperationException("programType is null where it is required.")).GetMethod("Main", BindingFlags.Public | BindingFlags.Static);
         Assert.NotNull(main);
 
         var originalOut = Console.Out;
@@ -85,8 +85,9 @@ public sealed class ProgramSynthesisToolingCliTests
             Console.SetOut(stdOutWriter);
             Console.SetError(stdErrWriter);
 
-            var task = (Task<int>)main!.Invoke(null, new object[] { args })!;
-            var exitCode = await task.ConfigureAwait(false);
+            var task = main.Invoke(null, new object[] { args }) as Task<int>
+            ?? throw new InvalidOperationException("The CLI entry point did not return a Task<int>.");
+            var exitCode = await (task ?? throw new InvalidOperationException("task is null where it is required.")).ConfigureAwait(false);
             return (exitCode, stdOutWriter.ToString(), stdErrWriter.ToString());
         }
         finally

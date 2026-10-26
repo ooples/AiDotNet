@@ -137,8 +137,8 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
         var result = _mode switch
         {
             OutlierHandlingMode.Remove => RemoveOutliers(X, y, predictions),
-            OutlierHandlingMode.ReplaceWithMedian => ReplaceOutliers(X, y, predictions, _columnMedians!),
-            OutlierHandlingMode.ReplaceWithMean => ReplaceOutliers(X, y, predictions, _columnMeans!),
+            OutlierHandlingMode.ReplaceWithMedian => ReplaceOutliers(X, y, predictions, (_columnMedians ?? throw new InvalidOperationException("_columnMedians is null where it is required."))),
+            OutlierHandlingMode.ReplaceWithMean => ReplaceOutliers(X, y, predictions, (_columnMeans ?? throw new InvalidOperationException("_columnMeans is null where it is required."))),
             _ => (X, y)
         };
 

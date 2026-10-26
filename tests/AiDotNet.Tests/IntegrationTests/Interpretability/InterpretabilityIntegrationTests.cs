@@ -717,7 +717,7 @@ public class InterpretabilityIntegrationTests
         var detector = new DemographicParityBiasDetector<double>();
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0 });
 
-        Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null!, sensitiveFeature));
+        Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null, sensitiveFeature));
     }
 
     [Fact(Timeout = 120000)]
@@ -726,7 +726,7 @@ public class InterpretabilityIntegrationTests
         var detector = new DemographicParityBiasDetector<double>();
         var predictions = new Vector<double>(new[] { 1.0, 0.0 });
 
-        Assert.Throws<ArgumentNullException>(() => detector.DetectBias(predictions, null!));
+        Assert.Throws<ArgumentNullException>(() => detector.DetectBias(predictions, null));
     }
 
     [Fact(Timeout = 120000)]
@@ -827,7 +827,7 @@ public class InterpretabilityIntegrationTests
         var detector = new DisparateImpactBiasDetector<double>();
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0 });
 
-        Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null!, sensitiveFeature));
+        Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null, sensitiveFeature));
     }
 
     [Fact(Timeout = 120000)]
@@ -914,7 +914,7 @@ public class InterpretabilityIntegrationTests
         var detector = new EqualOpportunityBiasDetector<double>();
         var sensitiveFeature = new Vector<double>(new[] { 0.0, 1.0 });
 
-        Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null!, sensitiveFeature));
+        Assert.Throws<ArgumentNullException>(() => detector.DetectBias(null, sensitiveFeature));
     }
 
     [Fact(Timeout = 120000)]
@@ -1584,7 +1584,7 @@ public class InterpretabilityIntegrationTests
         var predictionsData = new double[size];
         var sensitiveFeatureData = new double[size];
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < size; i++)
         {
             sensitiveFeatureData[i] = i < size / 2 ? 0.0 : 1.0;

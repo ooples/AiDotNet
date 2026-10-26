@@ -106,8 +106,8 @@ public class SelfSupervisedLearningIntegrationTests
         var validTensor = CreateRandomTensor(4, 8, seed: 42);
 
         // Assert
-        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(null!, validTensor));
-        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(validTensor, null!));
+        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(), validTensor));
+        Assert.Throws<ArgumentNullException>(() => loss.ComputeLoss(validTensor, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Tensor<double>>()));
     }
 
     #endregion

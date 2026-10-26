@@ -4,7 +4,7 @@ namespace AiDotNet.Inference.Quantization;
 
 /// <summary>
 /// Internal helpers for computing storage-byte accounting on INT8-quantized layers.
-/// Used by <see cref="Int8InferenceModel"/> to report compression stats without
+/// Used by <c>InferenceOptimizer</c> to report compression stats without
 /// exposing the internal sbyte[] storage to public callers.
 /// </summary>
 internal static class QuantizedLayerStats

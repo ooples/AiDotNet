@@ -53,7 +53,7 @@ public class FusedInferenceParityTests
             .TryGetFusedActivation(out var fusedType), $"{name} must declare a fused activation type");
 
         const int batch = 4, inF = 16, outF = 8;
-        var rng = new Random(20260529);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260529);
         var wData = new float[inF * outF];
         for (int i = 0; i < wData.Length; i++) wData[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
         var w = new Tensor<float>(wData, new[] { inF, outF });
@@ -138,7 +138,7 @@ public class FusedInferenceParityTests
             });
         var net = new FeedForwardNeuralNetwork<float>(arch);
 
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var data = new float[batch * inF];
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
         var input = new Tensor<float>(data, new[] { batch, inF });

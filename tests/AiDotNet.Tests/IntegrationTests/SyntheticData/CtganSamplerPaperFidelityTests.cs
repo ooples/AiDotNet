@@ -36,7 +36,7 @@ public class CtganSamplerPaperFidelityTests
             new("Cat", ColumnDataType.Categorical, new[] { "A", "B", "C" }, columnIndex: 0),
         };
 
-        var sampler = new CTGANDataSampler<double>(new Random(Seed));
+        var sampler = new CTGANDataSampler<double>(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed));
         sampler.Fit(data, columns);
 
         var drawn = new int[3];

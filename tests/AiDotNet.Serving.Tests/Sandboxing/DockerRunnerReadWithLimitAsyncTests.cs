@@ -46,11 +46,11 @@ public sealed class DockerRunnerReadWithLimitAsyncTests
         await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(value));
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
 
-        var task = (Task)method!.Invoke(null, new object[] { reader, maxChars, CancellationToken.None })!;
+        var task = (Task)(method.Invoke(null, new object[] { reader, maxChars, CancellationToken.None }) ?? throw new InvalidOperationException("method.Invoke(null, new object[] { reader, maxChars, CancellationToken.None }) is null where it is required."));
         await task.ConfigureAwait(false);
 
-        var resultProperty = task.GetType().GetProperty("Result")!;
-        return ((string Output, bool Truncated))resultProperty.GetValue(task)!;
+        var resultProperty = task.GetType().GetProperty("Result");
+        return ((string Output, bool Truncated))((resultProperty ?? throw new InvalidOperationException("resultProperty is null where it is required.")).GetValue(task) ?? throw new InvalidOperationException("resultProperty.GetValue(task) is null where it is required."));
     }
 }
 

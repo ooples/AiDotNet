@@ -98,7 +98,7 @@ public class PersonalizedFederatedLearningTests
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
 
-        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(null!, strategy: PersonalizedLayerSelectionStrategy.LastN));
+        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, double[]>>(), strategy: PersonalizedLayerSelectionStrategy.LastN));
         Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]>(), strategy: PersonalizedLayerSelectionStrategy.LastN));
         Assert.Throws<ArgumentOutOfRangeException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]> { ["a"] = new[] { 1.0 } }, strategy: (PersonalizedLayerSelectionStrategy)999));
         Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]> { ["a"] = new[] { 1.0 } }, strategy: PersonalizedLayerSelectionStrategy.ByPattern, customPatterns: null));
@@ -109,8 +109,8 @@ public class PersonalizedFederatedLearningTests
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
 
-        Assert.Throws<ArgumentException>(() => pfl.SeparateModel(null!, out _, out _));
-        Assert.Throws<ArgumentException>(() => pfl.GetModelSplitStatistics(null!));
+        Assert.Throws<ArgumentException>(() => pfl.SeparateModel(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, double[]>>(), out _, out _));
+        Assert.Throws<ArgumentException>(() => pfl.GetModelSplitStatistics(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, double[]>>()));
         Assert.Throws<ArgumentException>(() => pfl.GetModelSplitStatistics(new Dictionary<string, double[]>()));
     }
 
@@ -119,7 +119,7 @@ public class PersonalizedFederatedLearningTests
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
 
-        Assert.Throws<ArgumentNullException>(() => pfl.CombineModels(null!, new Dictionary<string, double[]>()));
-        Assert.Throws<ArgumentNullException>(() => pfl.CombineModels(new Dictionary<string, double[]>(), null!));
+        Assert.Throws<ArgumentNullException>(() => pfl.CombineModels(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, double[]>>(), new Dictionary<string, double[]>()));
+        Assert.Throws<ArgumentNullException>(() => pfl.CombineModels(new Dictionary<string, double[]>(), global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, double[]>>()));
     }
 }

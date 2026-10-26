@@ -110,7 +110,7 @@ namespace AiDotNetTests.UnitTests.Agentic.Mcp
 
             var result = await transport.SendRequestAsync("tools/list", null);
 
-            Assert.True((bool)result["ok"]);
+            Assert.True((bool)(result["ok"] ?? throw new InvalidOperationException("result[\"ok\"] is null where it is required.")));
         }
 
         [Fact(Timeout = 60000)]

@@ -295,11 +295,11 @@ public class DecisionTreeNodeIntegrationTests
         // Standard decision tree split: left if value <= splitValue
         if (input[node.FeatureIndex] <= node.SplitValue)
         {
-            return TraverseTree(node.Left!, input);
+            return TraverseTree((node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")), input);
         }
         else
         {
-            return TraverseTree(node.Right!, input);
+            return TraverseTree((node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")), input);
         }
     }
 

@@ -427,9 +427,9 @@ public class BlockTableManagerTests
 
         // Assert
         Assert.NotNull(forkedTable);
-        Assert.Equal(5, forkedTable!.NumLogicalBlocks);
+        Assert.Equal(5, forkedTable.NumLogicalBlocks);
         // Blocks should be shared (ref count increased)
-        Assert.Equal(2, blockManager.GetReferenceCount(sourceTable!.GetPhysicalBlock(0)));
+        Assert.Equal(2, blockManager.GetReferenceCount((sourceTable ?? throw new InvalidOperationException("sourceTable is null where it is required.")).GetPhysicalBlock(0)));
     }
 
     [Fact(Timeout = 60000)]
@@ -446,7 +446,7 @@ public class BlockTableManagerTests
         // Assert
         Assert.True(success);
         var table = tableManager.GetBlockTable(1);
-        Assert.True(table!.NumLogicalBlocks >= 4);
+        Assert.True((table ?? throw new InvalidOperationException("table is null where it is required.")).NumLogicalBlocks >= 4);
     }
 }
 

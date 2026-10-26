@@ -44,25 +44,25 @@ public class FusedTrainableSetTests
     public void TabDDPM_fused_step_updates_every_layer_the_eager_step_does()
     {
         DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); } catch (Exception) { }
+        try { gpu = new DirectGpuTensorEngine(); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"FusedTrainableSetTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
         Skip.IfNot(gpu is not null && gpu.SupportsGpu, "The fused multi-slot path needs a GPU engine.");
         var prior = AiDotNetEngine.Current;
         var codec = TensorCodecOptions.Current;
         bool saved = codec.EnableCompilation;
-        AiDotNetEngine.Current = gpu!;
+        AiDotNetEngine.Current = gpu;
         codec.EnableCompilation = true;
         try { AssertEveryLayerTrains(fused: true); }
         finally
         {
             codec.EnableCompilation = saved;
             AiDotNetEngine.Current = prior;
-            gpu!.Dispose();
+            gpu.Dispose();
         }
     }
 
     private void AssertEveryLayerTrains(bool fused)
     {
-        var random = new Random(7);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var data = new Matrix<float>(60, 5);
         for (int i = 0; i < 60; i++)
         {
@@ -87,19 +87,22 @@ public class FusedTrainableSetTests
         // Fit rebuilds its layers, so compare ONE training call on the fitted model: TrainBatch over its own data.
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;
         var type = typeof(TabDDPMGenerator<float>);
-        var layers = AuxFields.Select(f => (name: f, layer: (ILayer<float>)type.GetField(f, flags)!.GetValue(generator)!))
+        var layers = AuxFields.Select(f => (name: f, layer: (type.GetField(f, flags)
+                    ?? throw new InvalidOperationException($"TabDDPMGenerator has no field '{f}'."))
+                .GetValue(generator) as ILayer<float>
+                ?? throw new InvalidOperationException($"TabDDPMGenerator field '{f}' is not a layer.")))
             .Concat(generator.Layers.Select((l, i) => (name: $"Layers[{i}]", layer: l)))
             .ToArray();
         var before = layers.Select(x => x.layer.GetParameters().ToArray()).ToArray();
 
-        var prepared = type.GetMethod("PreprocessData", flags)!
-            .Invoke(generator, new[] { data, type.GetField("_columns", flags)!.GetValue(generator) })!;
+        var prepared = (type.GetMethod("PreprocessData", flags) ?? throw new InvalidOperationException("type.GetMethod(\"PreprocessData\", flags) is null where it is required."))
+            .Invoke(generator, new[] { data, (type.GetField("_columns", flags) ?? throw new InvalidOperationException("type.GetField(\"_columns\", flags) is null where it is required.")).GetValue(generator) });
         generator.SetTrainingMode(true);
         long fusedStepsBefore = FusedOptimizerStepCount(generator);
-        type.GetMethod("TrainBatch", flags)!.Invoke(generator, new object[]
+        (type.GetMethod("TrainBatch", flags) ?? throw new InvalidOperationException("type.GetMethod(\"TrainBatch\", flags) is null where it is required.")).Invoke(generator, new object[]
         {
-            prepared.GetType().GetField("Item1")!.GetValue(prepared)!,
-            prepared.GetType().GetField("Item2")!.GetValue(prepared)!,
+            PreparedItem(prepared, "Item1"),
+            PreparedItem(prepared, "Item2"),
             0, 60, 0.001f,
         });
 
@@ -128,6 +131,17 @@ public class FusedTrainableSetTests
     }
 
     /// <summary>The retained fused plan's optimizer step count, or -1 when no fused step or plan exists.</summary>
+    // PreprocessData returns a value tuple; TrainBatch takes its two items.
+    private static object PreparedItem(object? prepared, string item)
+    {
+        if (prepared is null)
+            throw new InvalidOperationException("PreprocessData returned null.");
+        var field = prepared.GetType().GetField(item)
+            ?? throw new InvalidOperationException($"PreprocessData's result has no '{item}'.");
+        return field.GetValue(prepared)
+            ?? throw new InvalidOperationException($"PreprocessData's '{item}' is null.");
+    }
+
     private static long FusedOptimizerStepCount(TabDDPMGenerator<float> generator)
     {
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;

@@ -61,10 +61,10 @@ internal sealed class LocalErrorSignalCreditRule<T> : CreditRuleBase<T>
         {
             if (layer.IsOutputLayer) continue;
             var h = FlatMatrix(layer.Output);                        // [B, M_i]
-            var logits = ProjectThrough(h, classifier[layer.Index]!); // [B, classes]
+            var logits = ProjectThrough(h, (classifier[layer.Index] ?? throw new InvalidOperationException("classifier[layer.Index] is null where it is required."))); // [B, classes]
             var error = SoftmaxRowsMinus(logits, target, ops);        // softmax(logits) − y   [B, classes]
             // teaching signal = dLocalCE/dh_i = error · W_iᵀ   -> [B, M_i]
-            var teach = error.Multiply(Transpose(classifier[layer.Index]!, ops));
+            var teach = error.Multiply(Transpose((classifier[layer.Index] ?? throw new InvalidOperationException("classifier[layer.Index] is null where it is required.")), ops));
             layer.TeachingSignal = ToTeachingSignal(teach, layer.OutputShape);
         }
     }
@@ -80,10 +80,10 @@ internal sealed class LocalErrorSignalCreditRule<T> : CreditRuleBase<T>
         {
             if (layer.IsOutputLayer) continue;
             var h = FlatMatrix(layer.Output);                        // [B, M_i]
-            var logits = ProjectThrough(h, classifier[layer.Index]!); // [B, classes]
+            var logits = ProjectThrough(h, (classifier[layer.Index] ?? throw new InvalidOperationException("classifier[layer.Index] is null where it is required."))); // [B, classes]
             var error = SoftmaxRowsMinus(logits, target, ops);        // [B, classes]
             var grad = MeanOuter(h, error, ops);                     // hᵀ·error / batch  -> [M_i, classes]
-            KpUpdate(classifier[layer.Index]!, grad, _classifierLearningRate, _weightDecay, ops);
+            KpUpdate((classifier[layer.Index] ?? throw new InvalidOperationException("classifier[layer.Index] is null where it is required.")), grad, _classifierLearningRate, _weightDecay, ops);
         }
     }
 

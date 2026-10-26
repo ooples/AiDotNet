@@ -1173,7 +1173,7 @@ public partial class MixedPrecisionIntegrationTests
 
             // Assert
             Assert.NotNull(retrieved);
-            Assert.Equal(3, retrieved!.Length);
+            Assert.Equal(3, retrieved.Length);
             Assert.Equal(1.0f, retrieved.GetFlatIndexValue(0));
         }
     }

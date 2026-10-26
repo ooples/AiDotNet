@@ -113,7 +113,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<ServingTestWeb
         var join = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/join", new JoinFederatedRunRequest
         {
             ClientId = null,
-            Attestation = null!
+            Attestation = null
         });
 
         if (join.StatusCode != HttpStatusCode.Forbidden)
@@ -224,7 +224,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<ServingTestWeb
         var proKey = await ReadAsJsonAsync<ModelArtifactKeyResponse>(proKeyResponse.Content);
         Assert.NotNull(proKey);
 
-        var proBytes = DecryptAesGcmArtifact(createResponse.RunId, proEncryptedBytes, proKey!);
+        var proBytes = DecryptAesGcmArtifact(createResponse.RunId, proEncryptedBytes, proKey);
 
         var proPath = Path.Combine(Path.GetTempPath(), $"aidn-pro-{Guid.NewGuid():N}.model");
         await File.WriteAllBytesAsync(proPath, proBytes);
@@ -260,7 +260,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<ServingTestWeb
         keyResponse.EnsureSuccessStatusCode();
         var key = await ReadAsJsonAsync<ModelArtifactKeyResponse>(keyResponse.Content);
         Assert.NotNull(key);
-        Assert.False(string.IsNullOrWhiteSpace(key!.KeyBase64));
+        Assert.False(string.IsNullOrWhiteSpace(key.KeyBase64));
     }
 
     [Fact(Timeout = 120000)]

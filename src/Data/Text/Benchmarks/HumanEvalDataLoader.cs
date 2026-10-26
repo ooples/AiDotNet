@@ -91,7 +91,7 @@ public class HumanEvalDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
             string? p = obj["prompt"]?.ToString();
             string? s = obj["canonical_solution"]?.ToString();
             if (string.IsNullOrEmpty(p) || s is null) continue;
-            prompts.Add(p!);
+            prompts.Add((p ?? throw new InvalidOperationException("p is null where it is required.")));
             solutions.Add(s);
         }
 

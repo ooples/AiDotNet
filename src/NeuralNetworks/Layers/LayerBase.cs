@@ -1755,7 +1755,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             for (int i = 0; i < declaredCount; i++)
             {
-                var (tensor, expected, _) = declared![i];
+                var (tensor, expected, _) = (declared ?? throw new InvalidOperationException("declared is null where it is required."))[i];
                 if (tensor is not null && tensor.Length > 0 && tensor.Shape.Length > 0)
                 {
                     count = checked(count + TrainableScalarCount(tensor));
@@ -1810,7 +1810,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 bool alreadyDeclared = false;
                 for (int declaredIndex = 0; declaredIndex < declaredCount; declaredIndex++)
                 {
-                    if (ReferenceEquals(declared![declaredIndex].Tensor, tensor))
+                    if (ReferenceEquals((declared ?? throw new InvalidOperationException("declared is null where it is required."))[declaredIndex].Tensor, tensor))
                     {
                         alreadyDeclared = true;
                         break;
@@ -7336,7 +7336,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                         : ParameterSlotRole.Trainable,
                     component.LowPrecisionTensor is not null
                         ? ValueSlot(component).Snapshot()
-                        : AsStoredScalarChunk(component.Tensor!),
+                        : AsStoredScalarChunk((component.Tensor ?? throw new InvalidOperationException("component.Tensor is null where it is required."))),
                     // A sparse component is presented as a dense run of its non-zero values, so the
                     // payload above is a DIFFERENT object from the registered tensor. Carry the
                     // registered one so reference-keyed callers (gradient lookup) still resolve it.

@@ -911,8 +911,8 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         backend.LambUpdate(
             parameters,
             gradients,
-            _gpuM!,
-            _gpuV!,
+            (_gpuM ?? throw new InvalidOperationException("_gpuM is null where it is required.")),
+            (_gpuV ?? throw new InvalidOperationException("_gpuV is null where it is required.")),
             (float)NumOps.ToDouble(CurrentLearningRate),
             (float)_options.Beta1,
             (float)_options.Beta2,

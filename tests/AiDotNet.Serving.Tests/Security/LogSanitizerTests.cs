@@ -24,8 +24,8 @@ public class LogSanitizerTests
         var sanitized = LogSanitizer.Sanitize(raw);
 
         Assert.Equal(expected, sanitized);
-        Assert.DoesNotContain('\r', sanitized!);
-        Assert.DoesNotContain('\n', sanitized!);
+        Assert.DoesNotContain('\r', (sanitized ?? throw new InvalidOperationException("sanitized is null where it is required.")));
+        Assert.DoesNotContain('\n', sanitized);
     }
 
     [Theory]

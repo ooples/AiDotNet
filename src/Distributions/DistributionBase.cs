@@ -104,10 +104,10 @@ public abstract class DistributionBase<T> : ISamplingDistribution<T>
     }
 
     /// <inheritdoc/>
-    public T Sample() => Sample(DefaultRandom.Value!);
+    public T Sample() => Sample((DefaultRandom.Value ?? throw new InvalidOperationException("DefaultRandom.Value is null where it is required.")));
 
     /// <inheritdoc/>
-    public Vector<T> Sample(int count) => Sample(DefaultRandom.Value!, count);
+    public Vector<T> Sample(int count) => Sample((DefaultRandom.Value ?? throw new InvalidOperationException("DefaultRandom.Value is null where it is required.")), count);
 
     /// <summary>
     /// Generates a standard normal random variate using the Box-Muller transform.

@@ -59,7 +59,7 @@ public class MetaLearnerOptionsBaseIntegrationTests
 
         Assert.NotNull(cloned);
         Assert.NotSame(options, cloned);
-        Assert.Equal(options.InnerLearningRate, cloned!.InnerLearningRate, precision: 6);
+        Assert.Equal(options.InnerLearningRate, cloned.InnerLearningRate, precision: 6);
         Assert.Equal(options.OuterLearningRate, cloned.OuterLearningRate, precision: 6);
         Assert.Equal(options.AdaptationSteps, cloned.AdaptationSteps);
         Assert.Equal(options.MetaBatchSize, cloned.MetaBatchSize);

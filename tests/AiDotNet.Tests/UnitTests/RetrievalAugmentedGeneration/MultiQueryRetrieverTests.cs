@@ -193,7 +193,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new MultiQueryRetriever<double>(null!));
+                new MultiQueryRetriever<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.IRetriever<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -368,7 +368,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
-                retriever.Retrieve(null!).ToList());
+                retriever.Retrieve(global::AiDotNet.Tests.TestNull.Of<string>()).ToList());
         }
 
         [Fact(Timeout = 60000)]
@@ -532,7 +532,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
 
             // Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                retriever.Retrieve("fox", topK: 5, null!).ToList());
+                retriever.Retrieve("fox", topK: 5, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<string, object>>()).ToList());
         }
 
         #endregion

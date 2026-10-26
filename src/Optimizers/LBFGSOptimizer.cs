@@ -840,7 +840,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             _lbfgsPreviousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
         }
         parameterSpan.CopyTo(_lbfgsPreviousParameters.AsWritableSpan());
-        gradient.AsSpan().CopyTo(_lbfgsPreviousGradient!.AsWritableSpan());
+        gradient.AsSpan().CopyTo((_lbfgsPreviousGradient ?? throw new InvalidOperationException("_lbfgsPreviousGradient is null where it is required.")).AsWritableSpan());
 
         return direction;
     }

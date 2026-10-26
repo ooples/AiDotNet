@@ -44,7 +44,7 @@ public class DocFormerBehaviourTests
 
     private static Tensor<double> Page(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var page = new Tensor<double>(new[] { 3, 64, 64 });
         for (int i = 0; i < page.Length; i++) page[i] = rng.NextDouble();
         return page;
@@ -71,7 +71,7 @@ public class DocFormerBehaviourTests
         // over its keys. Row 2 of [a, b, c] and of [b, a, c] then sees the same query and the same key set.
         // Only the relative 1-D terms can tell the two orders apart.
         using var encoder = new DocFormerEncoderLayer<double>(8, 2, 16, 2, 1);
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var rows = Enumerable.Range(0, 3).Select(_ => Enumerable.Range(0, 8).Select(__ => rng.NextDouble() - 0.5).ToArray()).ToArray();
         Tensor<double> Seq(params int[] order)
         {
@@ -94,7 +94,7 @@ public class DocFormerBehaviourTests
         // 2's skip (t2 + ts2) is then unchanged, and so are its text and relative scores, so only the spatial
         // q/k scores can move its output. Without them row 2 would be identical.
         using var encoder = new DocFormerEncoderLayer<double>(8, 2, 16, 2, 1);
-        var rng = new Random(11);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         using var text = new Tensor<double>(new[] { 3, 8 });
         using var zero = new Tensor<double>(new[] { 3, 8 });
         for (int i = 0; i < text.Length; i++) text[i] = rng.NextDouble() - 0.5;

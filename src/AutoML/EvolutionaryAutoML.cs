@@ -184,15 +184,16 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
 
             if (hasA && hasB)
             {
-                value = Random.NextDouble() < 0.5 ? aVal! : bVal!;
+                value = (Random.NextDouble() < 0.5 ? aVal : bVal)
+                    ?? throw new InvalidOperationException($"Both parents hold a null value for parameter '{name}'.");
             }
             else if (hasA)
             {
-                value = aVal!;
+                value = (aVal ?? throw new InvalidOperationException("aVal is null where it is required."));
             }
             else if (hasB)
             {
-                value = bVal!;
+                value = (bVal ?? throw new InvalidOperationException("bVal is null where it is required."));
             }
             else
             {
@@ -201,10 +202,10 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
 
             if (Random.NextDouble() < MutationRate)
             {
-                value = Mutate(value, range);
+                value = Mutate((value ?? throw new InvalidOperationException("value is null where it is required.")), range);
             }
 
-            child[name] = ClampToRange(value, range);
+            child[name] = ClampToRange((value ?? throw new InvalidOperationException("value is null where it is required.")), range);
         }
 
         return child;

@@ -28,7 +28,7 @@ public class StockformerModelTests
 
     private static Matrix<double> Returns(int seed = 7)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var m = new Matrix<double>(Stocks, Window);
         for (int s = 0; s < Stocks; s++)
             for (int t = 0; t < Window; t++)

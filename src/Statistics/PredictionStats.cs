@@ -27,6 +27,9 @@ public class PredictionStats<T>
     /// <summary>
     /// Provides mathematical operations for the generic type T.
     /// </summary>
+    /// <summary>The value every statistic holds until it is computed: zero, which is what <c>default</c> is for the numeric types.</summary>
+    private static readonly T ZeroValue = MathHelper.GetNumericOperations<T>().Zero;
+
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
@@ -213,7 +216,7 @@ public class PredictionStats<T>
     /// are too narrow. If it's much higher (like 99% for a 95% interval), your intervals
     /// might be unnecessarily wide.
     /// </remarks>
-    private T _predictionIntervalCoverage = default!;
+    private T _predictionIntervalCoverage = ZeroValue;
     public T PredictionIntervalCoverage { get { EnsureFullStatsComputed(); return _predictionIntervalCoverage; } private set { _predictionIntervalCoverage = value; } }
 
     /// <summary>
@@ -230,7 +233,7 @@ public class PredictionStats<T>
     /// Unlike error metrics that use absolute values (like MAE), this can tell you about the
     /// direction of the error, but positive and negative errors can cancel each other out.
     /// </remarks>
-    private T _meanPredictionError = default!;
+    private T _meanPredictionError = ZeroValue;
     public T MeanPredictionError { get { EnsureFullStatsComputed(); return _meanPredictionError; } private set { _meanPredictionError = value; } }
 
     /// <summary>
@@ -246,7 +249,7 @@ public class PredictionStats<T>
     /// 
     /// Like MeanPredictionError, a value close to zero is ideal.
     /// </remarks>
-    private T _medianPredictionError = default!;
+    private T _medianPredictionError = ZeroValue;
     public T MedianPredictionError { get { EnsureFullStatsComputed(); return _medianPredictionError; } private set { _medianPredictionError = value; } }
 
     /// <summary>
@@ -320,7 +323,7 @@ public class PredictionStats<T>
     /// R2 would be lower, but ExplainedVarianceScore would still be high.
     /// R² would be lower, but ExplainedVarianceScore would still be high.
     /// </remarks>
-    private T _explainedVarianceScore = default!;
+    private T _explainedVarianceScore = ZeroValue;
     public T ExplainedVarianceScore { get { EnsureFullStatsComputed(); return _explainedVarianceScore; } private set { _explainedVarianceScore = value; } }
 
     /// <summary>
@@ -355,7 +358,7 @@ public class PredictionStats<T>
     /// data belongs to class A, a model that always predicts class A would have 95% accuracy
     /// despite being useless for class B.
     /// </remarks>
-    private T _accuracy = default!;
+    private T _accuracy = ZeroValue;
     public T Accuracy { get { EnsureFullStatsComputed(); return _accuracy; } private set { _accuracy = value; } }
 
     /// <summary>
@@ -373,7 +376,7 @@ public class PredictionStats<T>
     /// Precision is important when the cost of false positives is high. In the spam example,
     /// high precision means fewer important emails mistakenly marked as spam.
     /// </remarks>
-    private T _precision = default!;
+    private T _precision = ZeroValue;
     public T Precision { get { EnsureFullStatsComputed(); return _precision; } private set { _precision = value; } }
 
     /// <summary>
@@ -391,7 +394,7 @@ public class PredictionStats<T>
     /// Recall is important when the cost of false negatives is high. In a medical context,
     /// high recall means catching most cases of a disease, even if it means some false alarms.
     /// </remarks>
-    private T _recall = default!;
+    private T _recall = ZeroValue;
     public T Recall { get { EnsureFullStatsComputed(); return _recall; } private set { _recall = value; } }
 
     /// <summary>
@@ -411,7 +414,7 @@ public class PredictionStats<T>
     /// 
     /// It's calculated as 2 * (precision * recall) / (precision + recall).
     /// </remarks>
-    private T _f1Score = default!;
+    private T _f1Score = ZeroValue;
     public T F1Score { get { EnsureFullStatsComputed(); return _f1Score; } private set { _f1Score = value; } }
 
     /// <summary>
@@ -430,7 +433,7 @@ public class PredictionStats<T>
     /// For prediction models, you typically want values close to 1, indicating that your
     /// predictions track well with actual values.
     /// </remarks>
-    private T _pearsonCorrelation = default!;
+    private T _pearsonCorrelation = ZeroValue;
     public T PearsonCorrelation { get { EnsureFullStatsComputed(); return _pearsonCorrelation; } private set { _pearsonCorrelation = value; } }
 
     /// <summary>
@@ -450,7 +453,7 @@ public class PredictionStats<T>
     /// 
     /// This is useful when you care about the order of predictions more than their exact values.
     /// </remarks>
-    private T _spearmanCorrelation = default!;
+    private T _spearmanCorrelation = ZeroValue;
     public T SpearmanCorrelation { get { EnsureFullStatsComputed(); return _spearmanCorrelation; } private set { _spearmanCorrelation = value; } }
 
     /// <summary>
@@ -470,7 +473,7 @@ public class PredictionStats<T>
     /// 
     /// KendallTau is often more robust to outliers than SpearmanCorrelation.
     /// </remarks>
-    private T _kendallTau = default!;
+    private T _kendallTau = ZeroValue;
     public T KendallTau { get { EnsureFullStatsComputed(); return _kendallTau; } private set { _kendallTau = value; } }
 
     /// <summary>
@@ -489,7 +492,7 @@ public class PredictionStats<T>
     /// This is especially useful for time series data like speech recognition, gesture recognition,
     /// or any data where timing may vary.
     /// </remarks>
-    private T _dynamicTimeWarping = default!;
+    private T _dynamicTimeWarping = ZeroValue;
     public T DynamicTimeWarping { get { EnsureFullStatsComputed(); return _dynamicTimeWarping; } private set { _dynamicTimeWarping = value; } }
 
     /// <summary>

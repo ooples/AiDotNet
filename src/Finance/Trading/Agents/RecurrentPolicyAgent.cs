@@ -62,9 +62,9 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
 
     // Per-episode recurrent state (eager act path).
     [AiDotNet.Attributes.Scratch]
-    private Tensor<T> _h = null!;
+    private Tensor<T> _h;
     [AiDotNet.Attributes.Scratch]
-    private Tensor<T> _c = null!;
+    private Tensor<T> _c;
 
     // Current-episode rollout.
     private readonly List<T[]> _states = new();
@@ -115,6 +115,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         return t;
     }
 
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_h), nameof(_c))]
     private void ResetHidden()
     {
         _h = new Tensor<T>(new[] { _hidden, 1 });

@@ -118,7 +118,7 @@ public class RBFLayerInitializationTests
 
     private static Tensor<double> Batch(int rows, int dims, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(new[] { rows, dims });
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble();
         return t;

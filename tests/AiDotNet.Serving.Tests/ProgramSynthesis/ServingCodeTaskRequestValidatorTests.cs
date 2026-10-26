@@ -147,11 +147,11 @@ public sealed class ServingCodeTaskRequestValidatorTests
         Assert.False(validator.TryValidate(request, context, out error));
         Assert.Equal("Corpus.Documents[0].Content is required.", error);
 
-        request.Corpus.Documents[0]!.Content = "012345";
+        request.Corpus.Documents[0].Content = "012345";
         Assert.False(validator.TryValidate(request, context, out error));
         Assert.Equal("Corpus.Documents[0].Content exceeds tier limit (5 chars).", error);
 
-        request.Corpus.Documents[0]!.Content = "12345";
+        request.Corpus.Documents[0].Content = "12345";
         request.Filters = new List<string> { "a", "b", "c" };
         Assert.False(validator.TryValidate(request, context, out error));
         Assert.Equal("Filters exceeds tier limit (2).", error);

@@ -82,7 +82,7 @@ public abstract class VideoInpaintingTestBase<T> : VideoNNModelTestBase<T>
             "VideoInpaintingBase<T>.Inpaint, so mask " +
             "conditioning cannot be verified. An inpainting fixture must expose the " +
             "mask-conditioned path; fix the fixture rather than skipping the invariant.");
-        var inpainter = (VideoInpaintingBase<T>)network;
+        var inpainter = (VideoInpaintingBase<T>)(network ?? throw new InvalidOperationException("(VideoInpaintingBase<T>)network is null where it is required."));
 
         var frames = CreateRandomTensor(InputShape, rng);
         int n = frames.Shape[0];
@@ -94,7 +94,7 @@ public abstract class VideoInpaintingTestBase<T> : VideoNNModelTestBase<T>
         var boxMask = BuildBoxMask(n, h, w, 0, 0, Math.Max(1, h / 2), Math.Max(1, w / 2));
         var fullMask = BuildBoxMask(n, h, w, 0, 0, h, w);
 
-        var boxOut = inpainter.Inpaint(frames, boxMask);
+        var boxOut = (inpainter ?? throw new InvalidOperationException("inpainter is null where it is required.")).Inpaint(frames, boxMask);
         var fullOut = inpainter.Inpaint(frames, fullMask);
 
         double sumSquared = 0;

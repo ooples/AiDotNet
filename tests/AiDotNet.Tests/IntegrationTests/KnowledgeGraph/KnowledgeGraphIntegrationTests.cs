@@ -1002,7 +1002,7 @@ public class KnowledgeGraphIntegrationTests
         model.Train(graph, SmallTrainingOptions());
 
         var predictor = new LinkPredictor<double>(model);
-        Assert.Throws<ArgumentNullException>(() => predictor.PredictTails(null, "einstein", "REL"));
+        Assert.Throws<ArgumentNullException>(() => predictor.PredictTails(global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph<double>>(), "einstein", "REL"));
     }
 
     #endregion

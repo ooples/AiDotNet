@@ -299,7 +299,7 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
             _trustRegionPreviousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
         }
         parameterSpan.CopyTo(_trustRegionPreviousParameters.AsWritableSpan());
-        gradientSpan.CopyTo(_trustRegionPreviousGradient!.AsWritableSpan());
+        gradientSpan.CopyTo((_trustRegionPreviousGradient ?? throw new InvalidOperationException("_trustRegionPreviousGradient is null where it is required.")).AsWritableSpan());
 
         return newParameters;
     }

@@ -58,7 +58,7 @@ public sealed class GroupedQueryAttentionGradientTests
             input[index] = original;
 
             double numerical = (plus - minus) / (2.0 * step);
-            double analytical = gradient![index];
+            double analytical = gradient[index];
             double tolerance = Math.Max(1e-8, Math.Abs(numerical) * 1e-5);
             Assert.True(Math.Abs(numerical - analytical) <= tolerance,
                 $"GQA input gradient mismatch at {index}: numerical={numerical:R}, " +

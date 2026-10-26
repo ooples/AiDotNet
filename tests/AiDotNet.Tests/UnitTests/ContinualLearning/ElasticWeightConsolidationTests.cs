@@ -37,7 +37,7 @@ public class ElasticWeightConsolidationTests
         // Act & Assert
         var exception = Assert.Throws<ArgumentNullException>(() =>
             new ElasticWeightConsolidation<double, Matrix<double>, Vector<double>>(
-                null!,
+                global::AiDotNet.Tests.TestNull.Of<AiDotNet.Interfaces.ILossFunction<double>>(),
                 1000.0));
 
         Assert.Contains("lossFunction", exception.Message);

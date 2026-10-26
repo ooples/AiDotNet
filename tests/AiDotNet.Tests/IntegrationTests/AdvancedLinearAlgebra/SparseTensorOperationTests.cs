@@ -473,7 +473,7 @@ public class SparseTensorOperationTests
         // Arrange - 100x100 matrix with 10% density
         int size = 100;
         int nnz = size * size / 10;
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         var rowIndices = new int[nnz];
         var colIndices = new int[nnz];

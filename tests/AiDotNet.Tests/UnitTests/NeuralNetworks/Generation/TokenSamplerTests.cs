@@ -62,7 +62,7 @@ public class TokenSamplerTests
     public void Sample_AlwaysReturnsValidIndex()
     {
         var logits = V(0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f);
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var opts = new SamplingOptions { Temperature = 1.0 };
         for (int i = 0; i < 200; i++)
         {
@@ -76,8 +76,8 @@ public class TokenSamplerTests
     {
         // Low temperature should concentrate on the argmax far more than high temperature.
         var logits = V(0f, 2f, 0f, 0f); // index 1 favored
-        var rngLow = new Random(99);
-        var rngHigh = new Random(99);
+        var rngLow = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
+        var rngHigh = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
         int low = 0, high = 0;
         for (int i = 0; i < 400; i++)
         {

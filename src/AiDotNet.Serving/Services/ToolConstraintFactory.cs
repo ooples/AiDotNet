@@ -86,13 +86,13 @@ internal static class ToolConstraintFactory
         var alternatives = new List<string>(eligible.Count);
         foreach (var t in eligible)
         {
-            var fnDef = t.Function!;
+            var fnDef = t.Function;
             var wrapper = new JObject
             {
                 ["type"] = "object",
                 ["properties"] = new JObject
                 {
-                    ["name"] = new JObject { ["enum"] = new JArray(fnDef.Name) },
+                    ["name"] = new JObject { ["enum"] = new JArray((fnDef ?? throw new System.InvalidOperationException("fnDef is null where it is required.")).Name) },
                     ["arguments"] = fnDef.Parameters ?? new JObject { ["type"] = "object" }
                 },
                 // Both members are mandatory: the schema compiler enforces "required", so the constraint
@@ -146,7 +146,7 @@ internal static class ToolConstraintFactory
             {
                 Id = callId,
                 Type = "function",
-                Function = new FunctionCallOut { Name = name!, Arguments = arguments }
+                Function = new FunctionCallOut { Name = name, Arguments = arguments }
             }
         };
     }

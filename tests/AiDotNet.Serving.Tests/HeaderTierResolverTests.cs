@@ -12,7 +12,7 @@ public class HeaderTierResolverTests
     [Fact(Timeout = 60000)]
     public async Task Constructor_Throws_WhenOptionsNull()
     {
-        Assert.Throws<ArgumentNullException>(() => new HeaderTierResolver(options: null!));
+        Assert.Throws<ArgumentNullException>(() => new HeaderTierResolver(options: global::AiDotNet.Serving.Tests.TestNull.Of<Microsoft.Extensions.Options.IOptions<AiDotNet.Serving.Configuration.TierEnforcementOptions>>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -20,7 +20,7 @@ public class HeaderTierResolverTests
     {
         var resolver = new HeaderTierResolver(Options.Create(new TierEnforcementOptions { Enabled = false }));
 
-        var tier = resolver.ResolveTier(httpContext: null!);
+        var tier = resolver.ResolveTier(httpContext: global::AiDotNet.Serving.Tests.TestNull.Of<Microsoft.AspNetCore.Http.HttpContext>());
 
         Assert.Equal(SubscriptionTier.Enterprise, tier);
     }
@@ -34,7 +34,7 @@ public class HeaderTierResolverTests
             DefaultTier = SubscriptionTier.Free
         }));
 
-        var tier = resolver.ResolveTier(httpContext: null!);
+        var tier = resolver.ResolveTier(httpContext: global::AiDotNet.Serving.Tests.TestNull.Of<Microsoft.AspNetCore.Http.HttpContext>());
 
         Assert.Equal(SubscriptionTier.Free, tier);
     }

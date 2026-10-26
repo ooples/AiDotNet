@@ -88,12 +88,12 @@ public static class ExpressionState
     {
         if (string.IsNullOrEmpty(saved)) throw Bad(layerName, key, "nothing was recorded for it.");
 
-        var invoke = typeof(TDelegate).GetMethod("Invoke")!;
-        if (invoke.GetParameters().Length != 1)
+        var invoke = typeof(TDelegate).GetMethod("Invoke");
+        if ((invoke ?? throw new InvalidOperationException("invoke is null where it is required.")).GetParameters().Length != 1)
             throw Bad(layerName, key, $"{typeof(TDelegate).Name} does not take exactly one argument.");
 
         var parameter = Expression.Parameter(invoke.GetParameters()[0].ParameterType, "x");
-        var parts = saved!.Split(';');
+        var parts = (saved ?? throw new InvalidOperationException("saved is null where it is required.")).Split(';');
         if (parts.Length < 2 || !int.TryParse(parts[parts.Length - 1], NumberStyles.Integer,
                 CultureInfo.InvariantCulture, out var rootId))
             throw Bad(layerName, key, "its recorded tree has no root.");

@@ -94,8 +94,8 @@ public class RagPipelineTests
         await pipeline.QueryAsync("q");
 
         // The retrieval filter carries the tenant so cross-tenant data is isolated.
-        Assert.True(retriever.LastFilters!.ContainsKey(RagPipeline<double>.TenantMetadataKey));
-        Assert.Equal("acme", retriever.LastFilters![RagPipeline<double>.TenantMetadataKey]);
+        Assert.True((retriever.LastFilters ?? throw new InvalidOperationException("retriever.LastFilters is null where it is required.")).ContainsKey(RagPipeline<double>.TenantMetadataKey));
+        Assert.Equal("acme", retriever.LastFilters[RagPipeline<double>.TenantMetadataKey]);
 
         // And the stored document was stamped with the tenant.
         var all = store.GetAll().ToList();

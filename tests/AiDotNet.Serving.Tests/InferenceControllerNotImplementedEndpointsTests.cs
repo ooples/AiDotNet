@@ -68,7 +68,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
 
         var payload = await ReadAsJsonAsync<SpeculativeDecodingResponse>(response.Content);
         Assert.NotNull(payload);
-        Assert.Equal("InputTokens array is required and cannot be empty", payload!.Error);
+        Assert.Equal("InputTokens array is required and cannot be empty", payload.Error);
     }
 
     [Fact(Timeout = 60000)]
@@ -82,7 +82,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
 
         var payload = await ReadAsJsonAsync<SpeculativeDecodingResponse>(response.Content);
         Assert.NotNull(payload);
-        Assert.Contains("missing-model", payload!.Error ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("missing-model", payload.Error ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact(Timeout = 60000)]
@@ -101,7 +101,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
 
         var payload = await ReadAsJsonAsync<SpeculativeDecodingResponse>(response.Content);
         Assert.NotNull(payload);
-        Assert.Contains("does not support text generation", payload!.Error ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("does not support text generation", payload.Error ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact(Timeout = 60000)]
@@ -115,7 +115,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
 
         var payload = await ReadAsJsonAsync<LoRAFineTuneResponse>(response.Content);
         Assert.NotNull(payload);
-        Assert.False(payload!.Success);
+        Assert.False(payload.Success);
         Assert.Equal("ModelName is required", payload.Error);
     }
 
@@ -135,7 +135,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
 
         var payload = await ReadAsJsonAsync<LoRAFineTuneResponse>(response.Content);
         Assert.NotNull(payload);
-        Assert.False(payload!.Success);
+        Assert.False(payload.Success);
         Assert.Contains("missing-model", payload.Error ?? string.Empty, StringComparison.Ordinal);
     }
 
@@ -157,7 +157,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
 
         var payload = await ReadAsJsonAsync<LoRAFineTuneResponse>(response.Content);
         Assert.NotNull(payload);
-        Assert.False(payload!.Success);
+        Assert.False(payload.Success);
         Assert.Equal("LoRA fine-tuning is not available via the REST API in the current version.", payload.Error);
     }
 
@@ -180,7 +180,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
 
         var payload = await ReadAsJsonAsync<Dictionary<string, string>>(response.Content);
         Assert.NotNull(payload);
-        Assert.True(payload!.TryGetValue("error", out var error));
+        Assert.True(payload.TryGetValue("error", out var error));
         Assert.Contains("batching is disabled", error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -332,7 +332,7 @@ public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<Ser
     {
         var method = request.GetType().GetMethod("Validate", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
-        return (string?)method!.Invoke(request, null);
+        return (string?)method.Invoke(request, null);
     }
 
     private void LoadSimpleModel(string name, bool enableBatching)

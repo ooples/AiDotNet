@@ -97,7 +97,7 @@ public class CnnInferenceAllocProfile
 
     private static Tensor<float> Rand(int[] shape, int seed)
     {
-        var rng = new Random(seed); var t = new Tensor<float>(shape); var s = t.AsWritableSpan();
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed); var t = new Tensor<float>(shape); var s = t.AsWritableSpan();
         for (int i = 0; i < s.Length; i++) s[i] = (float)(rng.NextDouble() - 0.5);
         return t;
     }

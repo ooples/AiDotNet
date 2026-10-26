@@ -367,7 +367,7 @@ public class PostprocessingDeepMathIntegrationTests
     public async Task SpellCorrection_Process_NullInput_ReturnsNull()
     {
         using var sc = new SpellCorrection<double>();
-        string result = sc.Process(null!);
+        string result = sc.Process(global::AiDotNet.Tests.TestNull.Of<string>());
         Assert.Null(result);
     }
 

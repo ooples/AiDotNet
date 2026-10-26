@@ -37,7 +37,7 @@ public abstract class ActiveLearningTestBase<T>
     /// <summary>Creates a synthetic unlabeled pool tensor [poolSize, featureDim].</summary>
     protected virtual Tensor<T> CreateUnlabeledPool()
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var data = new T[PoolSize * FeatureDim];
         for (int i = 0; i < data.Length; i++)
             data[i] = ToT(rng.NextDouble() * 2.0 - 1.0);

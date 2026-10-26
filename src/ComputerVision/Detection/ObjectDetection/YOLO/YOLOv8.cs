@@ -41,6 +41,13 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 public partial class YOLOv8<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
     private readonly AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T> _detectionLoss;
+
+    /// <summary>
+    /// The reference optimizer (Ultralytics default.yaml): SGD with momentum 0.937 at lr0 0.01. Its Nesterov variant
+    /// and weight decay (0.0005) are not applied.
+    /// </summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperSgdMomentum(0.01, 0.937);
     private readonly YOLOv8Head<T> _head;
     private readonly int[] _strides;
     private readonly NMS<T> _nms;

@@ -13,7 +13,7 @@ public sealed class ServingHeuristicCodeModelTests
     public async Task GetModelMetadata_IncludesExpectedFields()
     {
         var model = CreateDefaultModel(ProgramLanguage.Generic);
-        var metadata = (ModelMetadata<double>)Invoke(model, "GetModelMetadata")!;
+        var metadata = (ModelMetadata<double>)(Invoke(model, "GetModelMetadata") ?? throw new InvalidOperationException("Invoke(model, \"GetModelMetadata\") is null where it is required."));
 
         Assert.NotNull(metadata);
         Assert.Equal("ServingHeuristicCodeModel", metadata.AdditionalInfo["ModelName"]);
@@ -26,7 +26,7 @@ public sealed class ServingHeuristicCodeModelTests
         using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
         {
             var modelA = CreateDefaultModel(ProgramLanguage.Generic);
-            var payload = (byte[])Invoke(modelA, "Serialize")!;
+            var payload = (byte[])(Invoke(modelA, "Serialize") ?? throw new InvalidOperationException("Invoke(modelA, \"Serialize\") is null where it is required."));
 
             var modelB = CreateDefaultModel(ProgramLanguage.Python);
 
@@ -40,16 +40,16 @@ public sealed class ServingHeuristicCodeModelTests
         var type = Type.GetType("AiDotNet.Serving.ProgramSynthesis.ServingHeuristicCodeModel, AiDotNet.Serving");
         Assert.NotNull(type);
 
-        var factory = type!.GetMethod("CreateDefault", BindingFlags.Public | BindingFlags.Static);
+        var factory = type.GetMethod("CreateDefault", BindingFlags.Public | BindingFlags.Static);
         Assert.NotNull(factory);
 
-        return factory!.Invoke(null, new object[] { language })!;
+        return (factory.Invoke(null, new object[] { language }) ?? throw new InvalidOperationException("factory.Invoke(null, new object[] { language }) is null where it is required."));
     }
 
     private static object? Invoke(object instance, string methodName, params object[] args)
     {
         var method = instance.GetType().GetMethod(methodName, BindingFlags.Public | BindingFlags.Instance);
         Assert.NotNull(method);
-        return method!.Invoke(instance, args);
+        return method.Invoke(instance, args);
     }
 }

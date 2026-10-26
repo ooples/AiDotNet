@@ -593,10 +593,10 @@ public class InputHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GetItem_Matrix_NullInput_ThrowsException()
     {
-        Matrix<double>? nullMatrix = null;
+        Matrix<double> nullMatrix = TestNull.Of<Matrix<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetItem(nullMatrix!, 0));
+            InputHelper<double, Matrix<double>>.GetItem(nullMatrix, 0));
     }
 
     #endregion
@@ -726,19 +726,19 @@ public class InputHelperIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GetElement_NullInput_ThrowsArgumentNullException()
     {
-        Matrix<double>? nullMatrix = null;
+        Matrix<double> nullMatrix = TestNull.Of<Matrix<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetElement(nullMatrix!, 0, 0));
+            InputHelper<double, Matrix<double>>.GetElement(nullMatrix, 0, 0));
     }
 
     [Fact(Timeout = 120000)]
     public async Task GetBatch_NullInput_ThrowsArgumentNullException()
     {
-        Matrix<double>? nullMatrix = null;
+        Matrix<double> nullMatrix = TestNull.Of<Matrix<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetBatch(nullMatrix!, new[] { 0 }));
+            InputHelper<double, Matrix<double>>.GetBatch(nullMatrix, new[] { 0 }));
     }
 
     [Fact(Timeout = 120000)]
@@ -747,25 +747,25 @@ public class InputHelperIntegrationTests
         var matrix = new Matrix<double>(3, 2);
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.GetBatch(matrix, null!));
+            InputHelper<double, Matrix<double>>.GetBatch(matrix, global::AiDotNet.Tests.TestNull.Of<int[]>()));
     }
 
     [Fact(Timeout = 120000)]
     public async Task CreateSingleItemBatch_NullInput_ThrowsArgumentNullException()
     {
-        Matrix<double>? nullMatrix = null;
+        Matrix<double> nullMatrix = TestNull.Of<Matrix<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Matrix<double>>.CreateSingleItemBatch(nullMatrix!));
+            InputHelper<double, Matrix<double>>.CreateSingleItemBatch(nullMatrix));
     }
 
     [Fact(Timeout = 120000)]
     public async Task GetFeatureValue_NullInput_ThrowsArgumentNullException()
     {
-        Vector<double>? nullVector = null;
+        Vector<double> nullVector = TestNull.Of<Vector<double>>();
 
         Assert.Throws<ArgumentNullException>(() =>
-            InputHelper<double, Vector<double>>.GetFeatureValue(nullVector!, 0));
+            InputHelper<double, Vector<double>>.GetFeatureValue(nullVector, 0));
     }
 
     [Fact(Timeout = 120000)]

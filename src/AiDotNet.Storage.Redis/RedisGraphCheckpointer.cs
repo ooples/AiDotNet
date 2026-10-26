@@ -161,7 +161,8 @@ public sealed class RedisGraphCheckpointer<TState> : IGraphCheckpointer<TState>,
             return null;
         }
 
-        var state = JsonConvert.DeserializeObject<TState>(record.StateJson);
+        var state = JsonConvert.DeserializeObject<TState>(record.StateJson)
+            ?? throw new System.IO.InvalidDataException($"Checkpoint '{record.CheckpointId}' of thread '{threadId}' holds no state.");
         return new GraphCheckpoint<TState>(threadId, record.CheckpointId, record.Step, record.NextNode, state);
     }
 

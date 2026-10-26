@@ -53,7 +53,7 @@ public class LayerOverrideRedundancyTests
 
         var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "override-redundancy.txt");
         System.IO.StreamWriter? log = null;
-        try { log = new System.IO.StreamWriter(logPath, append: false) { AutoFlush = true }; } catch { }
+        try { log = new System.IO.StreamWriter(logPath, append: false) { AutoFlush = true }; } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"LayerOverrideRedundancyTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); }
 
         foreach (var closed in GetConstructableLayerTypes())
         {
@@ -74,7 +74,7 @@ public class LayerOverrideRedundancyTests
             {
                 var actual = gp.Invoke(layer, null);
                 if (actual is null) { skipped++; continue; }
-                int len = Convert.ToInt32(actual.GetType().GetProperty("Length")!.GetValue(actual));
+                int len = Convert.ToInt32((actual.GetType().GetProperty("Length") ?? throw new InvalidOperationException("actual.GetType().GetProperty(\"Length\") is null where it is required.")).GetValue(actual));
 
                 var expected = BaseOrderValues(layer, closed);
                 if (expected is null) { skipped++; continue; }
@@ -85,7 +85,7 @@ public class LayerOverrideRedundancyTests
                     var idx = actual.GetType().GetProperty("Item", new[] { typeof(int) });
                     for (int i = 0; i < len && same; i++)
                     {
-                        var v = Convert.ToDouble(idx!.GetValue(actual, new object[] { i }));
+                        var v = Convert.ToDouble((idx ?? throw new InvalidOperationException("idx is null where it is required.")).GetValue(actual, new object[] { i }));
                         if (Math.Abs(v - expected[i]) > 1e-12) same = false;
                     }
                 }

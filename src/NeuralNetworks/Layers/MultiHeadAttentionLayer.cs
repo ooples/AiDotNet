@@ -1769,11 +1769,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 gpuEngine.RegisterPersistentTensor(_outputBiasVelocity, PersistentTensorRole.OptimizerState);
             }
 
-            gpuEngine.SgdMomentumUpdateGpu(_queryWeights, _queryWeightsGradient, _queryWeightsVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_keyWeights, _keyWeightsGradient, _keyWeightsVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_valueWeights, _valueWeightsGradient, _valueWeightsVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_outputWeights, _outputWeightsGradient, _outputWeightsVelocity!, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_outputBias, _outputBiasGradient, _outputBiasVelocity!, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_queryWeights, _queryWeightsGradient, _queryWeightsVelocity, lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_keyWeights, _keyWeightsGradient, (_keyWeightsVelocity ?? throw new InvalidOperationException("_keyWeightsVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_valueWeights, _valueWeightsGradient, (_valueWeightsVelocity ?? throw new InvalidOperationException("_valueWeightsVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_outputWeights, _outputWeightsGradient, (_outputWeightsVelocity ?? throw new InvalidOperationException("_outputWeightsVelocity is null where it is required.")), lr, 0.0f, 0.0f);
+            gpuEngine.SgdMomentumUpdateGpu(_outputBias, _outputBiasGradient, (_outputBiasVelocity ?? throw new InvalidOperationException("_outputBiasVelocity is null where it is required.")), lr, 0.0f, 0.0f);
         }
         else
         {

@@ -82,7 +82,7 @@ public class MetaheuristicOptimizerIntegrationTests
     /// </summary>
     private static (Matrix<double> X, Vector<double> y) CreateSimpleRegressionData(int numSamples = 50)
     {
-        var rand = new Random(42); // Fixed seed for reproducibility
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42); // Fixed seed for reproducibility
         var X = new Matrix<double>(numSamples, 2);
         var y = new Vector<double>(numSamples);
 
@@ -478,14 +478,14 @@ public class MetaheuristicOptimizerIntegrationTests
     private static TField Field<TField>(
         OptimizerBase<double, Matrix<double>, Vector<double>> optimizer, string name)
         => (TField)typeof(OptimizerBase<double, Matrix<double>, Vector<double>>)
-            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(optimizer)!;
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)
+            .GetValue(optimizer);
 
     /// <summary>The first draw from the one generator an optimizer owns, which lives on the base.</summary>
     private static int FirstDraw(OptimizerBase<double, Matrix<double>, Vector<double>> optimizer)
         => ((Random)typeof(OptimizerBase<double, Matrix<double>, Vector<double>>)
-            .GetField("Random", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(optimizer)!).Next();
+            .GetField("Random", BindingFlags.Instance | BindingFlags.NonPublic)
+            .GetValue(optimizer)).Next();
 
     #endregion
 
@@ -1056,7 +1056,7 @@ public class MetaheuristicOptimizerIntegrationTests
     public async Task Metaheuristics_HandleHighDimensionalData()
     {
         // Test with higher dimensional data (10 features)
-        var rand = new Random(42);
+        var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int numSamples = 50;
         int numFeatures = 10;
 
@@ -1340,18 +1340,18 @@ public class MetaheuristicOptimizerIntegrationTests
 
         static FieldInfo Inertia() =>
             typeof(ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>)
-                .GetField("_currentInertia", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                .GetField("_currentInertia", BindingFlags.Instance | BindingFlags.NonPublic);
 
         var source = Build(SourceInitial);
         Inertia().SetValue(source, LiveInertia);
 
         var restored = Build(DestinationInitial);
-        Assert.Equal(DestinationInitial, (double)Inertia().GetValue(restored)!, 12);
+        Assert.Equal(DestinationInitial, (double)Inertia().GetValue(restored), 12);
 
         restored.Deserialize(source.Serialize());
 
         // The live value, not either side's Initial*.
-        Assert.Equal(LiveInertia, (double)Inertia().GetValue(restored)!, 12);
+        Assert.Equal(LiveInertia, (double)Inertia().GetValue(restored), 12);
     }
 
     #endregion

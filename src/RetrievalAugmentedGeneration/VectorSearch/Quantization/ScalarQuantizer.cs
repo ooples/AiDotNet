@@ -88,8 +88,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
                     for (int i = 0; i < dim; i++)
                     {
                         double v = Convert.ToDouble(arr[i]);
-                        if (v < min![i]) min[i] = v;
-                        if (v > max![i]) max[i] = v;
+                        if (v < (min ?? throw new InvalidOperationException("min is null where it is required."))[i]) min[i] = v;
+                        if (v > (max ?? throw new InvalidOperationException("max is null where it is required."))[i]) max[i] = v;
                     }
                 }
 
@@ -104,7 +104,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
             _scale = new double[dim];
             for (int i = 0; i < dim; i++)
             {
-                double range = max![i] - min![i];
+                double range = (max ?? throw new InvalidOperationException("max is null where it is required."))[i] - (min ?? throw new InvalidOperationException("min is null where it is required."))[i];
                 // Guard against zero-range (constant) dimensions to avoid division by zero.
                 _scale[i] = range > 0.0 ? range / (Levels - 1) : 0.0;
             }
@@ -127,13 +127,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
             {
                 double v = Convert.ToDouble(arr[i]);
                 int level;
-                if (_scale![i] <= 0.0)
+                if ((_scale ?? throw new InvalidOperationException("_scale is null where it is required."))[i] <= 0.0)
                 {
                     level = 0;
                 }
                 else
                 {
-                    double normalized = (v - _min![i]) / _scale[i];
+                    double normalized = (v - (_min ?? throw new InvalidOperationException("_min is null where it is required."))[i]) / _scale[i];
                     level = (int)Math.Round(normalized);
                     if (level < 0) level = 0;
                     if (level > Levels - 1) level = Levels - 1;
@@ -158,7 +158,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
             var values = new T[_dimension];
             for (int i = 0; i < _dimension; i++)
             {
-                double reconstructed = _min![i] + code[i] * _scale![i];
+                double reconstructed = (_min ?? throw new InvalidOperationException("_min is null where it is required."))[i] + code[i] * (_scale ?? throw new InvalidOperationException("_scale is null where it is required."))[i];
                 values[i] = _numOps.FromDouble(reconstructed);
             }
 

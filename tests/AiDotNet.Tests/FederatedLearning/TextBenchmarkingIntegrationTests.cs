@@ -80,11 +80,11 @@ public class TextBenchmarkingIntegrationTests
                 .BuildAsync();
 
             Assert.NotNull(result.BenchmarkReport);
-            var suite = GetSuite(result.BenchmarkReport!, BenchmarkSuite.Sent140);
+            var suite = GetSuite(result.BenchmarkReport, BenchmarkSuite.Sent140);
             Assert.Equal(BenchmarkExecutionStatus.Succeeded, suite.Status);
             Assert.Equal(1.0, GetMetric(suite, BenchmarkMetric.TotalEvaluated));
             Assert.NotNull(suite.DataSelection);
-            Assert.Equal(8, suite.DataSelection!.FeatureCount);
+            Assert.Equal(8, suite.DataSelection.FeatureCount);
         }
         finally
         {
@@ -140,11 +140,11 @@ public class TextBenchmarkingIntegrationTests
                 .BuildAsync();
 
             Assert.NotNull(result.BenchmarkReport);
-            var suite = GetSuite(result.BenchmarkReport!, BenchmarkSuite.Shakespeare);
+            var suite = GetSuite(result.BenchmarkReport, BenchmarkSuite.Shakespeare);
             Assert.Equal(BenchmarkExecutionStatus.Succeeded, suite.Status);
             Assert.Equal(1.0, GetMetric(suite, BenchmarkMetric.TotalEvaluated));
             Assert.NotNull(suite.DataSelection);
-            Assert.Equal(8, suite.DataSelection!.FeatureCount);
+            Assert.Equal(8, suite.DataSelection.FeatureCount);
         }
         finally
         {

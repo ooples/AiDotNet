@@ -39,13 +39,13 @@ public sealed class ServingCodeTaskExecutorTests
 
         Assert.NotNull(method);
 
-        var result = (CodeTaskResultBase)method!.Invoke(null, new object?[]
+        var result = (CodeTaskResultBase)(method.Invoke(null, new object?[]
         {
             task,
             ProgramLanguage.CSharp,
             "rid",
             "err"
-        })!;
+        }) ?? throw new InvalidOperationException("method.Invoke(null, new object?[] { task, ProgramLanguage.CSharp, \"rid\", \"err... is null where it is required."));
 
         Assert.IsType(expectedType, result);
         Assert.False(result.Success);
@@ -75,7 +75,7 @@ public sealed class ServingCodeTaskExecutorTests
 
         await Assert.ThrowsAsync<ArgumentNullException>(() =>
             executor.ExecuteAsync(
-                null!,
+                global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.ProgramSynthesis.Requests.CodeTaskRequestBase>(),
                 new ServingRequestContext { Tier = ServingTier.Free, IsAuthenticated = false },
                 CancellationToken.None));
     }

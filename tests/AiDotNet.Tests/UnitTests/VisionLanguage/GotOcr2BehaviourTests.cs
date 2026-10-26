@@ -52,7 +52,7 @@ public class GotOcr2BehaviourTests
 
     private static Tensor<double> Image(int seed, int size = 128)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var image = new Tensor<double>(new[] { 3, size, size });
         for (int i = 0; i < image.Length; i++) image[i] = rng.NextDouble();
         return image;
@@ -60,7 +60,7 @@ public class GotOcr2BehaviourTests
 
     private static Tensor<double> Random2D(int rows, int cols, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<double>(new[] { rows, cols });
         for (int i = 0; i < t.Length; i++) t[i] = rng.NextDouble() - 0.5;
         return t;
@@ -138,7 +138,7 @@ public class GotOcr2BehaviourTests
     {
         // bias[(qh,qw),(kh,kw)] = q . Rh[qh - kh + S - 1] + q . Rw[qw - kw + S - 1] (Li et al. 2022).
         using var encoder = Encoder();
-        var rng = new Random(13);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(13);
         Tensor<double> Fill(string field)
         {
             var table = (Tensor<double>)(typeof(SamViTDetEncoderLayer<double>)
@@ -170,7 +170,7 @@ public class GotOcr2BehaviourTests
     public void Projector_ReducesTheGridFourTimesPerSide()
     {
         using var projector = new GotOcr2ProjectorLayer<double>(4, 6, 8);
-        var rng = new Random(9);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9);
         using var map = new Tensor<double>(new[] { 4, 8, 8 });
         for (int i = 0; i < map.Length; i++) map[i] = rng.NextDouble();
         using var tokens = projector.Forward(map);

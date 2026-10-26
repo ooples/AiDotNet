@@ -63,8 +63,8 @@ namespace AiDotNetTests.UnitTests.Agentic.Tools
             Assert.NotNull(opts);
             Assert.Equal(ChatResponseFormatKind.JsonSchema, opts.ResponseFormat);
             Assert.NotNull(opts.ResponseJsonSchema);
-            Assert.Equal("object", (string)opts.ResponseJsonSchema["type"]);
-            Assert.NotNull(opts.ResponseJsonSchema["properties"]["TempC"]);
+            Assert.Equal("object", (opts.ResponseJsonSchema["type"] ?? throw new InvalidOperationException("(string)opts.ResponseJsonSchema[\"type\"] is null where it is required.")).ToString());
+            Assert.NotNull((opts.ResponseJsonSchema["properties"] ?? throw new InvalidOperationException("opts.ResponseJsonSchema[\"properties\"] is null where it is required."))["TempC"]);
         }
 
         [Fact(Timeout = 60000)]

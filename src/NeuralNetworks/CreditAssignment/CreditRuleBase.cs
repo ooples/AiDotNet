@@ -92,7 +92,7 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
 
     /// <summary>Returns the RNG this rule should use: its own seeded generator if a seed was supplied, else the context's.</summary>
     protected Random ResolveRandom(ICreditAssignmentContext<T> context)
-        => Seed.HasValue ? new Random(Seed.Value) : context.Random;
+        => Seed.HasValue ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Seed.Value) : context.Random;
 
     // ---- feedback cache -----------------------------------------------------------------------
 

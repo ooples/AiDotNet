@@ -710,7 +710,7 @@ public class TreeBasedRegressionIntegrationTests
         var forest = new RandomForestRegression<double>(options);
 
         // Create high-dimensional data (20 features, 10 samples)
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         int numSamples = 10;
         int numFeatures = 20;
         var xData = new double[numSamples, numFeatures];

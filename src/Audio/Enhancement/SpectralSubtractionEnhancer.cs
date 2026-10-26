@@ -138,7 +138,7 @@ public class SpectralSubtractionEnhancer<T> : AudioEnhancerBase<T>
         var strength = EnhancementStrength;
 
         // Use provided noise profile or running estimate
-        var noiseEstimate = _noiseProfile ?? _runningNoiseEstimate!;
+        var noiseEstimate = _noiseProfile ?? _runningNoiseEstimate;
 
         // Calculate frame energy for VAD
         double frameEnergy = 0;
@@ -158,7 +158,7 @@ public class SpectralSubtractionEnhancer<T> : AudioEnhancerBase<T>
         for (int i = 0; i < magnitudes.Length; i++)
         {
             double mag = NumOps.ToDouble(magnitudes[i]);
-            double noise = NumOps.ToDouble(noiseEstimate[i]);
+            double noise = NumOps.ToDouble((noiseEstimate ?? throw new InvalidOperationException("noiseEstimate is null where it is required."))[i]);
 
             // Spectral subtraction with over-subtraction
             double subtracted = mag * mag - _alpha * strength * noise * noise;

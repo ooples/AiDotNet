@@ -55,9 +55,9 @@ public class TokenizationDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Vocabulary_FromDictionary_NullThrows()
     {
-        Dictionary<string, int>? nullDict = null;
+        Dictionary<string, int> nullDict = TestNull.Of<Dictionary<string, int>>();
         Assert.Throws<ArgumentNullException>(() =>
-            new Vocabulary(nullDict!));
+            new Vocabulary(nullDict));
     }
 
     // ============================
@@ -102,7 +102,7 @@ public class TokenizationDeepMathIntegrationTests
     public async Task AddToken_NullString_Throws()
     {
         var vocab = new Vocabulary();
-        Assert.Throws<ArgumentException>(() => vocab.AddToken(null!));
+        Assert.Throws<ArgumentException>(() => vocab.AddToken(global::AiDotNet.Tests.TestNull.Of<string>()));
     }
 
     // ============================
@@ -239,7 +239,7 @@ public class TokenizationDeepMathIntegrationTests
     public async Task AddTokens_NullCollection_Throws()
     {
         var vocab = new Vocabulary();
-        Assert.Throws<ArgumentNullException>(() => vocab.AddTokens(null!));
+        Assert.Throws<ArgumentNullException>(() => vocab.AddTokens(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IEnumerable<string>>()));
     }
 
     [Fact(Timeout = 120000)]

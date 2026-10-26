@@ -137,7 +137,7 @@ public class Issue1625_PredictReturnsAllZeroTests
 
     private static (Tensor<double> X, Tensor<double> Y) MakeSplit(int n, int features, int seed)
     {
-        var rng = new System.Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var X = new Tensor<double>(new[] { n, features });
         var Y = new Tensor<double>(new[] { n, 1 });
         for (int i = 0; i < n; i++)

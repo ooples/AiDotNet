@@ -37,7 +37,7 @@ public class VideoMAEPretrainingTests
 
     private static Tensor<double> RandomClip(int frames, int size, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var clip = new Tensor<double>([1, frames, Channels, size, size]);
         var span = clip.Data.Span;
         for (int i = 0; i < span.Length; i++)
@@ -60,7 +60,7 @@ public class VideoMAEPretrainingTests
 
         // Encoder output layout: one [numFeatures, patchesH, patchesW] map per (clip, tubelet).
         var encoded = new Tensor<double>([numTubelets, features, patches, patches]);
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var span = encoded.Data.Span;
         for (int i = 0; i < span.Length; i++)
         {

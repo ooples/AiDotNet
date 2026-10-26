@@ -198,7 +198,7 @@ public sealed class ObjectDetectionRangeCacheReviewTests
     [MemberData(nameof(DeterministicCases))]
     public void Range_IsExactlyTheOrderedMeanOfIndependentPerThresholdScores(int seed, ThresholdRange range)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var predictions = new List<IReadOnlyList<Detection<double>>>();
         var truth = new List<IReadOnlyList<Detection<double>>>();
         for (int image = 0; image < 4; image++)

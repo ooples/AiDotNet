@@ -24,7 +24,7 @@ public class PoliciesIntegrationTests
             CreateNetwork(StateSize, DiscreteActionSize),
             DiscreteActionSize,
             new NoExploration<double>(),
-            random: new Random(7));
+            random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7));
 
         var state = CreateState(StateSize, 0.1);
         var action = policy.SelectAction(state, training: true);
@@ -45,7 +45,7 @@ public class PoliciesIntegrationTests
             ContinuousActionSize,
             new GaussianNoiseExploration<double>(initialStdDev: 0.0, noiseDecay: 1.0, minNoise: 0.0),
             useTanhSquashing: true,
-            random: new Random(11));
+            random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11));
 
         var state = CreateState(StateSize, 0.2);
         var action = policy.SelectAction(state, training: false);
@@ -100,7 +100,7 @@ public class PoliciesIntegrationTests
             new NoExploration<double>(),
             actionMin: -1.0,
             actionMax: 1.0,
-            random: new Random(17));
+            random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17));
 
         var state = CreateState(StateSize, 0.4);
         var action = policy.SelectAction(state, training: false);
@@ -124,7 +124,7 @@ public class PoliciesIntegrationTests
             new NoExploration<double>(),
             new NoExploration<double>(),
             sharedFeatures: false,
-            random: new Random(23));
+            random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(23));
 
         var state = CreateState(StateSize, 0.5);
         var action = policy.SelectAction(state, training: false);
@@ -150,7 +150,7 @@ public class PoliciesIntegrationTests
             ContinuousActionSize,
             components,
             new NoExploration<double>(),
-            random: new Random(29));
+            random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(29));
 
         var state = CreateState(StateSize, 0.6);
         var action = policy.SelectAction(state, training: false);

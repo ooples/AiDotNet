@@ -26,7 +26,7 @@ public class FederatedUnlearningTests
         int clientCount, int roundCount, int modelSize)
     {
         var histories = new Dictionary<int, List<Tensor<double>>>();
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int c = 0; c < clientCount; c++)
         {
@@ -313,25 +313,25 @@ public class FederatedUnlearningTests
     [Fact(Timeout = 60000)]
     public async Task ExactRetraining_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new ExactRetrainingUnlearner<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new ExactRetrainingUnlearner<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedUnlearningOptions>()));
     }
 
     [Fact(Timeout = 60000)]
     public async Task GradientAscent_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new GradientAscentUnlearner<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new GradientAscentUnlearner<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedUnlearningOptions>()));
     }
 
     [Fact(Timeout = 60000)]
     public async Task InfluenceFunction_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new InfluenceFunctionUnlearner<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new InfluenceFunctionUnlearner<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedUnlearningOptions>()));
     }
 
     [Fact(Timeout = 60000)]
     public async Task DiffusiveNoise_NullOptions_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new DiffusiveNoiseUnlearner<double>(null));
+        Assert.Throws<ArgumentNullException>(() => new DiffusiveNoiseUnlearner<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.FederatedUnlearningOptions>()));
     }
 
     // ========== Integration with FederatedLearningOptions ==========

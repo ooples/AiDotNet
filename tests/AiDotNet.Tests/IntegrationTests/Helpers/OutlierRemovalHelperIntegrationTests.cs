@@ -536,7 +536,7 @@ public class OutlierRemovalHelperIntegrationTests
         var inputMatrix = new Matrix<double>(rows, cols);
         var outputVector = new Vector<double>(rows);
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < rows; i++)
         {
             outputVector[i] = random.NextDouble() * 100;
@@ -562,7 +562,7 @@ public class OutlierRemovalHelperIntegrationTests
         var inputTensor = new Tensor<double>(new[] { rows, cols });
         var outputTensor = new Tensor<double>(new[] { rows });
 
-        var random = new Random(42);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < rows; i++)
         {
             outputTensor[i] = random.NextDouble() * 100;

@@ -75,8 +75,9 @@ public class FacadeConfigurationValidationGenerator : IIncrementalGenerator
                     && declaration.Identifier.ValueText == FacadeTypeName,
                 transform: static (syntaxContext, cancellationToken) =>
                     CreateFacadePart(syntaxContext, cancellationToken))
-            .Where(static part => part is not null)
-            .Select(static (part, _) => part!)
+            .SelectMany(static (part, _) => part is null
+                ? ImmutableArray<FacadePart>.Empty
+                : ImmutableArray.Create(part))
             .Collect();
 
         context.RegisterSourceOutput(facadeParts, static (productionContext, parts) =>
@@ -411,7 +412,7 @@ public class FacadeConfigurationValidationGenerator : IIncrementalGenerator
 
         internal static SourceLocation From(SyntaxToken token)
         {
-            FileLinePositionSpan lines = token.SyntaxTree.GetLineSpan(token.Span);
+            FileLinePositionSpan lines = (token.SyntaxTree ?? throw new InvalidOperationException("token.SyntaxTree is null where it is required.")).GetLineSpan(token.Span);
             return new SourceLocation(
                 token.SyntaxTree.FilePath ?? string.Empty,
                 token.SpanStart,

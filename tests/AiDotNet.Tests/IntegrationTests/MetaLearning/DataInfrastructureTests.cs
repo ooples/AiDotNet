@@ -217,7 +217,7 @@ public class DataInfrastructureTests
         var supportY = new Vector<double>(4);
         var queryX = new Matrix<double>(4, 3);
         var queryY = new Vector<double>(4);
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 4; i++)
         {
             for (int j = 0; j < 3; j++)

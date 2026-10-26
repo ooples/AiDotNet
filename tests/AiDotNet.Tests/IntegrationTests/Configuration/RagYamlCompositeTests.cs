@@ -57,7 +57,7 @@ public class RagYamlCompositeTests
     {
         var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(field is not null, $"Expected private field '{fieldName}' on {target.GetType().Name}.");
-        return field!.GetValue(target);
+        return field.GetValue(target);
     }
 
     /// <summary>
@@ -92,18 +92,18 @@ retrievalAugmentedGeneration:
         var config = YamlConfigLoader.LoadFromString(yaml);
 
         Assert.NotNull(config.RetrievalAugmentedGeneration);
-        var rag = config.RetrievalAugmentedGeneration!;
-        Assert.Equal("BM25Retriever", rag.Retriever!.Type);
-        Assert.Equal("IdentityReranker", rag.Reranker!.Type);
-        Assert.Equal("StubGenerator", rag.Generator!.Type);
+        var rag = config.RetrievalAugmentedGeneration;
+        Assert.Equal("BM25Retriever", (rag.Retriever ?? throw new InvalidOperationException("rag.Retriever is null where it is required.")).Type);
+        Assert.Equal("IdentityReranker", (rag.Reranker ?? throw new InvalidOperationException("rag.Reranker is null where it is required.")).Type);
+        Assert.Equal("StubGenerator", (rag.Generator ?? throw new InvalidOperationException("rag.Generator is null where it is required.")).Type);
         Assert.Single(rag.QueryProcessors);
         Assert.Equal("IdentityQueryProcessor", rag.QueryProcessors[0].Type);
-        Assert.Equal("InMemoryDocumentStore", rag.DocumentStore!.Type);
-        Assert.Equal("MemoryGraphStore", rag.GraphStore!.Type);
-        Assert.Equal("Word2Vec", rag.EmbeddingModel!.Type);
-        Assert.Equal("CosineSimilarityMetric", rag.SimilarityMetric!.Type);
+        Assert.Equal("InMemoryDocumentStore", (rag.DocumentStore ?? throw new InvalidOperationException("rag.DocumentStore is null where it is required.")).Type);
+        Assert.Equal("MemoryGraphStore", (rag.GraphStore ?? throw new InvalidOperationException("rag.GraphStore is null where it is required.")).Type);
+        Assert.Equal("Word2Vec", (rag.EmbeddingModel ?? throw new InvalidOperationException("rag.EmbeddingModel is null where it is required.")).Type);
+        Assert.Equal("CosineSimilarityMetric", (rag.SimilarityMetric ?? throw new InvalidOperationException("rag.SimilarityMetric is null where it is required.")).Type);
         Assert.NotNull(rag.KnowledgeGraph);
-        Assert.True(rag.KnowledgeGraph!.Params.ContainsKey("trainEmbeddings"));
+        Assert.True(rag.KnowledgeGraph.Params.ContainsKey("trainEmbeddings"));
     }
 
     /// <summary>
@@ -115,7 +115,7 @@ retrievalAugmentedGeneration:
     {
         var prop = typeof(YamlModelConfig).GetProperty("RetrievalAugmentedGeneration");
         Assert.NotNull(prop);
-        Assert.Equal("YamlRagSection", prop!.PropertyType.Name);
+        Assert.Equal("YamlRagSection", prop.PropertyType.Name);
 
         var ragType = prop.PropertyType;
         foreach (var expectedMember in new[]
@@ -201,7 +201,7 @@ retrievalAugmentedGeneration:
 
         var queryProcessors = GetPrivateField(builder, "_queryProcessors") as IEnumerable;
         Assert.NotNull(queryProcessors);
-        Assert.True(queryProcessors!.Cast<object>().Any(), "_queryProcessors should contain at least one processor.");
+        Assert.True(queryProcessors.Cast<object>().Any(), "_queryProcessors should contain at least one processor.");
 
         // Graph RAG components derived from graphStore + documentStore (documentStore was previously dropped).
         Assert.NotNull(GetPrivateField(builder, "_graphStore"));
@@ -226,7 +226,7 @@ retrievalAugmentedGeneration:
         // ConfigureKnowledgeGraph applied with the supplied params (previously a TODO / dropped).
         var kgOptions = GetPrivateField(builder, "_knowledgeGraphOptions") as KnowledgeGraphOptions;
         Assert.NotNull(kgOptions);
-        Assert.True(kgOptions!.TrainEmbeddings == true,
+        Assert.True(kgOptions.TrainEmbeddings == true,
             "ConfigureKnowledgeGraph should have applied trainEmbeddings=true from the composite section.");
     }
 

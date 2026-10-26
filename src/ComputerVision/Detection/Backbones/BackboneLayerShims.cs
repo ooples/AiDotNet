@@ -87,7 +87,35 @@ internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParam
                 $"depends on the construction-time channel count; reconstruct the shim with the " +
                 $"correct inChannels or reshape the input.",
                 nameof(input));
+        if (_initialBias is { } bias && !_layer.IsShapeResolved)
+        {
+            // The wrapped layer is lazy, so its bias only exists once its shape resolves. Resolve it from this
+            // input and set the bias before the first output is computed.
+            _layer.ResolveFromShape(input.Shape.ToArray());
+            ApplyInitialBias(bias);
+        }
         return _layer.Forward(input);
+    }
+
+    // The value every output channel's bias starts at, pending the lazy layer's first forward.
+    private double? _initialBias;
+
+    /// <summary>
+    /// Sets the value every output channel's bias starts at: now if the layer has resolved its shape, otherwise on
+    /// its first forward, before that forward's output. Weights already resolved, whether trained or loaded, are
+    /// left alone, so this never overwrites restored parameters.
+    /// </summary>
+    internal void InitializeBias(double value)
+    {
+        if (_layer.IsShapeResolved) return;
+        _initialBias = value;
+    }
+
+    private void ApplyInitialBias(double value)
+    {
+        _initialBias = null;
+        var bias = _layer.GetBiases() ?? throw new InvalidOperationException("Conv2D shim layer was built without a bias.");
+        bias.Fill(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(value));
     }
 
     public long GetParameterCount() => _layer.ParameterCount;

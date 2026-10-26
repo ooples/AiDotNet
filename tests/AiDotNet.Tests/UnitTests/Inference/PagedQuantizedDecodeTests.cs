@@ -28,7 +28,7 @@ public class PagedQuantizedDecodeTests
             LayerIndex = 0,
             EnableWeightOnlyQuantization = quantize
         };
-        var rng = new Random(20260616);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20260616);
         var p = layer.GetParameters();
         var pv = new float[p.Length];
         for (int i = 0; i < pv.Length; i++) pv[i] = (float)(rng.NextDouble() - 0.5) * 0.2f;
@@ -41,7 +41,7 @@ public class PagedQuantizedDecodeTests
 
     private static float[] Data(int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var d = new float[SeqLen * EmbDim];
         for (int i = 0; i < d.Length; i++) d[i] = (float)(rng.NextDouble() - 0.5);
         return d;

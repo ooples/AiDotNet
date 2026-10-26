@@ -34,7 +34,7 @@ public class ResearchEvaluationStatsTests
     [Fact]
     public void IC_is_near_zero_for_independent_series()
     {
-        var rng = new Random(12345);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(12345);
         int n = 5000;
         var pred = new double[n];
         var real = new double[n];
@@ -193,9 +193,9 @@ public class ResearchEvaluationStatsTests
     [Fact]
     public void Bootstrap_ci_brackets_point_estimate()
     {
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var rets = new double[300];
-        var r2 = new Random(7);
+        var r2 = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         for (int i = 0; i < rets.Length; i++)
         {
             rets[i] = 0.01 + 0.02 * (r2.NextDouble() - 0.5);
@@ -213,14 +213,14 @@ public class ResearchEvaluationStatsTests
     {
         double WidthFor(int n)
         {
-            var src = new Random(99);
+            var src = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
             var rets = new double[n];
             for (int i = 0; i < n; i++)
             {
                 rets[i] = 0.01 + 0.05 * (src.NextDouble() - 0.5);
             }
 
-            var rng = new Random(123);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
             var ci = BootstrapConfidenceInterval<double>.Compute(
                 rets, rng, BootstrapConfidenceInterval<double>.MeanStatistic, confidence: 0.95, nResamples: 1500);
             return ci.Upper - ci.Lower;
@@ -235,14 +235,14 @@ public class ResearchEvaluationStatsTests
     public void Bootstrap_is_reproducible_with_same_seed()
     {
         var rets = new double[100];
-        var src = new Random(1);
+        var src = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1);
         for (int i = 0; i < rets.Length; i++)
         {
             rets[i] = src.NextDouble();
         }
 
-        var a = BootstrapConfidenceInterval<double>.Compute(rets, new Random(555), nResamples: 500);
-        var b = BootstrapConfidenceInterval<double>.Compute(rets, new Random(555), nResamples: 500);
+        var a = BootstrapConfidenceInterval<double>.Compute(rets, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(555), nResamples: 500);
+        var b = BootstrapConfidenceInterval<double>.Compute(rets, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(555), nResamples: 500);
         Assert.Equal(a.Lower, b.Lower, 12);
         Assert.Equal(a.Upper, b.Upper, 12);
     }

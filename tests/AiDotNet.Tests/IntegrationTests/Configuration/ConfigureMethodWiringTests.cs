@@ -28,7 +28,7 @@ public class ConfigureMethodWiringTests
 {
     private static (Matrix<double> x, Vector<double> y) BuildDataset(int rows = 20, int features = 3)
     {
-        var rng = new System.Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         var xData = new double[rows, features];
         var yData = new double[rows];
         for (int r = 0; r < rows; r++)

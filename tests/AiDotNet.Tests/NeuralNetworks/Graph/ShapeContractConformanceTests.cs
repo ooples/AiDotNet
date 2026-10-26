@@ -50,7 +50,7 @@ public class ShapeContractConformanceTests
         var actual = ((ILayer<double>)layer).Forward(Input(inputShape)).Shape.ToArray();
 
         Assert.True(
-            predicted!.SequenceEqual(actual),
+            predicted.SequenceEqual(actual),
             $"{layer.GetType().Name} for input [{string.Join(",", inputShape)}]: the shape contract "
             + $"predicts [{string.Join(",", predicted)}] but the forward pass produced "
             + $"[{string.Join(",", actual)}]. The declaration and the implementation disagree; one of "
@@ -208,12 +208,12 @@ public class ShapeContractConformanceTests
 
         Assert.Equal(
             ShapeRelationKind.Convolutional,
-            ShapeInference.DeriveRelationKind(((IShapeContract)conv).OutputAxesFor(4)!));
+            ShapeInference.DeriveRelationKind((((IShapeContract)conv).OutputAxesFor(4) ?? throw new InvalidOperationException("((IShapeContract)conv).OutputAxesFor(4) is null where it is required."))));
 
         var dense = new DenseLayer<double>(outputSize: 5);
         Assert.Equal(
             ShapeRelationKind.FeatureOnly,
-            ShapeInference.DeriveRelationKind(((IShapeContract)dense).OutputAxesFor(3)!));
+            ShapeInference.DeriveRelationKind((((IShapeContract)dense).OutputAxesFor(3) ?? throw new InvalidOperationException("((IShapeContract)dense).OutputAxesFor(3) is null where it is required."))));
     }
 
     // ---------------------------------------------------------------------------------------------

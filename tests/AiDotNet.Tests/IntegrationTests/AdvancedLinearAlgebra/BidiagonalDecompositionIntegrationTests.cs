@@ -19,7 +19,7 @@ public class BidiagonalDecompositionIntegrationTests
 
     private static Matrix<double> CreateTestMatrix(int rows, int cols, int seed = 42)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var matrix = new Matrix<double>(rows, cols);
         for (int i = 0; i < rows; i++)
         {

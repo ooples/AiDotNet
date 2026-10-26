@@ -46,7 +46,7 @@ public static class AiModelResultTransformerExtensions
         return AiDotNet.Extensions.Telemetry.AiModelResultInferenceTelemetry.TimeAndLog(
             result,
             nameof(GenerateGreedy),
-            () => GenerateInternal(result, startTokens, maxNewTokens, argmax: true, temperature: default!, eosTokenId, seed: null, onToken: null, cancellationToken: default),
+            () => GenerateInternal(result, startTokens, maxNewTokens, argmax: true, temperature: GreedyTemperature<T>(), eosTokenId, seed: null, onToken: null, cancellationToken: default),
             resultCount: maxNewTokens);
     }
 
@@ -68,6 +68,11 @@ public static class AiModelResultTransformerExtensions
         GateAndValidate(result, nameof(GenerateSampled), startTokens, maxNewTokens);
         return GenerateInternal(result, startTokens, maxNewTokens, argmax: false, temperature, eosTokenId, seed, onToken: null, cancellationToken: default);
     }
+    /// <summary>The temperature argument for greedy decoding, which takes the argmax and never reads it.</summary>
+
+    private static T GreedyTemperature<T>() => MathHelper.GetNumericOperations<T>().One;
+
+
 
     private static Tensor<T> GenerateInternal<T, TInput, TOutput>(
         AiModelResult<T, TInput, TOutput> result,
@@ -209,7 +214,7 @@ public static class AiModelResultTransformerExtensions
     {
         GateAndValidate(result, nameof(GenerateGreedyAsync), startTokens, maxNewTokens);
         return Task.Run(
-            () => GenerateInternal(result, startTokens, maxNewTokens, argmax: true, default!, eosTokenId,
+            () => GenerateInternal(result, startTokens, maxNewTokens, argmax: true, GreedyTemperature<T>(), eosTokenId,
                 seed: null, onToken: onToken, cancellationToken: cancellationToken),
             cancellationToken);
     }
@@ -237,7 +242,7 @@ public static class AiModelResultTransformerExtensions
         var outputs = new Tensor<T>[startTokensPerPrompt.Length];
         System.Threading.Tasks.Parallel.For(0, startTokensPerPrompt.Length, i =>
         {
-            outputs[i] = GenerateInternal(result, startTokensPerPrompt[i], maxNewTokens, argmax: true, default!, eosTokenId, seed: null, onToken: null, cancellationToken: default);
+            outputs[i] = GenerateInternal(result, startTokensPerPrompt[i], maxNewTokens, argmax: true, GreedyTemperature<T>(), eosTokenId, seed: null, onToken: null, cancellationToken: default);
         });
         return outputs;
     }

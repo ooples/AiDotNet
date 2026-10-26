@@ -86,7 +86,7 @@ public class LlmGraphExtractionTests
 
         var einstein = graph.GetNode("albert_einstein");
         Assert.NotNull(einstein);
-        Assert.Equal("PERSON", einstein!.Label);
+        Assert.Equal("PERSON", einstein.Label);
         Assert.Equal("Theoretical physicist.", einstein.GetProperty<string>("description"));
 
         // (a) LLM-extracted relations populate the graph.
@@ -177,9 +177,9 @@ public class LlmGraphExtractionTests
 
         var node = graph.GetNode("acme_corp");
         Assert.NotNull(node);
-        var claims = node!.GetProperty<List<string>>("claims");
+        var claims = node.GetProperty<List<string>>("claims");
         Assert.NotNull(claims);
-        Assert.Contains(claims!, c => c.Contains("REGULATORY_VIOLATION") && c.Contains("pollution"));
+        Assert.Contains(claims, c => c.Contains("REGULATORY_VIOLATION") && c.Contains("pollution"));
     }
 
     [Fact(Timeout = 120000)]

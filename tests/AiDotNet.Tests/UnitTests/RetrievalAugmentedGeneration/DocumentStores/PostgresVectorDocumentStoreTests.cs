@@ -122,7 +122,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Skip.If(string.IsNullOrWhiteSpace(conn), $"Set {ConnEnv} to run the pgvector integration test.");
 
             var table = "vec_test_" + Guid.NewGuid().ToString("N");
-            var store = new PostgresVectorDocumentStore<float>(conn!, table, vectorDimension: 3);
+            var store = new PostgresVectorDocumentStore<float>(conn, table, vectorDimension: 3);
             try
             {
                 store.Add(Doc("a", "alpha", new Vector<float>(new float[] { 1, 0, 0 }),
@@ -146,7 +146,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                     new Dictionary<string, object> { ["category"] = "science" }).ToList();
                 Assert.All(filtered, d => Assert.Equal("science", d.Metadata["category"].ToString()));
 
-                Assert.Equal("beta", store.GetById("b")!.Content);
+                Assert.Equal("beta", (store.GetById("b") ?? throw new InvalidOperationException("store.GetById(\"b\") is null where it is required.")).Content);
                 Assert.True(store.Remove("b"));
                 Assert.Equal(2, store.DocumentCount);
                 Assert.Equal(2, store.GetAll().Count());

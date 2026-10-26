@@ -125,7 +125,7 @@ public partial class KNNDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < X.Rows; i++)
         {
             // Get distances to all training points
-            var distances = ComputeDistances(X, i, _trainingData!);
+            var distances = ComputeDistances(X, i, (_trainingData ?? throw new InvalidOperationException("_trainingData is null where it is required.")));
 
             // Sort and get k-nearest
             // Sort distances while keeping index for self-exclusion

@@ -297,7 +297,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         // Phase B: US-GPU-015 - GPU-accelerated gradient updates
         // velocity = momentum * velocity + learningRate * gradient
 
-        var momentumScaled = (Vector<T>)Engine.Multiply(_velocity!, CurrentMomentum);
+        var momentumScaled = (Vector<T>)Engine.Multiply((_velocity ?? throw new InvalidOperationException("_velocity is null where it is required.")), CurrentMomentum);
         var gradientScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
         _velocity = (Vector<T>)Engine.Add(momentumScaled, gradientScaled);
 
@@ -638,7 +638,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         backend.SgdMomentumUpdate(
             parameters,
             gradients,
-            _gpuVelocity!,
+            (_gpuVelocity ?? throw new InvalidOperationException("_gpuVelocity is null where it is required.")),
             (float)NumOps.ToDouble(CurrentLearningRate),
             (float)NumOps.ToDouble(CurrentMomentum),
             0.0f, // Basic momentum doesn't have weight decay

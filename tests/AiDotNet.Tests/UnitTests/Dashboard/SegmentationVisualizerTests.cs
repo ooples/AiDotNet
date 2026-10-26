@@ -236,7 +236,7 @@ public class SegmentationVisualizerTests
 
     private static byte[] ExtractBmp(string html)
     {
-        var match = Regex.Match(html, "data:image/bmp;base64,([A-Za-z0-9+/=]+)");
+        var match = Regex.Match(html, "data:image/bmp;base64,([A-Za-z0-9+/=]+)", RegexOptions.None, System.TimeSpan.FromSeconds(1));
         Assert.True(match.Success, "No BMP data URI found in the generated HTML.");
         return Convert.FromBase64String(match.Groups[1].Value);
     }

@@ -268,7 +268,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
     [Fact(Timeout = 60000)]
     public async Task ResolveEncryptedIndices_BuildsAllOrRanges()
     {
-        AssertInnerException<ArgumentNullException>(() => InvokePrivateStatic<object>("ResolveEncryptedIndices", null!, 5, HomomorphicEncryptionMode.Hybrid));
+        AssertInnerException<ArgumentNullException>(() => InvokePrivateStatic<object>("ResolveEncryptedIndices", null, 5, HomomorphicEncryptionMode.Hybrid));
 
         Assert.Empty(InvokePrivateStatic<int[]>("ResolveEncryptedIndices", new HomomorphicEncryptionOptions(), 0, HomomorphicEncryptionMode.Hybrid));
 
@@ -452,26 +452,26 @@ public class InMemoryFederatedTrainerInternalHelperTests
 
     private static T InvokePrivateStatic<T>(string methodName, params object?[] args)
     {
-        return (T)InvokePrivateStatic(methodName, args)!;
+        return TestNull.Cast<T>(InvokePrivateStatic(methodName, args));
     }
 
     private static object? InvokePrivateStatic(string methodName, params object?[] args)
     {
         var method = TrainerType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(method);
-        return method!.Invoke(null, args);
+        return method.Invoke(null, args);
     }
 
     private static T InvokePrivateInstance<T>(object instance, string methodName, params object?[] args)
     {
-        return (T)InvokePrivateInstance(instance, methodName, args)!;
+        return TestNull.Cast<T>(InvokePrivateInstance(instance, methodName, args));
     }
 
     private static object? InvokePrivateInstance(object instance, string methodName, params object?[] args)
     {
         var method = TrainerType.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(method);
-        return method!.Invoke(instance, args);
+        return method.Invoke(instance, args);
     }
 
     private static void AssertInnerException<TException>(Action action)

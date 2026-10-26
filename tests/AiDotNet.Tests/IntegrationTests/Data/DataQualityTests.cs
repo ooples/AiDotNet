@@ -286,7 +286,7 @@ public class DataQualityTests
         Assert.True(filter.PassesFileSizeCheck(10000));
 
         // Create diverse pixel data
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var pixels = new double[256 * 256];
         for (int i = 0; i < pixels.Length; i++)
             pixels[i] = rng.NextDouble() * 255;
@@ -334,7 +334,7 @@ public class DataQualityTests
         });
 
         var embeddings = new double[20][];
-        var rng = new Random(42);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < 20; i++)
         {
             embeddings[i] = new double[] { rng.NextDouble(), rng.NextDouble(), rng.NextDouble() };

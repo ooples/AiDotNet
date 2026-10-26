@@ -133,7 +133,7 @@ public class LossCompatibleTargetProjectionTests
         }
 
         public Tensor<float> Project(INeuralNetworkModel<float> network, Tensor<float> target)
-            => MakeTargetWellPosedForLoss(network, target, new Random(1));
+            => MakeTargetWellPosedForLoss(network, target, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1));
 
         public Tensor<float> Contrast(
             INeuralNetworkModel<float> network, Tensor<float> source, Tensor<float> input)

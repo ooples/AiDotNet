@@ -27,7 +27,7 @@ public class YamlTypeRegistryAccessibilityTests
         // Walk every static field/property of the registry that holds Type values (the per-section
         // name → implementation maps) and assert each registered Type is visible to external code.
         var offenders = new List<string>();
-        foreach (var field in registryType!.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
+        foreach (var field in registryType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
         {
             object? value;
             try

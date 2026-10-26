@@ -46,9 +46,11 @@ public class CompiledPlanMemoryTests : IDisposable
 
         // Build the conv net FIRST so its own weights/lazy-init memory is part of
         // the baseline — the deltas below then isolate plan-buffer residency.
-        var net = (AiDotNet.NeuralNetworks.NeuralNetworkBase<float>)typeof(CompiledInferenceParityTests)
-            .GetMethod("BuildAisEvalCnn", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-            .Invoke(null, null)!;
+        var build = typeof(CompiledInferenceParityTests)
+            .GetMethod("BuildAisEvalCnn", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            ?? throw new InvalidOperationException("CompiledInferenceParityTests.BuildAisEvalCnn was not found.");
+        var net = build.Invoke(null, null) as AiDotNet.NeuralNetworks.NeuralNetworkBase<float>
+            ?? throw new InvalidOperationException("BuildAisEvalCnn did not return a network.");
         var input = MakeInput(new[] { 64, 1, 28, 28 }, 3);
         // Warm through a TRUE eager forward: the class fixture leaves
         // EnableCompilation = true, so a plain Predict here could compile and
@@ -59,7 +61,7 @@ public class CompiledPlanMemoryTests : IDisposable
         TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
         try
         {
-            eagerWarm = net.Predict(input); // materialize weights + lazy shapes
+            eagerWarm = (net ?? throw new InvalidOperationException("net is null where it is required.")).Predict(input); // materialize weights + lazy shapes
         }
         finally
         {
@@ -112,7 +114,7 @@ public class CompiledPlanMemoryTests : IDisposable
 
     private static Tensor<float> MakeInput(int[] shape, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int len = 1; foreach (var d in shape) len *= d;
         var data = new float[len];
         for (int i = 0; i < len; i++) data[i] = (float)rng.NextDouble();

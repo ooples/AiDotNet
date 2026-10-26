@@ -161,7 +161,7 @@ public class ModelInputMeetsFirstLayerTests
                     continue;
                 }
 
-                var first = FirstLayer(model);
+                var first = FirstLayer((model ?? throw new InvalidOperationException("model is null where it is required.")));
                 if (first is null) { skipped.Add($"{open.Name}: no layers"); log?.WriteLine($"[skipped] {open.Name}: no layers"); continue; }
 
                 var layerRanks = AcceptedRanks(first.GetType());
@@ -379,8 +379,8 @@ public class ModelInputMeetsFirstLayerTests
     private static Exception Unwrap(Exception ex)
         => ex switch
         {
-            System.Reflection.TargetInvocationException { InnerException: not null } tie => Unwrap(tie.InnerException),
-            AggregateException { InnerException: not null } ae => Unwrap(ae.InnerException),
+            System.Reflection.TargetInvocationException { InnerException: not null } tie => Unwrap((tie.InnerException ?? throw new InvalidOperationException("tie.InnerException is null where it is required."))),
+            AggregateException { InnerException: not null } ae => Unwrap((ae.InnerException ?? throw new InvalidOperationException("ae.InnerException is null where it is required."))),
             _ => ex,
         };
 }

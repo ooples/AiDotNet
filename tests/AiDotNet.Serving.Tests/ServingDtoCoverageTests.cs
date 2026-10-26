@@ -113,8 +113,8 @@ public sealed class ServingDtoCoverageTests
 
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
         {
-            type = Nullable.GetUnderlyingType(type)!;
-            return CreateSimpleValue(type);
+            // A closed Nullable<> always has an underlying type.
+            return CreateSimpleValue(Nullable.GetUnderlyingType(type) ?? type);
         }
 
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
@@ -129,7 +129,7 @@ public sealed class ServingDtoCoverageTests
 
         if (type.IsArray)
         {
-            return Array.CreateInstance(type.GetElementType()!, 0);
+            return Array.CreateInstance((type.GetElementType() ?? throw new InvalidOperationException("type.GetElementType() is null where it is required.")), 0);
         }
 
         if (!type.IsAbstract && type.GetConstructor(Type.EmptyTypes) is not null)

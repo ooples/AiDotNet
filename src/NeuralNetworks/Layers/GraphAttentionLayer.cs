@@ -484,8 +484,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // softmax over neighbours; dropout on the normalized coefficients, §3.3) but expresses
         // every step with Engine ops that reference the ACTUAL parameter tensors, so autodiff
         // derives exact gradients for _weights, _attentionWeights and _bias.
-        var adjacency = _adjacencyMatrix!;
-        bool adjacency2D = adjacency.Shape.Length == 2;
+        var adjacency = _adjacencyMatrix;
+        bool adjacency2D = (adjacency ?? throw new InvalidOperationException("adjacency is null where it is required.")).Shape.Length == 2;
         T maskNegInf = NumOps.FromDouble(-1e9);
 
         // These per-forward scratch caches are unused on the on-tape path (autodiff owns the
@@ -562,7 +562,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
         var combinedHeads = _concatenateHeads
             ? Engine.Concat(denseHeadOutputs, 2)
-            : Engine.TensorDivideScalar(denseHeadSum!, NumOps.FromDouble(_numHeads));
+            : Engine.TensorDivideScalar((denseHeadSum ?? throw new InvalidOperationException("denseHeadSum is null where it is required.")), NumOps.FromDouble(_numHeads));
         var denseBias = Engine.Reshape(_bias, [1, 1, _combinedOutputFeatures]);
         output = Engine.TensorAdd(combinedHeads, denseBias);
 

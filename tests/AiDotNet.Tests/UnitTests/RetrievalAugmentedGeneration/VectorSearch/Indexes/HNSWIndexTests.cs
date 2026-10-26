@@ -15,7 +15,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         public async Task Constructor_WithNullMetric_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => new HNSWIndex<double>(null!));
+            Assert.Throws<ArgumentNullException>(() => new HNSWIndex<double>(global::AiDotNet.Tests.TestNull.Of<AiDotNet.RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -72,7 +72,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => index.Add(null!, vector));
+            Assert.Throws<ArgumentException>(() => index.Add(global::AiDotNet.Tests.TestNull.Of<string>(), vector));
         }
 
         [Fact(Timeout = 60000)]
@@ -83,7 +83,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             var index = new HNSWIndex<double>(metric);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => index.Add("vec1", null!));
+            Assert.Throws<ArgumentNullException>(() => index.Add("vec1", global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>()));
         }
 
         [Fact(Timeout = 60000)]
@@ -151,7 +151,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             var index = new HNSWIndex<double>(metric);
 
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => index.Search(null!, 5));
+            Assert.Throws<ArgumentNullException>(() => index.Search(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), 5));
         }
 
         [Fact(Timeout = 60000)]

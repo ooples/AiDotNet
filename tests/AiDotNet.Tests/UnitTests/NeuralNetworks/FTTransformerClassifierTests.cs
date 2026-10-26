@@ -39,7 +39,7 @@ public class FTTransformerClassifierTests
 
     private static Tensor<double> MakeInput(int n, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<double>([n, NumNumerical]);
         for (int i = 0; i < n; i++)
             for (int f = 0; f < NumNumerical; f++)
@@ -51,7 +51,7 @@ public class FTTransformerClassifierTests
     // the features (feature[cls] = 1, others 0) + tiny deterministic jitter.
     private static (Tensor<double> x, int[] y) MakeSeparable(int n, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<double>([n, NumNumerical]);
         var y = new int[n];
         for (int i = 0; i < n; i++)

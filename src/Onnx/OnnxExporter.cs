@@ -31,6 +31,12 @@ namespace AiDotNet.Onnx;
 /// </remarks>
 public static class OnnxExporter
 {
+    /// <summary>Reads an int-valued property found by reflection, naming it when it is not an int.</summary>
+    private static int ReadInt(System.Reflection.PropertyInfo property, object target, object[]? index = null)
+        => property.GetValue(target, index) is int value
+            ? value
+            : throw new InvalidOperationException($"{property.DeclaringType?.Name}.{property.Name} did not return an int.");
+
     private const long OnnxOpsetVersion = 17;
     private const long IrVersion = 8;
     private const string ProducerName = "AiDotNet";
@@ -276,7 +282,7 @@ public static class OnnxExporter
         var inputSizeProp = layerType.GetProperty("InputSize");
         if (inputSizeProp is not null)
         {
-            var inputSize = (int)inputSizeProp.GetValue(firstLayer)!;
+            var inputSize = ReadInt(inputSizeProp, firstLayer);
             return new[] { 1, inputSize };
         }
 
@@ -306,7 +312,7 @@ public static class OnnxExporter
         var outputSizeProp = layerType.GetProperty("OutputSize");
         if (outputSizeProp is not null)
         {
-            var outputSize = (int)outputSizeProp.GetValue(lastLayer)!;
+            var outputSize = ReadInt(outputSizeProp, lastLayer);
             return new[] { inputShape[0], outputSize };
         }
 
@@ -460,7 +466,7 @@ public static class OnnxExporter
             var indexer = objType.GetProperty("Item");
             if (lengthProp is not null && indexer is not null)
             {
-                int length = (int)lengthProp.GetValue(obj)!;
+                int length = ReadInt(lengthProp, obj);
                 var result = new float[length];
                 for (int i = 0; i < length; i++)
                 {
@@ -484,7 +490,7 @@ public static class OnnxExporter
             var lengthProp = objType.GetProperty("Length");
             if (lengthProp is not null)
             {
-                int length = (int)lengthProp.GetValue(obj)!;
+                int length = ReadInt(lengthProp, obj);
 
                 var getDataArrayMethod = objType.GetMethod("GetDataArray", System.Type.EmptyTypes);
                 if (getDataArrayMethod is not null)
@@ -560,10 +566,10 @@ public static class OnnxExporter
                     var indexerProp = shapeObj.GetType().GetProperty("Item");
                     if (lengthProp is not null && indexerProp is not null)
                     {
-                        int len = (int)lengthProp.GetValue(shapeObj)!;
+                        int len = ReadInt(lengthProp, shapeObj);
                         shape = new int[len];
                         for (int k = 0; k < len; k++)
-                            shape[k] = (int)indexerProp.GetValue(shapeObj, new object[] { k })!;
+                            shape[k] = ReadInt(indexerProp, shapeObj, new object[] { k });
                     }
                 }
                 if (shape is { Length: 2 })
@@ -631,8 +637,8 @@ public static class OnnxExporter
             var indexer = objType.GetProperty("Item");
             if (rowsProp is not null && colsProp is not null && indexer is not null)
             {
-                int rows = (int)rowsProp.GetValue(obj)!;
-                int cols = (int)colsProp.GetValue(obj)!;
+                int rows = ReadInt(rowsProp, obj);
+                int cols = ReadInt(colsProp, obj);
                 var result = new float[rows, cols];
                 for (int i = 0; i < rows; i++)
                 {

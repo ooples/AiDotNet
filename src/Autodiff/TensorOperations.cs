@@ -2703,7 +2703,7 @@ public static class TensorOperations<T>
             node.OperationParams = new Dictionary<string, object>
             {
                 { "PadWidth", padWidth },
-                { "Value", value! }
+                { "Value", (value ?? throw new InvalidOperationException("value is null where it is required.")) }
             };
 
             return node;
@@ -2798,7 +2798,7 @@ public static class TensorOperations<T>
             node.OperationParams = new Dictionary<string, object>
             {
                 { "PadWidth", padWidth },
-                { "Value", value! }
+                { "Value", (value ?? throw new InvalidOperationException("value is null where it is required.")) }
             };
 
             return node;
@@ -5001,7 +5001,7 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ReduceMax;
         node.OperationParams = new Dictionary<string, object>
         {
-            { "Axes", axes! },
+            { "Axes", axes },
             { "KeepDims", keepDims }
         };
 
@@ -5143,7 +5143,7 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ReduceMean;
         node.OperationParams = new Dictionary<string, object>
         {
-            { "Axes", axes! },
+            { "Axes", axes },
             { "KeepDims", keepDims }
         };
 
@@ -10924,8 +10924,8 @@ public static class TensorOperations<T>
         node.OperationParams = new Dictionary<string, object>
         {
             { "FeatureIndex", featureIndex },
-            { "Threshold", threshold! },
-            { "Temperature", temp! }
+            { "Threshold", (threshold ?? throw new InvalidOperationException("threshold is null where it is required.")) },
+            { "Temperature", (temp ?? throw new InvalidOperationException("temp is null where it is required.")) }
         };
 
         return node;
@@ -11110,7 +11110,7 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SoftKNN;
         node.OperationParams = new Dictionary<string, object>
         {
-            { "Temperature", temp! }
+            { "Temperature", (temp ?? throw new InvalidOperationException("temp is null where it is required.")) }
         };
 
         return node;
@@ -11253,8 +11253,8 @@ public static class TensorOperations<T>
         node.OperationParams = new Dictionary<string, object>
         {
             { "NumBits", numBits },
-            { "Scale", actualScale! },
-            { "ZeroPoint", actualZeroPoint! },
+            { "Scale", (actualScale ?? throw new InvalidOperationException("actualScale is null where it is required.")) },
+            { "ZeroPoint", (actualZeroPoint ?? throw new InvalidOperationException("actualZeroPoint is null where it is required.")) },
             { "Symmetric", symmetric }
         };
 

@@ -482,15 +482,15 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
 
         T negLR = NumOps.Negate(learningRate);
         Engine.TensorAddInPlace(_inputProjectionWeights, Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient, negLR));
-        Engine.TensorAddInPlace(_inputProjectionBias, Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_recurrenceGateWeights, Engine.TensorMultiplyScalar(_recurrenceGateWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_recurrenceGateBias, Engine.TensorMultiplyScalar(_recurrenceGateBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_inputGateWeights, Engine.TensorMultiplyScalar(_inputGateWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_inputGateBias, Engine.TensorMultiplyScalar(_inputGateBiasGradient!, negLR));
-        Engine.TensorAddInPlace(_valueProjectionWeights, Engine.TensorMultiplyScalar(_valueProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_decayParam, Engine.TensorMultiplyScalar(_decayParamGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_inputProjectionBias, Engine.TensorMultiplyScalar((_inputProjectionBiasGradient ?? throw new InvalidOperationException("_inputProjectionBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_recurrenceGateWeights, Engine.TensorMultiplyScalar((_recurrenceGateWeightsGradient ?? throw new InvalidOperationException("_recurrenceGateWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_recurrenceGateBias, Engine.TensorMultiplyScalar((_recurrenceGateBiasGradient ?? throw new InvalidOperationException("_recurrenceGateBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_inputGateWeights, Engine.TensorMultiplyScalar((_inputGateWeightsGradient ?? throw new InvalidOperationException("_inputGateWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_inputGateBias, Engine.TensorMultiplyScalar((_inputGateBiasGradient ?? throw new InvalidOperationException("_inputGateBiasGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_valueProjectionWeights, Engine.TensorMultiplyScalar((_valueProjectionWeightsGradient ?? throw new InvalidOperationException("_valueProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_decayParam, Engine.TensorMultiplyScalar((_decayParamGradient ?? throw new InvalidOperationException("_decayParamGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar((_outputProjectionWeightsGradient ?? throw new InvalidOperationException("_outputProjectionWeightsGradient is null where it is required.")), negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar((_outputProjectionBiasGradient ?? throw new InvalidOperationException("_outputProjectionBiasGradient is null where it is required.")), negLR));
 
     }
 

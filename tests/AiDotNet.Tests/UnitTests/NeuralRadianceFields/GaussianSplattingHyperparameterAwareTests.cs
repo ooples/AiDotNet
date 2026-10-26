@@ -150,6 +150,6 @@ public class GaussianSplattingHyperparameterAwareTests
         var gs = BuildGS();
         Assert.Throws<ArgumentNullException>(() =>
             ((IHyperparameterAware<double, Tensor<double>, Tensor<double>>)gs)
-                .ApplyOptimizerHyperparameters(null!));
+                .ApplyOptimizerHyperparameters(global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.OptimizationAlgorithmOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>()));
     }
 }

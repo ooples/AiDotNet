@@ -526,7 +526,7 @@ public class KalmanFilterIntegrationTests
         private double _spare;
         private bool _hasSpare;
 
-        public DeterministicGaussian(int seed) => _uniform = new Random(seed);
+        public DeterministicGaussian(int seed) => _uniform = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
         public double Next()
         {

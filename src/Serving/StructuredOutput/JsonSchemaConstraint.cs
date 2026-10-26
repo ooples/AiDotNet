@@ -117,7 +117,7 @@ public static class JsonSchemaConstraint
                 // Numeric range/step keywords (minimum, maximum, exclusiveMinimum, exclusiveMaximum,
                 // multipleOf) cannot be enforced by a finite regex over the decimal encoding, so rather than
                 // emit output that silently violates them, reject any schema that sets them.
-                EnsureNoUnsupportedKeywords(obj, type!);
+                EnsureNoUnsupportedKeywords(obj, type);
                 return type == "integer" ? IntegerRegex : NumberRegex;
             case "boolean":
                 EnsureNoUnsupportedKeywords(obj);

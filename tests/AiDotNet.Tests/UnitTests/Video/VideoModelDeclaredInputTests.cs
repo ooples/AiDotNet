@@ -38,7 +38,7 @@ public class VideoModelDeclaredInputTests
 
     private static Tensor<T> Random<T>(int[] shape, int seed, Func<double, T> convert)
     {
-        var rng = new System.Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<T>(shape);
         var span = t.Data.Span;
         for (int i = 0; i < span.Length; i++)

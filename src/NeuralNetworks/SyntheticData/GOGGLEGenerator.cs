@@ -253,7 +253,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         }
         else
         {
-            foreach (var customLayer in Architecture.Layers!)
+            foreach (var customLayer in Architecture.Layers)
                 Layers.Add(customLayer);
         }
         Layers.Add(_decoderOutput);
@@ -562,7 +562,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             // each feature receives the weighted sum of its neighbours. We use Aᵀ so
             // the (i,j) entry of A is "influence j → i" matching the paper's
             // adjacency convention.
-            var adjT = Engine.TensorTranspose(_adjacency!);
+            var adjT = Engine.TensorTranspose((_adjacency ?? throw new InvalidOperationException("_adjacency is null where it is required.")));
             // Layer-0 input width is _dataWidth; subsequent layers operate in
             // HiddenDimension. Only layer 0 needs the adjacency message-passing;
             // deeper layers see already-mixed hidden states (matches the GNN
@@ -575,8 +575,8 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             current = _gnnLayers[layer].Forward(current);
         }
 
-        var mean = _meanHead!.Forward(current);
-        var logVar = _logvarHead!.Forward(current);
+        var mean = (_meanHead ?? throw new InvalidOperationException("_meanHead is null where it is required.")).Forward(current);
+        var logVar = (_logvarHead ?? throw new InvalidOperationException("_logvarHead is null where it is required.")).Forward(current);
         return (mean, logVar);
     }
 

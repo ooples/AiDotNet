@@ -182,7 +182,7 @@ public class DataLeakagePreventionIntegrationTests
 
         // Assert: preprocessing can transform new data without error
         var newData = new Matrix<double>(3, 4);
-        var rng = new Random(99);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(99);
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 4; j++)
                 newData[i, j] = rng.NextDouble() * 10;
@@ -229,7 +229,7 @@ public class DataLeakagePreventionIntegrationTests
         var x = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 
-        var rng = new Random(123);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(123);
         for (int i = 0; i < samples; i++)
         {
             x[i, 0] = 100.0 + rng.NextDouble() * 10.0; // mean ~105
@@ -274,7 +274,7 @@ public class DataLeakagePreventionIntegrationTests
     private static (Matrix<double> x, Vector<double> y) CreateLinearDataset(
         int samples, int features, int seed)
     {
-        var random = new Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 

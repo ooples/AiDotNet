@@ -49,15 +49,15 @@ public static class InputDomainProviderRegistry
         return new Registration(provider);
     }
 
-    public static bool TryResolve(string? key, out IInputDomainProvider provider)
+    public static bool TryResolve(string? key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IInputDomainProvider? provider)
     {
-        if (!string.IsNullOrWhiteSpace(key) && Providers.TryGetValue(key!, out var resolved))
+        if (key is not null && !string.IsNullOrWhiteSpace(key) && Providers.TryGetValue(key, out var resolved))
         {
             provider = resolved;
             return true;
         }
 
-        provider = null!;
+        provider = null;
         return false;
     }
 

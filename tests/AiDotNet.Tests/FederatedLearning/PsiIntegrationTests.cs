@@ -227,7 +227,7 @@ public class PsiIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FuzzyPsi_NullInnerProtocol_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new FuzzyPsi(null));
+        Assert.Throws<ArgumentNullException>(() => new FuzzyPsi(global::AiDotNet.Tests.TestNull.Of<AiDotNet.FederatedLearning.PSI.IPrivateSetIntersection>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -389,7 +389,7 @@ public class PsiIntegrationTests
         var aligner = new EntityAligner();
 
         Assert.Throws<ArgumentNullException>(() =>
-            aligner.AlignEntities(null, PartyB));
+            aligner.AlignEntities(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<string>>(), PartyB));
     }
 
     [Fact(Timeout = 120000)]
@@ -398,7 +398,7 @@ public class PsiIntegrationTests
         var aligner = new EntityAligner();
 
         Assert.Throws<ArgumentNullException>(() =>
-            aligner.AlignEntities(PartyA, null));
+            aligner.AlignEntities(PartyA, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.IReadOnlyList<string>>()));
     }
 
     [Fact(Timeout = 120000)]

@@ -14,12 +14,12 @@ public class SealHomomorphicEncryptionProviderTests
         var baseline = new Vector<double>(new[] { 1.0 });
         var options = new HomomorphicEncryptionOptions();
 
-        Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(null!, new Dictionary<int, double>(), baseline, new[] { 0 }, options));
+        Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<double>>>(), new Dictionary<int, double>(), baseline, new[] { 0 }, options));
         Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>>(), new Dictionary<int, double>(), baseline, new[] { 0 }, options));
-        Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, null!, baseline, new[] { 0 }, options));
+        Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, global::AiDotNet.Tests.TestNull.Of<System.Collections.Generic.Dictionary<int, double>>(), baseline, new[] { 0 }, options));
         Assert.Throws<ArgumentException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double>(), baseline, new[] { 0 }, options));
-        Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, null!, new[] { 0 }, options));
-        Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, baseline, new[] { 0 }, null!));
+        Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(), new[] { 0 }, options));
+        Assert.Throws<ArgumentNullException>(() => provider.AggregateEncryptedWeightedAverage(new Dictionary<int, Vector<double>> { [1] = baseline }, new Dictionary<int, double> { [1] = 1.0 }, baseline, new[] { 0 }, global::AiDotNet.Tests.TestNull.Of<AiDotNet.Models.Options.HomomorphicEncryptionOptions>()));
     }
 
     [Fact(Timeout = 60000)]

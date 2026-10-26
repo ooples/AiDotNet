@@ -73,7 +73,7 @@ public class CopyOnWriteCloneTests
         Assert.NotNull(clone);
 
         var original = source.Predict(input);
-        var copied = clone!.Predict(input);
+        var copied = clone.Predict(input);
 
         Assert.Equal(original.Length, copied.Length);
         for (var i = 0; i < original.Length; i++)

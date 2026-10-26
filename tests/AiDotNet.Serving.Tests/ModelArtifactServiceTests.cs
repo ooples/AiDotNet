@@ -14,7 +14,7 @@ public class ModelArtifactServiceTests
     {
         var service = CreateService(modelDirectory: "models");
 
-        Assert.Throws<ArgumentNullException>(() => service.CreateKeyResponse(artifact: null!));
+        Assert.Throws<ArgumentNullException>(() => service.CreateKeyResponse(artifact: global::AiDotNet.Serving.Tests.TestNull.Of<AiDotNet.Serving.Services.ProtectedModelArtifact>()));
     }
 
     [Fact(Timeout = 60000)]
@@ -47,7 +47,7 @@ public class ModelArtifactServiceTests
     {
         var service = CreateService(modelDirectory: "models");
 
-        var ex = Assert.Throws<ArgumentException>(() => service.GetPlainArtifactPath(modelName!));
+        var ex = Assert.Throws<ArgumentException>(() => service.GetPlainArtifactPath(TestNull.Pass(modelName)));
 
         Assert.Equal("modelName", ex.ParamName);
     }
@@ -153,7 +153,7 @@ public class ModelArtifactServiceTests
         Assert.Equal(1, protector.CallCount);
         Assert.Equal("m", protector.LastModelName);
         Assert.Equal(Path.GetFullPath(file), protector.LastSourcePath);
-        Assert.EndsWith(Path.Combine(".protected"), protector.LastOutputDirectory!, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Combine(".protected"), protector.LastOutputDirectory, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact(Timeout = 60000)]

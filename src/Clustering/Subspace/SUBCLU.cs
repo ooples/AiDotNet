@@ -575,7 +575,7 @@ public partial class SUBCLU<T> : ClusteringBase<T>
                 foreach (int corePointIdx in cluster.CorePoints)
                 {
                     double dist = ComputeSubspaceDistanceToPoint(
-                        _trainingData!, corePointIdx, x, i, cluster.Dimensions);
+                        (_trainingData ?? throw new InvalidOperationException("_trainingData is null where it is required.")), corePointIdx, x, i, cluster.Dimensions);
 
                     if (dist <= _options.Epsilon)
                     {

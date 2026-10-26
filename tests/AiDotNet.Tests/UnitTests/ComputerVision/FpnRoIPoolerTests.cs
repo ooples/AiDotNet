@@ -38,7 +38,7 @@ public class FpnRoIPoolerTests
     public async Task Pool_ReturnsEachBoxFromItsLevelInCallerOrder()
     {
         await Task.Yield();
-        var r = new Random(5);
+        var r = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
         var levels = new List<Tensor<double>>();
         for (int l = 0; l < Strides.Length; l++)
         {

@@ -190,5 +190,5 @@ public class FrameInterpolationShapeContractTests
 
     private static Exception Unwrap(Exception ex)
         => ex is System.Reflection.TargetInvocationException { InnerException: not null } tie
-            ? Unwrap(tie.InnerException) : ex;
+            ? Unwrap((tie.InnerException ?? throw new InvalidOperationException("tie.InnerException is null where it is required."))) : ex;
 }
