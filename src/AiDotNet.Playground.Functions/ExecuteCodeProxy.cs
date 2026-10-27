@@ -3,16 +3,33 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace AiDotNet.Playground.Functions;
 
 /// <summary>Preserves the public URL without running submitted code in the billing worker.</summary>
-public sealed class ExecuteCodeProxy(HttpClient client, IConfiguration configuration, ILogger<ExecuteCodeProxy> logger)
+public sealed class ExecuteCodeProxy(IHttpClientFactory clients, IConfiguration configuration, ILogger<ExecuteCodeProxy> logger)
 {
+    public const string ClientName = "PlaygroundExecution";
     public const int MaxResponseBytes = 1024 * 1024;
     public const int DefaultTimeoutSeconds = 60;
     public const int MaxTimeoutSeconds = 180;
+    private readonly HttpClient _client = clients.CreateClient(ClientName);
+
+    public static void RegisterClient(IServiceCollection services)
+    {
+        // Functions creates function classes with ActivatorUtilities rather than resolving a
+        // registered typed client. Request the named client explicitly in the constructor.
+        services.AddHttpClient(ClientName, (provider, client) =>
+            ConfigureClient(client, provider.GetRequiredService<IConfiguration>()))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                UseDefaultCredentials = false
+            });
+    }
 
     public static void ConfigureClient(HttpClient client, IConfiguration configuration)
     {
@@ -48,7 +65,7 @@ public sealed class ExecuteCodeProxy(HttpClient client, IConfiguration configura
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
             request.Content = new StreamContent(req.Body);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-            using var response = await client.SendAsync(request, req.HttpContext.RequestAborted);
+            using var response = await _client.SendAsync(request, req.HttpContext.RequestAborted);
             if (!string.Equals(response.Content.Headers.ContentType?.MediaType, "application/json", StringComparison.OrdinalIgnoreCase))
                 return Unavailable(response.IsSuccessStatusCode ? StatusCodes.Status502BadGateway : (int)response.StatusCode);
             return new ContentResult

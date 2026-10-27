@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -111,6 +112,29 @@ public sealed class ExecuteCodeProxyTests
         Assert.Equal(body, result.Content);
     }
 
+    [Fact]
+    public async Task FunctionsActivationUsesNamedClientWithProductionLimits()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(Config(Endpoint, "120"));
+        ExecuteCodeProxy.RegisterClient(services);
+        services.AddHttpClient(ExecuteCodeProxy.ClientName).ConfigurePrimaryHttpMessageHandler(() =>
+            new Handler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(new string('x', ExecuteCodeProxy.MaxResponseBytes + 1), Encoding.UTF8, "application/json")
+            })));
+        using var provider = services.BuildServiceProvider();
+        using var configured = provider.GetRequiredService<IHttpClientFactory>().CreateClient(ExecuteCodeProxy.ClientName);
+        Assert.Equal(TimeSpan.FromSeconds(120), configured.Timeout);
+        Assert.Equal(ExecuteCodeProxy.MaxResponseBytes, configured.MaxResponseContentBufferSize);
+        // This is how the isolated Functions activator creates the function instance.
+        var proxy = ActivatorUtilities.CreateInstance<ExecuteCodeProxy>(provider);
+        var result = Assert.IsType<ContentResult>(await proxy.Run(Request("{}")));
+        Assert.Equal(502, result.StatusCode);
+        Assert.Equal("{\"success\":false,\"error\":\"Execution service unavailable\"}", result.Content);
+    }
+
     [Theory]
     [InlineData(null, 60)]
     [InlineData("120", 120)]
@@ -137,7 +161,16 @@ public sealed class ExecuteCodeProxyTests
     {
         var config = Config(endpoint);
         ExecuteCodeProxy.ConfigureClient(client, config);
-        return new(client, config, NullLogger<ExecuteCodeProxy>.Instance);
+        return new(new ClientFactory(client), config, NullLogger<ExecuteCodeProxy>.Instance);
+    }
+
+    private sealed class ClientFactory(HttpClient client) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name)
+        {
+            Assert.Equal(ExecuteCodeProxy.ClientName, name);
+            return client;
+        }
     }
 
     private static IConfiguration Config(string? endpoint, string? timeout = null) =>
