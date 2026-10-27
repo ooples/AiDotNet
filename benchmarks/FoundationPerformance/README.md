@@ -72,3 +72,7 @@ ETW collection required elevation and did not complete. These findings come from
 - Expanded float32 inference profiling exposed clearing and scalar weight transpose overhead. Use the existing vectorized weight transpose and a serial write-first recurrent GEMM; poisoned-output tests check full and tail writes.
 
 To reproduce a sampled profile, set `FOUNDATION_PROFILE_CASE` to a workload and shape (for example `LSTMLayer.forward:8x16x64x128`) and `FOUNDATION_PROFILE_SECONDS=20`, then run the harness under dotnet-trace. Unset the profile selector for timing. Keep profiling separate from benchmarks.
+
+Execution order for the published measurements was fixed: before CPU, before GPU, after CPU, after GPU, PyTorch CPU, PyTorch GPU. It was not randomized or interleaved, so time-dependent thermal or clock drift may affect close margins. Future comparisons should alternate or randomize implementations and record the actual order.
+
+When running the copied harness against the baseline without TensorCheckpoint, also pass `--legacy-checkpoint-baseline`. The updated checkout requires both Capture and Restore and rejects that baseline flag; a missing API fails before timing starts.

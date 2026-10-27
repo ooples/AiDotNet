@@ -12,5 +12,14 @@
   "threads": 1,
   "dotnet_tiered_compilation": false,
   "warmup": 20,
-  "samples": 101
+  "samples": 101,
+  "execution_order": [
+    "before CPU",
+    "before GPU",
+    "after CPU",
+    "after GPU",
+    "PyTorch CPU",
+    "PyTorch GPU"
+  ],
+  "execution_order_randomized": false
 }

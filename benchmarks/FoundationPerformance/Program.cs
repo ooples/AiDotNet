@@ -10,6 +10,18 @@ using AiDotNet.Tensors.Engines.DirectGpu.OpenCL;
 using AiDotNet.Tensors.LinearAlgebra;
 
 bool gpu = args.Contains("gpu");
+bool legacyCheckpointBaseline = args.Contains("--legacy-checkpoint-baseline");
+var snapshotType=typeof(LSTMLayer<float>).Assembly.GetType("AiDotNet.Training.TensorCheckpoint`1")?.MakeGenericType(typeof(float));
+var capture=snapshotType?.GetMethod("Capture", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+var restore=snapshotType?.GetMethod("Restore", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+if (capture is null || restore is null)
+{
+    if (!legacyCheckpointBaseline || snapshotType is not null)
+        throw new InvalidOperationException("Checkpoint Capture/Restore unavailable. Only the baseline without TensorCheckpoint may use --legacy-checkpoint-baseline.");
+}
+else if (legacyCheckpointBaseline)
+    throw new InvalidOperationException("--legacy-checkpoint-baseline requires a baseline without TensorCheckpoint.");
+Console.Error.WriteLine($"Checkpoint route: {(legacyCheckpointBaseline ? "legacy packed baseline" : "TensorCheckpoint Capture/Restore")}");
 using var backend = gpu ? new OpenClBackend() : null;
 if (gpu && !backend!.IsAvailable) throw new Exception("OpenCL required");
 using var direct = gpu ? (DirectGpuEngine)Activator.CreateInstance(typeof(DirectGpuEngine), BindingFlags.Instance | BindingFlags.NonPublic, null, new object[]{backend!}, null)! : null;
@@ -100,9 +112,7 @@ foreach(var shape in new[]{new[]{8,64},new[]{3,37},new[]{2,16,16,32},new[]{4,8,8
 }
 var live=Enumerable.Range(0,8).Select(_=>new Tensor<float>(new[]{256,256})).ToArray();
 foreach(var p in live) engine.TensorCopy(engine.TensorAddScalar(p,.1f),p);
-var snapshotType=typeof(LSTMLayer<float>).Assembly.GetType("AiDotNet.Training.TensorCheckpoint`1")?.MakeGenericType(typeof(float));
 Tensor<float>[]? saved=null;
-var capture=snapshotType?.GetMethod("Capture", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static); var restore=snapshotType?.GetMethod("Restore", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 Action checkpoint;
 if(capture is not null)
     checkpoint=()=>{saved=(Tensor<float>[])capture.Invoke(null,new object?[]{live,saved})!;restore!.Invoke(null,new object[]{live,saved});};
