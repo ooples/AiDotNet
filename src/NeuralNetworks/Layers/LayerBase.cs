@@ -6869,7 +6869,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     sparse.DataVector[i] = source.GetFlat(i);
                 return;
             }
-            source.AsSpan().CopyTo(_tensor.AsWritableSpan());
+            AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, _tensor);
         }
     }
 

@@ -760,18 +760,20 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     private IGpuBuffer? _gpuStackedBiasIh;
     private IGpuBuffer? _gpuStackedBiasHh;
 
-    // Cached CPU stacked weights for the fused LstmSequenceForward path (PyTorch
+    // Cached device-side stacked weights for the fused LstmSequenceForward path (PyTorch
     // [i, f, g, o] layout). Packing the 8 split tensors into the concatenated
     // [4*hidden, *] arrays is invariant across forward calls while the weights are
     // unchanged, so cache it and reuse on repeated inference. Invalidated alongside
     // the GPU stacked weights whenever the underlying weights mutate.
     [AiDotNet.Attributes.Scratch]
-    private Tensor<float>? _cpuStackedWeightsIh;
+    private Tensor<T>? _cpuStackedWeightsIh;
     [AiDotNet.Attributes.Scratch]
-    private Tensor<float>? _cpuStackedWeightsHh;
+    private Tensor<T>? _cpuStackedWeightsHh;
     [AiDotNet.Attributes.Scratch]
-    private Tensor<float>? _cpuStackedBiasIh;
+    private Tensor<T>? _cpuStackedBiasIh;
     private bool _cpuStackedWeightsValid;
+    [AiDotNet.Attributes.Scratch]
+    private IEngine? _sequenceCacheEngine;
     // The source tensors' summed mutation versions when the stack was packed. An in-place write (an optimizer step, a
     // finite-difference probe) bumps a version without going through an invalidating method; without this the cached
     // stack kept serving the old weights, so eval-mode inference ignored every such update.
@@ -1268,77 +1270,26 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         bool cacheBwd = ShouldCacheForBackward;
         _lastInput = cacheBwd ? input3D : null;
 
-        // AIsEval inference fast path: route the entire sequence through
-        // AiDotNet.Tensors.Engines.CpuEngine.LstmSequenceForward<T> — the
-        // fused primitive added in ooples/AiDotNet.Tensors#437 (Stages 3/5).
-        // Replaces the 8-MatMul-per-timestep loop below (which produced the
-        // "AiDotNet LSTM did not finish in 3+ min" datapoint in the AIsEval
-        // benchmark) with one batched Wx GEMM + a tight per-step inner loop
-        // using SimdGemm + vectorized sigmoid/tanh + pooled scratch.
-        //
-        // Measured at AIsEval shape [B=128, seq=32, in=32, hidden=64]:
-        // primitive completes in 8.19 ms/iter on net10.0 — faster than
-        // PyTorch's 11.76 ms nn.LSTM.
-        //
-        // Gate conditions (all must hold to take the fast path):
-        //   - IsTrainingMode == false. The primitive does not populate
-        //     _cachedHiddenStates / _cachedCellStates that LSTMLayer.Backward
-        //     reads, so it is safe only when no backward will run.
-        //   - typeof(T) == float. The primitive's competitive perf comes from
-        //     its float-specialized SimdGemm + AVX sigmoid/tanh path.
-        //   - Engine is CpuEngine. The primitive lives there.
-        //   - GraphMode.IsActive == false, EXCEPT compiled training on a host
-        //     engine: there LstmSequenceForward records ONE fused training node
-        //     (fused forward + fused BPTT backward) into the plan instead of the
-        //     per-timestep loop's ~30 primitives per step (AiDotNet.Tensors
-        //     RecordLstmSequenceTrainFloat). A GPU engine that records its own fused
-        //     node (persistent-RNN forward + BPTT kernels) takes it too; one that cannot
-        //     keeps the per-step trace, whose CUDA graph replays ~2,000 kernels a step.
-        // If any condition fails the existing per-step loop below runs unchanged.
-        // timeSteps > 0 guards the empty-sequence boundary: the per-step loop
-        // returns an empty output with zeroed final states, and the fused training
-        // primitives require a non-empty sequence.
-        if (timeSteps > 0
-            && !_stateStepping
-            && typeof(T) == typeof(float)
-            && Engine is AiDotNet.Tensors.Engines.CpuEngine cpuEngForFused
-            && (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
-                || (IsTrainingMode && (Engine is not DirectGpuTensorEngine gpuForFused
-                                       || gpuForFused.RecordsFusedLstmSequenceTraining))))
+        // The engine owns CPU/GPU dispatch. Both float and double have fused BPTT; restricting
+        // this shared layer to float left every double-valued model on the per-step graph.
+        // The state-returning overload supports fused streaming inference. Under a tape/compiled
+        // graph it may require a decomposed state adjoint, so retain that path below for stateful training.
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
+        bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
+        if (timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            && (!_stateStepping || (!tapeActive && !graphActive)))
         {
-            // Inference takes the cached manual stack (allocation-free, detached).
-            // Training builds the stacked wIh/wHh/bias via TAPE-CONNECTED Concat so
-            // gradients flow back to the per-gate trainable weights, and the fused
-            // tape-aware LstmSequenceForward records a single BPTT node in place of the
-            // per-timestep loop's hundreds of nodes (ooples/AiDotNet#1566). The training
-            // branch requires an AiDotNet.Tensors with tape-aware LstmSequenceForward
-            // (ooples/AiDotNet.Tensors#587); on an older package the primitive throws
-            // under a tape — caught below so the per-step path still runs.
             Tensor<T>? fusedOutput = null;
-            // Eval mode controls stochastic/stateful layer behavior; it must not disable autodiff.
-            // Generated finite-difference checks deliberately use eval mode inside a live tape. In
-            // that case the detached inference weight cache stranded every original trainable
-            // tensor, so choose the differentiable stack whenever a tape is active.
-            bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
-            if (IsTrainingMode || tapeActive)
-            {
-                try { fusedOutput = TryFusedLstmForwardTraining(cpuEngForFused, input3D, batchSize, timeSteps); }
-                catch (InvalidOperationException) { fusedOutput = null; }
-            }
-            else
-            {
-                fusedOutput = TryFusedLstmForward(cpuEngForFused, input3D, batchSize, timeSteps);
-            }
+            try { fusedOutput = TryFusedLstmForward(input3D, tapeActive || graphActive); }
+            catch (NotSupportedException) { /* An engine without this primitive retains the exact recurrence. */ }
+            catch (InvalidOperationException) { /* Older engines can decline fused tape recording. */ }
             if (fusedOutput is not null)
             {
-                // The fused primitive returns no final (h, c), so record none rather than a
-                // fabricated one: a zero cell state, or (under a compiled trace, where the
-                // output is lazy and holds no values yet) a zero hidden state, would be a
-                // silently wrong answer. The only reader, ForwardFromState, sets
-                // _stateStepping, which keeps every such call on the per-step loop below;
-                // anything else reading these now fails loudly instead of reading zeros.
-                _lastHiddenState = null;
-                _lastCellState = null;
+                if (!_stateStepping)
+                {
+                    _lastHiddenState = null;
+                    _lastCellState = null;
+                }
 
                 // Mirror the existing post-loop shape-restoration block.
                 var fusedShaped = fusedOutput;
@@ -1362,8 +1313,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // Per-time-step hidden states collected for a tape-connected concat (the
         // output must stay on the autodiff graph so gradients reach the weights; a
         // pre-allocated tensor written with SetSlice would detach it). This runs only
-        // when the fused inference fast path above did not return (training, FP64,
-        // non-CpuEngine, or an active autograd tape).
+        // when the sequence primitive is unavailable, for other numeric types, or for stateful training.
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
         // #1668: the per-timestep BPTT caches are read only by the manual Backward; skip
@@ -1463,139 +1413,52 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Inference-only helper that packs this layer's 8 split weight tensors
-    /// (F/I/C/O × i/h) into the concatenated <c>[4*hidden, in]</c> /
-    /// <c>[4*hidden, hidden]</c> layout PyTorch <c>nn.LSTM</c> uses, then
-    /// calls <c>CpuEngine.LstmSequenceForward&lt;float&gt;</c> (the fused
-    /// primitive added in AiDotNet.Tensors PR #437). Returns null only if
-    /// a runtime invariant fails — the caller falls back to the per-step
-    /// loop in that case.
+    /// Packs gates in i/f/g/o order on the active device and invokes its sequence primitive.
+    /// Tape/graph packing stays connected to the original weights; inference packing is cached by
+    /// engine and mutation version so a checkpoint restore or engine change cannot reuse stale weights.
     /// </summary>
-    private Tensor<T>? TryFusedLstmForward(
-        AiDotNet.Tensors.Engines.CpuEngine cpuEng,
-        Tensor<T> input3D,
-        int batchSize,
-        int timeSteps)
+    private Tensor<T>? TryFusedLstmForward(Tensor<T> input, bool differentiable)
     {
-        var inputF = (Tensor<float>)(object)input3D;
-        int gateRows = 4 * _hiddenSize;
-        int inFeatures = _inputSize;
-
-        // Pack the 8 split weight tensors once and cache the result; reuse it on
-        // subsequent forward calls until the weights mutate (the cache is cleared
-        // by InvalidateCpuStackedWeights, called at the same sites that invalidate
-        // the GPU stacked weights). This keeps repeated inference allocation-free.
-        long sourceVersion = StackedWeightsSourceVersion();
-        if (!_cpuStackedWeightsValid
-            || _cpuStackedWeightsSourceVersion != sourceVersion
-            || _cpuStackedWeightsIh is null
-            || _cpuStackedWeightsHh is null
-            || _cpuStackedBiasIh is null)
+        Tensor<T> wIh, wHh, bias;
+        var engine = Engine;
+        if (differentiable)
         {
-            // PyTorch nn.LSTM gate order: [i, f, g, o] concat along the row axis.
-            // AiDotNet stores [I, F, C, O] separately, where C is the cell
-            // candidate (PyTorch's "g"). So the concat order here is:
-            //   row 0       .. hidden-1    = Ii
-            //   row hidden  .. 2*hidden-1  = Fi
-            //   row 2*hidden.. 3*hidden-1  = Ci
-            //   row 3*hidden.. 4*hidden-1  = Oi
-            // and analogously for the hidden weights and biases. AiDotNet's
-            // [hidden, in] storage matches PyTorch nn.Linear.weight's [out, in]
-            // convention, so each block is a straight tensor-to-tensor copy of
-            // the appropriate row range.
-            var wIhArr = new float[gateRows * inFeatures];
-            var wHhArr = new float[gateRows * _hiddenSize];
-            var bIhArr = new float[gateRows];
-
-            var wIiSpan = ((Tensor<float>)(object)_weightsIi).AsSpan();
-            var wFiSpan = ((Tensor<float>)(object)_weightsFi).AsSpan();
-            var wCiSpan = ((Tensor<float>)(object)_weightsCi).AsSpan();
-            var wOiSpan = ((Tensor<float>)(object)_weightsOi).AsSpan();
-            var wIhSpan = ((Tensor<float>)(object)_weightsIh).AsSpan();
-            var wFhSpan = ((Tensor<float>)(object)_weightsFh).AsSpan();
-            var wChSpan = ((Tensor<float>)(object)_weightsCh).AsSpan();
-            var wOhSpan = ((Tensor<float>)(object)_weightsOh).AsSpan();
-            var bISpan  = ((Tensor<float>)(object)_biasI).AsSpan();
-            var bFSpan  = ((Tensor<float>)(object)_biasF).AsSpan();
-            var bCSpan  = ((Tensor<float>)(object)_biasC).AsSpan();
-            var bOSpan  = ((Tensor<float>)(object)_biasO).AsSpan();
-
-            int blockIn = _hiddenSize * inFeatures;
-            int blockHh = _hiddenSize * _hiddenSize;
-
-            wIiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(0 * blockIn, blockIn));
-            wFiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(1 * blockIn, blockIn));
-            wCiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(2 * blockIn, blockIn));
-            wOiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(3 * blockIn, blockIn));
-            wIhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(0 * blockHh, blockHh));
-            wFhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(1 * blockHh, blockHh));
-            wChSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(2 * blockHh, blockHh));
-            wOhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(3 * blockHh, blockHh));
-            bISpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(0 * _hiddenSize, _hiddenSize));
-            bFSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(1 * _hiddenSize, _hiddenSize));
-            bCSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(2 * _hiddenSize, _hiddenSize));
-            bOSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(3 * _hiddenSize, _hiddenSize));
-
-            _cpuStackedWeightsIh = new Tensor<float>(wIhArr, new[] { gateRows, inFeatures });
-            _cpuStackedWeightsHh = new Tensor<float>(wHhArr, new[] { gateRows, _hiddenSize });
-            _cpuStackedBiasIh = new Tensor<float>(bIhArr, new[] { gateRows });
-            _cpuStackedWeightsValid = true;
-            _cpuStackedWeightsSourceVersion = sourceVersion;
+            wIh = engine.Concat(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 0);
+            wHh = engine.Concat(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 0);
+            bias = engine.Concat(new[] { _biasI, _biasF, _biasC, _biasO }, 0);
+        }
+        else
+        {
+            long version = StackedWeightsSourceVersion();
+            if (!_cpuStackedWeightsValid || _cpuStackedWeightsSourceVersion != version
+                || !ReferenceEquals(_sequenceCacheEngine, engine)
+                || _cpuStackedWeightsIh is null || _cpuStackedWeightsHh is null || _cpuStackedBiasIh is null)
+            {
+                using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+                _cpuStackedWeightsIh = engine.Concat(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 0);
+                _cpuStackedWeightsHh = engine.Concat(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 0);
+                _cpuStackedBiasIh = engine.Concat(new[] { _biasI, _biasF, _biasC, _biasO }, 0);
+                _cpuStackedWeightsSourceVersion = version;
+                _sequenceCacheEngine = engine;
+                _cpuStackedWeightsValid = true;
+            }
+            wIh = _cpuStackedWeightsIh;
+            wHh = _cpuStackedWeightsHh;
+            bias = _cpuStackedBiasIh;
         }
 
-        var wIh = _cpuStackedWeightsIh;
-        var wHh = _cpuStackedWeightsHh;
-        var bIh = _cpuStackedBiasIh;
+        Tensor<T> result;
+        if (_stateStepping)
+            result = engine.LstmSequenceForward(input, _initialHidden, _initialCell, wIh, wHh, bias, null,
+                out _lastHiddenState, out _lastCellState, returnSequences: true);
+        else
+            result = engine.LstmSequenceForward(input, null, null, wIh, wHh, bias, null, returnSequences: true);
 
-        // returnSequences=true gives us the full [B, seq, hidden] stack —
-        // the existing per-step loop also writes the full stack to its
-        // `output` tensor, so the caller substitutes this in seamlessly.
-        var resultF = cpuEng.LstmSequenceForward(
-            inputF, h0: null, c0: null, wIh, wHh, bIh, bHh: null, returnSequences: true);
-        return (Tensor<T>)(object)resultF;
-    }
-
-    /// <summary>
-    /// Training counterpart of <see cref="TryFusedLstmForward"/>. Builds the stacked
-    /// wIh/wHh/bias from the per-gate trainable weights via TAPE-CONNECTED
-    /// <see cref="IEngine.Concat"/> (gate order i, f, c=g, o along the row axis, matching
-    /// the inference stack), so the fused op's gradients flow back through the concat to
-    /// the per-gate parameters. The inference helper packs into fresh detached tensors,
-    /// which would strand those gradients — so training MUST use this differentiable
-    /// stack. Initial state is zero (h0 = c0 = null), matching the per-step loop.
-    /// </summary>
-    private Tensor<T>? TryFusedLstmForwardTraining(
-        AiDotNet.Tensors.Engines.CpuEngine cpuEng,
-        Tensor<T> input3D,
-        int batchSize,
-        int timeSteps)
-    {
-        var inputF = (Tensor<float>)(object)input3D;
-
-        var wIh = Engine.Concat(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 0);
-        var wHh = Engine.Concat(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 0);
-        var bIh = Engine.Concat(new[] { _biasI, _biasF, _biasC, _biasO }, 0);
-
-        var resultF = cpuEng.LstmSequenceForward(
-            inputF, h0: null, c0: null,
-            (Tensor<float>)(object)wIh, (Tensor<float>)(object)wHh,
-            (Tensor<float>)(object)bIh, bHh: null, returnSequences: true);
-
-        // Robustness across AiDotNet.Tensors versions: the fused training node only
-        // records on a package WITH tape-aware LstmSequenceForward (#587). On an older
-        // package the primitive runs the inference path under the tape and returns an
-        // UN-connected output (GradFn == null) — using it would silently strand the LSTM
-        // weight gradients. Detect that and fall back to the per-timestep loop, which
-        // records correctly. (On #587+ the output carries the fused BPTT node.)
-        var result = (Tensor<T>)(object)resultF;
-        // Under a compiled trace the output is a lazy plan node whose backward the plan owns,
-        // so GradFn is null there by design; the check applies to the eager tape only.
+        // An older engine may return an inference-only result under a tape. Never silently lose gradients.
         if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
-            && result.GradFn is null)
-        {
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive && result.GradFn is null)
             return null;
-        }
         return result;
     }
 
@@ -1632,6 +1495,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         _cpuStackedWeightsHh = null;
         _cpuStackedBiasIh = null;
         _cpuStackedWeightsValid = false;
+        _sequenceCacheEngine = null;
     }
 
     /// <summary>

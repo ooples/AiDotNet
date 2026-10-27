@@ -422,6 +422,47 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
     }
 
+    /// <summary>
+    /// Restores a canonical stream directly when every destination is a live dense tensor.
+    /// Returns false without writing when a component needs its custom flat setter or the caller
+    /// supplied a different chunk framing. The caller retains its ordinary SetParameters fallback.
+    /// </summary>
+    internal bool TrySetParameterChunks(IReadOnlyList<Tensor<T>> chunks, Action? onRestoring = null)
+    {
+        lock (_surfaceGate)
+        {
+            // Writable storage alone does not authorize bypassing a nested model's setter.
+            // Only sealed field adapters have a setter whose full contract is a value copy.
+            if (!HasComponents || CurrentComponents.Any(source =>
+                source is not TensorFieldParameterSource<T>
+                && source is not ResizableTensorFieldParameterSource<T>)) return false;
+            PrepareSources(ParameterSurfaceIntent.Restore);
+            var targets = GetParameterStateChunks().ToArray();
+            if (targets.Length != chunks.Count) return false;
+            for (int i = 0; i < targets.Length; i++)
+            {
+                if (!targets[i].IsWritableInPlace || !targets[i].Tensor.IsContiguous || targets[i].Tensor is SparseTensor<T>
+                    || chunks[i] is SparseTensor<T> || targets[i].Tensor.Length != chunks[i].Length)
+                    return false;
+            }
+            // Snapshot before any write: callers may supply reordered or aliased live views.
+            var snapshot = AiDotNet.Training.TensorCheckpoint<T>.Capture(chunks);
+            if (onRestoring is not null)
+            {
+                onRestoring();
+                // A restore hook may detach copy-on-write fields. Resolve destinations again.
+                targets = GetParameterStateChunks().ToArray();
+                if (targets.Length != snapshot.Length || targets.Where((target, i) =>
+                    !target.IsWritableInPlace || !target.Tensor.IsContiguous || target.Tensor is SparseTensor<T>
+                    || target.Tensor.Length != snapshot[i].Length).Any())
+                    throw new ArgumentException("Restore hook changed the parameter layout.", nameof(chunks));
+            }
+            for (int i = 0; i < targets.Length; i++)
+                AiDotNet.Training.TensorCheckpoint<T>.CopyValues(snapshot[i], targets[i].Tensor);
+            return true;
+        }
+    }
+
     /// <summary>Restores slices using the exact manifest snapshot used to validate the vector.</summary>
     public void SetParameters(Vector<T> parameters)
     {

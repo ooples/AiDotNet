@@ -13,6 +13,7 @@ public static class TensorCheckpoint<T>
         if (tensors is null) throw new ArgumentNullException(nameof(tensors));
         ValidateLive(tensors);
         if (snapshot is not null) Validate(tensors, snapshot);
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         snapshot ??= tensors.Select(t => new Tensor<T>(t.Shape.ToArray())).ToArray();
@@ -26,14 +27,20 @@ public static class TensorCheckpoint<T>
         if (tensors is null) throw new ArgumentNullException(nameof(tensors));
         if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
         Validate(tensors, snapshot);
+        for (int i = 0; i < tensors.Count; i++) CopyValues(snapshot[i], tensors[i]);
+    }
+
+    /// <summary>Copies an already validated dense chunk, retaining the destination's shape and identity.</summary>
+    internal static void CopyValues(Tensor<T> source, Tensor<T> destination)
+    {
+        if (source.Length != destination.Length)
+            throw new ArgumentException("Checkpoint chunk length differs from its destination.", nameof(source));
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
-        for (int i = 0; i < tensors.Count; i++)
-        {
-            engine.TensorCopy(snapshot[i], tensors[i]);
-            tensors[i].IncrementVersion();
-            engine.InvalidatePersistentTensor(tensors[i]);
-        }
+        engine.TensorCopy(SameShape(source, destination) ? source : engine.Reshape(source, destination.Shape.ToArray()), destination);
+        destination.IncrementVersion();
+        AiDotNet.Tensors.Engines.InferenceWeightCache.Invalidate(destination.GetLiveBackingArrayOrNull());
+        engine.InvalidatePersistentTensor(destination);
     }
 
     private static bool SameShape(Tensor<T> left, Tensor<T> right)

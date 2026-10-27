@@ -48,8 +48,27 @@ namespace AiDotNet.TimeSeries;
 /// </para>
 /// </remarks>
 public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
-    ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider
+    ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
+    /// <summary>Exposes canonical registered state for device-side checkpoints.</summary>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        _ = Components;
+        return AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(
+            this, typeof(TimeSeriesModelBase<T>), _parameterRegistry, GetParameters);
+    }
+
+    /// <summary>Streams state in manifest order without flattening tensor-backed components.</summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+        => GetParameterStateChunks().Select(chunk => chunk.Tensor);
+
+    /// <summary>Restores canonical tensor chunks on their device, preserving custom setters and hooks.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        // SetParameters also refreshes ModelParameters for feature-index consumers.
+        SetParameters(AiDotNet.Models.Parameters.ParameterChunkBuffer.ToVector(chunks));
+    }
+
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
     // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.

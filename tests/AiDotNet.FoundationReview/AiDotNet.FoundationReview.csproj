@@ -21,6 +21,21 @@
     <Compile Include="../AiDotNet.Tests/UnitTests/MetaLearning/LinearEmbeddingModelTests.cs" Link="LinearEmbeddingModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/GANs/GanFusedTrainingTests.cs" Link="GanFusedTrainingTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/TimeSeries/DeepARShortWindowRegressionTests.cs" Link="DeepARShortWindowRegressionTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Training/FoundationDispatchTests.cs" Link="FoundationDispatchTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/NeuralNetworks/LstmFusedTrainingWiringTests.cs" Link="LstmFusedTrainingWiringTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Finance/PolicyAgentFusedTrainingTests.cs" Link="PolicyAgentFusedTrainingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Models/ParameterStateChunkTests.cs" Link="ParameterStateChunkTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Finance/ParameterChunkMutationContractTests.cs" Link="ParameterChunkMutationContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Diffusion/DiffusionParameterChunkHelperTests.cs" Link="DiffusionParameterChunkHelperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Training/SharedTrainingStepTests.cs" Link="SharedTrainingStepTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Training/TapeTrainingLoopRatchetTests.cs" Link="TapeTrainingLoopRatchetTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/Diffusion/DiffusionFusedTrainingTests.cs" Link="DiffusionFusedTrainingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/IntegrationTests/TimeSeries/ForecasterFusedTrainingTests.cs" Link="ForecasterFusedTrainingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/TimeSeries/DeepARCovariateTests.cs" Link="DeepARCovariateTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/TimeSeries/DeepARBatchedPredictTests.cs" Link="DeepARBatchedPredictTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TestNull.cs" Link="TestNull.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Training/FoundationRootRestoreTests.cs" Link="FoundationRootRestoreTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Training/FoundationBaseCoverageTests.cs" Link="FoundationBaseCoverageTests.cs" />
     <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
