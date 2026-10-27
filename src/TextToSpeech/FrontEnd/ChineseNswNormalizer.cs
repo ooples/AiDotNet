@@ -195,7 +195,7 @@ internal static class ChineseNswNormalizer
             return value.Length != stripped.Length
                 ? new List<Symbol> { new(0, 0), new(0, DigitValue(stripped[0])) }
                 : new List<Symbol> { new(0, DigitValue(stripped[0])) };
-        var unit = Units.Reverse().First(u => u.Power < stripped.Length);
+        var unit = Enumerable.Reverse(Units).First(u => u.Power < stripped.Length);
         string upper = value.Substring(0, value.Length - unit.Power);
         var result = Value(upper);
         result.Add(new Symbol(1, unit.Power));
