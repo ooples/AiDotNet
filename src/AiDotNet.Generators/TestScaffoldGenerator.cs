@@ -2154,12 +2154,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // genuine next rung rather than a duplicate — a family that already emits these members turns
         // this into a CS0102 double-emit. Their failures are pure gate overruns:
         //   MemFlow - MoreData_ShouldNotDegrade at 120 s (x2).
-        //   MedSegDiffV2 / MedSegDiffV2Segmentation / MegaTTS2 - already <float> via the A-Z rule and
+        //   MedSegDiffV2 / MedSegDiffV2Segmentation - already <float> via the A-Z rule and
         //     carrying NO overrides from any family branch (verified against the emitted fixtures, all
         //     five members: TrainingIterations, MemorizationTaskIterations, MoreDataShort/LongIterations
         //     and MoreDataTolerance). Each fails only MoreData_ShouldNotDegrade at 120 s, so the cap is
         //     the correct next rung.
-        "MedSegDiffV2", "MedSegDiffV2Segmentation", "MegaTTS2",
+        "MedSegDiffV2", "MedSegDiffV2Segmentation",
         // MelodyExtractor is deliberately NOT here: its audio family branch already emits
         // MoreDataTolerance, so adding it produced "CS0102: already contains a definition for
         // MoreDataTolerance". Checking only the ITERATION overrides is not sufficient — this block
@@ -9833,6 +9833,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // VQ bottleneck, P-LLM, discriminator and vocoder at width 16 with 16 mel bins.
                 constructorExpr = "AiDotNet.Tests.TextToSpeech.MegaTtsFixture.Create<double>()";
             }
+            else if (model.ClassName == "MegaTTS2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.Latest.", System.StringComparison.Ordinal))
+            {
+                // Mega-TTS 2's Table 5 model is 367M parameters behind HiFi-GAN V1; the fixture is the same encoders, MRTE,
+                // CVQ bottleneck, P-LLM, duration model, discriminator and vocoder at width 16 with 16 mel bins.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.MegaTts2Fixture.Create<double>()";
+            }
             else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
             {
                 // MMS (Pratap et al. 2023) keeps its production wav2vec2-large stack by default:
@@ -16366,6 +16373,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 16 };");
                 }
+                else if (model.ClassName == "MegaTTS2")
+                {
+                    // Mega-TTS 2 reads phone ids, predicts the autoencoder's mel spectrogram and trains on one with phoneme
+                    // durations: eight ids, and the fixture's 16 mel bins (the frames follow the predicted durations).
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 16 };");
+                }
                 else if (model.ClassName == "MegaTTS3")
                 {
                     // MegaTTS 3 reads a text's g2p token ids and trains on a 24 kHz recording: eight ids, and 240 samples
@@ -22102,8 +22116,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "MatchaTTS" => true,
             // Codec / flow-matching TTS (E2 TTS, etc.) use CreateDefaultCodecLMLayers.
             "E2TTS" => true,
-            // Mega-TTS 2 consumes text/prosody tokens and predicts acoustic mel frames.
-            "MegaTTS2" => true,
             // Tacotron2 (TextToSpeech.Classic) is built on CreateDefaultAcousticModelLayers, whose
             // first layer is an EmbeddingLayer over a 256-token vocabulary, so it consumes token IDs
             // and predicts mel frames. It was being fed a continuous [8, 80] mel block straight into
