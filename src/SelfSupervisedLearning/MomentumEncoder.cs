@@ -49,6 +49,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 public class MomentumEncoder<T> : IMomentumEncoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(Type, Type), bool> ChunkEligibility = new();
 
     private readonly INeuralNetwork<T> _encoder;
     private double _momentum;
@@ -161,15 +162,25 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
         return false;
 #else
         // Preserve custom UpdateParameters contracts rather than bypassing their side effects.
-        if (_encoder.GetType().GetMethod(nameof(INeuralNetwork<T>.UpdateParameters), new[] { typeof(Vector<T>) })?.DeclaringType
-                != typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)
-            || !AiDotNet.Models.Parameters.ParameterTransfer.UsesChunkContract(mainEncoder)
-            || !AiDotNet.Models.Parameters.ParameterTransfer.UsesChunkContract(_encoder)) return false;
+        var types = (mainEncoder.GetType(), _encoder.GetType());
+        if (!ChunkEligibility.TryGetValue(types, out bool eligible))
+        {
+            eligible = types.Item2.GetMethod(nameof(INeuralNetwork<T>.UpdateParameters), new[] { typeof(Vector<T>) })?.DeclaringType
+                == typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)
+                && AiDotNet.Models.Parameters.ParameterTransfer.UsesChunkContract(mainEncoder)
+                && AiDotNet.Models.Parameters.ParameterTransfer.UsesChunkContract(_encoder);
+            ChunkEligibility.TryAdd(types, eligible);
+        }
+        if (!eligible) return false;
         var from = mainEncoder.GetParameterChunks().ToArray();
         var to = _encoder.GetParameterChunks().ToArray();
         if (from.Length != to.Length) return false;
         for (int i = 0; i < to.Length; i++)
-            if (!from[i].Shape.ToArray().SequenceEqual(to[i].Shape.ToArray())) return false;
+        {
+            if (from[i].Rank != to[i].Rank) return false;
+            for (int d = 0; d < to[i].Rank; d++)
+                if (from[i].Shape[d] != to[i].Shape[d]) return false;
+        }
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var engine = AiDotNetEngine.Current;

@@ -68,13 +68,31 @@ public class HostStateCheckpointTests
     }
 
     [Fact]
-    public async Task DeepSurv_ReusableBestEpochStateProducesFinitePredictions()
+    public async Task DeepSurv_RestoresFirstBestEpochIncludingBatchNormalizationState()
     {
         var (x, y) = Data();
-        using var model = new DeepSurv<double>(new DeepSurvOptions<double>
-        { Epochs = 4, HiddenLayerSize = 4, BatchSize = 8, Seed = 42 });
+        // With zero learning rate and no dropout, later epochs cannot improve the
+        // loss, but their running BN statistics continue changing. Restore must
+        // reproduce the complete first-epoch state, not the final BN statistics.
+        DeepSurv<double> Make(int epochs) => new(new DeepSurvOptions<double>
+        { Epochs = epochs, HiddenLayerSize = 4, BatchSize = 16, Seed = 42,
+            LearningRate = 0, DropoutRate = 0, UseBatchNormalization = true });
+        using var model = Make(4); using var firstEpoch = Make(1);
         await model.TrainAsync(x, y);
-        Assert.All((await model.PredictAsync(x)).ToArray(), value => Assert.True(double.IsFinite(value)));
+        await firstEpoch.TrainAsync(x, y);
+        var expected = (await firstEpoch.PredictAsync(x)).ToArray();
+        var actual = (await model.PredictAsync(x)).ToArray();
+        Assert.All(actual, value => Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
+        for (int i = 0; i < actual.Length; i++) Assert.InRange(Math.Abs(actual[i] - expected[i]), 0, 1e-10);
+        foreach (string name in new[] { "_bnGamma", "_bnBeta", "_bnRunningMean", "_bnRunningVariance" })
+        {
+            var field = typeof(DeepSurv<double>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var saved = (List<Vector<double>>)field.GetValue(firstEpoch)!;
+            var restored = (List<Vector<double>>)field.GetValue(model)!;
+            Assert.NotEmpty(saved); Assert.Equal(saved.Count, restored.Count);
+            for (int i = 0; i < saved.Count; i++)
+                for (int j = 0; j < saved[i].Length; j++) Assert.InRange(Math.Abs(saved[i][j] - restored[i][j]), 0, 1e-10);
+        }
     }
 
     [Fact]
@@ -88,5 +106,20 @@ public class HostStateCheckpointTests
         var labels = model.Predict(x);
         Assert.Equal(x.Rows, labels.Length);
         Assert.All(labels.ToArray(), value => Assert.InRange(value, 0, 1));
+        // LowerBound is the total variational bound with the saved responsibilities,
+        // not the marginal likelihood Score computes. Recompute it from restored
+        // state to detect a covariance/mean/responsibility from a different restart.
+        var computeBound = model.GetType().GetMethod("ComputeLowerBound", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var restoredBound = (double)computeBound.Invoke(model, new object[] { x, x.Rows, x.Columns, 2 })!;
+        Assert.InRange(Math.Abs(restoredBound - model.LowerBound), 0, 1e-10);
+        Assert.True(model.Score(x) >= model.LowerBound - 1e-8);
+        using var clone = (AiDotNet.Clustering.Probabilistic.GaussianMixtureModel<double>)model.Clone();
+        Assert.Equal(model.Weights!.ToArray(), clone.Weights!.ToArray());
+        Assert.Equal(model.Means!.ToArray(), clone.Means!.ToArray());
+        Assert.Equal(model.Covariances!.ToArray(), clone.Covariances!.ToArray());
+        Assert.Equal(labels.ToArray(), clone.Predict(x).ToArray());
+        var snapshot = model.Covariances.ToArray();
+        clone.Covariances[0] += 1;
+        Assert.Equal(snapshot, model.Covariances.ToArray());
     }
 }

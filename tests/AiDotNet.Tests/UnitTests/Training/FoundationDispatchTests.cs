@@ -115,7 +115,7 @@ public class FoundationDispatchTests
             Assert.NotSame(engine.Packed, other.Packed);
             layer.ForwardFromState(input, null, null, out var h, out var c);
             Assert.Equal(1, other.StateCalls);
-            Assert.Equal(new[] { 1, 3 }, h.Shape);
+            Assert.Equal(new[] { 1, 3 }, h.Shape.ToArray());
             Assert.Equal(h.Shape, c.Shape);
         }
         finally { AiDotNetEngine.Current = previous; }
@@ -213,6 +213,20 @@ public class FoundationDispatchTests
     }
 
     [Fact]
+    public void DeferredField_ChunkRestoreDeclinesWithoutWritingThenFlatRestoreResolvesShape()
+    {
+        Tensor<double>? weight = new(new[] { 2, 0 });
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("weight", new ResizableTensorFieldParameterSource<double>(() => weight, value => weight = value));
+        var values = new Tensor<double>(new double[] { 1, 2, 3, 4, 5, 6 }, new[] { 2, 3 });
+        Assert.False(registry.TrySetParameterChunks(new[] { values }));
+        Assert.Equal(new[] { 2, 0 }, weight.Shape.ToArray());
+        registry.SetParameters(new Vector<double>(values.ToArray()));
+        Assert.Equal(new[] { 2, 3 }, weight.Shape.ToArray());
+        Assert.Equal(values.ToArray(), weight.ToArray());
+    }
+
+    [Fact]
     public void DeepARSequence_MatchesStepRecurrenceForBatchedInputs()
     {
         var cell = new AiDotNet.TimeSeries.DeepARLstmCellTape<double>(2, 3, seed: 51);
@@ -228,6 +242,27 @@ public class FoundationDispatchTests
             (h, c) = cell.Step(x, h, c);
             Near(engine.TensorTranspose(h), engine.TensorSliceAxis(actual, 1, t), 1e-12);
         }
+    }
+
+    [Fact]
+    public void DecimalDeepArSequence_GradientMatchesFiniteDifference()
+    {
+        var prior = AiDotNetEngine.Current;
+        var engine = new CpuEngine(); AiDotNetEngine.Current = engine;
+        try
+        {
+            var cell = new AiDotNet.TimeSeries.DeepARLstmCellTape<decimal>(2, 3, seed: 51);
+            var input = new Tensor<decimal>(new decimal[] { .1m, .2m, .3m, .4m, .5m, .6m }, new[] { 1, 3, 2 });
+            Tensor<decimal> Loss() => engine.ReduceSum(cell.Sequence(input), null);
+            decimal actual;
+            using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<decimal>())
+                actual = tape.ComputeGradients(Loss(), new[] { input })[input][0];
+            const decimal epsilon = .0001m;
+            input[0] += epsilon; decimal high = Loss()[0];
+            input[0] -= 2 * epsilon; decimal low = Loss()[0];
+            Assert.InRange(Math.Abs(actual - (high - low) / (2 * epsilon)), 0m, .00001m);
+        }
+        finally { AiDotNetEngine.Current = prior; }
     }
 
     [Fact]

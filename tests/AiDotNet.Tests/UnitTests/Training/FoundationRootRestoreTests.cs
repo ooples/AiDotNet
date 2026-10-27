@@ -6,6 +6,29 @@ namespace AiDotNet.Tests.UnitTests.Training;
 
 public class FoundationRootRestoreTests
 {
+    private sealed class RestoreAwareNetwork : AiDotNet.NeuralNetworks.NeuralNetwork<float>
+    {
+        public int Restored;
+        public RestoreAwareNetwork() : base(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 2, outputSize: 1, layers: new List<ILayer<float>> { new AiDotNet.NeuralNetworks.Layers.DenseLayer<float>(1) })) { }
+        protected override void OnParametersRestored() => Restored++;
+    }
+
+    [Fact]
+    public void NeuralNetworkChunkRestore_InvokesHookOnlyAfterSuccessfulWrites()
+    {
+        using var model = new RestoreAwareNetwork();
+        var chunks = model.GetParameterChunks().ToArray();
+        Assert.NotEmpty(chunks);
+        var replacement = chunks.Select(t => new Tensor<float>(Enumerable.Repeat(7f, t.Length).ToArray(), t.Shape.ToArray())).ToArray();
+        int before = model.Restored;
+        model.SetParameterChunks(replacement);
+        Assert.Equal(before + 1, model.Restored);
+        Assert.All(model.GetParameterChunks(), t => Assert.All(t.ToArray(), v => Assert.Equal(7f, v)));
+        Assert.Throws<ArgumentException>(() => model.SetParameterChunks(Array.Empty<Tensor<float>>()));
+        Assert.Equal(before + 1, model.Restored);
+    }
     private class TimeSeries : AiDotNet.TimeSeries.TimeSeriesModelBase<float>
     {
         public TimeSeries() : base(new AiDotNet.Models.Options.TimeSeriesRegressionOptions<float>()) { }
@@ -187,9 +210,11 @@ public class FoundationRootRestoreTests
     {
         var child = new StreamingClassifier();
         IParameterizable<double, Matrix<double>, Vector<double>> wrapper = autoML ? new AutoML(child) : new Wrapper(child);
-        Assert.Same(child.Weight, Assert.Single(wrapper.GetParameterChunks()));
+        var chunks = autoML ? ((AutoML)wrapper).GetParameterChunks() : ((Wrapper)wrapper).GetParameterChunks();
+        Assert.Same(child.Weight, Assert.Single(chunks));
         var replacement = new Tensor<double>(new[] { 2 }); replacement[0] = 6;
-        wrapper.SetParameterChunks(new[] { replacement });
+        if (autoML) ((AutoML)wrapper).SetParameterChunks(new[] { replacement });
+        else ((Wrapper)wrapper).SetParameterChunks(new[] { replacement });
         Assert.Equal(6, child.Weight[0]);
         Assert.Equal(1, child.Reads); Assert.Equal(1, child.Writes);
     }

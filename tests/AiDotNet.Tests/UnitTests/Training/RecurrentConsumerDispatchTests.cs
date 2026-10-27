@@ -223,14 +223,14 @@ public class RecurrentConsumerDispatchTests
     [Fact]
     public void GateCompatibilityBridge_UsesInstalledKernelAndPreservesBothAdjoints()
     {
-        var e = new CpuEngine(); var gates = Values(2, 12); var old = Values(2, 3);
+        var e = new Engine(); var gates = Values(2, 12); var old = Values(2, 3);
         var sources = new[] { gates, old };
         Tensor<double> actual; Dictionary<Tensor<double>, Tensor<double>> grads;
         using (var tape = new GradientTape<double>())
         {
             var h = LstmGateDispatch<double>.Forward(e, gates, old, out var c);
             actual = e.ReduceSum(e.TensorAdd(h, c), null);
-            if (typeof(CpuEngine).GetMethods().Any(m => m.Name == "LstmCellFromGates")) Assert.True(tape.EntryCount < 12);
+            Assert.Equal(1, e.GateCalls);
             grads = tape.ComputeGradients(actual, sources);
         }
         var reference = new Engine();

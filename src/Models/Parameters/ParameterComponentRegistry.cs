@@ -436,6 +436,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             if (!HasComponents || CurrentComponents.Any(source =>
                 !CanCopyChunkValues(source) && ParameterTransfer.ChunkRestoreAction(source) is null)) return false;
             PrepareSources(ParameterSurfaceIntent.Restore);
+            if (!CaptureLayout().Snapshot.ParameterCount.HasValue) return false;
             var targets = GetParameterStateChunks().ToArray();
             if (targets.Length != chunks.Count) return false;
             for (int i = 0; i < targets.Length; i++)
@@ -450,6 +451,8 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             {
                 onRestoring();
                 // A restore hook may detach copy-on-write fields. Resolve destinations again.
+                if (!CaptureLayout().Snapshot.ParameterCount.HasValue)
+                    throw new ArgumentException("Restore hook left the parameter layout unresolved.", nameof(chunks));
                 targets = GetParameterStateChunks().ToArray();
                 if (targets.Length != snapshot.Length || targets.Where((target, i) =>
                     !target.IsWritableInPlace || !target.Tensor.IsContiguous || target.Tensor is SparseTensor<T>

@@ -1550,6 +1550,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             Training.TensorCheckpoint<T>.CopyValues(source, destination);
         }
+        OnParametersRestored();
     }
 
     #region GPU Training Methods

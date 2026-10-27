@@ -5,10 +5,10 @@ namespace AiDotNet.Training;
 
 /// <summary>Reusable device-side snapshots of live dense tensors, independent of model inheritance.</summary>
 /// <typeparam name="T">The tensor element type.</typeparam>
-public static class TensorCheckpoint<T>
+internal static class TensorCheckpoint<T>
 {
     /// <summary>Copies tensors without recording gradients; reuses a compatible snapshot's storage.</summary>
-    public static Tensor<T>[] Capture(IReadOnlyList<Tensor<T>> tensors, Tensor<T>[]? snapshot = null)
+    internal static Tensor<T>[] Capture(IReadOnlyList<Tensor<T>> tensors, Tensor<T>[]? snapshot = null)
     {
         if (tensors is null) throw new ArgumentNullException(nameof(tensors));
         ValidateLive(tensors);
@@ -22,7 +22,7 @@ public static class TensorCheckpoint<T>
     }
 
     /// <summary>Restores values in place, preserving live tensor identities and invalidating cached weights.</summary>
-    public static void Restore(IReadOnlyList<Tensor<T>> tensors, Tensor<T>[] snapshot)
+    internal static void Restore(IReadOnlyList<Tensor<T>> tensors, Tensor<T>[] snapshot)
     {
         if (tensors is null) throw new ArgumentNullException(nameof(tensors));
         if (snapshot is null) throw new ArgumentNullException(nameof(snapshot));
@@ -38,6 +38,11 @@ public static class TensorCheckpoint<T>
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         engine.TensorCopy(SameShape(source, destination) ? source : engine.Reshape(source, destination.Shape.ToArray()), destination);
+        // Older installed engines copy offset views on the host. Invalidate only
+        // when that copy left host data authoritative; preserve resident device writes.
+        if (destination.StorageOffset != 0 && !destination.HasPendingGpuData
+            && engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu)
+            gpu.InvalidateResidentWeightBuffer(destination);
         AiDotNet.Tensors.Engines.InferenceWeightCache.Invalidate(destination.GetLiveBackingArrayOrNull());
     }
 

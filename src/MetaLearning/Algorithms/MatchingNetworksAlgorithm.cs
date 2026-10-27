@@ -611,13 +611,6 @@ internal sealed class MatchingMetric<T>
         _attention?.CopyGradients(gradients, queryContext, 0);
     }
 
-    /// <summary>A <c>[rows, columns]</c> tensor with a single one at <c>(row, column)</c>.</summary>
-    private static Tensor<T> Selector(int rows, int columns, int row, int column)
-    {
-        var selector = new Tensor<T>(new[] { rows, columns });
-        selector[row * columns + column] = Ops.One;
-        return selector;
-    }
 }
 
 /// <summary>

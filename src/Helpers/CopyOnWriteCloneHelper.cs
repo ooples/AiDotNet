@@ -77,7 +77,7 @@ internal static class CopyOnWriteCloneHelper
 
         // CloneShared materializes device-backed tensors on the host. Preserve clone
         // independence with a device copy when executing on the GPU.
-        return AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+        return source.HasPendingGpuData && AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
             ? TensorCheckpoint<T>.Capture(new[] { source })[0]
             : (Tensor<T>)source.CloneShared();
     }

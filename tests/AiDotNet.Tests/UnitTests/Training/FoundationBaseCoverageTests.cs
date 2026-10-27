@@ -50,7 +50,7 @@ public class FoundationBaseCoverageTests
             }
             inspected++;
         }
-        Assert.True(inspected >= 30, $"Unexpectedly small base inventory: {inspected}");
+        Assert.True(inspected >= 127, $"Unexpectedly small base inventory: {inspected}");
         Assert.True(missing.Count == 0, "Unclassified flat fallback: " + string.Join(", ", missing));
         _output.WriteLine($"Inspected {inspected} parameterized base classes.");
     }

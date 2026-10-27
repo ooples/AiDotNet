@@ -19,11 +19,36 @@ namespace AiDotNet.Tests.UnitTests.Training;
 [Collection("NonParallelIntegration")]
 public class CloneAndQuantizationResidencyTests
 {
-    [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    private static void RequireDevice(OpenClBackend backend)
+    {
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(backend.IsAvailable, "The required OpenCL lane has no usable device.");
+        Skip.IfNot(backend.IsAvailable, "No OpenCL device is available.");
+    }
+
+    [SkippableFact]
+    public void HostTensorClone_WithGpuEngineRetainsCopyOnWrite()
+    {
+        var prior = AiDotNetEngine.Current;
+        using var gpu = new DirectGpuTensorEngine();
+        AiDotNetEngine.Current = gpu;
+        try
+        {
+            var source = new Tensor<float>(new float[] { 2, 4 }, new[] { 2 });
+            Assert.False(source.HasPendingGpuData);
+            var clone = CopyOnWriteCloneHelper.ShareTensor(source);
+            Assert.True(CopyOnWriteCloneHelper.AreLiveCowPeers(source, clone));
+            clone[0] = 9;
+            Assert.Equal(2f, source[0]);
+            Assert.Equal(9f, clone[0]);
+        }
+        finally { AiDotNetEngine.Current = prior; }
+    }
+    [SkippableTheory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
     [Trait("Category", "GPU")]
     public void LayerClone_PreservesDeviceWeightsAndBuffers(bool batchNorm, bool copyOnWrite)
     {
-        using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
+        using var backend = new OpenClBackend(); RequireDevice(backend);
         using var direct = new DirectGpuEngine(backend); using var gpu = new DirectGpuTensorEngine(direct);
         var prior = AiDotNetEngine.Current; AiDotNetEngine.Current = gpu;
         try
@@ -55,11 +80,11 @@ public class CloneAndQuantizationResidencyTests
         finally { AiDotNetEngine.Current = prior; }
     }
 
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "GPU")]
     public void SpectralNormalization_DevicePowerIterationMatchesCpuForwardAndGradients()
     {
-        using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
+        using var backend = new OpenClBackend(); RequireDevice(backend);
         using var direct = new DirectGpuEngine(backend); using var gpu = new DirectGpuTensorEngine(direct);
         var prior = AiDotNetEngine.Current;
         try
@@ -101,7 +126,7 @@ public class CloneAndQuantizationResidencyTests
         finally { AiDotNetEngine.Current = prior; }
     }
 
-    [Fact]
+    [SkippableFact]
     public void GraFPrint_LossEvaluationRestoresBatchNormStatistics()
     {
         var bn = new BatchNormalizationLayer<float>(8);
@@ -116,15 +141,15 @@ public class CloneAndQuantizationResidencyTests
         var mean = bn.GetRunningMean().ToArray(); var variance = bn.GetRunningVariance().ToArray();
         float a = model.ComputeContrastiveLoss(first, second);
         float b = model.ComputeContrastiveLoss(first, second);
-        Assert.True(float.IsFinite(a)); Assert.Equal(a, b);
+        Assert.True(!float.IsNaN(a) && !float.IsInfinity(a)); Assert.Equal(a, b);
         Assert.Equal(mean, bn.GetRunningMean().ToArray()); Assert.Equal(variance, bn.GetRunningVariance().ToArray());
     }
 
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "GPU")]
     public void GeneratedTensorClonesAndRetainedGradients_AreIndependentResidentSnapshots()
     {
-        using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
+        using var backend = new OpenClBackend(); RequireDevice(backend);
         using var direct = new DirectGpuEngine(backend); using var gpu = new DirectGpuTensorEngine(direct);
         var prior = AiDotNetEngine.Current; AiDotNetEngine.Current = gpu;
         try
@@ -158,11 +183,11 @@ public class CloneAndQuantizationResidencyTests
         finally { AiDotNetEngine.Current = prior; }
     }
 
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "GPU")]
     public void BidirectionalConstruction_ClonesResidentRecurrentWeightsWithoutFlattening()
     {
-        using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
+        using var backend = new OpenClBackend(); RequireDevice(backend);
         using var direct = new DirectGpuEngine(backend); using var gpu = new DirectGpuTensorEngine(direct);
         var prior = AiDotNetEngine.Current; AiDotNetEngine.Current = gpu;
         try
@@ -179,12 +204,12 @@ public class CloneAndQuantizationResidencyTests
         finally { AiDotNetEngine.Current = prior; }
     }
 
-    [Theory] [InlineData(1, false)] [InlineData(4, false)] [InlineData(8, false)]
+    [SkippableTheory] [InlineData(1, false)] [InlineData(4, false)] [InlineData(8, false)]
     [InlineData(1, true)] [InlineData(4, true)] [InlineData(8, true)]
     [Trait("Category", "GPU")]
     public void QaLora_QuantizedForwardAndStraightThroughGradientsStayOnDevice(int bits, bool fullyConnected)
     {
-        using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
+        using var backend = new OpenClBackend(); RequireDevice(backend);
         using var direct = new DirectGpuEngine(backend); using var gpu = new DirectGpuTensorEngine(direct);
         var prior = AiDotNetEngine.Current;
         try
@@ -208,7 +233,7 @@ public class CloneAndQuantizationResidencyTests
                 int end = Math.Min(start + 4, values.Length);
                 float maximum = values.Skip(start).Take(end - start).Max(MathF.Abs);
                 float scale = (maximum == 0 ? 1e-8f : maximum) / (float)Math.Max(1, high);
-                for (int i = start; i < end; i++) quantized[i] = (float)Math.Clamp(Math.Round(values[i] / scale), low, high) * scale;
+                for (int i = start; i < end; i++) quantized[i] = (float)Math.Max(low, Math.Min(high, Math.Round(values[i] / scale))) * scale;
             }
             var qa = new Tensor<float>(quantized.Take(factors[0].Length).ToArray(), factors[0].Shape.ToArray());
             var qb = new Tensor<float>(quantized.Skip(factors[0].Length).ToArray(), factors[1].Shape.ToArray());
@@ -232,7 +257,7 @@ public class CloneAndQuantizationResidencyTests
             Near(reference[qa], gradients[factors[0]]); Near(reference[qb], gradients[factors[1]]);
             for (int i = 0; i < factors.Count; i++) Assert.Equal(originals[i], factors[i].ToArray());
             var stats = adapter.GetQuantizationStats();
-            Assert.Equal(3, stats.numGroups); Assert.True(double.IsFinite(stats.averageError));
+            Assert.Equal(3, stats.numGroups); Assert.True(!double.IsNaN(stats.averageError) && !double.IsInfinity(stats.averageError));
             ILayer<float> merged;
             using (var scope = GpuResidencyScope.Begin(captureOperations: true))
             {
@@ -253,7 +278,7 @@ public class CloneAndQuantizationResidencyTests
                 int end = Math.Min(start + 4, mergedValues.Length);
                 float maximum = mergedValues.Skip(start).Take(end - start).Max(MathF.Abs);
                 float scale = (maximum == 0 ? 1e-8f : maximum) / (float)Math.Max(1, high);
-                for (int i = start; i < end; i++) mergedValues[i] = (float)Math.Clamp(Math.Round(mergedValues[i] / scale), low, high) * scale;
+                for (int i = start; i < end; i++) mergedValues[i] = (float)Math.Max(low, Math.Min(high, Math.Round(mergedValues[i] / scale))) * scale;
             }
             var mergedParameters = ((LayerBase<float>)merged).GetTrainableParameters();
             Near(new Tensor<float>(mergedValues, mergedParameters[0].Shape.ToArray()), mergedParameters[0]);
