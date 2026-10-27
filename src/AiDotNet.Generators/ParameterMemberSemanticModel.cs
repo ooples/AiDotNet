@@ -245,52 +245,36 @@ internal static class ParameterMemberSemanticModel
     /// Only the type's OWN declarations are read, so a base class's disposed flag is classified where it is
     /// declared, which is where its state declaration is emitted too.
     /// </remarks>
-    internal static IReadOnlyCollection<string> GetDisposeAssignedMembers(INamedTypeSymbol owner)
+    internal static IReadOnlyCollection<string> GetDisposeAssignedMembers(
+        INamedTypeSymbol owner,
+        Compilation compilation)
     {
-        var memberNames = new HashSet<string>(owner.GetMembers()
-            .Where(member => member is IFieldSymbol or IPropertySymbol)
-            .Select(member => member.Name), StringComparer.Ordinal);
-        if (memberNames.Count == 0) return Array.Empty<string>();
-
         var assigned = new HashSet<string>(StringComparer.Ordinal);
         foreach (var declaration in owner.DeclaringSyntaxReferences
             .Select(syntaxReference => syntaxReference.GetSyntax())
             .OfType<ClassDeclarationSyntax>())
         {
+            // A semantic model per declaring tree, so a partial type split across files is covered. The tree is
+            // one of this compilation's by construction -- it came from a symbol the compilation declared.
+            var semanticModel = compilation.GetSemanticModel(declaration.SyntaxTree);
 
-            // Members, not DescendantNodes: a NESTED class's Dispose is not this type's, and scanning it would
-            // drop a member of the outer type that merely shares a name with something the nested one tears down.
+            // Members, not DescendantNodes: a NESTED class's Dispose is not this type's. The symbol check below
+            // would reject its fields anyway, but there is no reason to walk them.
             foreach (var method in declaration.Members
                 .OfType<MethodDeclarationSyntax>()
                 .Where(method => method.Identifier.ValueText is "Dispose" or "DisposeAsync"))
             {
-                // Names the method binds itself -- locals, including out/pattern declarations, and parameters.
-                // An assignment to one of those is not an assignment to the member it shadows, and treating it as
-                // one would silently take a real member out of the payload.
-                var shadowed = new HashSet<string>(
-                    method.DescendantNodes()
-                        .OfType<VariableDeclaratorSyntax>()
-                        .Select(declarator => declarator.Identifier.ValueText)
-                        .Concat(method.DescendantNodes()
-                            .OfType<SingleVariableDesignationSyntax>()
-                            .Select(designation => designation.Identifier.ValueText))
-                        .Concat(method.ParameterList.Parameters
-                            .Select(parameter => parameter.Identifier.ValueText)),
-                    StringComparer.Ordinal);
-
                 assigned.UnionWith(method.DescendantNodes()
                     .OfType<AssignmentExpressionSyntax>()
-                    .Select(assignment => assignment.Left switch
-                    {
-                        // A bare identifier only counts when the method does not bind that name itself.
-                        IdentifierNameSyntax identifier when !shadowed.Contains(identifier.Identifier.ValueText)
-                            => identifier.Identifier.ValueText,
-                        // this.X is unambiguous whatever the method binds.
-                        MemberAccessExpressionSyntax { Expression: ThisExpressionSyntax } access
-                            => access.Name.Identifier.ValueText,
-                        _ => null
-                    })
-                    .Where(target => target is not null && memberNames.Contains(target))!);
+                    // Bound to a SYMBOL, not matched by name. A local or parameter that shadows a member resolves
+                    // to the local, and a field of some other type -- a nested class's, a captured instance's --
+                    // resolves to that type, so neither is mistaken for a member of this one. Matching the name
+                    // alone could take a real model member out of the payload, which is the worst thing this
+                    // exclusion could do.
+                    .Select(assignment => semanticModel.GetSymbolInfo(assignment.Left).Symbol)
+                    .Where(symbol => symbol is IFieldSymbol or IPropertySymbol
+                        && SymbolEqualityComparer.Default.Equals(symbol.ContainingType, owner))
+                    .Select(symbol => symbol!.Name));
             }
         }
 
