@@ -375,6 +375,9 @@
 	<!-- English G2P data, built by tools/reference-data/g2p_resources.py: the CMU Pronouncing Dictionary
 	     (BSD-2-Clause, see NOTICE) and the letter-to-sound rules of NRL Report 7948 (a US Government work). -->
 	<ItemGroup>
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\maskgct_mandarin.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.maskgct_mandarin.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\maskgct_vocab.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.maskgct_vocab.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\openjtalk_rules.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.openjtalk_rules.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\ftfy_tables.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.ftfy_tables.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\langdetect_profiles.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.langdetect_profiles.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_zh_tn_tagger.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_zh_tn_tagger.fst.gz" />
@@ -419,6 +422,7 @@
 	  <EmbeddedResource Include="Tokenization\Resources\bert-kor-base-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-kor-base-vocab.txt.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi221_kanwa.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi221_kanwa.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi221_itaiji.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi221_itaiji.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pykakasi230_kanwa_delta.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pykakasi230_kanwa_delta.tsv.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\bert-base-japanese-v3-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.bert-base-japanese-v3-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\simbert-base-chinese-vocab.txt.gz" LogicalName="AiDotNet.Tokenization.simbert-base-chinese-vocab.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\whisper-multilingual.tiktoken.gz" LogicalName="AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz" />
