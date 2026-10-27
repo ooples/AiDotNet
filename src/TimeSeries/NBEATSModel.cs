@@ -425,22 +425,11 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
                 double epochLoss = epochLossSum / epochStepCount;
                 _lastRunEpochLosses.Add(epochLoss);
 
-                // Snapshot the weights (as Tensors) whenever this epoch improved on the best loss so far.
-                // Allocate the snapshot tensors once, then reuse them via a vectorized copy (dest = src * 1).
+                // Snapshot the weights whenever this epoch improved on the best loss so far, on their own device.
                 if (epochLoss < bestEpochLoss && !double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss))
                 {
                     bestEpochLoss = epochLoss;
-                    if (bestParamSnapshot is null)
-                    {
-                        bestParamSnapshot = new Tensor<T>[trainableParams.Count];
-                        for (int pi = 0; pi < trainableParams.Count; pi++)
-                            bestParamSnapshot[pi] = trainableParams[pi].Clone();
-                    }
-                    else
-                    {
-                        for (int pi = 0; pi < trainableParams.Count; pi++)
-                            Engine.TensorMultiplyScalarInto(bestParamSnapshot[pi], trainableParams[pi], NumOps.One);
-                    }
+                    bestParamSnapshot = SnapshotParameters(trainableParams, bestParamSnapshot);
                 }
 
                 // Report after snapshotting so an early stop still leaves the best weights to
@@ -452,10 +441,9 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
             }
         }
 
-        // Restore the best-loss weights so inference never runs on a diverged tail (vectorized copy).
+        // Restore the best-loss weights so inference never runs on a diverged tail.
         if (bestParamSnapshot is not null)
-            for (int pi = 0; pi < trainableParams.Count; pi++)
-                Engine.TensorMultiplyScalarInto(trainableParams[pi], bestParamSnapshot[pi], NumOps.One);
+            RestoreParameters(trainableParams, bestParamSnapshot);
     }
 
     /// <summary>

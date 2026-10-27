@@ -277,7 +277,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         // training loss improves on the best seen, and restore the best snapshot after
         // training so late-epoch Adam divergence cannot degrade the returned model.
         double bestLoss = double.PositiveInfinity;
-        List<Vector<T>>? bestSnapshot = null;
+        Tensor<T>[]? bestSnapshot = null;
         _epochLosses.Clear();
 
         // Keep only anchors with a complete lookback AND a one-step-ahead target for every timestep in the
@@ -345,7 +345,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                 if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
                 {
                     bestLoss = epochLoss;
-                    bestSnapshot = SnapshotParameters();
+                    bestSnapshot = SnapshotParameters(trainableParams, bestSnapshot);
                 }
 
                 // Report after checkpointing so an early stop still leaves the best weights to
@@ -358,7 +358,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         if (bestSnapshot is not null)
-            RestoreParameters(bestSnapshot);
+            RestoreParameters(trainableParams, bestSnapshot);
     }
 
     /// <summary>
@@ -401,22 +401,6 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         return _head.ComputeBatchLoss(hiddenSteps, obsSteps, target);
-    }
-
-    private List<Vector<T>> SnapshotParameters()
-    {
-        var snap = new List<Vector<T>>(_lstmLayers.Count + 1);
-        foreach (var lstm in _lstmLayers)
-            snap.Add(lstm.GetParameters());
-        snap.Add(_head.GetParameters());
-        return snap;
-    }
-
-    private void RestoreParameters(List<Vector<T>> snapshot)
-    {
-        for (int i = 0; i < _lstmLayers.Count; i++)
-            _lstmLayers[i].SetParameters(snapshot[i]);
-        _head.SetParameters(snapshot[_lstmLayers.Count]);
     }
 
     public override Vector<T> Predict(Matrix<T> input)
