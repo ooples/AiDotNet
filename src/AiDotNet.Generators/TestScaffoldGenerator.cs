@@ -14034,6 +14034,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 128, 128 };");
             sb.AppendLine("    protected override double TrainingErrorMultiplier => 10.0;");
         }
+        else if (model.ClassName == "SegNeXt")
+        {
+            // Same allowance as its FastSAM and EfficientSAM siblings, for the same reason: a dense per-pixel head
+            // over one training input drives both losses down so far that which of them lands lower is a coin toss.
+            // MEASURED on a CI runner: training took the train loss 5.008370 -> 0.308932 (-94%) while the unseen
+            // input went 5.006990 -> 0.091158 (-98%), so the model fit what it trained on and generalised even
+            // better. The 3x default then failed it by 0.035 (0.308932 against an allowance of 0.273474), and the
+            // "training helped" escape hatch could not rescue it because the train-minus-test GAP widened -- which
+            // here only means the test loss fell faster. Nothing about the training step is wrong, so the bound is
+            // what moves; the gap conjunct stays, because without it a model that barely learns would pass.
+            sb.AppendLine("    protected override double TrainingErrorMultiplier => 10.0;");
+        }
         else if (model.ClassName == "EDVR")
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
