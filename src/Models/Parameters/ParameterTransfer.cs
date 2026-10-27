@@ -21,6 +21,20 @@ internal static class ParameterTransfer
             destination.SetParameterChunks(source.GetParameterChunks());
 #endif
     }
+    internal static void CopyLayer<T>(ILayer<T> source, ILayer<T> destination)
+    {
+        if (ReferenceEquals(source, destination)) return;
+        if (source is AiDotNet.NeuralNetworks.Layers.LayerBase<T> from
+            && destination is AiDotNet.NeuralNetworks.Layers.LayerBase<T> to
+            && from.CanRestoreParameterChunksInPlace() && to.CanRestoreParameterChunksInPlace()
+            && to.TryRestoreParameterChunks(from.GetParameterStateChunks("$").Select(x => x.Tensor).ToArray())) return;
+        destination.SetParameters(source.GetParameters());
+    }
+
+    internal static bool UsesChunkContract<T, TInput, TOutput>(IParameterizable<T, TInput, TOutput> model)
+        => !HasMoreSpecificFlatMethod(model.GetType(), "GetParameters", "GetParameterChunks", Type.EmptyTypes)
+            && !HasMoreSpecificFlatMethod(model.GetType(), "SetParameters", "SetParameterChunks", new[] { typeof(Vector<T>) });
+
     private static bool HasMoreSpecificFlatMethod(Type type, string flatName, string chunkName, Type[] parameters)
     {
         var flatOwner = type.GetMethod(flatName, parameters)?.DeclaringType;

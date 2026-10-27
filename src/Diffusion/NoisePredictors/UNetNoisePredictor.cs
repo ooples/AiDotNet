@@ -1405,7 +1405,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             if (!hasSource) break;
             if (source.Current is null || target.Current is null)
                 continue;
-            target.Current.SetParameters(source.Current.GetParameters());
+            AiDotNet.Models.Parameters.ParameterTransfer.CopyLayer(source.Current, target.Current);
         }
     }
 
@@ -1427,7 +1427,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 $"with {target.Length} elements.");
         }
 
-        source.Data.Span.CopyTo(target.Data.Span);
+        AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, target);
     }
 
     /// <summary>

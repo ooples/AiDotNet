@@ -432,10 +432,11 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         lock (_surfaceGate)
         {
             // Writable storage alone does not authorize bypassing a nested model's setter.
-            // Only sealed field adapters have a setter whose full contract is a value copy.
+            // Field adapters and canonical layers support value copies with cache invalidation.
             if (!HasComponents || CurrentComponents.Any(source =>
                 source is not TensorFieldParameterSource<T>
-                && source is not ResizableTensorFieldParameterSource<T>)) return false;
+                && source is not ResizableTensorFieldParameterSource<T>
+                && !(source is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layer && layer.CanRestoreParameterChunksInPlace()))) return false;
             PrepareSources(ParameterSurfaceIntent.Restore);
             var targets = GetParameterStateChunks().ToArray();
             if (targets.Length != chunks.Count) return false;
@@ -459,6 +460,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             }
             for (int i = 0; i < targets.Length; i++)
                 AiDotNet.Training.TensorCheckpoint<T>.CopyValues(snapshot[i], targets[i].Tensor);
+            AiDotNet.NeuralNetworks.Layers.LayerBase<T>.NotifyParameterChunksRestored();
             return true;
         }
     }

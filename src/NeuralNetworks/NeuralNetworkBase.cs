@@ -1549,7 +1549,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         foreach (var (source, destination) in pairs)
         {
             Training.TensorCheckpoint<T>.CopyValues(source, destination);
-            GpuEngine?.InvalidateResidentWeightBuffer(destination);
         }
     }
 
@@ -16904,7 +16903,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     {
                         try
                         {
-                            dstLayer.SetParameters(srcLayer.GetParameters());
+                            AiDotNet.Models.Parameters.ParameterTransfer.CopyLayer(srcLayer, dstLayer);
                         }
                         catch (ArgumentException ex)
                         {

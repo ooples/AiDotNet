@@ -38,9 +38,7 @@ public static class TensorCheckpoint<T>
         using var noGrad = new NoGradScope<T>();
         var engine = AiDotNetEngine.Current;
         engine.TensorCopy(SameShape(source, destination) ? source : engine.Reshape(source, destination.Shape.ToArray()), destination);
-        destination.IncrementVersion();
         AiDotNet.Tensors.Engines.InferenceWeightCache.Invalidate(destination.GetLiveBackingArrayOrNull());
-        engine.InvalidatePersistentTensor(destination);
     }
 
     private static bool SameShape(Tensor<T> left, Tensor<T> right)

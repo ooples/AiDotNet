@@ -164,4 +164,52 @@ public class FoundationRootRestoreTests
         Assert.Equal(1, source.Reads); Assert.Equal(1, destination.Writes);
         Assert.Equal(12, destination.Weight[0]);
     }
+
+    [Fact]
+    public void ModelCheckpoint_ReusesSnapshotAndPreservesCustomSetter()
+    {
+        var model = new CustomSetterClassifier(); model.Weight[0] = 12;
+        var checkpoint = new AiDotNet.Training.ModelParameterCheckpoint<double, Matrix<double>, Vector<double>>(model);
+        checkpoint.Capture(); model.Weight[0] = 3; checkpoint.Restore();
+        Assert.Equal(12, model.Weight[0]); Assert.Equal(1, model.SetterCalls);
+        model.Weight[0] = 8; checkpoint.Capture(); model.Weight[0] = 1; checkpoint.Restore();
+        Assert.Equal(8, model.Weight[0]); Assert.Equal(2, model.SetterCalls);
+    }
+
+    [Fact]
+    public void AdaptedPrediction_RestoresStreamingModelAfterException()
+    {
+        var model = new ThrowingClassifier(); model.Weight[0] = 12;
+        var adapted = new AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<double, Matrix<double>, Vector<double>>(
+            model, new Vector<double>(new double[] { 4, 5 }));
+        Assert.Throws<InvalidOperationException>(() => adapted.Predict(new Matrix<double>(1, 1)));
+        Assert.Equal(12, model.Weight[0]);
+    }
+    private sealed class ThrowingClassifier : Classifier
+    {
+        public override Vector<double> Predict(Matrix<double> x) => throw new InvalidOperationException("prediction failed");
+    }
+
+    private sealed class LayerClassifier : AiDotNet.Classification.ClassifierBase<double>
+    {
+        internal readonly AiDotNet.NeuralNetworks.Layers.DenseLayer<double> Layer = new(2);
+        public LayerClassifier() => Layer.Forward(new Tensor<double>(new[] { 1, 3 }));
+        internal int Restored;
+        protected override void RegisterComponents() => RegisterParameterComponent("layer", Layer);
+        protected override void OnParametersRestored() => Restored++;
+        public override void Train(Matrix<double> x, Vector<double> y) { }
+        public override Vector<double> Predict(Matrix<double> x) => new(x.Rows);
+    }
+
+    [Fact]
+    public void RegisteredLayerModel_CheckpointRestoresLiveStateAndInvokesModelHook()
+    {
+        var model = new LayerClassifier();
+        var chunks = model.GetParameterChunks().ToArray();
+        Assert.NotEmpty(chunks); chunks[0][0] = 12;
+        var checkpoint = new AiDotNet.Training.ModelParameterCheckpoint<double, Matrix<double>, Vector<double>>(model);
+        checkpoint.Capture(); chunks[0][0] = 8; checkpoint.Restore();
+        Assert.Same(chunks[0], model.GetParameterChunks().First());
+        Assert.Equal(12, chunks[0][0]); Assert.Equal(1, model.Restored);
+    }
 }

@@ -919,7 +919,7 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
                 $"with {target.Length} elements.");
         }
 
-        source.Data.Span.CopyTo(target.Data.Span);
+        AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, target);
     }
 
     #endregion

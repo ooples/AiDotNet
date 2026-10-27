@@ -100,6 +100,7 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
     {
         if (mainEncoder is null) throw new ArgumentNullException(nameof(mainEncoder));
 
+        if (TryUpdateFromChunks(mainEncoder, _momentum)) return;
         var mainParams = mainEncoder.GetParameters();
         UpdateFromParameters(mainParams);
     }
@@ -149,8 +150,37 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
     {
         if (mainEncoder is null) throw new ArgumentNullException(nameof(mainEncoder));
 
+        if (TryUpdateFromChunks(mainEncoder, 0)) return;
         var mainParams = mainEncoder.GetParameters();
         _encoder.UpdateParameters(mainParams);
+    }
+
+    private bool TryUpdateFromChunks(INeuralNetwork<T> mainEncoder, double momentum)
+    {
+#if AIDN_LEGACY_TFM
+        return false;
+#else
+        // Preserve custom UpdateParameters contracts rather than bypassing their side effects.
+        if (_encoder.GetType().GetMethod(nameof(INeuralNetwork<T>.UpdateParameters), new[] { typeof(Vector<T>) })?.DeclaringType
+                != typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)
+            || !AiDotNet.Models.Parameters.ParameterTransfer.UsesChunkContract(mainEncoder)
+            || !AiDotNet.Models.Parameters.ParameterTransfer.UsesChunkContract(_encoder)) return false;
+        var from = mainEncoder.GetParameterChunks().ToArray();
+        var to = _encoder.GetParameterChunks().ToArray();
+        if (from.Length != to.Length) return false;
+        for (int i = 0; i < to.Length; i++)
+            if (!from[i].Shape.ToArray().SequenceEqual(to[i].Shape.ToArray())) return false;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        var engine = AiDotNetEngine.Current;
+        var updated = momentum == 0
+            ? AiDotNet.Training.TensorCheckpoint<T>.Capture(from)
+            : to.Select((tensor, i) => engine.TensorAdd(
+                engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(momentum)),
+                engine.TensorMultiplyScalar(from[i], NumOps.FromDouble(1 - momentum)))).ToArray();
+        _encoder.SetParameterChunks(updated);
+        return true;
+#endif
     }
 
     /// <inheritdoc />

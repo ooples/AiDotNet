@@ -823,7 +823,7 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
                 copyBase.DeserializeInternalUnchecked(inner);
                 if (IsFitted)
                 {
-                    copyBase.SetParameters(GetParameters());
+                    AiDotNet.Models.Parameters.ParameterTransfer.Copy(this, copyBase);
                 }
             }
             else

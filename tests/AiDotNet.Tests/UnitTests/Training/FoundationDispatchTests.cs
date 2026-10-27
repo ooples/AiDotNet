@@ -270,4 +270,117 @@ public class FoundationDispatchTests
         for (int i = 0; i < expected.Length; i++)
             Assert.True(Math.Abs(expected[i] - actual[i]) <= tolerance, $"index {i}: {expected[i]} vs {actual[i]}");
     }
+
+    [Fact]
+    public void LayerCopy_PreservesIdentityAndRejectsInvalidLaterChunkBeforeWriting()
+    {
+        var source = new DenseLayer<double>(2);
+        var target = new DenseLayer<double>(2);
+        source.Forward(new Tensor<double>(new[] { 1, 3 })); target.Forward(new Tensor<double>(new[] { 1, 3 }));
+        var chunks = source.GetParameterStateChunks("$").Select(c => c.Tensor).ToArray();
+        var destinations = target.GetParameterStateChunks("$").Select(c => c.Tensor).ToArray();
+        Assert.True(chunks.Length > 1);
+        chunks[0][0] = 7;
+        ParameterTransfer.CopyLayer(source, target);
+        Assert.Same(destinations[0], target.GetParameterStateChunks("$").First().Tensor);
+        Assert.Equal(7, destinations[0][0]);
+        chunks[0][0] = 9;
+        Assert.Equal(7, destinations[0][0]);
+        var invalid = chunks.ToArray(); invalid[^1] = new Tensor<double>(new[] { chunks[^1].Length + 1 });
+        Assert.Throws<ArgumentException>(() => target.TryRestoreParameterChunks(invalid));
+        Assert.Equal(7, destinations[0][0]);
+    }
+
+    [Fact]
+    public void RegisteredLayerRestore_OpenClDoesNotDownloadWeights()
+    {
+        using var backend = new AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend();
+        Assert.True(backend.IsAvailable, backend.InitializationException?.ToString());
+        using var direct = new AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine(backend);
+        using var gpu = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine(direct);
+        var prior = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = gpu;
+            var source = new DenseLayer<float>(2);
+            var target = new DenseLayer<float>(2);
+            source.Forward(new Tensor<float>(new[] { 1, 3 })); target.Forward(new Tensor<float>(new[] { 1, 3 }));
+            var sourceChunks = source.GetParameterStateChunks("$").Select(c => c.Tensor).ToArray();
+            var expected = sourceChunks.Select(c => c.ToArray()).ToArray();
+            var registry = new ParameterComponentRegistry<float>(); registry.Register("layer", target);
+            var probe = new Tensor<float>(new[] { 1, 3 }); probe[0] = .3f; probe[1] = -.2f;
+            var referenceOutput = source.Forward(probe).ToArray();
+            Tensor<float>? actualOutput = null;
+            int hooks = 0;
+            using (var scope = AiDotNet.Tensors.Engines.Diagnostics.GpuResidencyScope.Begin(captureOperations: true))
+            {
+                var snapshot = AiDotNet.Training.TensorCheckpoint<float>.Capture(sourceChunks);
+                Assert.True(registry.TrySetParameterChunks(snapshot, () => hooks++));
+                ParameterTransfer.CopyLayer(source, target);
+                actualOutput = target.Forward(probe);
+                Assert.True(scope.Downloads == 0, string.Join("\n", scope.Events.Where(e => e.Kind == AiDotNet.Tensors.Engines.Diagnostics.GpuTransferKind.DeviceToHost)));
+            }
+            Assert.Equal(referenceOutput, actualOutput!.ToArray());
+            Assert.Equal(1, hooks);
+            var restored = target.GetParameterStateChunks("$").ToArray();
+            for (int i = 0; i < restored.Length; i++) Assert.Equal(expected[i], restored[i].Tensor.ToArray());
+        }
+        finally { AiDotNetEngine.Current = prior; }
+    }
+
+    [Fact]
+    public void NestedBidirectionalConsumer_UsesTwoSequenceKernels()
+    {
+        var prior = AiDotNetEngine.Current; var engine = new SpyEngine(); AiDotNetEngine.Current = engine;
+        try
+        {
+            var layer = new BidirectionalLayer<double>(new LSTMLayer<double>(3), activationFunction: (IActivationFunction<double>?)null);
+            var input = new Tensor<double>(new[] { 2, 4, 2 });
+            layer.Forward(input); engine.Calls = 0;
+            using var tape = new GradientTape<double>();
+            var output = layer.Forward(input);
+            var gradients = tape.ComputeGradients(engine.ReduceSum(output, null), new[] { input });
+            Assert.Equal(2, engine.Calls);
+            Assert.Equal(input.Shape, gradients[input].Shape);
+        }
+        finally { AiDotNetEngine.Current = prior; }
+    }
+
+    [Fact]
+    public void TimeGradHistory_UsesOneSequenceKernelPerLayerAndPreservesCarriedState()
+    {
+        var prior = AiDotNetEngine.Current; var engine = new SpyEngine(); AiDotNetEngine.Current = engine;
+        try
+        {
+            var network = new AiDotNet.Finance.Forecasting.Foundation.TimeGradNetwork<double>(2, 3, 0, 2, 1, 2, 1, 2, 2);
+            var input = new Tensor<double>(new[] { 2, 4, 2 });
+            for (int i = 0; i < input.Length; i++) input[i] = Math.Sin(i) * .2;
+            var expected = network.EncodeHistory(input);
+            Assert.Equal(2, engine.Calls);
+            var hidden = new Tensor<double>?[2]; var cell = new Tensor<double>?[2];
+            var first = engine.TensorNarrow(input, 1, 0, 2); var second = engine.TensorNarrow(input, 1, 2, 2);
+            network.AdvanceHistory(engine, first, hidden, cell);
+            var actual = network.AdvanceHistory(engine, second, hidden, cell);
+            Assert.Equal(4, engine.StateCalls);
+            Near(engine.Reshape(engine.TensorNarrow(expected, 1, 3, 1), new[] { 2, 3 }), actual, 1e-10);
+        }
+        finally { AiDotNetEngine.Current = prior; }
+    }
+
+    private sealed class CustomDense : DenseLayer<double>
+    {
+        internal int SetterCalls;
+        internal CustomDense() : base(2) { }
+        public override void SetParameters(Vector<double> values) { SetterCalls++; base.SetParameters(values); }
+    }
+
+    [Fact]
+    public void LayerCopy_PreservesCustomSetterContract()
+    {
+        var source = new DenseLayer<double>(2); var target = new CustomDense();
+        var input = new Tensor<double>(new[] { 1, 3 }); source.Forward(input); target.Forward(input);
+        ParameterTransfer.CopyLayer(source, target);
+        Assert.Equal(1, target.SetterCalls);
+        Assert.Equal(source.GetParameters().ToArray(), target.GetParameters().ToArray());
+    }
 }

@@ -9455,6 +9455,42 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     {
     }
 
+    /// <summary>Whether the canonical dense-state restore can preserve this layer's setter contract.</summary>
+    internal bool CanRestoreParameterChunksInPlace()
+    {
+        var type = GetType();
+        if (type.GetMethod(nameof(GetParameters), Type.EmptyTypes)?.DeclaringType != typeof(LayerBase<T>)
+            || type.GetMethod(nameof(SetParameters), new[] { typeof(Vector<T>) })?.DeclaringType != typeof(LayerBase<T>))
+            return false;
+        EnsureParametersMaterialized();
+        foreach (var component in GetOrderedParameterComponents())
+        {
+            // These chunk payloads are projections, not writable live dense storage.
+            if (component.LowPrecisionTensor is not null || component.Tensor is SparseTensor<T>) return false;
+            if (component.Layer is { } child && !IsSubLayerParameterFrozen(child)
+                && (child is not LayerBase<T> layer || !layer.CanRestoreParameterChunksInPlace())) return false;
+        }
+        return true;
+    }
+
+    internal static void NotifyParameterChunksRestored() => BumpParameterEpoch();
+
+    internal bool TryRestoreParameterChunks(IReadOnlyList<Tensor<T>> sources)
+    {
+        if (!CanRestoreParameterChunksInPlace()) return false;
+        var destinations = GetParameterStateChunks("$").ToArray();
+        if (destinations.Length != sources.Count || destinations.Any(x => !x.IsWritableInPlace || !x.Tensor.IsContiguous || x.Tensor is SparseTensor<T>)) return false;
+        for (int i = 0; i < destinations.Length; i++)
+            if (sources[i].Length != destinations[i].Tensor.Length)
+                throw new ArgumentException($"Parameter chunk {i} has an incompatible length.", nameof(sources));
+        // Inputs may be live views of the destination, including reordered slots.
+        var snapshot = AiDotNet.Training.TensorCheckpoint<T>.Capture(sources);
+        for (int i = 0; i < destinations.Length; i++)
+            AiDotNet.Training.TensorCheckpoint<T>.CopyValues(snapshot[i], destinations[i].Tensor);
+        BumpParameterEpoch();
+        return true;
+    }
+
     /// <summary>
     /// Copies the values of <paramref name="sources"/> INTO this layer's existing trainable tensors,
     /// element for element, without rebinding or allocating — the allocation-free, aliasing-free
@@ -9476,8 +9512,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (sources[i].Length != dst[i].Length)
                 throw new ArgumentException(
                     $"{GetType().Name} trainable tensor {i} has length {dst[i].Length} but received {sources[i].Length}.");
-            sources[i].Data.Span.CopyTo(dst[i].Data.Span);
-            Engine.InvalidatePersistentTensor(dst[i]);
+            AiDotNet.Training.TensorCheckpoint<T>.CopyValues(sources[i], dst[i]);
         }
     }
 

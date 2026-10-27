@@ -948,7 +948,7 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
                 // the flat parameter vector then remains authoritative for every registered value.
                 if (IsFitted)
                 {
-                    copyBase.SetParameters(GetParameters());
+                    AiDotNet.Models.Parameters.ParameterTransfer.Copy(this, copyBase);
                 }
             }
             else
