@@ -139,24 +139,15 @@ internal sealed class TapeLstmCell<T>
         }
 
         var engine = AiDotNetEngine.Current;
-        Tensor<T> Gate(int gate)
-        {
-            var z = engine.TensorMatMul(input, engine.TensorTranspose(_inputWeights[gate]));
-            for (int j = 0; j < RecurrentInputs; j++)
-            {
-                z = engine.TensorAdd(z, engine.TensorMatMul(recurrent[j], engine.TensorTranspose(_recurrentWeights[gate][j])));
-            }
-
-            return engine.TensorAdd(z, engine.Reshape(_biases[gate], new[] { 1, Hidden }));
-        }
-
-        var inputGate = engine.Sigmoid(Gate(0));
-        var forgetGate = engine.Sigmoid(Gate(1));
-        var candidate = engine.Tanh(Gate(2));
-        var outputGate = engine.Sigmoid(Gate(3));
-        var nextCell = engine.TensorAdd(engine.TensorMultiply(forgetGate, cell), engine.TensorMultiply(inputGate, candidate));
-        var output = engine.TensorMultiply(outputGate, engine.Tanh(nextCell));
-        return (output, nextCell);
+        // Attention feedback is an additional input for this step; only the first recurrent
+        // tensor is the carried hidden state. Packing stays on the tape for all gate leaves.
+        var x = RecurrentInputs == 1 ? input
+            : engine.Concat(new[] { input }.Concat(recurrent.Skip(1)).ToArray(), 1);
+        var inputBlocks = Enumerable.Range(0, Gates).Select(g => RecurrentInputs == 1 ? _inputWeights[g]
+            : engine.Concat(new[] { _inputWeights[g] }.Concat(_recurrentWeights[g].Skip(1)).ToArray(), 1)).ToArray();
+        return engine.TensorLstmCell(x, recurrent[0], cell,
+            engine.Concat(inputBlocks, 0),
+            engine.Concat(_recurrentWeights.Select(w => w[0]).ToArray(), 0), engine.Concat(_biases, 0));
     }
 
     /// <summary>

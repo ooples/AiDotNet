@@ -713,11 +713,19 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
         _lastHiddenState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
         _lastCellState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
 
+        Tensor<T>? packedInput = null, packedHidden = null, packedBias = null;
+        if ((UsingVectorActivation ? VectorActivation?.GetType() : ScalarActivation?.GetType()) == typeof(TanhActivation<T>))
+        {
+            packedInput = Engine.TensorConcatenate(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 3);
+            packedHidden = Engine.TensorConcatenate(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 3);
+            packedBias = Engine.TensorConcatenate(new[] { _biasI, _biasF, _biasC, _biasO }, 3);
+        }
+
         for (int t = 0; t < timeSteps; t++)
         {
             // Slice along dimension 1 (time) to get [batchSize, height, width, channels]
-            var xt = input5D.GetSliceAlongDimension(t, 1);
-            (_lastHiddenState, _lastCellState) = ConvLSTMCell(xt, _lastHiddenState, _lastCellState);
+            var xt = Engine.TensorSqueeze(Engine.TensorNarrow(input5D, 1, t, 1), 1);
+            (_lastHiddenState, _lastCellState) = ConvLSTMCell(xt, _lastHiddenState, _lastCellState, packedInput, packedHidden, packedBias);
             hiddenStatesList.Add(Engine.Reshape(_lastHiddenState, new[] { batchSize, 1, height, width, _filters }));
         }
 
@@ -782,8 +790,18 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// the layer processes each frame in sequence.
     /// </para>
     /// </remarks>
-    private (Tensor<T> hiddenState, Tensor<T> cellState) ConvLSTMCell(Tensor<T> input, Tensor<T> prevHiddenState, Tensor<T> prevCellState)
+    private (Tensor<T> hiddenState, Tensor<T> cellState) ConvLSTMCell(Tensor<T> input, Tensor<T> prevHiddenState, Tensor<T> prevCellState,
+        Tensor<T>? packedInput, Tensor<T>? packedHidden, Tensor<T>? packedBias)
     {
+        if (packedInput is not null && packedHidden is not null && packedBias is not null)
+        {
+            // Two packed convolutions replace eight. The gate update preserves both state adjoints.
+            var gates = Engine.TensorAdd(Engine.TensorAdd(Convolve(input, packedInput),
+                Convolve(prevHiddenState, packedHidden)), packedBias);
+            var hidden = LstmGateDispatch<T>.Forward(Engine, gates, prevCellState, out var cell);
+            return (hidden, cell);
+        }
+
         // Compute gate pre-activations by convolving input and hidden state, then adding bias
         // Use Engine.TensorAdd for biases since they have shape [1,1,1,filters] and need to broadcast
         // to the convolution output shape [batchSize, height, width, filters]
@@ -823,10 +841,10 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> Convolve(Tensor<T> input, Tensor<T> kernel)
     {
         // Transpose input from [B, H, W, C] to [B, C, H, W] for Engine
-        var inputNCHW = input.Transpose(new[] { 0, 3, 1, 2 }).Contiguous();
+        var inputNCHW = Engine.TensorPermute(input, new[] { 0, 3, 1, 2 });
 
         // Transpose kernel from [kH, kW, inC, outC] to [outC, inC, kH, kW] for Engine
-        var kernelNCHW = kernel.Transpose(new[] { 3, 2, 0, 1 }).Contiguous();
+        var kernelNCHW = Engine.TensorPermute(kernel, new[] { 3, 2, 0, 1 });
 
         var stride = new int[] { _strides, _strides };
         var padding = new int[] { _padding, _padding };
@@ -836,7 +854,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
         var outputNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, stride, padding, dilation);
 
         // Transpose output back to [B, H, W, outC]
-        return outputNCHW.Transpose(new[] { 0, 2, 3, 1 }).Contiguous();
+        return Engine.TensorPermute(outputNCHW, new[] { 0, 2, 3, 1 });
     }
 
     /// <summary>

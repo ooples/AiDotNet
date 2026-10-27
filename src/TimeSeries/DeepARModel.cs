@@ -873,31 +873,9 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
     /// </summary>
     public (Tensor<T> h, Tensor<T> c) Step(Tensor<T> xt, Tensor<T> hPrev, Tensor<T> cPrev)
     {
-        // Pre-activations for all 4 gates: [4H, B].
-        var fromX = Engine.TensorMatMul(_wx, xt);      // [4H, B]
-        var fromH = Engine.TensorMatMul(_wh, hPrev);   // [4H, B]
-        var preact = Engine.TensorAdd(fromX, fromH);
-        var biasCol = Engine.Reshape(_bias, new[] { 4 * _hiddenSize, 1 });
-        preact = Engine.TensorAdd(preact, biasCol);
-
-        // Slice the stacked pre-activations into the four gates along axis 0.
-        var iPre = Engine.TensorNarrow(preact, 0, 0, _hiddenSize);
-        var fPre = Engine.TensorNarrow(preact, 0, _hiddenSize, _hiddenSize);
-        var gPre = Engine.TensorNarrow(preact, 0, 2 * _hiddenSize, _hiddenSize);
-        var oPre = Engine.TensorNarrow(preact, 0, 3 * _hiddenSize, _hiddenSize);
-
-        var iGate = Engine.Sigmoid(iPre);
-        var fGate = Engine.Sigmoid(fPre);
-        var gGate = Engine.Tanh(gPre);
-        var oGate = Engine.Sigmoid(oPre);
-
-        // c = f ⊙ c_prev + i ⊙ g ; h = o ⊙ tanh(c).
-        var cNew = Engine.TensorAdd(
-            Engine.TensorMultiply(fGate, cPrev),
-            Engine.TensorMultiply(iGate, gGate));
-        var hNew = Engine.TensorMultiply(oGate, Engine.Tanh(cNew));
-
-        return (hNew, cNew);
+        var (hidden, cell) = Engine.TensorLstmCell(Engine.TensorTranspose(xt),
+            Engine.TensorTranspose(hPrev), Engine.TensorTranspose(cPrev), _wx, _wh, _bias);
+        return (Engine.TensorTranspose(hidden), Engine.TensorTranspose(cell));
     }
 
     private static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
