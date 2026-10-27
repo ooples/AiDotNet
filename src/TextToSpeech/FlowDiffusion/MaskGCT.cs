@@ -530,16 +530,19 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         RequireAllUsed("acoustic encoder", encoder, usedEncoder);
         RequireAllUsed("acoustic decoder", decoder, usedDecoder);
 
-        void Generator(string relative, Action<Func<string, int[], double[]?>> load)
+        void Generator(string relative, Action<Func<string, int[], double[]?>> load, Func<string, bool>? unused = null)
         {
             var state = ReadState(Path.Combine(directory, relative));
             var usedNames = new HashSet<string>(StringComparer.Ordinal);
             load(Reader(state, usedNames));
-            RequireAllUsed(relative, state, usedNames);
+            RequireAllUsed(relative, state, usedNames, unused);
         }
+        // The acoustic models' DiffLlama is a LlamaModel whose token table its forward never reads (it is given
+        // embeddings); the release saves it anyway.
+        static bool TokenTable(string name) => name == "diff_estimator.embed_tokens.weight";
         Generator(Path.Combine("t2s_model", "model.safetensors"), TextToSemantic.Load);
-        Generator(Path.Combine("s2a_model", "s2a_model_1layer", "model.safetensors"), FirstLayerModel.Load);
-        Generator(Path.Combine("s2a_model", "s2a_model_full", "model.safetensors"), FullModel.Load);
+        Generator(Path.Combine("s2a_model", "s2a_model_1layer", "model.safetensors"), FirstLayerModel.Load, TokenTable);
+        Generator(Path.Combine("s2a_model", "s2a_model_full", "model.safetensors"), FullModel.Load, TokenTable);
     }
 
     /// <summary>Loads w2v-BERT 2.0 (<c>facebook/w2v-bert-2.0</c>'s <c>model.safetensors</c>); the layers past
