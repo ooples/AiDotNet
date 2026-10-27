@@ -1272,12 +1272,11 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
 
         // The engine owns CPU/GPU dispatch. Both float and double have fused BPTT; restricting
         // this shared layer to float left every double-valued model on the per-step graph.
-        // The state-returning overload supports fused streaming inference. Under a tape/compiled
-        // graph it may require a decomposed state adjoint, so retain that path below for stateful training.
+        // The state-returning overload dispatches sequence and final-state gradients together.
+        // Engines without a fused state adjoint retain their differentiable fallback internally.
         bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
         bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
-        if (timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double))
-            && (!_stateStepping || (!tapeActive && !graphActive)))
+        if (timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
             Tensor<T>? fusedOutput = null;
             try { fusedOutput = TryFusedLstmForward(input3D, tapeActive || graphActive); }
@@ -1313,7 +1312,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // Per-time-step hidden states collected for a tape-connected concat (the
         // output must stay on the autodiff graph so gradients reach the weights; a
         // pre-allocated tensor written with SetSlice would detach it). This runs only
-        // when the sequence primitive is unavailable, for other numeric types, or for stateful training.
+        // when the sequence primitive is unavailable, for other numeric types, or when the engine declines the primitive.
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
         // #1668: the per-timestep BPTT caches are read only by the manual Backward; skip

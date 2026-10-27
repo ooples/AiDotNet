@@ -30,6 +30,7 @@ public class FoundationDispatchTests
             out Tensor<T> finalHidden, out Tensor<T> finalCell, bool returnSequences = false)
         {
             StateCalls++;
+            if (Decline) throw new NotSupportedException();
             return base.LstmSequenceForward(input, h0, c0, wIh, wHh, bIh, bHh,
                 out finalHidden, out finalCell, returnSequences);
         }
@@ -227,6 +228,40 @@ public class FoundationDispatchTests
             (h, c) = cell.Step(x, h, c);
             Near(engine.TensorTranspose(h), engine.TensorSliceAxis(actual, 1, t), 1e-12);
         }
+    }
+
+    [Fact]
+    public void StatefulTraining_DispatchesAndPreservesAllStateGradients()
+    {
+        var previous = AiDotNetEngine.Current;
+        var engine = new SpyEngine(); AiDotNetEngine.Current = engine;
+        try
+        {
+            var layer = new LSTMLayer<double>(3);
+            var input = new Tensor<double>(new[] { 2, 4, 2 });
+            for (int i = 0; i < input.Length; i++) input[i] = Math.Sin(i) * 0.2;
+            var h0 = new Tensor<double>(new[] { 2, 3 }); h0[0] = 0.2;
+            var c0 = new Tensor<double>(new[] { 2, 3 }); c0[0] = -0.3;
+            layer.Forward(input);
+            var sources = new[] { input, h0, c0 }.Concat(layer.GetTrainableParameters()).ToArray();
+            Tensor<double> Loss()
+            {
+                var y = layer.ForwardFromState(input, h0, c0, out var h, out var c);
+                return engine.TensorAdd(engine.ReduceSum(y, null),
+                    engine.ReduceSum(engine.TensorAdd(h, c), null));
+            }
+            Tensor<double> actual;
+            Dictionary<Tensor<double>, Tensor<double>> gradients;
+            using (var tape = new GradientTape<double>())
+            { actual = Loss(); gradients = tape.ComputeGradients(actual, sources); }
+            Assert.Equal(1, engine.StateCalls);
+            engine.Decline = true;
+            using var referenceTape = new GradientTape<double>();
+            var expected = Loss(); var reference = referenceTape.ComputeGradients(expected, sources);
+            Near(expected, actual, 1e-10);
+            foreach (var parameter in sources) Near(reference[parameter], gradients[parameter], 1e-10);
+        }
+        finally { AiDotNetEngine.Current = previous; }
     }
 
     private static void Near(Tensor<double> expected, Tensor<double> actual, double tolerance)
