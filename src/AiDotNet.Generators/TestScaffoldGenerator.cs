@@ -1444,7 +1444,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // changes. Any that still OOM at fp32 (paper-scale generative LMs) will show in the live run and move
         // to the nightly HeavyTimeout lane.
         "KeywordSpotting", "LiteDVDNet", "LLMTime", "LSTNet", "MARS5TTS", "MGTSD", "MQCNN", "MadmomBeatTracker", "Mamba",
-        "MarbleNet", "MatchaTTS", "MedicalASR", "MegaTTS", "MeloTTS", "MelodyExtractor", "MusicGenModel",
+        "MarbleNet", "MatchaTTS", "MedicalASR", "MeloTTS", "MelodyExtractor", "MusicGenModel",
         "MusicStructureAnalyzer",
         // --- #1624 training/perf-bound inventory (OOM / TIMEOUT in training/clone) ---
         // Conformer/CTC ASR family: deep (12-18 layer) attention encoders whose <double> training
@@ -9827,28 +9827,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxDetections = 4, NumClassEmbeddings = 32, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "MegaTTS" && model.TypeParameterCount == 1
-                     && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.Latest.", System.StringComparison.Ordinal))
             {
-                // Mega-TTS's paper defaults are a 20-block stack: 6 content-encoder + 2 prosody +
-                // 2 timbre + 4 P-LLM + 6 mel-decoder residual transformer blocks at 192/512 wide.
-                // Every structural, gradient and memorization invariant passes at that scale —
-                // including Gradients_MatchFiniteDifference and LossStrictlyDecreasesOnMemorization
-                // — but Training_ShouldReduceLoss diverged (17.7 -> 43.7) because 20 blocks cannot
-                // settle within the generated suite's short training budget on random tokens. Same
-                // situation, and same remedy, as the FastSpeech bound above: keep the production
-                // defaults untouched and exercise the identical content / prosody-bottleneck /
-                // timbre / P-LLM / mel-decoder topology through the public options at smoke scale.
-                // Widths stay divisible by the head counts, and output shape follows the text-to-mel branch
-                // (8 tokens -> [8, 80] mel).
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 8, outputSize: 80), " +
-                    "new AiDotNet.TextToSpeech.Latest.MegaTTSOptions { EncoderDim = 32, DecoderDim = 32, " +
-                    "ProsodyDim = 8, ProsodyCodebookSize = 32, TimbreDim = 32, " +
-                    "PLLMDim = 32, NumEncoderLayers = 1, NumDecoderLayers = 1, NumProsodyLayers = 1, " +
-                    "NumTimbreLayers = 1, NumPLLMLayers = 1, NumHeads = 2, NumPLLMHeads = 2, " +
-                    "VocabSize = 64, DropoutRate = 0.0 })";
+                // Mega-TTS's Table 7 model is 222.5M parameters behind HiFi-GAN V1; the fixture is the same encoders,
+                // VQ bottleneck, P-LLM, discriminator and vocoder at width 16 with 16 mel bins.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.MegaTtsFixture.Create<double>()";
             }
             else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
             {
@@ -16376,6 +16359,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "MegaTTS")
+                {
+                    // Mega-TTS reads phone ids, predicts the acoustic model's mel spectrogram and trains on one with phoneme
+                    // durations: eight ids, and the fixture's 16 mel bins (the frames follow the predicted durations).
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 16 };");
+                }
                 else if (model.ClassName == "MegaTTS3")
                 {
                     // MegaTTS 3 reads a text's g2p token ids and trains on a 24 kHz recording: eight ids, and 240 samples
@@ -22114,12 +22104,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "E2TTS" => true,
             // Mega-TTS 2 consumes text/prosody tokens and predicts acoustic mel frames.
             "MegaTTS2" => true,
-            // Mega-TTS (v1) is the same contract as MegaTTS2 above and was simply missed here. Its
-            // content branch is phoneme-embedding-first, so the harness must supply integer token
-            // IDs; while it was absent from this list the generic path fed it continuous 0.1/0.9
-            // constants, which the embedding rounded to the same handful of indices and which no
-            // amount of training could separate.
-            "MegaTTS" => true,
             // Tacotron2 (TextToSpeech.Classic) is built on CreateDefaultAcousticModelLayers, whose
             // first layer is an EmbeddingLayer over a 256-token vocabulary, so it consumes token IDs
             // and predicts mel frames. It was being fed a continuous [8, 80] mel block straight into
