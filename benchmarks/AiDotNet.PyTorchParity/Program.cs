@@ -20,6 +20,7 @@
 // Then run the PyTorch side (see pytorch/README in this folder) and compare.
 
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -27,6 +28,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.PyTorchParity;
 using AiDotNet.Tensors.LinearAlgebra;
 using System.Diagnostics;
@@ -96,7 +98,7 @@ if (benchOptions.VerifyStep1Dir is { } referenceDir)
     var anyVerdict = false;
     foreach (var name in benchOptions.Models)
     {
-        if (backend.Create(name) is not AiDotNetBenchmarkModel verifiable)
+        if (backend.Create(name) is not AiDotNetBenchmarkModel { HasStep1Twin: true } verifiable)
         {
             Console.WriteLine($"[step1] {name}: no PyTorch twin to verify against");
             continue;
@@ -141,7 +143,8 @@ internal sealed record BenchmarkOptions(
     int WarmupIterations,
     int Seed,
     string OutputPath,
-    string? VerifyStep1Dir)
+    string? VerifyStep1Dir,
+    int[] InferenceBatchSizes)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -168,14 +171,15 @@ internal sealed record BenchmarkOptions(
             Int(map, "warmup-iterations", 10),
             Int(map, "seed", 1234),
             map.GetValueOrDefault("output", "results/aidotnet.json"),
-            map.GetValueOrDefault("verify-step1"));
+            map.GetValueOrDefault("verify-step1"),
+            map.GetValueOrDefault("inference-batches", "1,8,32,128")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(int.Parse).ToArray());
     }
 }
 
 internal sealed class BenchmarkRunner(BenchmarkOptions options)
 {
-    private static readonly int[] InferenceBatchSizes = [1, 8, 32, 128];
-
     public BenchmarkReport Run()
     {
         // Create each requested model, measure its training and inference
@@ -220,6 +224,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         var gradientSeconds = new List<double>();
         var dataSeconds = new List<double>();
         var total = Stopwatch.StartNew();
+        double? firstLoss = null;
         using var monitor = ResourceMonitor.Start();
 
         // Batches are generated BEFORE the timed epochs (the PyTorch twin does the same) so epoch
@@ -251,6 +256,8 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 var gradientTimer = Stopwatch.StartNew();
                 model.Backward();
                 gradientTimer.Stop();
+                // The first step's loss is read once, in the untimed-for-steady-state epoch 0, as proof the step trains.
+                firstLoss ??= model.LastLoss;
                 gradientSeconds.Add(gradientTimer.Elapsed.TotalSeconds);
                 model.Step();
             }
@@ -275,7 +282,9 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             options.TrainBatches,
             Round6(gradientSeconds.Count == 0 ? 0 : gradientSeconds.Average()),
             Round6(dataSeconds.Count == 0 ? 0 : dataSeconds.Average()),
-            monitor.Summary());
+            monitor.Summary(),
+            firstLoss,
+            model.LastLoss);
     }
 
     private List<InferenceReport> BenchmarkInference(IBenchmarkModel model)
@@ -284,7 +293,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         // latency and throughput behavior under different request shapes.
         var reports = new List<InferenceReport>();
         var process = Process.GetCurrentProcess();
-        foreach (var batchSize in InferenceBatchSizes)
+        foreach (var batchSize in options.InferenceBatchSizes)
         {
             model.LoadSyntheticBatch(batchSize);
 
@@ -359,6 +368,8 @@ internal interface IBenchmarkModel
     /// times batch replay around empty Backward/Step calls.
     /// </summary>
     bool IsInferenceOnly => false;
+    /// <summary>The loss of the most recent training step, or null for a model with no training step.</summary>
+    double? LastLoss => null;
     /// <summary>The batch the next Forward/Backward consumes; settable so the training loop can replay pre-generated batches.</summary>
     (Tensor<float> Input, Tensor<float> Label) CurrentBatch { get; set; }
 }
@@ -385,6 +396,18 @@ internal sealed class AiDotNetTensorBackend(int seed)
         // model should now ALSO hit this kernel through Predict() — compare the
         // two rows to confirm the high-level path no longer leaves perf on the table.
         "mlp-fused" => new AiDotNetMlpFusedModel(seed),
+        // GRU(input=32, hidden=64) + last-timestep slice + Linear(64, 10). Input [B, 32, 32].
+        "gru" => new AiDotNetGruModel(seed),
+        // Production vision families at CIFAR shape [3, 32, 32], 10 classes. The twins are the torchvision
+        // definitions of the same architectures (benchmark.py), so these rows compare the standard model
+        // against the standard model; each report records both parameter counts.
+        "resnet18" => new AiDotNetVisionModel(seed, VisionFamily.ResNet18),
+        "resnet50" => new AiDotNetVisionModel(seed, VisionFamily.ResNet50),
+        "vgg11" => new AiDotNetVisionModel(seed, VisionFamily.Vgg11),
+        "mobilenetv2" => new AiDotNetVisionModel(seed, VisionFamily.MobileNetV2),
+        "densenet121" => new AiDotNetVisionModel(seed, VisionFamily.DenseNet121),
+        // ViT at [3, 32, 32], patch 4, d=192, 6 layers, 3 heads, MLP 768 (a ViT-Tiny width).
+        "vit" => new AiDotNetVisionModel(seed, VisionFamily.VisionTransformer),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
@@ -448,6 +471,10 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
     /// <summary>True when Predict returns class probabilities rather than logits (Transformer re-applies softmax when
     /// its head emits logits); the step-1 check then compares in probability space.</summary>
     protected virtual bool PredictReturnsProbabilities => false;
+
+    /// <summary>False for a row measured against torchvision's definition of the architecture rather than a
+    /// layer-for-layer twin: there is no weight map, so the step-1 check has nothing to load.</summary>
+    public virtual bool HasStep1Twin => true;
 
     /// <summary>
     /// Loads the twin's initial weights, then checks this network computes what PyTorch computed on the reference
@@ -681,7 +708,14 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var sampleSize = perSample.Aggregate(1, (a, b) => a * b);
         var fullShape = new[] { batchSize }.Concat(perSample).ToArray();
         var inputs = new float[batchSize * sampleSize];
-        for (var i = 0; i < inputs.Length; i++) inputs[i] = (float)Random.NextDouble();
+        // Standard normal (Box-Muller), the twin's torch.randn. Uniform [0, 1) inputs were a different problem: PyTorch's
+        // own MLP on them moves its loss 2.309 -> 2.295 over the 60 timed steps against 2.308 -> 0.699 on randn, so the
+        // two sides' loss curves could not be compared.
+        for (var i = 0; i < inputs.Length; i++)
+        {
+            double u1 = 1.0 - Random.NextDouble(), u2 = Random.NextDouble();
+            inputs[i] = (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+        }
         Input = new Tensor<float>(inputs, fullShape);
 
         var labels = new float[batchSize * OutputClasses];
@@ -714,6 +748,8 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
     {
         // Real optimizer step happened inside Backward()'s Train call.
     }
+
+    public double? LastLoss => Convert.ToDouble(Network.GetLastLoss());
 }
 
 internal sealed class AiDotNetMlpModel : AiDotNetBenchmarkModel
@@ -893,6 +929,80 @@ internal sealed class AiDotNetTransformerModel : AiDotNetBenchmarkModel
             usePositionalEncoding: false, // the PyTorch twin has no positional encoding
             sequencePooling: SequencePoolingMode.MeanPool);
         return new Transformer<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>());
+    }
+}
+
+internal sealed class AiDotNetGruModel : AiDotNetBenchmarkModel
+{
+    public AiDotNetGruModel(int seed) : base(seed) { }
+    protected override int[] InputShapePerSample => new[] { 32, 32 };
+    protected override int OutputClasses => 10;
+    protected override IReadOnlyList<string> PyTorchModulePrefixes => ["gru", "head"];
+    protected override NeuralNetworkBase<float> BuildNetwork()
+    {
+        // GRU(input=32, hidden=64) + last-timestep slice + Linear(64, 10), the LSTM row's shape with a GRU cell.
+        var layers = new List<ILayer<float>>
+        {
+            new GRULayer<float>(hiddenSize: 64, returnSequences: true),
+            new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.Last),
+            new DenseLayer<float>(10, activationFunction: NoActivation),
+        };
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32,
+            inputWidth: 32,
+            outputSize: 10,
+            layers: layers);
+        return new GRUNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>());
+    }
+}
+
+internal enum VisionFamily { ResNet18, ResNet50, Vgg11, MobileNetV2, DenseNet121, VisionTransformer }
+
+/// <summary>
+/// A production vision network built through its own configuration class at CIFAR shape. These rows have no
+/// step-1 weight map: they measure the shipped architecture against torchvision's definition of it, not a
+/// layer-for-layer twin, so the report carries both parameter counts instead of an equivalence check.
+/// </summary>
+internal sealed class AiDotNetVisionModel(int seed, VisionFamily family) : AiDotNetBenchmarkModel(seed)
+{
+    private const int ImageSize = 32;
+    private const int Classes = 10;
+
+    // A field initializer runs before the base constructor, which is where BuildNetwork is called.
+    private readonly VisionFamily _family = family;
+
+    protected override int[] InputShapePerSample => new[] { 3, ImageSize, ImageSize };
+    protected override int OutputClasses => Classes;
+    protected override IReadOnlyList<string> PyTorchModulePrefixes => [];
+    public override bool HasStep1Twin => false;
+
+    protected override NeuralNetworkBase<float> BuildNetwork()
+    {
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: ImageSize, inputWidth: ImageSize, inputDepth: 3,
+            outputSize: Classes);
+        var loss = new CrossEntropyWithLogitsLoss<float>();
+        return _family switch
+        {
+            VisionFamily.ResNet18 => new ResNetNetwork<float>(arch,
+                new ResNetConfiguration(ResNetVariant.ResNet18, Classes, ImageSize, ImageSize), lossFunction: loss),
+            VisionFamily.ResNet50 => new ResNetNetwork<float>(arch,
+                new ResNetConfiguration(ResNetVariant.ResNet50, Classes, ImageSize, ImageSize), lossFunction: loss),
+            VisionFamily.Vgg11 => new VGGNetwork<float>(arch,
+                new VGGConfiguration(VGGVariant.VGG11, Classes, ImageSize, ImageSize, dropoutRate: 0.0), lossFunction: loss),
+            VisionFamily.MobileNetV2 => new MobileNetV2Network<float>(arch,
+                new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, Classes, ImageSize, ImageSize), lossFunction: loss),
+            VisionFamily.DenseNet121 => new DenseNetNetwork<float>(arch,
+                new DenseNetConfiguration(DenseNetVariant.DenseNet121, Classes, ImageSize, ImageSize), lossFunction: loss),
+            VisionFamily.VisionTransformer => new VisionTransformer<float>(arch, ImageSize, ImageSize, 3, patchSize: 4,
+                numClasses: Classes, lossFunction: loss,
+                options: new VisionTransformerOptions { HiddenDim = 192, NumLayers = 6, NumHeads = 3, MlpDim = 768 }),
+            _ => throw new ArgumentOutOfRangeException(nameof(_family), _family, null),
+        };
     }
 }
 
@@ -1080,7 +1190,8 @@ internal sealed record ModelReport(string Model, string Backend, string Device, 
 // ~0.36 s thereafter, so TotalSeconds/EpochSeconds[0] are warmup-skewed; the
 // steady-state average is the apples-to-apples training number vs PyTorch.
 internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds, double SteadyStateEpochSecondsAvg,
-    double SteadyStateEpochSecondsMedian, double SteadyStateEpochSecondsP25, double SteadyStateEpochSecondsP75, int StepsPerEpoch, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources);
+    double SteadyStateEpochSecondsMedian, double SteadyStateEpochSecondsP25, double SteadyStateEpochSecondsP75, int StepsPerEpoch, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources,
+    double? FirstLoss, double? LastLoss);
 internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample);
 internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95,
     double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak);

@@ -59,6 +59,9 @@ class TrainingResult:
     gradient_seconds_avg: float
     data_loading_seconds_avg: float
     resources: ResourceSummary
+    # Loss after the first and the last timed step: proof the step trains, read off the device only after timing.
+    first_loss: float | None = None
+    last_loss: float | None = None
 
 
 @dataclass
@@ -208,7 +211,76 @@ class TransformerClassifier(nn.Module):
         return self.head(encoded.mean(dim=1))
 
 
+class GRUClassifier(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.gru = nn.GRU(input_size=32, hidden_size=64, batch_first=True)
+        self.head = nn.Linear(64, 10)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out, _ = self.gru(x)
+        return self.head(out[:, -1, :])
+
+
+class TinyViT(nn.Module):
+    """ViT at 32x32, patch 4 (64 tokens + CLS), d=192, 6 pre-LN layers, 3 heads, MLP 768: the C# row's
+    VisionTransformerOptions. Classification reads the CLS token, as AiDotNet's VisionTransformer does."""
+
+    def __init__(self, image: int = 32, patch: int = 4, dim: int = 192, depth: int = 6, heads: int = 3,
+                 mlp: int = 768, classes: int = 10) -> None:
+        super().__init__()
+        tokens = (image // patch) ** 2
+        self.patch = nn.Conv2d(3, dim, patch, stride=patch)
+        self.cls = nn.Parameter(torch.zeros(1, 1, dim))
+        self.pos = nn.Parameter(torch.zeros(1, tokens + 1, dim))
+        layer = nn.TransformerEncoderLayer(d_model=dim, nhead=heads, dim_feedforward=mlp, dropout=0.0,
+                                           activation="gelu", batch_first=True, norm_first=True)
+        self.encoder = nn.TransformerEncoder(layer, num_layers=depth, enable_nested_tensor=False)
+        self.norm = nn.LayerNorm(dim)
+        self.head = nn.Linear(dim, classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        tokens = self.patch(x).flatten(2).transpose(1, 2)
+        tokens = torch.cat([self.cls.expand(tokens.shape[0], -1, -1), tokens], dim=1) + self.pos
+        return self.head(self.norm(self.encoder(tokens))[:, 0])
+
+
+def make_vision_model(name: str) -> nn.Module:
+    """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
+    32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
+    (no 7x7 adaptive pool), and DenseNet uses the CIFAR stem (3x3 stride 1, no max pool)."""
+    import torchvision.models as tvm
+
+    if name == "resnet18":
+        return tvm.resnet18(num_classes=10)
+    if name == "resnet50":
+        return tvm.resnet50(num_classes=10)
+    if name == "vgg11":
+        model = tvm.vgg11(num_classes=10)
+        model.avgpool = nn.Identity()
+        model.classifier = nn.Sequential(nn.Linear(512, 4096), nn.ReLU(True), nn.Linear(4096, 4096), nn.ReLU(True),
+                                         nn.Linear(4096, 10))
+        return model
+    if name == "mobilenetv2":
+        return tvm.mobilenet_v2(num_classes=10, dropout=0.0)
+    if name == "densenet121":
+        model = tvm.densenet121(num_classes=10)
+        model.features.conv0 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        model.features.pool0 = nn.Identity()
+        return model
+    if name == "vit":
+        return TinyViT()
+    raise ValueError(f"Unknown vision model: {name}")
+
+
+VISION_MODELS = ("resnet18", "resnet50", "vgg11", "mobilenetv2", "densenet121", "vit")
+
+
 def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
+    if name == "gru":
+        return GRUClassifier(), (32, 32)
+    if name in VISION_MODELS:
+        return make_vision_model(name), (3, 32, 32)
     if name == "mlp":
         return MLP(), (1, 28, 28)
     if name == "cnn":
@@ -263,6 +335,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
         data_seconds.append(time.perf_counter() - start_data)
 
     start_total = time.perf_counter()
+    first_loss: torch.Tensor | None = None
     with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
@@ -276,6 +349,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(x)
                 loss = criterion(logits, y)
+                if first_loss is None:
+                    first_loss = loss.detach()
                 # Per-step device syncs inflate the step on GPU; they run only under --breakdown,
                 # which attributes time to the backward. Default timing matches AiDotNet's loop.
                 if breakdown:
@@ -293,6 +368,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
             if profile_epoch:
                 torch.cuda.profiler.stop()
     total = time.perf_counter() - start_total
+    first_loss_value = float(first_loss.item()) if first_loss is not None else None
+    last_loss_value = float(loss.item()) if first_loss is not None else None
     # Steady state excludes epoch 0 (warmup), exactly as the AiDotNet twin does.
     steady_epochs = epoch_seconds[1:] if len(epoch_seconds) > 1 else epoch_seconds
     steady_sorted = sorted(steady_epochs)
@@ -307,13 +384,16 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
         gradient_seconds_avg=round(statistics.fmean(gradient_seconds), 6) if gradient_seconds else 0.0,
         data_loading_seconds_avg=round(statistics.fmean(data_seconds), 6),
         resources=monitor.summary(),
+        first_loss=first_loss_value,
+        last_loss=last_loss_value,
     )
 
 
 @torch.inference_mode()
-def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.device, iterations: int, warmup: int) -> list[InferenceBatchResult]:
+def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.device, iterations: int, warmup: int,
+                        batch_sizes: list[int]) -> list[InferenceBatchResult]:
     results: list[InferenceBatchResult] = []
-    for batch_size in BATCH_SIZES:
+    for batch_size in batch_sizes:
         x, _ = synthetic_batch(batch_size, shape, device)
         warmup_times: list[float] = []
         for _ in range(warmup):
@@ -377,7 +457,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             model = torch.compile(model)
         training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown)
         model.eval()
-        inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations)
+        inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
+                                        [int(b) for b in args.inference_batches.split(",")])
         model_results.append(ModelResult(name, str(device), parameters, training, inference))
 
     return {
@@ -400,6 +481,8 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--inference-iterations", type=int, default=100)
     parser.add_argument("--warmup-iterations", type=int, default=10)
+    parser.add_argument("--inference-batches", default=",".join(str(b) for b in BATCH_SIZES),
+                        help="Comma-separated inference batch sizes (the C# side takes the same flag).")
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--breakdown", action="store_true",
                         help="sync per step to attribute time to the backward (slows GPU steps)")
