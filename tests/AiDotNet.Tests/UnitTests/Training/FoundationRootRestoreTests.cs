@@ -212,4 +212,47 @@ public class FoundationRootRestoreTests
         Assert.Same(chunks[0], model.GetParameterChunks().First());
         Assert.Equal(12, chunks[0][0]); Assert.Equal(1, model.Restored);
     }
+
+    [Theory]
+    [InlineData("classifier")] [InlineData("multilabel")] [InlineData("online")]
+    [InlineData("clustering")] [InlineData("survival")] [InlineData("causal")]
+    public void NestedModelRestore_UsesChildChunkContractAndRunsChildHook(string family)
+    {
+        IFixture child = family switch
+        {
+            "classifier" => new Classifier(), "multilabel" => new MultiLabel(), "online" => new Online(),
+            "clustering" => new Clustering(), "survival" => new Survival(), "causal" => new Causal(),
+            _ => throw new ArgumentException()
+        };
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("children", new ComponentCollectionParameterSource<double>(
+            () => new[] { (IParameterSource<double>)child }));
+        var replacement = new Tensor<double>(new[] { 2 }); replacement[0] = 7;
+        Assert.True(registry.TrySetParameterChunks(new[] { replacement }));
+        Assert.Equal(7, child.Weight[0]); Assert.Equal(1, child.Restored);
+    }
+
+    [Fact]
+    public void NestedRestore_SnapshotsAliasesBeforeAnyChildWrite()
+    {
+        var own = new Tensor<double>(new[] { 2 }); own[0] = 3;
+        var child = new Classifier(); child.Weight[0] = 7;
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("a", new TensorFieldParameterSource<double>(() => own));
+        registry.Register("child", child);
+        Assert.False(registry.TrySetParameterChunks(new[] { child.Weight, new Tensor<double>(new[] { 3 }) }));
+        Assert.Equal(3, own[0]); Assert.Equal(0, child.Restored);
+        Assert.True(registry.TrySetParameterChunks(new[] { child.Weight, own }));
+        Assert.Equal(7, own[0]); Assert.Equal(3, child.Weight[0]); Assert.Equal(1, child.Restored);
+    }
+
+    [Fact]
+    public void NestedRestore_DoesNotBypassMoreSpecificChildSetter()
+    {
+        var child = new CustomSetterClassifier();
+        var registry = new ParameterComponentRegistry<double>(); registry.Register("child", child);
+        Assert.False(registry.TrySetParameterChunks(new[] { child.Weight }));
+        registry.SetParameters(new Vector<double>(new double[] { 8, 9 }));
+        Assert.Equal(1, child.SetterCalls); Assert.Equal(8, child.Weight[0]);
+    }
 }

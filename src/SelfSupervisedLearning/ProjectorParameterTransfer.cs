@@ -7,6 +7,19 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <summary>Copies or averages live projector tensors without flattening weights onto the host.</summary>
 internal static class ProjectorParameterTransfer<T>
 {
+    internal static IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> StateChunks(IProjectorHead<T> projector)
+    {
+        var tensors = projector.GetTrainableTensors();
+        for (int i = 0; i < tensors.Count; i++)
+            yield return new AiDotNet.Models.Parameters.ParameterChunk<T>($"tensor={i:D8}",
+                AiDotNet.Models.Parameters.ParameterSlotRole.Trainable, tensors[i]);
+    }
+
+    internal static IReadOnlyList<AiDotNet.Models.Parameters.ParameterSlotDescriptor> Layout(IProjectorHead<T> projector)
+        => StateChunks(projector).Select(chunk => new AiDotNet.Models.Parameters.ParameterSlotDescriptor(
+            chunk.StableId, chunk.Role, AiDotNet.Models.Parameters.ParameterReadiness.Materialized,
+            chunk.Tensor.Length, shape: chunk.Tensor.Shape.ToArray(), elementType: typeof(T).FullName)).ToArray();
+
     internal static void Copy(IProjectorHead<T> source, IProjectorHead<T> destination, bool leadingProjectorOnly = false)
         => Update(source, destination, 0, leadingProjectorOnly);
 

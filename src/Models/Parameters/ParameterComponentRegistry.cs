@@ -434,9 +434,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             // Writable storage alone does not authorize bypassing a nested model's setter.
             // Field adapters and canonical layers support value copies with cache invalidation.
             if (!HasComponents || CurrentComponents.Any(source =>
-                source is not TensorFieldParameterSource<T>
-                && source is not ResizableTensorFieldParameterSource<T>
-                && !(source is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layer && layer.CanRestoreParameterChunksInPlace()))) return false;
+                !CanCopyChunkValues(source) && ParameterTransfer.ChunkRestoreAction(source) is null)) return false;
             PrepareSources(ParameterSurfaceIntent.Restore);
             var targets = GetParameterStateChunks().ToArray();
             if (targets.Length != chunks.Count) return false;
@@ -458,12 +456,47 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                     || target.Tensor.Length != snapshot[i].Length).Any())
                     throw new ArgumentException("Restore hook changed the parameter layout.", nameof(chunks));
             }
-            for (int i = 0; i < targets.Length; i++)
-                AiDotNet.Training.TensorCheckpoint<T>.CopyValues(snapshot[i], targets[i].Tensor);
+            // Build every child restore before writing. Nested models own their restore hooks;
+            // bypassing those hooks would leave derived state or copy-on-write storage stale.
+            var actions = new List<Action>();
+            int offset = 0;
+            foreach (var source in CurrentComponents)
+            {
+                if (source is not IParameterChunkSource<T> chunked)
+                    throw new ArgumentException("Restore hook changed the parameter contract.", nameof(chunks));
+                var live = chunked.GetParameterStateChunks().Where(c => c.Tensor.Length > 0).ToArray();
+                if (offset + live.Length > targets.Length || live.Where((c, i) =>
+                    !ReferenceEquals(c.Tensor, targets[offset + i].Tensor)).Any())
+                    throw new ArgumentException("Restore hook changed the parameter layout.", nameof(chunks));
+                var values = snapshot.Skip(offset).Take(live.Length).ToArray();
+                if (CanCopyChunkValues(source))
+                    actions.Add(() =>
+                    {
+                        for (int i = 0; i < live.Length; i++)
+                            AiDotNet.Training.TensorCheckpoint<T>.CopyValues(values[i], live[i].Tensor);
+                    });
+                else
+                {
+                    var restore = ParameterTransfer.ChunkRestoreAction(source)
+                        ?? throw new ArgumentException("Restore hook changed the parameter contract.", nameof(chunks));
+                    actions.Add(() => restore(values));
+                }
+                offset += live.Length;
+            }
+            if (offset != targets.Length)
+                throw new ArgumentException("Restore hook changed the parameter layout.", nameof(chunks));
+            foreach (var action in actions) action();
             AiDotNet.NeuralNetworks.Layers.LayerBase<T>.NotifyParameterChunksRestored();
             return true;
         }
     }
+
+    private static bool CanCopyChunkValues(IParameterSource<T> source)
+        => source is TensorFieldParameterSource<T> or ResizableTensorFieldParameterSource<T>
+            || source is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layer && layer.CanRestoreParameterChunksInPlace()
+            || source.GetType() == typeof(AiDotNet.SelfSupervisedLearning.LinearProjector<T>)
+            || source.GetType() == typeof(AiDotNet.SelfSupervisedLearning.MLPProjector<T>)
+            || source.GetType() == typeof(AiDotNet.SelfSupervisedLearning.SymmetricProjector<T>);
 
     /// <summary>Restores slices using the exact manifest snapshot used to validate the vector.</summary>
     public void SetParameters(Vector<T> parameters)

@@ -77,4 +77,33 @@ public class TeacherParameterTransferTests
         }
         finally { AiDotNetEngine.Current = prior; }
     }
+
+    [Fact]
+    public void CompositeSslModel_CheckpointUsesLiveEncoderAndProjectorChunks()
+    {
+        using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
+        using var direct = new DirectGpuEngine(backend); using var gpu = new DirectGpuTensorEngine(direct);
+        var prior = AiDotNetEngine.Current; AiDotNetEngine.Current = gpu;
+        try
+        {
+            using var encoder = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+                AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+                inputSize: 3, outputSize: 2, layers: new List<ILayer<float>> { new DenseLayer<float>(2) }));
+            var projector = new MLPProjector<float>(2, 4, 2);
+            var model = new SimCLR<float>(encoder, projector);
+            var expected = model.GetParameters().ToArray();
+            var checkpoint = new AiDotNet.Training.ModelParameterCheckpoint<float, Tensor<float>, Tensor<float>>(model);
+            using (var scope = GpuResidencyScope.Begin(captureOperations: true))
+            {
+                var chunks = model.GetParameterChunks().ToArray();
+                Assert.All(projector.GetTrainableTensors(), tensor => Assert.Contains(tensor, chunks));
+                checkpoint.Capture();
+                foreach (var tensor in chunks) ((IEngine)gpu).TensorCopy(gpu.TensorAddScalar(tensor, 3f), tensor);
+                checkpoint.Restore();
+                Assert.True(scope.Downloads == 0, string.Join("\n", scope.Events));
+            }
+            Assert.Equal(expected, model.GetParameters().ToArray());
+        }
+        finally { AiDotNetEngine.Current = prior; }
+    }
 }

@@ -35,6 +35,21 @@ internal static class ParameterTransfer
         => !HasMoreSpecificFlatMethod(model.GetType(), "GetParameters", "GetParameterChunks", Type.EmptyTypes)
             && !HasMoreSpecificFlatMethod(model.GetType(), "SetParameters", "SetParameterChunks", new[] { typeof(Vector<T>) });
 
+    internal static Action<IEnumerable<Tensor<T>>>? ChunkRestoreAction<T>(IParameterSource<T> source)
+    {
+        if (source is not IParameterChunkSource<T>) return null;
+        var type = source.GetType();
+        var chunks = type.GetMethod("GetParameterChunks", Type.EmptyTypes);
+        var state = type.GetMethod("GetParameterStateChunks", Type.EmptyTypes);
+        var restore = type.GetMethod("SetParameterChunks", new[] { typeof(IEnumerable<Tensor<T>>) });
+        // The registry enumerates role-aware state. Only use a chunk setter when its public
+        // read surface has the same owner, and no more-specific flat contract was overridden.
+        if (chunks is null || state is null || restore is null || chunks.DeclaringType != state.DeclaringType
+            || HasMoreSpecificFlatMethod(type, "GetParameters", "GetParameterChunks", Type.EmptyTypes)
+            || HasMoreSpecificFlatMethod(type, "SetParameters", "SetParameterChunks", new[] { typeof(Vector<T>) })) return null;
+        return (Action<IEnumerable<Tensor<T>>>)restore.CreateDelegate(typeof(Action<IEnumerable<Tensor<T>>>), source);
+    }
+
     private static bool HasMoreSpecificFlatMethod(Type type, string flatName, string chunkName, Type[] parameters)
     {
         var flatOwner = type.GetMethod(flatName, parameters)?.DeclaringType;

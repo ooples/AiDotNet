@@ -154,4 +154,78 @@ public class RemainingLstmIntegrationTests
         }
         finally { AiDotNetEngine.Current = prior; }
     }
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void OpenCl_MemoryControllersKeepCellGradientsOnDevice(bool dnc)
+    {
+        using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
+        using var direct = new DirectGpuEngine(backend); using var gpu = new DirectGpuTensorEngine(direct);
+        var prior = AiDotNetEngine.Current;
+        try
+        {
+            var cpu = new CpuEngine(); AiDotNetEngine.Current = cpu;
+            Tensor<float> Make(params int[] shape)
+            {
+                var t = new Tensor<float>(shape);
+                for (int i = 0; i < t.Length; i++) t[i] = MathF.Sin(i + .3f) * .2f;
+                return t;
+            }
+            Func<Tensor<float>> forward;
+            Tensor<float>[] sources;
+            var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            if (dnc)
+            {
+                var model = new AiDotNet.NeuralNetworks.DifferentiableNeuralComputer<float>(
+                    new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>(
+                        inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+                        inputSize: 2, outputSize: 1), memorySize: 3, memoryWordSize: 2, controllerSize: 2, readHeads: 1,
+                    activationFunction: (IActivationFunction<float>?)null);
+                var method = model.GetType().GetMethod("ApplyControllerCell", flags)!;
+                var state = model.GetType().GetField("_controllerCell", flags)!;
+                var gates = Make(1, 8); var old = Make(1, 2); sources = new[] { gates };
+                forward = () =>
+                {
+                    state.SetValue(model, old);
+                    var first = (Tensor<float>)method.Invoke(model, new object[] { gates })!;
+                    var second = (Tensor<float>)method.Invoke(model, new object[] { gates })!;
+                    return AiDotNetEngine.Current.TensorAdd(AiDotNetEngine.Current.TensorAdd(first, second),
+                        (Tensor<float>)state.GetValue(model)!);
+                };
+            }
+            else
+            {
+                var controller = new AiDotNet.MetaLearning.Algorithms.LSTMNTMController<float, Matrix<float>, Vector<float>>(
+                    new AiDotNet.MetaLearning.Options.NTMOptions<float, Matrix<float>, Vector<float>>(
+                        new AiDotNet.Regression.SimpleRegression<float>())
+                    { ControllerHiddenSize = 3, MemoryWidth = 2, NumReadHeads = 1, RandomSeed = 42 });
+                var input = Make(4); var read = new List<Tensor<float>>(); controller.Forward(input, read);
+                sources = new[] { input }.Concat(new[] { "_weightsInput", "_weightsHidden", "_biases" }
+                    .Select(name => (Tensor<float>)controller.GetType().GetField(name, flags)!.GetValue(controller)!)).ToArray();
+                forward = () =>
+                {
+                    controller.Reset(); var first = controller.Forward(input, read); var second = controller.Forward(input, read);
+                    return AiDotNetEngine.Current.TensorConcatenate(new[] { first, second }, 0);
+                };
+            }
+            (Tensor<float> Output, Dictionary<Tensor<float>, Tensor<float>> Gradients) Run()
+            {
+                using var tape = new GradientTape<float>(); var output = forward();
+                var loss = AiDotNetEngine.Current.ReduceSum(output, null);
+                return (output, tape.ComputeGradients(loss, sources));
+            }
+            var expected = Run(); AiDotNetEngine.Current = gpu;
+            (Tensor<float> Output, Dictionary<Tensor<float>, Tensor<float>> Gradients) actual;
+            using (var scope = GpuResidencyScope.Begin(captureOperations: true))
+            {
+                actual = Run();
+                Assert.True(scope.Downloads == 0, string.Join("\n", scope.Events));
+            }
+            void Compare(Tensor<float> a, Tensor<float> b)
+            { for (int i = 0; i < a.Length; i++) Assert.InRange(MathF.Abs(a[i] - b[i]), 0, 5e-5f); }
+            Compare(expected.Output, actual.Output);
+            foreach (var source in sources) Compare(expected.Gradients[source], actual.Gradients[source]);
+        }
+        finally { AiDotNetEngine.Current = prior; }
+    }
 }
