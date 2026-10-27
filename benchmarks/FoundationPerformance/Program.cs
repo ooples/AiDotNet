@@ -16,10 +16,23 @@ using var direct = gpu ? (DirectGpuEngine)Activator.CreateInstance(typeof(Direct
 using var device = gpu ? new DirectGpuTensorEngine(direct!) : null;
 IEngine engine = device is null ? new CpuEngine() : device;
 AiDotNetEngine.Current = engine;
-const int warmup = 5, repeats = 21;
+const int warmup = 20, repeats = 101;
+string? profileCase = Environment.GetEnvironmentVariable("FOUNDATION_PROFILE_CASE");
+int profileSeconds = int.TryParse(Environment.GetEnvironmentVariable("FOUNDATION_PROFILE_SECONDS"), out var seconds) ? seconds : 20;
 var results = new List<object>();
 void Measure(string name, Action step, Func<double> checksum, object shape, Action synchronize)
 {
+    if (profileCase is not null)
+    {
+        if (profileCase != name + ":" + string.Join("x", (int[])shape)) return;
+        for (int i = 0; i < warmup; i++) { step(); synchronize(); }
+        Console.WriteLine($"Profiling {profileCase} for {profileSeconds} seconds");
+        var duration = Stopwatch.StartNew();
+        long iterations = 0;
+        while (duration.Elapsed.TotalSeconds < profileSeconds) { step(); synchronize(); iterations++; }
+        Console.WriteLine($"Completed {iterations} iterations; checksum={checksum():R}");
+        return;
+    }
     for (int i=0;i<warmup;i++) { step(); synchronize(); }
     var times = new double[repeats]; var bytes = new long[repeats];
     for (int i=0;i<repeats;i++)
@@ -31,9 +44,9 @@ void Measure(string name, Action step, Func<double> checksum, object shape, Acti
     long downloads, uploads;
     using(var scope=GpuResidencyScope.Begin()) { step(); backend?.Synchronize(); downloads=scope.Downloads; uploads=scope.Uploads; }
     Array.Sort(times); Array.Sort(bytes);
-    results.Add(new { name, shape, median_ms=times[repeats/2], min_ms=times[0], max_ms=times[^1], allocated_bytes=bytes[repeats/2], downloads, uploads, checksum=checksum() });
+    results.Add(new { name, shape, samples_ms=times, median_ms=times[repeats/2], min_ms=times[0], max_ms=times[^1], allocated_bytes=bytes[repeats/2], downloads, uploads, checksum=checksum() });
 }
-foreach (var shape in new[] { new[]{4,8,16,32}, new[]{16,32,32,64} })
+foreach (var shape in new[] { new[]{1,1,16,32}, new[]{4,8,16,32}, new[]{2,7,13,37}, new[]{16,32,32,64}, new[]{8,16,64,128} })
 {
     int b=shape[0], t=shape[1], inputs=shape[2], h=shape[3];
     var x=new Tensor<float>(new[]{b,t,inputs});
@@ -65,7 +78,7 @@ if (!gpu)
     Measure("LSTMLayer.float64.forward",Forward,()=>output!.ToArray().Sum(),new[]{b,t,inputs,h},()=>{});
     Measure("LSTMLayer.float64.forward_backward",Train,()=>gradients![x].ToArray().Sum(),new[]{b,t,inputs,h},()=>{});
 }
-foreach(var shape in new[]{new[]{8,64},new[]{2,16,16,32}})
+foreach(var shape in new[]{new[]{8,64},new[]{3,37},new[]{2,16,16,32},new[]{4,8,8,64}})
 {
     int hidden=shape[^1]; var gateShape=(int[])shape.Clone(); gateShape[^1]*=4;
     var gates=new Tensor<float>(gateShape);var old=new Tensor<float>(shape);
@@ -89,7 +102,7 @@ var live=Enumerable.Range(0,8).Select(_=>new Tensor<float>(new[]{256,256})).ToAr
 foreach(var p in live) engine.TensorCopy(engine.TensorAddScalar(p,.1f),p);
 var snapshotType=typeof(LSTMLayer<float>).Assembly.GetType("AiDotNet.Training.TensorCheckpoint`1")?.MakeGenericType(typeof(float));
 Tensor<float>[]? saved=null;
-var capture=snapshotType?.GetMethod("Capture"); var restore=snapshotType?.GetMethod("Restore");
+var capture=snapshotType?.GetMethod("Capture", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static); var restore=snapshotType?.GetMethod("Restore", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 Action checkpoint;
 if(capture is not null)
     checkpoint=()=>{saved=(Tensor<float>[])capture.Invoke(null,new object?[]{live,saved})!;restore!.Invoke(null,new object[]{live,saved});};

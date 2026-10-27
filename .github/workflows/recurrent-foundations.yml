@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ooples/AiDotNet.Tensors
-          ref: 905a52851d7aa545f718d09b4cd8c26da93c93df
+          ref: b67e720f86c0cc39d7d7f847bbe961a3c29807d6
           path: companion-tensors
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:

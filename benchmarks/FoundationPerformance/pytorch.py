@@ -10,13 +10,13 @@ else:
     device=torch.device('cpu'); backend='CPU native nn.LSTM'
 results=[]
 def measure(name, step, shape):
-    for _ in range(5): out=step(); out.cpu() if args.gpu else None
+    for _ in range(20): out=step(); out.cpu() if args.gpu else None
     times=[]
-    for _ in range(21):
+    for _ in range(101):
         start=time.perf_counter(); out=step(); out.cpu() if args.gpu else None
         times.append((time.perf_counter()-start)*1000)
-    results.append(dict(name=name,shape=shape,median_ms=statistics.median(times),min_ms=min(times),max_ms=max(times),checksum=out.detach().cpu().double().sum().item()))
-for b,t,i,h in [(4,8,16,32),(16,32,32,64)]:
+    results.append(dict(name=name,shape=shape,samples_ms=times,median_ms=statistics.median(times),min_ms=min(times),max_ms=max(times),checksum=out.detach().cpu().double().sum().item()))
+for b,t,i,h in [(1,1,16,32),(4,8,16,32),(2,7,13,37),(16,32,32,64),(8,16,64,128)]:
     shape=[b,t,i,h]
     x=torch.tensor([math.sin(j*.01)*.1 for j in range(b*t*i)],dtype=torch.float32).reshape(b,t,i).to(device).requires_grad_()
     model=torch.nn.LSTM(i,h,batch_first=True).to(device)
@@ -48,7 +48,7 @@ if not args.gpu:
     model.bias_hh_l0.requires_grad_(False)
     measure('LSTMLayer.float64.forward',inference,[b,t,i,h])
     measure('LSTMLayer.float64.forward_backward',train,[b,t,i,h])
-for shape in [(8,64),(2,16,16,32)]:
+for shape in [(8,64),(3,37),(2,16,16,32),(4,8,8,64)]:
     n=math.prod(shape)*4
     gates=torch.tensor([math.sin(j*.01)*.1 for j in range(n)],dtype=torch.float32).reshape(*shape[:-1],4*shape[-1]).to(device).requires_grad_()
     old=torch.full(shape,.1,device=device,dtype=torch.float32,requires_grad=True)
@@ -65,4 +65,4 @@ def checkpoint():
         for src,dst in zip(saved,live): dst.copy_(src)
     return live[0]
 measure('checkpoint.capture_restore',checkpoint,[8,256,256])
-print(json.dumps(dict(backend=backend,torch=torch.__version__,warmup=5,repeats=21,results=results),indent=2))
+print(json.dumps(dict(backend=backend,torch=torch.__version__,warmup=20,repeats=101,results=results),indent=2))

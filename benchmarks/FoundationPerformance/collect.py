@@ -1,7 +1,7 @@
 """Normalize runner output, validate checksum agreement, and produce the measured table."""
 import json, pathlib, sys
 source=pathlib.Path(sys.argv[1]); target=pathlib.Path(__file__).parent/'results';target.mkdir(exist_ok=True)
-lines=['| Device / workload | Shape | Before ms | After ms | PyTorch ms | Before/after |', '|---|---|---:|---:|---:|---:|']
+lines=['| Device / workload | Shape | Before ms | After ms | PyTorch ms | Before/after | PyTorch/after |', '|---|---|---:|---:|---:|---:|---:|']
 for device in ['cpu','gpu']:
     reports=[]
     for version in ['before','after','pytorch']:
@@ -14,6 +14,6 @@ for device in ['cpu','gpu']:
         checks=[r['checksum'] for r in rows]
         assert max(checks)-min(checks)<max(1e-5,abs(checks[0])*1e-5),(rows[0]['name'],checks)
         before,after,torch=[r['median_ms'] for r in rows]
-        lines.append(f"| {device.upper()} {rows[0]['name']} | {'×'.join(map(str,rows[0]['shape']))} | {before:.4f} | {after:.4f} | {torch:.4f} | {before/after:.2f}× |")
+        lines.append(f"| {device.upper()} {rows[0]['name']} | {'×'.join(map(str,rows[0]['shape']))} | {before:.4f} | {after:.4f} | {torch:.4f} | {before/after:.2f}× | {torch/after:.2f}× |")
 (target/'table.txt').write_text('\n'.join(lines)+'\n',encoding='utf-8')
 print('Validated all benchmark checksums; wrote normalized reports and table.')
