@@ -10,6 +10,20 @@ namespace AiDotNet.Playground.Functions;
 /// <summary>Preserves the public URL without running submitted code in the billing worker.</summary>
 public sealed class ExecuteCodeProxy(HttpClient client, IConfiguration configuration, ILogger<ExecuteCodeProxy> logger)
 {
+    public const int MaxResponseBytes = 1024 * 1024;
+    public const int DefaultTimeoutSeconds = 60;
+    public const int MaxTimeoutSeconds = 180;
+
+    public static void ConfigureClient(HttpClient client, IConfiguration configuration)
+    {
+        var setting = configuration["PLAYGROUND_EXECUTION_TIMEOUT_SECONDS"];
+        var seconds = DefaultTimeoutSeconds;
+        if (setting is not null && (!int.TryParse(setting, out seconds) || seconds <= 0 || seconds > MaxTimeoutSeconds))
+            throw new InvalidOperationException($"Execution timeout must be between 1 and {MaxTimeoutSeconds} seconds.");
+        client.Timeout = TimeSpan.FromSeconds(seconds);
+        client.MaxResponseContentBufferSize = MaxResponseBytes;
+    }
+
     [Function("execute")]
     public async Task<IActionResult> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req)
@@ -24,7 +38,7 @@ public sealed class ExecuteCodeProxy(HttpClient client, IConfiguration configura
             || endpoint.AbsolutePath != "/api/execute")
         {
             logger.LogError("Isolated execution endpoint is not configured correctly");
-            return new StatusCodeResult(StatusCodes.Status503ServiceUnavailable);
+            return Unavailable(StatusCodes.Status503ServiceUnavailable);
         }
 
         try
@@ -35,6 +49,8 @@ public sealed class ExecuteCodeProxy(HttpClient client, IConfiguration configura
             request.Content = new StreamContent(req.Body);
             request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             using var response = await client.SendAsync(request, req.HttpContext.RequestAborted);
+            if (!string.Equals(response.Content.Headers.ContentType?.MediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+                return Unavailable(response.IsSuccessStatusCode ? StatusCodes.Status502BadGateway : (int)response.StatusCode);
             return new ContentResult
             {
                 StatusCode = (int)response.StatusCode,
@@ -45,7 +61,14 @@ public sealed class ExecuteCodeProxy(HttpClient client, IConfiguration configura
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
             logger.LogWarning("Isolated execution service is unavailable");
-            return new StatusCodeResult(StatusCodes.Status502BadGateway);
+            return Unavailable(StatusCodes.Status502BadGateway);
         }
     }
+
+    private static ContentResult Unavailable(int status) => new()
+    {
+        StatusCode = status,
+        ContentType = "application/json",
+        Content = "{\"success\":false,\"error\":\"Execution service unavailable\"}"
+    };
 }

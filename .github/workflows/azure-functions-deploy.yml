@@ -60,7 +60,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -105,7 +105,7 @@ jobs:
           python3 scripts/verify-playground-package.py ./publish-execution --execution
 
       - name: Upload verified deployment artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playground-functions
           path: |
@@ -122,10 +122,10 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Required for azure/login OIDC federation
     steps:
       - name: Checkout route verification script
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -134,7 +134,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Download verified deployment artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: playground-functions
           path: .
@@ -164,7 +164,7 @@ jobs:
         run: python3 scripts/verify-playground-isolation.py "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" "$AZURE_FUNCTIONAPP_NAME" "$AZURE_EXECUTIONAPP_NAME"
 
       - name: Deploy isolated code execution
-        uses: Azure/functions-action@v1
+        uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1
         with:
           app-name: ${{ env.AZURE_EXECUTIONAPP_NAME }}
           package: ./publish-execution
@@ -177,7 +177,7 @@ jobs:
           az functionapp config appsettings set --resource-group "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" --name "$AZURE_FUNCTIONAPP_NAME" --settings "PLAYGROUND_EXECUTION_URL=https://$hostname/api/execute" --output none
 
       - name: Deploy to Azure Functions
-        uses: Azure/functions-action@v1
+        uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1
         with:
           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
           package: ./publish

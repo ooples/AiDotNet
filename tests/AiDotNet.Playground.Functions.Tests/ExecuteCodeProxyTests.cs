@@ -26,7 +26,7 @@ public sealed class ExecuteCodeProxyTests
             Assert.Empty(request.Headers);
             Assert.Equal("application/json", request.Content!.Headers.ContentType!.MediaType);
             Assert.Equal(code, await request.Content.ReadAsStringAsync());
-            return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(body) };
+            return new HttpResponseMessage((HttpStatusCode)status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
         });
         using var client = new HttpClient(handler);
         var request = Request(code);
@@ -52,7 +52,7 @@ public sealed class ExecuteCodeProxyTests
     {
         var handler = new Handler(_ => throw new Xunit.Sdk.XunitException("Must not send"));
         using var client = new HttpClient(handler);
-        var result = Assert.IsType<StatusCodeResult>(await Proxy(client, endpoint).Run(Request("{}")));
+        var result = Assert.IsType<ContentResult>(await Proxy(client, endpoint).Run(Request("{}")));
         Assert.Equal(503, result.StatusCode);
         Assert.Equal(0, handler.Calls);
     }
@@ -61,15 +61,102 @@ public sealed class ExecuteCodeProxyTests
     public async Task BackendFailureDoesNotFallBackToLocalExecution()
     {
         using var client = new HttpClient(new Handler(_ => throw new HttpRequestException("Backend failed")));
-        var result = Assert.IsType<StatusCodeResult>(await Proxy(client, Endpoint).Run(Request("{}")));
+        var result = Assert.IsType<ContentResult>(await Proxy(client, Endpoint).Run(Request("{}")));
         Assert.Equal(502, result.StatusCode);
     }
 
-    private static ExecuteCodeProxy Proxy(HttpClient client, string? endpoint) => new(client,
+    [Theory]
+    [InlineData(200, 502)]
+    [InlineData(503, 503)]
+    public async Task NonJsonBackendResponseBecomesControlledError(int status, int expected)
+    {
+        using var client = new HttpClient(new Handler(_ => Task.FromResult(new HttpResponseMessage((HttpStatusCode)status)
+        {
+            Content = new StringContent("<html>Internal upstream failure</html>", Encoding.UTF8, "text/html")
+        })));
+        var result = Assert.IsType<ContentResult>(await Proxy(client, Endpoint).Run(Request("{}")));
+        Assert.Equal(expected, result.StatusCode);
+        Assert.Equal("application/json", result.ContentType);
+        using var json = System.Text.Json.JsonDocument.Parse(result.Content!);
+        Assert.False(json.RootElement.GetProperty("success").GetBoolean());
+        Assert.Equal("Execution service unavailable", json.RootElement.GetProperty("error").GetString());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OversizedResponsesAreRejectedIncludingUnknownContentLength(bool unknownLength)
+    {
+        using var client = new HttpClient(new Handler(_ =>
+        {
+            HttpContent content = unknownLength ? new ChunkedContent() : new ByteArrayContent(new byte[ExecuteCodeProxy.MaxResponseBytes + 1]);
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+        }));
+        var result = Assert.IsType<ContentResult>(await Proxy(client, Endpoint).Run(Request("{}")));
+        Assert.Equal(502, result.StatusCode);
+        Assert.Equal("{\"success\":false,\"error\":\"Execution service unavailable\"}", result.Content);
+    }
+
+    [Fact]
+    public async Task ResponseAtLimitIsAccepted()
+    {
+        var body = "\"" + new string('x', ExecuteCodeProxy.MaxResponseBytes - 2) + "\"";
+        using var client = new HttpClient(new Handler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        })));
+        var result = Assert.IsType<ContentResult>(await Proxy(client, Endpoint).Run(Request("{}")));
+        Assert.Equal(200, result.StatusCode);
+        Assert.Equal(body, result.Content);
+    }
+
+    [Theory]
+    [InlineData(null, 60)]
+    [InlineData("120", 120)]
+    public void ClientUsesValidatedTimeoutAndResponseLimit(string? setting, int seconds)
+    {
+        using var client = new HttpClient();
+        ExecuteCodeProxy.ConfigureClient(client, Config(Endpoint, setting));
+        Assert.Equal(TimeSpan.FromSeconds(seconds), client.Timeout);
+        Assert.Equal(ExecuteCodeProxy.MaxResponseBytes, client.MaxResponseContentBufferSize);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("181")]
+    [InlineData("invalid")]
+    public void InvalidTimeoutIsRejected(string setting)
+    {
+        using var client = new HttpClient();
+        Assert.Throws<InvalidOperationException>(() => ExecuteCodeProxy.ConfigureClient(client, Config(Endpoint, setting)));
+    }
+
+    private static ExecuteCodeProxy Proxy(HttpClient client, string? endpoint)
+    {
+        var config = Config(endpoint);
+        ExecuteCodeProxy.ConfigureClient(client, config);
+        return new(client, config, NullLogger<ExecuteCodeProxy>.Instance);
+    }
+
+    private static IConfiguration Config(string? endpoint, string? timeout = null) =>
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["PLAYGROUND_EXECUTION_URL"] = endpoint
-        }).Build(), NullLogger<ExecuteCodeProxy>.Instance);
+            ["PLAYGROUND_EXECUTION_URL"] = endpoint,
+            ["PLAYGROUND_EXECUTION_TIMEOUT_SECONDS"] = timeout
+        }).Build();
+
+    private sealed class ChunkedContent : HttpContent
+    {
+        protected override bool TryComputeLength(out long length) { length = 0; return false; }
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            var chunk = new byte[4096];
+            for (var bytes = 0; bytes <= ExecuteCodeProxy.MaxResponseBytes; bytes += chunk.Length)
+                await stream.WriteAsync(chunk);
+        }
+    }
 
     private static HttpRequest Request(string body)
     {

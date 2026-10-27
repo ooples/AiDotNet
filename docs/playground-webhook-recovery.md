@@ -46,9 +46,9 @@ duplicate/retry controls all preserved `free/canceled`; the concurrent event had
 exactly one receipt. All temporary subscription/customer/user/profile fixtures
 were cleaned up. Signature rejection and execute-output-42 checks still passed.
 
-Rollback: the preceding Functions package can still run with these additive
-tables present, but it does not enforce ordering or deduplication. Keep the
-tables and receipts when rolling back; do not erase the processing history.
+Rollback must use a verified webhook/proxy package and preserve the event tables
+and receipts. Pre-isolation packages are not safe rollback targets for the billing
+app because they execute submitted code beside billing credentials.
 
 
 ## Incident evidence (2026-10-26)
@@ -178,7 +178,9 @@ merging this draft. Preserve all existing application settings and routes.
    Azure bearer authentication to Kudu; never log credentials/settings values.
 2. Verify the release ZIP hash against the reviewed artifact. ZIP entries must
    start at `host.json`/`functions.metadata`, without a containing directory or
-   `local.settings.json`. Deploy only to `aidotnet-playground`.
+   `local.settings.json`. Deploy the execution-only package to
+   `aidotnet-playground-execution` first, then the verified webhook/proxy package
+   to `aidotnet-playground`. Never interchange the two packages.
 3. Confirm Azure lists both functions, then run
    `python scripts/check-playground-routes.py https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net`.
    Both empty unsigned POST requests must return 400. These checks do not
@@ -187,9 +189,13 @@ merging this draft. Preserve all existing application settings and routes.
    With explicit approval, reconcile duplicate registrations and resend a
    suitable failed test event. Verify its delivery response and intended profile
    change. Do not rotate secrets or disable either registration speculatively.
-5. If the execute route regresses, redeploy the captured previous ZIP and verify
-   execute again. That package lacks the webhook: rollback restores the old
-   execute service but reintroduces webhook 404, and is not incident resolution.
+5. If execution regresses, roll back only the execution app to a verified
+   execution-only package, keeping its dedicated storage and credential isolation.
+   A billing rollback must pass `verify-playground-package.py` in billing mode and
+   contain only the webhook and `ExecuteCodeProxy`. Pre-isolation ZIPs, including
+   `20260124021456.zip`, are superseded and must never be restored to the billing
+   app. If no verified proxy package is available, leave execution unavailable
+   while correcting the proxy; never fall back to local execution.
 
 ## Local verification
 
@@ -219,6 +225,9 @@ subsequent live checks separately.
 The billing app retains both public URLs. Its `/api/execute` handler only proxies
 request bodies to `PLAYGROUND_EXECUTION_URL`; it neither compiles nor executes
 submitted code, and forwards no incoming authorization, cookies, or function keys.
+The proxy caps buffered responses at 1 MiB and replaces non-JSON upstream errors
+with a controlled JSON error. `PLAYGROUND_EXECUTION_TIMEOUT_SECONDS` defaults to
+60 and accepts 1–180 seconds; invalid values fail configuration.
 The compiler and AiDotNet runtime are packaged in `AiDotNet.Playground.Execution`
 and deployed to `aidotnet-playground-execution`. This app uses its own storage
 account `aidotnetexecstore2026`, has no managed identity, and receives no Stripe,
@@ -246,3 +255,12 @@ a combined execution/webhook package to an app containing billing secrets.
 The corrective database migration was verified live with the delayed A-cancel /
 B-checkout sequence and all eight status mappings. Temporary user/profile/state/
 receipt fixtures were removed after verification.
+
+Isolation deployment verification (2026-10-27): execution deployment
+`b8493baf281b44b3b2af09fe4bc2c692` and billing deployment
+`bf66ff4b8afe41baa2bd6929efcc5746` preserved both public URLs. Submitted code
+through the public URL returned `42` and confirmed billing credentials and
+managed-identity endpoints were absent. Both Stripe registrations delivered
+subscription update/delete events with HTTP 200; a concurrent lease conflict
+retried automatically and recovered. The exact profile transitioned from
+`pro/active` to `free/canceled`, and all temporary fixtures were removed.

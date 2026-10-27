@@ -77,6 +77,27 @@ class EventStateTests(unittest.TestCase):
         self.assertEqual(claim("evt_checkout_b", 299, OTHER), "duplicate")
         self.assertEqual(sql("select count(*) from public.playground_stripe_events;"), "2")
 
+    def test_same_second_terminal_event_for_other_subscription_is_stale(self):
+        self.assertEqual(claim("evt_a", 200), "claimed")
+        self.assertEqual(complete("active", subscription="sub_a", created=100), "applied")
+        for index, status in enumerate(["canceled", "incomplete_expired"]):
+            with self.subTest(status=status):
+                event = f"evt_b_{index}"
+                self.assertEqual(claim(event, 201 + index), "claimed")
+                self.assertEqual(complete(status, subscription="sub_b", created=100), "stale")
+                self.assertEqual(profile(), "pro/active/cus_test")
+                self.assertEqual(sql("select subscription_id from public.playground_stripe_state;"), "sub_a")
+                self.assertEqual(sql(f"select outcome from public.playground_stripe_events where event_id='{event}';"), "stale")
+                self.assertEqual(claim(event, 201 + index), "duplicate")
+
+    def test_same_second_non_terminal_event_for_other_subscription_is_applied(self):
+        self.assertEqual(claim("evt_a", 200), "claimed")
+        self.assertEqual(complete("active", subscription="sub_a", created=100), "applied")
+        self.assertEqual(claim("evt_b", 201), "claimed")
+        self.assertEqual(complete("past_due", subscription="sub_b", created=100), "applied")
+        self.assertEqual(profile(), "free/past_due/cus_test")
+        self.assertEqual(sql("select subscription_id from public.playground_stripe_state;"), "sub_b")
+
     def test_only_active_and_trialing_subscriptions_grant_pro(self):
         for i, status in enumerate(["active", "trialing", "past_due", "unpaid",
                                     "incomplete", "incomplete_expired", "paused", "canceled"]):

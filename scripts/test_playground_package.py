@@ -41,6 +41,11 @@ class PlaygroundPackage(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'compiler'):
             self.verify()
 
+    def test_billing_worker_rejects_execution_library(self):
+        (self.root/'AiDotNet.dll').write_bytes(b'fixture')
+        with self.assertRaisesRegex(ValueError, 'execution library'):
+            self.verify()
+
     def test_execution_package_rejects_webhook_and_stripe(self):
         with self.assertRaisesRegex(ValueError, 'Unexpected function'):
             self.verify(execution=True)
