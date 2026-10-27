@@ -40,6 +40,57 @@ internal sealed class MeCab
         public short[] Cost = Array.Empty<short>();
         public ushort[] PosId = Array.Empty<ushort>();
         public ushort[] Tag = Array.Empty<ushort>();
+        // A dictionary read from MeCab's binary format: the Darts double array its keys are searched in, and each
+        // token's feature (an offset into the NUL-terminated feature strings).
+        public int[]? Base;
+        public uint[]? Check;
+        public uint[] Feature = Array.Empty<uint>();
+        public byte[] Features = Array.Empty<byte>();
+
+        public string FeatureOf(int token)
+        {
+            int start = (int)Feature[token], end = start;
+            while (Features[end] != 0) end++;
+            return Encoding.UTF8.GetString(Features, start, end - start);
+        }
+
+        // Darts::DoubleArray::commonPrefixSearch: each key the len bytes from begin start with, shortest first.
+        public void CommonPrefixSearch(byte[] s, int begin, int len, List<(int Value, int Length)> results)
+        {
+            if (Base is null || Check is null)
+            {
+                var key = new StringBuilder(len);
+                for (int length = 1; length <= Math.Min(len, MaxKeyLength); length++)
+                {
+                    key.Append((char)s[begin + length - 1]);
+                    if (Keys.TryGetValue(key.ToString(), out int value)) results.Add((value, length));
+                }
+                return;
+            }
+            int b = Base[0];
+            for (int i = 0; i < len; i++)
+            {
+                if ((uint)b == Check[b] && Base[b] < 0) results.Add((-Base[b] - 1, i));
+                int p = b + s[begin + i] + 1;
+                if (p >= Check.Length || (uint)b != Check[p]) return;
+                b = Base[p];
+            }
+            if ((uint)b == Check[b] && Base[b] < 0) results.Add((-Base[b] - 1, len));
+        }
+
+        // Darts::DoubleArray::exactMatchSearch; -1 when the key is absent.
+        public int ExactMatchSearch(byte[] key)
+        {
+            if (Base is null || Check is null) return Keys.TryGetValue(Latin1(key), out int found) ? found : -1;
+            int b = Base[0];
+            foreach (byte c in key)
+            {
+                int p = b + c + 1;
+                if (p >= Check.Length || (uint)b != Check[p]) return -1;
+                b = Base[p];
+            }
+            return (uint)b == Check[b] && Base[b] < 0 ? -Base[b] - 1 : -1;
+        }
     }
 
     private readonly Lexicon _system;
@@ -98,6 +149,91 @@ internal sealed class MeCab
             int posid = reader.ReadUInt16(), cost = reader.ReadInt32();
             if (!_leftSpacePenalty.ContainsKey(posid)) _leftSpacePenalty[posid] = cost;
         }
+    }
+
+    /// <summary>
+    /// A MeCab 0.996 dictionary directory as <c>mecab-dict-index</c> writes it (<c>sys.dic</c>, <c>unk.dic</c>,
+    /// <c>matrix.bin</c>, <c>char.bin</c>), read as MeCab's <c>Dictionary::open</c>, <c>Connector::open</c> and
+    /// <c>CharProperty::open</c> read them; Open JTalk's (<c>open_jtalk_dic_utf_8-1.11</c>) for one. Its words come
+    /// with their features (<see cref="ParseFeatures"/>).
+    /// </summary>
+    public static MeCab Open(string directory)
+    {
+        if (directory is null) throw new ArgumentNullException(nameof(directory));
+        return new MeCab(directory, fromDirectory: true);
+    }
+
+    private MeCab(string directory, bool fromDirectory)
+    {
+        _system = ReadDictionary(Path.Combine(directory, "sys.dic"), out int leftSize, out int rightSize);
+        _unknown = ReadDictionary(Path.Combine(directory, "unk.dic"), out _, out _);
+
+        var matrix = File.ReadAllBytes(Path.Combine(directory, "matrix.bin"));
+        _leftSize = BitConverter.ToUInt16(matrix, 0);
+        int matrixRight = BitConverter.ToUInt16(matrix, 2);
+        if (_leftSize != leftSize || matrixRight != rightSize || matrix.Length != 2 * (_leftSize * matrixRight + 2))
+            throw new InvalidDataException("matrix.bin does not match sys.dic.");
+        _matrix = new short[_leftSize * matrixRight];
+        Buffer.BlockCopy(matrix, 4, _matrix, 0, _matrix.Length * 2);
+
+        var chars = File.ReadAllBytes(Path.Combine(directory, "char.bin"));
+        int categories = (int)BitConverter.ToUInt32(chars, 0);
+        if (chars.Length != 4 + 32 * categories + 4 * 0xffff) throw new InvalidDataException("char.bin: invalid file size.");
+        _unknownTokens = new (int, int)[categories];
+        for (int i = 0; i < categories; i++)
+        {
+            int start = 4 + 32 * i, end = start;
+            while (end < start + 32 && chars[end] != 0) end++;
+            var name = new byte[end - start];
+            Array.Copy(chars, start, name, 0, name.Length);
+            int value = _unknown.ExactMatchSearch(name);
+            if (value == -1) throw new InvalidDataException($"cannot find UNK category: {Encoding.UTF8.GetString(name)}");
+            _unknownTokens[i] = (value >> 8, value & 0xff);
+        }
+        _charMap = new uint[0xffff];
+        Buffer.BlockCopy(chars, 4 + 32 * categories, _charMap, 0, _charMap.Length * 4);
+        _space = _charMap[0x20];
+    }
+
+    private const uint DictionaryMagicId = 0xef718f77;
+
+    private static Lexicon ReadDictionary(string path, out int leftSize, out int rightSize)
+    {
+        var bytes = File.ReadAllBytes(path);
+        if (bytes.Length < 100) throw new InvalidDataException($"dictionary file is broken: {path}");
+        uint Header(int i) => BitConverter.ToUInt32(bytes, 4 * i);
+        if ((Header(0) ^ DictionaryMagicId) != (uint)bytes.Length) throw new InvalidDataException($"dictionary file is broken: {path}");
+        if (Header(1) != 102) throw new InvalidDataException($"incompatible version: {Header(1)}");
+        leftSize = (int)Header(4);
+        rightSize = (int)Header(5);
+        int dsize = (int)Header(6), tsize = (int)Header(7), fsize = (int)Header(8);
+        int offset = 40 + 32;
+        if (offset + dsize + tsize + fsize != bytes.Length) throw new InvalidDataException($"dictionary file is broken: {path}");
+
+        var lexicon = new Lexicon { Base = new int[dsize / 8], Check = new uint[dsize / 8] };
+        for (int i = 0; i < lexicon.Base.Length; i++)
+        {
+            lexicon.Base[i] = BitConverter.ToInt32(bytes, offset + 8 * i);
+            lexicon.Check[i] = BitConverter.ToUInt32(bytes, offset + 8 * i + 4);
+        }
+        offset += dsize;
+        int tokens = tsize / 16;
+        lexicon.Left = new ushort[tokens];
+        lexicon.Right = new ushort[tokens];
+        lexicon.PosId = new ushort[tokens];
+        lexicon.Cost = new short[tokens];
+        lexicon.Feature = new uint[tokens];
+        for (int i = 0; i < tokens; i++, offset += 16)
+        {
+            lexicon.Left[i] = BitConverter.ToUInt16(bytes, offset);
+            lexicon.Right[i] = BitConverter.ToUInt16(bytes, offset + 2);
+            lexicon.PosId[i] = BitConverter.ToUInt16(bytes, offset + 4);
+            lexicon.Cost[i] = BitConverter.ToInt16(bytes, offset + 6);
+            lexicon.Feature[i] = BitConverter.ToUInt32(bytes, offset + 8);
+        }
+        lexicon.Features = new byte[fsize];
+        Array.Copy(bytes, offset, lexicon.Features, 0, fsize);
+        return lexicon;
     }
 
     private static string Latin1(byte[] bytes)
@@ -184,6 +320,8 @@ internal sealed class MeCab
         public int Surface, Length, RLength;
         public int Left, Right, WordCost;
         public int PosId, Tag = -1;
+        public Lexicon? Source;
+        public int Token;
         public long Cost;
         public Node? Previous, BNext, ENext;
     }
@@ -198,13 +336,10 @@ internal sealed class MeCab
 
         // commonPrefixSearch: every dictionary key the bytes from begin2 start with, shortest first (a zero length
         // reads up to the buffer's NUL, which is at the end of the text).
-        int available = end - begin2;
-        int limit = Math.Min(available, _system.MaxKeyLength);
-        var key = new StringBuilder(limit);
-        for (int length = 1; length <= limit; length++)
+        var matches = new List<(int Value, int Length)>();
+        _system.CommonPrefixSearch(s, begin2, end - begin2, matches);
+        foreach (var (value, length) in matches)
         {
-            key.Append((char)s[begin2 + length - 1]);
-            if (!_system.Keys.TryGetValue(key.ToString(), out int value)) continue;
             int token = value >> 8, count = value & 0xff;
             for (int j = 0; j < count; j++)
                 result = new Node
@@ -213,6 +348,7 @@ internal sealed class MeCab
                     Right = _system.Right[token + j], WordCost = _system.Cost[token + j], BNext = result,
                     PosId = _system.PosId.Length > 0 ? _system.PosId[token + j] : 0,
                     Tag = _system.Tag.Length > 0 ? _system.Tag[token + j] : -1,
+                    Source = _system, Token = token + j,
                 };
         }
         if (result is not null && !Invoke(cinfo)) return result;
@@ -227,6 +363,7 @@ internal sealed class MeCab
                     Right = _unknown.Right[token + k], WordCost = _unknown.Cost[token + k], BNext = result,
                     PosId = _unknown.PosId.Length > 0 ? _unknown.PosId[token + k] : 0,
                     Tag = _unknown.Tag.Length > 0 ? _unknown.Tag[token + k] : -1,
+                    Source = _unknown, Token = token + k,
                 };
         }
 
@@ -288,7 +425,18 @@ internal sealed class MeCab
     public IReadOnlyList<string> Segment(string text) => Parse(text).Select(w => w.Surface).ToList();
 
     /// <summary>The best path's words and their part-of-speech tags (empty for a dictionary without tags).</summary>
-    public IReadOnlyList<(string Surface, string Tag)> Parse(string text)
+    public IReadOnlyList<(string Surface, string Tag)> Parse(string text) =>
+        BestPath(text).Select(w => (w.Surface, w.Node.Tag >= 0 ? _tags[w.Node.Tag] : "")).ToList();
+
+    /// <summary>
+    /// The best path's words and their features (a dictionary read by <see cref="Open"/>): what Open JTalk's
+    /// <c>Mecab_analysis</c> collects from the lattice, each word's surface and its feature string.
+    /// </summary>
+    public IReadOnlyList<(string Surface, string Feature)> ParseFeatures(string text) =>
+        BestPath(text).Select(w => (w.Surface, w.Node.Source is { Features.Length: > 0 } source ? source.FeatureOf(w.Node.Token)
+            : throw new InvalidOperationException("This dictionary has no features; open a MeCab dictionary directory."))).ToList();
+
+    private List<(string Surface, Node Node)> BestPath(string text)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
         int nul = text.IndexOf('\0');
@@ -307,10 +455,9 @@ internal sealed class MeCab
                 Connect(position, eos, endNodes);
                 break;
             }
-        var words = new List<(string, string)>();
+        var words = new List<(string, Node)>();
         for (var node = eos.Previous; node is not null && node.Previous is not null; node = node.Previous)
-            words.Add((Encoding.UTF8.GetString(s, node.Surface, Math.Min(node.Length, len - node.Surface)),
-                node.Tag >= 0 ? _tags[node.Tag] : ""));
+            words.Add((Encoding.UTF8.GetString(s, node.Surface, Math.Min(node.Length, len - node.Surface)), node));
         words.Reverse();
         return words;
     }

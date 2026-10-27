@@ -74,8 +74,8 @@ internal sealed class VocosGenerator<T>
     private readonly List<(NormedConv1DLayer<T> Depthwise, LayerNormalizationLayer<T> Norm, NormedConv1DLayer<T> Expand,
         NormedConv1DLayer<T> Project, ChannelScaleLayer<T> Scale)> _blocks = new();
     private readonly LayerNormalizationLayer<T> _finalNorm;
-    private readonly NormedConv1DLayer<T> _head;
-    private readonly InverseStft<T> _istft;
+    private readonly NormedConv1DLayer<T>? _head;
+    private readonly InverseStft<T>? _istft;
     // AdaLayerNorm (conditional generators): per-class scale and shift of an affine-free layer norm, one pair for the
     // embedding's norm and one per block.
     private readonly List<(TiedEmbeddingLayer<T> Scale, TiedEmbeddingLayer<T> Shift)> _adaptive = new();
@@ -83,8 +83,10 @@ internal sealed class VocosGenerator<T>
     /// <param name="adaptiveClasses">Classes of Vocos's <c>AdaLayerNorm</c> (the EnCodec model's bandwidths); 0 for plain
     /// layer norms.</param>
     /// <param name="samePadding">The ISTFT head's <c>padding="same"</c> (the EnCodec model) instead of <c>center</c>.</param>
+    /// <param name="withHead">Whether the ISTFT head is built; without it only <see cref="Backbone"/> runs (models that use
+    /// Vocos's backbone as an encoder, such as MaskGCT's semantic codec).</param>
     public VocosGenerator(IEngine engine, Random initialization, int melChannels, int dim, int intermediate, int blocks, int fftSize, int hopSize,
-        int adaptiveClasses = 0, bool samePadding = false)
+        int adaptiveClasses = 0, bool samePadding = false, bool withHead = true)
     {
         _engine = engine;
         _dim = dim;
@@ -126,8 +128,11 @@ internal sealed class VocosGenerator<T>
         }
         _layers.Add(_finalNorm = new LayerNormalizationLayer<T>(dim, 1e-6));
         // The head's linear map keeps PyTorch's default initialization (the backbone's init does not reach it).
-        _layers.Add(_head = new NormedConv1DLayer<T>(dim, fftSize + 2, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None));
-        _istft = new InverseStft<T>(engine, fftSize, hopSize, fftSize, samePadding);
+        if (withHead)
+        {
+            _layers.Add(_head = new NormedConv1DLayer<T>(dim, fftSize + 2, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None));
+            _istft = new InverseStft<T>(engine, fftSize, hopSize, fftSize, samePadding);
+        }
     }
 
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
@@ -169,11 +174,8 @@ internal sealed class VocosGenerator<T>
     /// <c>[1, channels, frames]</c>; <paramref name="condition"/> is the adaptive norms' class.</summary>
     public Tensor<T> Forward(Tensor<T> mel, int condition = 0)
     {
-        var x = Norm(0, _norm, _embed.Forward(mel), condition);
-        int block = 1;
-        foreach (var (depthwise, norm, expand, project, scale) in _blocks)
-            x = _engine.TensorAdd(x, scale.Forward(project.Forward(Gelu(expand.Forward(Norm(block++, norm, depthwise.Forward(x), condition))))));
-        var h = _head.Forward(ChannelNorm(_finalNorm, x));                                               // [1, n_fft + 2, frames]
+        if (_head is null || _istft is null) throw new InvalidOperationException("This Vocos was built without its ISTFT head.");
+        var h = _head.Forward(Backbone(mel, condition));                                                 // [1, n_fft + 2, frames]
         int bins = _fft / 2 + 1, frames = h.Shape[2];
         var m = _engine.TensorSlice(h, new[] { 0, 0, 0 }, new[] { 1, bins, frames });
         var p = _engine.TensorSlice(h, new[] { 0, bins, 0 }, new[] { 1, bins, frames });
@@ -183,11 +185,26 @@ internal sealed class VocosGenerator<T>
         return _istft.Forward(magnitude, p);
     }
 
-    /// <summary>Loads the reference's <c>backbone.*</c> and <c>head.*</c> parameters (gemelo-ai/vocos).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, int inputChannels, int intermediate)
+    /// <summary>The backbone's output <c>[1, dim, frames]</c> (after its final layer norm) of features
+    /// <c>[1, channels, frames]</c>.</summary>
+    public Tensor<T> Backbone(Tensor<T> features, int condition = 0)
+    {
+        var x = Norm(0, _norm, _embed.Forward(features), condition);
+        int block = 1;
+        foreach (var (depthwise, norm, expand, project, scale) in _blocks)
+            x = _engine.TensorAdd(x, scale.Forward(project.Forward(Gelu(expand.Forward(Norm(block++, norm, depthwise.Forward(x), condition))))));
+        return ChannelNorm(_finalNorm, x);
+    }
+
+    /// <summary>The ISTFT head's inverse STFT (to load a stored window).</summary>
+    internal InverseStft<T>? Istft => _istft;
+
+    /// <summary>Loads the reference's <c>backbone.*</c> and <c>head.*</c> parameters (gemelo-ai/vocos), named
+    /// <paramref name="backbone"/> and <paramref name="head"/> (for models that nest them).</summary>
+    public void LoadTorchWeights(Func<string, int[], double[]> read, int inputChannels, int intermediate, string backbone = "backbone.", string head = "head.")
     {
         int dim = _dim, kernel = 7;
-        _embed.LoadTorchWeights(read("backbone.embed.weight", new[] { dim, inputChannels, kernel }), null, read("backbone.embed.bias", new[] { dim }));
+        _embed.LoadTorchWeights(read(backbone + "embed.weight", new[] { dim, inputChannels, kernel }), null, read(backbone + "embed.bias", new[] { dim }));
         void LoadNorm(int index, LayerNormalizationLayer<T> norm, string name)
         {
             if (_adaptive.Count > 0)
@@ -200,11 +217,11 @@ internal sealed class VocosGenerator<T>
                 CodecBased.TorchParameters.LayerNorm(_engine, norm, read(name + ".weight", new[] { dim }), read(name + ".bias", new[] { dim }));
             }
         }
-        LoadNorm(0, _norm, "backbone.norm");
+        LoadNorm(0, _norm, backbone + "norm");
         for (int i = 0; i < _blocks.Count; i++)
         {
             var (depthwise, norm, expand, project, scale) = _blocks[i];
-            string p = $"backbone.convnext.{i}";
+            string p = $"{backbone}convnext.{i}";
             depthwise.LoadTorchWeights(read(p + ".dwconv.weight", new[] { dim, 1, kernel }), null, read(p + ".dwconv.bias", new[] { dim }));
             LoadNorm(i + 1, norm, p + ".norm");
             // pwconv1 / pwconv2 are nn.Linear over channels; the 1-wide convolutions take them as [out, in, 1].
@@ -214,8 +231,8 @@ internal sealed class VocosGenerator<T>
             for (int c = 0; c < dim; c++) scale.Scale[c] = NumOps.FromDouble(gamma[c]);
             _engine.InvalidatePersistentTensor(scale.Scale);
         }
-        CodecBased.TorchParameters.LayerNorm(_engine, _finalNorm, read("backbone.final_layer_norm.weight", new[] { dim }),
-            read("backbone.final_layer_norm.bias", new[] { dim }));
-        _head.LoadTorchWeights(read("head.out.weight", new[] { _fft + 2, dim }), null, read("head.out.bias", new[] { _fft + 2 }));
+        CodecBased.TorchParameters.LayerNorm(_engine, _finalNorm, read(backbone + "final_layer_norm.weight", new[] { dim }),
+            read(backbone + "final_layer_norm.bias", new[] { dim }));
+        _head?.LoadTorchWeights(read(head + "out.weight", new[] { _fft + 2, dim }), null, read(head + "out.bias", new[] { _fft + 2 }));
     }
 }
