@@ -253,6 +253,33 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// Copies <paramref name="parameters"/> into <paramref name="snapshot"/> (allocated on the first call and reused),
+    /// on whichever device holds them: the best-epoch checkpoint a training loop restores at its end.
+    /// </summary>
+    /// <remarks>
+    /// One engine copy per tensor. Cloning on the host instead downloaded every GPU-resident parameter at each
+    /// improving epoch (96 MB for N-BEATS's 24M weights), and the element-by-element restore wrote each value through
+    /// the indexer, so the checkpoint cost more than the epoch it protected (AiDotNet#1804).
+    /// </remarks>
+    private protected Tensor<T>[] SnapshotParameters(IReadOnlyList<Tensor<T>> parameters, Tensor<T>[]? snapshot)
+    {
+        snapshot ??= new Tensor<T>[parameters.Count];
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            snapshot[i] ??= new Tensor<T>(parameters[i].Shape.ToArray());
+            Engine.TensorCopy(parameters[i], snapshot[i]);
+        }
+        return snapshot;
+    }
+
+    /// <summary>Writes a <see cref="SnapshotParameters"/> checkpoint back into <paramref name="parameters"/>.</summary>
+    private protected void RestoreParameters(IReadOnlyList<Tensor<T>> parameters, Tensor<T>[] snapshot)
+    {
+        for (int i = 0; i < parameters.Count; i++)
+            Engine.TensorCopy(snapshot[i], parameters[i]);
+    }
+
+    /// <summary>
     /// Trains one batch on the gradient tape: the fused compiled plan (forward, backward and optimizer update as
     /// one plan, GPU-resident on a GPU engine, a fused CPU kernel otherwise) when it applies, the eager tape with
     /// <paramref name="optimizer"/> when it does not.

@@ -182,7 +182,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     /// to <paramref name="y"/>); those standardized covariates are concatenated to the series value at each
     /// step, so the recurrence conditions on them. Autodiff yields gradients for every LSTM gate weight/bias
     /// and the selected distribution head. The head emits the mean as a residual on the current observation
-    /// (μ_t = x_t + Δ(h_t)); see <see cref="ForwardHidden"/> and <see cref="DeepARDistributionHead{T}"/>.
+    /// (μ_t = x_t + Δ(h_t)); see <see cref="ForwardPackedHidden"/> and <see cref="DeepARDistributionHead{T}"/>.
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -277,7 +277,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         // training loss improves on the best seen, and restore the best snapshot after
         // training so late-epoch Adam divergence cannot degrade the returned model.
         double bestLoss = double.PositiveInfinity;
-        List<Vector<T>>? bestSnapshot = null;
+        Tensor<T>[]? bestSnapshot = null;
         _epochLosses.Clear();
 
         // Keep only anchors with a complete lookback AND a one-step-ahead target for every timestep in the
@@ -345,7 +345,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                 if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
                 {
                     bestLoss = epochLoss;
-                    bestSnapshot = SnapshotParameters();
+                    bestSnapshot = SnapshotParameters(trainableParams, bestSnapshot);
                 }
 
                 // Report after checkpointing so an early stop still leaves the best weights to
@@ -358,72 +358,29 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         if (bestSnapshot is not null)
-            RestoreParameters(bestSnapshot);
-    }
-
-    /// <summary>
-    /// Tape-tracked batched forward: unrolls the LSTM over the timesteps in
-    /// <paramref name="inputSteps"/> (each <c>[1, B]</c>) and returns the top-layer hidden state
-    /// <c>[H, B]</c> at every timestep. The selected <see cref="DeepARDistributionHead{T}"/> turns those
-    /// hidden states into its likelihood loss. Uses <c>Engine.Tensor*</c> ops so
-    /// <see cref="GradientTape{T}"/> differentiates the loss w.r.t. every registered weight.
-    /// </summary>
-    private List<Tensor<T>> ForwardHidden(Tensor<T>[] inputSteps, int batch)
-    {
-        int layers = _lstmLayers.Count;
-        int h = _options.HiddenSize;
-
-        // Zero initial hidden/cell state per layer, [H, B] column-major.
-        var hState = new Tensor<T>[layers];
-        var cState = new Tensor<T>[layers];
-        for (int l = 0; l < layers; l++)
-        {
-            hState[l] = new Tensor<T>(new[] { h, batch });
-            cState[l] = new Tensor<T>(new[] { h, batch });
-        }
-
-        var hiddenSteps = new List<Tensor<T>>(inputSteps.Length);
-        for (int t = 0; t < inputSteps.Length; t++)
-        {
-            Tensor<T> layerInput = inputSteps[t]; // [inputSize, B]
-            for (int l = 0; l < layers; l++)
-            {
-                var (hNew, cNew) = _lstmLayers[l].Step(layerInput, hState[l], cState[l]);
-                hState[l] = hNew;
-                cState[l] = cNew;
-                layerInput = hNew; // feed to next layer
-            }
-
-            // Each Step returns a fresh tensor, so storing the current top-layer hidden captures this
-            // timestep's state before the next iteration overwrites hState[layers-1]. The head applies the
-            // residual-mean skip (μ_t = x_t + Δ(h_t)) itself, keeping the strong persistence prior at init.
-            hiddenSteps.Add(hState[layers - 1]);
-        }
-
-        return hiddenSteps;
+            RestoreParameters(trainableParams, bestSnapshot);
     }
 
     /// <summary>
     /// Training forward over a packed batch: <paramref name="input"/> is <c>[L, 1+cov, B]</c>. Returns
     /// <c>[L, H+1, B]</c>, each timestep's top-layer hidden state stacked over its observation row, so the loss can
-    /// hand the distribution head both without the forward reading the batch on the host. Every slice is an engine
+    /// hand the distribution head both without the forward reading the batch on the host. Every op is an engine
     /// op, which a compiled plan replays against each new batch.
     /// </summary>
+    /// <remarks>
+    /// Each layer is ONE whole-sequence LSTM op (<see cref="DeepARLstmCellTape{T}.Sequence"/>), not
+    /// an unrolled <see cref="DeepARLstmCellTape{T}.Step"/> per timestep: the engines record it as a single fused node (the persistent
+    /// RNN kernels on the GPU, the fused BPTT on the CPU), where the unrolled cell traced ~17 ops per timestep per
+    /// layer plus a narrow, a concatenate and a stack per timestep. Same math, same zero initial state (AiDotNet#1804).
+    /// </remarks>
     private Tensor<T> ForwardPackedHidden(Tensor<T> input)
     {
-        int steps = input.Shape[0];
-        int inputDim = input.Shape[1];
-        int batch = input.Shape[2];
-
-        var inputSteps = new Tensor<T>[steps];
-        for (int t = 0; t < steps; t++)
-            inputSteps[t] = Engine.Reshape(Engine.TensorNarrow(input, 0, t, 1), new[] { inputDim, batch });
-
-        var hiddenSteps = ForwardHidden(inputSteps, batch);
-        var packed = new Tensor<T>[steps];
-        for (int t = 0; t < steps; t++)
-            packed[t] = Engine.TensorConcatenate(new[] { hiddenSteps[t], Engine.TensorNarrow(inputSteps[t], 0, 0, 1) }, 0);
-        return Engine.TensorStack(packed, 0);
+        var sequence = Engine.TensorPermute(input, new[] { 2, 0, 1 });          // [B, L, 1+cov]
+        foreach (var lstm in _lstmLayers)
+            sequence = lstm.Sequence(sequence);                                 // [B, L, H]
+        var hidden = Engine.TensorPermute(sequence, new[] { 1, 2, 0 });         // [L, H, B]
+        var observation = Engine.TensorNarrow(input, 1, 0, 1);                  // [L, 1, B]: the series value row
+        return Engine.TensorConcatenate(new[] { hidden, observation }, 1);      // [L, H+1, B]
     }
 
     /// <summary>Unpacks <see cref="ForwardPackedHidden"/>'s output and returns the head's likelihood loss.</summary>
@@ -444,22 +401,6 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         return _head.ComputeBatchLoss(hiddenSteps, obsSteps, target);
-    }
-
-    private List<Vector<T>> SnapshotParameters()
-    {
-        var snap = new List<Vector<T>>(_lstmLayers.Count + 1);
-        foreach (var lstm in _lstmLayers)
-            snap.Add(lstm.GetParameters());
-        snap.Add(_head.GetParameters());
-        return snap;
-    }
-
-    private void RestoreParameters(List<Vector<T>> snapshot)
-    {
-        for (int i = 0; i < _lstmLayers.Count; i++)
-            _lstmLayers[i].SetParameters(snapshot[i]);
-        _head.SetParameters(snapshot[_lstmLayers.Count]);
     }
 
     public override Vector<T> Predict(Matrix<T> input)
@@ -971,6 +912,14 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
             tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         return tensor;
     }
+
+    /// <summary>
+    /// Runs the cell over a whole sequence from a zero state: <paramref name="input"/> is <c>[B, L, inputSize]</c>,
+    /// the result every timestep's hidden state, <c>[B, L, H]</c>. The same LSTM as <see cref="Step"/> (gate order
+    /// i, f, g, o; one bias), as the single engine op that compiled training records as one fused node.
+    /// </summary>
+    public Tensor<T> Sequence(Tensor<T> input)
+        => Engine.LstmSequenceForward(input, null, null, _wx, _wh, _bias, null, returnSequences: true);
 
     /// <summary>
     /// Computes one LSTM step. Inputs are column-major: <paramref name="xt"/> is
