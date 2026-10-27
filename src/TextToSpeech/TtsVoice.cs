@@ -31,6 +31,12 @@ public sealed class TtsVoice<T>
     public Tensor<T>? ReferenceTokens { get; init; }
 
     /// <summary>
+    /// Each <see cref="ReferenceTokens"/> token's duration in the reference recording's frames (a forced aligner's), for
+    /// models that read the prompt at the phoneme level (Mega-TTS pools its prosody encoder over the prompt's phonemes).
+    /// </summary>
+    public int[]? ReferenceDurations { get; init; }
+
+    /// <summary>
     /// A reference recording of the speaker as a waveform, <c>[samples]</c> at the model's sample rate, for models whose
     /// speaker encoder reads audio (YourTTS's H/ASP speaker encoder).
     /// </summary>

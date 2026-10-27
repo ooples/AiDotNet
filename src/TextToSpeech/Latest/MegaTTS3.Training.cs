@@ -168,7 +168,11 @@ public partial class MegaTTS3<T>
     {
         if (_optimizer is not null) return _optimizer;
         var o = _options;
-        var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = o.LearningRate, Beta1 = o.Beta1, Beta2 = o.Beta2 };
+        var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> {
+            InitialLearningRate = o.LearningRate, Beta1 = o.Beta1, Beta2 = o.Beta2,
+            // The paper's Adam: its betas held, and no gradient clipping (Appendix A.1 states none).
+            UseAdaptiveBetas = false, EnableGradientClipping = false,
+        };
         if (o.WarmupSteps > 0)
         {
             options.LearningRateScheduler = new LinearWarmupScheduler(o.LearningRate, o.WarmupSteps, 0, 0.0, LinearWarmupScheduler.DecayMode.Constant);
