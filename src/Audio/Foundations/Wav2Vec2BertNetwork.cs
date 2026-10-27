@@ -79,6 +79,38 @@ internal sealed class Wav2Vec2BertFeatures<T>
         if (rows * _stride != frames) normalized = _engine.TensorSlice(normalized, new[] { 0, 0 }, new[] { rows * _stride, mels });
         return _engine.Reshape(normalized, new[] { rows, mels * _stride });
     }
+
+    /// <summary>
+    /// The features and their row mask as the extractor's default call makes them (<c>padding=True</c>,
+    /// <c>pad_to_multiple_of=2</c>): the normalized frames padded with <paramref name="paddingValue"/> to a whole number of
+    /// rows (w2v-BERT 2.0's <c>padding_value</c> is 1), a row real when its last frame is (false for a padded one).
+    /// </summary>
+    public (Tensor<T> Features, bool[] Mask) ForwardPadded(IReadOnlyList<double> audio, double paddingValue = 1.0)
+    {
+        var scaled = new Tensor<T>(new[] { audio.Count });
+        for (int i = 0; i < audio.Count; i++) scaled[i] = NumOps.FromDouble(audio[i] * 32768.0);
+        var fbank = _fbank.Forward(scaled);
+        int frames = fbank.Shape[0], mels = fbank.Shape[1];
+        if (frames < 2) throw new ArgumentException("The waveform needs at least two filterbank frames.", nameof(audio));
+        var mean = _engine.ReduceMean(fbank, new[] { 0 }, keepDims: true);
+        var centered = _engine.TensorSubtract(fbank, _engine.TensorTile(mean, new[] { frames, 1 }));
+        var variance = _engine.TensorDivideScalar(_engine.ReduceSum(_engine.TensorSquare(centered), new[] { 0 }, keepDims: true),
+            NumOps.FromDouble(frames - 1));
+        var deviation = _engine.TensorSqrt(_engine.TensorAddScalar(variance, NumOps.FromDouble(1e-7)));
+        var normalized = _engine.TensorDivide(centered, _engine.TensorTile(deviation, new[] { frames, 1 }));
+        int padded = (frames + _stride - 1) / _stride * _stride;
+        if (padded != frames)
+        {
+            var fill = new Tensor<T>(new[] { padded - frames, mels });
+            for (int r = 0; r < padded - frames; r++)
+                for (int c = 0; c < mels; c++) fill[r, c] = NumOps.FromDouble(paddingValue);
+            normalized = _engine.TensorConcatenate(new[] { normalized, fill }, 0);
+        }
+        int rows = padded / _stride;
+        var mask = new bool[rows];
+        for (int r = 0; r < rows; r++) mask[r] = (r + 1) * _stride - 1 < frames;
+        return (_engine.Reshape(normalized, new[] { rows, mels * _stride }), mask);
+    }
 }
 
 /// <summary>
@@ -90,7 +122,8 @@ internal sealed class Wav2Vec2BertFeatures<T>
 /// convolution module (layer norm, pointwise convolution to twice the width, GLU, a causal depthwise convolution, layer
 /// norm, swish, pointwise convolution, residual), a second half-step feed-forward and a final layer norm.
 /// </summary>
-/// <remarks>For frozen use (X-codec2's semantic encoder): no masking, dropout or LayerDrop. Only the first
+/// <remarks>For frozen use (X-codec2's and MaskGCT's semantic encoders): no dropout or LayerDrop; a row mask hides the
+/// extractor's padding. Only the first
 /// <c>layerCount</c> layers are built, since X-codec2 reads <c>hidden_states[16]</c>. Its layers are added to the owner's
 /// list.</remarks>
 internal sealed class Wav2Vec2BertNetwork<T>
@@ -151,16 +184,35 @@ internal sealed class Wav2Vec2BertNetwork<T>
 
     /// <summary>The hidden states <c>[rows, hidden]</c> of features <c>[rows, 160]</c>, as transformers'
     /// <c>output_hidden_states</c> lists them: the projected features, then every built layer's output.</summary>
-    public IReadOnlyList<Tensor<T>> HiddenStates(Tensor<T> features)
+    public IReadOnlyList<Tensor<T>> HiddenStates(Tensor<T> features) => HiddenStates(features, null);
+
+    /// <summary>The hidden states with a row mask (false for padding), as the model runs with an attention mask: padded
+    /// rows zeroed after the projection, hidden from attention as keys and from the depthwise convolution.</summary>
+    public IReadOnlyList<Tensor<T>> HiddenStates(Tensor<T> features, bool[]? mask)
     {
         if (features.Rank != 2 || features.Shape[1] != Configuration.FeatureInputDim)
             throw new ArgumentException($"Expected features [rows, {Configuration.FeatureInputDim}].", nameof(features));
         var hidden = Projection.Forward(ProjectionNorm.Forward(features));
-        var distances = Distances(hidden.Shape[0]);
+        int length = hidden.Shape[0];
+        if (mask is not null && mask.Length != length) throw new ArgumentException($"The mask covers {mask.Length} rows; there are {length}.", nameof(mask));
+        Tensor<T>? keep = null, bias = null;
+        if (mask is not null && mask.Any(m => !m))
+        {
+            keep = new Tensor<T>(new[] { length, Configuration.HiddenSize });
+            bias = new Tensor<T>(new[] { 1, length, length });
+            var blocked = NumOps.FromDouble(typeof(T) == typeof(float) ? float.MinValue : double.MinValue);
+            for (int r = 0; r < length; r++)
+            {
+                for (int c = 0; c < Configuration.HiddenSize; c++) keep[r, c] = mask[r] ? NumOps.One : NumOps.Zero;
+                if (!mask[r]) for (int q = 0; q < length; q++) bias[0, q, r] = blocked;
+            }
+            hidden = _engine.TensorMultiply(hidden, keep);
+        }
+        var distances = Distances(length);
         var states = new List<Tensor<T>> { hidden };
         foreach (var layer in EncoderLayers)
         {
-            hidden = Encode(layer, hidden, distances);
+            hidden = Encode(layer, hidden, distances, keep, bias);
             states.Add(hidden);
         }
         return states;
@@ -189,7 +241,7 @@ internal sealed class Wav2Vec2BertNetwork<T>
         return _engine.TensorPermute(_engine.Reshape(projection.Forward(x), new[] { length, heads, e }), new[] { 1, 0, 2 });
     }
 
-    private Tensor<T> Attention(Layer l, Tensor<T> x, Tensor<int> distances)
+    private Tensor<T> Attention(Layer l, Tensor<T> x, Tensor<int> distances, Tensor<T>? bias)
     {
         int length = x.Shape[0], heads = Configuration.Heads, e = Configuration.HiddenSize / heads;
         int p = Configuration.LeftMaxPositions + Configuration.RightMaxPositions + 1;
@@ -204,14 +256,17 @@ internal sealed class Wav2Vec2BertNetwork<T>
             new[] { heads, length * p });
         var position = _engine.Reshape(_engine.TensorIndexSelect(perDistance, distances, 1), new[] { heads, length, length });
         var scores = _engine.TensorMultiplyScalar(_engine.TensorAdd(content, position), scale);
+        if (bias is not null) scores = _engine.TensorAdd(scores, _engine.TensorBroadcastTo(bias, new[] { heads, length, length }));
         var context = _engine.BatchMatMul(_engine.Softmax(scores, axis: 2), v);
         return l.Output.Forward(_engine.Reshape(_engine.TensorPermute(context, new[] { 1, 0, 2 }), new[] { length, heads * e }));
     }
 
-    private Tensor<T> Convolution(Layer l, Tensor<T> x)
+    private Tensor<T> Convolution(Layer l, Tensor<T> x, Tensor<T>? keep)
     {
         int length = x.Shape[0], h = Configuration.HiddenSize, kernel = Configuration.DepthwiseKernel;
-        var expanded = l.Pointwise1.Forward(l.ConvolutionNorm.Forward(x));                                // [L, 2H]
+        var normed = l.ConvolutionNorm.Forward(x);
+        if (keep is not null) normed = _engine.TensorMultiply(normed, keep);   // padded rows do not leak into the convolution
+        var expanded = l.Pointwise1.Forward(normed);                                                       // [L, 2H]
         var gated = _engine.TensorMultiply(_engine.TensorSlice(expanded, new[] { 0, 0 }, new[] { length, h }),
             _engine.Sigmoid(_engine.TensorSlice(expanded, new[] { 0, h }, new[] { length, h })));
         // The causal depthwise convolution: k − 1 zeros in front.
@@ -221,11 +276,11 @@ internal sealed class Wav2Vec2BertNetwork<T>
         return l.Pointwise2.Forward(Swish(l.DepthwiseNorm.Forward(depthwise)));
     }
 
-    private Tensor<T> Encode(Layer l, Tensor<T> x, Tensor<int> distances)
+    private Tensor<T> Encode(Layer l, Tensor<T> x, Tensor<int> distances, Tensor<T>? keep, Tensor<T>? bias)
     {
         x = FeedForward(l.FeedForward1Norm, l.FeedForward1In, l.FeedForward1Out, x);
-        x = _engine.TensorAdd(x, Attention(l, l.AttentionNorm.Forward(x), distances));
-        x = _engine.TensorAdd(x, Convolution(l, x));
+        x = _engine.TensorAdd(x, Attention(l, l.AttentionNorm.Forward(x), distances, bias));
+        x = _engine.TensorAdd(x, Convolution(l, x, keep));
         x = FeedForward(l.FeedForward2Norm, l.FeedForward2In, l.FeedForward2Out, x);
         return l.FinalNorm.Forward(x);
     }
