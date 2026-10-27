@@ -39,7 +39,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string IActivationFunctionPrefix = "AiDotNet.Interfaces.IActivationFunction<";
     private const string ILossFunctionPrefix = "AiDotNet.Interfaces.ILossFunction<";
 
-    // A paper-length warmup (MaskGCT: 32000 steps) leaves the learning rate near zero for the
+    // A paper-length warmup (MaskGCT's 32000 steps) leaves the learning rate near zero for the
     // few steps a smoke fixture runs, so the memorization probe sees no loss drop (#2087).
     // Fixtures for such models shorten the ramp to this, which reaches the recipe's peak rate.
     private const string SmokeWarmupSteps = "WarmupSteps = 2";
@@ -48,12 +48,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string AstSmokeOptions = "new AiDotNet.Audio.Classification.ASTOptions { NumMels = 32, TargetLength = 16, " +
         "PatchSize = 8, FrequencyStride = 8, TimeStride = 8, EmbeddingDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, " +
         "FeedForwardDim = 64, FrequencyMaskLength = 12, TimeMaskLength = 3, CustomLabels = new[] { \"a\", \"b\", \"c\", \"d\" } }";
-
-    // Codec-LM models that share one constructor branch below but need the short warmup.
-    private static readonly HashSet<string> ShortWarmupCodecModels = new(System.StringComparer.Ordinal)
-    {
-        "MaskGCT",
-    };
 
     // Non-model algorithm interface prefixes (for invariant test generation)
     private const string ICausalDiscoveryPrefix = "AiDotNet.CausalDiscovery.ICausalDiscoveryAlgorithm<";
@@ -977,9 +971,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // CI-smoke fixture would have to shrink the architecture past recognizability; deferred to the nightly
         // HeavyTimeout lane where they run full-scale. Families: CLIP dual-encoders (MetaCLIP, LLM2CLIP,
         // MedCLIP), SAM segmentation (MedSAM, MedSAM2, MaskAdapter), forecasting foundations (MOIRAI), speech
-        // /audio LMs (MMS, KyutaiMoshi, MARS5TTS, LlamaOmni, MinMo), state-space LM (Mamba2), codec-TTS
-        // (MaskGCT), and the mixture-of-Gaussians generative net (MoG). Paper defaults intact + customizable.
-        "MARS5TTS", "LlamaOmni", "MinMo", "MaskGCT",
+        // /audio LMs (MMS, KyutaiMoshi, MARS5TTS, LlamaOmni, MinMo), state-space LM (Mamba2), and the
+        // mixture-of-Gaussians generative net (MoG). Paper defaults intact + customizable.
+        "MARS5TTS", "LlamaOmni", "MinMo",
         // #1789 J-M mid-tier classes that still OOM or time out on the forward/training even at <float>
         // (verified locally): Mask2Former (segmentation foundation), LLMTime (LLM-forecasting),
         // MedicalASR / MedSegDiffV2 (medical ASR / seg-diffusion), MemFlow (optical flow — its
@@ -1731,10 +1725,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // PR #1789 run 29922036148: these paper-scale generated fixtures exhausted either the
         // per-test CPU training budget or the 16 GB runner at <double>. Apply the project's
         // required precision-first mitigation before considering any reduced smoke options:
-        // GraniteSpeech timed out in two training invariants and then OOM-killed G-I; MaskGCT
-        // was the last completed class before J-M's memory cliff; SegNeXt and SigLIP timed out
-        // before Q-S was OOM-killed. Production defaults and user customization are unchanged.
-        "GraniteSpeech", "MaskGCT", "SegNeXt", "SigLIP",
+        // GraniteSpeech timed out in two training invariants and then OOM-killed G-I; SegNeXt and
+        // SigLIP timed out before Q-S was OOM-killed. Production defaults and user customization are unchanged.
+        "GraniteSpeech", "SegNeXt", "SigLIP",
         // #1789 run 29877759783, Generated A-C: the generated MoreData probes for CUPS and
         // ContextNet both exhausted the 120-second CPU budget at <double>. Apply the required
         // precision-first mitigation to their test fixtures; production defaults and every public
@@ -7894,23 +7887,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
             }
-            else if ((model.ClassName == "MARS5TTS" || model.ClassName == "MaskGCT"
+            else if ((model.ClassName == "MARS5TTS"
                       || model.ClassName == "MinMo" || model.ClassName == "LlamaOmni"
                       || model.ClassName == "Voicebox"
                       || model.ClassName == "WhisperSpeech" || model.ClassName == "Zonos")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
             {
-                // Three CodecTtsOptions models whose production defaults are foundation-scale
-                // codec LMs — an 8x1024 codec-token head behind a wide, deep autoregressive
-                // decoder (MARS5-TTS 1536-wide/24-layer, MaskGCT 1024-wide/16-layer, MinMo
-                // 1024-wide/12-layer). On the J-M shard they produced 16, 22 and 4
-                // OutOfMemoryExceptions respectively, cascading across nearly every invariant in
+                // CodecTtsOptions models whose production defaults are foundation-scale codec LMs —
+                // an 8x1024 codec-token head behind a wide, deep autoregressive decoder (MARS5-TTS
+                // 1536-wide/24-layer, MinMo 1024-wide/12-layer). On the J-M shard they produced 16
+                // and 4 OutOfMemoryExceptions respectively, cascading across nearly every invariant in
                 // each class because a class that OOMs mid-suite leaves too little headroom for
                 // the tests that follow it.
-                // MaskGCT and MinMo were already on Fp32TestClassNames, so <float> was applied
-                // first and measured insufficient — these OOM during CONSTRUCTION, which halving
-                // element width cannot fix. MARS5TTS carried no mitigation at all.
+                // MinMo was already on Fp32TestClassNames, so <float> was applied first and measured
+                // insufficient — it OOMs during CONSTRUCTION, which halving element width cannot fix.
+                // MARS5TTS carried no mitigation at all.
                 // Voicebox and WhisperSpeech join from the T-Z shard, which ran only 23 classes
                 // before hitting the 45-min job timeout: measured there at 356s and 199s of test time. Voicebox and WhisperSpeech
                 // additionally failed Training_ShouldReduceLoss and
@@ -7920,8 +7912,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // at smoke scale through the public options, exactly as the FireRedTTS bound above
                 // does for the same base. Production defaults are unchanged.
                 // NumCodebooks stays at 2, NOT 1. Several models routed here have a genuine
-                // MULTI-codebook contract that collapses at 1: MaskGCT and Voicebox are
-                // non-autoregressive over multiple codec layers.
+                // MULTI-codebook contract that collapses at 1: Voicebox is non-autoregressive over
+                // multiple codec layers.
                 // At NumCodebooks = 1 there are no remaining codebooks, so the NAR half of those
                 // architectures is silently skipped by the fixture and the test stops covering the
                 // thing the paper is about. 2 is the smallest value that keeps both stages live, and
@@ -7929,7 +7921,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string codecOptionsType = model.ClassName switch
                 {
                     "MARS5TTS" => "AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions",
-                    "MaskGCT" => "AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions",
                     "LlamaOmni" => "AiDotNet.TextToSpeech.MultiModal.LlamaOmniOptions",
                     "Voicebox" => "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions",
                     "WhisperSpeech" => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
@@ -7944,10 +7935,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {codecOptionsType} {{ NumCodebooks = 2, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    // MaskGCT's paper warmup is 32000 steps, which leaves the rate near 3e-9 for the
-                    // memorization probe's two steps (loss fell 0.6% against the required 1%, #2087);
-                    // a short ramp reaches the recipe's 1e-4, as the NaturalSpeech3 fixture does.
-                    (ShortWarmupCodecModels.Contains(model.ClassName) ? SmokeWarmupSteps + ", " : "") +
                     "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "ALIGN" && model.TypeParameterCount == 1)
@@ -10075,6 +10062,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
                     "NumAttentionHeads = 4, FeedForwardDim = 64, NumMels = 32, " +
                     "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+            }
+            else if (model.ClassName == "MaskGCT" && model.TypeParameterCount == 1)
+            {
+                // MaskGCT is w2v-BERT 2.0, a RepCodec, a 24 kHz codec and three 1024-1536-wide transformers; keep every one
+                // (two w2v-BERT layers at width 32, 32 semantic codes, two acoustic layers of 16 codes still hopping 480
+                // samples, generators and duration predictor at width 16 with one layer) and the phone vocabulary's 1,024.
+                // The harness's voice is a recording without a transcript, so the target's length is given (0.2 s); two
+                // decoding steps per stage. The paper's 32000-step warmup leaves the rate near zero for the probes' steps,
+                // so the ramp is shortened, and the rate is raised to 1e-3 so fifteen randomly masked steps descend.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions { " +
+                    "SemanticHiddenSize = 32, SemanticHeads = 4, SemanticIntermediateSize = 64, SemanticLayer = 2, " +
+                    "SemanticCodebookSize = 32, SemanticCodebookDim = 4, SemanticCodecDim = 16, SemanticCodecIntermediate = 32, " +
+                    "SemanticCodecLayers = 1, CodecEncoderDim = 2, CodecLatentDim = 16, NumQuantizers = 2, CodebookSize = 16, " +
+                    "CodebookDim = 4, VocosDim = 16, VocosIntermediate = 32, VocosLayers = 1, HiddenDim = 16, " +
+                    "TextToSemanticDim = 16, TextToSemanticLayers = 1, TextToSemanticHeads = 2, SemanticToAcousticLayers = 1, " +
+                    "SemanticToAcousticHeads = 2, DurationDim = 16, DurationLayers = 1, DurationHeads = 2, " +
+                    "TextToSemanticSteps = 2, SemanticToAcousticSteps = new[] { 2, 1 }, TargetDurationSeconds = 0.2, LearningRate = 1e-3, " +
+                    SmokeWarmupSteps + " })";
             }
             else if (model.ClassName == "Llasa" && model.TypeParameterCount == 1)
             {
@@ -16403,6 +16412,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "MaskGCT")
+                {
+                    // MaskGCT reads phone ids and trains on a 24 kHz recording: eight ids, and 9600 samples (0.4 s: 19
+                    // semantic frames, enough to draw the release's prompt from). Its training draws a step, a prompt and a
+                    // mask, so the probes compare the objective at a fixed draw. Its text goes through eSpeak NG, which CI does
+                    // not install: the text-in tests skip without it, and the text probe is left out.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 9600 };");
+                    sb.AppendLine("    protected override string? SynthesisUnavailableReason => AiDotNet.TextToSpeech.FrontEnd.EspeakNg.IsAvailable ? null");
+                    sb.AppendLine("        : \"MaskGCT phonemizes English with eSpeak NG (libespeak-ng), which is not installed here.\";");
+                    // Each step draws its own step, prompt and mask, so at the paper's 1e-4 fifteen steps only wander
+                    // (3.511717 to 3.550057 on the fixed evaluation draw); at the fixture's 1e-3 they lower it to 3.338378, a
+                    // drop of 4.9%, five times the threshold below.
+                    sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99;");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "Llasa")
                 {
                     // Llasa reads a text's token ids and trains on a recording: eight ids, and 3200 samples (0.2 s at 16 kHz,
@@ -16541,7 +16572,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
