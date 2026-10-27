@@ -13,7 +13,7 @@ on:
       - 'scripts/test_playground_package.py'
       - 'scripts/test_playground_routes.py'
       - 'scripts/test_playground_event_state.py'
-      - 'website/supabase/migrations/20261027000000_playground_stripe_event_state.sql'
+      - 'website/supabase/migrations/*playground_stripe*.sql'
       - 'tests/AiDotNet.Playground.Functions.Tests/**'
   workflow_dispatch:  # Allow manual trigger
 
@@ -31,42 +31,20 @@ permissions:
   contents: read
 
 jobs:
-  build-and-deploy:
-    name: Build and Deploy
+  build:
+    name: Build and Verify
     runs-on: ubuntu-latest
     # The functions project references src/AiDotNet.csproj, so this build compiles the library's
     # net10.0 target too (about 6.5 minutes on a 128-core workstation; several times that on a
     # 4-core hosted runner, where CodeQL's traced net10.0 build of it takes about 26 minutes).
     # 15 minutes was sized for restoring a prebuilt AiDotNet package.
     timeout-minutes: 45
-    permissions:
-      contents: read
-      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7.0.1
-
-      - name: Check federated deployment configuration
-        shell: bash
-        env:
-          AZURE_CLIENT_ID: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-        run: |
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Configure federated Azure deployment first; see docs/playground-webhook-recovery.md ($name is missing)."
-              exit 1
-            fi
-          done
-
-      - name: Sign in to Azure without publishing passwords
-        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2
         with:
-          client-id: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
@@ -102,6 +80,57 @@ jobs:
           python3 scripts/test_playground_package.py
           python3 scripts/test_playground_routes.py
           python3 scripts/verify-playground-package.py ./publish
+
+      - name: Upload verified deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: playground-functions
+          path: ./publish
+          include-hidden-files: true
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy Verified Artifact
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout route verification script
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/check-playground-routes.py
+          sparse-checkout-cone-mode: false
+
+      - name: Download verified deployment artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: playground-functions
+          path: ./publish
+
+      - name: Check federated deployment configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Configure federated Azure deployment first; see docs/playground-webhook-recovery.md ($name is missing)."
+              exit 1
+            fi
+          done
+
+      - name: Sign in to Azure without publishing passwords
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2
+        with:
+          client-id: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy to Azure Functions
         uses: Azure/functions-action@v1

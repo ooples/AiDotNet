@@ -48,19 +48,44 @@ class EventStateTests(unittest.TestCase):
                 updated_at timestamptz not null default now()
             );
         """)
-        sql((ROOT / "website/supabase/migrations/20261027000000_playground_stripe_event_state.sql").read_text())
+        for name in ["20261027000000_playground_stripe_event_state.sql",
+                     "20261027010000_playground_stripe_ordering_and_tiers.sql"]:
+            sql((ROOT / "website/supabase/migrations" / name).read_text())
 
     def setUp(self):
         sql("truncate public.playground_stripe_events, public.playground_stripe_state, public.profiles;")
         sql(f"insert into public.profiles(id) values ('{PROFILE}');")
 
-    def test_duplicate_and_stale_delivery_cannot_restore_canceled_profile(self):
+    def test_duplicate_and_delayed_delivery_cannot_restore_canceled_profile(self):
         self.assertEqual(claim("evt_cancel", 200), "claimed")
         self.assertEqual(complete("canceled"), "applied")
         self.assertEqual(claim("evt_cancel", 200, OTHER), "duplicate")
-        self.assertEqual(claim("evt_old_update", 199), "stale")
+        self.assertEqual(claim("evt_old_update", 199), "claimed")
+        # The handler reads current Stripe state while holding the lease.
+        self.assertEqual(complete("canceled"), "applied")
         self.assertEqual(profile(), "free/canceled/cus_test")
         self.assertEqual(sql("select count(*) from public.playground_stripe_events;"), "2")
+
+    def test_delayed_replacement_checkout_after_old_cancellation(self):
+        self.assertEqual(claim("evt_cancel_a", 300), "claimed")
+        self.assertEqual(complete("canceled", subscription="sub_a", created=100), "applied")
+        self.assertEqual(profile(), "free/canceled/cus_test")
+        self.assertEqual(claim("evt_checkout_b", 299), "claimed")
+        self.assertEqual(complete("active", subscription="sub_b", created=299), "applied")
+        self.assertEqual(profile(), "pro/active/cus_test")
+        self.assertEqual(sql("select subscription_id || '/' || last_event_created from public.playground_stripe_state;"), "sub_b/300")
+        self.assertEqual(claim("evt_checkout_b", 299, OTHER), "duplicate")
+        self.assertEqual(sql("select count(*) from public.playground_stripe_events;"), "2")
+
+    def test_only_active_and_trialing_subscriptions_grant_pro(self):
+        for i, status in enumerate(["active", "trialing", "past_due", "unpaid",
+                                    "incomplete", "incomplete_expired", "paused", "canceled"]):
+            with self.subTest(status=status):
+                self.assertEqual(claim(f"evt_status_{i}", 200 + i), "claimed")
+                self.assertEqual(complete(status), "applied")
+                tier = "pro" if status in ("active", "trialing") else "free"
+                expected_status = "active" if status == "trialing" else status
+                self.assertEqual(profile(), f"{tier}/{expected_status}/cus_test")
 
     def test_concurrent_workers_have_one_owner_and_one_receipt(self):
         with concurrent.futures.ThreadPoolExecutor(2) as pool:
@@ -77,7 +102,7 @@ class EventStateTests(unittest.TestCase):
         self.assertEqual(complete(), "applied")
         self.assertEqual(claim("evt_past_due", 200, OTHER), "claimed")
         self.assertEqual(complete("past_due", OTHER), "applied")
-        self.assertEqual(profile(), "pro/past_due/cus_test")
+        self.assertEqual(profile(), "free/past_due/cus_test")
         self.assertEqual(sql("select count(*) from public.playground_stripe_events;"), "2")
 
     def test_lease_expiry_fences_old_worker_and_allows_recovery(self):

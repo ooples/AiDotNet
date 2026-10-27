@@ -3,6 +3,7 @@
 ## Durable event processing
 
 Apply `website/supabase/migrations/20261027000000_playground_stripe_event_state.sql`
+and the corrective `20261027010000_playground_stripe_ordering_and_tiers.sql`
 before deploying this handler. Refresh PostgREST's schema cache after a manual
 migration (`notify pgrst, 'reload schema';`). The migration adds two service-only
 tables and three restricted RPCs; it does not rewrite existing profile data.
@@ -12,17 +13,20 @@ Each profile has a two-minute database lease. Competing workers return retryable
 worker from committing or releasing a replacement lease. Successful completion
 updates the profile, advances its event timestamp and records the Stripe event
 ID in one transaction. Failed writes roll back all three. Replays from either
-endpoint are acknowledged without another profile update, and events older than
-the applied timestamp are recorded as stale.
+endpoint are acknowledged without another profile update. Event timestamps are
+retained for diagnostics, not used to reject claims: a replacement checkout can
+precede the old subscription's cancellation.
 
 Stripe event timestamps have second precision, so event IDs are not used to
 break ties. While holding the lease, the handler retrieves the current Stripe
 subscription for checkout, update and deletion events. This also prevents a
 delayed checkout from restoring a canceled subscription. Subscription creation
 timestamps prevent a delayed cancellation of an older subscription from revoking
-its replacement. The existing single-subscription-per-profile model is retained.
+its replacement. Only `active` and `trialing` grant `pro`; all other Stripe
+statuses grant `free`, with `trialing` stored as `active`. The existing single-subscription-per-profile model is retained.
 
-Validation: 37 Functions tests and eight real PostgreSQL tests passed. Run
+The original handler passed 37 Functions tests. The PostgreSQL regression suite
+also covers delayed replacement checkout and all eight subscription statuses. Run
 `python scripts/test_playground_event_state.py` with Docker available; it creates
 and removes an isolated PostgreSQL container and tests concurrent claims,
 duplicates, stale events, same-second reconciliation, expired-worker fencing,
@@ -35,8 +39,9 @@ handler (ZIP SHA-256
 `023949f6fed82d228b08bc3e092b63a61e13efa51070514d08cf65589649e7e6`).
 Real Stripe subscription update/delete events updated the exact test profile.
 Signed replays through both secrets left its timestamp unchanged with one receipt
-per event. An older active event was recorded as stale without changing the
-canceled profile. Same-second active snapshots, delayed checkout and concurrent
+per event. Before the corrective migration, an older active event was recorded as stale
+without changing the canceled profile. The correction instead reconciles current
+Stripe state even for older event timestamps. Same-second active snapshots, delayed checkout and concurrent
 duplicate/retry controls all preserved `free/canceled`; the concurrent event had
 exactly one receipt. All temporary subscription/customer/user/profile fixtures
 were cleaned up. Signature rejection and execute-output-42 checks still passed.
