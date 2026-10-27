@@ -66,7 +66,7 @@ internal sealed class MegaTtsAttention<T>
 
 /// <summary>
 /// NATSpeech's pre-norm Transformer layer: layer norm, self-attention and a residual, then layer norm, a feed-forward
-/// convolution of kernel k to 4h (scaled by k^−½, GELU) and a linear layer back, and a residual. An encoder layer
+/// convolution of kernel k to the filter width (4h unless given; scaled by k^−½, GELU) and a linear layer back, and a residual. An encoder layer
 /// (<c>EncSALayer</c>) pads its convolution on both sides and zeroes padded positions; a decoder layer (<c>DecSALayer</c>
 /// without encoder attention) attends causally and pads its convolution on the left.
 /// </summary>
@@ -74,10 +74,11 @@ internal sealed class MegaTtsTransformerLayer<T>
 {
     private readonly IEngine _engine;
 
-    public MegaTtsTransformerLayer(IEngine engine, List<LayerBase<T>> layers, int width, int heads, int kernel, bool decoder)
+    public MegaTtsTransformerLayer(IEngine engine, List<LayerBase<T>> layers, int width, int heads, int kernel, bool decoder, int? filter = null)
     {
         _engine = engine;
         Width = width;
+        Filter = filter ?? 4 * width;
         Kernel = kernel;
         Decoder = decoder;
         Norm1 = new LayerNormalizationLayer<T>(width, 1e-5);
@@ -85,11 +86,12 @@ internal sealed class MegaTtsTransformerLayer<T>
         Attention = new MegaTtsAttention<T>(engine, layers, width, heads);
         Norm2 = new LayerNormalizationLayer<T>(width, 1e-5);
         layers.Add(Norm2);
-        Ffn1 = MegaTts3Ops.Conv(layers, width, 4 * width, kernel, padding: decoder ? 0 : kernel / 2);
+        Ffn1 = MegaTts3Ops.Conv(layers, width, Filter, kernel, padding: decoder ? 0 : kernel / 2);
         Ffn2 = MegaTts3Ops.Linear(layers, width);
     }
 
     public int Width { get; }
+    public int Filter { get; }
     public int Kernel { get; }
     public bool Decoder { get; }
     public LayerNormalizationLayer<T> Norm1 { get; }
@@ -120,7 +122,7 @@ internal sealed class MegaTtsTransformerLayer<T>
         string norm2 = Decoder ? "layer_norm3" : "layer_norm2";
         TorchParameters.LayerNorm(engine, Norm2, read($"{prefix}.{norm2}.weight"), read($"{prefix}.{norm2}.bias"));
         MegaTts3Ops.LoadConv(read, Ffn1, Decoder ? $"{prefix}.ffn.ffn_1.1" : $"{prefix}.ffn.ffn_1");
-        MegaTts3Ops.LoadDense(engine, read, Ffn2, $"{prefix}.ffn.ffn_2", 4 * Width, Width);
+        MegaTts3Ops.LoadDense(engine, read, Ffn2, $"{prefix}.ffn.ffn_2", Filter, Width);
     }
 }
 
@@ -154,13 +156,14 @@ internal sealed class MegaTtsContentEncoder<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
 
-    public MegaTtsContentEncoder(IEngine engine, List<LayerBase<T>> layers, int vocabulary, int width, int layerCount, int heads, int kernel)
+    public MegaTtsContentEncoder(IEngine engine, List<LayerBase<T>> layers, int vocabulary, int width, int layerCount, int heads, int kernel,
+        int? filter = null)
     {
         _engine = engine;
         Width = width;
         Embedding = new TiedEmbeddingLayer<T>(vocabulary, width);
         layers.Add(Embedding);
-        for (int i = 0; i < layerCount; i++) Layers.Add(new MegaTtsTransformerLayer<T>(engine, layers, width, heads, kernel, decoder: false));
+        for (int i = 0; i < layerCount; i++) Layers.Add(new MegaTtsTransformerLayer<T>(engine, layers, width, heads, kernel, decoder: false, filter));
         FinalNorm = new LayerNormalizationLayer<T>(width, 1e-5);
         layers.Add(FinalNorm);
     }
