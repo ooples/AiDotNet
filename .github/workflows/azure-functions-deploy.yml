@@ -11,6 +11,7 @@ on:
       - 'scripts/verify-playground-package.py'
       - 'scripts/check-playground-routes.py'
       - 'scripts/test_playground_package.py'
+      - 'scripts/test_playground_routes.py'
       - 'tests/AiDotNet.Playground.Functions.Tests/**'
   workflow_dispatch:  # Allow manual trigger
 
@@ -20,6 +21,7 @@ concurrency:
 
 env:
   AZURE_FUNCTIONAPP_NAME: aidotnet-playground
+  AZURE_FUNCTIONAPP_RESOURCE_GROUP: aidotnet-playground_group
   AZURE_FUNCTIONAPP_PACKAGE_PATH: src/AiDotNet.Playground.Functions
   DOTNET_VERSION: '10.0.x'
 
@@ -84,11 +86,16 @@ jobs:
         run: dotnet test tests/AiDotNet.Playground.Functions.Tests -c Release --no-restore -p:GeneratePackageOnBuild=false
 
       - name: Publish
-        run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release -o ./publish --no-build
+        # The existing app is Windows Consumption. A portable publish carries mobile/macOS/Linux
+        # native libraries and exhausted Kudu's temporary disk during the recovery upload.
+        # Keep reference PDBs for diagnostics, but omit XML documentation from the runtime package.
+        # Reuse the library built by the test step; only publish the Functions host for Windows.
+        run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release -r win-x64 --self-contained false -o ./publish -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false -p:AllowedReferenceRelatedFileExtensions=.pdb
 
       - name: Verify both required functions are packaged
         run: |
           python3 scripts/test_playground_package.py
+          python3 scripts/test_playground_routes.py
           python3 scripts/verify-playground-package.py ./publish
 
       - name: Deploy to Azure Functions
@@ -98,7 +105,12 @@ jobs:
           package: ./publish
 
       - name: Check public routes reject unsigned or empty requests
-        run: python3 scripts/check-playground-routes.py https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net
+        shell: bash
+        run: |
+          hostname=$(az functionapp show --resource-group "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" --name "$AZURE_FUNCTIONAPP_NAME" --query defaultHostName --output tsv)
+          test -n "$hostname"
+          echo "DEPLOYED_APP_URL=https://$hostname" >> "$GITHUB_ENV"
+          python3 scripts/check-playground-routes.py "https://$hostname"
 
       - name: Deployment Summary
         if: success()
@@ -107,6 +119,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Azure Functions deployed to:" >> $GITHUB_STEP_SUMMARY
           echo "- **App Name**: ${{ env.AZURE_FUNCTIONAPP_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net" >> $GITHUB_STEP_SUMMARY
-          echo "- **API Endpoint**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net/api/execute" >> $GITHUB_STEP_SUMMARY
-          echo "- **Stripe Webhook**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net/api/stripe-webhook" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: $DEPLOYED_APP_URL" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Endpoint**: $DEPLOYED_APP_URL/api/execute" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stripe Webhook**: $DEPLOYED_APP_URL/api/stripe-webhook" >> $GITHUB_STEP_SUMMARY

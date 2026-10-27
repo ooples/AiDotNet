@@ -21,6 +21,9 @@ class PlaygroundPackage(unittest.TestCase):
         ]} for name in ('execute', 'stripe-webhook')]
         (self.root/'App.dll').write_bytes(b'fixture')
         (self.root/'Stripe.net.dll').write_bytes(b'fixture')
+        (self.root/'worker.config.json').write_text('{}')
+        (self.root/'extensions.json').write_text('{}')
+        (self.root/'.azurefunctions').mkdir()
         (self.root/'host.json').write_text('{"version":"2.0","extensions":{"http":{"routePrefix":"api"}}}')
 
     def verify(self):
@@ -30,6 +33,24 @@ class PlaygroundPackage(unittest.TestCase):
 
     def test_complete_package(self):
         self.verify()
+
+    def test_missing_worker_artifacts_are_rejected(self):
+        for name in ('worker.config.json', 'extensions.json'):
+            with self.subTest(name=name):
+                artifact = self.root/name
+                artifact.unlink()
+                with self.assertRaisesRegex(ValueError, 'Missing isolated-worker artifact'):
+                    self.verify()
+                artifact.write_text('{}')
+
+    def test_worker_directory_must_exist_and_be_a_directory(self):
+        artifact = self.root/'.azurefunctions'
+        artifact.rmdir()
+        with self.assertRaisesRegex(ValueError, 'Missing isolated-worker directory'):
+            self.verify()
+        artifact.write_text('not a directory')
+        with self.assertRaisesRegex(ValueError, 'Missing isolated-worker directory'):
+            self.verify()
 
     def test_execute_only_package_is_rejected(self):
         self.functions.pop()

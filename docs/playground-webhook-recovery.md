@@ -35,6 +35,72 @@ The deployment workflow uses Azure federation instead of the disabled password
 mechanism. It fails early until federation is configured. Do not enable SCM
 basic authentication as a workaround.
 
+## Recovery progress (2026-10-27)
+
+The four review findings are addressed: customer-lookup configuration/API failures
+now return retryable 500 responses; checkout tests verify the exact profile and
+subscription values; package validation requires the isolated-worker artifacts;
+and route checks resolve the deployed app's hostname. Cold-start read timeouts
+are retried by the route checker.
+
+Verification passed: 29 Functions tests, seven package-validator tests, and two
+route-checker tests. The original failure behavior was also observed against the
+old Functions binary: all four new customer-lookup failure cases returned 200
+instead of the required 500. All four pass with the updated binary.
+
+The `aidotnet-playground-github` Azure application is configured for GitHub OIDC
+from `repo:ooples/AiDotNet:ref:refs/heads/master`, with Website Contributor scoped
+only to this Function App. The three repository variables are set. No publishing
+password or client secret was created. The master-branch GitHub deployment has
+not yet run with this identity; the recovery deployment used the operator's
+existing Azure CLI identity.
+
+The previous ZIP (`20260124021456.zip`, 435,735,453 bytes) was downloaded before
+deployment. Its SHA-256 is
+`db8954ea1053eb8df5747e6f89a29b815e0701c09339c17a3818148589297ef3`.
+Its cached copy occupied most of the Windows Consumption worker's 500 MB
+temporary disk. Portable and initial Windows-specific uploads failed for lack
+of temporary space. Only the incomplete uploads from these attempts were removed.
+
+Publishing for `win-x64`, framework-dependent, without reference XML documentation
+reduced the ZIP to 85,196,805 bytes while retaining binaries and PDBs. The app is
+configured for 64-bit workers and .NET 10. The resulting package deployed
+successfully (`f2772c964d4c485eb5e5282edcc135b1`), with SHA-256
+`45a69ea8e8cf94387d96a48e06385bb4a5f8e1e6eb6ba9e6d3efbb0fddeaa33d`.
+Azure now lists both functions. Live checks returned 400 for empty requests,
+200 for a valid signed unhandled Clover event, 400 for invalid/expired signatures,
+and 200 with output `42` for actual code execution.
+
+Live verification exposed a Supabase Auth failure: listing users returned 500.
+Auth logs identified `confirmation_token` NULL-to-string conversion failures.
+An aggregate SQL check found two malformed rows with NULL confirmation, recovery,
+email-change token and email-change fields. A transaction guarded by the exact
+two-row count normalized only those NULL fields to empty strings. No user was
+deleted or granted access. The Auth admin list endpoint then returned 200.
+Signed subscription controls verified the exact temporary profile/customer and
+`pro/past_due` then `free/canceled` values; all temporary resources were removed.
+
+Dashboard comparison matched the original Azure signing secret to
+`we_1T7LHJBCSxBmC8eojsJel9NC`. The owner requested preserving both registrations
+and approved optional `STRIPE_WEBHOOK_SECRET_SECONDARY` support for
+`we_1T7LG7BCSxBmC8eoi7ScoXwU`. The original primary setting remains required;
+the secondary secret is tried only after primary verification fails, with the
+same signature, timestamp and API-version checks. Tests verify exact profile
+updates signed by either secret and reject unknown secrets, expired signatures
+and unsupported versions. Neither endpoint's secret was rotated.
+
+The final package with secondary-secret support deployed successfully as
+`82c041874400457b95e9b8895920fb6e` (84,567,738 bytes; SHA-256
+`efb331398e3e9763696fde495420744127242b97a2ae0c6613b651a4debbcf99`).
+Live checks accepted signatures from either configured secret, rejected an
+unknown secret and expired signatures from both, and executed code with output
+`42`. Actual Stripe sandbox events `evt_1UVDsxBCSxBmC8eod49akgBk` (subscription
+updated) and `evt_1UVDt3BCSxBmC8eowOIK2oNP` (subscription deleted) changed the
+exact temporary profile/customer to `pro/active` then `free/canceled`. Both
+events reported zero pending webhook deliveries; each existing endpoint's
+dashboard showed HTTP 200 for both events. The trial subscription was
+canceled and the temporary customer, Auth user and profile were removed.
+
 ## Federated deployment setup (requires approval)
 
 1. Use a dedicated Azure deployment identity in the CrowdTrainer tenant. Create
@@ -77,17 +143,22 @@ merging this draft. Preserve all existing application settings and routes.
 ## Local verification
 
 Run the Functions test project in Release with `GeneratePackageOnBuild=false`.
-Publish the tested output with `--no-build --no-restore`. Run
+Publish the Functions host with `-r win-x64 --self-contained false`,
+`-p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false`, and
+`-p:AllowedReferenceRelatedFileExtensions=.pdb` to reuse the tested library and
+exclude reference XML documentation from the runtime package. Run
 `python scripts/test_playground_package.py` and
+`python scripts/test_playground_routes.py`, then
 `python scripts/verify-playground-package.py <publish-directory>`.
 Start Azure Functions Core Tools in the published directory with
 `FUNCTIONS_WORKER_RUNTIME=dotnet-isolated`, `AzureWebJobsSecretStorageType=files`,
 and a dummy `STRIPE_WEBHOOK_SECRET`. Do not use production Stripe/Supabase keys.
 
-Recovery verification passed: 16 .NET tests and five package-check tests.
+Initial draft verification passed: 16 .NET tests and five package-check tests.
 Core Tools 4.6.0 registered both routes. Actual local HTTP requests returned
 400 for unsigned, invalidly signed and expired webhook requests; 200 for a
 valid synthetic Clover unhandled event; 400 for empty execute input; and 200
 with output `42` for the execution check. This does not establish that both
 remote Stripe registrations have the right signing secret, nor validate a live
-subscription-to-database transaction. Those remain deployment checks.
+subscription-to-database transaction. The recovery progress above records those
+subsequent live checks separately.

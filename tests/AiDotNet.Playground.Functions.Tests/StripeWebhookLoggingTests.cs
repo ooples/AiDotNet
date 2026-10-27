@@ -25,16 +25,21 @@ namespace AiDotNet.Playground.Functions.Tests;
 public sealed class StripeWebhookLoggingTests : IAsyncLifetime
 {
     private const string WebhookSecret = "whsec_test_do_not_leak_0123456789";
+    private const string SecondarySecret = "whsec_secondary_do_not_leak_456789";
     private const string SupabaseKey = "sb_secret_test_do_not_leak_9876543210";
     private const string CustomerEmail = "jane.private@janes-family-domain.example";
     private const string CustomerId = "cus_TEST123";
 
-    private static readonly string[] EnvNames = ["STRIPE_WEBHOOK_SECRET", "SUPABASE_URL", "SUPABASE_SECRET_KEY"];
+    private static readonly string[] EnvNames = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_SECONDARY", "STRIPE_SECRET_KEY", "SUPABASE_URL", "SUPABASE_SECRET_KEY"];
 
     private readonly Dictionary<string, string?> _savedEnv = new();
     private readonly ConcurrentQueue<string> _supabaseRequests = new();
     private WebApplication? _fakeSupabase;
     private string _supabaseUsersJson = "{\"users\":[]}";
+    private IStripeClient? _savedStripeClient;
+    private string? _savedStripeKey;
+    private int _stripeStatus = 200;
+    private string? _stripeEmail = CustomerEmail;
 
     public async Task InitializeAsync()
     {
@@ -47,6 +52,9 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         builder.Logging.ClearProviders();
         builder.WebHost.UseSetting("urls", "http://127.0.0.1:0");
         _fakeSupabase = builder.Build();
+        _fakeSupabase.MapGet("/v1/customers/{id}", (string id) => _stripeStatus == 200
+            ? Results.Json(new { id, @object = "customer", email = _stripeEmail })
+            : Results.Json(new { error = new { type = "api_error", message = "Temporary test failure" } }, statusCode: _stripeStatus));
         _fakeSupabase.MapGet("/auth/v1/admin/users", () =>
         {
             _supabaseRequests.Enqueue("GET users");
@@ -66,12 +74,21 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
             ?? throw new InvalidOperationException("The fake Supabase server exposes no address.");
 
         Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET", WebhookSecret);
+        Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET_SECONDARY", null);
         Environment.SetEnvironmentVariable("SUPABASE_URL", address.TrimEnd('/'));
         Environment.SetEnvironmentVariable("SUPABASE_SECRET_KEY", SupabaseKey);
+        _savedStripeKey = StripeConfiguration.ApiKey;
+        _savedStripeClient = StripeConfiguration.StripeClient;
+        Environment.SetEnvironmentVariable("STRIPE_SECRET_KEY", "sk_test_local_only");
+        StripeConfiguration.ApiKey = "sk_test_local_only";
+        StripeConfiguration.StripeClient = new StripeClient("sk_test_local_only", apiBase: address.TrimEnd('/'),
+            httpClient: new SystemNetHttpClient(maxNetworkRetries: 0));
     }
 
     public async Task DisposeAsync()
     {
+        StripeConfiguration.ApiKey = _savedStripeKey;
+        StripeConfiguration.StripeClient = _savedStripeClient;
         foreach (var (name, value) in _savedEnv)
         {
             Environment.SetEnvironmentVariable(name, value);
@@ -183,8 +200,103 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         var payload = CheckoutCompletedEvent().Replace(StripeConfiguration.ApiVersion, "2026-02-25.clover", StringComparison.Ordinal);
         var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(payload));
         Assert.IsType<OkResult>(result);
-        Assert.Contains(_supabaseRequests, request => request.StartsWith("PATCH", StringComparison.Ordinal));
+        AssertProfilePatch("pro", "active");
     }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(EventTypes.CustomerSubscriptionUpdated, true)]
+    [InlineData(EventTypes.CustomerSubscriptionUpdated, false)]
+    [InlineData(EventTypes.CustomerSubscriptionDeleted, true)]
+    [InlineData(EventTypes.CustomerSubscriptionDeleted, false)]
+    public async Task CustomerLookupFailure_IsRetryable(string eventType, bool missingKey)
+    {
+        if (missingKey) Environment.SetEnvironmentVariable("STRIPE_SECRET_KEY", null);
+        else _stripeStatus = 503;
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>())
+            .Run(SignedRequest(SubscriptionEvent(eventType, "active")));
+        Assert.Equal(500, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        Assert.Empty(_supabaseRequests);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(EventTypes.CustomerSubscriptionUpdated)]
+    [InlineData(EventTypes.CustomerSubscriptionDeleted)]
+    public async Task CustomerWithoutEmail_IsAcknowledgedWithoutProfileUpdate(string eventType)
+    {
+        _stripeEmail = null;
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>())
+            .Run(SignedRequest(SubscriptionEvent(eventType, "active")));
+        Assert.IsType<OkResult>(result);
+        Assert.Empty(_supabaseRequests);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(EventTypes.CustomerSubscriptionUpdated, "past_due", "pro")]
+    [InlineData(EventTypes.CustomerSubscriptionDeleted, "canceled", "free")]
+    public async Task CloverSubscription_UpdatesExpectedProfile(string eventType, string status, string tier)
+    {
+        _supabaseUsersJson = JsonSerializer.Serialize(new
+        {
+            users = new[] { new { id = "00000000-0000-0000-0000-00000000abcd", email = CustomerEmail } }
+        });
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>())
+            .Run(SignedRequest(SubscriptionEvent(eventType, status)));
+        Assert.IsType<OkResult>(result);
+        AssertProfilePatch(tier, status);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(WebhookSecret)]
+    [InlineData(SecondarySecret)]
+    public async Task BothEndpointSecrets_UpdateTheExactProfile(string signingSecret)
+    {
+        Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET_SECONDARY", SecondarySecret);
+        _supabaseUsersJson = JsonSerializer.Serialize(new
+        {
+            users = new[] { new { id = "00000000-0000-0000-0000-00000000abcd", email = CustomerEmail } }
+        });
+        var logger = new CapturingLogger<StripeWebhook>();
+        var payload = CheckoutCompletedEvent().Replace(StripeConfiguration.ApiVersion, "2026-02-25.clover", StringComparison.Ordinal);
+        var result = await new StripeWebhook(logger).Run(SignedRequest(payload, signingSecret));
+        Assert.IsType<OkResult>(result);
+        AssertProfilePatch("pro", "active");
+        AssertNoSensitiveData(logger.Entries);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData("unknown-secret")]
+    [InlineData("expired")]
+    [InlineData("unsupported-version")]
+    public async Task SecondarySecret_PreservesAuthenticationAndVersionChecks(string failure)
+    {
+        Environment.SetEnvironmentVariable("STRIPE_WEBHOOK_SECRET_SECONDARY", SecondarySecret);
+        var payload = CheckoutCompletedEvent().Replace(StripeConfiguration.ApiVersion,
+            failure == "unsupported-version" ? "2099-01-01.future" : "2026-02-25.clover", StringComparison.Ordinal);
+        var request = SignedRequest(payload,
+            failure == "unknown-secret" ? "whsec_untrusted" : SecondarySecret,
+            failure == "expired" ? DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds() : null);
+        var logger = new CapturingLogger<StripeWebhook>();
+        Assert.IsType<BadRequestObjectResult>(await new StripeWebhook(logger).Run(request));
+        Assert.Empty(_supabaseRequests);
+        AssertNoSensitiveData(logger.Entries);
+    }
+
+    private void AssertProfilePatch(string tier, string status)
+    {
+        var patch = Assert.Single(_supabaseRequests, request => request.StartsWith("PATCH", StringComparison.Ordinal));
+        const string prefix = "PATCH ?id=eq.00000000-0000-0000-0000-00000000abcd ";
+        Assert.StartsWith(prefix, patch, StringComparison.Ordinal);
+        using var document = JsonDocument.Parse(patch[prefix.Length..]);
+        Assert.Equal(CustomerId, document.RootElement.GetProperty("stripe_customer_id").GetString());
+        Assert.Equal(tier, document.RootElement.GetProperty("subscription_tier").GetString());
+        Assert.Equal(status, document.RootElement.GetProperty("subscription_status").GetString());
+    }
+
+    private static string SubscriptionEvent(string eventType, string status) => JsonSerializer.Serialize(new
+    {
+        id = "evt_legacy_subscription", @object = "event", api_version = "2026-02-25.clover", type = eventType,
+        data = new { @object = new { id = "sub_legacy", @object = "subscription", customer = CustomerId, status } }
+    });
 
     [Theory(Timeout = 60000)]
     [InlineData("2025-01-27.acacia")]
@@ -235,6 +347,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
             Assert.DoesNotContain("jane.private", entry, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("janes-family-domain", entry, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(WebhookSecret, entry, StringComparison.Ordinal);
+            Assert.DoesNotContain(SecondarySecret, entry, StringComparison.Ordinal);
             Assert.DoesNotContain(SupabaseKey, entry, StringComparison.Ordinal);
         }
     }

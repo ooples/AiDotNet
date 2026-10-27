@@ -6,6 +6,11 @@ import sys
 
 def verify(folder):
     folder = pathlib.Path(folder)
+    for name in ('worker.config.json', 'extensions.json'):
+        if not (folder / name).is_file():
+            raise ValueError(f'Missing isolated-worker artifact: {name}')
+    if not (folder / '.azurefunctions').is_dir():
+        raise ValueError('Missing isolated-worker directory: .azurefunctions')
     functions = json.loads((folder / 'functions.metadata').read_text(encoding='utf-8-sig'))
     names = [item['name'] for item in functions]
     if len(names) != len(set(names)):

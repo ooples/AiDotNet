@@ -16,7 +16,7 @@ def check(base, attempts=12, delay=5):
                     status = response.status
             except urllib.error.HTTPError as error:
                 status = error.code
-            except urllib.error.URLError:
+            except (urllib.error.URLError, TimeoutError):
                 status = 'unreachable'
             if status == 400:
                 break

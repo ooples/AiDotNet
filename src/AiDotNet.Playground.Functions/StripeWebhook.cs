@@ -57,17 +57,28 @@ public class StripeWebhook
         }
 
         Event stripeEvent;
+        var secondarySecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET_SECONDARY");
         try
         {
-            stripeEvent = EventUtility.ConstructEvent(
-                requestBody,
-                signature,
-                webhookSecret,
-                // The existing sandbox emits Clover snapshots. The three handled events
-                // use fields verified by our compatibility tests; do not accept arbitrary
-                // API versions when updating the SDK. Signature/timestamp checks remain on.
-                throwOnApiVersionMismatch: false
-            );
+            try
+            {
+                stripeEvent = EventUtility.ConstructEvent(
+                    requestBody,
+                    signature,
+                    webhookSecret,
+                    // The existing sandbox emits Clover snapshots. The three handled events
+                    // use fields verified by our compatibility tests; do not accept arbitrary
+                    // API versions when updating the SDK. Signature/timestamp checks remain on.
+                    throwOnApiVersionMismatch: false
+                );
+            }
+            catch (StripeException) when (!string.IsNullOrWhiteSpace(secondarySecret))
+            {
+                // Both existing registrations target this route with distinct signing secrets.
+                // The secondary registration retains the same signature/timestamp requirements.
+                stripeEvent = EventUtility.ConstructEvent(
+                    requestBody, signature, secondarySecret, throwOnApiVersionMismatch: false);
+            }
         }
         catch (StripeException ex)
         {
@@ -211,7 +222,7 @@ public class StripeWebhook
         if (string.IsNullOrEmpty(stripeSecretKey))
         {
             _logger.LogError("STRIPE_SECRET_KEY environment variable is not set");
-            return null;
+            throw new InvalidOperationException("Stripe customer lookup configuration is missing.");
         }
 
         StripeConfiguration.ApiKey = stripeSecretKey;
@@ -225,7 +236,7 @@ public class StripeWebhook
         catch (StripeException ex)
         {
             _logger.LogError(ex, "Failed to retrieve customer {CustomerId} from Stripe", customerId);
-            return null;
+            throw;
         }
     }
 
