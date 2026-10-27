@@ -13920,28 +13920,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
-        var saved = new List<(Tensor<T> Buffer, T[] Values)>();
-        foreach (var layer in Layers) SnapshotBuffers(layer, saved);
+        var buffers = new List<Tensor<T>>();
+        foreach (var layer in Layers) CollectSnapshotBuffers(layer, buffers);
+        var saved = AiDotNet.Training.TensorCheckpoint<T>.Capture(buffers);
         try
         {
             using (new NoGradScope<T>())
-                return ForwardForTraining(input).Clone();
+                return AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { ForwardForTraining(input) })[0];
         }
         finally
         {
-            foreach (var (buffer, values) in saved)
-                values.AsSpan().CopyTo(buffer.AsWritableSpan());
+            AiDotNet.Training.TensorCheckpoint<T>.Restore(buffers, saved);
         }
     }
 
-    private static void SnapshotBuffers(ILayer<T> layer, List<(Tensor<T> Buffer, T[] Values)> saved)
+    private static void CollectSnapshotBuffers(ILayer<T> layer, List<Tensor<T>> buffers)
     {
         if (layer is LayerBase<T> concrete)
         {
             foreach (var (_, buffer) in concrete.GetRegisteredBuffers())
-                saved.Add((buffer, buffer.ToArray()));
+                buffers.Add(buffer);
         }
-        foreach (var sub in layer.GetSubLayers()) SnapshotBuffers(sub, saved);
+        foreach (var sub in layer.GetSubLayers()) CollectSnapshotBuffers(sub, buffers);
     }
     /// <summary>
     /// Runs this network's forward on the caller's active gradient tape with the network frozen:

@@ -95,6 +95,37 @@ internal sealed class TapeLstmCell<T>
         }
     }
 
+    /// <summary>Runs an ordinary single-recurrent-input cell over [batch, time, input] from zero state.</summary>
+    internal Tensor<T> Sequence(Tensor<T> input)
+    {
+        if (RecurrentInputs != 1)
+            throw new InvalidOperationException("A sequence requires one recurrent input; attention feedback must use Step.");
+        if (input.Rank != 3 || input.Shape[2] != Input)
+            throw new ArgumentException("Expected [batch, time, input] with the cell's input width.", nameof(input));
+        if (input.Shape[1] == 0) return new Tensor<T>(new[] { input.Shape[0], 0, Hidden });
+        var engine = AiDotNetEngine.Current;
+        // Other numeric types retain the differentiable per-step path: the fused tape kernel
+        // supports float/double only. Their recurrence and parameter layout remain identical.
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+        {
+            var hidden = new Tensor<T>(new[] { input.Shape[0], Hidden });
+            var state = new Tensor<T>(new[] { input.Shape[0], Hidden });
+            var steps = new Tensor<T>[input.Shape[1]];
+            for (int t = 0; t < steps.Length; t++)
+            {
+                var x = engine.Reshape(engine.TensorNarrow(input, 1, t, 1), new[] { input.Shape[0], Input });
+                (hidden, state) = Step(x, new[] { hidden }, state);
+                steps[t] = hidden;
+            }
+            return engine.TensorStack(steps, 1);
+        }
+        // Tape-connected packing preserves gradients to every original gate leaf.
+        return engine.LstmSequenceForward(input, null, null,
+            engine.Concat(_inputWeights, 0),
+            engine.Concat(_recurrentWeights.Select(w => w[0]).ToArray(), 0),
+            engine.Concat(_biases, 0), null, returnSequences: true);
+    }
+
     /// <summary>One step: the new output and cell from the input, the recurrent inputs and the previous cell.</summary>
     /// <param name="input"><c>[rows, Input]</c>.</param>
     /// <param name="recurrent"><see cref="RecurrentInputs"/> tensors, each <c>[rows, Hidden]</c>.</param>

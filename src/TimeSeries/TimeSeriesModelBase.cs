@@ -262,22 +262,11 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// the indexer, so the checkpoint cost more than the epoch it protected (AiDotNet#1804).
     /// </remarks>
     private protected Tensor<T>[] SnapshotParameters(IReadOnlyList<Tensor<T>> parameters, Tensor<T>[]? snapshot)
-    {
-        snapshot ??= new Tensor<T>[parameters.Count];
-        for (int i = 0; i < parameters.Count; i++)
-        {
-            snapshot[i] ??= new Tensor<T>(parameters[i].Shape.ToArray());
-            Engine.TensorCopy(parameters[i], snapshot[i]);
-        }
-        return snapshot;
-    }
+        => AiDotNet.Training.TensorCheckpoint<T>.Capture(parameters, snapshot);
 
     /// <summary>Writes a <see cref="SnapshotParameters"/> checkpoint back into <paramref name="parameters"/>.</summary>
     private protected void RestoreParameters(IReadOnlyList<Tensor<T>> parameters, Tensor<T>[] snapshot)
-    {
-        for (int i = 0; i < parameters.Count; i++)
-            Engine.TensorCopy(snapshot[i], parameters[i]);
-    }
+        => AiDotNet.Training.TensorCheckpoint<T>.Restore(parameters, snapshot);
 
     /// <summary>
     /// Trains one batch on the gradient tape: the fused compiled plan (forward, backward and optimizer update as
