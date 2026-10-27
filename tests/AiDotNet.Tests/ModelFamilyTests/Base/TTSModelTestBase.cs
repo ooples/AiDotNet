@@ -333,9 +333,17 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
 
     private const string SynthesisText = "the quick brown fox";
 
+    /// <summary>
+    /// Why this fixture's model cannot turn text into tokens on this machine — a front end it calls is not installed
+    /// (MaskGCT phonemizes English with the user's eSpeak NG) — or null when it can. The text-in tests skip with it.
+    /// </summary>
+    protected virtual string? SynthesisUnavailableReason => null;
+
     private ITtsModel<T> RequireTtsModel(object network)
     {
         Skip.IfNot(network is ITtsModel<T>, "This fixture's model does not implement ITtsModel, so it has no Synthesize entry point.");
+        string? unavailable = SynthesisUnavailableReason;
+        Skip.If(unavailable is not null, unavailable);
         return (ITtsModel<T>)network;
     }
 

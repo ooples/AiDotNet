@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using AiDotNet.Audio.Foundations;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -204,5 +205,40 @@ public class MaskGctReferenceTests
         Assert.Equal(expected.Length, decoded.Length);
         for (int i = 0; i < expected.Length; i++)
             Assert.True(Math.Abs(expected[i] - decoded[i]) <= 1e-9, $"sample {i}: {expected[i]} vs {decoded[i]}");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SemanticFeatures_PadAndMaskAnOddFrameCount_AsTheReleasesExtractorDoes()
+    {
+        await Task.Yield();
+        var reference = Load("maskgct_semantic_reference.json");
+        var c = reference.GetProperty("config");
+        var config = new Wav2Vec2BertConfiguration
+        {
+            HiddenSize = c.GetProperty("hidden_size").GetInt32(), Heads = c.GetProperty("num_attention_heads").GetInt32(),
+            IntermediateSize = c.GetProperty("intermediate_size").GetInt32(), Layers = c.GetProperty("num_hidden_layers").GetInt32(),
+        };
+        var weights = reference.GetProperty("weights").EnumerateObject().ToDictionary(p => p.Name,
+            p => p.Value.GetProperty("values").EnumerateArray().Select(v => v.GetDouble()).ToArray(), StringComparer.Ordinal);
+        var engine = new CpuEngine();
+        var network = new Wav2Vec2BertNetwork<double>(engine, new List<LayerBase<double>>(), config);
+        network.LoadTorchWeights((name, _) => weights[name]);
+        var features = new Wav2Vec2BertFeatures<double>(engine, config);
+        int layer = reference.GetProperty("layer").GetInt32();
+        foreach (var e in reference.GetProperty("cases").EnumerateArray())
+        {
+            var audio = e.GetProperty("audio").EnumerateArray().Select(v => v.GetDouble()).ToArray();
+            var (x, mask) = features.ForwardPadded(audio);
+            Assert.Equal(e.GetProperty("mask").EnumerateArray().Select(v => v.GetInt32() == 1).ToArray(), mask);
+            var expectedFeatures = e.GetProperty("features").EnumerateArray().Select(v => v.GetDouble()).ToArray();
+            Assert.Equal(expectedFeatures.Length, x.Length);
+            for (int i = 0; i < expectedFeatures.Length; i++)
+                Assert.True(Math.Abs(expectedFeatures[i] - x.GetFlat(i)) < 1e-5, $"feature {i}: {expectedFeatures[i]} vs {x.GetFlat(i)}");
+            var hidden = network.HiddenStates(x, mask)[layer];
+            var expected = e.GetProperty("hidden").EnumerateArray().Select(v => v.GetDouble()).ToArray();
+            Assert.Equal(expected.Length, hidden.Length);
+            for (int i = 0; i < expected.Length; i++)
+                Assert.True(Math.Abs(expected[i] - hidden.GetFlat(i)) < 1e-5, $"hidden {i}: {expected[i]} vs {hidden.GetFlat(i)}");
+        }
     }
 }
