@@ -1,0 +1,45 @@
+name: Recurrent foundation integration
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'src/**'
+      - 'tests/AiDotNet.FoundationReview/**'
+      - 'tests/AiDotNet.Tests/**'
+      - '.github/workflows/recurrent-foundations.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  opencl-foundations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AIDOTNET_OPENCL_ALLOW_CPU: '1'
+      AIDOTNET_REQUIRE_GPU_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ooples/AiDotNet.Tensors
+          ref: c860607bea7c6bd538d60d90c97d48a477d39c30
+          path: companion-tensors
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install OpenCL runtime
+        run: |
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y ocl-icd-opencl-dev pocl-opencl-icd clinfo
+          clinfo
+      - name: Run CPU and OpenCL foundation regressions against companion kernels
+        run: >-
+          dotnet test tests/AiDotNet.FoundationReview/AiDotNet.FoundationReview.csproj
+          -c Release -f net10.0 -p:UseLocalTensors=true
+          -p:LocalTensorsRoot=${{ github.workspace }}/companion-tensors
+          -p:GeneratePackageOnBuild=false --logger 'trx;LogFileName=foundations.trx'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recurrent-foundation-results
+          path: tests/AiDotNet.FoundationReview/TestResults/*.trx

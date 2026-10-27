@@ -22,7 +22,11 @@ internal static class ParameterChunkBuffer
         var destination = flat.AsWritableSpan();
         foreach (var chunk in buffered)
         {
-            chunk.AsSpan().CopyTo(destination.Slice(offset, chunk.Length));
+            var dense = chunk is SparseTensor<T> sparse ? sparse.ToDense() : chunk;
+            if (dense.IsContiguous)
+                dense.AsSpan().CopyTo(destination.Slice(offset, dense.Length));
+            else
+                for (int i = 0; i < dense.Length; i++) destination[offset + i] = dense.GetFlat(i);
             offset += chunk.Length;
         }
 

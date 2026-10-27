@@ -19,6 +19,7 @@ public class TeacherParameterTransferTests
     [InlineData(0, 0)] [InlineData(0, .75)]
     [InlineData(1, 0)] [InlineData(1, .75)]
     [InlineData(2, 0)] [InlineData(2, .75)]
+    [Trait("Category", "GPU")]
     public void ProjectorCopyAndEma_StayOnDeviceAndPreserveIndependentStorage(int kind, double momentum)
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
@@ -52,6 +53,7 @@ public class TeacherParameterTransferTests
     }
 
     [Fact]
+    [Trait("Category", "GPU")]
     public void MomentumEncoder_CopyAndUpdateUseResidentChunks()
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
@@ -79,6 +81,7 @@ public class TeacherParameterTransferTests
     }
 
     [Fact]
+    [Trait("Category", "GPU")]
     public void CompositeSslModel_CheckpointUsesLiveEncoderAndProjectorChunks()
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);

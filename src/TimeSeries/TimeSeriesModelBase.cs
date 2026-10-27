@@ -65,8 +65,15 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// <summary>Restores canonical tensor chunks on their device, preserving custom setters and hooks.</summary>
     public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
-        // SetParameters also refreshes ModelParameters for feature-index consumers.
-        SetParameters(AiDotNet.Models.Parameters.ParameterChunkBuffer.ToVector(chunks));
+        _ = Components;
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(TimeSeriesModelBase<T>), chunks, _parameterRegistry, SetParameters,
+            () =>
+            {
+                // Canonical tensors stay authoritative until a caller requests the packed view.
+                _modelParametersDirty = !_legacyModelParametersRegistered;
+                OnParametersRestored();
+            });
     }
 
     // --- declared state (ModelStateRegistry) ---
@@ -356,7 +363,22 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// the recipe ingredients with specific measurements that the model has figured out work best.
     /// </para>
     /// </remarks>
-    protected Vector<T> ModelParameters { get; set; }
+    protected Vector<T> ModelParameters
+    {
+        get
+        {
+            if (_modelParametersDirty)
+            {
+                _modelParameters = _parameterRegistry.GetParameters();
+                _modelParametersDirty = false;
+            }
+            return _modelParameters;
+        }
+        set { _modelParameters = value; _modelParametersDirty = false; }
+    }
+
+    private Vector<T> _modelParameters = new(0);
+    private bool _modelParametersDirty;
 
     /// <summary>
     /// Indicates whether the model has been trained.

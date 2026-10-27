@@ -68,7 +68,9 @@ public static class TensorCheckpoint<T>
         {
             if (snapshot[i] is null || snapshot[i] is SparseTensor<T> || !SameShape(tensors[i], snapshot[i]))
                 throw new ArgumentException($"Checkpoint shape differs at tensor {i}.", nameof(snapshot));
-            if (live.Contains(snapshot[i]) || !saved.Add(snapshot[i]))
+            if (live.Contains(snapshot[i]) || !saved.Add(snapshot[i])
+                || tensors.Any(t => snapshot[i].SharesStorageWith(t))
+                || snapshot.Take(i).Any(t => snapshot[i].SharesStorageWith(t)))
                 throw new ArgumentException("Checkpoint storage must be independent of live tensors and other snapshot entries.", nameof(snapshot));
         }
     }

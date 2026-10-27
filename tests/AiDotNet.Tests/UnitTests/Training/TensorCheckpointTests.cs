@@ -8,6 +8,30 @@ namespace AiDotNet.Tests.UnitTests.Training;
 public class TensorCheckpointTests
 {
     [Fact]
+    public void Checkpoint_RejectsDistinctViewsSharingLiveOrSnapshotStorageBeforeWriting()
+    {
+        var first = new Tensor<double>(new double[] { 1, 2, 3, 4 }, new[] { 2, 2 });
+        var second = new Tensor<double>(new double[] { 5, 6, 7, 8 }, new[] { 2, 2 });
+        var live = new[] { first, second };
+        var aliases = new[] { second.Transpose(new[] { 1, 0 }), first.Transpose(new[] { 1, 0 }) };
+        Assert.Throws<ArgumentException>(() => TensorCheckpoint<double>.Capture(live, aliases));
+        Assert.Throws<ArgumentException>(() => TensorCheckpoint<double>.Restore(live, aliases));
+        Assert.Equal(new double[] { 1, 2, 3, 4 }, first.ToArray());
+        var saved = new Tensor<double>(new[] { 2, 2 });
+        Assert.Throws<ArgumentException>(() => TensorCheckpoint<double>.Capture(live,
+            new[] { saved, saved.Transpose(new[] { 1, 0 }) }));
+    }
+
+    [Fact]
+    public void PackedChunkFallback_PreservesLogicalOrderOfPermutedAndSparseChunks()
+    {
+        var dense = new Tensor<double>(new double[] { 1, 2, 3, 4, 5, 6 }, new[] { 2, 3 });
+        var sparse = SparseTensor<double>.FromDense(dense);
+        var flat = AiDotNet.Models.Parameters.ParameterChunkBuffer.ToVector(new[] { dense.Transpose(new[] { 1, 0 }), sparse });
+        Assert.Equal(new double[] { 1, 4, 2, 5, 3, 6, 1, 2, 3, 4, 5, 6 }, flat.ToArray());
+    }
+
+    [Fact]
     public void Capture_DetachesFromAnActiveTape()
     {
         var live = new Tensor<double>(new[] { 1 }); live[0] = 2;

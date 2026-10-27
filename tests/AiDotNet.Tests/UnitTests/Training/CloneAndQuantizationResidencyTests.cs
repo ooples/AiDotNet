@@ -20,6 +20,7 @@ namespace AiDotNet.Tests.UnitTests.Training;
 public class CloneAndQuantizationResidencyTests
 {
     [Theory] [InlineData(false, false)] [InlineData(true, false)] [InlineData(false, true)] [InlineData(true, true)]
+    [Trait("Category", "GPU")]
     public void LayerClone_PreservesDeviceWeightsAndBuffers(bool batchNorm, bool copyOnWrite)
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
@@ -55,6 +56,7 @@ public class CloneAndQuantizationResidencyTests
     }
 
     [Fact]
+    [Trait("Category", "GPU")]
     public void SpectralNormalization_DevicePowerIterationMatchesCpuForwardAndGradients()
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
@@ -119,6 +121,7 @@ public class CloneAndQuantizationResidencyTests
     }
 
     [Fact]
+    [Trait("Category", "GPU")]
     public void GeneratedTensorClonesAndRetainedGradients_AreIndependentResidentSnapshots()
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
@@ -156,6 +159,7 @@ public class CloneAndQuantizationResidencyTests
     }
 
     [Fact]
+    [Trait("Category", "GPU")]
     public void BidirectionalConstruction_ClonesResidentRecurrentWeightsWithoutFlattening()
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
@@ -177,6 +181,7 @@ public class CloneAndQuantizationResidencyTests
 
     [Theory] [InlineData(1, false)] [InlineData(4, false)] [InlineData(8, false)]
     [InlineData(1, true)] [InlineData(4, true)] [InlineData(8, true)]
+    [Trait("Category", "GPU")]
     public void QaLora_QuantizedForwardAndStraightThroughGradientsStayOnDevice(int bits, bool fullyConnected)
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);

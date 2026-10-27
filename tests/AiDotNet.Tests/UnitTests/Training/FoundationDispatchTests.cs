@@ -292,6 +292,7 @@ public class FoundationDispatchTests
     }
 
     [Fact]
+    [Trait("Category", "GPU")]
     public void RegisteredLayerRestore_OpenClDoesNotDownloadWeights()
     {
         using var backend = new AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend();

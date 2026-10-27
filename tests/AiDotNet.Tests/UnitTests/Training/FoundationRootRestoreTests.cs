@@ -6,6 +6,58 @@ namespace AiDotNet.Tests.UnitTests.Training;
 
 public class FoundationRootRestoreTests
 {
+    private class TimeSeries : AiDotNet.TimeSeries.TimeSeriesModelBase<float>
+    {
+        public TimeSeries() : base(new AiDotNet.Models.Options.TimeSeriesRegressionOptions<float>()) { }
+        public Tensor<float> Weight { get; } = new(new[] { 2 });
+        public int Restored;
+        public Vector<float> Packed => ModelParameters;
+        protected override void RegisterComponents() => RegisterParameterComponent("weight", new TensorFieldParameterSource<float>(() => Weight));
+        protected override void OnParametersRestored() => Restored++;
+        public override float PredictSingle(Vector<float> x) => 0;
+        public override AiDotNet.Models.ModelMetadata<float> GetModelMetadata() => new();
+        protected override IFullModel<float, Matrix<float>, Vector<float>> CreateInstance() => new TimeSeries();
+    }
+    private sealed class CustomTimeSeries : TimeSeries
+    {
+        public int Writes;
+        public override void SetParameters(Vector<float> values) { Writes++; base.SetParameters(values); }
+    }
+    [Fact]
+    public void TimeSeriesChunkRestore_PreservesCustomSetterAndPackedView()
+    {
+        var model = new CustomTimeSeries();
+        model.SetParameterChunks(new[] { new Tensor<float>(new float[] { 3, 7 }, new[] { 2 }) });
+        Assert.Equal(1, model.Writes); Assert.Equal(1, model.Restored);
+        Assert.Equal(new float[] { 3, 7 }, model.Packed.ToArray());
+    }
+    [Fact, Trait("Category", "GPU")]
+    public void TimeSeriesChunkRestore_DefersPackedViewWithoutDownloadingDeviceWeights()
+    {
+        using var backend = new AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend();
+        Assert.True(backend.IsAvailable);
+        using var direct = new AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine(backend);
+        using var gpu = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine(direct);
+        var previous = AiDotNetEngine.Current; AiDotNetEngine.Current = gpu;
+        try
+        {
+            var model = new TimeSeries();
+            var source = gpu.TensorAddScalar(new Tensor<float>(new[] { 2 }), 7f);
+            using (var scope = AiDotNet.Tensors.Engines.Diagnostics.GpuResidencyScope.Begin(captureOperations: true))
+            {
+                model.SetParameterChunks(new[] { source });
+                Assert.Equal(0, scope.Downloads);
+            }
+            Assert.Equal(1, model.Restored);
+            Assert.Same(model.Weight, Assert.Single(model.GetParameterChunks()));
+            Assert.Equal(new float[] { 7, 7 }, model.Packed.ToArray());
+            source = gpu.TensorAddScalar(source, 2f);
+            model.SetParameterChunks(new[] { source });
+            Assert.Equal(new float[] { 9, 9 }, model.Packed.ToArray());
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
     private interface IFixture
     {
         Tensor<double> Weight { get; }

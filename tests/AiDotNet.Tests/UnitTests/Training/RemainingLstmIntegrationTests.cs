@@ -17,6 +17,7 @@ namespace AiDotNet.Tests.UnitTests.Training;
 public class RemainingLstmIntegrationTests
 {
     [Fact]
+    [Trait("Category", "GPU")]
     public void OpenCl_LegacyCellKeepsBothStateAdjointsOnDevice()
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable, backend.InitializationException?.ToString());
@@ -48,6 +49,7 @@ public class RemainingLstmIntegrationTests
         finally { AiDotNetEngine.Current = prior; }
     }
     [Theory] [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)] [InlineData(5)]
+    [Trait("Category", "GPU")]
     public void OpenCl_ConsumersTrainWithoutHostReadbacks(int kind)
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable, backend.InitializationException?.ToString());
@@ -157,6 +159,7 @@ public class RemainingLstmIntegrationTests
 
     [Theory]
     [InlineData(false)] [InlineData(true)]
+    [Trait("Category", "GPU")]
     public void OpenCl_MemoryControllersKeepCellGradientsOnDevice(bool dnc)
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable);
