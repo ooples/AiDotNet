@@ -33,9 +33,9 @@ duplicates, stale events, same-second reconciliation, expired-worker fencing,
 transaction rollback, replacement subscriptions and role restrictions. This check
 also runs in the deployment workflow.
 
-The migration was applied and recorded in Supabase migration history on
+Both migrations were applied and recorded in Supabase migration history on
 2026-10-27. Deployment `81b55279c7da4a429326e69a51b614e3` contains the durable
-handler (ZIP SHA-256
+handler before endpoint isolation (ZIP SHA-256
 `023949f6fed82d228b08bc3e092b63a61e13efa51070514d08cf65589649e7e6`).
 Real Stripe subscription update/delete events updated the exact test profile.
 Signed replays through both secrets left its timestamp unchanged with one receipt
@@ -213,3 +213,36 @@ with output `42` for the execution check. This does not establish that both
 remote Stripe registrations have the right signing secret, nor validate a live
 subscription-to-database transaction. The recovery progress above records those
 subsequent live checks separately.
+
+## Execution isolation
+
+The billing app retains both public URLs. Its `/api/execute` handler only proxies
+request bodies to `PLAYGROUND_EXECUTION_URL`; it neither compiles nor executes
+submitted code, and forwards no incoming authorization, cookies, or function keys.
+The compiler and AiDotNet runtime are packaged in `AiDotNet.Playground.Execution`
+and deployed to `aidotnet-playground-execution`. This app uses its own storage
+account `aidotnetexecstore2026`, has no managed identity, and receives no Stripe,
+Supabase, shared telemetry, or billing storage credentials. Its own Functions
+storage is not a security boundary from submitted code; it must remain dedicated
+to this disposable execution service. This split isolates billing credentials;
+it does not turn arbitrary in-process C# into a general-purpose sandbox.
+
+Deployment builds and tests both packages in a job without OIDC. A separate job
+checks app/storage/settings isolation, deploys execution first, configures the
+HTTPS proxy URL, then deploys the billing app. The deployment identity needs
+Website Contributor separately scoped to each app, not to the resource group.
+Package verification rejects local execution/compiler dependencies in the billing
+package and webhook functions/Stripe dependencies in the execution package.
+
+Provision the execution app as Windows Consumption, .NET isolated 10, 64-bit,
+HTTPS-only, with a dedicated Standard_LRS storage account and no Application
+Insights or managed identity. Do not copy billing app settings. Run
+`python scripts/verify-playground-isolation.py aidotnet-playground_group aidotnet-playground aidotnet-playground-execution`
+before deploying. Only platform settings explicitly approved by that check are
+accepted; do not add credentials to its allowlist. Keep both Stripe registrations
+pointed at the original billing app. Rollback must retain the proxy: never restore
+a combined execution/webhook package to an app containing billing secrets.
+
+The corrective database migration was verified live with the delayed A-cancel /
+B-checkout sequence and all eight status mappings. Temporary user/profile/state/
+receipt fixtures were removed after verification.

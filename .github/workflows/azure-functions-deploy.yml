@@ -7,6 +7,23 @@ on:
       - main
     paths:
       - 'src/AiDotNet.Playground.Functions/**'
+      - 'src/AiDotNet.Playground.Execution/**'
+      - 'scripts/verify-playground-isolation.py'
+      - 'scripts/test_playground_isolation.py'
+      - '.github/workflows/azure-functions-deploy.yml'
+      - 'scripts/verify-playground-package.py'
+      - 'scripts/check-playground-routes.py'
+      - 'scripts/test_playground_package.py'
+      - 'scripts/test_playground_routes.py'
+      - 'scripts/test_playground_event_state.py'
+      - 'website/supabase/migrations/*playground_stripe*.sql'
+      - 'tests/AiDotNet.Playground.Functions.Tests/**'
+  pull_request:
+    paths:
+      - 'src/AiDotNet.Playground.Functions/**'
+      - 'src/AiDotNet.Playground.Execution/**'
+      - 'scripts/verify-playground-isolation.py'
+      - 'scripts/test_playground_isolation.py'
       - '.github/workflows/azure-functions-deploy.yml'
       - 'scripts/verify-playground-package.py'
       - 'scripts/check-playground-routes.py'
@@ -23,6 +40,7 @@ concurrency:
 
 env:
   AZURE_FUNCTIONAPP_NAME: aidotnet-playground
+  AZURE_EXECUTIONAPP_NAME: aidotnet-playground-execution
   AZURE_FUNCTIONAPP_RESOURCE_GROUP: aidotnet-playground_group
   AZURE_FUNCTIONAPP_PACKAGE_PATH: src/AiDotNet.Playground.Functions
   DOTNET_VERSION: '10.0.x'
@@ -34,7 +52,7 @@ jobs:
   build:
     name: Build and Verify
     runs-on: ubuntu-latest
-    # The functions project references src/AiDotNet.csproj, so this build compiles the library's
+    # The execution project references src/AiDotNet.csproj, so this build compiles the library's
     # net10.0 target too (about 6.5 minutes on a 128-core workstation; several times that on a
     # 4-core hosted runner, where CodeQL's traced net10.0 build of it takes about 26 minutes).
     # 15 minutes was sized for restoring a prebuilt AiDotNet package.
@@ -72,25 +90,33 @@ jobs:
         # The existing app is Windows Consumption. A portable publish carries mobile/macOS/Linux
         # native libraries and exhausted Kudu's temporary disk during the recovery upload.
         # Keep reference PDBs for diagnostics, but omit XML documentation from the runtime package.
-        # Reuse the library built by the test step; only publish the Functions host for Windows.
+        # Reuse the library built by the test step; publish each Functions host for Windows.
         run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release -r win-x64 --self-contained false -o ./publish -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false -p:AllowedReferenceRelatedFileExtensions=.pdb
+
+      - name: Publish isolated execution service
+        run: dotnet publish src/AiDotNet.Playground.Execution -c Release -r win-x64 --self-contained false -o ./publish-execution -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false -p:AllowedReferenceRelatedFileExtensions=.pdb
 
       - name: Verify both required functions are packaged
         run: |
           python3 scripts/test_playground_package.py
           python3 scripts/test_playground_routes.py
+          python3 scripts/test_playground_isolation.py
           python3 scripts/verify-playground-package.py ./publish
+          python3 scripts/verify-playground-package.py ./publish-execution --execution
 
       - name: Upload verified deployment artifact
         uses: actions/upload-artifact@v4
         with:
           name: playground-functions
-          path: ./publish
+          path: |
+            ./publish
+            ./publish-execution
           include-hidden-files: true
           if-no-files-found: error
 
   deploy:
     name: Deploy Verified Artifact
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -102,14 +128,16 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: scripts/check-playground-routes.py
+          sparse-checkout: |
+            scripts/check-playground-routes.py
+            scripts/verify-playground-isolation.py
           sparse-checkout-cone-mode: false
 
       - name: Download verified deployment artifact
         uses: actions/download-artifact@v4
         with:
           name: playground-functions
-          path: ./publish
+          path: .
 
       - name: Check federated deployment configuration
         shell: bash
@@ -131,6 +159,22 @@ jobs:
           client-id: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify app and storage isolation before deploying
+        run: python3 scripts/verify-playground-isolation.py "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" "$AZURE_FUNCTIONAPP_NAME" "$AZURE_EXECUTIONAPP_NAME"
+
+      - name: Deploy isolated code execution
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_EXECUTIONAPP_NAME }}
+          package: ./publish-execution
+
+      - name: Configure public execution proxy
+        shell: bash
+        run: |
+          hostname=$(az functionapp show --resource-group "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" --name "$AZURE_EXECUTIONAPP_NAME" --query defaultHostName --output tsv)
+          test -n "$hostname"
+          az functionapp config appsettings set --resource-group "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" --name "$AZURE_FUNCTIONAPP_NAME" --settings "PLAYGROUND_EXECUTION_URL=https://$hostname/api/execute" --output none
 
       - name: Deploy to Azure Functions
         uses: Azure/functions-action@v1

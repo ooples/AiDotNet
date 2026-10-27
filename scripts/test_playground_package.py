@@ -16,7 +16,7 @@ class PlaygroundPackage(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = pathlib.Path(self.temp.name)
-        self.functions = [{'name': name, 'scriptFile': 'App.dll', 'bindings': [
+        self.functions = [{'name': name, 'scriptFile': 'App.dll', 'entryPoint': 'AiDotNet.Playground.Functions.ExecuteCodeProxy.Run' if name == 'execute' else 'StripeWebhook.Run', 'bindings': [
             {'type': 'httpTrigger', 'methods': ['post'], 'authLevel': 'anonymous'}
         ]} for name in ('execute', 'stripe-webhook')]
         (self.root/'App.dll').write_bytes(b'fixture')
@@ -26,10 +26,29 @@ class PlaygroundPackage(unittest.TestCase):
         (self.root/'.azurefunctions').mkdir()
         (self.root/'host.json').write_text('{"version":"2.0","extensions":{"http":{"routePrefix":"api"}}}')
 
-    def verify(self):
+    def verify(self, execution=False):
         (self.root/'functions.metadata').write_text(json.dumps(self.functions))
         with contextlib.redirect_stdout(io.StringIO()):
-            checker.verify(self.root)
+            checker.verify(self.root, execution=execution)
+
+    def test_billing_worker_rejects_local_execution(self):
+        self.functions[0]['entryPoint'] = 'AiDotNet.Playground.Functions.ExecuteCode.Run'
+        with self.assertRaisesRegex(ValueError, 'only proxy'):
+            self.verify()
+
+    def test_billing_worker_rejects_compiler(self):
+        (self.root/'Microsoft.CodeAnalysis.CSharp.dll').write_bytes(b'fixture')
+        with self.assertRaisesRegex(ValueError, 'compiler'):
+            self.verify()
+
+    def test_execution_package_rejects_webhook_and_stripe(self):
+        with self.assertRaisesRegex(ValueError, 'Unexpected function'):
+            self.verify(execution=True)
+        self.functions.pop()
+        with self.assertRaisesRegex(ValueError, 'must not contain Stripe'):
+            self.verify(execution=True)
+        (self.root/'Stripe.net.dll').unlink()
+        self.verify(execution=True)
 
     def test_complete_package(self):
         self.verify()
