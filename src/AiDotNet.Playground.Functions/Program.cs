@@ -6,6 +6,7 @@ var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
     .ConfigureServices(services =>
     {
+        AiDotNet.Playground.Functions.ExecuteCodeProxy.RegisterClient(services);
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
     })

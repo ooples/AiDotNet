@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AiDotNet.Playground.Functions\AiDotNet.Playground.Functions.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Playground.Execution\AiDotNet.Playground.Execution.csproj" />
   </ItemGroup>
 
 </Project>
