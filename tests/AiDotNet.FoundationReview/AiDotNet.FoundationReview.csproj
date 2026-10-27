@@ -41,5 +41,6 @@
     <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/TeacherParameterTransferTests.cs" Link="TeacherParameterTransferTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/CloneAndQuantizationResidencyTests.cs" Link="CloneAndQuantizationResidencyTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Training/HostStateCheckpointTests.cs" Link="HostStateCheckpointTests.cs" />
   </ItemGroup>
 </Project>
