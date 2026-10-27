@@ -976,7 +976,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     }
 
 
-
     /// <summary>
     /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the
     /// full input shape into the layer's resolved input/output shapes (output preserves
@@ -1276,7 +1275,9 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // Engines without a fused state adjoint retain their differentiable fallback internally.
         bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
         bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
-        if (timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
+        bool standardActivations = (_useVectorActivation ? _tanhVectorActivation?.GetType() : _tanhActivation?.GetType()) == typeof(TanhActivation<T>)
+            && (_useVectorActivation ? _sigmoidVectorActivation?.GetType() : _sigmoidActivation?.GetType()) == typeof(SigmoidActivation<T>);
+        if (standardActivations && timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
             Tensor<T>? fusedOutput = null;
             try { fusedOutput = TryFusedLstmForward(input3D, tapeActive || graphActive); }
@@ -1341,42 +1342,26 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             currentH = _initialHidden;
             currentC = _initialCell;
         }
-        // Input projections hoisted out of the recurrence: for each gate, x * W_gi + b_g over ALL timesteps in one GEMM
-        // (as cuDNN's LSTM does), so each step does one hidden GEMM per gate instead of an input GEMM, a hidden GEMM,
-        // an add and a bias add. Kept per gate rather than packed [B, 4H]: splitting a packed gate tensor costs four
-        // last-axis slices (and their scatters in backward) per step, which the CPU engine pays heavily.
         int inputFeatures = input3D.Shape[2];
         var flatInput = Engine.Reshape(input3D, [batchSize * timeSteps, inputFeatures]);
-        Tensor<T> Project(Tensor<T> weights, Tensor<T> bias)
-            => Engine.Reshape(
-                Engine.TensorAdd(Engine.TensorMatMul(flatInput, Engine.TensorTranspose(weights)),
-                    Engine.Reshape(bias, [1, _hiddenSize])),
-                [batchSize, timeSteps, _hiddenSize]);
-        var projF = Project(_weightsFi, _biasF);
-        var projI = Project(_weightsIi, _biasI);
-        var projC = Project(_weightsCi, _biasC);
-        var projO = Project(_weightsOi, _biasO);
-        var WfhT = Engine.TensorTranspose(_weightsFh);
-        var WihT = Engine.TensorTranspose(_weightsIh);
-        var WchT = Engine.TensorTranspose(_weightsCh);
-        var WohT = Engine.TensorTranspose(_weightsOh);
+        var wi = Engine.TensorConcatenate(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 0);
+        var wh = Engine.TensorTranspose(Engine.TensorConcatenate(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 0));
+        var bias = Engine.TensorConcatenate(new[] { _biasI, _biasF, _biasC, _biasO }, 0);
+        var projected = Engine.Reshape(Engine.TensorAdd(Engine.TensorMatMul(flatInput, Engine.TensorTranspose(wi)),
+            Engine.Reshape(bias, [1, 4 * _hiddenSize])), [batchSize, timeSteps, 4 * _hiddenSize]);
+        Tensor<T> Activate(Tensor<T> x) => _useVectorActivation
+            ? ActivationHelper.ApplyActivation(_tanhVectorActivation, x, Engine)
+            : ActivationHelper.ApplyActivation(_tanhActivation, x, Engine);
+        Tensor<T> Recurrent(Tensor<T> x) => _useVectorActivation
+            ? ActivationHelper.ApplyActivation(_sigmoidVectorActivation, x, Engine)
+            : ActivationHelper.ApplyActivation(_sigmoidActivation, x, Engine);
 
         for (int t = 0; t < timeSteps; t++)
         {
-            // Tape-tracked slices: gradient flows back into input3D through the projections, so layers upstream of
-            // the LSTM (embeddings, stacked LSTMs) still train end-to-end.
-            var f = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projF, axis: 1, index: t), Engine.TensorMatMul(currentH, WfhT)));
-            var i = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projI, axis: 1, index: t), Engine.TensorMatMul(currentH, WihT)));
-            var c_tilde = Engine.Tanh(Engine.TensorAdd(Engine.TensorSliceAxis(projC, axis: 1, index: t), Engine.TensorMatMul(currentH, WchT)));
-            var o = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projO, axis: 1, index: t), Engine.TensorMatMul(currentH, WohT)));
-            // Update Cell State
-            var f_prevC = Engine.TensorMultiply(f, currentC);
-            var i_cTilde = Engine.TensorMultiply(i, c_tilde);
-            currentC = Engine.TensorAdd(f_prevC, i_cTilde);
-
-            // Update Hidden State
-            var tanhC = Engine.Tanh(currentC);
-            currentH = Engine.TensorMultiply(o, tanhC);
+            var gates = Engine.TensorAdd(Engine.TensorSqueeze(Engine.TensorNarrow(projected, 1, t, 1), 1), Engine.TensorMatMul(currentH, wh));
+            currentH = standardActivations
+                ? LstmGateDispatch<T>.Forward(Engine, gates, currentC, out currentC)
+                : LstmGateDispatch<T>.Forward(Engine, gates, currentC, Activate, Recurrent, out currentC);
             // Collect the hidden state for the tape-connected output concat below.
             hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
             // Caches for the manual backward path (not on the tape).

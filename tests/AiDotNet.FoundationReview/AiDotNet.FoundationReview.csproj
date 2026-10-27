@@ -21,6 +21,7 @@
     <Compile Include="../AiDotNet.Tests/UnitTests/MetaLearning/LinearEmbeddingModelTests.cs" Link="LinearEmbeddingModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/NeuralNetworks/GANs/GanFusedTrainingTests.cs" Link="GanFusedTrainingTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/TimeSeries/DeepARShortWindowRegressionTests.cs" Link="DeepARShortWindowRegressionTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Training/RemainingLstmIntegrationTests.cs" Link="RemainingLstmIntegrationTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/RecurrentConsumerDispatchTests.cs" Link="RecurrentConsumerDispatchTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/FoundationDispatchTests.cs" Link="FoundationDispatchTests.cs" />
     <Compile Include="../AiDotNet.Tests/IntegrationTests/NeuralNetworks/LstmFusedTrainingWiringTests.cs" Link="LstmFusedTrainingWiringTests.cs" />

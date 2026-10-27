@@ -32,4 +32,17 @@ internal static class LstmGateDispatch<T>
             engine.TensorMultiply(engine.Sigmoid(Gate(0)), engine.Tanh(Gate(2))));
         return engine.TensorMultiply(engine.Sigmoid(Gate(3)), engine.Tanh(cell));
     }
+    // Custom activations share packed projections and the same state update. Activations
+    // remain engine operations, so their own device kernels and adjoints are preserved.
+    internal static Tensor<T> Forward(IEngine engine, Tensor<T> gates, Tensor<T> previousCell,
+        Func<Tensor<T>, Tensor<T>> activation, Func<Tensor<T>, Tensor<T>> recurrentActivation,
+        out Tensor<T> cell)
+    {
+        int width = previousCell.Shape[previousCell.Rank - 1];
+        Tensor<T> Gate(int i) => engine.TensorNarrow(gates, gates.Rank - 1, i * width, width);
+        cell = engine.TensorAdd(engine.TensorMultiply(recurrentActivation(Gate(1)), previousCell),
+            engine.TensorMultiply(recurrentActivation(Gate(0)), activation(Gate(2))));
+        return engine.TensorMultiply(recurrentActivation(Gate(3)), activation(cell));
+    }
+
 }
