@@ -75,7 +75,11 @@ internal static class CopyOnWriteCloneHelper
                 sparse.DataVector.ToArray());
         }
 
-        return (Tensor<T>)source.CloneShared();
+        // CloneShared materializes device-backed tensors on the host. Preserve clone
+        // independence with a device copy when executing on the GPU.
+        return AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            ? TensorCheckpoint<T>.Capture(new[] { source })[0]
+            : (Tensor<T>)source.CloneShared();
     }
 
     /// <summary>

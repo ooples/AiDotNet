@@ -3570,13 +3570,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
     }
 
-    /// <summary>Creates a distinct tensor object that shares storage copy-on-write with the source.</summary>
+    /// <summary>Creates an independent tensor, sharing CPU storage copy-on-write when supported.</summary>
     protected static Tensor<T>? CloneGeneratedTrainableTensor(Tensor<T>? source)
-        => source is null ? null : (Tensor<T>)source.CloneShared();
+        => source is null ? null : CopyOnWriteCloneHelper.ShareTensor(source);
 
-    /// <summary>Creates a distinct copy-on-write tensor object for required generated storage.</summary>
+    /// <summary>Creates independent required storage, sharing CPU storage copy-on-write when supported.</summary>
     protected static Tensor<T> CloneRequiredGeneratedTrainableTensor(Tensor<T> source)
-        => (Tensor<T>)source.CloneShared();
+        => CopyOnWriteCloneHelper.ShareTensor(source);
 
     /// <summary>Copies a generated readonly tensor into its constructor-created destination storage.</summary>
     protected static void CopyGeneratedTrainableTensorValues(
@@ -3591,7 +3591,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 $"Generated trainable tensor '{memberName}' has incompatible source/clone storage.");
         }
 
-        source.Data.Span.CopyTo(destination.Data.Span);
+        AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, destination);
     }
 
     /// <summary>Creates an independent generated trainable vector for an in-memory clone.</summary>
@@ -4967,9 +4967,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var bag = _retainedStreamingGrads;
         if (bag is null || source is null || grad is null) return;
 
-        var copy = new Tensor<T>(grad.Shape.ToArray());
-        grad.Data.Span.CopyTo(copy.Data.Span);
-        bag[source] = copy;
+        bag[source] = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { grad })[0];
     }
 
     /// <summary>Publishes anything retained during the step, then drops it.</summary>
