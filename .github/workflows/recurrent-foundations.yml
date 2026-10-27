@@ -14,11 +14,16 @@ jobs:
   opencl-foundations:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: library
     env:
       AIDOTNET_OPENCL_ALLOW_CPU: '1'
       AIDOTNET_REQUIRE_GPU_TESTS: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: library
       - uses: actions/checkout@v4
         with:
           repository: ooples/AiDotNet.Tensors
@@ -42,4 +47,4 @@ jobs:
         if: always()
         with:
           name: recurrent-foundation-results
-          path: tests/AiDotNet.FoundationReview/TestResults/*.trx
+          path: library/tests/AiDotNet.FoundationReview/TestResults/*.trx
