@@ -312,7 +312,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         int maxEpochs = timeBounded ? int.MaxValue : _options.Epochs;
 
         double bestLoss = double.PositiveInfinity;
-        List<Tensor<T>>? bestSnapshot = null;
+        Tensor<T>[]? bestSnapshot = null;
 
         for (int epoch = 0; epoch < maxEpochs; epoch++)
         {
@@ -362,7 +362,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
                 {
                     bestLoss = epochLoss;
-                    bestSnapshot = allParams.Select(p => p.Clone()).ToList();
+                    bestSnapshot = SnapshotParameters(allParams, bestSnapshot);
                 }
 
                 // Report after checkpointing so an early stop still leaves the best weights to
@@ -376,14 +376,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
 
         // Restore best-epoch parameters (copy values into the live tensors the model uses).
         if (bestSnapshot is not null)
-        {
-            for (int i = 0; i < allParams.Count; i++)
-            {
-                var src = bestSnapshot[i];
-                var dst = allParams[i];
-                for (int k = 0; k < Math.Min(src.Length, dst.Length); k++) dst[k] = src[k];
-            }
-        }
+            RestoreParameters(allParams, bestSnapshot);
     }
 
     public override Vector<T> Predict(Matrix<T> input)
