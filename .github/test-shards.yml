@@ -1487,6 +1487,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedVisionLanguageFixtureContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratorContainmentWalkTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelCoverageBaselineTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.ModelStateDisposeBindingTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelStateOwnershipContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ParameterGeneratorSemanticTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ParameterUpdateInPlaceAnalyzerTests.|

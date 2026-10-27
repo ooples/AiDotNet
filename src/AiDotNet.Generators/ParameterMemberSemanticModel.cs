@@ -230,6 +230,57 @@ internal static class ParameterMemberSemanticModel
         return null;
     }
 
+    /// <summary>
+    /// The members this type's own <c>Dispose</c> assigns. A field a type writes while disposing is OBJECT
+    /// LIFETIME, not model state: it describes the instance that is going away, so carrying it in a checkpoint and
+    /// restoring it into a fresh instance can only misdescribe that instance. The clearest case is the disposed
+    /// flag itself -- restored as <c>true</c>, every call on the freshly loaded model throws
+    /// <see cref="System.ObjectDisposedException"/>.
+    /// </summary>
+    /// <remarks>
+    /// Derived from <c>Dispose</c> rather than from a name, so a differently-named flag is covered and a field that
+    /// merely happens to be called <c>_disposed</c> without being dispose state is not. Matched syntactically, the
+    /// same way <see cref="GetRegistrationClassifications"/> matches registration calls: an assignment whose target
+    /// names a member of this type, inside a method named <c>Dispose</c> or <c>DisposeAsync</c> declared here.
+    /// Only the type's OWN declarations are read, so a base class's disposed flag is classified where it is
+    /// declared, which is where its state declaration is emitted too.
+    /// </remarks>
+    internal static IReadOnlyCollection<string> GetDisposeAssignedMembers(
+        INamedTypeSymbol owner,
+        Compilation compilation)
+    {
+        var assigned = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var declaration in owner.DeclaringSyntaxReferences
+            .Select(syntaxReference => syntaxReference.GetSyntax())
+            .OfType<ClassDeclarationSyntax>())
+        {
+            // A semantic model per declaring tree, so a partial type split across files is covered. The tree is
+            // one of this compilation's by construction -- it came from a symbol the compilation declared.
+            var semanticModel = compilation.GetSemanticModel(declaration.SyntaxTree);
+
+            // Members, not DescendantNodes: a NESTED class's Dispose is not this type's. The symbol check below
+            // would reject its fields anyway, but there is no reason to walk them.
+            foreach (var method in declaration.Members
+                .OfType<MethodDeclarationSyntax>()
+                .Where(method => method.Identifier.ValueText is "Dispose" or "DisposeAsync"))
+            {
+                assigned.UnionWith(method.DescendantNodes()
+                    .OfType<AssignmentExpressionSyntax>()
+                    // Bound to a SYMBOL, not matched by name. A local or parameter that shadows a member resolves
+                    // to the local, and a field of some other type -- a nested class's, a captured instance's --
+                    // resolves to that type, so neither is mistaken for a member of this one. Matching the name
+                    // alone could take a real model member out of the payload, which is the worst thing this
+                    // exclusion could do.
+                    .Select(assignment => semanticModel.GetSymbolInfo(assignment.Left).Symbol)
+                    .Where(symbol => symbol is IFieldSymbol or IPropertySymbol
+                        && SymbolEqualityComparer.Default.Equals(symbol.ContainingType, owner))
+                    .Select(symbol => symbol!.Name));
+            }
+        }
+
+        return assigned;
+    }
+
     internal static IReadOnlyDictionary<string, Classification> GetRegistrationClassifications(
         INamedTypeSymbol owner)
     {
@@ -237,9 +288,10 @@ internal static class ParameterMemberSemanticModel
             .Where(member => member is IFieldSymbol or IPropertySymbol)
             .Select(member => member.Name), StringComparer.Ordinal);
         var declarations = new Dictionary<string, List<(Kind Kind, string Name)>>(StringComparer.Ordinal);
-        foreach (var syntaxReference in owner.DeclaringSyntaxReferences)
+        foreach (var declaration in owner.DeclaringSyntaxReferences
+            .Select(syntaxReference => syntaxReference.GetSyntax())
+            .OfType<ClassDeclarationSyntax>())
         {
-            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
             foreach (var invocation in declaration.DescendantNodes().OfType<InvocationExpressionSyntax>())
             {
                 string? callName = invocation.Expression switch
