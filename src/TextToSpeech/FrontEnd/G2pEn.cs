@@ -193,7 +193,16 @@ internal sealed class G2pEn
             .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
         text = Keep.Replace(text.ToLowerInvariant(), "");
         text = text.Replace("i.e.", "that is").Replace("e.g.", "for example");
-        var words = NltkWordTokens(text);
+        return Words(NltkWordTokens(text));
+    }
+
+    /// <summary>
+    /// <c>G2p.__call__</c>'s pronunciation loop on words already tokenized (NATSpeech's <c>EnG2p</c> after its own text
+    /// cleaning): the words tagged together, then each word's homograph pronunciation for its tag, its CMU pronunciation
+    /// or the prediction, the word itself when it has no letter; the words' pronunciations separated by " ".
+    /// </summary>
+    public List<string> Words(IReadOnlyList<string> words)
+    {
         var tags = words.Count > 0 ? AveragedPerceptronTagger.English.Tag(words) : new List<string>();
         var prons = new List<string>();
         for (int i = 0; i < words.Count; i++)
