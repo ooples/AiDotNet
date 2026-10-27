@@ -1,0 +1,96 @@
+{
+  "backend": "DirectML explicit recurrence",
+  "torch": "2.4.1+cpu",
+  "warmup": 5,
+  "repeats": 21,
+  "results": [
+    {
+      "name": "LSTMLayer.forward",
+      "shape": [
+        4,
+        8,
+        16,
+        32
+      ],
+      "median_ms": 3.6093000089749694,
+      "min_ms": 3.217300050891936,
+      "max_ms": 3.9770000148564577,
+      "checksum": 6.373242678120732
+    },
+    {
+      "name": "LSTMLayer.forward_backward",
+      "shape": [
+        4,
+        8,
+        16,
+        32
+      ],
+      "median_ms": 11.895100004039705,
+      "min_ms": 11.293599964119494,
+      "max_ms": 14.02619993314147,
+      "checksum": 1.134327539242804
+    },
+    {
+      "name": "LSTMLayer.forward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 14.77760006673634,
+      "min_ms": 13.75499996356666,
+      "max_ms": 19.81210010126233,
+      "checksum": 258.64532103645615
+    },
+    {
+      "name": "LSTMLayer.forward_backward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 52.386999945156276,
+      "min_ms": 46.54180002398789,
+      "max_ms": 58.26989992056042,
+      "checksum": 145.06238317815587
+    },
+    {
+      "name": "projected_gates.forward_backward",
+      "shape": [
+        8,
+        64
+      ],
+      "median_ms": 1.2193999718874693,
+      "min_ms": 1.1138999834656715,
+      "max_ms": 1.424000016413629,
+      "checksum": 70.53137479208135
+    },
+    {
+      "name": "projected_gates.forward_backward",
+      "shape": [
+        2,
+        16,
+        16,
+        32
+      ],
+      "median_ms": 1.2249000137671828,
+      "min_ms": 1.1632000096142292,
+      "max_ms": 1.5711999731138349,
+      "checksum": 2133.4602642797618
+    },
+    {
+      "name": "checkpoint.capture_restore",
+      "shape": [
+        8,
+        256,
+        256
+      ],
+      "median_ms": 0.6094001000747085,
+      "min_ms": 0.3706000279635191,
+      "max_ms": 1.0135999182239175,
+      "checksum": 6553.60009765625
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "backend": "CPU native nn.LSTM",
+  "torch": "2.4.1+cpu",
+  "warmup": 5,
+  "repeats": 21,
+  "results": [
+    {
+      "name": "LSTMLayer.forward",
+      "shape": [
+        4,
+        8,
+        16,
+        32
+      ],
+      "median_ms": 0.1797000877559185,
+      "min_ms": 0.1772999530658126,
+      "max_ms": 0.19649998284876347,
+      "checksum": 6.373237286694348
+    },
+    {
+      "name": "LSTMLayer.forward_backward",
+      "shape": [
+        4,
+        8,
+        16,
+        32
+      ],
+      "median_ms": 0.5758999614045024,
+      "min_ms": 0.571100041270256,
+      "max_ms": 0.6325000431388617,
+      "checksum": 1.134326508268714
+    },
+    {
+      "name": "LSTMLayer.forward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 0.8163000456988811,
+      "min_ms": 0.8058000821620226,
+      "max_ms": 0.8680999744683504,
+      "checksum": 258.6452339820098
+    },
+    {
+      "name": "LSTMLayer.forward_backward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 2.446300000883639,
+      "min_ms": 2.3619000567123294,
+      "max_ms": 2.6578999822959304,
+      "checksum": 145.06235607224517
+    },
+    {
+      "name": "LSTMLayer.float64.forward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 2.780799986794591,
+      "min_ms": 2.716100076213479,
+      "max_ms": 2.9457000782713294,
+      "checksum": 258.6452626928897
+    },
+    {
+      "name": "LSTMLayer.float64.forward_backward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 11.079099960625172,
+      "min_ms": 10.687100002542138,
+      "max_ms": 11.490499950014055,
+      "checksum": 145.062393995355
+    },
+    {
+      "name": "projected_gates.forward_backward",
+      "shape": [
+        8,
+        64
+      ],
+      "median_ms": 0.24470000062137842,
+      "min_ms": 0.24129997473210096,
+      "max_ms": 0.32389990519732237,
+      "checksum": 70.53138650608713
+    },
+    {
+      "name": "projected_gates.forward_backward",
+      "shape": [
+        2,
+        16,
+        16,
+        32
+      ],
+      "median_ms": 0.5394999170675874,
+      "min_ms": 0.5252000410109758,
+      "max_ms": 0.6513000698760152,
+      "checksum": 2133.460646823105
+    },
+    {
+      "name": "checkpoint.capture_restore",
+      "shape": [
+        8,
+        256,
+        256
+      ],
+      "median_ms": 0.13810000382363796,
+      "min_ms": 0.13669999316334724,
+      "max_ms": 0.16759999562054873,
+      "checksum": 6553.60009765625
+    }
+  ]
+}

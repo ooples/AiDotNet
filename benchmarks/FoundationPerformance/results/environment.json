@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-27",
+  "cpu": "AMD Ryzen 9 3950X (16 cores / 32 logical processors)",
+  "gpu": "AMD Radeon RX 5500 XT, OpenCL; PyTorch DirectML on same GPU",
+  "os": "Windows",
+  "dotnet": "10.0.403 SDK / net10.0 Release",
+  "before_aidotnet": "04e44e859446307322f06043a11023f9ebc822d8",
+  "before_tensors": "NuGet 0.143.0",
+  "after_aidotnet": "e00ec8266c (production tree unchanged by benchmark commit)",
+  "after_tensors": "3c52f2918393eb067479e0238cbf0b5e583803b1",
+  "pytorch": "2.4.1+cpu with torch-directml 0.2.5.dev240914",
+  "threads": 1,
+  "dotnet_tiered_compilation": false,
+  "warmup": 5,
+  "samples": 21
+}

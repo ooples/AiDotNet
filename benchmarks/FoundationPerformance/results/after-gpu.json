@@ -1,0 +1,116 @@
+{
+  "backend": "OpenCL",
+  "warmup": 5,
+  "repeats": 21,
+  "results": [
+    {
+      "name": "LSTMLayer.forward",
+      "shape": [
+        4,
+        8,
+        16,
+        32
+      ],
+      "median_ms": 0.4037,
+      "min_ms": 0.3685,
+      "max_ms": 2.3586,
+      "allocated_bytes": 16416,
+      "downloads": 0,
+      "uploads": 1,
+      "checksum": 6.373236830346286
+    },
+    {
+      "name": "LSTMLayer.forward_backward",
+      "shape": [
+        4,
+        8,
+        16,
+        32
+      ],
+      "median_ms": 5.2676,
+      "min_ms": 4.9372,
+      "max_ms": 7.4137,
+      "allocated_bytes": 88920,
+      "downloads": 0,
+      "uploads": 2,
+      "checksum": 1.134326338302344
+    },
+    {
+      "name": "LSTMLayer.forward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 1.6388,
+      "min_ms": 1.4691,
+      "max_ms": 4.116,
+      "allocated_bytes": 397016,
+      "downloads": 0,
+      "uploads": 1,
+      "checksum": 258.64520814083517
+    },
+    {
+      "name": "LSTMLayer.forward_backward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 92.1742,
+      "min_ms": 88.6116,
+      "max_ms": 98.2484,
+      "allocated_bytes": 281696,
+      "downloads": 0,
+      "uploads": 2,
+      "checksum": 145.06235014298
+    },
+    {
+      "name": "projected_gates.forward_backward",
+      "shape": [
+        8,
+        64
+      ],
+      "median_ms": 1.0353,
+      "min_ms": 0.9111,
+      "max_ms": 2.6417,
+      "allocated_bytes": 70968,
+      "downloads": 0,
+      "uploads": 4,
+      "checksum": 70.5313867205738
+    },
+    {
+      "name": "projected_gates.forward_backward",
+      "shape": [
+        2,
+        16,
+        16,
+        32
+      ],
+      "median_ms": 1.3279,
+      "min_ms": 1.0612,
+      "max_ms": 2.7458,
+      "allocated_bytes": 833672,
+      "downloads": 0,
+      "uploads": 4,
+      "checksum": 2133.4606282686555
+    },
+    {
+      "name": "checkpoint.capture_restore",
+      "shape": [
+        8,
+        256,
+        256
+      ],
+      "median_ms": 0.5347,
+      "min_ms": 0.3559,
+      "max_ms": 1.195,
+      "allocated_bytes": 534984,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 6553.60009765625
+    }
+  ]
+}

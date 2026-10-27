@@ -1,0 +1,148 @@
+{
+  "backend": "CPU",
+  "warmup": 5,
+  "repeats": 21,
+  "results": [
+    {
+      "name": "LSTMLayer.forward",
+      "shape": [
+        4,
+        8,
+        16,
+        32
+      ],
+      "median_ms": 0.0422,
+      "min_ms": 0.0405,
+      "max_ms": 0.0733,
+      "allocated_bytes": 33080,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 6.3732387237250805
+    },
+    {
+      "name": "LSTMLayer.forward_backward",
+      "shape": [
+        4,
+        8,
+        16,
+        32
+      ],
+      "median_ms": 0.129,
+      "min_ms": 0.126,
+      "max_ms": 0.146,
+      "allocated_bytes": 242056,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 1.1343243746086955
+    },
+    {
+      "name": "LSTMLayer.forward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 0.6439,
+      "min_ms": 0.6072,
+      "max_ms": 2.1509,
+      "allocated_bytes": 235952,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 258.64531855634414
+    },
+    {
+      "name": "LSTMLayer.forward_backward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 3.0865,
+      "min_ms": 2.5094,
+      "max_ms": 4.5665,
+      "allocated_bytes": 2636392,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 145.06236647767946
+    },
+    {
+      "name": "LSTMLayer.float64.forward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 7.0773,
+      "min_ms": 5.6044,
+      "max_ms": 8.5425,
+      "allocated_bytes": 26184128,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 258.6452626929147
+    },
+    {
+      "name": "LSTMLayer.float64.forward_backward",
+      "shape": [
+        16,
+        32,
+        32,
+        64
+      ],
+      "median_ms": 26.028,
+      "min_ms": 17.103,
+      "max_ms": 34.6763,
+      "allocated_bytes": 22967784,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 145.06239399535625
+    },
+    {
+      "name": "projected_gates.forward_backward",
+      "shape": [
+        8,
+        64
+      ],
+      "median_ms": 0.1243,
+      "min_ms": 0.0942,
+      "max_ms": 0.1698,
+      "allocated_bytes": 136472,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 70.53138682342637
+    },
+    {
+      "name": "projected_gates.forward_backward",
+      "shape": [
+        2,
+        16,
+        16,
+        32
+      ],
+      "median_ms": 0.7134,
+      "min_ms": 0.5401,
+      "max_ms": 3.3256,
+      "allocated_bytes": 3130312,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 2133.4606544070107
+    },
+    {
+      "name": "checkpoint.capture_restore",
+      "shape": [
+        8,
+        256,
+        256
+      ],
+      "median_ms": 1.3798,
+      "min_ms": 0.7195,
+      "max_ms": 3.239,
+      "allocated_bytes": 6297056,
+      "downloads": 0,
+      "uploads": 0,
+      "checksum": 6553.60009765625
+    }
+  ]
+}
