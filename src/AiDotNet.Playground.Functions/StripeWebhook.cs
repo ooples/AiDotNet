@@ -128,88 +128,32 @@ public class StripeWebhook
 
     private async Task HandleCheckoutSessionCompleted(Event stripeEvent)
     {
-        var session = stripeEvent.Data.Object as Stripe.Checkout.Session;
-        if (session is null)
+        var session = stripeEvent.Data.Object as Stripe.Checkout.Session
+            ?? throw new InvalidOperationException("Checkout session could not be deserialized.");
+        if (session.Mode != "subscription") return;
+        var email = session.CustomerDetails?.Email ?? session.CustomerEmail;
+        if (string.IsNullOrEmpty(email))
         {
-            _logger.LogWarning("CheckoutSessionCompleted: could not deserialize session object");
+            _logger.LogWarning("CheckoutSessionCompleted: no customer email for session {SessionId}", session.Id);
             return;
         }
-
-        var customerEmail = session.CustomerDetails?.Email ?? session.CustomerEmail;
-        var customerId = session.CustomerId;
-
-        if (string.IsNullOrEmpty(customerEmail))
-        {
-            _logger.LogWarning("CheckoutSessionCompleted: no customer email found for session {SessionId}", session.Id);
-            return;
-        }
-
-        _logger.LogInformation(
-            "Checkout completed for customer {CustomerId}, session {SessionId}, subscription {SubscriptionId}",
-            customerId, session.Id, session.SubscriptionId);
-
-        // Determine tier from the subscription
-        var tier = "pro"; // Default to pro since that's our only paid tier currently
-
-        await UpdateSupabaseProfile(customerEmail, tier, "active", customerId);
+        await UpdateSupabaseProfile(email, session.CustomerId, session.SubscriptionId, stripeEvent);
     }
 
     private async Task HandleSubscriptionUpdated(Event stripeEvent)
     {
-        var subscription = stripeEvent.Data.Object as Subscription;
-        if (subscription is null)
+        var subscription = stripeEvent.Data.Object as Subscription
+            ?? throw new InvalidOperationException("Subscription could not be deserialized.");
+        var email = await GetCustomerEmail(subscription.CustomerId);
+        if (string.IsNullOrEmpty(email))
         {
-            _logger.LogWarning("SubscriptionUpdated: could not deserialize subscription object");
+            _logger.LogWarning("Subscription event: no email for customer {CustomerId}", subscription.CustomerId);
             return;
         }
-
-        // Get customer email from Stripe
-        var customerEmail = await GetCustomerEmail(subscription.CustomerId);
-        if (string.IsNullOrEmpty(customerEmail))
-        {
-            _logger.LogWarning("SubscriptionUpdated: could not find email for customer {CustomerId}", subscription.CustomerId);
-            return;
-        }
-
-        var status = subscription.Status switch
-        {
-            "active" => "active",
-            "past_due" => "past_due",
-            "canceled" => "canceled",
-            "unpaid" => "unpaid",
-            "trialing" => "active",
-            _ => subscription.Status
-        };
-
-        var tier = status == "canceled" ? "free" : "pro";
-
-        _logger.LogInformation(
-            "Subscription updated for customer {CustomerId}: status={Status}, tier={Tier}",
-            subscription.CustomerId, status, tier);
-
-        await UpdateSupabaseProfile(customerEmail, tier, status, subscription.CustomerId);
+        await UpdateSupabaseProfile(email, subscription.CustomerId, subscription.Id, stripeEvent);
     }
 
-    private async Task HandleSubscriptionDeleted(Event stripeEvent)
-    {
-        var subscription = stripeEvent.Data.Object as Subscription;
-        if (subscription is null)
-        {
-            _logger.LogWarning("SubscriptionDeleted: could not deserialize subscription object");
-            return;
-        }
-
-        var customerEmail = await GetCustomerEmail(subscription.CustomerId);
-        if (string.IsNullOrEmpty(customerEmail))
-        {
-            _logger.LogWarning("SubscriptionDeleted: could not find email for customer {CustomerId}", subscription.CustomerId);
-            return;
-        }
-
-        _logger.LogInformation("Subscription deleted for customer {CustomerId}, reverting to free tier", subscription.CustomerId);
-
-        await UpdateSupabaseProfile(customerEmail, "free", "canceled", subscription.CustomerId);
-    }
+    private Task HandleSubscriptionDeleted(Event stripeEvent) => HandleSubscriptionUpdated(stripeEvent);
 
     private async Task<string?> GetCustomerEmail(string? customerId)
     {
@@ -251,7 +195,7 @@ public class StripeWebhook
     /// personal or small-company domains). Logs correlate through the Stripe customer ID and the
     /// Supabase user ID instead.
     /// </remarks>
-    private async Task UpdateSupabaseProfile(string email, string tier, string status, string? stripeCustomerId)
+    private async Task UpdateSupabaseProfile(string email, string? stripeCustomerId, string? subscriptionId, Event stripeEvent)
     {
         var supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL");
         var supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_SECRET_KEY");
@@ -317,51 +261,75 @@ public class StripeWebhook
             return;
         }
 
-        // Update the profiles table via REST API
-        var updatePayload = new Dictionary<string, object?>
+        if (string.IsNullOrEmpty(stripeCustomerId) || string.IsNullOrEmpty(subscriptionId)
+            || string.IsNullOrEmpty(stripeEvent.Id) || stripeEvent.Created <= DateTime.UnixEpoch)
+            throw new InvalidOperationException("Stripe event is missing its subscription or ordering identity.");
+
+        var token = Guid.NewGuid();
+        var claim = await CallStateRpc(supabaseUrl, supabaseKey, "claim_playground_stripe_event", new
         {
-            ["subscription_tier"] = tier,
-            ["subscription_status"] = status,
-            ["updated_at"] = DateTime.UtcNow.ToString("o")
+            p_profile_id = userId, p_event_id = stripeEvent.Id,
+            p_event_created = new DateTimeOffset(stripeEvent.Created).ToUnixTimeSeconds(), p_token = token
+        });
+        if (claim is "duplicate" or "stale")
+        {
+            _logger.LogInformation("Ignored {Disposition} Stripe event {EventId}", claim, stripeEvent.Id);
+            return;
+        }
+        if (claim != "claimed")
+            throw new InvalidOperationException("Stripe profile is being processed; retry this event.");
+
+        try
+        {
+            var stripeKey = Environment.GetEnvironmentVariable("STRIPE_SECRET_KEY");
+            if (string.IsNullOrEmpty(stripeKey))
+                throw new InvalidOperationException("Stripe subscription lookup configuration is missing.");
+            StripeConfiguration.ApiKey = stripeKey;
+            // Read AFTER acquiring the durable lease. Current state resolves same-second events
+            // without ordering opaque IDs, and prevents delayed checkout restoring cancellation.
+            var subscription = await new SubscriptionService().GetAsync(subscriptionId);
+            if (subscription.CustomerId != stripeCustomerId || subscription.Id != subscriptionId)
+                throw new InvalidOperationException("Stripe subscription does not match the event customer.");
+            var outcome = await CallStateRpc(supabaseUrl, supabaseKey, "complete_playground_stripe_event", new
+            {
+                p_profile_id = userId, p_token = token, p_customer_id = stripeCustomerId,
+                p_subscription_id = subscription.Id,
+                p_subscription_created = new DateTimeOffset(subscription.Created).ToUnixTimeSeconds(),
+                p_status = subscription.Status
+            });
+            if (outcome is not ("applied" or "stale"))
+                throw new InvalidOperationException("Unexpected Stripe event completion response.");
+            _logger.LogInformation("Stripe event {EventId} {Outcome} for user {UserId}, customer {CustomerId}",
+                stripeEvent.Id, outcome, userId, stripeCustomerId);
+        }
+        finally
+        {
+            // Completion releases atomically. On failure release early; crashed workers expire.
+            // Token fencing prevents an old worker releasing a replacement worker's lease.
+            try
+            {
+                await CallStateRpc(supabaseUrl, supabaseKey, "release_playground_stripe_event",
+                    new { p_profile_id = userId, p_token = token });
+            }
+            catch (Exception)
+            {
+                _logger.LogWarning("Could not release Stripe event lease; it will expire automatically");
+            }
+        }
+    }
+
+    private static async Task<string?> CallStateRpc(string url, string key, string function, object payload)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{url}/rest/v1/rpc/{function}")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
-
-        if (!string.IsNullOrEmpty(stripeCustomerId))
-        {
-            updatePayload["stripe_customer_id"] = stripeCustomerId;
-        }
-
-        var jsonContent = new StringContent(
-            JsonSerializer.Serialize(updatePayload),
-            Encoding.UTF8,
-            "application/json"
-        );
-
-        // PATCH the profile row matching this user's ID
-        var patchRequest = new HttpRequestMessage(HttpMethod.Patch,
-            $"{supabaseUrl}/rest/v1/profiles?id=eq.{userId}")
-        {
-            Content = jsonContent
-        };
-        patchRequest.Headers.Add("apikey", supabaseKey);
-        patchRequest.Headers.Add("Authorization", $"Bearer {supabaseKey}");
-        patchRequest.Headers.Add("Prefer", "return=minimal");
-
-        var patchResponse = await httpClient.SendAsync(patchRequest);
-
-        if (patchResponse.IsSuccessStatusCode)
-        {
-            _logger.LogInformation(
-                "Updated profile for user {UserId}: tier={Tier}, status={Status}, stripe_customer={CustomerId}",
-                userId, tier, status, stripeCustomerId);
-        }
-        else
-        {
-            var errorBody = await patchResponse.Content.ReadAsStringAsync();
-            _logger.LogError(
-                "Failed to update profile for user {UserId}: {StatusCode} - {Error}",
-                userId, patchResponse.StatusCode, errorBody);
-            throw new InvalidOperationException(
-                $"Supabase profile update failed with HTTP {(int)patchResponse.StatusCode}.");
-        }
+        request.Headers.Add("apikey", key);
+        request.Headers.Add("Authorization", $"Bearer {key}");
+        using var response = await SharedHttpClient.SendAsync(request);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Supabase event state failed with HTTP {(int)response.StatusCode}.");
+        var body = await response.Content.ReadAsStringAsync();
+        return string.IsNullOrWhiteSpace(body) ? null : JsonSerializer.Deserialize<string>(body);
     }
 }

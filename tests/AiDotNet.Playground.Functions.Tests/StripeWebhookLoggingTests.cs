@@ -29,6 +29,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
     private const string SupabaseKey = "sb_secret_test_do_not_leak_9876543210";
     private const string CustomerEmail = "jane.private@janes-family-domain.example";
     private const string CustomerId = "cus_TEST123";
+    private const long EventCreated = 1700000100;
 
     private static readonly string[] EnvNames = ["STRIPE_WEBHOOK_SECRET", "STRIPE_WEBHOOK_SECRET_SECONDARY", "STRIPE_SECRET_KEY", "SUPABASE_URL", "SUPABASE_SECRET_KEY"];
 
@@ -40,6 +41,11 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
     private string? _savedStripeKey;
     private int _stripeStatus = 200;
     private string? _stripeEmail = CustomerEmail;
+    private string _subscriptionStatus = "active";
+    private int _subscriptionHttpStatus = 200;
+    private string _claimResult = "claimed";
+    private string? _failingRpc;
+    private int _subscriptionReads;
 
     public async Task InitializeAsync()
     {
@@ -60,11 +66,26 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
             _supabaseRequests.Enqueue("GET users");
             return Results.Content(_supabaseUsersJson, "application/json");
         });
-        _fakeSupabase.MapMethods("/rest/v1/profiles", ["PATCH"], async (HttpRequest request) =>
+        _fakeSupabase.MapGet("/v1/subscriptions/{id}", (string id) =>
+        {
+            Interlocked.Increment(ref _subscriptionReads);
+            return _subscriptionHttpStatus == 200
+                ? Results.Json(new { id, @object = "subscription", customer = CustomerId,
+                    status = _subscriptionStatus, created = 1700000000L })
+                : Results.Json(new { error = new { type = "api_error", message = "Temporary test failure" } },
+                    statusCode: _subscriptionHttpStatus);
+        });
+        _fakeSupabase.MapPost("/rest/v1/rpc/{function}", async (string function, HttpRequest request) =>
         {
             using var reader = new StreamReader(request.Body);
-            _supabaseRequests.Enqueue("PATCH " + request.QueryString + " " + await reader.ReadToEndAsync());
-            return Results.NoContent();
+            _supabaseRequests.Enqueue(function + " " + await reader.ReadToEndAsync());
+            if (function == _failingRpc) return Results.StatusCode(503);
+            return Results.Json(function switch
+            {
+                "claim_playground_stripe_event" => _claimResult,
+                "complete_playground_stripe_event" => "applied",
+                _ => (string?)null
+            });
         });
         await _fakeSupabase.StartAsync();
 
@@ -112,8 +133,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         var result = await new StripeWebhook(logger).Run(SignedRequest(CheckoutCompletedEvent()));
 
         Assert.IsType<OkResult>(result);
-        Assert.Contains(_supabaseRequests, r => r.StartsWith("PATCH ?id=eq.00000000-0000-0000-0000-00000000abcd", StringComparison.Ordinal)
-                                                 && r.Contains(CustomerId, StringComparison.Ordinal));
+        AssertProfileCommit("active", "sub_TEST456");
         Assert.Contains(logger.Entries, e => e.Contains(CustomerId, StringComparison.Ordinal));
         AssertNoSensitiveData(logger.Entries);
     }
@@ -127,7 +147,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         var result = await new StripeWebhook(logger).Run(SignedRequest(CheckoutCompletedEvent()));
 
         Assert.IsType<OkResult>(result);
-        Assert.DoesNotContain(_supabaseRequests, r => r.StartsWith("PATCH", StringComparison.Ordinal));
+        Assert.DoesNotContain(_supabaseRequests, r => r.StartsWith("complete_playground_stripe_event", StringComparison.Ordinal));
         Assert.Contains(logger.Entries, e => e.Contains("No Supabase user found", StringComparison.Ordinal)
                                              && e.Contains(CustomerId, StringComparison.Ordinal));
         AssertNoSensitiveData(logger.Entries);
@@ -200,7 +220,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         var payload = CheckoutCompletedEvent().Replace(StripeConfiguration.ApiVersion, "2026-02-25.clover", StringComparison.Ordinal);
         var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(payload));
         Assert.IsType<OkResult>(result);
-        AssertProfilePatch("pro", "active");
+        AssertProfileCommit("active", "sub_TEST456");
     }
 
     [Theory(Timeout = 60000)]
@@ -231,10 +251,11 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
     }
 
     [Theory(Timeout = 60000)]
-    [InlineData(EventTypes.CustomerSubscriptionUpdated, "past_due", "pro")]
-    [InlineData(EventTypes.CustomerSubscriptionDeleted, "canceled", "free")]
-    public async Task CloverSubscription_UpdatesExpectedProfile(string eventType, string status, string tier)
+    [InlineData(EventTypes.CustomerSubscriptionUpdated, "past_due")]
+    [InlineData(EventTypes.CustomerSubscriptionDeleted, "canceled")]
+    public async Task CloverSubscription_UpdatesExpectedProfile(string eventType, string status)
     {
+        _subscriptionStatus = status;
         _supabaseUsersJson = JsonSerializer.Serialize(new
         {
             users = new[] { new { id = "00000000-0000-0000-0000-00000000abcd", email = CustomerEmail } }
@@ -242,7 +263,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>())
             .Run(SignedRequest(SubscriptionEvent(eventType, status)));
         Assert.IsType<OkResult>(result);
-        AssertProfilePatch(tier, status);
+        AssertProfileCommit(status);
     }
 
     [Theory(Timeout = 60000)]
@@ -259,7 +280,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         var payload = CheckoutCompletedEvent().Replace(StripeConfiguration.ApiVersion, "2026-02-25.clover", StringComparison.Ordinal);
         var result = await new StripeWebhook(logger).Run(SignedRequest(payload, signingSecret));
         Assert.IsType<OkResult>(result);
-        AssertProfilePatch("pro", "active");
+        AssertProfileCommit("active", "sub_TEST456");
         AssertNoSensitiveData(logger.Entries);
     }
 
@@ -281,19 +302,100 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         AssertNoSensitiveData(logger.Entries);
     }
 
-    private void AssertProfilePatch(string tier, string status)
+    [Theory(Timeout = 60000)]
+    [InlineData("duplicate")]
+    [InlineData("stale")]
+    public async Task RecordedEvent_IsAcknowledgedWithoutReadingOrWritingSubscription(string disposition)
     {
-        var patch = Assert.Single(_supabaseRequests, request => request.StartsWith("PATCH", StringComparison.Ordinal));
-        const string prefix = "PATCH ?id=eq.00000000-0000-0000-0000-00000000abcd ";
-        Assert.StartsWith(prefix, patch, StringComparison.Ordinal);
-        using var document = JsonDocument.Parse(patch[prefix.Length..]);
-        Assert.Equal(CustomerId, document.RootElement.GetProperty("stripe_customer_id").GetString());
-        Assert.Equal(tier, document.RootElement.GetProperty("subscription_tier").GetString());
-        Assert.Equal(status, document.RootElement.GetProperty("subscription_status").GetString());
+        SetMatchingUser();
+        _claimResult = disposition;
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>())
+            .Run(SignedRequest(SubscriptionEvent(EventTypes.CustomerSubscriptionUpdated, "active")));
+        Assert.IsType<OkResult>(result);
+        Assert.Equal(0, _subscriptionReads);
+        Assert.DoesNotContain(_supabaseRequests, r => r.StartsWith("complete_", StringComparison.Ordinal));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConcurrentOwner_ReturnsRetryableFailureWithoutOverwritingItsLease()
+    {
+        SetMatchingUser();
+        _claimResult = "busy";
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>())
+            .Run(SignedRequest(CheckoutCompletedEvent()));
+        Assert.Equal(500, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        Assert.Equal(0, _subscriptionReads);
+        Assert.DoesNotContain(_supabaseRequests, r => r.StartsWith("release_", StringComparison.Ordinal));
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DelayedActiveSnapshot_UsesCurrentCanceledState(bool checkout)
+    {
+        SetMatchingUser();
+        _subscriptionStatus = "canceled";
+        var payload = checkout ? CheckoutCompletedEvent() : SubscriptionEvent(EventTypes.CustomerSubscriptionUpdated, "active");
+        Assert.IsType<OkResult>(await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(payload)));
+        AssertProfileCommit("canceled", checkout ? "sub_TEST456" : "sub_legacy");
+        Assert.Equal(1, _subscriptionReads);
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData("claim_playground_stripe_event")]
+    [InlineData("complete_playground_stripe_event")]
+    public async Task PersistenceFailure_Returns500AndCanRetry(string failedRpc)
+    {
+        SetMatchingUser();
+        _failingRpc = failedRpc;
+        var payload = CheckoutCompletedEvent();
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(payload));
+        Assert.Equal(500, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        _failingRpc = null;
+        Assert.IsType<OkResult>(await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(payload)));
+        Assert.Equal(failedRpc == "claim_playground_stripe_event" ? 1 : 2, _subscriptionReads);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task SubscriptionLookupFailure_ReleasesLeaseWithoutCompletingEvent()
+    {
+        SetMatchingUser();
+        _subscriptionHttpStatus = 503;
+        var result = await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(CheckoutCompletedEvent()));
+        Assert.Equal(500, Assert.IsType<StatusCodeResult>(result).StatusCode);
+        Assert.Single(_supabaseRequests, r => r.StartsWith("release_", StringComparison.Ordinal));
+        Assert.DoesNotContain(_supabaseRequests, r => r.StartsWith("complete_", StringComparison.Ordinal));
+        _subscriptionHttpStatus = 200;
+        Assert.IsType<OkResult>(await new StripeWebhook(new CapturingLogger<StripeWebhook>()).Run(SignedRequest(CheckoutCompletedEvent())));
+    }
+
+    private void SetMatchingUser() => _supabaseUsersJson = JsonSerializer.Serialize(new
+    {
+        users = new[] { new { id = "00000000-0000-0000-0000-00000000abcd", email = CustomerEmail } }
+    });
+
+    private void AssertProfileCommit(string status, string subscriptionId = "sub_legacy")
+    {
+        var commit = Assert.Single(_supabaseRequests, r => r.StartsWith("complete_playground_stripe_event ", StringComparison.Ordinal));
+        using var document = JsonDocument.Parse(commit["complete_playground_stripe_event ".Length..]);
+        Assert.Equal("00000000-0000-0000-0000-00000000abcd", document.RootElement.GetProperty("p_profile_id").GetString());
+        Assert.Equal(CustomerId, document.RootElement.GetProperty("p_customer_id").GetString());
+        Assert.Equal(subscriptionId, document.RootElement.GetProperty("p_subscription_id").GetString());
+        Assert.Equal(1700000000L, document.RootElement.GetProperty("p_subscription_created").GetInt64());
+        Assert.Equal(status, document.RootElement.GetProperty("p_status").GetString());
+        var claim = Assert.Single(_supabaseRequests, r => r.StartsWith("claim_playground_stripe_event ", StringComparison.Ordinal));
+        using var claimDocument = JsonDocument.Parse(claim["claim_playground_stripe_event ".Length..]);
+        Assert.Equal(document.RootElement.GetProperty("p_token").GetString(), claimDocument.RootElement.GetProperty("p_token").GetString());
+        Assert.Equal(EventCreated, claimDocument.RootElement.GetProperty("p_event_created").GetInt64());
+        Assert.Equal(subscriptionId == "sub_TEST456" ? "evt_test_checkout" : "evt_legacy_subscription",
+            claimDocument.RootElement.GetProperty("p_event_id").GetString());
+        Assert.Equal(document.RootElement.GetProperty("p_profile_id").GetString(),
+            claimDocument.RootElement.GetProperty("p_profile_id").GetString());
     }
 
     private static string SubscriptionEvent(string eventType, string status) => JsonSerializer.Serialize(new
     {
+        created = EventCreated,
         id = "evt_legacy_subscription", @object = "event", api_version = "2026-02-25.clover", type = eventType,
         data = new { @object = new { id = "sub_legacy", @object = "subscription", customer = CustomerId, status } }
     });
@@ -357,7 +459,7 @@ public sealed class StripeWebhookLoggingTests : IAsyncLifetime
         ["id"] = "evt_test_checkout",
         ["object"] = "event",
         ["api_version"] = StripeConfiguration.ApiVersion,
-        ["created"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        ["created"] = EventCreated,
         ["livemode"] = false,
         ["pending_webhooks"] = 1,
         ["type"] = EventTypes.CheckoutSessionCompleted,

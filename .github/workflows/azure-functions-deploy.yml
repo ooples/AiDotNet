@@ -12,6 +12,8 @@ on:
       - 'scripts/check-playground-routes.py'
       - 'scripts/test_playground_package.py'
       - 'scripts/test_playground_routes.py'
+      - 'scripts/test_playground_event_state.py'
+      - 'website/supabase/migrations/20261027000000_playground_stripe_event_state.sql'
       - 'tests/AiDotNet.Playground.Functions.Tests/**'
   workflow_dispatch:  # Allow manual trigger
 
@@ -81,6 +83,9 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore tests/AiDotNet.Playground.Functions.Tests
+
+      - name: Test durable Stripe event state against PostgreSQL
+        run: python3 scripts/test_playground_event_state.py
 
       - name: Build and test webhook and execution contracts
         run: dotnet test tests/AiDotNet.Playground.Functions.Tests -c Release --no-restore -p:GeneratePackageOnBuild=false
