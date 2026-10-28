@@ -23070,7 +23070,6 @@ AiDotNet.Deployment.Export.Onnx.OnnxOperation.Outputs.set -> void
 AiDotNet.Deployment.Export.Onnx.OnnxOperation.Type.get -> string!
 AiDotNet.Deployment.Export.Onnx.OnnxOperation.Type.set -> void
 AiDotNet.Deployment.Mobile.Android.INNAPIGraphBuilder
-AiDotNet.Deployment.Mobile.Android.INNAPIGraphBuilder.BuildGraph(nint modelHandle, byte[]! modelBytes) -> bool
 AiDotNet.Deployment.Mobile.Android.NNAPIBackend<T>
 AiDotNet.Deployment.Mobile.Android.NNAPIBackend<T>.Dispose() -> void
 AiDotNet.Deployment.Mobile.Android.NNAPIBackend<T>.Execute(T[]! input) -> T[]!
@@ -39988,9 +39987,7 @@ AiDotNet.Interfaces.IPanopticSegmentation<T>.SegmentPanoptic(AiDotNet.Tensors.Li
 AiDotNet.Interfaces.IPaperOptimizerVariant
 AiDotNet.Interfaces.IPaperOptimizerVariant.PaperOptimizerVariant.get -> string?
 AiDotNet.Interfaces.IParameterizable<T, TInput, TOutput>
-AiDotNet.Interfaces.IParameterizable<T, TInput, TOutput>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.Interfaces.IParameterizable<T, TInput, TOutput>.SanitizeParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.Interfaces.IParameterizable<T, TInput, TOutput>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
 AiDotNet.Interfaces.IParameterizable<T, TInput, TOutput>.SupportsParameterInitialization.get -> bool
 AiDotNet.Interfaces.IParameterizable<T, TInput, TOutput>.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>!
 AiDotNet.Interfaces.IParameterSource<T>
@@ -102550,11 +102547,9 @@ override AiDotNet.ComputerVision.VisionTaskModelBase<T>.PrepareCopyForStateResto
 override AiDotNet.ComputerVision.VisionTaskModelBase<T>.Serialize() -> byte[]!
 override AiDotNet.ComputerVision.VisionTaskModelBase<T>.Train(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> void
 override AiDotNet.ComputerVision.VisionTaskModelBase<T>.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> AiDotNet.Interfaces.IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-override AiDotNet.Configuration.FusedOptimizerPathEvent.<Clone>$() -> AiDotNet.Configuration.FusedOptimizerPathEvent!
 override AiDotNet.Configuration.FusedOptimizerPathEvent.Equals(object? obj) -> bool
 override AiDotNet.Configuration.FusedOptimizerPathEvent.GetHashCode() -> int
 override AiDotNet.Configuration.FusedOptimizerPathEvent.ToString() -> string!
-override AiDotNet.Configuration.GradientNormEvent.<Clone>$() -> AiDotNet.Configuration.GradientNormEvent!
 override AiDotNet.Configuration.GradientNormEvent.Equals(object? obj) -> bool
 override AiDotNet.Configuration.GradientNormEvent.GetHashCode() -> int
 override AiDotNet.Configuration.GradientNormEvent.ToString() -> string!
@@ -102562,11 +102557,9 @@ override AiDotNet.Configuration.ProgramMetricAggregationOptions.ToString() -> st
 override AiDotNet.Configuration.TrainingDiagnosticEvent.Equals(object? obj) -> bool
 override AiDotNet.Configuration.TrainingDiagnosticEvent.GetHashCode() -> int
 override AiDotNet.Configuration.TrainingDiagnosticEvent.ToString() -> string!
-override AiDotNet.Configuration.TrainingLossEvent.<Clone>$() -> AiDotNet.Configuration.TrainingLossEvent!
 override AiDotNet.Configuration.TrainingLossEvent.Equals(object? obj) -> bool
 override AiDotNet.Configuration.TrainingLossEvent.GetHashCode() -> int
 override AiDotNet.Configuration.TrainingLossEvent.ToString() -> string!
-override AiDotNet.Configuration.TrainingMessageEvent.<Clone>$() -> AiDotNet.Configuration.TrainingMessageEvent!
 override AiDotNet.Configuration.TrainingMessageEvent.Equals(object? obj) -> bool
 override AiDotNet.Configuration.TrainingMessageEvent.GetHashCode() -> int
 override AiDotNet.Configuration.TrainingMessageEvent.ToString() -> string!
@@ -122099,7 +122092,6 @@ override AiDotNet.ReinforcementLearning.Policies.PolicyBase<T>.WithParameters(Ai
 override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T, TState, TAction>.Equals(object? obj) -> bool
 override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T, TState, TAction>.GetHashCode() -> int
 override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T, TState, TAction>.ToString() -> string!
-override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>.<Clone>$() -> AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>!
 override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>.EqualityContract.get -> System.Type!
 override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>.Equals(object? obj) -> bool
 override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>.GetHashCode() -> int

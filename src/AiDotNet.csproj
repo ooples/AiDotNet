@@ -354,8 +354,17 @@
 	     public signature without updating PublicAPI.Unshipped.txt fails the build: RS0016 (undeclared API) and RS0017
 	     (declared API that no longer exists) are warnings, and TreatWarningsAsErrors above turns them into errors.
 	     The root files hold the API common to every target framework; PublicAPI/<tfm>/ holds the members that exist
-	     only on that framework, as the analyzer documents for multi-targeted projects. The package's own targets add
-	     the root files as AdditionalFiles. -->
+	     only on that framework, as the analyzer documents for multi-targeted projects (net10.0/net8.0 and the three
+	     legacy targets differ by 8 and 41 entries: record-clone covariant returns, default interface methods, nint,
+	     and the legacy polyfills). The package's own targets add the root files as AdditionalFiles. No per-framework
+	     PublicAPI.Unshipped.txt exists by default, so the IDE code fix writes new API to the root Unshipped file;
+	     create PublicAPI/<tfm>/PublicAPI.Unshipped.txt only for an addition that exists on one framework.
+	     RS0041 (public API uses oblivious reference types) is off: 361 existing members sit in #nullable disable
+	     code, and annotating them is a separate change. The baseline still records them with the '~' marker, so a
+	     change to their signatures is caught by RS0016/RS0017 like any other. -->
+	<PropertyGroup>
+	  <NoWarn>$(NoWarn);RS0041</NoWarn>
+	</PropertyGroup>
 	<ItemGroup>
 	  <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
 	</ItemGroup>
