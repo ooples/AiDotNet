@@ -19,6 +19,7 @@ internal sealed class SpeechT5Core<T>
     {
         _engine = engine;
         Configuration = c;
+        int start = layers.Count;
         // fairseq's Embedding: N(0, d^-1/2) with the padding row zero.
         Embedding = new TiedEmbeddingLayer<T>(c.TextVocabulary, c.Hidden);
         layers.Add(Embedding);
@@ -26,6 +27,7 @@ internal sealed class SpeechT5Core<T>
         Embedding.Reinitialize(() => std * IndexTtsOps.Gaussian(random), c.PadId);
         TextPositions = new SpeechT5ScaledPositions<T>(engine, layers, c.Hidden);
         Encoder = new SpeechT5Encoder<T>(engine, layers, c, random);
+        TextEncoderLayers = layers.Skip(start).ToList();
         Decoder = new SpeechT5Decoder<T>(engine, layers, c, random);
         SpeechPrenet = new SpeechT5SpeechDecoderPrenet<T>(engine, layers, c, random);
         SpeechPostnet = new SpeechT5SpeechDecoderPostnet<T>(engine, layers, c, random);
@@ -35,6 +37,9 @@ internal sealed class SpeechT5Core<T>
     }
 
     public SpeechT5Configuration Configuration { get; }
+
+    /// <summary>The text encoder pre-net's and the shared encoder's layers (what the TTS recipe freezes).</summary>
+    public List<LayerBase<T>> TextEncoderLayers { get; }
     public TiedEmbeddingLayer<T> Embedding { get; }
     public SpeechT5ScaledPositions<T> TextPositions { get; }
     public SpeechT5Encoder<T> Encoder { get; }
@@ -81,9 +86,10 @@ internal sealed class SpeechT5Core<T>
     /// The official <c>generate_speech</c>: from a zero frame, each step decodes the pre-net of the frames so far (its
     /// dropout drawn from <paramref name="random"/>), emits r frames and r stop probabilities, and feeds back the last
     /// frame, until a probability reaches <paramref name="threshold"/> or <c>⌊N · 20 / r⌋</c> steps; then the post-net.
+    /// With <paramref name="summedStop"/>, the step's r probabilities summed must reach it instead (the Hugging Face port).
     /// </summary>
     public (Tensor<T> Mel, double[] Probabilities) Generate(IReadOnlyList<int> tokens, Tensor<T> speaker, Random random, double threshold = 0.5,
-        double maxRatio = 20.0)
+        double maxRatio = 20.0, bool summedStop = false)
     {
         var c = Configuration;
         var memory = EncodeText(tokens);
@@ -100,12 +106,15 @@ internal sealed class SpeechT5Core<T>
             var (emitted, logits) = SpeechPostnet.Project(z);
             outputs.Add(emitted);
             bool stop = false;
+            double sum = 0;
             for (int i = 0; i < c.ReductionFactor; i++)
             {
                 double p = 1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(logits[i])));
                 probabilities.Add(p);
+                sum += p;
                 stop |= p >= threshold;
             }
+            if (summedStop) stop = sum >= threshold;
             frames.Add(_engine.TensorNarrow(emitted, 0, c.ReductionFactor - 1, 1));
             if (stop || step >= maxSteps) break;
         }
@@ -242,6 +251,65 @@ internal sealed class SpeechT5Core<T>
         var picks = Enumerable.Range(0, target.Count).Where(i => target[i] != c.PadId).Select(i => i * c.TextVocabulary + target[i]).ToArray();
         var nll = _engine.TensorNegate(_engine.ReduceSum(_engine.TensorIndexSelect(logp, new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks)), 0), null, false));
         return _engine.TensorAdd(nll, _engine.TensorMultiplyScalar(Quantizer.Diversity(perplexity), NumOps.FromDouble(diversityWeight * target.Count)));
+    }
+
+    /// <summary>
+    /// The official pre-training's <c>--bert-init</c> (fairseq's <c>init_bert_params</c>): every linear layer's weight
+    /// drawn from N(0, 0.02) and its bias zeroed, and every embedding table (the text embedding with its padding row zero,
+    /// the relative positions) drawn from N(0, 0.02).
+    /// </summary>
+    public void BertInitialize(IEnumerable<LayerBase<T>> layers, Random random)
+    {
+        foreach (var dense in layers.OfType<DenseLayer<T>>())
+        {
+            var w = dense.GetWeights();
+            for (int i = 0; i < w.Length; i++) w.SetFlat(i, NumOps.FromDouble(0.02 * IndexTtsOps.Gaussian(random)));
+            _engine.InvalidatePersistentTensor(w);
+            var b = dense.GetBiases();
+            for (int i = 0; i < b.Length; i++) b.SetFlat(i, NumOps.Zero);
+            _engine.InvalidatePersistentTensor(b);
+        }
+        Embedding.Reinitialize(() => 0.02 * IndexTtsOps.Gaussian(random), Configuration.PadId);
+        Encoder.RelativePositions.Reinitialize(() => 0.02 * IndexTtsOps.Gaussian(random));
+    }
+
+    /// <summary>
+    /// The Hugging Face name (<c>microsoft/speecht5_tts</c>) of an official checkpoint tensor this model reads, or null
+    /// for one the text-to-speech checkpoint does not hold.
+    /// </summary>
+    public static string? HuggingFaceName(string name)
+    {
+        string Layer(string rest) => rest.Replace("fc1", "feed_forward.intermediate_dense").Replace("fc2", "feed_forward.output_dense");
+        var m = System.Text.RegularExpressions.Regex.Match(name, @"^encoder\.layers\.(\d+)\.(.+)$");
+        if (m.Success)
+        {
+            string rest = m.Groups[2].Value;
+            rest = rest.StartsWith("self_attn_layer_norm.", StringComparison.Ordinal) ? "layer_norm." + rest.Substring("self_attn_layer_norm.".Length)
+                : rest.StartsWith("self_attn.", StringComparison.Ordinal) ? "attention." + rest.Substring("self_attn.".Length) : Layer(rest);
+            return $"speecht5.encoder.wrapped_encoder.layers.{m.Groups[1].Value}.{rest}";
+        }
+        m = System.Text.RegularExpressions.Regex.Match(name, @"^decoder\.layers\.(\d+)\.(.+)$");
+        if (m.Success) return $"speecht5.decoder.wrapped_decoder.layers.{m.Groups[1].Value}.{Layer(m.Groups[2].Value)}";
+        m = System.Text.RegularExpressions.Regex.Match(name, @"^speech_decoder_prenet\.decoder_prenet\.0\.0\.prenet\.(\d+)\.0\.(.+)$");
+        if (m.Success) return $"speecht5.decoder.prenet.layers.{m.Groups[1].Value}.{m.Groups[2].Value}";
+        m = System.Text.RegularExpressions.Regex.Match(name, @"^speech_decoder_postnet\.postnet\.postnet\.(\d+)\.([01])\.(.+)$");
+        if (m.Success) return $"speech_decoder_postnet.layers.{m.Groups[1].Value}.{(m.Groups[2].Value == "0" ? "conv" : "batch_norm")}.{m.Groups[3].Value}";
+        switch (name)
+        {
+            case "text_encoder_prenet.encoder_prenet.0.weight": return "speecht5.encoder.prenet.embed_tokens.weight";
+            case "text_encoder_prenet.encoder_prenet.1.alpha": return "speecht5.encoder.prenet.encode_positions.alpha";
+            case "encoder.layer_norm.weight": return "speecht5.encoder.wrapped_encoder.layer_norm.weight";
+            case "encoder.layer_norm.bias": return "speecht5.encoder.wrapped_encoder.layer_norm.bias";
+            case "encoder.pos_emb.pe_k.weight": return "speecht5.encoder.wrapped_encoder.embed_positions.pe_k.weight";
+            case "speech_decoder_prenet.decoder_prenet.1.alpha": return "speecht5.decoder.prenet.encode_positions.alpha";
+        }
+        if (name.StartsWith("speech_decoder_prenet.decoder_prenet.0.1.", StringComparison.Ordinal))
+            return "speecht5.decoder.prenet.final_layer." + name.Substring("speech_decoder_prenet.decoder_prenet.0.1.".Length);
+        if (name.StartsWith("speech_decoder_prenet.spkembs_layer.0.", StringComparison.Ordinal))
+            return "speecht5.decoder.prenet.speaker_embeds_layer." + name.Substring("speech_decoder_prenet.spkembs_layer.0.".Length);
+        if (name.StartsWith("speech_decoder_postnet.feat_out.", StringComparison.Ordinal) || name.StartsWith("speech_decoder_postnet.prob_out.", StringComparison.Ordinal))
+            return name;
+        return null;
     }
 
     /// <summary>Loads the official checkpoint's names (<c>encoder.*</c>, <c>decoder.*</c>, the pre- and post-nets,
