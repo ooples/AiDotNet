@@ -264,10 +264,9 @@ public partial class CSM<T>
                 ?? throw new FileNotFoundException($"No model.safetensors or ckpt.pt in {path}.");
             path = file;
         }
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-            state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        var used = LoadTorchWeights(name => state.TryGetValue(name, out var v) ? v : null);
+        // Each tensor is widened when it is read: the 1B checkpoint held whole in double would be another 12 GB.
+        var state = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
+        var used = LoadTorchWeights(name => state.TryGetValue(name, out var v) ? Array.ConvertAll(v.ToArray(), x => (double)x) : null);
         // Causal masks and key-value caches are buffers of a model whose caches were set up; they are recomputed. A
         // transformers checkpoint also carries its Mimi (codec_model.*), in transformers' own names: the codec is loaded
         // from the release's Mimi by LoadCodecWeights.
