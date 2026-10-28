@@ -23,8 +23,9 @@ namespace AiDotNet.Tokenization.Algorithms;
 /// with byte fallback, every unknown character emitted as its UTF-8 bytes' <c>&lt;0xXX&gt;</c> pieces
 /// (<c>sentencepiece_processor.cc</c>).
 /// </para>
-/// <para>Models with user-defined symbols, and unigram models with byte fallback, are refused rather than segmented
-/// differently from the reference.</para>
+/// <para>User-defined symbols of a unigram model pass through the normalizer unchanged and score
+/// <c>bytes × max score − 0.1</c> in the segmentation, as the reference treats them. BPE models with user-defined symbols,
+/// and unigram models with byte fallback, are refused rather than segmented differently from the reference.</para>
 /// </remarks>
 public sealed class SentencePieceModel
 {
@@ -45,6 +46,8 @@ public sealed class SentencePieceModel
     private readonly double _unknownScore;
     private readonly bool _bpe;
     private readonly bool _byteFallback;
+    private readonly Dictionary<byte, List<byte[]>> _userDefined = new();
+    private readonly float _maxScore;
 
     private const int Normal = 1, Unknown = 2, Control = 3, UserDefined = 4, Unused = 5, ByteType = 6;
 
@@ -106,8 +109,8 @@ public sealed class SentencePieceModel
         }
         if (modelType is not (1 or 2))
             throw new NotSupportedException($"Only unigram and BPE SentencePiece models are supported (model_type {modelType}).");
-        if (pieces.Any(p => p.Type == UserDefined))
-            throw new NotSupportedException("SentencePiece models with user-defined symbols are not supported.");
+        if (modelType == 2 && pieces.Any(p => p.Type == UserDefined))
+            throw new NotSupportedException("BPE SentencePiece models with user-defined symbols are not supported.");
         if (modelType == 1 && (byteFallback || pieces.Any(p => p.Type == ByteType)))
             throw new NotSupportedException("Unigram SentencePiece models with byte fallback are not supported.");
         _bpe = modelType == 2;
@@ -118,13 +121,26 @@ public sealed class SentencePieceModel
         _types = pieces.Select(p => p.Type).ToArray();
         UnknownId = unkId;
         double minScore = double.MaxValue;
+        float maxScore = float.MinValue;
         for (int i = 0; i < _pieces.Length; i++)
         {
             if (!_ids.ContainsKey(_pieces[i])) _ids[_pieces[i]] = i;
-            if (_types[i] == Normal) minScore = Math.Min(minScore, _scores[i]);
-            if (_types[i] is Normal or Unused) _trie.Add(_pieces[i], i);
+            if (_types[i] == Normal)
+            {
+                minScore = Math.Min(minScore, _scores[i]);
+                maxScore = Math.Max(maxScore, _scores[i]);
+            }
+            if (_types[i] is Normal or UserDefined or Unused) _trie.Add(_pieces[i], i);
+            if (_types[i] == UserDefined)
+            {
+                var bytes = Encoding.UTF8.GetBytes(_pieces[i]);
+                if (bytes.Length == 0) continue;
+                if (!_userDefined.TryGetValue(bytes[0], out var list)) _userDefined[bytes[0]] = list = new List<byte[]>();
+                list.Add(bytes);
+            }
         }
         _unknownScore = minScore - UnknownPenalty;
+        _maxScore = maxScore;
         for (int i = 0; i < _pieces.Length; i++)
             if (_types[i] is Normal or UserDefined or Unused && !_bpePieces.ContainsKey(_pieces[i])) _bpePieces[_pieces[i]] = i;
         _addDummyPrefix = addDummyPrefix;
@@ -207,7 +223,12 @@ public sealed class SentencePieceModel
                 if (_types[id] == Unused) continue;
                 int e = charIndexOfOffset[endOffset];
                 if (e == s + 1) singleCharacter = true;
-                double candidate = _scores[id] + bestScore[s];
+                // unigram_model.cc: a user-defined symbol scores (its byte length × the highest piece score) − 0.1, so
+                // it wins over any segmentation of the same span.
+                double score = _types[id] == UserDefined
+                    ? (float)((float)(Encoding.UTF8.GetByteCount(normalized.Substring(starts[s], endOffset - starts[s])) * _maxScore) - 0.1)
+                    : _scores[id];
+                double candidate = score + bestScore[s];
                 if (bestStart[e] < 0 || candidate > bestScore[e])
                 {
                     bestScore[e] = candidate;
@@ -421,6 +442,21 @@ public sealed class SentencePieceModel
     // The longest charsmap rule at `position`, or the character itself (U+FFFD for malformed UTF-8).
     private (byte[] Rewrite, int Consumed) NormalizePrefix(byte[] input, int position)
     {
+        // normalizer.cc: a user-defined symbol (the longest at this position) passes through unnormalized.
+        int symbol = 0;
+        foreach (var bytes in _userDefined.TryGetValue(input[position], out var candidates) ? candidates : new List<byte[]>())
+        {
+            if (bytes.Length <= symbol || position + bytes.Length > input.Length) continue;
+            bool match = true;
+            for (int i = 0; i < bytes.Length && match; i++) match = input[position + i] == bytes[i];
+            if (match) symbol = bytes.Length;
+        }
+        if (symbol > 0)
+        {
+            var passed = new byte[symbol];
+            Array.Copy(input, position, passed, 0, symbol);
+            return (passed, symbol);
+        }
         int longestLength = 0, longestValue = 0;
         if (_charsmapTrie.Length > 0)
         {
