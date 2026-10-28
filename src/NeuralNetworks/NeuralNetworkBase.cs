@@ -6899,7 +6899,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         // A model whose forward keeps nothing between calls frees its GPU intermediates when the call ends, instead of
         // when a garbage collection finalizes them (ooples/AiDotNet.Tensors#1432); only the output survives.
-        using var resultScope = ReleasesInferenceIntermediates ? TensorScope.Begin() : null;
+        // Disposed in the finally below, before the collection there, which must see the intermediates already returned.
+        var resultScope = ReleasesInferenceIntermediates ? TensorScope.Begin() : null;
         using var noGrad = new NoGradScope<T>();
         try
         {
@@ -6918,9 +6919,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 _deferLazyShapeResolutionToForward = priorDefer;
             }
+            resultScope?.Dispose();
             // The call's intermediates are dead now: run the young collection a GPU backend asked for while they are
             // still young, as a finished training step does, instead of inside the next call's allocation, where it
-            // blocked mid-forward (#1432: once per ResNet-50 predict on OpenCL). Not inside a caller's tape.
+            // blocked mid-forward (#1432: once per ResNet-50 predict on OpenCL). It runs only while bytes nobody disposed
+            // remain past the backend's threshold, so after the scope above it is usually skipped. Not inside a caller's tape.
             if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
                 AiDotNet.Tensors.Engines.DirectGpu.DeviceMemoryReclaim.CollectIfDueAtStepBoundary();
         }
