@@ -44,12 +44,17 @@ internal sealed class WeTextNormalizer
 
     private static readonly Lazy<WeTextNormalizer> ChineseInstance = new(() => new WeTextNormalizer("zh_tn", TnOrders), isThreadSafe: true);
     private static readonly Lazy<WeTextNormalizer> EnglishInstance = new(() => new WeTextNormalizer("en_tn", EnTnOrders), isThreadSafe: true);
+    private static readonly Lazy<WeTextNormalizer> IndexTtsChineseInstance = new(() => new WeTextNormalizer("indextts_zh_tn", TnOrders), isThreadSafe: true);
 
     /// <summary>The Chinese normalizer (<c>tn.chinese.normalizer.Normalizer</c>).</summary>
     public static WeTextNormalizer Chinese => ChineseInstance.Value;
 
     /// <summary>The English normalizer (<c>tn.english.normalizer.Normalizer</c>).</summary>
     public static WeTextNormalizer English => EnglishInstance.Value;
+
+    /// <summary>The Chinese normalizer as IndexTTS builds it on Linux (<c>remove_interjections=False</c>,
+    /// <c>remove_erhua=False</c>, compiled into its own cache rather than read from the wheel).</summary>
+    public static WeTextNormalizer IndexTtsChinese => IndexTtsChineseInstance.Value;
 
     /// <summary><c>normalize</c>: tag, then verbalize.</summary>
     public string Normalize(string text) => Verbalize(Tag(text));
