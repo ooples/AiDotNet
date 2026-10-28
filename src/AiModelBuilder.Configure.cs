@@ -490,7 +490,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// - ✅ Memory-constrained scenarios where you need bigger batch sizes
     /// - ❌ Non-gradient optimizers (evolutionary algorithms, random search)
     /// - ❌ CPU-only training (minimal benefit without Tensor Cores)
-    /// - ❌ Very small models (<1M parameters) where memory isn't a concern
+    /// - ❌ Very small models (&lt;1M parameters) where memory isn't a concern
     /// - ❌ Non-float types (double, decimal, int)
     ///
     /// <b>Technical Details:</b>
@@ -981,7 +981,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// - ✅ Large datasets (>10,000 samples)
     /// - ✅ Matrix-heavy operations (linear regression, etc.)
     /// - ✅ When you have a GPU available
-    /// - ⚠️ Small datasets (<1,000 samples) - minimal benefit
+    /// - ⚠️ Small datasets (&lt;1,000 samples) - minimal benefit
     /// - ⚠️ Simple models with no matrix operations - no benefit
     ///
     /// <b>Performance Expectations:</b>
@@ -990,7 +990,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// - Large matrix multiplication: **50-100x faster**
     /// - Neural network training: **10-50x faster**
     /// - Element-wise operations: **5-20x faster**
-    /// - Small operations (<100K elements): Similar or slower (transfer overhead)
+    /// - Small operations (&lt;100K elements): Similar or slower (transfer overhead)
     ///
     /// The system automatically uses CPU for small operations and GPU for large ones,
     /// so you get optimal performance without any manual tuning!

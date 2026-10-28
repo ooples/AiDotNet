@@ -9,16 +9,21 @@
     GenerateDocumentationFile makes the build emit <Assembly>.xml, which the .NET
     SDK pack target then includes in the package lib/ folder alongside the .dll.
 
-    The XML-doc warning family (CS1591 and 19 related codes) is NOT suppressed here any more.
-    <NoWarn> overrides every .editorconfig severity, which made it impossible to hold part of
-    the codebase to a documentation standard while the rest catches up. Their severity is set
-    per path in the repository .editorconfig instead (issue #2393): "none" for src/ as a
-    whole, which is the old behaviour, and "error" for the documented user-facing facade
+    The XML-doc warning family (CS1591 and 19 related codes) is NOT suppressed with <NoWarn>
+    any more: NoWarn overrides every analyzer-config severity, which made it impossible to hold
+    part of the codebase to a documentation standard while the rest catches up (issue #2393).
+    XmlDocDiagnostics.globalconfig (included below) sets them to "none" for every file, which
+    is the old behaviour and also covers source-generator output; a path section in the
+    repository .editorconfig overrides that to "error" for the documented user-facing facade
     (AiModelBuilder, AiModelResult, the Serving extensions and the interfaces they expose).
     The compiler still emits <Assembly>.xml for every well-formed comment either way.
   -->
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <GlobalAnalyzerConfigFiles Include="$(MSBuildThisFileDirectory)XmlDocDiagnostics.globalconfig" />
+  </ItemGroup>
 
 </Project>

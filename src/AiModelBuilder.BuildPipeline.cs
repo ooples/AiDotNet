@@ -3266,9 +3266,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         DataAggregationHelper.Aggregate<T, TOutput>(outputs, "output");
 
     /// <summary>
-    /// Internal method that performs supervised training with the provided input features and output values.
-    /// This contains all the core supervised learning logic.
-    /// <summary>
     /// Image-only training path (#1834). Drives the image-space training loop when the caller
     /// configured an <c>IDataLoader&lt;ImageView&lt;T&gt;, PixelBatch&lt;T&gt;&gt;</c> and an
     /// <c>IImageTrainable</c> model with no standard X/y data. Skips the row-oriented
@@ -3460,6 +3457,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         _ => false,
     };
 
+    /// <summary>
+    /// Internal method that performs supervised training with the provided input features and output values.
+    /// This contains all the core supervised learning logic.
+    /// </summary>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(
         TInput x, TOutput y, CancellationToken cancellationToken)
     {
