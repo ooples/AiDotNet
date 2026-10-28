@@ -134,9 +134,15 @@ public class WeightLoader
         return weights;
     }
 
-    // Every tensor of a (possibly nested) state dictionary, with dotted names.
+    // Every tensor of a (possibly nested) state dictionary, with dotted names; a file holding one bare tensor
+    // (torch.save(tensor)) gives it under the empty name.
     private static void CollectTensors(object? node, string prefix, List<(string Name, TensorData Data)> tensors)
     {
+        if (node is TensorData bare && prefix.Length == 0)
+        {
+            tensors.Add((string.Empty, bare));
+            return;
+        }
         if (node is not Dictionary<string, object?> dict) return;
         foreach (var kvp in dict)
         {

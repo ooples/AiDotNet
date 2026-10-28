@@ -78,14 +78,35 @@ internal sealed class MaskGctSemanticCodec<T>
     /// <summary>Codes per second at 16 kHz (50: one per w2v-BERT frame).</summary>
     public int Hidden => _hidden;
 
+    /// <summary>w2v-BERT hidden states <c>[frames, hidden]</c> normalized by the feature statistics (IndexTTS2's
+    /// <c>get_emb</c>, which conditions on them directly).</summary>
+    public Tensor<T> Normalize(Tensor<T> hidden)
+    {
+        int frames = hidden.Shape[0];
+        var normalized = new Tensor<T>(new[] { frames, _hidden });
+        for (int t = 0; t < frames; t++)
+            for (int c = 0; c < _hidden; c++) normalized[t, c] = NumOps.FromDouble((NumOps.ToDouble(hidden[t, c]) - _mean[c]) / _std[c]);
+        return normalized;
+    }
+
+    /// <summary>The quantized features <c>[frames, hidden]</c> of codes (<c>quantizer.vq2emb</c>: the code vectors
+    /// through the output projection).</summary>
+    public Tensor<T> Embed(IReadOnlyList<int> codes)
+    {
+        var grid = new int[1, codes.Count];
+        for (int i = 0; i < codes.Count; i++) grid[0, i] = codes[i];
+        return _engine.TensorTranspose(_engine.Reshape(_quantizer.Decode(grid), new[] { _hidden, codes.Count }));
+    }
+
     /// <summary>The semantic codes of w2v-BERT hidden states <c>[frames, hidden]</c> (unnormalized).</summary>
-    public int[] Encode(Tensor<T> hidden)
+    public int[] Encode(Tensor<T> hidden) => EncodeNormalized(Normalize(hidden));
+
+    /// <summary>The semantic codes of normalized hidden states <c>[frames, hidden]</c>.</summary>
+    public int[] EncodeNormalized(Tensor<T> normalizedRows)
     {
         using var _ = new NoGradScope<T>();
-        int frames = hidden.Shape[0];
-        var normalized = new Tensor<T>(new[] { 1, _hidden, frames });
-        for (int t = 0; t < frames; t++)
-            for (int c = 0; c < _hidden; c++) normalized[0, c, t] = NumOps.FromDouble((NumOps.ToDouble(hidden[t, c]) - _mean[c]) / _std[c]);
+        int frames = normalizedRows.Shape[0];
+        var normalized = _engine.Reshape(_engine.TensorTranspose(normalizedRows), new[] { 1, _hidden, frames });
         var encoded = _project.Forward(_engine.TensorTranspose(_engine.Reshape(_encoder.Backbone(normalized), new[] { _dim, frames })));   // [T, hidden]
         var codes = _quantizer.Encode(_engine.Reshape(_engine.TensorTranspose(encoded), new[] { 1, _hidden, frames }), 1);
         return Enumerable.Range(0, frames).Select(t => codes[0, t]).ToArray();

@@ -32,6 +32,7 @@ internal sealed class AntiAliasedSnake<T>
     {
         _engine = engine;
         owned.Add(_snake = activation);
+        Activation = activation;
         var filter = KaiserSinc(0.25, 0.3, Taps);
         _upFilter = new Tensor<T>(new[] { 1, 1, 1, Taps });
         _downFilter = new Tensor<T>(new[] { 1, 1, 1, Taps });
@@ -41,6 +42,9 @@ internal sealed class AntiAliasedSnake<T>
             _downFilter[0, 0, 0, i] = NumOps.FromDouble(filter[i]);
         }
     }
+
+    /// <summary>The wrapped per-channel activation.</summary>
+    internal LayerBase<T> Activation { get; }
 
     internal static double[] KaiserSinc(double cutoff, double halfWidth, int kernel)
     {
@@ -118,11 +122,21 @@ internal sealed class BigVganGenerator<T>
     private readonly List<List<List<(AntiAliasedSnake<T> A1, NormedConv1DLayer<T> C1, AntiAliasedSnake<T> A2, NormedConv1DLayer<T> C2)>>> _blocks = new();
     private readonly AntiAliasedSnake<T> _postActivation;
     private readonly NormedConv1DLayer<T> _post;
+    private readonly bool _tanhAtFinal;
 
+    /// <param name="snakeBeta">BigVGAN-v2's log-scale SnakeBeta in place of Snake (<c>activation: snakebeta</c>,
+    /// <c>snake_logscale: true</c>).</param>
+    /// <param name="tanhAtFinal">tanh on the output (<c>use_tanh_at_final</c>); otherwise it is clamped to [−1, 1].</param>
+    /// <param name="biasAtFinal">A bias on the output convolution (<c>use_bias_at_final</c>).</param>
     public BigVganGenerator(IEngine engine, Random initialization, int melChannels, int initialChannels, int[] upsampleRates,
-        int[] upsampleKernels, int[] resblockKernels, int[][] resblockDilations)
+        int[] upsampleKernels, int[] resblockKernels, int[][] resblockDilations, bool snakeBeta = false, bool tanhAtFinal = true,
+        bool biasAtFinal = true)
     {
         _engine = engine;
+        _tanhAtFinal = tanhAtFinal;
+        AntiAliasedSnake<T> Activation(int channels) => snakeBeta
+            ? new AntiAliasedSnake<T>(engine, _layers, new AiDotNet.Audio.Codecs.XCodec2SnakeBetaLayer<T>(channels))
+            : new AntiAliasedSnake<T>(engine, _layers, channels);
         Func<double> normal = () =>
         {
             double u1 = 1.0 - initialization.NextDouble(), u2 = initialization.NextDouble();
@@ -145,9 +159,9 @@ internal sealed class BigVganGenerator<T>
                 var block = new List<(AntiAliasedSnake<T>, NormedConv1DLayer<T>, AntiAliasedSnake<T>, NormedConv1DLayer<T>)>();
                 foreach (int d in resblockDilations[j])
                 {
-                    var a1 = new AntiAliasedSnake<T>(engine, _layers, channels);
+                    var a1 = Activation(channels);
                     var c1 = Add(new NormedConv1DLayer<T>(channels, channels, k, 1, d, 1, (k * d - d) / 2, false, ConvolutionNormalization.Weight));
-                    var a2 = new AntiAliasedSnake<T>(engine, _layers, channels);
+                    var a2 = Activation(channels);
                     var c2 = Add(new NormedConv1DLayer<T>(channels, channels, k, 1, 1, 1, (k - 1) / 2, false, ConvolutionNormalization.Weight));
                     c1.Reinitialize(normal, keepBias: true);
                     c2.Reinitialize(normal, keepBias: true);
@@ -157,8 +171,8 @@ internal sealed class BigVganGenerator<T>
             }
             _blocks.Add(stage);
         }
-        _postActivation = new AntiAliasedSnake<T>(engine, _layers, channels);
-        _post = Add(new NormedConv1DLayer<T>(channels, 1, 7, 1, 1, 1, 3, false, ConvolutionNormalization.Weight));
+        _postActivation = Activation(channels);
+        _post = Add(new NormedConv1DLayer<T>(channels, 1, 7, 1, 1, 1, 3, false, ConvolutionNormalization.Weight, biasAtFinal));
         _post.Reinitialize(normal, keepBias: true);
     }
 
@@ -188,6 +202,58 @@ internal sealed class BigVganGenerator<T>
             }
             x = _engine.TensorMultiplyScalar(sum!, ops.FromDouble(1.0 / _blocks[i].Count));
         }
-        return _engine.Tanh(_post.Forward(_postActivation.Forward(x)));
+        var y = _post.Forward(_postActivation.Forward(x));
+        return _tanhAtFinal ? _engine.Tanh(y) : _engine.TensorClamp(y, ops.FromDouble(-1), ops.FromDouble(1));
+    }
+
+    /// <summary>
+    /// Loads the reference generator's state (<c>bigvgan_generator.pt</c>'s <c>generator</c>): <c>conv_pre</c>,
+    /// <c>ups.{i}.0</c>, <c>resblocks.{i·K + j}.convs1/convs2.{n}</c> with their <c>activations.{2n/2n+1}.act</c>,
+    /// <c>activation_post.act</c> and <c>conv_post</c>; weight-normalized convolutions as <c>weight_g</c>/<c>weight_v</c>
+    /// or plain <c>weight</c>. The anti-aliasing filters are fixed and not read.
+    /// </summary>
+    internal void LoadTorch(Func<string, double[]?> read)
+    {
+        double[] Require(string name) => read(name) ?? throw new InvalidDataException($"The BigVGAN checkpoint has no tensor '{name}'.");
+        void Conv(NormedConv1DLayer<T> conv, string name)
+        {
+            var v = read(name + ".weight_v");
+            var bias = conv.HasBias ? Require(name + ".bias") : new double[conv.OutputChannels];
+            if (v is not null) conv.LoadTorchWeights(v, Require(name + ".weight_g"), bias);
+            else conv.LoadTorchWeights(Require(name + ".weight"), null, bias);
+        }
+        void Act(AntiAliasedSnake<T> activation, string name)
+        {
+            switch (activation.Activation)
+            {
+                case AiDotNet.Audio.Codecs.XCodec2SnakeBetaLayer<T> beta:
+                    beta.Load(Require(name + ".alpha"), Require(name + ".beta"));
+                    break;
+                case SnakeLayer<T> snake:
+                    snake.LoadAlpha(Require(name + ".alpha"));
+                    break;
+                default:
+                    throw new InvalidOperationException("Unknown BigVGAN activation.");
+            }
+        }
+        Conv(_pre, "conv_pre");
+        for (int i = 0; i < _ups.Count; i++)
+        {
+            Conv(_ups[i], $"ups.{i}.0");
+            for (int j = 0; j < _blocks[i].Count; j++)
+            {
+                string p = $"resblocks.{i * _blocks[i].Count + j}.";
+                for (int n = 0; n < _blocks[i][j].Count; n++)
+                {
+                    var (a1, c1, a2, c2) = _blocks[i][j][n];
+                    Act(a1, $"{p}activations.{2 * n}.act");
+                    Conv(c1, $"{p}convs1.{n}");
+                    Act(a2, $"{p}activations.{2 * n + 1}.act");
+                    Conv(c2, $"{p}convs2.{n}");
+                }
+            }
+        }
+        Act(_postActivation, "activation_post.act");
+        Conv(_post, "conv_post");
     }
 }
