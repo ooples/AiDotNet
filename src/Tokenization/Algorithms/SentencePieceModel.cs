@@ -23,6 +23,8 @@ namespace AiDotNet.Tokenization.Algorithms;
 /// with byte fallback, every unknown character emitted as its UTF-8 bytes' <c>&lt;0xXX&gt;</c> pieces
 /// (<c>sentencepiece_processor.cc</c>).
 /// </para>
+/// <para>A character model follows <c>char_model.cc</c>: each Unicode character of the normalized text is a piece (or
+/// the longest user-defined symbol starting there), unknown ones merged into runs as above.</para>
 /// <para>User-defined symbols of a unigram model pass through the normalizer unchanged and score
 /// <c>bytes × max score − 0.1</c> in the segmentation, as the reference treats them. BPE models with user-defined symbols,
 /// and unigram models with byte fallback, are refused rather than segmented differently from the reference.</para>
@@ -45,6 +47,7 @@ public sealed class SentencePieceModel
     private readonly bool _escapeWhitespaces;
     private readonly double _unknownScore;
     private readonly bool _bpe;
+    private readonly bool _character;
     private readonly bool _byteFallback;
     private readonly Dictionary<byte, List<byte[]>> _userDefined = new();
     private readonly float _maxScore;
@@ -107,13 +110,16 @@ public sealed class SentencePieceModel
             }
             else reader.Skip(wire);
         }
-        if (modelType is not (1 or 2))
-            throw new NotSupportedException($"Only unigram and BPE SentencePiece models are supported (model_type {modelType}).");
+        if (modelType is not (1 or 2 or 4))
+            throw new NotSupportedException($"Only unigram, BPE and character SentencePiece models are supported (model_type {modelType}).");
+        if (modelType == 4 && (byteFallback || pieces.Any(p => p.Type == ByteType)))
+            throw new NotSupportedException("Character SentencePiece models with byte fallback are not supported.");
         if (modelType == 2 && pieces.Any(p => p.Type == UserDefined))
             throw new NotSupportedException("BPE SentencePiece models with user-defined symbols are not supported.");
         if (modelType == 1 && (byteFallback || pieces.Any(p => p.Type == ByteType)))
             throw new NotSupportedException("Unigram SentencePiece models with byte fallback are not supported.");
         _bpe = modelType == 2;
+        _character = modelType == 4;
         _byteFallback = byteFallback;
 
         _pieces = pieces.Select(p => p.Piece).ToArray();
@@ -202,6 +208,7 @@ public sealed class SentencePieceModel
         Guard.NotNull(text);
         var normalized = Normalize(text);
         if (_bpe) return EncodeBpe(normalized);
+        if (_character) return MergeUnknown(EncodeCharacters(normalized));
         // Positions are UTF-16 indices of Unicode scalar starts (a surrogate pair is one character).
         var starts = new List<int>();
         for (int i = 0; i < normalized.Length; i++)
@@ -251,7 +258,12 @@ public sealed class SentencePieceModel
         for (int e = n; e > 0; e = bestStart[e])
             result.Add((normalized.Substring(starts[bestStart[e]], starts[e] - starts[bestStart[e]]), bestId[e]));
         result.Reverse();
-        // Runs of unknown pieces are merged into one.
+        return MergeUnknown(result);
+    }
+
+    // Runs of unknown pieces are merged into one.
+    private List<(string Piece, int Id)> MergeUnknown(List<(string Piece, int Id)> result)
+    {
         var merged = new List<(string Piece, int Id)>();
         foreach (var piece in result)
         {
@@ -260,6 +272,24 @@ public sealed class SentencePieceModel
             else merged.Add(piece);
         }
         return merged;
+    }
+
+    /// <summary>The character segmentation of normalized text (<c>char_model.cc</c>): the longest user-defined symbol at
+    /// each position, otherwise one Unicode character, each piece's id or the unknown id.</summary>
+    private List<(string Piece, int Id)> EncodeCharacters(string normalized)
+    {
+        var result = new List<(string Piece, int Id)>();
+        for (int i = 0; i < normalized.Length;)
+        {
+            int length = char.IsHighSurrogate(normalized[i]) && i + 1 < normalized.Length ? 2 : 1;
+            foreach (var (endOffset, id) in _trie.Prefixes(normalized, i))
+                if (_types[id] == UserDefined) length = Math.Max(length, endOffset - i);
+            string piece = normalized.Substring(i, length);
+            int pieceId = _ids.TryGetValue(piece, out int found) && _types[found] != Unused ? found : UnknownId;
+            result.Add((piece, pieceId));
+            i += length;
+        }
+        return result;
     }
 
     /// <summary>The BPE segmentation of normalized text (<c>bpe_model.cc</c>), with byte fallback for unknown characters.</summary>

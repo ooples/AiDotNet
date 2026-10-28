@@ -9743,6 +9743,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLayers = 2, TextDim = 8, TextConvLayers = 1, VocabSize = 64, MelChannels = 16, NumFunctionEvaluations = 4 }" +
                     ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
+            else if (model.ClassName == "SpeechT5" && model.TypeParameterCount == 1)
+            {
+                // SpeechT5 is the shared encoder-decoder with its speech and text pre/post-nets, speechbrain's x-vector extractor
+                // and HiFi-GAN; keep every one at width 8-16 with two layers (the 81-token character vocabulary, so the embedded
+                // spm_char.model tokenizes text, and the vocoder still hopping 256 samples). The warm-up is one step and the encoder
+                // is not frozen, so fifteen steps of the fine-tuning objective descend. PyTorch's default initialization instead
+                // of the pre-training's N(0, 0.02): at width 16 the BERT draws leave the untrained outputs equal across texts.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.MultiModal.SpeechT5Options { " +
+                    "HiddenDim = 16, FeedForwardDim = 32, NumHeads = 2, NumEncoderLayers = 2, NumDecoderLayers = 2, MaxRelativePosition = 8, " +
+                    "MaxTextLength = 64, MaxMelLength = 400, MelChannels = 16, SpeakerDim = 8, PrenetUnits = 8, PostnetChannels = 8, " +
+                    "FeatureLayers = new[] { (8, 10, 5), (8, 3, 2) }, ConvPositionKernel = 8, ConvPositionGroups = 2, FinalDim = 8, " +
+                    "HubertClasses = new[] { 16 }, LatentVars = 4, SpeakerEncoderChannels = new[] { 8, 8, 8, 8, 16 }, " +
+                    "VocoderInitialChannels = 64, VocoderResBlockKernels = new[] { 3 }, VocoderResBlockDilations = new[] { new[] { 1 } }, " +
+                    "WarmupUpdates = 1, FreezeEncoderUpdates = 0, MaxLengthRatio = 4, LearningRate = 1e-3, BertInitialization = false })";
+            }
             else if (model.ClassName == "IndexTTS2" && model.TypeParameterCount == 1)
             {
                 // IndexTTS2 is w2v-BERT 2.0, the semantic codec, a conformer-perceiver GPT-2, the seed-vc DiT flow, CAM++ and
@@ -16439,6 +16458,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
+                else if (model.ClassName == "SpeechT5")
+                {
+                    // SpeechT5 reads a text's character ids and trains on a 16 kHz recording: eight ids, and 6400 samples (0.4 s:
+                    // 26 mel frames, 13 decoder steps), whose x-vector is the speaker.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 6400 };");
                 }
                 else if (model.ClassName == "IndexTTS2")
                 {
