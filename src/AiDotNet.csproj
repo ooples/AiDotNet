@@ -349,6 +349,30 @@
 	  </EmbeddedResource>
 	</ItemGroup>
 
+	<!-- Public API contract (#2392). Every public type and member is recorded in PublicAPI.Shipped.txt (the surface
+	     shipped so far) and PublicAPI.Unshipped.txt (added since the last release). Adding, changing or removing a
+	     public signature without updating PublicAPI.Unshipped.txt fails the build: RS0016 (undeclared API) and RS0017
+	     (declared API that no longer exists) are warnings, and TreatWarningsAsErrors above turns them into errors.
+	     The root files hold the API common to every target framework; PublicAPI/<tfm>/ holds the members that exist
+	     only on that framework, as the analyzer documents for multi-targeted projects. The package's own targets add
+	     the root files as AdditionalFiles. -->
+	<ItemGroup>
+	  <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+	</ItemGroup>
+	<ItemGroup>
+	  <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt" Condition="Exists('PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt')" />
+	  <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt" Condition="Exists('PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt')" />
+	</ItemGroup>
+
+	<!-- Package validation (#2392): every pack (GeneratePackageOnBuild packs on every full build) compares the package
+	     against the last release on nuget.org and fails on a binary or source break, and checks that the assets for
+	     the different target frameworks are compatible with each other. Breaks that already shipped are recorded in
+	     CompatibilitySuppressions.xml. Bump the baseline to the new version after each release. -->
+	<PropertyGroup>
+	  <EnablePackageValidation>true</EnablePackageValidation>
+	  <PackageValidationBaselineVersion>0.234.0</PackageValidationBaselineVersion>
+	</PropertyGroup>
+
 	<!-- Global usings for AiDotNet.Tensors namespaces -->
 	<ItemGroup>
 	  <Using Include="AiDotNet.Tensors.LinearAlgebra" />
