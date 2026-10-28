@@ -487,7 +487,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// AiDotNet.Tensors tensor allocations satisfy this — the storage
     /// is a contiguous <c>T[]</c> with row-major strides — but if a
     /// future tensor backend exposes non-contiguous views (e.g. stride
-    /// tricks for slicing without copy), this loop would silently copy
+    /// tricks for slicing without copy), this copy would silently take
     /// the wrong elements. A <c>Debug.Assert</c> checks that the backing
     /// span is at least as long as the logical shape, which holds today;
     /// revisit if the contiguous row-major storage contract relaxes.</para>
