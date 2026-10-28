@@ -1191,7 +1191,8 @@ internal sealed record ModelReport(string Model, string Backend, string Device, 
 // steady-state average is the apples-to-apples training number vs PyTorch.
 internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds, double SteadyStateEpochSecondsAvg,
     double SteadyStateEpochSecondsMedian, double SteadyStateEpochSecondsP25, double SteadyStateEpochSecondsP75, int StepsPerEpoch, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources,
-    double? FirstLoss, double? LastLoss);
+    [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? FirstLoss,
+    [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? LastLoss);
 internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample);
 internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95,
     double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak);

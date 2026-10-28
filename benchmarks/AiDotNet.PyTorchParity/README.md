@@ -30,6 +30,9 @@ so `--verify-step1` skips them; each report records both parameter counts instea
 Each training report also records `FirstLoss` / `LastLoss` (`first_loss` / `last_loss`): the loss of the first and
 the last training step, as evidence the timed step trains. The last is read after timing. The first is read during
 epoch 0, once, which the steady-state figures exclude; the PyTorch side holds it on the device until timing ends.
+The C# report preserves non-finite endpoint losses as JSON strings (`"NaN"`, `"Infinity"`,
+`"-Infinity"`), so divergence does not discard the report. Finite losses remain JSON numbers.
+The comparison reader accepts these reports; the C# report types also deserialize those strings.
 
 ## 1. Run the AiDotNet side
 
@@ -81,7 +84,7 @@ our worst-of-95% steady-state latency still beats their average.
 | flag | default | meaning |
 |------|---------|---------|
 | `--models` | `mlp,cnn,lstm,transformer` | comma-separated subset of `mlp,cnn,lstm,gru,transformer,resnet18,resnet50,vgg11,mobilenetv2,densenet121,vit`; C# side also accepts `mlp-fused` |
-| `--inference-batches` | `1,8,32,128` | inference batch sizes; the vision rows use `1,8,16` to stay within a 6 GB card |
+| `--inference-batches` | `1,8,32,128` | inference batch sizes; for vision rows on a 6 GB card, explicitly pass `--inference-batches 1,8,16` to both harnesses (the default does not change by model) |
 | `--epochs` | `3` | training epochs |
 | `--train-batches` | `20` | batches per epoch |
 | `--batch-size` | `64` | training batch size |
