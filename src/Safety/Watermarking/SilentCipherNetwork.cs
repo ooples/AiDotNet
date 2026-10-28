@@ -484,7 +484,15 @@ internal static class SilentCipherWatermark
 
     /// <summary>Whether <paramref name="audio"/> carries <paramref name="key"/> (CSM's <c>verify</c>: resampled to the
     /// model's rate, phase-shift decoding).</summary>
-    public static bool Verify<T>(IEngine engine, SilentCipherNetwork<T> network, double[] audio, int sampleRate, IReadOnlyList<int> key)
+    public static bool Verify<T>(IEngine engine, SilentCipherNetwork<T> network, double[] audio, int sampleRate, IReadOnlyList<int> key) =>
+        Check(engine, network, audio, sampleRate, key, phaseShiftDecoding: true);
+
+    /// <summary><see cref="Verify"/> without the phase search, for audio known to start where the watermark does (the
+    /// search runs the message decoder at 205 offsets).</summary>
+    public static bool VerifyWithoutPhaseSearch<T>(IEngine engine, SilentCipherNetwork<T> network, double[] audio, int sampleRate, IReadOnlyList<int> key) =>
+        Check(engine, network, audio, sampleRate, key, phaseShiftDecoding: false);
+
+    private static bool Check<T>(IEngine engine, SilentCipherNetwork<T> network, double[] audio, int sampleRate, IReadOnlyList<int> key, bool phaseShiftDecoding)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         int rate = network.Configuration.SampleRate;
@@ -497,7 +505,7 @@ internal static class SilentCipherWatermark
             var y = new TorchaudioResample<T>(engine, sampleRate, rate).Forward(t);
             x = Enumerable.Range(0, y.Length).Select(i => ops.ToDouble(y[i])).ToArray();
         }
-        var (found, message, _) = network.Decode(x, phaseShiftDecoding: true);
+        var (found, message, _) = network.Decode(x, phaseShiftDecoding);
         return found && message.SequenceEqual(key);
     }
 }
