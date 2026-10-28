@@ -994,6 +994,30 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             _lastHiddenState.Fill(NumOps.Zero);
         }
 
+        // ooples/AiDotNet.Tensors#1568: the whole sequence as one fused op (one node on a tape; on a GPU, a few kernels
+        // per step instead of a dozen ops) when the layer uses the activations the op computes: sigmoid gates and a tanh
+        // candidate, the paper-standard defaults. This layer applies the reset gate to the hidden state before the
+        // recurrent product (Cho et al. 2014), the op's resetAfter: false form, so the values match the per-step loop
+        // below. The stacked weights are tape-connected concatenations, so gradients reach each gate's own weights.
+        if (sequenceLength > 0 && UsesStandardGruActivations())
+        {
+            var stackedWih = Engine.TensorConcatenate(new[] { _Wr, _Wz, _Wh }, axis: 0);
+            var stackedWhh = Engine.TensorConcatenate(new[] { _Ur, _Uz, _Uh }, axis: 0);
+            var stackedBias = Engine.TensorConcatenate(new[] { _br, _bz, _bh }, axis: 0);
+            var fused = Engine.GruSequenceForward(input3D, _lastHiddenState, stackedWih, stackedWhh, stackedBias, null,
+                out var finalHidden, _returnSequences, resetAfter: false);
+            if (IsTrainingMode)
+            {
+                // The fused op keeps its own activations for its backward; these per-step snapshots are not produced.
+                _lastZ = null;
+                _lastR = null;
+                _lastH = null;
+                _lastHiddenState = finalHidden;
+            }
+            _allHiddenStates = null;
+            return RestoreOriginalOutputShape(fused, sequenceLength);
+        }
+
         // Initialize list to store all hidden states if returning sequences
         if (_returnSequences)
         {
@@ -1091,6 +1115,24 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             output = currentHiddenState;
         }
 
+        return RestoreOriginalOutputShape(output, sequenceLength);
+    }
+
+    /// <summary>
+    /// True when the gates use the sigmoid and the candidate the tanh (the defaults), the activations the fused
+    /// sequence op computes. A configured activation of another type, including a subclass, keeps the per-step loop.
+    /// </summary>
+    private bool UsesStandardGruActivations()
+    {
+        object? gate = (object?)_vectorRecurrentActivation ?? _recurrentActivation;
+        object? candidate = (object?)_vectorActivation ?? _activation;
+        return (gate is null || gate.GetType() == typeof(SigmoidActivation<T>))
+            && (candidate is null || candidate.GetType() == typeof(TanhActivation<T>));
+    }
+
+    /// <summary>Restores the caller's leading dimensions (any-rank input) and the 1-D output of a 2-D input.</summary>
+    private Tensor<T> RestoreOriginalOutputShape(Tensor<T> output, int sequenceLength)
+    {
         // Restore original batch dimensions for any-rank support
         if (_originalInputShape != null && _originalInputShape.Length > 3)
         {
