@@ -271,21 +271,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Configures the optimization algorithm to find the best model parameters.
-    /// </summary>
-    /// <param name="optimizationAlgorithm">The optimization algorithm to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> The optimizer helps find the best settings for your model.
-    /// It's like having someone adjust the knobs on a radio to get the clearest signal.
-    /// The optimizer tries different settings and keeps the ones that work best.
-    /// </remarks>
-    /// <summary>
     /// Configures TARGET (label) scaling for regression: the targets are scaled (default: z-score via
     /// <see cref="AiDotNet.Preprocessing.TargetStandardScaler{T,TOutput}"/>) before training — fit on the
     /// TRAINING split only — and <c>Predict</c> automatically inverse-transforms model outputs back to the
     /// ORIGINAL target units. Pass a custom pipeline to control the transformation.
     /// </summary>
+    /// <param name="pipeline">The target transformation pipeline, or <c>null</c> (the default) for a pipeline
+    /// containing a single <see cref="AiDotNet.Preprocessing.TargetStandardScaler{T,TOutput}"/>.</param>
+    /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> If your target is, say, a price in the hundreds while your features are
     /// scaled to ~1, gradient training struggles. This scales the target down for training and scales
@@ -313,6 +306,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// features map to different within-group ranks on different dates), collapsing the net to a constant.
     /// Neural models with Tensor inputs only; epochs come from the configured optimizer's MaxIterations.
     /// </summary>
+    /// <param name="groups">The query groups; each inner list holds the training row indices of one group.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="groups"/> is <c>null</c> or empty.</exception>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingGroups(IReadOnlyList<IReadOnlyList<int>> groups)
     {
         if (groups is null || groups.Count == 0)
@@ -324,6 +320,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <summary>
+    /// Configures the optimization algorithm to find the best model parameters.
+    /// </summary>
+    /// <param name="optimizationAlgorithm">The optimization algorithm to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> The optimizer helps find the best settings for your model.
+    /// It's like having someone adjust the knobs on a radio to get the clearest signal.
+    /// The optimizer tries different settings and keeps the ones that work best.
+    /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _trainingCore.ConfigureOptimizer(optimizationAlgorithm);
@@ -924,7 +930,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>This builder for fluent chaining.</returns>
     /// <remarks>
     /// <para>
-    /// By default, <see cref="BuildAsync"/> calls
+    /// By default, <see cref="BuildAsync()"/> calls
     /// <c>AiDotNetEngine.SetDeterministicMode(true)</c> so every model built by
     /// this library produces bitwise-identical results across runs on the same
     /// hardware.
@@ -1594,6 +1600,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
+    /// <summary>
+    /// Builds the configured model, observing a cancellation token. This is the overload every other
+    /// <c>BuildAsync</c> overload delegates to.
+    /// </summary>
+    /// <param name="cancellationToken">A token that cancels the build. It is checked before any work starts and
+    /// passed down to the selected training path.</param>
+    /// <returns>A task whose result is the trained <see cref="AiModelResult{T, TInput, TOutput}"/>.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if no training path was configured, or the configured
+    /// RAG components do not form a valid pipeline.</exception>
+    /// <remarks>
+    /// Before training, this applies the build-wide settings (gradient checkpointing, weight streaming, JIT
+    /// compilation and the deterministic-by-default engine mode unless <see cref="AllowNondeterminism"/> was called),
+    /// validates any configured RAG components, and then runs the training path that matches the configuration.
+    /// See <see cref="BuildAsync()"/> for the available paths and examples.
+    /// </remarks>
     public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -2252,13 +2274,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return search.Search();
     }
 
-    /// <summary>
-    /// Internal method that performs reinforcement learning training.
-    /// This contains all the core RL training logic.
-    /// </summary>
-    /// <param name="episodes">Number of episodes to train for.</param>
-    /// <param name="verbose">Whether to print training progress.</param>
-    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
 #pragma warning disable CS1998
     // ── SELF-SUPERVISED / GENERATIVE TRAINING ────────────────────────────────
     // Trains a model that owns its objective (ISelfSupervisedModel, e.g. diffusion).
@@ -2540,6 +2555,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
+    /// <summary>
+    /// Internal method that performs reinforcement learning training.
+    /// This contains all the core RL training logic.
+    /// </summary>
+    /// <param name="episodes">Number of episodes to train for.</param>
+    /// <param name="verbose">Whether to print training progress.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
         // RL TRAINING PATH

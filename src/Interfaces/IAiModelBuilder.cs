@@ -42,6 +42,8 @@ namespace AiDotNet.Interfaces;
 /// - Create different variations of models without writing repetitive code
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data the model consumes, for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
+/// <typeparam name="TOutput">The type of output the model produces, for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
 public interface IAiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>

@@ -1496,7 +1496,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// "use the auto-detect default": models above the parameter
     /// threshold (10B by default) auto-engage streaming; models below
     /// stay eager. Set via <see cref="ConfigureWeightStreaming"/> and
-    /// applied during model construction in <see cref="BuildAsync"/>.
+    /// applied during model construction in <see cref="BuildAsync()"/>.
     /// </summary>
     private WeightStreamingConfig? _weightStreamingConfig;
 

@@ -15,9 +15,6 @@ namespace AiDotNet;
 /// causal inference, drift detection, survival analysis, video, point cloud, document processing,
 /// finance, radial basis functions, distance metrics, embeddings, scoring, explainability, and RL agents.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input type.</typeparam>
-/// <typeparam name="TOutput">The output type.</typeparam>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private IActiveLearningStrategy<T>? _configuredActiveLearningStrategy;

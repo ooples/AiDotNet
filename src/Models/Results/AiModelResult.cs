@@ -82,6 +82,8 @@ namespace AiDotNet.Models.Results;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data the model consumes, for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
+/// <typeparam name="TOutput">The type of output the model produces, for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
 [Serializable]
 [ModelMetadataExempt]
 public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>

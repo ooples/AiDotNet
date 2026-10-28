@@ -8,9 +8,6 @@ namespace AiDotNet;
 /// <summary>
 /// Segmentation-specific fields and configuration for AiModelBuilder.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input type.</typeparam>
-/// <typeparam name="TOutput">The output type.</typeparam>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private SegmentationVisualizationConfig? _segmentationVisualizationConfig;
