@@ -1,7 +1,7 @@
 # PyTorch side of the parity benchmark. CPU wheels are sufficient for the
 # CPU-vs-CPU comparison; install a CUDA build if you want --device cuda.
-torch>=2.5.0
-# torchvision 0.20+ declares its matching torch version in package metadata;
-# pip resolves the pair together for both the core and vision benchmark rows.
-torchvision>=0.20.0
+# Match the PyTorch 2.14.1 baseline reported in PR #2381 with compatible
+# torchvision 0.29.1. Keep the pair pinned for reproducible runs.
+torch==2.14.1
+torchvision==0.29.1
 psutil>=5.9
