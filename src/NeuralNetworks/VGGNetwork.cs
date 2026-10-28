@@ -68,6 +68,9 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Simonyan and Zisserman 2015, Sec. 3.1 (Training): SGD, initial lr 0.01 divided by 10 on plateau, momentum 0.9, weight decay 5e-4.")]
 public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <summary>A feed-forward CNN keeps nothing between calls: each Predict frees its GPU intermediates when it ends.</summary>
+    protected override bool ReleasesInferenceIntermediates => true;
+
     private readonly VGGOptions _options;
 
     /// <summary>

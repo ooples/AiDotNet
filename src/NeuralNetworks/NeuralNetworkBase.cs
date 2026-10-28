@@ -6897,12 +6897,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _deferLazyShapeResolutionToForward = priorDefer;
         }
 
+        // A model whose forward keeps nothing between calls frees its GPU intermediates when the call ends, instead of
+        // when a garbage collection finalizes them (ooples/AiDotNet.Tensors#1432); only the output survives.
+        using var resultScope = ReleasesInferenceIntermediates ? TensorScope.Begin() : null;
         using var noGrad = new NoGradScope<T>();
         try
         {
             var output = PredictInInferenceMode(input);
             RequireArchitectureAgreesWithOutput(output);
-            return output;
+            return resultScope is null ? output : resultScope.Keep(output);
         }
         finally
         {
@@ -6915,8 +6918,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 _deferLazyShapeResolutionToForward = priorDefer;
             }
+            // The call's intermediates are dead now: run the young collection a GPU backend asked for while they are
+            // still young, as a finished training step does, instead of inside the next call's allocation, where it
+            // blocked mid-forward (#1432: once per ResNet-50 predict on OpenCL). Not inside a caller's tape.
+            if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+                AiDotNet.Tensors.Engines.DirectGpu.DeviceMemoryReclaim.CollectIfDueAtStepBoundary();
         }
     }
+
+    /// <summary>
+    /// True for a model whose forward keeps no GPU tensor between <see cref="Predict(Tensor{T})"/> calls (no
+    /// generation cache or carried state), so each call can free its GPU intermediates when it ends through a
+    /// <see cref="TensorScope"/>. A model that does keep one must leave this false: its kept tensors would be freed.
+    /// </summary>
+    protected virtual bool ReleasesInferenceIntermediates => false;
 
     /// <summary>
     /// Whether this model sizes its layers from its options rather than from its architecture, so an architecture

@@ -66,6 +66,9 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "He et al. 2016, Sec. 3.4 (Implementation): SGD, lr 0.1 divided by 10 when the error plateaus, momentum 0.9, weight decay 1e-4.")]
 public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <summary>A feed-forward CNN keeps nothing between calls: each Predict frees its GPU intermediates when it ends.</summary>
+    protected override bool ReleasesInferenceIntermediates => true;
+
     private readonly ResNetOptions _options;
 
     /// <summary>
