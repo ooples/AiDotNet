@@ -9,26 +9,16 @@
     GenerateDocumentationFile makes the build emit <Assembly>.xml, which the .NET
     SDK pack target then includes in the package lib/ folder alongside the .dll.
 
-    The XML-doc warning family is suppressed so that turning doc generation on does
-    not convert documentation-quality warnings into build breaks under
-    TreatWarningsAsErrors (set in AiDotNet.csproj):
-      CS1591 — missing XML comment for a publicly visible member
-      CS1570/CS1587/CS1592 — malformed XML in a doc comment
-      CS1571/CS1572/CS1573 — duplicate / unmatched / missing param tags
-      CS1574/CS1580/CS1581/CS1584/CS1589/CS1590 — unresolved or malformed cref/include
-      CS0419 — ambiguous cref (overload set); CS1723 — cref to a type parameter
-      CS1710/CS1711/CS1712 — duplicate / unmatched / missing typeparam tags
-      CS1734/CS1735 — paramref / typeparamref naming a non-existent (type)parameter
-    The compiler still emits <Assembly>.xml for every well-formed comment (the vast
-    majority); this change is purely about SHIPPING the docs we already have so they
-    surface in IntelliSense. Raising coverage and cleaning up the doc comments these
-    codes flag is a separate follow-up — tracked, not blocking. (A small number of
-    genuinely malformed crefs that produced non-suppressible parse errors, CS1658,
-    were fixed in source in this same change.)
+    The XML-doc warning family (CS1591 and 19 related codes) is NOT suppressed here any more.
+    <NoWarn> overrides every .editorconfig severity, which made it impossible to hold part of
+    the codebase to a documentation standard while the rest catches up. Their severity is set
+    per path in the repository .editorconfig instead (issue #2393): "none" for src/ as a
+    whole, which is the old behaviour, and "error" for the documented user-facing facade
+    (AiModelBuilder, AiModelResult, the Serving extensions and the interfaces they expose).
+    The compiler still emits <Assembly>.xml for every well-formed comment either way.
   -->
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591;CS1570;CS1571;CS1572;CS1573;CS1574;CS1580;CS1581;CS1584;CS1587;CS1589;CS1590;CS1592;CS0419;CS1710;CS1711;CS1712;CS1723;CS1734;CS1735</NoWarn>
   </PropertyGroup>
 
 </Project>
