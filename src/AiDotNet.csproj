@@ -391,6 +391,7 @@
 	  <EmbeddedResource Include="TextToSpeech\Latest\Resources\outetts_qwen3_added_tokens.json.gz" LogicalName="AiDotNet.TextToSpeech.Latest.outetts_qwen3_added_tokens.json.gz" />
 	  <EmbeddedResource Include="Audio\Whisper\Resources\whisper_mel_filters.gz" LogicalName="AiDotNet.Audio.Whisper.whisper_mel_filters.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_pinyin_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_pinyin_chars.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\MultiModal\Resources\speecht5_spm_char.model.gz" LogicalName="AiDotNet.TextToSpeech.MultiModal.speecht5_spm_char.model.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_pinyin_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_pinyin_phrases.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_lexicon.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_lexicon.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\emotivoice_tokens.txt.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.emotivoice_tokens.txt.gz" />
