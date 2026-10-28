@@ -373,10 +373,13 @@
 	  <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt" Condition="Exists('PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt')" />
 	</ItemGroup>
 
-	<!-- Package validation (#2392): every pack (GeneratePackageOnBuild packs on every full build) compares the package
-	     against the last release on nuget.org and fails on a binary or source break, and checks that the assets for
-	     the different target frameworks are compatible with each other. Breaks that already shipped are recorded in
-	     CompatibilitySuppressions.xml. Bump the baseline to the new version after each release. -->
+	<!-- Package validation (#2392): every pack compares the package against the last release on nuget.org and fails on
+	     a binary or source break, and checks that the assets for the different target frameworks are compatible with
+	     each other. GeneratePackageOnBuild packs on every multi-framework build (a single-framework `-f` build is an
+	     inner build and does not pack, so it does not validate). Accepted breaks are recorded in
+	     CompatibilitySuppressions.xml; regenerate it with -p:GenerateCompatibilitySuppressionFile=true and review the
+	     diff. After each release, bump the baseline to that version, clear the suppressions it makes obsolete, and move
+	     PublicAPI.Unshipped.txt entries into PublicAPI.Shipped.txt. -->
 	<PropertyGroup>
 	  <EnablePackageValidation>true</EnablePackageValidation>
 	  <PackageValidationBaselineVersion>0.234.0</PackageValidationBaselineVersion>
