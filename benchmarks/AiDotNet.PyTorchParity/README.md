@@ -28,7 +28,8 @@ d 192, 6 layers, 3 heads). The AiDotNet side builds each through its own configu
 so `--verify-step1` skips them; each report records both parameter counts instead (they agree within 1.4%).
 
 Each training report also records `FirstLoss` / `LastLoss` (`first_loss` / `last_loss`): the loss of the first and
-the last timed step, read off the device only after timing, as evidence the timed step trains.
+the last training step, as evidence the timed step trains. The last is read after timing. The first is read during
+epoch 0, once, which the steady-state figures exclude; the PyTorch side holds it on the device until timing ends.
 
 ## 1. Run the AiDotNet side
 
