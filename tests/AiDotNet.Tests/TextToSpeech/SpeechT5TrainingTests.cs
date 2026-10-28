@@ -61,12 +61,12 @@ public class SpeechT5TrainingTests
 
         var hubertBefore = Snapshot(model, m => m.Core.Hubert.LabelEmbeddings);
         double speechLoss = model.Train(speech);
-        Assert.True(double.IsFinite(speechLoss) && speechLoss > 0, $"speech loss {speechLoss}");
+        Assert.True(!(double.IsNaN(speechLoss) || double.IsInfinity(speechLoss)) && speechLoss > 0, $"speech loss {speechLoss}");
         Assert.NotEqual(hubertBefore, Snapshot(model, m => m.Core.Hubert.LabelEmbeddings));
 
         var embeddingBefore = Snapshot(model, m => m.Core.Embedding);
         double textLoss = model.Train(text);
-        Assert.True(double.IsFinite(textLoss) && textLoss > 0, $"text loss {textLoss}");
+        Assert.True(!(double.IsNaN(textLoss) || double.IsInfinity(textLoss)) && textLoss > 0, $"text loss {textLoss}");
         Assert.NotEqual(embeddingBefore, Snapshot(model, m => m.Core.Embedding));
         Assert.Equal(2, model.Updates);
         Assert.True(model.Core.Quantizer.Temperature < 2.0);
@@ -84,7 +84,7 @@ public class SpeechT5TrainingTests
         var encoderBefore = Snapshot(model, m => m.Core.Encoder.InputNorm);
         var decoderBefore = Snapshot(model, m => m.Core.SpeechPostnet.FeatureOut);
         double first = model.Train(sample);
-        Assert.True(double.IsFinite(first), $"loss {first}");
+        Assert.True(!(double.IsNaN(first) || double.IsInfinity(first)), $"loss {first}");
         Assert.Equal(encoderBefore, Snapshot(model, m => m.Core.Encoder.InputNorm));
         Assert.NotEqual(decoderBefore, Snapshot(model, m => m.Core.SpeechPostnet.FeatureOut));
 
