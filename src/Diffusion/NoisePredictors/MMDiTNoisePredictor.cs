@@ -1170,7 +1170,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             // Per-layer copy. A lazy source layer reports an empty vector and the corresponding
             // SetParameters is a no-op, which is correct: the clone's matching layer was probed to
             // the same materialization state, so both stay lazy together.
-            dst.Current.SetParameters(src.Current.GetParameters());
+            AiDotNet.Models.Parameters.ParameterTransfer.CopyLayer(src.Current, dst.Current);
         }
 
         if (dst.MoveNext())

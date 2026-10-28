@@ -437,39 +437,19 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     {
         int n = input.Rows, cols = input.Columns;
         int steps = Math.Max(cols, _options.LookbackWindow), pad = steps - cols;
-        int layers = _lstmLayers.Count, h = _options.HiddenSize;
+        int h = _options.HiddenSize;
 
-        var hState = new Tensor<T>[layers];
-        var cState = new Tensor<T>[layers];
-        for (int l = 0; l < layers; l++)
-        {
-            hState[l] = new Tensor<T>(new[] { h, n });
-            cState[l] = new Tensor<T>(new[] { h, n });
-        }
-
+        var sequence = new Tensor<T>(new[] { n, steps, 1 });
         var lastNorm = new T[n];
-        for (int t = 0; t < steps; t++)
-        {
-            var xt = new Tensor<T>(new[] { 1, n });
-            for (int i = 0; i < n; i++)
+        for (int i = 0; i < n; i++)
+            for (int t = 0; t < steps; t++)
             {
                 T raw = cols == 0 ? NumOps.Zero : input[i, t < pad ? 0 : t - pad];
                 T normValue = NumOps.Divide(NumOps.Subtract(raw, _normMean), _normStd);
-                xt[0, i] = normValue;
+                sequence[i, t, 0] = normValue;
                 lastNorm[i] = normValue;
             }
-
-            Tensor<T> layerInput = xt;
-            for (int l = 0; l < layers; l++)
-            {
-                var (hNew, cNew) = _lstmLayers[l].Step(layerInput, hState[l], cState[l]);
-                hState[l] = hNew;
-                cState[l] = cNew;
-                layerInput = hNew;
-            }
-        }
-
-        var top = hState[layers - 1];
+        var top = FinalHidden(sequence);
         var predictions = new Vector<T>(n);
         var column = new Tensor<T>(new[] { h, 1 });
         for (int i = 0; i < n; i++)
@@ -541,39 +521,14 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
             input = lb;
         }
 
-        int layers = _lstmLayers.Count;
-        int h = _options.HiddenSize;
-
-        var hState = new Tensor<T>[layers];
-        var cState = new Tensor<T>[layers];
-        for (int l = 0; l < layers; l++)
-        {
-            hState[l] = new Tensor<T>(new[] { h, 1 });
-            cState[l] = new Tensor<T>(new[] { h, 1 });
-        }
-
-        // Unroll over the normalized window (these Engine ops run eagerly outside a tape).
+        var sequence = new Tensor<T>(new[] { 1, input.Length, 1 });
         T lastNorm = NumOps.Zero;
         for (int t = 0; t < input.Length; t++)
         {
-            T normValue = NumOps.Divide(NumOps.Subtract(input[t], _normMean), _normStd);
-            lastNorm = normValue;
-            var xt = new Tensor<T>(new[] { 1, 1 });
-            xt[0, 0] = normValue;
-
-            Tensor<T> layerInput = xt;
-            for (int l = 0; l < layers; l++)
-            {
-                var (hNew, cNew) = _lstmLayers[l].Step(layerInput, hState[l], cState[l]);
-                hState[l] = hNew;
-                cState[l] = cNew;
-                layerInput = hNew;
-            }
+            lastNorm = NumOps.Divide(NumOps.Subtract(input[t], _normMean), _normStd);
+            sequence[0, t, 0] = lastNorm;
         }
-
-        // The head owns the residual-mean skip and the distribution math; hand it the final hidden state
-        // and the last normalized observation, and return its normalized predictive distribution.
-        return _head.PredictNorm(hState[layers - 1], lastNorm);
+        return _head.PredictNorm(FinalHidden(sequence), lastNorm);
     }
 
     /// <summary>
@@ -729,50 +684,38 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Covariate-aware eager unroll (B = 1): runs the LSTM over a <c>[L]</c> series window plus its aligned
+    /// Covariate-aware sequence forward (B = 1): runs the LSTM over a <c>[L]</c> series window plus its aligned
     /// <c>[L][CovariateSize]</c> covariate rows (both original-scale; standardized here with the training
     /// stats) and returns the head's normalized predictive distribution.
     /// </summary>
     private DeepARPredictiveDist<T> PredictDistNormCov(Vector<T> seriesWindow, T[][] covWindow)
     {
-        int layers = _lstmLayers.Count;
-        int hidden = _options.HiddenSize;
         int cov = _options.CovariateSize;
-
-        var hState = new Tensor<T>[layers];
-        var cState = new Tensor<T>[layers];
-        for (int l = 0; l < layers; l++)
-        {
-            hState[l] = new Tensor<T>(new[] { hidden, 1 });
-            cState[l] = new Tensor<T>(new[] { hidden, 1 });
-        }
-
+        var sequence = new Tensor<T>(new[] { 1, seriesWindow.Length, 1 + cov });
         T lastNorm = NumOps.Zero;
         for (int t = 0; t < seriesWindow.Length; t++)
         {
-            T normValue = NumOps.Divide(NumOps.Subtract(seriesWindow[t], _normMean), _normStd);
-            lastNorm = normValue;
-            var xt = new Tensor<T>(new[] { 1 + cov, 1 });
-            xt[0, 0] = normValue;
+            lastNorm = NumOps.Divide(NumOps.Subtract(seriesWindow[t], _normMean), _normStd);
+            sequence[0, t, 0] = lastNorm;
             for (int c = 0; c < cov; c++)
-                xt[1 + c, 0] = NumOps.Divide(NumOps.Subtract(covWindow[t][c], _covMean[c]), _covStd[c]);
-
-            Tensor<T> layerInput = xt;
-            for (int l = 0; l < layers; l++)
-            {
-                var (hNew, cNew) = _lstmLayers[l].Step(layerInput, hState[l], cState[l]);
-                hState[l] = hNew;
-                cState[l] = cNew;
-                layerInput = hNew;
-            }
+                sequence[0, t, 1 + c] = NumOps.Divide(NumOps.Subtract(covWindow[t][c], _covMean[c]), _covStd[c]);
         }
-
-        return _head.PredictNorm(hState[layers - 1], lastNorm);
+        return _head.PredictNorm(FinalHidden(sequence), lastNorm);
     }
 
 
 
 
+
+    /// <summary>Runs a complete normalized prediction window and returns the top state as [hidden, batch].</summary>
+    private Tensor<T> FinalHidden(Tensor<T> sequence)
+    {
+        int batch = sequence.Shape[0], steps = sequence.Shape[1];
+        if (batch == 0 || steps == 0) return new Tensor<T>(new[] { _options.HiddenSize, batch });
+        foreach (var layer in _lstmLayers) sequence = layer.Sequence(sequence);
+        var last = Engine.Reshape(Engine.TensorNarrow(sequence, 1, steps - 1, 1), new[] { batch, _options.HiddenSize });
+        return Engine.TensorTranspose(last);
+    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -919,7 +862,24 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
     /// i, f, g, o; one bias), as the single engine op that compiled training records as one fused node.
     /// </summary>
     public Tensor<T> Sequence(Tensor<T> input)
-        => Engine.LstmSequenceForward(input, null, null, _wx, _wh, _bias, null, returnSequences: true);
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return Engine.LstmSequenceForward(input, null, null, _wx, _wh, _bias, null, returnSequences: true);
+        if (input.Rank != 3 || input.Shape[2] != _wx.Shape[1])
+            throw new ArgumentException("Expected [batch, time, input] with the cell's input width.", nameof(input));
+        int batch = input.Shape[0], hiddenSize = _wh.Shape[1];
+        if (input.Shape[1] == 0) return new Tensor<T>(new[] { batch, 0, hiddenSize });
+        var hidden = new Tensor<T>(new[] { batch, hiddenSize });
+        var cell = new Tensor<T>(new[] { batch, hiddenSize });
+        var steps = new Tensor<T>[input.Shape[1]];
+        for (int t = 0; t < steps.Length; t++)
+        {
+            var x = Engine.Reshape(Engine.TensorNarrow(input, 1, t, 1), new[] { batch, input.Shape[2] });
+            (hidden, cell) = Engine.TensorLstmCell(x, hidden, cell, _wx, _wh, _bias);
+            steps[t] = hidden;
+        }
+        return Engine.TensorStack(steps, 1);
+    }
 
     /// <summary>
     /// Computes one LSTM step. Inputs are column-major: <paramref name="xt"/> is
@@ -930,31 +890,9 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
     /// </summary>
     public (Tensor<T> h, Tensor<T> c) Step(Tensor<T> xt, Tensor<T> hPrev, Tensor<T> cPrev)
     {
-        // Pre-activations for all 4 gates: [4H, B].
-        var fromX = Engine.TensorMatMul(_wx, xt);      // [4H, B]
-        var fromH = Engine.TensorMatMul(_wh, hPrev);   // [4H, B]
-        var preact = Engine.TensorAdd(fromX, fromH);
-        var biasCol = Engine.Reshape(_bias, new[] { 4 * _hiddenSize, 1 });
-        preact = Engine.TensorAdd(preact, biasCol);
-
-        // Slice the stacked pre-activations into the four gates along axis 0.
-        var iPre = Engine.TensorNarrow(preact, 0, 0, _hiddenSize);
-        var fPre = Engine.TensorNarrow(preact, 0, _hiddenSize, _hiddenSize);
-        var gPre = Engine.TensorNarrow(preact, 0, 2 * _hiddenSize, _hiddenSize);
-        var oPre = Engine.TensorNarrow(preact, 0, 3 * _hiddenSize, _hiddenSize);
-
-        var iGate = Engine.Sigmoid(iPre);
-        var fGate = Engine.Sigmoid(fPre);
-        var gGate = Engine.Tanh(gPre);
-        var oGate = Engine.Sigmoid(oPre);
-
-        // c = f ⊙ c_prev + i ⊙ g ; h = o ⊙ tanh(c).
-        var cNew = Engine.TensorAdd(
-            Engine.TensorMultiply(fGate, cPrev),
-            Engine.TensorMultiply(iGate, gGate));
-        var hNew = Engine.TensorMultiply(oGate, Engine.Tanh(cNew));
-
-        return (hNew, cNew);
+        var (hidden, cell) = Engine.TensorLstmCell(Engine.TensorTranspose(xt),
+            Engine.TensorTranspose(hPrev), Engine.TensorTranspose(cPrev), _wx, _wh, _bias);
+        return (Engine.TensorTranspose(hidden), Engine.TensorTranspose(cell));
     }
 
     private static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)

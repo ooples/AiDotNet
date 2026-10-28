@@ -48,8 +48,34 @@ namespace AiDotNet.TimeSeries;
 /// </para>
 /// </remarks>
 public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
-    ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider
+    ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
+    /// <summary>Exposes canonical registered state for device-side checkpoints.</summary>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        _ = Components;
+        return AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(
+            this, typeof(TimeSeriesModelBase<T>), _parameterRegistry, GetParameters);
+    }
+
+    /// <summary>Streams state in manifest order without flattening tensor-backed components.</summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+        => GetParameterStateChunks().Select(chunk => chunk.Tensor);
+
+    /// <summary>Restores canonical tensor chunks on their device, preserving custom setters and hooks.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        _ = Components;
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(TimeSeriesModelBase<T>), chunks, _parameterRegistry, SetParameters,
+            () =>
+            {
+                // Canonical tensors stay authoritative until a caller requests the packed view.
+                _modelParametersDirty = !_legacyModelParametersRegistered;
+                OnParametersRestored();
+            });
+    }
+
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
     // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
@@ -262,22 +288,11 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// the indexer, so the checkpoint cost more than the epoch it protected (AiDotNet#1804).
     /// </remarks>
     private protected Tensor<T>[] SnapshotParameters(IReadOnlyList<Tensor<T>> parameters, Tensor<T>[]? snapshot)
-    {
-        snapshot ??= new Tensor<T>[parameters.Count];
-        for (int i = 0; i < parameters.Count; i++)
-        {
-            snapshot[i] ??= new Tensor<T>(parameters[i].Shape.ToArray());
-            Engine.TensorCopy(parameters[i], snapshot[i]);
-        }
-        return snapshot;
-    }
+        => AiDotNet.Training.TensorCheckpoint<T>.Capture(parameters, snapshot);
 
     /// <summary>Writes a <see cref="SnapshotParameters"/> checkpoint back into <paramref name="parameters"/>.</summary>
     private protected void RestoreParameters(IReadOnlyList<Tensor<T>> parameters, Tensor<T>[] snapshot)
-    {
-        for (int i = 0; i < parameters.Count; i++)
-            Engine.TensorCopy(snapshot[i], parameters[i]);
-    }
+        => AiDotNet.Training.TensorCheckpoint<T>.Restore(parameters, snapshot);
 
     /// <summary>
     /// Trains one batch on the gradient tape: the fused compiled plan (forward, backward and optimizer update as
@@ -348,7 +363,22 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// the recipe ingredients with specific measurements that the model has figured out work best.
     /// </para>
     /// </remarks>
-    protected Vector<T> ModelParameters { get; set; }
+    protected Vector<T> ModelParameters
+    {
+        get
+        {
+            if (_modelParametersDirty)
+            {
+                _modelParameters = _parameterRegistry.GetParameters();
+                _modelParametersDirty = false;
+            }
+            return _modelParameters;
+        }
+        set { _modelParameters = value; _modelParametersDirty = false; }
+    }
+
+    private Vector<T> _modelParameters = new(0);
+    private bool _modelParametersDirty;
 
     /// <summary>
     /// Indicates whether the model has been trained.
