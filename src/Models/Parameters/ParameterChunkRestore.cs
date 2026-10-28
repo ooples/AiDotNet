@@ -10,7 +10,14 @@ internal static class ParameterChunkRestore<T>
         ParameterComponentRegistry<T> registry, Func<Vector<T>> getParameters)
     {
         var getter = owner.GetType().GetMethod(nameof(IParameterSource<T>.GetParameters), Type.EmptyTypes);
-        if (getter?.DeclaringType == baseType && registry.HasComponents)
+        var state = owner.GetType().GetMethod(nameof(IParameterChunkSource<T>.GetParameterStateChunks), Type.EmptyTypes);
+        // An explicit state override at or below the getter's owner opts into the registry's
+        // live contract (for example, vision bases that materialize lazy layers then call base).
+        // A more-derived flat-only override still requires a detached compatibility snapshot.
+        var explicitStateContract = getter?.DeclaringType is Type getterOwner
+            && state?.DeclaringType is Type stateOwner && stateOwner != baseType
+            && getterOwner.IsAssignableFrom(stateOwner);
+        if (registry.HasComponents && (getter?.DeclaringType == baseType || explicitStateContract))
             return registry.GetParameterStateChunks();
         var flat = getParameters();
         return flat.Length == 0 ? Array.Empty<ParameterChunk<T>>()

@@ -119,6 +119,37 @@ public class FoundationRootRestoreTests
         public override void Train(Matrix<double> x, Vector<double> y) { }
         public override Vector<double> Predict(Matrix<double> x) => new(x.Rows);
     }
+    private class ExplicitStateClassifier : Classifier
+    {
+        public override Vector<double> GetParameters() => base.GetParameters();
+        public override IEnumerable<ParameterChunk<double>> GetParameterStateChunks()
+            => base.GetParameterStateChunks();
+    }
+    private sealed class FlatOnlyDerivedClassifier : ExplicitStateClassifier
+    {
+        public override Vector<double> GetParameters() => new(new double[] { Weight[1], Weight[0] });
+    }
+    [Fact]
+    public void ExplicitStateOverride_PreservesLiveTrainableTensors()
+    {
+        var model = new ExplicitStateClassifier();
+        var chunk = Assert.Single(model.GetParameterStateChunks());
+        Assert.True(chunk.IsWritableInPlace);
+        Assert.Same(model.Weight, chunk.Tensor);
+        chunk.Tensor[0] = 7;
+        Assert.Equal(7, model.GetParameters()[0]);
+    }
+    [Fact]
+    public void MoreDerivedFlatOnlyOverride_PreservesCustomOrderAndSnapshotIsolation()
+    {
+        var model = new FlatOnlyDerivedClassifier(); model.Weight[0] = 3; model.Weight[1] = 7;
+        var chunk = Assert.Single(model.GetParameterStateChunks());
+        Assert.False(chunk.IsWritableInPlace);
+        Assert.Equal(new double[] { 7, 3 }, chunk.Tensor.ToArray());
+        chunk.Tensor[0] = 9;
+        Assert.Equal(7, model.Weight[1]);
+    }
+
     private sealed class MultiLabel : AiDotNet.Classification.MultiLabel.MultiLabelClassifierBase<double>, IFixture
     {
         public Tensor<double> Weight { get; } = new(new[] { 2 });
