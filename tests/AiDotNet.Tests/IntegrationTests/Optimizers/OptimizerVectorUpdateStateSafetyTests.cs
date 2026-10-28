@@ -14,8 +14,12 @@ public class OptimizerVectorUpdateStateSafetyTests
     public void FactoriesCoverEveryConcreteGradientBasedOptimizer()
     {
         Type openBaseType = typeof(GradientBasedOptimizerBase<,,>);
+        // The general-purpose optimizers, generic over <T, TInput, TOutput>, are what a Matrix/Vector factory can build. A
+        // model's own wrapper fixed to its tensor inputs (StyleTTS 2's per-module AdamW, which keeps AdamW's vector update)
+        // cannot be built here and is covered by its model's tests.
         Type[] discovered = openBaseType.Assembly.GetTypes()
-            .Where(type => !type.IsAbstract && InheritsOpenGeneric(type, openBaseType))
+            .Where(type => !type.IsAbstract && InheritsOpenGeneric(type, openBaseType)
+                && (!type.IsGenericType || type.GetGenericTypeDefinition().GetGenericArguments().Length == 3))
             .Select(type => type.IsGenericType ? type.GetGenericTypeDefinition() : type)
             .OrderBy(type => type.FullName)
             .ToArray();
