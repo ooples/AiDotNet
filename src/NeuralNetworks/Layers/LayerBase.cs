@@ -64,7 +64,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Layers that want arena-based allocation create this in their constructor
     /// and declare buffer shapes. See <see cref="AiDotNet.Memory.LayerWorkspace{T}"/>.
     /// </summary>
-    protected LayerWorkspace<T>? Workspace { get; set; }
+    private protected LayerWorkspace<T>? Workspace { get; set; }
 
     /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
