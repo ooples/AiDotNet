@@ -147,6 +147,28 @@ public partial class AiModelResult<T, TInput, TOutput>
     internal void SetDeepEnsembleModels(List<IFullModel<T, TInput, TOutput>> models)
         { Guard.NotNull(models); _deepEnsembleModels = models; }
 
+    /// <summary>
+    /// Makes a prediction together with an estimate of how uncertain the model is about it.
+    /// </summary>
+    /// <param name="newData">The input features to predict on.</param>
+    /// <param name="numSamples">Number of stochastic forward passes for Monte Carlo dropout, or <c>null</c> to use
+    /// the configured <c>NumSamples</c>. Ignored by the other uncertainty methods.</param>
+    /// <returns>The prediction, its variance, the method actually used, and uncertainty metrics.</returns>
+    /// <exception cref="InvalidOperationException">The model is not initialized.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Monte Carlo dropout is used and the effective sample count is
+    /// less than 1.</exception>
+    /// <remarks>
+    /// <para>
+    /// The method comes from the uncertainty quantification options configured on the builder. With
+    /// <c>Auto</c>, the first available of these is used: conformal prediction (when calibrated), a deep ensemble,
+    /// a SWAG posterior, a Laplace posterior, the model's own Bayesian estimator, and finally Monte Carlo dropout.
+    /// When uncertainty quantification is not enabled, or Monte Carlo dropout finds no dropout layers, this returns
+    /// the ordinary <see cref="Predict(TInput)"/> result with zero variance.
+    /// </para>
+    /// <para><b>For Beginners:</b> A normal prediction gives you one answer. This also tells you how much to trust
+    /// it: a large variance means the model is unsure, which is a signal to review the case or gather more data.
+    /// </para>
+    /// </remarks>
     public UncertaintyPredictionResult<T, TOutput> PredictWithUncertainty(TInput newData, int? numSamples = null)
     {
         if (Model == null)

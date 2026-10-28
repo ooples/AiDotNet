@@ -295,7 +295,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Postprocessing pipeline configured via
     /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigurePostprocessing(AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput})"/>.
-    /// Applied inside <see cref="Predict"/> after the model produces its
+    /// Applied inside <see cref="Predict(TInput)"/> after the model produces its
     /// raw output. Stored-but-not-consumed regression on this surface was
     /// detected by AiDotNet#1345 Bucket6 pre/post tests; wiring added here
     /// so the configured pipeline actually runs against predictions.
@@ -863,7 +863,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <para>
     /// This is populated when benchmarking is enabled through the facade (for example,
     /// <c>AiModelBuilder.ConfigureBenchmarking(...)</c>) or when
-    /// <see cref="EvaluateBenchmarksAsync"/> is called.
+    /// <see cref="EvaluateBenchmarksAsync(BenchmarkingOptions, CancellationToken)"/> is called.
     /// </para>
     /// <para><b>For Beginners:</b> This is the "report card" from running standardized benchmark suites.</para>
     /// </remarks>
@@ -2320,42 +2320,14 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Makes predictions using the model on the provided input data.
-    /// </summary>
-    /// <param name="newData">A matrix of input features, where each row represents an observation and each column represents a feature.</param>
-    /// <returns>A vector of predicted values, one for each observation in the input matrix.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the Model or Normalizer is not initialized.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method makes predictions using the model on the provided input data. It first normalizes the input data using
-    /// the normalizer from the NormalizationInfo property, then passes the normalized data to the model's Predict method,
-    /// and finally denormalizes the model's outputs to obtain the final predictions. This process ensures that the input
-    /// data is preprocessed in the same way as the training data was, and that the predictions are in the same scale as
-    /// the original target variable.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes predictions on new data using the trained model.
-    /// 
-    /// The Predict method:
-    /// - Takes a matrix of input features as its parameter
-    /// - Normalizes the input data to match how the model was trained
-    /// - Passes the normalized data to the model for prediction
-    /// - Denormalizes the results to convert them back to the original scale
-    /// - Returns a vector of predictions, one for each row in the input matrix
-    /// 
-    /// This method will throw an exception if:
-    /// - The Model property is null (not initialized)
-    /// - The Normalizer in NormalizationInfo is null (not initialized)
-    /// 
-    /// For example, if you have a matrix of house features (square footage, bedrooms, etc.),
-    /// this method will return a vector of predicted house prices.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Multi-horizon <c>Predict</c> overload: predicts <paramref name="horizon"/> future steps at once from a single
     /// <paramref name="lookback"/> window. Same method name as the normal <see cref="Predict(TInput)"/> — beginners
     /// just call <c>Predict</c>. Requires the trained model to be a time-series model; models with a native direct
     /// multi-step head (e.g. N-BEATS) emit all steps at once, others use the recursive strategy.
     /// </summary>
+    /// <param name="lookback">The most recent observations of the series, oldest first, that the forecast starts from.</param>
+    /// <param name="horizon">How many future steps to predict.</param>
+    /// <returns>A vector of <paramref name="horizon"/> forecasts, one per future step.</returns>
     /// <exception cref="NotSupportedException">The built model is not a time-series forecasting model.</exception>
     public Vector<T> Predict(Vector<T> lookback, int horizon)
     {
@@ -2394,7 +2366,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Produces an N-step-ahead forecast for a time-series model through the unified <see cref="Predict"/> front:
+    /// Produces an N-step-ahead forecast for a time-series model through the unified <see cref="Predict(TInput)"/> front:
     /// the row count of <paramref name="newData"/> is the horizon, and the forecast extends the series the model was
     /// trained on.
     /// </summary>
@@ -2484,13 +2456,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
     /// <summary>
     /// The [horizon, variables] shape of the most recent <b>multivariate</b> forecast returned
-    /// through <see cref="Predict"/>, or <c>null</c> if the last forecast was univariate /
+    /// through <see cref="Predict(TInput)"/>, or <c>null</c> if the last forecast was univariate /
     /// exogenous. Pair with <see cref="ReshapeForecastToMatrix"/> to recover the 2-D form.
     /// </summary>
     public int[]? LastForecastShape { get; private set; }
 
     /// <summary>
-    /// Reshapes a flat multivariate forecast vector (as returned by <see cref="Predict"/> for a
+    /// Reshapes a flat multivariate forecast vector (as returned by <see cref="Predict(TInput)"/> for a
     /// multivariate model) back into its [horizon x variables] matrix using
     /// <see cref="LastForecastShape"/> — so callers recover the natural 2-D forecast without
     /// needing to know the row-major flatten layout.
@@ -2530,6 +2502,34 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return flat;
     }
 
+    /// <summary>
+    /// Makes predictions using the trained model on the provided input data.
+    /// </summary>
+    /// <param name="newData">The input features, in the same layout the model was trained on (for example a
+    /// <c>Matrix&lt;T&gt;</c> with one row per observation and one column per feature).</param>
+    /// <returns>The predictions, in the original units of the training target.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized, or when a configured
+    /// safety filter rejects the input.</exception>
+    /// <remarks>
+    /// <para>
+    /// Prediction runs the same steps the training data went through, in order: the fitted input preprocessing
+    /// pipeline (if any) transforms the features; the configured safety filter (if any) validates and may sanitize
+    /// them; the feature subset chosen during training is selected; the model predicts; fitted target scaling is
+    /// inverted; the postprocessing pipeline (if any) is applied; and the safety filter may filter the output. The
+    /// builder's JIT-compilation and determinism settings are re-applied on the calling thread first.
+    /// </para>
+    /// <para>
+    /// Time-series models are the exception: for them the number of rows in <paramref name="newData"/> is the
+    /// forecast horizon, and the forecast continues the series the model was trained on.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes predictions on new data using the trained model. You pass raw
+    /// data in the same shape as your training features, and you get answers back in the same scale as your
+    /// training labels — all the scaling and cleanup that was learned during training is applied for you.
+    ///
+    /// For example, if you have a matrix of house features (square footage, bedrooms, etc.),
+    /// this method will return a vector of predicted house prices.
+    /// </para>
+    /// </remarks>
     public TOutput Predict(TInput newData)
     {
         if (Model == null)
@@ -2712,7 +2712,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Single-source-of-truth inference dispatch for <see cref="Predict"/>.
+    /// Single-source-of-truth inference dispatch for <see cref="Predict(TInput)"/>.
     /// Picks the InferenceOptimizationConfig fast path, then the JIT
     /// compiled function, then the standard <see cref="Model"/>.Predict.
     /// Returning a single <typeparamref name="TOutput"/> lets the caller
@@ -3122,7 +3122,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <remarks>
     /// <para>
     /// This type intentionally keeps inference internals behind the facade. Users create sequences via
-    /// <see cref="CreateSequence"/> and run inference via <see cref="InferenceSequence.Predict(TInput)"/>.
+    /// <see cref="CreateSequence()"/> and run inference via <see cref="InferenceSequence.Predict(TInput)"/>.
     /// </para>
     /// </remarks>
     public sealed class InferenceSession : IDisposable
@@ -4342,7 +4342,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Detects and quantifies feature interactions using Friedman's H-statistic.
     /// </summary>
     /// <param name="data">The data matrix to analyze.</param>
-    /// <param name="numSamples">Number of samples to use (for performance).</param>
+    /// <param name="gridSize">Number of grid points used to approximate the partial-dependence functions (at least 2).
+    /// Higher values give more accurate H-statistics but are slower.</param>
     /// <returns>Feature interaction results including pairwise H-statistics.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> H-statistic measures how much two features interact in the model.
@@ -4351,7 +4352,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var interactions = result.GetFeatureInteractions(trainingData, 500);
+    /// var interactions = result.GetFeatureInteractions(trainingData, gridSize: 20);
     /// var topPairs = interactions.GetTopInteractions(5);
     /// // Shows the 5 most interacting feature pairs
     /// </code>
@@ -4502,7 +4503,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Explains a prediction using DeepLIFT attribution.
     /// </summary>
     /// <param name="instance">The input instance to explain.</param>
-    /// <param name="reference">Reference input (baseline) for comparison.</param>
+    /// <param name="baseline">Reference input (baseline) for comparison, or <c>null</c> for a zero vector.</param>
     /// <param name="rule">The propagation rule to use (Rescale or RevealCancel).</param>
     /// <returns>DeepLIFT attributions showing feature contributions.</returns>
     /// <remarks>
@@ -4515,7 +4516,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var deepLiftResult = result.ExplainWithDeepLIFT(instance, referenceInput);
+    /// var deepLiftResult = result.ExplainWithDeepLIFT(instance, baseline: referenceInput);
     /// // deepLiftResult.Attributions[i] shows feature i's contribution
     /// </code>
     /// </para>
@@ -4547,6 +4548,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="backgroundData">Background dataset for sampling baselines.</param>
     /// <param name="numSamples">Number of baseline samples to use.</param>
+    /// <param name="numSteps">Number of integration steps between each baseline and the instance.</param>
     /// <returns>GradientSHAP attributions with variance estimates.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> GradientSHAP combines the efficiency of gradient-based methods
@@ -4597,6 +4599,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="rule">The LRP propagation rule to use.</param>
+    /// <param name="epsilon">The stabilizing epsilon used by the LRP-epsilon rule.</param>
     /// <returns>LRP explanation with relevance scores per feature.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> LRP explains neural network predictions by backpropagating
@@ -4643,7 +4646,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="method">The saliency method to use.</param>
-    /// <param name="numSamples">Number of samples for SmoothGrad methods.</param>
+    /// <param name="smoothGradSamples">Number of noisy samples averaged by the SmoothGrad methods.</param>
+    /// <param name="smoothGradNoise">Standard deviation of the noise SmoothGrad adds to each sample (must not be negative).</param>
     /// <returns>Saliency map showing feature importance via gradients.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Saliency maps show which input features the model is most
@@ -4695,7 +4699,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="prototypes">The set of prototype examples.</param>
     /// <param name="prototypeLabels">Optional labels for each prototype.</param>
-    /// <param name="numPrototypes">Number of similar prototypes to return.</param>
+    /// <param name="numNeighbors">Number of nearest prototypes to return.</param>
     /// <param name="metric">Distance metric to use.</param>
     /// <returns>Prototype explanation with similar and contrasting examples.</returns>
     /// <remarks>
@@ -7428,6 +7432,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Solves a problem using advanced reasoning strategies like Chain-of-Thought, Tree-of-Thoughts, or Self-Consistency.
     /// </summary>
     /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="chatClient">The chat client (language model) the reasoner sends its prompts to.</param>
     /// <param name="mode">The reasoning mode to use (default: Auto selects based on problem complexity).</param>
     /// <param name="config">Optional reasoning configuration (uses pre-configured settings if null).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
@@ -7485,6 +7490,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Quickly solves a problem with minimal reasoning overhead for fast answers.
     /// </summary>
     /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="chatClient">The chat client (language model) the reasoner sends its prompts to.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The final answer as a string.</returns>
     /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
@@ -7518,6 +7524,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Performs deep, thorough reasoning on a complex problem using extensive exploration and verification.
     /// </summary>
     /// <param name="problem">The complex problem to analyze.</param>
+    /// <param name="chatClient">The chat client (language model) the reasoner sends its prompts to.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A comprehensive reasoning result with extensive exploration.</returns>
     /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
@@ -7560,6 +7567,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Solves a problem multiple times using different approaches and returns the consensus answer.
     /// </summary>
     /// <param name="problem">The problem to solve.</param>
+    /// <param name="chatClient">The chat client (language model) the reasoner sends its prompts to.</param>
     /// <param name="numAttempts">Number of independent solving attempts (default: 5).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The consensus result with voting statistics.</returns>
