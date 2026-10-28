@@ -300,7 +300,7 @@ internal static class Program
             case "t5xxl-ctor":
             {
                 var sw = Stopwatch.StartNew();
-                _ = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>(ClipTokenizerFactory.CreateSimple(), AiDotNet.Enums.T5Variant.XXL);
+                _ = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>(ClipTokenizerFactory.CreateSimple(), options: new AiDotNet.Diffusion.Conditioning.T5TextConditionerOptions { Variant = AiDotNet.Enums.T5Variant.XXL });
                 sw.Stop();
                 Console.WriteLine($"[harness] T5TextConditioner(T5-XXL) ctor: {sw.ElapsedMilliseconds} ms");
                 return true;
