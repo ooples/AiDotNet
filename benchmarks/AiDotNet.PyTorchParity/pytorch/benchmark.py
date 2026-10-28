@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import platform
 import random
@@ -60,8 +61,9 @@ class TrainingResult:
     data_loading_seconds_avg: float
     resources: ResourceSummary
     # Loss after the first and the last timed step: proof the step trains, read off the device only after timing.
-    first_loss: float | None = None
-    last_loss: float | None = None
+    # A non-finite loss is the string "NaN", "Infinity" or "-Infinity", as in the C# report: bare NaN tokens are not JSON.
+    first_loss: float | str | None = None
+    last_loss: float | str | None = None
 
 
 @dataclass
@@ -368,8 +370,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
             if profile_epoch:
                 torch.cuda.profiler.stop()
     total = time.perf_counter() - start_total
-    first_loss_value = float(first_loss.item()) if first_loss is not None else None
-    last_loss_value = float(loss.item()) if first_loss is not None else None
+    first_loss_value = json_loss(float(first_loss.item())) if first_loss is not None else None
+    last_loss_value = json_loss(float(loss.item())) if first_loss is not None else None
     # Steady state excludes epoch 0 (warmup), exactly as the AiDotNet twin does.
     steady_epochs = epoch_seconds[1:] if len(epoch_seconds) > 1 else epoch_seconds
     steady_sorted = sorted(steady_epochs)
@@ -387,6 +389,15 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
         first_loss=first_loss_value,
         last_loss=last_loss_value,
     )
+
+
+def json_loss(value: float) -> float | str:
+    """Encode a non-finite loss as the JSON string the C# report and compare.py use."""
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    return value
 
 
 @torch.inference_mode()

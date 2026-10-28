@@ -174,7 +174,17 @@ internal sealed record BenchmarkOptions(
             map.GetValueOrDefault("verify-step1"),
             map.GetValueOrDefault("inference-batches", "1,8,32,128")
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(int.Parse).ToArray());
+                .Select(ParsePositiveBatch).ToArray());
+    }
+
+    private static int ParsePositiveBatch(string text)
+    {
+        var batch = int.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        if (batch <= 0)
+        {
+            throw new ArgumentException($"--inference-batches values must be positive; got {batch}.");
+        }
+        return batch;
     }
 }
 
@@ -742,6 +752,7 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         // the per-batch wall-time measurement Backward does the full train step
         // and Step is a no-op — gradientSeconds therefore captures backward+step.
         Network.Train(Input, Label);
+        _hasTrainingLoss = true;
     }
 
     public void Step()
@@ -749,7 +760,10 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         // Real optimizer step happened inside Backward()'s Train call.
     }
 
-    public double? LastLoss => Convert.ToDouble(Network.GetLastLoss());
+    // GetLastLoss returns zero before any step, so report no loss until Train has run.
+    private bool _hasTrainingLoss;
+
+    public double? LastLoss => _hasTrainingLoss ? Convert.ToDouble(Network.GetLastLoss()) : null;
 }
 
 internal sealed class AiDotNetMlpModel : AiDotNetBenchmarkModel
@@ -823,7 +837,12 @@ internal sealed class AiDotNetMlpFusedModel : IBenchmarkModel
     {
         var data = new float[batchSize * 784];
         var rng = new Random(1234);
-        for (var i = 0; i < data.Length; i++) data[i] = (float)rng.NextDouble();
+        // Standard normal, the same inputs as the mlp row and the twin's torch.randn.
+        for (var i = 0; i < data.Length; i++)
+        {
+            double u1 = 1.0 - rng.NextDouble(), u2 = rng.NextDouble();
+            data[i] = (float)(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+        }
         _input = new Tensor<float>(data, [batchSize, 784]);
     }
 
@@ -935,6 +954,8 @@ internal sealed class AiDotNetTransformerModel : AiDotNetBenchmarkModel
 internal sealed class AiDotNetGruModel : AiDotNetBenchmarkModel
 {
     public AiDotNetGruModel(int seed) : base(seed) { }
+    // No gru.weights.safetensors reference exists yet, so --verify-step1 must skip this row, not abort on the load.
+    public override bool HasStep1Twin => false;
     protected override int[] InputShapePerSample => new[] { 32, 32 };
     protected override int OutputClasses => 10;
     protected override IReadOnlyList<string> PyTorchModulePrefixes => ["gru", "head"];
