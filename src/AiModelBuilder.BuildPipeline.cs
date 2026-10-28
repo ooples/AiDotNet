@@ -3165,7 +3165,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <param name="samples">The single-sample tensors to stack.</param>
     /// <param name="stacked">The stacked <c>[samples.Length, *sampleShape]</c> tensor, or <c>null</c> on failure.</param>
-    /// <returns><c>true</c> if every sample is non-null and has the same shape; otherwise <c>false</c>.</returns>
+    /// <returns><c>true</c> if <paramref name="samples"/> is non-empty and every sample is non-null with the same
+    /// shape; otherwise <c>false</c>.</returns>
     /// <remarks>
     /// Even for samples.Length == 1 this still adds the leading batch dim,
     /// producing a [1, *sampleShape] tensor rather than passing the

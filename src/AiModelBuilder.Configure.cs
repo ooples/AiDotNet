@@ -1610,6 +1610,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
     /// <exception cref="InvalidOperationException">Thrown if no training path was configured, or the configured
     /// RAG components do not form a valid pipeline.</exception>
+    /// <exception cref="NotSupportedException">Streaming training options were configured but the data loader is not
+    /// an <c>IStreamingDataLoader</c>.</exception>
     /// <remarks>
     /// Before training, this applies the build-wide settings (gradient checkpointing, weight streaming, JIT
     /// compilation and the deterministic-by-default engine mode unless <see cref="AllowNondeterminism"/> was called),

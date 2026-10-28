@@ -2515,12 +2515,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Prediction runs the same steps the training data went through, in order: the fitted input preprocessing
     /// pipeline (if any) transforms the features; the configured safety filter (if any) validates and may sanitize
     /// them; the feature subset chosen during training is selected; the model predicts; fitted target scaling is
-    /// inverted; the postprocessing pipeline (if any) is applied; and the safety filter may filter the output. The
-    /// builder's JIT-compilation and determinism settings are re-applied on the calling thread first.
+    /// inverted; the postprocessing pipeline (if any) is applied; and the safety filter may filter the output. Before
+    /// these steps, the builder's JIT-compilation and determinism settings are re-applied on the calling thread.
     /// </para>
     /// <para>
-    /// Time-series models are the exception: for them the number of rows in <paramref name="newData"/> is the
-    /// forecast horizon, and the forecast continues the series the model was trained on.
+    /// Time-series models are the exception and skip the steps above: for them the number of rows in
+    /// <paramref name="newData"/> is the forecast horizon, and the forecast continues the series the model was
+    /// trained on.
     /// </para>
     /// <para><b>For Beginners:</b> This method makes predictions on new data using the trained model. You pass raw
     /// data in the same shape as your training features, and you get answers back in the same scale as your
