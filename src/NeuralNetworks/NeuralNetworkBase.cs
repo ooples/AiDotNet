@@ -1483,6 +1483,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
         if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        GuardParameterMutation();
 
         var destinations = new List<Tensor<T>>();
         bool streamable = true;
@@ -1547,15 +1548,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         foreach (var (source, destination) in pairs)
         {
-            source.AsSpan().CopyTo(destination.AsWritableSpan());
-            // AsWritableSpan deliberately does not publish a mutation. Consumers of live
-            // chunks and resident GPU buffers rely on this version, while CPU packed-weight
-            // caches key the backing array. Invalidate only the tensor/array actually written.
-            destination.IncrementVersion();
-            AiDotNet.Tensors.Engines.InferenceWeightCache.Invalidate(destination.GetLiveBackingArrayOrNull());
-            Engine.InvalidatePersistentTensor(destination);
-            GpuEngine?.InvalidateResidentWeightBuffer(destination);
+            Training.TensorCheckpoint<T>.CopyValues(source, destination);
         }
+        OnParametersRestored();
     }
 
     #region GPU Training Methods
@@ -3576,13 +3571,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
     }
 
-    /// <summary>Creates a distinct tensor object that shares storage copy-on-write with the source.</summary>
+    /// <summary>Creates an independent tensor, sharing CPU storage copy-on-write when supported.</summary>
     protected static Tensor<T>? CloneGeneratedTrainableTensor(Tensor<T>? source)
-        => source is null ? null : (Tensor<T>)source.CloneShared();
+        => source is null ? null : CopyOnWriteCloneHelper.ShareTensor(source);
 
-    /// <summary>Creates a distinct copy-on-write tensor object for required generated storage.</summary>
+    /// <summary>Creates independent required storage, sharing CPU storage copy-on-write when supported.</summary>
     protected static Tensor<T> CloneRequiredGeneratedTrainableTensor(Tensor<T> source)
-        => (Tensor<T>)source.CloneShared();
+        => CopyOnWriteCloneHelper.ShareTensor(source);
 
     /// <summary>Copies a generated readonly tensor into its constructor-created destination storage.</summary>
     protected static void CopyGeneratedTrainableTensorValues(
@@ -3597,7 +3592,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 $"Generated trainable tensor '{memberName}' has incompatible source/clone storage.");
         }
 
-        source.Data.Span.CopyTo(destination.Data.Span);
+        AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, destination);
     }
 
     /// <summary>Creates an independent generated trainable vector for an in-memory clone.</summary>
@@ -4973,9 +4968,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var bag = _retainedStreamingGrads;
         if (bag is null || source is null || grad is null) return;
 
-        var copy = new Tensor<T>(grad.Shape.ToArray());
-        grad.Data.Span.CopyTo(copy.Data.Span);
-        bag[source] = copy;
+        bag[source] = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { grad })[0];
     }
 
     /// <summary>Publishes anything retained during the step, then drops it.</summary>
@@ -13938,28 +13931,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
-        var saved = new List<(Tensor<T> Buffer, T[] Values)>();
-        foreach (var layer in Layers) SnapshotBuffers(layer, saved);
+        var buffers = new List<Tensor<T>>();
+        foreach (var layer in Layers) CollectSnapshotBuffers(layer, buffers);
+        var saved = AiDotNet.Training.TensorCheckpoint<T>.Capture(buffers);
         try
         {
             using (new NoGradScope<T>())
-                return ForwardForTraining(input).Clone();
+                return AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { ForwardForTraining(input) })[0];
         }
         finally
         {
-            foreach (var (buffer, values) in saved)
-                values.AsSpan().CopyTo(buffer.AsWritableSpan());
+            AiDotNet.Training.TensorCheckpoint<T>.Restore(buffers, saved);
         }
     }
 
-    private static void SnapshotBuffers(ILayer<T> layer, List<(Tensor<T> Buffer, T[] Values)> saved)
+    private static void CollectSnapshotBuffers(ILayer<T> layer, List<Tensor<T>> buffers)
     {
         if (layer is LayerBase<T> concrete)
         {
             foreach (var (_, buffer) in concrete.GetRegisteredBuffers())
-                saved.Add((buffer, buffer.ToArray()));
+                buffers.Add(buffer);
         }
-        foreach (var sub in layer.GetSubLayers()) SnapshotBuffers(sub, saved);
+        foreach (var sub in layer.GetSubLayers()) CollectSnapshotBuffers(sub, buffers);
     }
     /// <summary>
     /// Runs this network's forward on the caller's active gradient tape with the network frozen:
@@ -16927,7 +16920,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     {
                         try
                         {
-                            dstLayer.SetParameters(srcLayer.GetParameters());
+                            AiDotNet.Models.Parameters.ParameterTransfer.CopyLayer(srcLayer, dstLayer);
                         }
                         catch (ArgumentException ex)
                         {

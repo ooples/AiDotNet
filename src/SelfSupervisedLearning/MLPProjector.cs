@@ -34,8 +34,14 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public partial class MLPProjector<T> : IProjectorHead<T>
+public partial class MLPProjector<T> : IProjectorHead<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>, AiDotNet.Models.Parameters.IParameterLayoutSource
 {
+    IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> AiDotNet.Models.Parameters.IParameterChunkSource<T>.GetParameterStateChunks()
+        => ProjectorParameterTransfer<T>.StateChunks(this);
+
+    IReadOnlyList<AiDotNet.Models.Parameters.ParameterSlotDescriptor> AiDotNet.Models.Parameters.IParameterLayoutSource.GetParameterLayout()
+        => ProjectorParameterTransfer<T>.Layout(this);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
