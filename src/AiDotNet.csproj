@@ -32,7 +32,7 @@
 		<Description>A comprehensive .NET library for machine learning, deep learning, NLP, computer vision, and AI model serving. Licensed under BSL 1.1 — free for non-commercial use, community license available at aidotnet.dev. Model save/load requires a free or paid license after a 10-operation trial. Optional anonymous telemetry (opt-in via AIDOTNET_TELEMETRY=true) collects usage metrics — no PII or model data is collected.</Description>
 		<Company>CrowdTrainer LLC</Company>
 		<Authors>ooples</Authors>
-		<Copyright>Copyright (C) 2026 CrowdTrainer LLC</Copyright>
+		<Copyright>Copyright (C) 2024-2026 CrowdTrainer LLC</Copyright>
 		<PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
 		<RepositoryType>git</RepositoryType>
 		<RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>

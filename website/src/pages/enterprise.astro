@@ -37,7 +37,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </ul>
           <p class="text-slate-600 dark:text-slate-300 mt-2">
             These flags are <strong>cryptographically gated</strong>: the open-source build refuses
-            to honor them without a valid Ooples-issued enterprise license. This protects the BSL
+            to honor them without a valid CrowdTrainer LLC-issued enterprise license. This protects the BSL
             commercial terms while letting legitimate enterprise customers deploy clean binaries.
             See <a href="https://github.com/ooples/AiDotNet/blob/master/build/AiDotNet.Tensors.Enterprise.targets" class="text-blue-600 dark:text-blue-400 hover:underline">build/AiDotNet.Tensors.Enterprise.targets</a>
             for the gate implementation.
@@ -49,7 +49,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <p class="text-slate-600 dark:text-slate-300">
             Enterprise customers receive a signed license file (JSON document with ed25519 signature
             over license metadata). License validation runs entirely offline — no network callout to
-            an Ooples license server is required at any point during build, install, or runtime.
+            a CrowdTrainer LLC license server is required at any point during build, install, or runtime.
             License files expire annually per BSL terms and can be renewed by contacting
             <a href="mailto:admin@aidotnet.dev" class="text-blue-600 dark:text-blue-400 hover:underline">admin@aidotnet.dev</a>.
           </p>

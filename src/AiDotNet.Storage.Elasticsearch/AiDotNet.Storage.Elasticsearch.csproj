@@ -17,7 +17,7 @@
     <Description>Elasticsearch document-store backend for AiDotNet's retrieval-augmented generation pipeline. Implements IDocumentStore via the Elastic.Clients.Elasticsearch 9.x client. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
     <Company>CrowdTrainer LLC</Company>
     <Authors>ooples</Authors>
-    <Copyright>Copyright (C) 2026 CrowdTrainer LLC</Copyright>
+    <Copyright>Copyright (C) 2024-2026 CrowdTrainer LLC</Copyright>
     <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>

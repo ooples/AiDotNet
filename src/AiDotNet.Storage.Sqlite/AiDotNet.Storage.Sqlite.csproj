@@ -16,7 +16,7 @@
     <Description>SQLite-backed services for AiDotNet. Provides SqliteSqlSyntaxValidator (ISqlSyntaxValidator) for precise SQL validation in the program synthesizer. Opt-in: reference this package and register the validator via SqlSyntaxValidation.Validator. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
     <Company>CrowdTrainer LLC</Company>
     <Authors>ooples</Authors>
-    <Copyright>Copyright (C) 2026 CrowdTrainer LLC</Copyright>
+    <Copyright>Copyright (C) 2024-2026 CrowdTrainer LLC</Copyright>
     <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>

@@ -17,7 +17,7 @@
     <Description>PostgreSQL-backed services for AiDotNet. Provides PostgresGraphCheckpointer (IGraphCheckpointer) for durable agentic-graph checkpointing. Opt-in: reference this package to keep Npgsql out of the core package. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
     <Company>CrowdTrainer LLC</Company>
     <Authors>ooples</Authors>
-    <Copyright>Copyright (C) 2026 CrowdTrainer LLC</Copyright>
+    <Copyright>Copyright (C) 2024-2026 CrowdTrainer LLC</Copyright>
     <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
