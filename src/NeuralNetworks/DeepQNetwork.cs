@@ -488,7 +488,7 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
 
         for (int i = 0; i < Layers.Count; i++)
         {
-            _targetNetwork.Layers[i].SetParameters(Layers[i].GetParameters());
+            AiDotNet.Models.Parameters.ParameterTransfer.CopyLayer(Layers[i], _targetNetwork.Layers[i]);
         }
     }
 

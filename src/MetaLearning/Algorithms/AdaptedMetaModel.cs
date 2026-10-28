@@ -98,7 +98,8 @@ public partial class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBas
     /// </remarks>
     public override TOutput Predict(TInput input)
     {
-        var originalParams = InterfaceGuard.Parameterizable(BaseModel).GetParameters();
+        var checkpoint = new AiDotNet.Training.ModelParameterCheckpoint<T, TInput, TOutput>(InterfaceGuard.Parameterizable(BaseModel));
+        checkpoint.Capture();
         try
         {
             if (_modulationFactors is not null && _modulationFactors.Length > 0)
@@ -117,7 +118,7 @@ public partial class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBas
         }
         finally
         {
-            InterfaceGuard.Parameterizable(BaseModel).SetParameters(originalParams);
+            checkpoint.Restore();
         }
     }
 

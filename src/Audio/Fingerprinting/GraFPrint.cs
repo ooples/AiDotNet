@@ -437,9 +437,8 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         int pairBatch = first.Shape[0];
         var combined = Engine.TensorConcatenate(new[] { first, second }, axis: 0);
         var batchNorms = BatchNormalizationLayersOf(Layers).ToList();
-        var savedStatistics = batchNorms
-            .Select(bn => (Mean: bn.GetRunningMean().Clone(), Variance: bn.GetRunningVariance().Clone()))
-            .ToList();
+        var statistics = batchNorms.SelectMany(bn => new[] { bn.GetRunningMean(), bn.GetRunningVariance() }).ToArray();
+        var savedStatistics = AiDotNet.Training.TensorCheckpoint<T>.Capture(statistics);
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);
         try
@@ -456,14 +455,8 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         }
         finally
         {
-            for (int i = 0; i < batchNorms.Count; i++)
-            {
-                savedStatistics[i].Mean.AsSpan().CopyTo(batchNorms[i].GetRunningMean().AsWritableSpan());
-                savedStatistics[i].Variance.AsSpan().CopyTo(batchNorms[i].GetRunningVariance().AsWritableSpan());
-                batchNorms[i].GetRunningMean().IncrementVersion();
-                batchNorms[i].GetRunningVariance().IncrementVersion();
-                batchNorms[i].SetTrainingMode(false);
-            }
+            AiDotNet.Training.TensorCheckpoint<T>.Restore(statistics, savedStatistics);
+            foreach (var batchNorm in batchNorms) batchNorm.SetTrainingMode(false);
             SetTrainingMode(wasTraining);
         }
     }
