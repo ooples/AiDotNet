@@ -1,4 +1,4 @@
-// Copyright (c) AiDotNet. All rights reserved.
+// Copyright (c) CrowdTrainer LLC. All rights reserved.
 // #99 Stage 3 (exceed-industry combo): quantized paged KV decode. With int8 weight-only quantization
 // engaged, the per-sequence paged decode must still be correct — incremental (token-by-token) decode
 // equals the full forward — and stay close to the fp32 result. This lets more sequences stay resident
