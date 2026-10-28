@@ -200,11 +200,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
-    /// <summary>
-    /// Configures a scoring rule for evaluating probabilistic predictions.
-    /// </summary>
-    /// <param name="scorer">The scoring rule implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
     // ConfigureScoringRule was removed: the scoring rule is configured on the model's options
     // (NGBoostRegressionOptions<T>.ScoringRule, a nullable IScoringRule<T>), which is the one door.
     // A builder-level setter could not reach an already-constructed model whose rule is read in its

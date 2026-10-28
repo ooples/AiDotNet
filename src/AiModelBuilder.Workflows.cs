@@ -1415,18 +1415,21 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     // Deployment Configuration Methods
     // ============================================================================
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null)
     {
         _quantizationConfig = config;
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCompression(CompressionConfig? config = null)
     {
         _compressionConfig = config ?? new CompressionConfig();
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null)
     {
         _storage.ConfigureCaching(config);
@@ -1434,6 +1437,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null)
     {
         _storage.ConfigureVersioning(config);
@@ -1441,6 +1445,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null)
     {
         _storage.ConfigureABTesting(config);
@@ -1448,6 +1453,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null)
     {
         _observability.ConfigureTelemetry(config);
@@ -1809,6 +1815,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return new ProfilerSession(_profilingConfig);
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)
     {
         _exportConfig = config;
@@ -2346,7 +2353,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <para>
     /// Tokenizer selection:
     /// - If <paramref name="options"/> provides a tokenizer, it is used.
-    /// - Otherwise, if a tokenizer was configured earlier via <see cref="ConfigureTokenizer"/>, that tokenizer is reused.
+    /// - Otherwise, if an earlier <c>ConfigureProgramSynthesis</c> call on this builder resolved a tokenizer, that tokenizer is reused.
     /// - If no tokenizer is available, a code-aware tokenizer is created automatically based on the target language.
     /// </para>
     /// <para>

@@ -36,7 +36,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> These methods let you perform segmentation on images after configuring
-/// a model with <see cref="AiModelBuilder{T, TInput, TOutput}.ConfigureModel"/>. Each method
+/// a model with <see cref="AiModelBuilder{T, TInput, TOutput}.ConfigureModel(IFullModel{T, TInput, TOutput})"/>. Each method
 /// detects what kind of segmentation model you configured and calls the appropriate interface.
 ///
 /// Usage pattern:

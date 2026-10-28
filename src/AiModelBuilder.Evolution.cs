@@ -497,7 +497,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     /// <summary>Resolves the options a typed run should use and enforces the archive requirement.</summary>
     /// <param name="options">The options passed to the overload, or <see langword="null"/> to reuse the configured ones.</param>
+    /// <param name="hasCustomArchiveFactory">
+    /// <see langword="true"/> when the caller supplied its own archive factory, in which case the options need not
+    /// declare any <see cref="EvolutionOptions.Descriptors"/>.
+    /// </param>
     /// <returns>A validated copy.</returns>
+    /// <exception cref="ArgumentException">
+    /// No custom archive factory was supplied and the options declare no behaviour descriptors.
+    /// </exception>
     private EvolutionOptions ResolveTypedEvolutionOptions(EvolutionOptions? options, bool hasCustomArchiveFactory)
     {
         EvolutionOptions effective = options is null
@@ -527,6 +534,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="observer">The caller's observer, or <see langword="null"/>.</param>
     /// <param name="checkpointStore">The caller's checkpoint store, or <see langword="null"/> to derive one.</param>
     /// <param name="genomeDistance">The caller's structural distance metric, or <see langword="null"/>.</param>
+    /// <param name="archiveFactory">
+    /// The caller's per-island archive factory, or <see langword="null"/> for the MAP-Elites archive built from the options.
+    /// </param>
+    /// <param name="winnerModelFactory">
+    /// Adapter that turns the best genome into the built model, or <see langword="null"/> for a genome-only result.
+    /// </param>
     /// <param name="cancellationToken">Propagated into proposals, refinement, and evaluation.</param>
     /// <returns>The redacted summary and the engine's own typed result.</returns>
     private async Task<EvolutionRunOutcome> RunTypedEvolutionAsync<TGenome>(
@@ -578,6 +591,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="genomeDistance">
     /// The caller's structural distance metric, or <see langword="null"/>. Required by the engine whenever
     /// <see cref="EvolutionOptions.NoveltyDistanceThreshold"/> is positive.
+    /// </param>
+    /// <param name="archiveFactory">
+    /// The caller's per-island archive factory, or <see langword="null"/> for the MAP-Elites archive built from the options.
+    /// </param>
+    /// <param name="winnerModelFactory">
+    /// Adapter that turns the best genome into the built model, or <see langword="null"/> for a genome-only result.
     /// </param>
     /// <param name="seeds">The starting candidates.</param>
     /// <param name="maxElites">How many elites the summary retains.</param>
