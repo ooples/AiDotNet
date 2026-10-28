@@ -1737,12 +1737,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // #1789 run 29966681393: pin every generated model implicated by the currently failing
         // resource-bound shards to FP32. The shard-wide rule below already floats supported A-I/N-Z
         // families, but the audio/TTS smoke-iteration overrides intentionally key off this explicit
-        // roster. Listing the models here therefore ensures AudioLM, E2TTS, and IndexTTS2 receive
+        // roster. Listing the models here therefore ensures AudioLM and E2TTS receive
         // both halves of the established mitigation (float values plus bounded training probes), and
         // keeps all other implicated fixtures in float if shard boundaries change. Production
         // constructors, research-paper defaults, and public customization surfaces are untouched.
         "BayesianNeuralNetwork", "DeCLIP", "Dessurt", "DocGCN", "E2TTS",
-        "IndexTTS2", "LayoutLMv2", "LLM2CLIP", "Mamba2LanguageModel", "NemotronSpeech", "PatchTST", "TimeGPT",
+        "LayoutLMv2", "LLM2CLIP", "Mamba2LanguageModel", "NemotronSpeech", "PatchTST", "TimeGPT",
         // PR #1789 generated-shard failures: these training-bound models either exhausted the
         // runner or overflowed numerically in their FP64 generated fixtures. Apply the project's
         // precision-first policy; their production defaults and public configuration stay unchanged.
@@ -9745,19 +9745,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "IndexTTS2" && model.TypeParameterCount == 1)
             {
-                // IndexTTS2's production defaults retain its paper-scale autoregressive
-                // text-to-semantic stack and paper AdamW learning rate. The generated
-                // invariant uses the same embedding -> Transformer -> acoustic-token
-                // projection through public options at CI scale so strict convergence
-                // can be tested without a 12-layer, 8192-way CPU update.
+                // IndexTTS2 is w2v-BERT 2.0, the semantic codec, a conformer-perceiver GPT-2, the seed-vc DiT flow, CAM++ and
+                // BigVGAN-v2; keep every one at width 8-32 with one or two layers (w2v-BERT's second hidden state, 32 semantic
+                // codes, the vocoder still hopping 256 samples). Generation is capped at eight semantic tokens and the flow at
+                // two Euler steps. The rate is raised to 1e-3 so fifteen steps of the sampled objective descend.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 8, outputSize: 80), " +
-                    "new AiDotNet.TextToSpeech.Latest.IndexTTS2Options { TextEncoderDim = 32, LLMDim = 32, " +
-                    "NumEncoderLayers = 1, NumLLMLayers = 2, NumHeads = 4, VocabSize = 64, " +
-                    "NumCodebooks = 1, CodebookSize = 80, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0, LearningRate = 2e-4 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.Latest.IndexTTS2Options { " +
+                    "HiddenDim = 16, NumHeads = 2, Layers = 1, MaxTextLength = 16, MaxMelTokens = 64, VocabSize = 64, MelCodes = 34, " +
+                    "ConditionLatents = 4, ConditionDim = 8, ConditionLinearUnits = 16, ConditionHeads = 2, ConditionBlocks = 1, " +
+                    "EmotionConditionDim = 8, EmotionConditionLinearUnits = 16, EmotionConditionHeads = 2, EmotionConditionBlocks = 1, " +
+                    "SemanticHiddenSize = 32, SemanticHeads = 4, SemanticIntermediateSize = 64, SemanticLayer = 2, " +
+                    "SemanticCodebookSize = 32, SemanticCodebookDim = 4, SemanticCodecDim = 16, SemanticCodecIntermediate = 32, SemanticCodecLayers = 1, " +
+                    "MelChannels = 16, DitHidden = 16, DitHeads = 2, DitDepth = 3, StyleDim = 16, RegulatorChannels = 16, RegulatorStages = 1, " +
+                    "WavenetHidden = 16, WavenetLayers = 2, DiffusionSteps = 2, SpeakerEncoderGrowthRate = 8, SpeakerEncoderChannels = 16, " +
+                    "VocoderInitialChannels = 64, VocoderResBlockKernels = new[] { 3 }, VocoderResBlockDilations = new[] { new[] { 1 } }, " +
+                    "MaxGeneratedTokens = 8, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "InvestLM" && model.TypeParameterCount == 1)
             {
@@ -16028,7 +16033,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "BarkModel" or "FishSpeech"
                         or "XTTSv2Clone"
-                        or "GLM4Voice" or "IndexTTS2" or "SeedTTS";
+                        or "GLM4Voice" or "SeedTTS";
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataShortIterations => 1;"
                     : "    protected override int MoreDataShortIterations => 3;");
@@ -16036,7 +16041,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
                 if (model.ClassName is "Bark" or "BarkModel"
-                    or "GLM4Voice" or "IndexTTS2" or "SeedTTS"
+                    or "GLM4Voice" or "SeedTTS"
                     || IsValleCodecLMModel(model.ClassName))
                 {
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
@@ -16414,6 +16419,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
+                else if (model.ClassName == "IndexTTS2")
+                {
+                    // IndexTTS2 reads a text's token ids and trains on a 22.05 kHz recording: eight ids, and 8820 samples (0.4 s:
+                    // 20 semantic tokens). Its training draws a duration drop, so the probes compare the objective at a fixed draw.
+                    // Text goes through the release's bpe.model, which CI does not have: the text-in tests skip without it.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 8820 };");
+                    sb.AppendLine("    protected override string? SynthesisUnavailableReason =>");
+                    sb.AppendLine("        \"IndexTTS2 tokenizes text with the release's bpe.model (IndexTTS2Options.BpeModelPath), which is not set here.\";");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
                 else if (model.ClassName == "MaskGCT")
@@ -22002,7 +22024,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "UniAudio" or "Zonos" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
-            or "IndexTTS" or "IndexTTS2"
+            or "IndexTTS"
             or "SeedTTS" or "SeedTTSClone"
             or "SpeechGPT" or "SpiritLM"
             or "Amphion" or "Dia" or "GLM4Voice" or "WhisperSpeech"
@@ -22023,7 +22045,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             "VALLEXClone" => 16,
             "IndexTTS" => 16,
-            "IndexTTS2" => 80,
             "SeedTTS" => 16,
             "SeedTTSClone" => 16,
             "SpeechGPT" => 16,
@@ -22062,7 +22083,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return IsValleCodecLMModel(className)
             || className is "Bark" or "BarkModel"
-            || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2"
+            || className is "GLM4Voice" or "IndexTTS"
                 or "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM" or "Zonos"
                 ? 64 : 256;
