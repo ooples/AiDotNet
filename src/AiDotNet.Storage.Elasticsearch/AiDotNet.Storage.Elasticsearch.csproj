@@ -15,9 +15,9 @@
     <Version>0.204.0</Version>
     <Title>AiDotNet.Storage.Elasticsearch</Title>
     <Description>Elasticsearch document-store backend for AiDotNet's retrieval-augmented generation pipeline. Implements IDocumentStore via the Elastic.Clients.Elasticsearch 9.x client. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
-    <Company>Ooples Finance</Company>
+    <Company>CrowdTrainer LLC</Company>
     <Authors>ooples</Authors>
-    <Copyright>Ooples Finance LLC 2023</Copyright>
+    <Copyright>Copyright (C) 2026 CrowdTrainer LLC</Copyright>
     <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>

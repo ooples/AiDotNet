@@ -13,9 +13,9 @@
     <Version>0.204.0</Version>
     <Title>AiDotNet.Storage.Redis</Title>
     <Description>Redis-backed services for AiDotNet. Provides RedisGraphCheckpointer (IGraphCheckpointer) for durable, distributed agentic-graph checkpointing. Opt-in: reference this package to keep StackExchange.Redis out of the core package. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
-    <Company>Ooples Finance</Company>
+    <Company>CrowdTrainer LLC</Company>
     <Authors>ooples</Authors>
-    <Copyright>Ooples Finance LLC 2023</Copyright>
+    <Copyright>Copyright (C) 2026 CrowdTrainer LLC</Copyright>
     <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>

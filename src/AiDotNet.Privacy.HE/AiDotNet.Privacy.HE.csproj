@@ -13,9 +13,9 @@
     <Version>0.204.0</Version>
     <Title>AiDotNet.Privacy.HE</Title>
     <Description>Homomorphic-encryption provider for AiDotNet federated learning, implemented with Microsoft SEAL. Provides SealHomomorphicEncryptionProvider (IHomomorphicEncryptionProvider) for encrypted weighted-average aggregation. Opt-in: reference this package and pass the provider to InMemoryFederatedTrainer. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
-    <Company>Ooples Finance</Company>
+    <Company>CrowdTrainer LLC</Company>
     <Authors>ooples</Authors>
-    <Copyright>Ooples Finance LLC 2023</Copyright>
+    <Copyright>Copyright (C) 2026 CrowdTrainer LLC</Copyright>
     <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
