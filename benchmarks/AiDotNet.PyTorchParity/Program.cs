@@ -141,6 +141,7 @@ internal sealed record BenchmarkOptions(
     int BatchSize,
     int InferenceIterations,
     int WarmupIterations,
+    int WarmupMinMs,
     int Seed,
     string OutputPath,
     string? VerifyStep1Dir,
@@ -169,6 +170,7 @@ internal sealed record BenchmarkOptions(
             Int(map, "batch-size", 64),
             Int(map, "inference-iterations", 100),
             Int(map, "warmup-iterations", 10),
+            Int(map, "warmup-min-ms", 1000),
             Int(map, "seed", 1234),
             map.GetValueOrDefault("output", "results/aidotnet.json"),
             map.GetValueOrDefault("verify-step1"),
@@ -308,9 +310,13 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             model.LoadSyntheticBatch(batchSize);
 
             // Warmup iterations prime JIT compilation and tensor internals before
-            // steady-state measurements are recorded.
+            // steady-state measurements are recorded. A count alone is not enough: .NET runs a method as
+            // unoptimized tier-0 code until it has been called 30 times AND no new tier-0 code has run for 100 ms,
+            // so 10 calls of a 0.1 ms forward (1 ms) timed tier-0 code for whichever batch ran first (#2386:
+            // b1/b8 read 3-4x slower first than after a b128 pass). Also warm for at least --warmup-min-ms.
             var warmup = new List<double>();
-            for (var i = 0; i < options.WarmupIterations; i++)
+            var warmupClock = Stopwatch.StartNew();
+            for (var i = 0; i < options.WarmupIterations || warmupClock.Elapsed.TotalMilliseconds < options.WarmupMinMs; i++)
             {
                 var timer = Stopwatch.StartNew();
                 model.Forward();

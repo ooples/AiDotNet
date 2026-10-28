@@ -90,6 +90,7 @@ our worst-of-95% steady-state latency still beats their average.
 | `--batch-size` | `64` | training batch size |
 | `--inference-iterations` | `100` | steady-state inference iterations per batch size |
 | `--warmup-iterations` | `10` | warmup iterations before measuring |
+| `--warmup-min-ms` | `1000` | also warm each batch size for at least this long. .NET runs tier-0 (unoptimized) code until a method has 30 calls and no new tier-0 code has run for 100 ms, so a count-only warm-up timed tier-0 code for whichever batch ran first (#2386) |
 | `--seed` | `1234` | RNG seed |
 | `--output` | `results/{aidotnet,pytorch}.json` | report path |
 | `--threads` (PyTorch) | `0` (all cores) | pin CPU threads; match `AIDOTNET_BLAS_THREADS` |

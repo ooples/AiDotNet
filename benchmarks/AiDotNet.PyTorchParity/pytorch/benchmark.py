@@ -402,12 +402,14 @@ def json_loss(value: float) -> float | str:
 
 @torch.inference_mode()
 def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.device, iterations: int, warmup: int,
-                        batch_sizes: list[int]) -> list[InferenceBatchResult]:
+                        batch_sizes: list[int], warmup_min_ms: float = 0.0) -> list[InferenceBatchResult]:
     results: list[InferenceBatchResult] = []
     for batch_size in batch_sizes:
         x, _ = synthetic_batch(batch_size, shape, device)
         warmup_times: list[float] = []
-        for _ in range(warmup):
+        # Same rule as the C# twin: at least warmup calls and at least warmup_min_ms of warm-up per batch size.
+        warmup_start = time.perf_counter()
+        while len(warmup_times) < warmup or (time.perf_counter() - warmup_start) * 1000.0 < warmup_min_ms:
             start = time.perf_counter()
             model(x)
             synchronize(device)
@@ -469,7 +471,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown)
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
-                                        [int(b) for b in args.inference_batches.split(",")])
+                                        [int(b) for b in args.inference_batches.split(",")], args.warmup_min_ms)
         model_results.append(ModelResult(name, str(device), parameters, training, inference))
 
     return {
@@ -492,6 +494,8 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--inference-iterations", type=int, default=100)
     parser.add_argument("--warmup-iterations", type=int, default=10)
+    parser.add_argument("--warmup-min-ms", type=float, default=1000.0,
+                        help="Also warm each batch size for at least this long (the C# side needs it for JIT tier-up).")
     parser.add_argument("--inference-batches", default=",".join(str(b) for b in BATCH_SIZES),
                         help="Comma-separated inference batch sizes (the C# side takes the same flag).")
     parser.add_argument("--seed", type=int, default=1234)
