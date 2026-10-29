@@ -386,7 +386,10 @@ internal sealed class DifferentiableMel<T>
     private readonly Tensor<T> _sin;
     private readonly Tensor<T> _mel;
 
-    public DifferentiableMel(IEngine engine, int sampleRate, int fftSize, int hopSize, int windowSize, int melChannels, double fMin, double fMax)
+    /// <param name="singlePrecisionBasis">librosa's float32 filterbank exactly (its default dtype, as references that keep
+    /// it, such as Amphion's <c>MelSpectrogram</c>, compute with it).</param>
+    public DifferentiableMel(IEngine engine, int sampleRate, int fftSize, int hopSize, int windowSize, int melChannels, double fMin, double fMax,
+        bool singlePrecisionBasis = false)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         _engine = engine;
@@ -406,7 +409,8 @@ internal sealed class DifferentiableMel<T>
                 _cos[n, k] = ops.FromDouble(window[n] * Math.Cos(a));
                 _sin[n, k] = ops.FromDouble(-window[n] * Math.Sin(a));
             }
-        var basis = new TacotronSpectrogram(sampleRate, fftSize, hopSize, windowSize, melChannels, fMin, fMax).MelBasis;
+        var basis = singlePrecisionBasis ? TacotronSpectrogram.LibrosaFloat32MelBasis(sampleRate, fftSize, melChannels, fMin, fMax)
+            : new TacotronSpectrogram(sampleRate, fftSize, hopSize, windowSize, melChannels, fMin, fMax).MelBasis;
         _mel = new Tensor<T>(new[] { bins, melChannels });
         for (int m = 0; m < melChannels; m++)
             for (int k = 0; k < bins; k++) _mel[k, m] = ops.FromDouble(basis[m, k]);
