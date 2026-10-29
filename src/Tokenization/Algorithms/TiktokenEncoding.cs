@@ -8,6 +8,17 @@ using System.Text.RegularExpressions;
 
 namespace AiDotNet.Tokenization.Algorithms
 {
+    /// <summary>The pre-tokenizer pattern a <see cref="TiktokenEncoding"/> splits text with.</summary>
+    internal enum TiktokenPattern
+    {
+        /// <summary>GPT-2's (r50k, Whisper): <c>'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+</c>.</summary>
+        Gpt2,
+
+        /// <summary>cl100k's, as GLM-4 uses it: <c>(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}|
+        /// ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+</c>.</summary>
+        Cl100k,
+    }
+
     /// <summary>
     /// A tiktoken byte-level BPE encoding (OpenAI's <c>tiktoken.Encoding</c>): a rank for every mergeable byte sequence,
     /// the GPT-2 pre-tokenizer pattern, and special tokens numbered after the ranks.
@@ -29,11 +40,15 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly Dictionary<string, int> _specials;
         private readonly Dictionary<int, string> _specialById;
         private readonly Regex? _specialPattern;
+        private readonly TiktokenPattern _pattern;
 
         /// <param name="ranks">Each mergeable byte sequence's rank; the ranks must be exactly 0 … count − 1.</param>
         /// <param name="specialTokens">Special tokens in id order, numbered from the number of ranks.</param>
-        public TiktokenEncoding(IReadOnlyDictionary<byte[], int> ranks, IReadOnlyList<string> specialTokens)
+        /// <param name="pattern">The pre-tokenizer pattern (GPT-2's).</param>
+        public TiktokenEncoding(IReadOnlyDictionary<byte[], int> ranks, IReadOnlyList<string> specialTokens,
+            TiktokenPattern pattern = TiktokenPattern.Gpt2)
         {
+            _pattern = pattern;
             if (ranks is null) throw new ArgumentNullException(nameof(ranks));
             if (specialTokens is null) throw new ArgumentNullException(nameof(specialTokens));
             _ranks = new Dictionary<string, int>(ranks.Count, StringComparer.Ordinal);
@@ -133,12 +148,25 @@ namespace AiDotNet.Tokenization.Algorithms
             return Encoding.UTF8.GetString(bytes.ToArray());
         }
 
+        /// <summary>The pre-tokens of ordinary text (special tokens not matched), as the pattern splits it.</summary>
+        internal List<string> PreTokens(string text)
+        {
+            var pieces = new List<string>();
+            for (int position = 0; position < text.Length;)
+            {
+                int length = _pattern == TiktokenPattern.Cl100k ? Cl100kTokenLength(text, position, text.Length) : PreTokenLength(text, position, text.Length);
+                pieces.Add(text.Substring(position, length));
+                position += length;
+            }
+            return pieces;
+        }
+
         private void EncodeOrdinary(string text, int start, int end, List<int> ids)
         {
             int position = start;
             while (position < end)
             {
-                int length = PreTokenLength(text, position, end);
+                int length = _pattern == TiktokenPattern.Cl100k ? Cl100kTokenLength(text, position, end) : PreTokenLength(text, position, end);
                 var utf8 = Encoding.UTF8.GetBytes(text.Substring(position, length));
                 string piece = ToKey(utf8, 0, utf8.Length);
                 if (_ranks.TryGetValue(piece, out int whole)) ids.Add(whole);
@@ -248,6 +276,51 @@ namespace AiDotNet.Tokenization.Algorithms
             }
             // \s+(?!\S) | \s+ — a run of whitespace, giving its last character to a following non-space when it can.
             int spaceEnd = RunEnd(text, position, end, Kind.Space);
+            int run = spaceEnd - position;
+            return spaceEnd == end || run == 1 ? run : run - 1;
+        }
+
+        private static bool IsNewline(char c) => c is '\r' or '\n';
+
+        /// <summary>The length of cl100k's pattern match at <paramref name="position"/>, its alternatives in order.</summary>
+        private static int Cl100kTokenLength(string text, int position, int end)
+        {
+            // (?i:'s|'t|'re|'ve|'m|'ll|'d)
+            if (text[position] == '\'' && position + 1 < end)
+            {
+                char a = char.ToLowerInvariant(text[position + 1]);
+                if (a is 's' or 't' or 'm' or 'd') return 2;
+                if (position + 2 < end)
+                {
+                    char b = char.ToLowerInvariant(text[position + 2]);
+                    if ((a == 'r' && b == 'e') || (a == 'v' && b == 'e') || (a == 'l' && b == 'l')) return 3;
+                }
+            }
+            var kind = KindAt(text, position, out int width);
+            // [^\r\n\p{L}\p{N}]?\p{L}+
+            if (kind == Kind.Letter) return RunEnd(text, position, end, Kind.Letter) - position;
+            if (kind != Kind.Number && !IsNewline(text[position]) && position + width < end && KindAt(text, position + width, out _) == Kind.Letter)
+                return RunEnd(text, position + width, end, Kind.Letter) - position;
+            // \p{N}{1,3}
+            if (kind == Kind.Number)
+            {
+                int index = position;
+                for (int n = 0; n < 3 && index < end && KindAt(text, index, out int w) == Kind.Number; n++) index += w;
+                return index - position;
+            }
+            //  ?[^\s\p{L}\p{N}]+[\r\n]*
+            int from = text[position] == ' ' && position + 1 < end && KindAt(text, position + 1, out _) == Kind.Other ? position + 1 : position;
+            if (KindAt(text, from, out _) == Kind.Other)
+            {
+                int index = RunEnd(text, from, end, Kind.Other);
+                while (index < end && IsNewline(text[index])) index++;
+                return index - position;
+            }
+            // \s*[\r\n]+ : the whitespace run up to and including its last newline.
+            int spaceEnd = RunEnd(text, position, end, Kind.Space);
+            for (int i = spaceEnd - 1; i >= position; i--)
+                if (IsNewline(text[i])) return i + 1 - position;
+            // \s+(?!\S) | \s+
             int run = spaceEnd - position;
             return spaceEnd == end || run == 1 ? run : run - 1;
         }
