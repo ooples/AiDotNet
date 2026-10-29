@@ -16,7 +16,8 @@ namespace AiDotNet.Safety.Watermarking;
 /// The watermark is computed on the image's luminance (the mean over channels) and the same spatial change is added
 /// to every channel. The image is split into tiles of at most <see cref="MaxTileSize"/> pixels per side, and each tile
 /// carries its own pattern, so the cost grows linearly with the pixel count and averaging tiles reveals nothing.
-/// Images above <see cref="MaxPixels"/> pixels are rejected.
+/// Embedding rejects images above <see cref="MaxPixels"/> pixels; detection reports no evidence for them, so a safety
+/// pipeline that checks a huge image still completes.
 /// </para>
 /// <para>
 /// Detection is a correlation test over every tile: with the selected transform coefficients c and the key's pattern
@@ -57,6 +58,13 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
 
     private const double MinimumAmplitudeFraction = 0.02;
 
+    // Detection maps the correlation z-score linearly from confidence 0 at ZeroConfidenceZ to 1 at FullConfidenceZ.
+    private const double ZeroConfidenceZ = 3.0;
+    private const double FullConfidenceZ = 6.0;
+
+    // Coefficients whose RMS is below 1e-9 (mean square below this) are rounding error, not evidence.
+    private const double MinimumMeanSquare = 1e-18;
+
     private readonly byte[] _keyBytes;
 
     /// <summary>
@@ -73,8 +81,8 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
     {
         if (double.IsNaN(watermarkStrength) || double.IsInfinity(watermarkStrength) || watermarkStrength <= 0)
             throw new ArgumentOutOfRangeException(nameof(watermarkStrength), "Watermark strength must be a positive, finite number.");
-        if (key is not null && key.Length == 0)
-            throw new ArgumentException("A watermark key must not be empty; pass null for the public key.", nameof(key));
+        if (key is not null && string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("A watermark key must not be empty or whitespace; pass null for the public key.", nameof(key));
         WatermarkStrength = watermarkStrength;
         _keyBytes = Encoding.UTF8.GetBytes(key ?? PublicKey);
     }
@@ -105,10 +113,16 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
     protected abstract double[,] TileDelta(int height, int width, double[] coefficientChanges);
 
     /// <inheritdoc />
-    /// <exception cref="ArgumentException">The image is too small to carry the watermark, or larger than <see cref="MaxPixels"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// The image is too small to carry the watermark, larger than <see cref="MaxPixels"/>, or the strength is too low
+    /// for the mark to reach full detection confidence on it.
+    /// </exception>
     public Tensor<T> EmbedWatermark(Tensor<T> image)
     {
         var (channels, height, width) = ImageDimensions(image);
+        if ((long)height * width > MaxPixels)
+            throw new ArgumentException(
+                $"A {height}x{width} image exceeds the {MaxPixels}-pixel limit of {ModuleName}.", nameof(image));
         int smallest = SmallestTileCoefficients(height, width);
         if (smallest < MinimumCoefficients)
             throw new ArgumentException(
@@ -123,10 +137,16 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
         var luminance = Luminance(values, channels, height, width);
         var delta = new double[height, width];
         int tileIndex = 0;
+        // Expected detection z of the mark: sum(a_t * n_t) / sqrt(sum(n_t * (spread_t^2 + a_t^2))), taking the host
+        // coefficients as uncorrelated with the key pattern.
+        double expectedSignal = 0, expectedVariance = 0;
         foreach (var (y0, x0, h, w) in Tiles(height, width))
         {
             var coefficients = TileCoefficients(Crop(luminance, y0, x0, h, w));
-            double amplitude = Amplitude(RobustSpread(coefficients), valueScale);
+            double spread = RobustSpread(coefficients);
+            double amplitude = Amplitude(spread, valueScale);
+            expectedSignal += amplitude * coefficients.Length;
+            expectedVariance += coefficients.Length * ((spread * spread) + (amplitude * amplitude));
             var pattern = KeyPattern(coefficients.Length, tileIndex++);
             var changes = new double[pattern.Length];
             for (int k = 0; k < changes.Length; k++) changes[k] = amplitude * pattern[k];
@@ -134,6 +154,13 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++) delta[y0 + y, x0 + x] = tileDelta[y, x];
         }
+
+        double expectedZ = expectedVariance > 0 ? expectedSignal / Math.Sqrt(expectedVariance) : 0;
+        if (expectedZ < FullConfidenceZ)
+            throw new ArgumentException(
+                $"At strength {WatermarkStrength} the mark on this {height}x{width} image would reach an expected detection " +
+                $"z of {expectedZ:F1}, below the {FullConfidenceZ} needed for full confidence; raise the strength or use a larger image.",
+                nameof(image));
 
         int plane = height * width;
         for (int c = 0; c < channels; c++)
@@ -149,10 +176,11 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
     }
 
     /// <inheritdoc />
-    /// <exception cref="ArgumentException">The image is larger than <see cref="MaxPixels"/>.</exception>
+    /// <remarks>An image larger than <see cref="MaxPixels"/> is not examined and scores 0 (no evidence).</remarks>
     public double DetectWatermark(Tensor<T> image)
     {
         var (channels, height, width) = ImageDimensions(image);
+        if ((long)height * width > MaxPixels) return 0;
         if (SmallestTileCoefficients(height, width) < MinimumCoefficients) return 0;
 
         var luminance = Luminance(ToDoubles(image), channels, height, width);
@@ -172,10 +200,10 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
         }
 
         // Coefficients at rounding-error level (an RMS below 1e-9) carry no evidence either way.
-        double z = energy > 1e-18 * count ? dot / Math.Sqrt(energy) : 0;
+        double z = energy > MinimumMeanSquare * count ? dot / Math.Sqrt(energy) : 0;
         // Non-finite pixels give no usable correlation, so they are no evidence of a watermark.
         if (double.IsNaN(z) || double.IsInfinity(z)) return 0;
-        return Math.Max(0.0, Math.Min(1.0, (z - 3.0) / 3.0));
+        return Math.Max(0.0, Math.Min(1.0, (z - ZeroConfidenceZ) / (FullConfidenceZ - ZeroConfidenceZ)));
     }
 
     /// <inheritdoc />
@@ -331,9 +359,6 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
                 $"Expected an image of shape [H, W], [C, H, W] or [1, C, H, W]; got [{string.Join(", ", s.ToArray())}].",
                 nameof(image)),
         };
-        if ((long)height * width > MaxPixels)
-            throw new ArgumentException(
-                $"A {height}x{width} image exceeds the {MaxPixels}-pixel limit of {ModuleName}.", nameof(image));
         return (channels, height, width);
     }
 

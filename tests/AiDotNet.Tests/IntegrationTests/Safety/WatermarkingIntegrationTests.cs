@@ -144,22 +144,37 @@ public class WatermarkingIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ImageWatermarker_RejectsImagesAboveItsPixelLimit()
+    public async Task ImageWatermarker_RejectsOversizedImagesForEmbedding_AndReportsNoEvidenceOnDetection()
     {
         await Task.Yield();
         var watermarker = new SmallLimitWatermarker();
         var image = CreateRandomImageTensor(1, 40, 40);
         Assert.Throws<ArgumentException>(() => watermarker.EmbedWatermark(image));
-        Assert.Throws<ArgumentException>(() => watermarker.DetectWatermark(image));
+        // A safety pipeline evaluating a huge image must still complete, so detection reports no evidence.
+        Assert.Equal(0.0, watermarker.DetectWatermark(image));
+        Assert.Empty(watermarker.EvaluateImage(image));
         var allowed = CreateRandomImageTensor(1, 32, 32);
         Assert.True(watermarker.DetectWatermark(watermarker.EmbedWatermark(allowed)) >= 0.9);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ImageWatermarker_EmptyKey_IsRejected()
+    public async Task ImageWatermarker_EmptyOrBlankKey_IsRejected()
     {
         await Task.Yield();
         Assert.Throws<ArgumentException>(() => new ImageWatermarker<double>(key: ""));
+        Assert.Throws<ArgumentException>(() => new ImageWatermarker<double>(key: "   "));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EmbedWatermark_RefusesAStrengthTooLowToBeDetected()
+    {
+        await Task.Yield();
+        // At strength 0.05 a 64 x 64 noise image's mark would reach an expected z near 2, which scores 0.
+        var image = CreateRandomImageTensor(3, 64, 64);
+        var weak = new InvisibleImageWatermarker<double>(watermarkStrength: 0.05);
+        var error = Assert.Throws<ArgumentException>(() => weak.EmbedWatermark(image));
+        Assert.Contains("expected detection z", error.Message);
+        Assert.True(new InvisibleImageWatermarker<double>().DetectWatermark(new InvisibleImageWatermarker<double>().EmbedWatermark(image)) >= 0.9);
     }
 
     private sealed class SmallLimitWatermarker : ImageWatermarker<double>

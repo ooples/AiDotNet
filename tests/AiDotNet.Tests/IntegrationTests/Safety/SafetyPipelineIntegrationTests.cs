@@ -417,10 +417,18 @@ public class SafetyPipelineIntegrationTests
             new SafetyConfig { Watermarking = { ImageWatermarking = true } }));
         Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(
             new SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = "k-123", WatermarkStrength = 0 } }));
+        // A blank key, or the published public key, is no secret of the application's own.
+        Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = "   " } }));
+        Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = ImageWatermarkerBase<double>.PublicKey } }));
 
         // Detection alone needs no key: it looks for marks made with the public key.
         var detectOnly = SafetyPipelineFactory<double>.Create(new SafetyConfig { Watermarking = { DetectionMode = true } });
         Assert.Contains(detectOnly.Modules, m => m is ImageWatermarker<double>);
+        var detectBlank = SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { DetectionMode = true, ImageWatermarkKey = "   " } });
+        Assert.Contains(detectBlank.Modules, m => m is ImageWatermarker<double>);
     }
 
     [Fact(Timeout = 120000)]
