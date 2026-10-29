@@ -71,6 +71,21 @@ public class AdafactorOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimi
     /// </summary>
     public double Beta1 { get; set; } = double.NaN;
 
+    /// <summary>
+    /// Whether matrices keep the factored (row and column) second moment; false keeps a full one per element.
+    /// </summary>
+    /// <remarks>PaLM trains with Adafactor "without factorization" (Chowdhery et al. 2022 §5), which makes it Adam
+    /// with parameter scaling.</remarks>
+    public bool Factored { get; set; } = true;
+
+    /// <summary>
+    /// Whether the step size is multiplied by the RMS of the parameters it updates (floored at
+    /// <see cref="ParameterScaleFloor"/>); null does so exactly when <see cref="UseRelativeStepSize"/> is on.
+    /// </summary>
+    /// <remarks>The reference implementations' <c>scale_parameter</c> / <c>multiply_by_parameter_scale</c>. PaLM
+    /// keeps it with a stated rate.</remarks>
+    public bool? MultiplyByParameterScale { get; set; }
+
     /// <summary>Decoupled weight decay, applied to the parameters rather than the gradient.</summary>
     public double WeightDecay { get; set; } = 0.0;
 }

@@ -1,44 +1,40 @@
-﻿using AiDotNet.LearningRateSchedulers;
-using AiDotNet.Enums;
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Latest;
+using AiDotNet.TextToSpeech.MultiModal;
 
 namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 
 /// <summary>
-/// AudioPaLM: large language model for speech understanding and generation
+/// AudioPaLM's speech recognition (Rubenstein et al. 2023): the same decoder over text and audio tokens as
+/// <see cref="AiDotNet.TextToSpeech.MultiModal.AudioPaLM{T}"/>, given <c>[ASR language]</c> and a recording's audio tokens,
+/// writing the transcript.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "AudioPaLM: A Large Language Model That Can Speak and Listen" (Rubenstein et al., Google, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> AudioPaLM fuses the PaLM-2 text language model with AudioLM's speech processing capabilities into a single multimodal model. For ASR, speech is encoded using USM encoder features, which are projected into PaLM-2's embedding space. The model genera...</para>
-/// <para>
-/// AudioPaLM fuses the PaLM-2 text language model with AudioLM's speech processing capabilities into a single multimodal model. For ASR, speech is encoded using USM encoder features, which are projected into PaLM-2's embedding space. The model generates text tokens conditioned on the speech input, leveraging PaLM-2's massive language understanding. AudioPaLM achieves state-of-the-art on speech translation while maintaining competitive ASR performance.
-/// </para>
+/// <para>The recording becomes 25 Hz audio tokens (w2v-BERT's k-means codes, §3.1), offset past the text vocabulary
+/// (§3.2), after the task tag in the text tokenizer's tokens (§3.4); the decoder continues with the transcript's text
+/// tokens and an end token. Training is AudioPaLM's: the cross-entropy of the transcript with the input's positions
+/// masked, Adafactor at a constant 5e-5 (§3.6).</para>
+/// <para><b>For Beginners:</b> AudioPaLM is a language model that also understands "audio words". To transcribe, it
+/// turns speech into audio words and writes the text that follows the instruction "[ASR English]".</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// var audioTensor = Tensor&lt;float&gt;.CreateRandom(1, 16000);
-/// // Create AudioPaLM for speech recognition using ONNX
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.SpeechRecognition,
-///     inputSize: 80,
-///     outputSize: 32000);
-///
-/// var model = new AudioPaLM&lt;float&gt;(architecture, "audiopalm.onnx");
-///
-/// // Transcribe audio
-/// var result = model.Transcribe(audioTensor);
-/// // Result is available in the returned value
+/// var options = AudioPaLMOptions.Gemma2B();
+/// var model = new AudioPaLM&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
+///     NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), options);
+/// model.LoadGemmaWeights("gemma-2b");
+/// model.FitSpeechTokenizer(recordings);
+/// model.Train(recording, transcriptIds);
+/// var result = model.Transcribe(recording, "en");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -46,87 +42,237 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.SpeechRecognition)]
-[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioPaLM: A Large Language Model That Can Speak and Listen", "https://arxiv.org/abs/2306.12925", Year = 2023, Authors = "Rubenstein et al.")]
-[PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 1e-4, MinLearningRate = 1e-5,
-                Phase = TrainingPhase.PreTraining,
-                Schedule = LearningRateSchedulerType.LinearWarmup,
-                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
-                Source = "Rubenstein et al. 2023: a learning rate schedule of linear ramp-up to 1e-4 followed by exponential decay to 1e-5. The decay is declared as the closest shape this library builds after a ramp; the paper says exponential.")]
 [PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 5e-5,
-                Phase = TrainingPhase.FineTuning,
-                Source = "Rubenstein et al. 2023: we finetune with the Adafactor optimizer with a constant learning rate of 5e-5. A stated rate stands Adafactor relative step rule down.")]
+                Source = "Rubenstein et al. 2023 §3.6: the finetuning setup of Chowdhery et al. 2022 §6.1.2, Adafactor with a "
+                        + "constant learning rate of 5e-5, dropout 0.1, loss masking on the inputs.")]
+[TaskVariantOf(typeof(AiDotNet.TextToSpeech.MultiModal.AudioPaLM<>), "speech recognition")]
 public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AudioPaLMOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
-    public IReadOnlyList<string> SupportedLanguages { get; }
+    private readonly AudioPalmCore<T> _core;
+    private readonly List<LayerBase<T>> _decoderLayers = new();
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private Random? _trainingRandom;
+    private bool _disposed;
+
+    /// <summary>Creates AudioPaLM's speech recognizer.</summary>
+    public AudioPaLM(NeuralNetworkArchitecture<T> architecture, AudioPaLMOptions? options = null)
+        : base(architecture)
+    {
+        _options = options ?? new AudioPaLMOptions();
+        Options = _options;
+        AudioPalmCore<T>.Validate(_options);
+        base.SampleRate = _options.SampleRate;
+        _core = new AudioPalmCore<T>(Engine, _options, _decoderLayers, architecture.RandomSeed ?? _options.TrainingSeed, withDetokenizer: false);
+        Layers.AddRange(_decoderLayers);
+        // The speech tokenizer (its encoder and fitted codebook), so clones and saved models keep it; it does not train.
+        Layers.AddRange(_core.ComponentLayers());
+    }
+
+    internal AudioPalmCore<T> Core => _core;
+
+    /// <inheritdoc />
+    /// <remarks>Languages are named in the task tag by their English names (§3.4); any language the tokens were trained
+    /// on can be asked for, so the list is the one <see cref="AudioPaLMOptions.Language"/> names.</remarks>
+    public IReadOnlyList<string> SupportedLanguages => new[] { _options.Language };
+
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
-    public AudioPaLM(NeuralNetworkArchitecture<T> architecture, string modelPath, AudioPaLMOptions? options = null) : base(architecture) { _options = options ?? new AudioPaLMOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public AudioPaLM(NeuralNetworkArchitecture<T> architecture, AudioPaLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AudioPaLMOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
-        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    /// <summary>The English name the task tag uses for a language given as a name or an ISO code ("en" → "English").</summary>
+    private string LanguageName(string? language)
+    {
+        if (string.IsNullOrWhiteSpace(language)) return _options.Language;
+        if (language!.Length > 3) return language;
+        try
+        {
+            return System.Globalization.CultureInfo.GetCultureInfo(language).EnglishName;
+        }
+        catch (System.Globalization.CultureNotFoundException)
+        {
+            return language;
+        }
+    }
 
-    /// <summary>
-    /// Transcribes audio using AudioPaLM's fused speech-text architecture.
-    /// Per Rubenstein et al. (2023): USM encoder extracts speech features, projected into
-    /// PaLM-2's space, and the LLM generates text with strong language understanding.
-    /// </summary>
+    // ---------------------------------------------------------------- tokens and weights
+
+    /// <summary>Fits the audio tokens' k-means codebook on 16 kHz recordings (§3.1).</summary>
+    public void FitSpeechTokenizer(IEnumerable<Tensor<T>> recordings) => _core.FitSpeechTokenizer(recordings);
+
+    /// <summary>Sets the w2v-BERT 2.0 tokenizer's k-means centroids.</summary>
+    public void LoadSpeechTokenizerCodebook(double[,] centroids) => _core.LoadSpeechTokenizerCodebook(centroids);
+
+    /// <summary>The text token ids of <paramref name="text"/>.</summary>
+    public int[] TokenizeText(string text) => _core.TokenizeText(text);
+
+    /// <summary>Loads a Hugging Face Gemma checkpoint directory (use <see cref="AudioPaLMOptions.Gemma2B"/>).</summary>
+    public void LoadGemmaWeights(string directory) => _core.LoadGemma(directory);
+
+    /// <summary>Loads a lucidrains/PaLM-pytorch state dict.</summary>
+    public void LoadPalmPytorchWeights(string path) => _core.LoadPalmPytorch(path);
+
+    /// <summary>Loads w2v-BERT 2.0 for the w2v-BERT 2.0 tokenizer.</summary>
+    public void LoadW2vBert2Weights(string path) => _core.LoadW2vBert2(path);
+
+    // ---------------------------------------------------------------- recognition
+
+    private int[] Prefix(Tensor<T> audio, string? language)
+    {
+        var tokens = _core.AudioTokensOf(audio.Rank == 1 ? audio : Engine.Reshape(audio, new[] { audio.Length }));
+        return _core.TaskPrefix($"[ASR {LanguageName(language)}]", _core.AudioIds(tokens));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The transcript AudioPaLM writes after <c>[ASR language]</c> and the recording's audio tokens.</remarks>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
-        var features = PreprocessAudio(audio);
-        Tensor<T> logits;
-
-        if (IsOnnxMode && OnnxEncoder is not null)
+        if (audio is null) throw new ArgumentNullException(nameof(audio));
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
         {
-            logits = OnnxEncoder.Run(features);
+            var ids = _core.Generate(Prefix(audio, language), audioOutput: false, out var probabilities);
+            string text = _core.DecodeText(ids);
+            double duration = (double)audio.Length / SampleRate;
+            // The mean probability the decoder gave the tokens it chose.
+            var confidence = NumOps.FromDouble(probabilities.Length == 0 ? 0.0 : probabilities.Average());
+            return new TranscriptionResult<T>
+            {
+                Text = text,
+                Language = language ?? _options.Language,
+                Confidence = confidence,
+                DurationSeconds = duration,
+                Segments = ResolveReturnTimestamps(includeTimestamps) && text.Length > 0
+                    ? new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = confidence } }
+                    : Array.Empty<TranscriptionSegment<T>>(),
+            };
         }
-        else
+        finally
         {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
+            SetTrainingMode(wasTraining);
         }
-
-        var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
-        var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-
-        return new TranscriptionResult<T>
-        {
-            Text = text,
-            Language = language ?? _options.Language,
-            Confidence = NumOps.FromDouble(confidence),
-            DurationSeconds = duration,
-            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
-        };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
-    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("AudioPaLM does not support streaming.");
-
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultLLMASRLayers(encoderDim: _options.EncoderDim, llmDim: _options.EncoderDim * 2, numEncoderLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "AudioPaLM-Native" : "AudioPaLM-ONNX", Description = "AudioPaLM: PaLM-2 + AudioLM fusion (Google, 2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null,
+        CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
+    /// <inheritdoc />
+    /// <remarks>AudioPaLM is told the language in its task tag; the paper defines no language-identification task.</remarks>
+    public string DetectLanguage(Tensor<T> audio) =>
+        throw new NotSupportedException("AudioPaLM is told the language in its task tag (§3.4); it has no language-identification task.");
 
+    /// <inheritdoc />
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) =>
+        throw new NotSupportedException("AudioPaLM is told the language in its task tag (§3.4); it has no language-identification task.");
 
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(AudioPaLM<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
+    /// <inheritdoc />
+    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) =>
+        throw new NotSupportedException("AudioPaLM decodes a whole recording.");
+
+    // ---------------------------------------------------------------- the network
+
+    /// <inheritdoc />
+    protected override void InitializeLayers()
+    {
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The decoder's layers are not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    /// <inheritdoc />
+    /// <remarks><paramref name="input"/> is a 16 kHz recording; the result is the transcript's text token ids.</remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var ids = _core.Generate(Prefix(input, null), audioOutput: false);
+            return IndexTtsOps.Ids<T>(ids.Length == 0 ? new[] { _options.EndId } : ids);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    /// <summary>
+    /// One update on a 16 kHz recording <paramref name="input"/> and its transcript's text token ids
+    /// <paramref name="expected"/> (<see cref="TokenizeText"/>): the cross-entropy of the transcript and the end token after
+    /// <c>[ASR language]</c> and the audio tokens, the input masked (§3.6), plus PaLM's z-loss.
+    /// </summary>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
+    {
+        ThrowIfDisposed();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var transcript = new int[expected.Length];
+        for (int i = 0; i < transcript.Length; i++)
+        {
+            transcript[i] = (int)Math.Round(numOps.ToDouble(expected.GetFlat(i)));
+            if (transcript[i] < 0 || transcript[i] >= _options.VocabSize)
+                throw new ArgumentOutOfRangeException(nameof(expected), $"Transcript ids are text tokens in [0, {_options.VocabSize}).");
+        }
+        var prefix = Prefix(input, null);
+        var random = _trainingRandom ??= AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.TrainingSeed);
+        TrainWithCustomObjective(input, expected, (_, _) => _core.Loss(prefix, transcript, true, random), Optimizer());
+        return true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The decoder trains; the speech tokenizer is frozen.</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        var trained = new HashSet<Tensor<T>>(Training.TapeTrainingStep<T>.CollectParameters(_decoderLayers.Cast<ILayer<T>>().ToList(), -1),
+            TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(trained.Contains).ToList();
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> Optimizer() => _optimizer ??=
+        PaperOptimizerFactory.VerifyHandBuilt(this, new AdafactorOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdafactorOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate, UseRelativeStepSize = false, MultiplyByParameterScale = true, Factored = false,
+            Beta1 = _options.Beta1, EnableGradientClipping = _options.MaxGradientNorm > 0,
+            MaxGradientNorm = _options.MaxGradientNorm > 0 ? _options.MaxGradientNorm : 1.0,
+        }));
+
+    /// <inheritdoc />
+    protected override bool SupportsParameterMutation => true;
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        Name = "AudioPaLM-ASR",
+        Description = "AudioPaLM speech recognition (Rubenstein et al., 2023)",
+        FeatureCount = _options.HiddenDim,
+        AdditionalInfo = BaseAudioMetadataInfo(),
+    };
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(AudioPaLM<T>));
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) _core.SpeechEncoder?.Dispose();
+        base.Dispose(disposing);
+    }
 }
