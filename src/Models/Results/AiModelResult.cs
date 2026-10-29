@@ -7479,6 +7479,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var result = await modelResult.ReasonAsync(
     ///     "If a train travels 60 mph for 2.5 hours, how far does it go?",
+    ///     chatClient,
     ///     ReasoningMode.ChainOfThought
     /// );
     /// // Result is available in the returned value  // "150 miles"
@@ -7526,7 +7527,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// **Example:**
     /// <code>
-    /// string answer = await modelResult.QuickReasonAsync("What is 15% of 240?");
+    /// string answer = await modelResult.QuickReasonAsync("What is 15% of 240?", chatClient);
     /// // Result is available in the returned value  // "36"
     /// </code>
     /// </para>
@@ -7568,7 +7569,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// **Example:**
     /// <code>
     /// var result = await modelResult.DeepReasonAsync(
-    ///     "Design an algorithm to find the shortest path in a weighted graph"
+    ///     "Design an algorithm to find the shortest path in a weighted graph",
+    ///     chatClient
     /// );
     /// // Result includes multiple explored approaches and verification
     /// </code>
@@ -7612,6 +7614,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var result = await modelResult.ReasonWithConsensusAsync(
     ///     "What is the derivative of x^3?",
+    ///     chatClient,
     ///     numAttempts: 5
     /// );
     /// // If 4 out of 5 attempts say "3x^2", that's the answer
