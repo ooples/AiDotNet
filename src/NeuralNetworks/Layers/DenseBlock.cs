@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -123,7 +123,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     // Non-readonly: lazy ctor leaves _inputChannels = -1 until
     // OnFirstForward resolves it from the runtime input tensor.
     private int _inputChannels;
-    private List<Tensor<T>>? _layerOutputs;
 
     public override bool SupportsTraining => true;
 
@@ -261,8 +260,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         // before the inner-layer Forwards consume their weights.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _layerOutputs = new List<Tensor<T>>(_numLayers + 1) { input };
-
         // Current feature maps (accumulated)
         var currentFeatures = input;
 
@@ -270,7 +267,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         {
             // Each layer takes ALL previous features as input
             var layerOutput = layer.Forward(currentFeatures);
-            _layerOutputs.Add(layerOutput);
 
             // Concatenate new features with existing features along channel dimension
             currentFeatures = ConcatenateChannels(currentFeatures, layerOutput);
@@ -322,7 +318,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     /// </summary>
     public override void ResetState()
     {
-        _layerOutputs = null;
         foreach (var layer in _layers)
         {
             layer.ResetState();

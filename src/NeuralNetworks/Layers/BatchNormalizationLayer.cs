@@ -869,10 +869,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // that's never reached when training goes through the tape (tape
         // holds its own intermediate refs already). Skip the assignment
         // when a tape is active so this field doesn't double-root the
-        // input activation; null it out so the previous step's tensor is
-        // eligible for collection.
+        // input activation, and in inference (ShouldCacheForBackward is false
+        // in eval mode), where it held every BN input of the last forward.
         bool tapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
-        _lastInput = tapeActive ? null : input;
+        _lastInput = tapeActive || !ShouldCacheForBackward ? null : input;
 
         // Batch statistics are taken over every value a feature has in this batch: the batch
         // axis AND, for convolutional (channels-first) inputs, every spatial position. That is

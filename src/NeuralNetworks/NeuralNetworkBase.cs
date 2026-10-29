@@ -6324,6 +6324,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 // Diagnostic only.
             }
+            finally
+            {
+                // The recording holds every layer's input and output of that forward. Drop it here, so a
+                // context that captured the observer (a thread or task started during the forward) cannot
+                // keep those activations alive.
+                trace.ReleaseRecording();
+            }
         }
 
         return output;
