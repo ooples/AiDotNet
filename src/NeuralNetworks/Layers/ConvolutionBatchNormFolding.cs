@@ -75,7 +75,9 @@ internal static class ConvolutionBatchNormFolding<T>
     {
         output = input;
         if (!InferenceFusionSettings.FoldBatchNormIntoConvolution) return false;
-        if (input.Rank != 4 || norm.InTrainingMode) return false;
+        // BatchNormInference reads the activation as one contiguous span (as BatchNormalizationLayer's own fused path
+        // requires); a strided view takes the layer's unfused path instead.
+        if (input.Rank != 4 || !input.IsContiguous || norm.InTrainingMode) return false;
         if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>() || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
             return false;
         if (LayerBase<T>.IsInferringShapes) return false;

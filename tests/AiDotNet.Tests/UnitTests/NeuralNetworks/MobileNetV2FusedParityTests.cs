@@ -120,7 +120,11 @@ public class MobileNetV2FusedParityTests
             eager.SetTrainingMode(true);
 
             TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            int hitsBefore = AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits;
             fused.Train(x, y);
+            // Without this, a fused step that silently fell back to the tape would make every variant agree.
+            Assert.True(AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits > hitsBefore,
+                $"{variant}: the compiled fused step did not engage");
             TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
             eager.Train(x, y);
 
@@ -129,13 +133,16 @@ public class MobileNetV2FusedParityTests
             var p0 = init.ToArray();
             var pf = fused.GetParameters().ToArray();
             var pe = eager.GetParameters().ToArray();
-            double dot = 0, nf = 0, ne = 0, maxAbs = 0;
+            double dot = 0, nf = 0, ne = 0, nd = 0, maxAbs = 0;
             for (int i = 0; i < p0.Length; i++)
             {
                 double df = pf[i] - p0[i], de = pe[i] - p0[i];
                 dot += df * de; nf += df * df; ne += de * de;
+                nd += (pf[i] - pe[i]) * (pf[i] - pe[i]);
                 maxAbs = Math.Max(maxAbs, Math.Abs(pf[i] - pe[i]));
             }
+            // Direction alone accepts an update 100x too large; the difference must be small next to the update.
+            double relativeDiff = Math.Sqrt(nd / ne);
             double cosine = dot / Math.Sqrt(nf * ne);
             _output.WriteLine($"{variant}: loss fused {lossFused:R} eager {lossEager:R}; update cosine {cosine:R}; " +
                               $"max |param diff| {maxAbs:E3}; params {p0.Length}");
@@ -143,11 +150,20 @@ public class MobileNetV2FusedParityTests
             Assert.True(Math.Abs(lossFused - lossEager) <= 1e-4 * Math.Max(1.0, Math.Abs(lossEager)),
                 $"{variant}: fused loss {lossFused} vs eager {lossEager}");
             Assert.True(cosine >= 0.9999, $"{variant}: fused vs eager update cosine {cosine}");
+            Assert.True(relativeDiff <= 1e-3, $"{variant}: |fused - eager| / |eager update| = {relativeDiff}");
         }
         finally
         {
             TensorCodecOptions.SetCurrent(priorOptions);
             AiDotNetEngine.Current = prior;
         }
+    }
+
+    [Fact]
+    public void Fused_step_is_the_default()
+    {
+        // The parity theory opts in explicitly so it compares the two paths even if the default changes; this pins
+        // the default itself (#2382).
+        Assert.False(new MobileNetV2Options().DisableFusedOptimizerStep);
     }
 }

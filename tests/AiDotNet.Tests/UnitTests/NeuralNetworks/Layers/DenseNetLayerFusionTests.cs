@@ -39,11 +39,16 @@ public class DenseNetLayerFusionTests
 
     private static void AssertFusedEqualsUnfused(ILayer<double> layer, Tensor<double> x)
     {
-        var fused = layer.Forward(x).ToArray();
+        // Force each mode explicitly: under AIDOTNET_FOLD_BATCHNORM=0 the "fused" forward would otherwise run unfused too.
         bool previous = InferenceFusionSettings.FoldBatchNormIntoConvolution;
-        InferenceFusionSettings.FoldBatchNormIntoConvolution = false;
-        double[] unfused;
-        try { unfused = layer.Forward(x).ToArray(); }
+        double[] fused, unfused;
+        try
+        {
+            InferenceFusionSettings.FoldBatchNormIntoConvolution = true;
+            fused = layer.Forward(x).ToArray();
+            InferenceFusionSettings.FoldBatchNormIntoConvolution = false;
+            unfused = layer.Forward(x).ToArray();
+        }
         finally { InferenceFusionSettings.FoldBatchNormIntoConvolution = previous; }
         Assert.Equal(unfused.Length, fused.Length);
         for (int i = 0; i < fused.Length; i++)

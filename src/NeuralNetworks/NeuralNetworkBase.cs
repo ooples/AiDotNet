@@ -7073,8 +7073,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         // #2385: with no host scratch rented, nothing in this arena can back the output (a GPU forward keeps its
         // result on the device). Detaching anyway downloaded every result to a fresh host array on each call,
-        // a device sync the caller may never need. Same rule as DetachAndRecycleBetweenLayers.
-        if (arena.PeakBackingBytes == 0) return output;
+        // a device sync the caller may never need. Same rule as DetachAndRecycleBetweenLayers. Still detach when the
+        // output IS (or views) the caller's input, e.g. a forward through only an InputLayer: the caller would get its
+        // own tensor back, and the streaming PredictInBatches path disposes each result after its callback.
+        if (arena.PeakBackingBytes == 0 && !output.SharesStorageWith(input)) return output;
         return DetachFromArena(output);
     }
 

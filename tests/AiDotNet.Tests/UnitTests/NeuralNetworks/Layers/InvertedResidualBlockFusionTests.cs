@@ -49,11 +49,16 @@ public class InvertedResidualBlockFusionTests
     {
         var block = TrainedBlock<double>(inChannels, outChannels, expansion, stride, seed: 11);
         var x = Random<double>(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5), new[] { 2, inChannels, 8, 8 }, 3.0);
-        var fused = block.Forward(x).ToArray();
+        // Force each mode explicitly: under AIDOTNET_FOLD_BATCHNORM=0 the "fused" forward would otherwise run unfused too.
         bool previous = InferenceFusionSettings.FoldBatchNormIntoConvolution;
-        InferenceFusionSettings.FoldBatchNormIntoConvolution = false;
-        double[] unfused;
-        try { unfused = block.Forward(x).ToArray(); }
+        double[] fused, unfused;
+        try
+        {
+            InferenceFusionSettings.FoldBatchNormIntoConvolution = true;
+            fused = block.Forward(x).ToArray();
+            InferenceFusionSettings.FoldBatchNormIntoConvolution = false;
+            unfused = block.Forward(x).ToArray();
+        }
         finally { InferenceFusionSettings.FoldBatchNormIntoConvolution = previous; }
 
         Assert.Equal(unfused.Length, fused.Length);
