@@ -24,6 +24,9 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     internal ProgramSynthesisServingClientOptions? ProgramSynthesisServingClientOptions { get; private set; }
 
+    /// <summary>The parser configured through <c>ProgramSynthesisOptions.SyntaxProvider</c>, or null for none.</summary>
+    internal AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? CodeSyntaxProvider { get; private set; }
+
     /// <summary>
     /// Executes a structured code task using the configured program synthesis model.
     /// </summary>
@@ -105,7 +108,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         CodeTokenizationPipelineOptions? pipelineOptions = null)
     {
         var tokenizer = ProgramSynthesisTokenizerFactory.CreateDefault(language);
-        var pipeline = new CodeTokenizationPipeline();
+        var pipeline = new CodeTokenizationPipeline(CodeSyntaxProvider);
 
         return pipelineOptions is null
             ? pipeline.Tokenize(code ?? string.Empty, language, tokenizer, options)

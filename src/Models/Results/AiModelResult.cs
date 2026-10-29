@@ -1731,6 +1731,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Program Synthesis (optional)
         ProgramSynthesisModel = options.ProgramSynthesisModel;
         ProgramSynthesisServingClientOptions = options.ProgramSynthesisServingClientOptions;
+        CodeSyntaxProvider = options.CodeSyntaxProvider;
         ProgramSynthesisServingClient =
             options.ProgramSynthesisServingClient ??
             (options.ProgramSynthesisServingClientOptions is not null
@@ -2359,9 +2360,16 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// the row count of <paramref name="newData"/> is the horizon, and the forecast extends the series the model was
     /// trained on.
     /// </summary>
+    /// <param name="model">The time-series model.</param>
+    /// <param name="newData">The input; its row count is the horizon.</param>
+    /// <param name="forecastsTarget">
+    /// True when the forecast continues the target series (univariate, exogenous, or a multivariate model collapsed to
+    /// the target); false when a multivariate model forecasts its feature series, which target scaling does not cover.
+    /// </param>
     private TOutput ForecastWithTimeSeriesModelInternal(
-        AiDotNet.TimeSeries.TimeSeriesModelBase<T> model, TInput newData)
+        AiDotNet.TimeSeries.TimeSeriesModelBase<T> model, TInput newData, out bool forecastsTarget)
     {
+        forecastsTarget = true;
         // The forecast horizon is the row count of the input matrix.
         int horizon = (object?)newData is Matrix<T> matrix ? matrix.Rows : 1;
         if (horizon <= 0)
@@ -2411,6 +2419,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             else if (mvTraining != null && (object?)mvTraining.X is Matrix<T> trainX)
             {
                 mvHistory = trainX;
+                forecastsTarget = false;
             }
             Matrix<T> mvForecast = multivariate.ForecastMultivariate(mvHistory, horizon);
             LastForecastShape = new[] { mvForecast.Rows, mvForecast.Columns };
@@ -2552,8 +2561,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (Model is AiDotNet.TimeSeries.TimeSeriesModelBase<T> timeSeriesModel)
         {
             // The model was trained on scaled targets when target scaling was configured: undo it, as every other
-            // prediction path does, so forecasts come back in the target's original units.
-            return DenormalizeForecast(ForecastWithTimeSeriesModelInternal(timeSeriesModel, newData));
+            // prediction path does, so forecasts come back in the target's original units. A genuinely multivariate
+            // model forecasts the feature series instead, which the target scaler was never fitted to.
+            var forecast = ForecastWithTimeSeriesModelInternal(timeSeriesModel, newData, out bool forecastsTarget);
+            return forecastsTarget ? DenormalizeForecast(forecast) : forecast;
         }
 
         // Bridge builder-configured JIT compilation flags into this thread's

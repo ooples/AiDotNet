@@ -77,6 +77,39 @@ public class TargetScalingFacadeTests
         for (int h = 0; h < forecast.Length; h++)
             Assert.True(Math.Abs(forecast[h] - 5000.0) < 500.0, $"forecast[{h}]={forecast[h]}: expected near 5000");
     }
+    [Fact(Timeout = 120000)]
+    public async Task Multivariate_feature_forecasts_are_not_rescaled_by_the_target_scaler()
+    {
+        // A two-variable VAR forecasts its feature series (around 1 and 2). The target (around 5000) is scaled for
+        // training, but that scaler says nothing about the features: inverting it would push the forecast to ~5000.
+        const int n = 120;
+        var x = new Matrix<double>(n, 2);
+        var y = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            x[i, 0] = 1.0 + (0.2 * Math.Sin(2.0 * Math.PI * i / 20.0));
+            x[i, 1] = 2.0 + (0.3 * Math.Cos(2.0 * Math.PI * i / 15.0));
+            y[i] = 5000.0 + (100.0 * Math.Sin(2.0 * Math.PI * i / 20.0));
+        }
+
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureModel(new AiDotNet.TimeSeries.VectorAutoRegressionModel<double>(
+                new AiDotNet.Models.Options.VARModelOptions<double> { OutputDimension = 2, Lag = 1 }))
+            .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(x, y))
+            .ConfigureTargetScaling()
+            .BuildAsync();
+        Assert.True(result.PreprocessingInfo?.IsTargetFitted == true, "Target scaling was not fitted.");
+
+        var forecast = result.Predict(new Matrix<double>(3, 2));
+        Assert.Equal(new[] { 3, 2 }, result.LastForecastShape);
+        var matrix = result.ReshapeForecastToMatrix(forecast);
+        for (int h = 0; h < 3; h++)
+        {
+            Assert.True(Math.Abs(matrix[h, 0] - 1.0) < 1.0, $"variable 0 at step {h} = {matrix[h, 0]}: expected near 1");
+            Assert.True(Math.Abs(matrix[h, 1] - 2.0) < 1.0, $"variable 1 at step {h} = {matrix[h, 1]}: expected near 2");
+        }
+    }
+
     [Fact]
     public void TargetStandardScaler_round_trips_vectors_and_tensors()
     {

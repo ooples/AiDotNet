@@ -12,7 +12,7 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Version>0.204.0</Version>
     <Title>AiDotNet.CodeAnalysis.TreeSitter</Title>
-    <Description>TreeSitter-backed code analysis for AiDotNet: precise syntax validation for the program synthesizer, AST extraction for the code-tokenization pipeline, and TreeSitterTokenizer. Opt-in: reference this package and register TreeSitterCodeSyntaxProvider via CodeSyntaxProviders.Provider. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
+    <Description>TreeSitter-backed code analysis for AiDotNet: precise syntax validation for the program synthesizer, AST extraction for the code-tokenization pipeline, and TreeSitterTokenizer. Opt-in: reference this package and pass TreeSitterCodeSyntaxProvider as ProgramSynthesisOptions.SyntaxProvider. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
     <Company>Ooples Finance</Company>
     <Authors>ooples</Authors>
     <Copyright>Ooples Finance LLC 2023</Copyright>

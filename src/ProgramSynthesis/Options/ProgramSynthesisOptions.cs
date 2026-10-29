@@ -18,6 +18,16 @@ namespace AiDotNet.ProgramSynthesis.Options;
 public class ProgramSynthesisOptions
 {
     /// <summary>
+    /// Gets or sets the parser used to validate generated code and to extract syntax trees, for example
+    /// <c>TreeSitterCodeSyntaxProvider</c> from the opt-in <c>AiDotNet.CodeAnalysis.TreeSitter</c> package.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> leave it null to use generic structural checks (and no syntax trees); set it to get
+    /// precise validation for the languages the provider supports.
+    /// </remarks>
+    public AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? SyntaxProvider { get; set; }
+
+    /// <summary>
     /// Gets or sets the built-in code model kind to configure when no explicit model is provided.
     /// </summary>
     public ProgramSynthesisModelKind ModelKind { get; set; } = ProgramSynthesisModelKind.CodeT5;

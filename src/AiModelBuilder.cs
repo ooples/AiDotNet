@@ -346,6 +346,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     // Program synthesis Serving configuration
     private ProgramSynthesisServingClientOptions? _programSynthesisServingClientOptions;
+    private AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? _codeSyntaxProvider;
     private IProgramSynthesisServingClient? _programSynthesisServingClient;
     private IFullModel<T, Tensor<T>, Tensor<T>>? _programSynthesisModel;
 

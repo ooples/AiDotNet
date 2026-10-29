@@ -897,6 +897,9 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </summary>
     public ProgramSynthesisServingClientOptions? ProgramSynthesisServingClientOptions { get; set; }
 
+    /// <summary>The parser configured through <c>ProgramSynthesisOptions.SyntaxProvider</c>, or null for none.</summary>
+    internal AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? CodeSyntaxProvider { get; set; }
+
     // ============================================================================
     // Diagnostics Properties
     // ============================================================================

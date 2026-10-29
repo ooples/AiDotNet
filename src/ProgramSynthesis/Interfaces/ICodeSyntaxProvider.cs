@@ -11,8 +11,9 @@ namespace AiDotNet.ProgramSynthesis.Interfaces;
 /// <remarks>
 /// <b>For Beginners:</b> a real parser lets AiDotNet check that generated code is valid and see its structure.
 /// The TreeSitter implementation ships in the opt-in <c>AiDotNet.CodeAnalysis.TreeSitter</c> package, so its native
-/// grammars stay out of the core package. Register one through <see cref="Engines.CodeSyntaxProviders.Provider"/>;
-/// without one, validation falls back to generic structural checks and pipelines produce no AST.
+/// grammars stay out of the core package. Pass one through <see cref="Options.ProgramSynthesisOptions.SyntaxProvider"/>
+/// (with <c>AiModelBuilder.ConfigureProgramSynthesis</c>) or the <c>NeuralProgramSynthesizer</c> constructor; without
+/// one, validation falls back to generic structural checks and pipelines produce no AST.
 /// </remarks>
 public interface ICodeSyntaxProvider
 {

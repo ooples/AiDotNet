@@ -2456,6 +2456,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         // Store the program-synthesis model separately so it is available regardless of the primary model's TInput/TOutput types.
         _programSynthesisModel = codeModel;
+        _codeSyntaxProvider = options.SyntaxProvider ?? _codeSyntaxProvider;
 
         // If compatible, also apply as the primary model (supports code-only workflows).
         if (codeModel is IFullModel<T, TInput, TOutput> fullModel)

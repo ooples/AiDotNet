@@ -31,9 +31,10 @@ public class ReadmeClaimsTests
     internal static string Floor(int n) => n switch
     {
         < 5 => n.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        < 100 => $"{n / 5 * 5}+",
-        < 1000 => $"{n / 10 * 10}+",
-        _ => $"{n / 100 * 100:N0}+",
+        < 100 => (n / 5 * 5).ToString(System.Globalization.CultureInfo.InvariantCulture) + "+",
+        < 1000 => (n / 10 * 10).ToString(System.Globalization.CultureInfo.InvariantCulture) + "+",
+        // Invariant: the committed README uses "," grouping whatever the machine's culture.
+        _ => (n / 100 * 100).ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + "+",
     };
 
     private sealed record Model(Type Type, ModelDomain[] Domains, ModelCategory[] Categories);
@@ -153,4 +154,21 @@ public class ReadmeClaimsTests
     [InlineData(867, "860+")]
     [InlineData(2157, "2,100+")]
     public void Counts_are_floored(int n, string shown) => Assert.Equal(shown, Floor(n));
+
+    [Fact]
+    public void Counts_are_formatted_the_same_in_every_culture()
+    {
+        var prior = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            // German groups thousands with "." — the committed README must still read "2,100+".
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+            Assert.Equal("2,100+", Floor(2157));
+            Assert.Equal("860+", Floor(867));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = prior;
+        }
+    }
 }

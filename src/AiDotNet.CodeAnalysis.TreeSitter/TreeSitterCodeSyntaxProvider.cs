@@ -10,11 +10,13 @@ namespace AiDotNet.ProgramSynthesis.Tokenization;
 /// C++, Go and Rust.
 /// </summary>
 /// <remarks>
-/// <b>For Beginners:</b> register it once at startup so the program synthesizer validates generated code with a
-/// real parser and the code-tokenization pipeline can produce syntax trees:
+/// <b>For Beginners:</b> pass it to the builder so the program synthesizer validates generated code with a real
+/// parser and the code-tokenization pipeline can produce syntax trees:
 /// <code>
-/// AiDotNet.ProgramSynthesis.Engines.CodeSyntaxProviders.Provider =
-///     new AiDotNet.ProgramSynthesis.Tokenization.TreeSitterCodeSyntaxProvider();
+/// builder.ConfigureProgramSynthesis(new ProgramSynthesisOptions
+/// {
+///     SyntaxProvider = new AiDotNet.ProgramSynthesis.Tokenization.TreeSitterCodeSyntaxProvider()
+/// });
 /// </code>
 /// </remarks>
 public sealed class TreeSitterCodeSyntaxProvider : ICodeSyntaxProvider

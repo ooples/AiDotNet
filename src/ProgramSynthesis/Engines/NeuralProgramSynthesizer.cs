@@ -80,6 +80,10 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
     /// <param name="codeModel">The underlying code model (CodeT5 recommended).</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <param name="optimizer">Optional optimizer.</param>
+    /// <param name="executionEngine">Optional engine that runs candidate programs against test cases.</param>
+    /// <param name="options">Optional synthesizer options; defaults are used when null.</param>
+    /// <param name="sqlSyntaxValidator">Optional precise SQL validator; null falls back to the global registration.</param>
+    /// <param name="codeSyntaxProvider">Optional parser for validating generated code (for example TreeSitterCodeSyntaxProvider); null falls back to the host-level provider.</param>
     /// <remarks>
     /// <para>
     /// Creates a new neural program synthesizer. Uses a code model (like CodeT5)
@@ -102,7 +106,8 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         IProgramExecutionEngine? executionEngine = null,
         NeuralProgramSynthesizerOptions? options = null,
-        ISqlSyntaxValidator? sqlSyntaxValidator = null)
+        ISqlSyntaxValidator? sqlSyntaxValidator = null,
+        ICodeSyntaxProvider? codeSyntaxProvider = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new NeuralProgramSynthesizerOptions();
@@ -115,11 +120,16 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
         // process-global SqlSyntaxValidation.Validator only when not injected here, so
         // callers can supply their own validator without mutating global state.
         _sqlSyntaxValidator = sqlSyntaxValidator;
+        // The same for the code parser: the host-level fallback applies only when none is passed here.
+        _codeSyntaxProvider = codeSyntaxProvider;
         InitializeLayersCore();
     }
 
     /// <summary>Per-instance precise SQL validator; null falls back to the global registration.</summary>
     private readonly ISqlSyntaxValidator? _sqlSyntaxValidator;
+
+    /// <summary>Per-instance code parser; null falls back to the host-level provider.</summary>
+    private readonly ICodeSyntaxProvider? _codeSyntaxProvider;
 
     protected override void InitializeLayers()
     {
@@ -313,7 +323,7 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
 
         // A registered parser (the TreeSitter one ships in the opt-in AiDotNet.CodeAnalysis.TreeSitter package, which
         // keeps its native grammars out of core) validates precisely; it returns null for a language it cannot parse.
-        if (CodeSyntaxProviders.Provider is { } syntaxProvider)
+        if ((_codeSyntaxProvider ?? CodeSyntaxProviders.Provider) is { } syntaxProvider)
         {
             try
             {

@@ -1607,11 +1607,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="cancellationToken">A token that cancels the build. It is checked before any work starts. What it
     /// does after that depends on the training path: the supervised and streaming paths stop at the next epoch
     /// boundary and return the model trained so far (they do not throw), and data loading observes it. The
-    /// self-supervised, image-only and evolution paths receive it. The reinforcement-learning and meta-learning
-    /// paths, and the AutoML inner search, do not observe it once training has started.</param>
+    /// self-supervised and image-only paths throw at the next epoch boundary, and the evolution path passes it to the
+    /// evolution run. The reinforcement-learning and meta-learning paths, and the AutoML inner search, do not observe
+    /// it once training has started.</param>
     /// <returns>A task whose result is the trained <see cref="AiModelResult{T, TInput, TOutput}"/>.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled before
-    /// training started, or during data loading.</exception>
+    /// training started or during data loading; on the self-supervised and image-only paths, during training (thrown
+    /// at the next epoch boundary); or while the evolution run observed it.</exception>
     /// <exception cref="InvalidOperationException">Thrown if no training path was configured, or the configured
     /// RAG components do not form a valid pipeline.</exception>
     /// <exception cref="NotSupportedException">Streaming training options were configured but the data loader is not
@@ -1841,6 +1843,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
@@ -2215,6 +2218,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             PromptTemplate = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,
@@ -2500,6 +2504,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             PromptTemplate = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,
@@ -2882,6 +2887,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             PromptTemplate = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,
