@@ -67,6 +67,25 @@ File.WriteAllText(args[0], JsonSerializer.Serialize(reports, JsonOptions.Default
                 self.assertEqual(375, rows["mlp"].training.p25)
                 self.assertEqual(625, rows["mlp"].training.p75)
 
+class InferenceBatchParsingTests(unittest.TestCase):
+    """benchmark.py must accept exactly what the C# harness's NumberStyles.Integer parse accepts."""
+
+    def setUp(self):
+        try:
+            import benchmark
+        except ImportError as error:  # benchmark.py imports torch
+            self.skipTest(f"benchmark.py needs PyTorch: {error}")
+        self.parse = benchmark.parse_inference_batches
+
+    def test_accepts_what_csharp_accepts(self):
+        self.assertEqual(self.parse("1,8,32"), [1, 8, 32])
+        self.assertEqual(self.parse(" 4 , +5"), [4, 5])
+        self.assertEqual(self.parse("2147483647"), [2147483647])
+
+    def test_rejects_what_csharp_rejects(self):
+        for text in ["1_0", "2147483648", "\u0661", "1.5", "0", "-3", "1,,2", ""]:
+            with self.subTest(text=text), self.assertRaises(ValueError):
+                self.parse(text)
 
 if __name__ == "__main__":
     unittest.main()

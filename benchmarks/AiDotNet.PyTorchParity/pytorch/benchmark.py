@@ -10,7 +10,7 @@ AiDotNet side runs its own compiled/fused path; pitting it against a separately
 torch.compile'd PyTorch would compare two different compilation stacks rather
 than the kernels. Pin both sides to the same CPU thread count:
     python benchmark.py --threads 8 ...
-    dotnet run ... (set AIDOTNET_BLAS_THREADS=8)
+    dotnet run ... (set AIDOTNET_CPU_THREADS=8)
 
 Usage:
     pip install -r requirements.txt
@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import os
 import platform
 import random
@@ -455,15 +456,22 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
     return results
 
 
+_CSHARP_INT = re.compile(r"[+-]?[0-9]+")
+_INT32_MAX = 2**31 - 1
+
+
 def parse_inference_batches(text: str) -> list[int]:
     """Comma-separated positive batch sizes; the C# harness takes the same flag with the same contract."""
     items = [item.strip() for item in text.split(",")]
     if not items or any(not item for item in items):
         raise ValueError(f"--inference-batches must be comma-separated positive integers, got {text!r}")
-    try:
-        batches = [int(item) for item in items]
-    except ValueError as error:
-        raise ValueError(f"--inference-batches must be comma-separated positive integers, got {text!r}") from error
+    # The C# side parses with NumberStyles.Integer: optional sign, ASCII digits, Int32 range. Python's int() also takes
+    # "1_0", non-ASCII digits and arbitrary size, so a value C# rejects could pass here and fail only after training.
+    if any(_CSHARP_INT.fullmatch(item) is None for item in items):
+        raise ValueError(f"--inference-batches must be comma-separated positive integers, got {text!r}")
+    batches = [int(item) for item in items]
+    if any(batch > _INT32_MAX for batch in batches):
+        raise ValueError(f"--inference-batches values must fit a 32-bit integer, got {text!r}")
     if any(batch <= 0 for batch in batches):
         raise ValueError(f"--inference-batches must be positive, got {text!r}")
     return batches
@@ -474,7 +482,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     random.seed(seed)
     torch.manual_seed(seed)
     # Pin CPU threads for a fair head-to-head — match the AiDotNet side's
-    # AIDOTNET_BLAS_THREADS so the numbers reflect the kernels, not the scheduler.
+    # AIDOTNET_CPU_THREADS so the numbers reflect the kernels, not the scheduler.
     if args.threads and args.threads > 0:
         torch.set_num_threads(args.threads)
     if args.device == "auto":
@@ -529,7 +537,7 @@ def main() -> None:
                         help="sync per step to attribute time to the backward (slows GPU steps)")
     parser.add_argument("--threads", type=int, default=0,
                         help="Pin CPU thread count (0 = PyTorch default = all cores). "
-                             "Match the AiDotNet side's AIDOTNET_BLAS_THREADS for a fair comparison.")
+                             "Match the AiDotNet side's AIDOTNET_CPU_THREADS for a fair comparison.")
     parser.add_argument("--compile", action="store_true",
                         help="Wrap each model in torch.compile (TorchInductor) — the 'PyTorch compiled' head-to-head.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
