@@ -153,4 +153,9 @@
     </ItemGroup>
   </Target>
 
+  <ItemGroup>
+    <!-- Core references only ONNX Runtime's managed API; running ONNX models needs a native runtime. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+  </ItemGroup>
+
 </Project>

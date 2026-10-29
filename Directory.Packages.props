@@ -405,6 +405,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.31.0" />
     <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />
     <PackageVersion Include="Microsoft.Bcl.Numerics" Version="10.0.7" />
     <PackageVersion Include="System.Net.Http" Version="4.3.4" />

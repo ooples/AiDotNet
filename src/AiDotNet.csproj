@@ -119,7 +119,12 @@
 	       and falls back to generic validation when none is registered. The
 	       SQLite-backed validator ships in AiDotNet.Storage.Sqlite.
 	  <PackageReference Include="Microsoft.Data.Sqlite" /> -->
-	  <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+	  <!-- ONNX Runtime's MANAGED API only (about 1 MB). The full Microsoft.ML.OnnxRuntime package adds every platform's
+	       native runtime, about 151 MB, to every AiDotNet consumer. An application that loads ONNX models (a model's
+	       onnxModelPath constructor, ONNX export round-trips, the ONNX rerankers) adds the native package it wants:
+	       Microsoft.ML.OnnxRuntime (CPU), .Gpu or .DirectML. This is the reference pattern ONNX Runtime documents
+	       for libraries (#2393). -->
+	  <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" />
 	  <!-- Microsoft.Research.SEALNet (homomorphic encryption) extracted to the
 	       opt-in AiDotNet.Privacy.HE metapackage in audit-2026-05 phase 2c
 	       (finding #14). SealHomomorphicEncryptionProvider moved there; the
