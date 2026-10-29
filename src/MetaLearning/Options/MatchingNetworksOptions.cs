@@ -106,15 +106,12 @@ public class MatchingNetworksOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss that scores the attention class probabilities against the class indices.
-    /// Default: null, which uses cross-entropy - on these probabilities the paper's <c>-log P(y | x, S)</c> (eq. 2).
-    /// </summary>
+    /// <summary>Loss function for meta-training; null uses cross-entropy over logits.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for encoder updates.
-    /// Default: null (uses built-in Adam optimizer with OuterLearningRate).
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 

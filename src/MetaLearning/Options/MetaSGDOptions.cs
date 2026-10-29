@@ -86,29 +86,13 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// </summary>
-    /// <value>Default: null (uses model's default loss function if available).</value>
-    /// <remarks>
-    /// <para>
-    /// The loss function is used both in the inner loop (task adaptation) and
-    /// outer loop (meta-optimization) to guide the learning of per-parameter optimizers.
-    /// </para>
-    /// </remarks>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for meta-parameter updates (outer loop).
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
     /// </summary>
-    /// <value>Default: null (uses built-in Adam optimizer with OuterLearningRate).</value>
-    /// <remarks>
-    /// <para>
-    /// This optimizer updates the learned per-parameter learning rates, momentums,
-    /// and directions. Adam is typically used as it handles the sparse gradients
-    /// from per-parameter optimization well.
-    /// </para>
-    /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
