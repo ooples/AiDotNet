@@ -94,7 +94,12 @@ public partial class IndexTTS2<T>
         var gpt = new Checkpoint(Path.Combine(dir, "gpt.pth"));
         string gptPrefix = gpt.Keys.Any(k => k.StartsWith("model.", StringComparison.Ordinal)) && !gpt.Contains("mel_head.weight") ? "model." : "";
         TextToSemantic.Load(gpt.Reader(gptPrefix, "gpt"));
-        gpt.RequireAllUsed("gpt", k => k.Contains("text_head.") || k.EndsWith(".pos_enc.pe", StringComparison.Ordinal)
+        // The conformers' position tables are persistent buffers: the release runs on the checkpoint's float32 tables.
+        if (gpt.Take(gptPrefix + "conditioning_encoder.embed.pos_enc.pe") is { } speakerPositions)
+            TextToSemantic.Conditioning.LoadPositionTable(speakerPositions);
+        if (gpt.Take(gptPrefix + "emo_conditioning_encoder.embed.pos_enc.pe") is { } emotionPositions)
+            TextToSemantic.EmotionConditioning.LoadPositionTable(emotionPositions);
+        gpt.RequireAllUsed("gpt", k => k.Contains("text_head.")
             || k.EndsWith("attn.bias", StringComparison.Ordinal) || k.EndsWith("attn.masked_bias", StringComparison.Ordinal)
             || (o.Duration == IndexTts2DurationConditioning.Paper && k.EndsWith("speed_emb.weight", StringComparison.Ordinal)));
 
