@@ -21,9 +21,10 @@ internal enum WenetInputLayer
 /// <param name="Conformer">A <c>ConformerEncoderLayer</c> (norms <c>norm_mha</c>, <c>norm_ff</c>) rather than a
 /// <c>TransformerEncoderLayer</c> (<c>norm1</c>, <c>norm2</c>); without its convolution and macaron modules they compute
 /// the same block.</param>
+/// <param name="BlockNormEpsilon">The blocks' LayerNorm ε: wenet's 1e-12, or 1e-5 in GLM-4-Voice's cosyvoice fork.</param>
 internal sealed record WenetEncoderConfiguration(int InputSize, int OutputSize, int Heads, int LinearUnits, int Blocks,
     WenetInputLayer InputLayer, bool Swish, bool Conformer, int StaticChunkSize = 0, double Dropout = 0.1, double PositionalDropout = 0.1,
-    double AttentionDropout = 0.0, bool AfterNorm = true);
+    double AttentionDropout = 0.0, bool AfterNorm = true, double BlockNormEpsilon = 1e-12);
 
 /// <summary>
 /// A wenet encoder with ESPnet relative positional attention (CosyVoice <c>cosyvoice/transformer</c>: <c>BaseEncoder</c>,
@@ -35,7 +36,8 @@ internal sealed record WenetEncoderConfiguration(int InputSize, int OutputSize, 
 /// <para>Attention (Dai et al. 2019, §3.3): scores <c>((q + u) kᵀ + rel_shift((q + v) pᵀ)) / √d_k</c> with p the
 /// projected position table over relative positions L−1 … −(L−1); <c>rel_shift</c> keeps, for query i and key j, the
 /// column of relative position i − j.</para>
-/// <para>Layer norms inside the blocks use ε = 1e-12, the input layer's and the final one 1e-5, as wenet sets them.</para>
+/// <para>Layer norms inside the blocks use ε = 1e-12 (<see cref="WenetEncoderConfiguration.BlockNormEpsilon"/>), the input
+/// layer's and the final one 1e-5, as wenet sets them.</para>
 /// </remarks>
 internal sealed class WenetEncoder<T>
 {
@@ -76,7 +78,7 @@ internal sealed class WenetEncoder<T>
         double xavier = Math.Sqrt(6.0 / (c.Heads + dk));
         for (int i = 0; i < c.Blocks; i++)
         {
-            var normAttention = Norm(1e-12);
+            var normAttention = Norm(c.BlockNormEpsilon);
             var query = Linear(d, d);
             var key = Linear(d, d);
             var value = Linear(d, d);
@@ -86,7 +88,7 @@ internal sealed class WenetEncoder<T>
             // pos_bias_u / pos_bias_v: xavier_uniform over [heads, d_k].
             var biasU = Values(d, () => xavier * (2 * initialization.NextDouble() - 1));
             var biasV = Values(d, () => xavier * (2 * initialization.NextDouble() - 1));
-            var normFeedForward = Norm(1e-12);
+            var normFeedForward = Norm(c.BlockNormEpsilon);
             Blocks.Add(new Block(normAttention, query, key, value, output, position, biasU, biasV, normFeedForward,
                 Linear(d, c.LinearUnits), Linear(c.LinearUnits, d)));
         }
