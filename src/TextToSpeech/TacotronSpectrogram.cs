@@ -168,6 +168,39 @@ public sealed class TacotronSpectrogram
         return weights;
     }
 
+    /// <summary>
+    /// librosa's <c>filters.mel</c> exactly as it computes its default float32 result (Slaney scale and norm): the bin
+    /// frequencies by <c>np.fft.rfftfreq</c>, the band edges by <c>np.linspace</c>, each triangle stored to float32 before
+    /// the area normalization multiplies it, and the product stored to float32 again. <c>[melChannels, fftSize/2 + 1]</c>.
+    /// </summary>
+    internal static double[,] LibrosaFloat32MelBasis(int sampleRate, int fftSize, int melChannels, double fMin, double fMax)
+    {
+        int bins = 1 + fftSize / 2;
+        double spacing = 1.0 / (fftSize * (1.0 / sampleRate));
+        var fftFreqs = new double[bins];
+        for (int k = 0; k < bins; k++) fftFreqs[k] = k * spacing;
+        double melMin = HzToMel(fMin), melMax = HzToMel(fMax);
+        int count = melChannels + 2;
+        double step = (melMax - melMin) / (count - 1);
+        var melF = new double[count];
+        for (int i = 0; i < count; i++) melF[i] = MelToHz(i == count - 1 ? melMax : i * step + melMin);
+        var weights = new double[melChannels, bins];
+        for (int i = 0; i < melChannels; i++)
+        {
+            double lowerDiff = melF[i + 1] - melF[i];
+            double upperDiff = melF[i + 2] - melF[i + 1];
+            double enorm = 2.0 / (melF[i + 2] - melF[i]);
+            for (int k = 0; k < bins; k++)
+            {
+                double lower = -(melF[i] - fftFreqs[k]) / lowerDiff;
+                double upper = (melF[i + 2] - fftFreqs[k]) / upperDiff;
+                float triangle = (float)Math.Max(0, Math.Min(lower, upper));
+                weights[i, k] = (float)(triangle * enorm);
+            }
+        }
+        return weights;
+    }
+
     // librosa hz_to_mel / mel_to_hz with htk=False (Slaney): linear below 1 kHz, logarithmic above.
     private const double FSp = 200.0 / 3;
     private const double MinLogHz = 1000.0;

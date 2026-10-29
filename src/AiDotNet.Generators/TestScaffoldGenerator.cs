@@ -1721,7 +1721,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // J-M reached 50-166 MB available memory before runner shutdown. Their generated constructors
         // therefore also supply reduced user options/arguments below. Production defaults remain the
         // published values and every public customization path remains available.
-        "Amphion", "CLAPModel", "FILM", "MATCHA",
+        "CLAPModel", "FILM", "MATCHA",
         // PR #1789 run 29922036148: these paper-scale generated fixtures exhausted either the
         // per-test CPU training budget or the 16 GB runner at <double>. Apply the project's
         // required precision-first mitigation before considering any reduced smoke options:
@@ -11196,25 +11196,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 2, NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, " +
                     "MaxCodecFrames = 8, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "Amphion"
-                     && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            else if (model.ClassName == "Vevo" && model.TypeParameterCount == 1)
             {
-                // Amphion uses the same embedding -> text transformer -> codec transformer ->
-                // acoustic-token head structure as the other codec-LM fixtures. Its paper defaults
-                // (1024x12 with an 8x1024 head) OOM/timeout on CPU.
-                // Reduce only the generated instance through the public options object.
-                pinInitSeed = true;
-                string codecOptionsType = "AmphionOptions";
+                // Vevo is HuBERT-Large, two tokenizers, two Llamas (1920 and 1536 wide), a 16-layer flow transformer and a
+                // 30-block Vocos; keep every one at width 4-16 with one or two layers: HuBERT's three-layer feature encoder hops 20
+                // samples at 16 kHz and the mel 30 at 24 kHz (both 800 frames a second), 16 content-style and 4 content tokens.
+                // Decoding is restricted to content-style tokens (the untrained model would emit others) and stops at 900
+                // positions (the harness's one-second voice is 799 tokens of prompt); the flow takes two steps. The schedule's warm-up is one step and the rates 1e-3 so fifteen steps
+                // of the objective descend.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 32), " +
-                    $"new AiDotNet.TextToSpeech.CodecBased.{codecOptionsType} {{ TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
-                    "NumCodebooks = 2, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.VevoOptions { " +
+                    "MelChannels = 8, FftSize = 64, HopSize = 30, HiddenDim = 16, PhoneVocabulary = 64, " +
+                    "HubertConvDims = new[] { 8, 8, 8 }, HubertConvKernels = new[] { 10, 3, 2 }, HubertConvStrides = new[] { 5, 2, 2 }, " +
+                    "HubertHidden = 16, HubertHeads = 2, HubertIntermediate = 32, HubertPositionKernel = 8, HubertPositionGroups = 4, HubertLayer = 2, " +
+                    "ContentStyleCodes = 16, ContentStyleCodeDim = 4, ContentStyleVocosDim = 8, ContentStyleVocosIntermediate = 16, ContentStyleVocosLayers = 1, " +
+                    "ContentCodes = 4, ContentCodecChannels = 16, TextArHidden = 16, TextArIntermediate = 32, TextArLayers = 1, TextArHeads = 2, " +
+                    "VoiceArHidden = 16, VoiceArIntermediate = 32, VoiceArLayers = 1, VoiceArHeads = 2, FlowLayers = 1, FlowHeads = 2, FlowSteps = 2, " +
+                    "VocoderDim = 16, VocoderIntermediate = 32, VocoderLayers = 1, MinNewTokens = 2, MaxLength = 900, " +
+                    "ConstrainToContentStyleTokens = true, WarmupSteps = 1, LearningRate = 1e-3, FlowLearningRate = 1e-3 })";
             }
             else if (model.ClassName == "IndexTTS" && model.TypeParameterCount == 1)
             {
@@ -16467,6 +16469,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 6400 };");
                 }
+                else if (model.ClassName == "Vevo")
+                {
+                    // Vevo reads a text's phone ids and trains on a 24 kHz recording: eight ids, and 1200 samples (40 mel frames,
+                    // 39 HuBERT frames at the fixture's rates). Its flow objective draws t, the prompt and the noise, so the probes
+                    // compare the objective at a fixed draw. Text goes through eSpeak NG, which CI does not install: the text-in
+                    // tests skip without it.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 1200 };");
+                    sb.AppendLine("    protected override string? SynthesisUnavailableReason =>");
+                    sb.AppendLine("        \"Vevo phonemizes text with eSpeak NG (Amphion's g2p_), which is not installed here.\";");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "IndexTTS")
                 {
                     // IndexTTS reads a text's token ids and trains on a 24 kHz recording: eight ids, and 1024 samples (32 of the
@@ -16719,7 +16739,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "Vevo" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
@@ -22147,7 +22167,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoiceClone" or "Chatterbox"
             or "SeedTTS" or "SeedTTSClone"
             or "SpeechGPT" or "SpiritLM"
-            or "Amphion" or "GLM4Voice" or "WhisperSpeech"
+            or "GLM4Voice" or "WhisperSpeech"
             // SparkTTS exposes the same discrete codec-token contract.
             or "SparkTTS"
             || IsValleCodecLMModel(className);
@@ -22168,7 +22188,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "SeedTTSClone" => 16,
             "SpeechGPT" => 16,
             "SpiritLM" => 16,
-            "Amphion" => 32,
             "Bark" or "BarkModel" => 32,
             "CosyVoice3" => 16,
             "CosyVoiceClone" => 16,
