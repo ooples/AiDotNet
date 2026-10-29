@@ -123,14 +123,19 @@ internal sealed class BigVganGenerator<T>
     private readonly AntiAliasedSnake<T> _postActivation;
     private readonly NormedConv1DLayer<T> _post;
     private readonly bool _tanhAtFinal;
+    private readonly NormedConv1DLayer<T>? _speakerPre;
+    private readonly List<NormedConv1DLayer<T>> _speakerStages = new();
 
     /// <param name="snakeBeta">BigVGAN-v2's log-scale SnakeBeta in place of Snake (<c>activation: snakebeta</c>,
     /// <c>snake_logscale: true</c>).</param>
     /// <param name="tanhAtFinal">tanh on the output (<c>use_tanh_at_final</c>); otherwise it is clamped to [−1, 1].</param>
     /// <param name="biasAtFinal">A bias on the output convolution (<c>use_bias_at_final</c>).</param>
+    /// <param name="speakerChannels">IndexTTS's speaker conditioning (its <c>cond_layer</c> and
+    /// <c>cond_d_vector_in_each_upsampling_layer</c>): a speaker embedding of this width, through a 1×1 convolution, added
+    /// to the input convolution's output and, through one more per stage, to every upsampling's output. 0 for none.</param>
     public BigVganGenerator(IEngine engine, Random initialization, int melChannels, int initialChannels, int[] upsampleRates,
         int[] upsampleKernels, int[] resblockKernels, int[][] resblockDilations, bool snakeBeta = false, bool tanhAtFinal = true,
-        bool biasAtFinal = true)
+        bool biasAtFinal = true, int speakerChannels = 0)
     {
         _engine = engine;
         _tanhAtFinal = tanhAtFinal;
@@ -174,7 +179,25 @@ internal sealed class BigVganGenerator<T>
         _postActivation = Activation(channels);
         _post = Add(new NormedConv1DLayer<T>(channels, 1, 7, 1, 1, 1, 3, false, ConvolutionNormalization.Weight, biasAtFinal));
         _post.Reinitialize(normal, keepBias: true);
+        if (speakerChannels > 0)
+        {
+            // Plain nn.Conv1d: PyTorch's default U(±1/√fan_in) for weights and biases.
+            NormedConv1DLayer<T> Condition(int outputs)
+            {
+                var conv = Add(new NormedConv1DLayer<T>(speakerChannels, outputs, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None));
+                double bound = 1.0 / Math.Sqrt(speakerChannels);
+                Func<double> uniform = () => bound * (2 * initialization.NextDouble() - 1);
+                conv.LoadTorchWeights(Enumerable.Range(0, outputs * speakerChannels).Select(_ => uniform()).ToArray(), null,
+                    Enumerable.Range(0, outputs).Select(_ => uniform()).ToArray());
+                return conv;
+            }
+            _speakerPre = Condition(initialChannels);
+            for (int i = 0; i < upsampleRates.Length; i++) _speakerStages.Add(Condition(initialChannels >> (i + 1)));
+        }
     }
+
+    /// <summary>The width of the speaker embedding the generator is conditioned on (0 when it is not).</summary>
+    public int SpeakerChannels => _speakerPre?.InputChannels ?? 0;
 
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
 
@@ -184,14 +207,25 @@ internal sealed class BigVganGenerator<T>
         return layer;
     }
 
-    /// <summary>A waveform <c>[1, 1, frames · Π u]</c> from a mel spectrogram <c>[1, mel, frames]</c>.</summary>
-    public Tensor<T> Forward(Tensor<T> mel)
+    /// <summary>A waveform <c>[1, 1, frames · Π u]</c> from a mel spectrogram <c>[1, mel, frames]</c> (or, for IndexTTS,
+    /// GPT latents <c>[1, d, frames]</c>), conditioned on <paramref name="speaker"/> <c>[1, SpeakerChannels]</c> when the
+    /// generator takes a speaker.</summary>
+    public Tensor<T> Forward(Tensor<T> mel, Tensor<T>? speaker = null)
     {
         var ops = MathHelper.GetNumericOperations<T>();
+        if ((speaker is null) != (_speakerPre is null))
+            throw new ArgumentException(_speakerPre is null ? "This generator takes no speaker embedding." : "This generator needs a speaker embedding.", nameof(speaker));
+        Tensor<T> Condition(Tensor<T> x, NormedConv1DLayer<T> conv)
+        {
+            var bias = conv.Forward(_engine.Reshape(speaker!, new[] { 1, speaker!.Length, 1 }));     // [1, C, 1]
+            return _engine.TensorAdd(x, _engine.TensorBroadcastTo(bias, x.Shape.ToArray()));
+        }
         var x = _pre.Forward(mel);
+        if (_speakerPre is not null) x = Condition(x, _speakerPre);
         for (int i = 0; i < _ups.Count; i++)
         {
             x = _ups[i].Forward(x);
+            if (_speakerPre is not null) x = Condition(x, _speakerStages[i]);
             Tensor<T>? sum = null;
             foreach (var block in _blocks[i])
             {
@@ -255,5 +289,10 @@ internal sealed class BigVganGenerator<T>
         }
         Act(_postActivation, "activation_post.act");
         Conv(_post, "conv_post");
+        if (_speakerPre is not null)
+        {
+            Conv(_speakerPre, "cond_layer");
+            for (int i = 0; i < _speakerStages.Count; i++) Conv(_speakerStages[i], $"conds.{i}");
+        }
     }
 }

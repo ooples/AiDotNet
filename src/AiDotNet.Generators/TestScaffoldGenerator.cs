@@ -1946,8 +1946,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "LSTMDetector",
         // PR #1789 shard failures: apply the standard float-first policy before changing paper
         // architecture or invariant counts. BlackLittermanNeural and SECBertNER exhausted the
-        // runner; IndexTTS and OpenVocabSAM exceeded their generated-test time budgets.
-        "BlackLittermanNeural", "SECBertNER", "IndexTTS", "OpenVocabSAM",
+        // runner; OpenVocabSAM exceeded its generated-test time budget.
+        "BlackLittermanNeural", "SECBertNER", "OpenVocabSAM",
         // Generated N-P: PixelLM and OpenCLIP each timed out in their many-step training
         // invariants at <double>. Apply the required precision-first mitigation before changing
         // either paper-scale architecture or the generated iteration counts.
@@ -11230,26 +11230,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumCodebooks = 2, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "IndexTTS" && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            else if (model.ClassName == "IndexTTS" && model.TypeParameterCount == 1)
             {
-                // IndexTTS (Zhou et al., 2025) defaults to a 1024-wide, 20-layer GPT with a
-                // 12000-token text vocabulary and an 8192-way acoustic-token head. Float was
-                // applied first via Fp32TestClassNames and measured insufficient: the generated
-                // Clone_AfterTraining test still exceeded its 120 s budget. Keep production defaults
-                // paper-faithful and build the same text-encoder -> GPT -> single-codebook-logit
-                // structure at CI-smoke width/depth only in this generated test factory.
-                pinInitSeed = true;
+                // IndexTTS 1.0 is a 1024-wide 20-layer GPT-2 over 8194 mel codes, a 6-block conformer and perceiver over a
+                // 100-band mel, a DVAE coding every 1024 samples, and BigVGAN with a 512-wide ECAPA-TDNN; keep every one at
+                // width 4-16 with one block each: a 16-band mel of 64-point frames hopping 16 samples, a one-layer DVAE of 32
+                // codes (one per 32 samples), BigVGAN upsampling x32. Generation is capped at eight codes. The rate is raised
+                // to 1e-3 so fifteen steps of the objective descend.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions { SampleRate = 24000, " +
-                    "NumCodebooks = 1, CodebookSize = 16, CodecFrameRate = 25, TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
-                    "VocabSize = 64, MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0, " +
-                    "LearningRate = 1e-3, WeightDecay = 0.0 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.IndexTTSOptions { " +
+                    "MelChannels = 16, FftSize = 64, HopSize = 16, HiddenDim = 16, NumHeads = 2, Layers = 1, MaxTextLength = 16, MaxMelTokens = 64, " +
+                    "VocabSize = 64, MelCodes = 34, SamplesPerCode = 32, ConditionLatents = 4, ConditionDim = 8, ConditionLinearUnits = 16, " +
+                    "ConditionHeads = 2, ConditionBlocks = 1, DvaeHidden = 8, DvaeLayers = 1, DvaeResBlocks = 1, DvaeCodebookDim = 4, " +
+                    "VocoderInitialChannels = 16, VocoderUpsampleRates = new[] { 4, 8 }, VocoderUpsampleKernels = new[] { 8, 16 }, " +
+                    "VocoderResBlockKernels = new[] { 3 }, VocoderResBlockDilations = new[] { new[] { 1, 3, 5 } }, SpeakerEmbeddingDim = 8, " +
+                    "SpeakerEncoderChannels = new[] { 16, 16, 32 }, SpeakerEncoderKernels = new[] { 5, 3, 1 }, SpeakerEncoderDilations = new[] { 1, 2, 1 }, " +
+                    "SpeakerEncoderAttentionChannels = 8, SpeakerEncoderSeChannels = 8, SpeakerEncoderScale = 4, " +
+                    "MaxGeneratedTokens = 8, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
             {
@@ -16465,6 +16465,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 6400 };");
                 }
+                else if (model.ClassName == "IndexTTS")
+                {
+                    // IndexTTS reads a text's token ids and trains on a 24 kHz recording: eight ids, and 1024 samples (32 of the
+                    // fixture's mel codes). Its training draws dropout, so the probes compare the objective without it. Text goes
+                    // through the release's bpe.model, which CI does not have: the text-in tests skip without it.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 1024 };");
+                    sb.AppendLine("    protected override string? SynthesisUnavailableReason =>");
+                    sb.AppendLine("        \"IndexTTS tokenizes text with the release's bpe.model (IndexTTSOptions.BpeModelPath), which is not set here.\";");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "IndexTTS2")
                 {
                     // IndexTTS2 reads a text's token ids and trains on a 22.05 kHz recording: eight ids, and 8820 samples (0.4 s:
@@ -16700,7 +16717,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
@@ -22126,7 +22143,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "UniAudio" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
-            or "IndexTTS"
             or "SeedTTS" or "SeedTTSClone"
             or "SpeechGPT" or "SpiritLM"
             or "Amphion" or "GLM4Voice" or "WhisperSpeech"
@@ -22146,7 +22162,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return className switch
         {
             "VALLEXClone" => 16,
-            "IndexTTS" => 16,
             "SeedTTS" => 16,
             "SeedTTSClone" => 16,
             "SpeechGPT" => 16,
@@ -22183,7 +22198,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return IsValleCodecLMModel(className)
             || className is "Bark" or "BarkModel"
-            || className is "GLM4Voice" or "IndexTTS"
+            || className is "GLM4Voice"
                 or "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM"
                 ? 64 : 256;
