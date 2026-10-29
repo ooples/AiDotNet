@@ -851,7 +851,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <remarks>
     /// <para>
     /// Useful for production observability — shows exactly which of AVX2/AVX-512/NEON,
-    /// CUDA/OpenCL/HIP, OpenBLAS/CLBlast/MKL are active on the target host. Users can
+    /// CUDA/OpenCL/HIP, CLBlast and oneDNN are active on the target host. Users can
     /// assert against the returned snapshot in CI (e.g., fail build if AVX-512 isn't
     /// detected on an Intel Xeon host).
     /// </para>

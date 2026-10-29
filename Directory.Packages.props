@@ -395,7 +395,6 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          (AiDotNet.Tensors #679), which the new AiDotNet targets need. 0.138.1 depends on AiDotNet.Evolution
          0.3.0, so Evolution moves with it. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.143.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.139.2" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.143.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.6.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.143.0" />
@@ -430,7 +429,6 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
     <PackageVersion Include="MySqlConnector" Version="2.6.2" />
     <!-- Azure -->
-    <PackageVersion Include="Azure.Search.Documents" Version="11.7.0" />
     <PackageVersion Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />

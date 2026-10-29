@@ -97,7 +97,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Azure.Search.Documents" />
 	  <!-- audit-2026-05 phase 2b: Elasticsearch backend extracted to
 	       src/AiDotNet.Storage.Elasticsearch (consumers add a project /
 	       package reference to AiDotNet.Storage.Elasticsearch to opt in).
@@ -310,8 +309,6 @@
 	  Users can also install these separately to enable specific accelerators.
 	-->
 	<ItemGroup>
-	  <!-- CPU acceleration via OpenBLAS -->
-	  <PackageReference Include="AiDotNet.Native.OpenBLAS" />
 	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
 	  <PackageReference Include="AiDotNet.Native.CLBlast" />
 	  <!-- CPU acceleration via Intel OneDNN -->
