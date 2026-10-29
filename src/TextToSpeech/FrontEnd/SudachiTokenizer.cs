@@ -37,14 +37,14 @@ internal sealed class SudachiTokenizer
     /// character lower-cased (Unicode's Uppercase property) and NFKC-normalized unless <c>rewrite.def</c> leaves it.</summary>
     internal string Normalize(string text)
     {
-        var runes = text.EnumerateRunes().ToArray();
+        var runes = SudachiText.CodePoints(text);
         var output = new StringBuilder(text.Length);
         for (int i = 0; i < runes.Length; i++)
         {
             bool replaced = false;
             for (int length = Math.Min(_dic.LongestReplacementKey, runes.Length - i); length >= 1 && !replaced; length--)
             {
-                string key = string.Concat(runes.Skip(i).Take(length).Select(r => r.ToString()));
+                string key = string.Concat(runes.Skip(i).Take(length).Select(SudachiText.Of));
                 if (_dic.Replacements.TryGetValue(key, out var replacement))
                 {
                     output.Append(replacement);
@@ -54,12 +54,12 @@ internal sealed class SudachiTokenizer
             }
             if (replaced) continue;
             var rune = runes[i];
-            string original = rune.ToString();
+            string original = SudachiText.Of(rune);
             string changed = original;
-            if (IsUppercase(rune.Value)) changed = Lowercase(rune.Value);
-            if (!_dic.IgnoreNormalize.Contains(rune.Value)) changed = changed.Normalize(NormalizationForm.FormKC);
+            if (IsUppercase(rune)) changed = Lowercase(rune);
+            if (!_dic.IgnoreNormalize.Contains(rune)) changed = changed.Normalize(NormalizationForm.FormKC);
             // handle_normalization_slow: replaced only when the first character changes.
-            output.Append(changed.EnumerateRunes().FirstOrDefault().Value != rune.Value && changed.Length > 0 ? changed : original);
+            output.Append(changed.Length > 0 && SudachiText.CodePoints(changed)[0] != rune ? changed : original);
         }
         return output.ToString();
     }
@@ -80,19 +80,19 @@ internal sealed class SudachiTokenizer
     /// <summary>ProlongedSoundMarkPlugin: each run of two or more prolonged sound marks as one "ー".</summary>
     internal static string CollapseProlongedSoundMarks(string text)
     {
-        var runes = text.EnumerateRunes().ToArray();
+        var runes = SudachiText.CodePoints(text);
         var output = new StringBuilder(text.Length);
         for (int i = 0; i < runes.Length; i++)
         {
             int j = i;
-            while (j < runes.Length && ProlongedSoundMarks.Contains(runes[j].Value)) j++;
+            while (j < runes.Length && ProlongedSoundMarks.Contains(runes[j])) j++;
             if (j - i >= 2)
             {
                 output.Append('ー');
                 i = j - 1;
                 continue;
             }
-            output.Append(runes[i].ToString());
+            output.Append(SudachiText.Of(runes[i]));
         }
         return output.ToString();
     }
@@ -100,19 +100,19 @@ internal sealed class SudachiTokenizer
     /// <summary>IgnoreYomiganaPlugin: a kanji's bracketed reading (one to four kana) removed.</summary>
     internal string RemoveYomigana(string text)
     {
-        var runes = text.EnumerateRunes().ToArray();
+        var runes = SudachiText.CodePoints(text);
         var output = new StringBuilder(text.Length);
         for (int i = 0; i < runes.Length; i++)
         {
-            output.Append(runes[i].ToString());
-            if (!_dic.Categories.Of(runes[i].Value).HasFlag(SudachiCategory.Kanji) || i + 1 >= runes.Length || !LeftBrackets.Contains(runes[i + 1].Value))
+            output.Append(SudachiText.Of(runes[i]));
+            if (!_dic.Categories.Of(runes[i]).HasFlag(SudachiCategory.Kanji) || i + 1 >= runes.Length || !LeftBrackets.Contains(runes[i + 1]))
                 continue;
             int reading = 0;
             while (reading <= MaxYomiganaLength && i + 2 + reading < runes.Length
-                && (_dic.Categories.Of(runes[i + 2 + reading].Value) & (SudachiCategory.Hiragana | SudachiCategory.Katakana)) != 0)
+                && (_dic.Categories.Of(runes[i + 2 + reading]) & (SudachiCategory.Hiragana | SudachiCategory.Katakana)) != 0)
                 reading++;
             int close = i + 2 + reading;
-            if (reading >= 1 && reading <= MaxYomiganaLength && close < runes.Length && RightBrackets.Contains(runes[close].Value))
+            if (reading >= 1 && reading <= MaxYomiganaLength && close < runes.Length && RightBrackets.Contains(runes[close]))
                 i = close;
         }
         return output.ToString();
@@ -130,7 +130,7 @@ internal sealed class SudachiTokenizer
         public SudachiCategory[] Categories = Array.Empty<SudachiCategory>();
         public int[] Continuity = Array.Empty<int>();
 
-        public string Slice(int begin, int end) => string.Concat(Chars.Skip(begin).Take(end - begin).Select(c => new Rune(c).ToString()));
+        public string Slice(int begin, int end) => string.Concat(Chars.Skip(begin).Take(end - begin).Select(c => SudachiText.Of(c)));
 
         public SudachiCategory CategoryOfRange(int begin, int end)
         {
@@ -143,7 +143,7 @@ internal sealed class SudachiTokenizer
 
     private Input Build(string text)
     {
-        var input = new Input { Chars = text.EnumerateRunes().Select(r => r.Value).ToArray() };
+        var input = new Input { Chars = SudachiText.CodePoints(text) };
         int n = input.Chars.Length;
         input.Bytes = Encoding.UTF8.GetBytes(text);
         input.CharToByte = new int[n + 1];
@@ -160,7 +160,7 @@ internal sealed class SudachiTokenizer
             input.Categories[i] = category;
             input.BowAtByte[b] = (category & nonStarting) == 0 || (category & previous) == 0;
             previous = category;
-            int width = new Rune(input.Chars[i]).Utf8SequenceLength;
+            int width = SudachiText.Utf8Length(input.Chars[i]);
             for (int k = 0; k < width; k++) input.ByteToChar[b + k] = i;
             b += width;
         }
@@ -405,9 +405,9 @@ internal sealed class SudachiTokenizer
                     parser.Clear();
                     beginIndex = i;
                 }
-                foreach (var rune in s.EnumerateRunes())
+                foreach (var rune in SudachiText.CodePoints(s))
                 {
-                    if (!parser.Append(rune.Value))
+                    if (!parser.Append(rune))
                     {
                         if (beginIndex >= 0)
                         {
