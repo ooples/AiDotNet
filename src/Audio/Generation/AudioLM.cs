@@ -257,6 +257,43 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
         }
     }
 
+    /// <summary>
+    /// Acoustic generation continuing a voice prompt (§III-D, as AudioPaLM conditions it): the coarse stage reads the
+    /// prompt's and the continuation's semantic tokens and continues the prompt's coarse codes, the fine stage fills the
+    /// continuation; returns the continuation's codes <c>[Q, frames]</c>.
+    /// </summary>
+    internal int[,] GenerateAcoustic(IReadOnlyList<int> semantic, int[,] promptCodes, IReadOnlyList<int> promptSemantic, int? seed = null)
+    {
+        Guard.NotNull(semantic);
+        Guard.NotNull(promptCodes);
+        Guard.NotNull(promptSemantic);
+        ThrowIfDisposed();
+        var o = _options;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed ?? o.Seed ?? 0);
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using var _ = new NoGradScope<T>();
+            var core = Core;
+            int frames = Math.Max(1, semantic.Count * FramesPerSemanticToken);
+            var all = promptSemantic.Concat(semantic).ToArray();
+            var coarse = core.GenerateCoarse(all, promptCodes, frames, o.CoarseTemperature, random);
+            int prompt = promptCodes.GetLength(1), total = prompt + coarse.GetLength(1);
+            var codes = new int[o.NumCodebooks, total];
+            for (int q = 0; q < o.NumCodebooks; q++)
+                for (int t = 0; t < prompt; t++) codes[q, t] = promptCodes[q, t];
+            for (int q = 0; q < o.CoarseCodebooks; q++)
+                for (int t = 0; t < coarse.GetLength(1); t++) codes[q, prompt + t] = coarse[q, t];
+            core.GenerateFine(codes, prompt, Math.Max(1, (int)Math.Round(o.FineCropSeconds * FrameRate)), o.FineTemperature, random);
+            return Slice(codes, prompt, total, o.NumCodebooks);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
     /// <summary>Acoustic generation (§III-D): renders semantic tokens (25 Hz) to codes <c>[Q, frames]</c> with the
     /// coarse and fine stages.</summary>
     public int[,] GenerateAcoustic(IReadOnlyList<int> semantic, int? seed = null)

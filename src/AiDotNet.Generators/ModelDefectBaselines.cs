@@ -10,8 +10,6 @@ internal static class ModelDefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> DuplicatePapers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>",
-            "AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>",
         };
 
     /// <summary>ADNDEF002: LayerHelper factories yielding a bare MultiHeadAttentionLayer, 102 entries; an overloaded factory is keyed by its signature.</summary>
@@ -162,7 +160,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>",
             "AiDotNet.SpeechRecognition.Foundation.UniSpeech<T>",
             "AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>",
-            "AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASR<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASRLLM<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.GraniteSpeech<T>",
@@ -248,7 +245,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>",
             "AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>",
             "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>",
-            "AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>",
             "AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T>",
             "AiDotNet.TextToSpeech.MultiModal.LlamaOmni<T>",
             "AiDotNet.TextToSpeech.MultiModal.MinMo<T>",
