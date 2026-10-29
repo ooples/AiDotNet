@@ -194,7 +194,9 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
         _acoustic ?? throw new InvalidOperationException("SoundStorm's acoustic network exists in native mode only.");
 
     private T5Seq2Seq<T> TextToSemantic =>
-        _textToSemantic ?? throw new InvalidOperationException("SoundStorm's text-to-semantic network exists in native mode only.");
+        _textToSemantic ?? throw new InvalidOperationException(_useNativeMode
+            ? "This SoundStorm was built without its text-to-semantic model (SoundStormOptions.IncludeTextToSemantic)."
+            : "SoundStorm's text-to-semantic network exists in native mode only.");
 
     // The networks' layers, for tests that check a stage updates its own network only.
     internal IReadOnlyList<LayerBase<T>> TextToSemanticLayers => _textLayers;
@@ -215,12 +217,16 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
 
         var o = _options;
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed);
-        _textToSemantic = new T5Seq2Seq<T>(Engine, _textLayers, new T5Configuration(
-            VocabularySize: o.VocabSize, ModelDim: o.TextModelDim, FeedForwardDim: o.TextFeedForwardDim,
-            KeyValueDim: o.TextKeyValueDim, Heads: o.NumHeads, EncoderLayers: o.NumEncoderLayers,
-            DecoderLayers: o.NumDecoderLayers, Dropout: o.TextDropoutRate, DecoderStartTokenId: PadToken,
-            EndTokenId: EndToken, GatedGelu: true, TieWordEmbeddings: false));
-        _textToSemantic.InitializeLikeHuggingFace(random);
+        if (o.IncludeTextToSemantic)
+        {
+            _textToSemantic = new T5Seq2Seq<T>(Engine, _textLayers, new T5Configuration(
+                VocabularySize: o.VocabSize, ModelDim: o.TextModelDim, FeedForwardDim: o.TextFeedForwardDim,
+                KeyValueDim: o.TextKeyValueDim, Heads: o.NumHeads, EncoderLayers: o.NumEncoderLayers,
+                DecoderLayers: o.NumDecoderLayers, Dropout: o.TextDropoutRate, DecoderStartTokenId: PadToken,
+                EndTokenId: EndToken, GatedGelu: true, TieWordEmbeddings: false));
+            _textToSemantic.InitializeLikeHuggingFace(random);
+        }
+        else CurrentStage = SoundStormTrainingStage.SemanticToAcoustic;
 
         double Normal002()
         {
@@ -258,8 +264,12 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ArgumentException($"The codec's {CodecFrameRate} frames per second must be a multiple of the semantic tokens' {o.SemanticFrameRate}.");
         _codec = new AudioCodecLayer<T>(codec);
 
-        AddEncoderDecoderLayers(_textLayers.Cast<ILayer<T>>().ToList(), Array.Empty<ILayer<T>>());
-        ComponentLayers.AddRange(_acousticLayers);
+        if (o.IncludeTextToSemantic)
+        {
+            AddEncoderDecoderLayers(_textLayers.Cast<ILayer<T>>().ToList(), Array.Empty<ILayer<T>>());
+            ComponentLayers.AddRange(_acousticLayers);
+        }
+        else AddUnsplitLayers(_acousticLayers.Cast<ILayer<T>>().ToList());
         ComponentLayers.Add(_codec);
     }
 
@@ -445,7 +455,6 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
         {
             using var _ = new NoGradScope<T>();
             var o = _options;
-            int factor = UpsampleFactor;
 
             int[] promptSemantic = Array.Empty<int>();
             int[,] promptCodes = new int[o.NumCodebooks, 0];
@@ -470,10 +479,33 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
                 .Skip(prefix.Count).Where(id => id >= ByteVocabulary).Select(id => id - ByteVocabulary).ToArray();
             if (generated.Length == 0)
                 throw new InvalidOperationException("The text-to-semantic model generated no semantic tokens.");
+            return SemanticToAudio(generated, promptSemantic, promptCodes, random);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
 
+    /// <summary>
+    /// The acoustic stage (§3): semantic tokens at <see cref="SoundStormOptions.SemanticFrameRate"/> to the waveform
+    /// <c>[samples]</c>, continuing a voice prompt given as its semantic tokens and its codec codes <c>[Q, P]</c> (empty for
+    /// none). AudioPaLM detokenizes its audio tokens through this.
+    /// </summary>
+    internal Tensor<T> SemanticToAudio(IReadOnlyList<int> generated, IReadOnlyList<int> promptSemantic, int[,] promptCodes, Random random)
+    {
+        var o = _options;
+        int factor = UpsampleFactor;
+        if (generated.Concat(promptSemantic).Any(code => code < 0 || code >= o.SemanticCodes))
+            throw new ArgumentOutOfRangeException(nameof(generated), $"Semantic tokens lie in [0, {o.SemanticCodes}).");
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using var _ = new NoGradScope<T>();
             // The prompt's frames are those both its codes and its upsampled semantic tokens cover.
-            int promptFrames = Math.Min(promptCodes.GetLength(1), promptSemantic.Length * factor);
-            int frames = promptFrames + generated.Length * factor;
+            int promptFrames = Math.Min(promptCodes.GetLength(1), promptSemantic.Count * factor);
+            int frames = promptFrames + generated.Count * factor;
             var semantic = new int[frames];
             for (int f = 0; f < promptFrames; f++) semantic[f] = promptSemantic[f / factor];
             for (int f = promptFrames; f < frames; f++) semantic[f] = generated[(f - promptFrames) / factor];
