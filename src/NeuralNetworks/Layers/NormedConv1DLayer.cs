@@ -163,6 +163,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
 
     /// <summary>The output channels.</summary>
+    internal int InputChannels => _in;
     internal int OutputChannels => _out;
 
     /// <summary>Whether the layer has a bias.</summary>
