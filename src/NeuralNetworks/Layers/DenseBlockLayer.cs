@@ -202,6 +202,21 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         // BN/Conv expect [N, C, H, W] format. Add batch dim if 3D [C, H, W].
         var x = input.Shape.Length == 3 ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;
 
+        // In inference the pre-activation BN1 + ReLU runs as one pass, and BN2 + ReLU folds into the 1x1 convolution
+        // before it (the engine's FusedConv2DBatchNorm): two batch-norm passes and two ReLU passes fewer per layer, a third
+        // of a DenseNet-121 predict. Each helper declines (training, a tape, a capture, an observer) and the layer then
+        // runs unfused below, which also keeps the intermediates the backward reads.
+        if (!ShouldCacheForBackward
+            && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn1, x, FusedActivationType.ReLU, out var preActivated)
+            && ConvolutionBatchNormFolding<T>.TryForward(_conv1x1, _bn2, preActivated, FusedActivationType.ReLU, out var bottleneck))
+        {
+            _bn1Out = _relu1Out = _conv1Out = _bn2Out = _relu2Out = null;
+            var fusedOutput = _conv3x3.Forward(bottleneck);
+            if (input.Shape.Length == 3 && fusedOutput.Shape.Length == 4 && fusedOutput.Shape[0] == 1)
+                fusedOutput = Engine.Reshape(fusedOutput, [fusedOutput.Shape[1], fusedOutput.Shape[2], fusedOutput.Shape[3]]);
+            return fusedOutput;
+        }
+
         // BN-ReLU-Conv1x1 (DenseNet paper: pre-activation bottleneck)
         _bn1Out = _bn1.Forward(x);
         // Scalar activation objects operate eagerly and therefore detach the value from the

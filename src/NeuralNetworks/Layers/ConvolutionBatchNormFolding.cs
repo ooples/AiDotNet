@@ -27,6 +27,15 @@ internal static class ConvolutionBatchNormFolding<T>
     /// </summary>
     internal static bool TryForward(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> norm, Tensor<T> input,
         bool relu, out Tensor<T> output)
+        => TryForward(conv, norm, input, relu ? FusedActivationType.ReLU : FusedActivationType.None, out output);
+
+    /// <summary>
+    /// <c>act(bn(conv(input)))</c> as one convolution with the folded weights, for any activation the engine fuses into
+    /// a convolution (a ReLU6 for MobileNetV2's expansion stage). False, with nothing computed, under the same
+    /// conditions as the ReLU overload.
+    /// </summary>
+    internal static bool TryForward(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> norm, Tensor<T> input,
+        FusedActivationType activation, out Tensor<T> output)
     {
         output = input;
         if (!InferenceFusionSettings.FoldBatchNormIntoConvolution) return false;
@@ -51,8 +60,81 @@ internal static class ConvolutionBatchNormFolding<T>
         // there (after on-device training), instead of downloading all six to fold them on the host.
         output = AiDotNetEngine.Current.FusedConv2DBatchNorm(input, conv.KernelsForFolding, conv.BiasesForFolding,
             gamma, beta, mean, variance, epsilon, conv.Stride, conv.Stride, conv.Padding, conv.Padding, 1, 1,
-            relu ? FusedActivationType.ReLU : FusedActivationType.None);
+            activation);
         return true;
+    }
+
+    /// <summary>
+    /// <c>act(bn(input))</c> in one pass over the activation (AiDotNet.Tensors' BatchNormInference with an activation),
+    /// where a batch norm cannot fold into the convolution before it: a depthwise convolution, say. False, with nothing
+    /// computed, when folding is off, the layer is training, a tape is recording, a graph is being captured, shapes are
+    /// being inferred, an observer is attached, or the input is not rank 4.
+    /// </summary>
+    internal static bool TryBatchNormActivation(BatchNormalizationLayer<T> norm, Tensor<T> input,
+        FusedActivationType activation, out Tensor<T> output)
+    {
+        output = input;
+        if (!InferenceFusionSettings.FoldBatchNormIntoConvolution) return false;
+        if (input.Rank != 4 || norm.InTrainingMode) return false;
+        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>() || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            return false;
+        if (LayerBase<T>.IsInferringShapes) return false;
+        if (!norm.TryGetFoldingStatistics(input.Shape[1], out var gamma, out var beta, out var mean, out var variance,
+                out double epsilon))
+            return false;
+        if (LayerForwardObserver<T>.Current is { } observer)
+        {
+            observer.NoteSuppressedFolding();
+            return false;
+        }
+
+        output = AiDotNetEngine.Current.BatchNormInference(input, gamma, beta, mean, variance, epsilon, activation);
+        return true;
+    }
+
+    /// <summary>
+    /// <c>act(bn(depthwise(input) + bias))</c> as a bias-free depthwise convolution and one batch-norm pass with the bias
+    /// folded into its mean (mean - bias): the bias add and the activation are no separate passes. False, with nothing
+    /// computed, under the conditions of <see cref="TryBatchNormActivation"/> or when the convolution is not a depthwise
+    /// one without an activation of its own (<see cref="ConvolutionalLayer{T}.CanFoldBiasIntoFollowingBatchNorm"/>).
+    /// </summary>
+    internal static bool TryDepthwiseBatchNormActivation(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> norm,
+        Tensor<T> input, FusedActivationType activation, out Tensor<T> output)
+    {
+        output = input;
+        if (!InferenceFusionSettings.FoldBatchNormIntoConvolution) return false;
+        if (input.Rank != 4 || conv.InTrainingMode || norm.InTrainingMode) return false;
+        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>() || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            return false;
+        if (LayerBase<T>.IsInferringShapes) return false;
+        if (!conv.CanFoldBiasIntoFollowingBatchNorm || input.Shape[1] != conv.InputDepth) return false;
+        if (!norm.TryGetFoldingStatistics(conv.OutputDepth, out var gamma, out var beta, out var mean, out var variance,
+                out double epsilon))
+            return false;
+        if (LayerForwardObserver<T>.Current is { } observer)
+        {
+            observer.NoteSuppressedFolding();
+            return false;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var depthwise = engine.DepthwiseConv2D(input, conv.KernelsForFolding, new[] { conv.Stride, conv.Stride },
+            new[] { conv.Padding, conv.Padding });
+        var shiftedMean = conv.BiasesForFolding is { } bias ? engine.TensorSubtract(mean, bias) : mean;
+        output = engine.BatchNormInference(depthwise, gamma, beta, shiftedMean, variance, epsilon, activation);
+        return true;
+    }
+    /// <summary>
+    /// The engine-fusable form of <paramref name="activation"/>: None for no activation, ReLU and ReLU6 for exactly those
+    /// activation types (a subclass may compute something else, so it does not qualify). False otherwise.
+    /// </summary>
+    internal static bool TryGetFusedActivation(IActivationFunction<T>? activation, out FusedActivationType fused)
+    {
+        fused = FusedActivationType.None;
+        if (activation is null) return true;
+        if (activation.GetType() == typeof(ReLU6Activation<T>)) { fused = FusedActivationType.ReLU6; return true; }
+        if (activation.GetType() == typeof(ReLUActivation<T>)) { fused = FusedActivationType.ReLU; return true; }
+        return false;
     }
 
     /// <summary>

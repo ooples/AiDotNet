@@ -306,9 +306,19 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
         _lastInput = processInput;
 
-        // BN → ReLU → Conv1x1 → AvgPool
-        _bnOut = _bn.Forward(processInput);
-        _reluOut = _relu.Activate(_bnOut);
+        // BN → ReLU → Conv1x1 → AvgPool. In inference BN + ReLU is one pass (when the block's ReLU is exactly a ReLU);
+        // otherwise, and whenever the backward will read the intermediates, the stages run separately.
+        if (!ShouldCacheForBackward && _relu.GetType() == typeof(ReLUActivation<T>)
+            && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn, processInput, FusedActivationType.ReLU, out var preActivated))
+        {
+            _bnOut = null;
+            _reluOut = preActivated;
+        }
+        else
+        {
+            _bnOut = _bn.Forward(processInput);
+            _reluOut = _relu.Activate(_bnOut);
+        }
         _convOut = conv.Forward(_reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
