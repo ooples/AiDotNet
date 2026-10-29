@@ -118,19 +118,62 @@ public class WatermarkingIntegrationTests
     {
         await Task.Yield();
         var image = CreateRandomImageTensor(3, 32, 32);
-        var marked = new ImageWatermarker<double>().EmbedWatermark(image);
-        double confidence = new ImageWatermarker<double>().DetectWatermark(marked);
-        Assert.True(confidence > 0 && confidence <= 1, $"confidence {confidence} on a marked image");
+        var detector = new ImageWatermarker<double>();
+        var fullMark = detector.EmbedWatermark(image);
 
-        var atThreshold = new ImageWatermarker<double>(detectionThreshold: confidence).EvaluateImage(marked);
-        var finding = Assert.Single(atThreshold);
+        // Scale the embedded change so the confidence lies strictly inside (0, 1); both sides of the threshold
+        // are then checked unconditionally. Confidence rises with the scale, so bisection finds one.
+        double low = 0, high = 1, confidence = detector.DetectWatermark(fullMark);
+        Tensor<double> partial = fullMark;
+        for (int step = 0; step < 40 && !(confidence >= 0.3 && confidence <= 0.7); step++)
+        {
+            double scale = 0.5 * (low + high);
+            partial = Blend(image, fullMark, scale);
+            confidence = detector.DetectWatermark(partial);
+            if (confidence > 0.7) high = scale; else low = scale;
+        }
+
+        Assert.True(confidence >= 0.3 && confidence <= 0.7, $"no scale gave a mid-range confidence; last {confidence}");
+
+        var finding = Assert.Single(new ImageWatermarker<double>(detectionThreshold: confidence).EvaluateImage(partial));
         Assert.Equal(AiDotNet.Enums.SafetyCategory.Watermarked, finding.Category);
         Assert.Equal(confidence, finding.Confidence);
-
-        if (confidence < 1)
-            Assert.Empty(new ImageWatermarker<double>(detectionThreshold: Math.Min(1, confidence + 1e-6)).EvaluateImage(marked));
+        Assert.Empty(new ImageWatermarker<double>(detectionThreshold: confidence + 0.01).EvaluateImage(partial));
         Assert.Empty(new ImageWatermarker<double>(detectionThreshold: 0.5).EvaluateImage(image));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ImageWatermarker<double>(detectionThreshold: 1.5));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_RejectsImagesAboveItsPixelLimit()
+    {
+        await Task.Yield();
+        var watermarker = new SmallLimitWatermarker();
+        var image = CreateRandomImageTensor(1, 40, 40);
+        Assert.Throws<ArgumentException>(() => watermarker.EmbedWatermark(image));
+        Assert.Throws<ArgumentException>(() => watermarker.DetectWatermark(image));
+        var allowed = CreateRandomImageTensor(1, 32, 32);
+        Assert.True(watermarker.DetectWatermark(watermarker.EmbedWatermark(allowed)) >= 0.9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_EmptyKey_IsRejected()
+    {
+        await Task.Yield();
+        Assert.Throws<ArgumentException>(() => new ImageWatermarker<double>(key: ""));
+    }
+
+    private sealed class SmallLimitWatermarker : ImageWatermarker<double>
+    {
+        protected override long MaxPixels => 32 * 32;
+    }
+
+    private static Tensor<double> Blend(Tensor<double> image, Tensor<double> marked, double scale)
+    {
+        var a = image.ToArray();
+        var b = marked.ToArray();
+        var data = new double[a.Length];
+        for (int i = 0; i < a.Length; i++) data[i] = a[i] + scale * (b[i] - a[i]);
+        return new Tensor<double>(data, image.Shape.ToArray());
     }
 
     #endregion

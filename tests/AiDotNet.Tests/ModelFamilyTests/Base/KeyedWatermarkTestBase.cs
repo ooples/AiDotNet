@@ -37,13 +37,13 @@ public abstract class KeyedWatermarkTestBase
     /// Creates the watermarker with another key. The default finds the module's constructor parameter named
     /// <c>key</c> and passes every other parameter its default.
     /// </summary>
-    protected virtual IImageWatermarker<double> CreateModuleWithKey(int key)
+    protected virtual IImageWatermarker<double> CreateModuleWithKey(string key)
     {
         var type = CreateModule().GetType();
         foreach (var ctor in type.GetConstructors())
         {
             var parameters = ctor.GetParameters();
-            if (!parameters.Any(p => p.Name == "key" && p.ParameterType == typeof(int))) continue;
+            if (!parameters.Any(p => p.Name == "key" && p.ParameterType == typeof(string))) continue;
             if (!parameters.All(p => p.Name == "key" || p.HasDefaultValue)) continue;
             var args = parameters.Select(p => p.Name == "key" ? key : p.DefaultValue).ToArray();
             return (IImageWatermarker<double>)ctor.Invoke(args);
@@ -59,7 +59,7 @@ public abstract class KeyedWatermarkTestBase
     /// <summary>The height and width of the test images.</summary>
     protected virtual int ImageSize => 64;
 
-    private const int OtherKey = 0x1234567;
+    private const string OtherKey = "another-application-secret-key";
 
     [Fact(Timeout = 60000)]
     public async Task Embed_ThenDetect_IsConfident()
@@ -169,6 +169,36 @@ public abstract class KeyedWatermarkTestBase
         Assert.Equal(0.0, module.DetectWatermark(tiny));
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task TiledImage_RoundTrips_AndRejectsAForeignKey()
+    {
+        await Task.Yield();
+        // 150 x 150 is split into 3 x 3 tiles of 50 pixels, each with its own pattern.
+        var module = CreateModule();
+        var image = NoiseImage(150);
+        var marked = module.EmbedWatermark(image);
+        Assert.True(module.DetectWatermark(marked) >= 0.9, $"{module.ModuleName}: its own mark is not detected in a tiled image.");
+        Assert.Equal(0.0, module.DetectWatermark(image));
+        Assert.Equal(0.0, CreateModuleWithKey(OtherKey).DetectWatermark(marked));
+
+        // Every tile carries the mark: the top-left tile alone still detects it.
+        var corner = new double[ImageChannels * 50 * 50];
+        var all = marked.ToArray();
+        for (int c = 0; c < ImageChannels; c++)
+            for (int y = 0; y < 50; y++)
+                for (int x = 0; x < 50; x++) corner[(c * 50 + y) * 50 + x] = all[(c * 150 + y) * 150 + x];
+        Assert.True(module.DetectWatermark(new Tensor<double>(corner, new[] { ImageChannels, 50, 50 })) > 0,
+            $"{module.ModuleName}: the first tile of a tiled mark carries no evidence on its own.");
+
+        // Each tile has its own pattern, so averaging tiles cannot estimate it: the second tile, read as a lone
+        // image (where it would be the first tile), carries no evidence.
+        var second = new double[ImageChannels * 50 * 50];
+        for (int c = 0; c < ImageChannels; c++)
+            for (int y = 0; y < 50; y++)
+                for (int x = 0; x < 50; x++) second[(c * 50 + y) * 50 + x] = all[(c * 150 + y) * 150 + 50 + x];
+        Assert.Equal(0.0, module.DetectWatermark(new Tensor<double>(second, new[] { ImageChannels, 50, 50 })));
+    }
+
     private (string Name, Tensor<double> Image)[] Images() => new[]
     {
         ("natural", NaturalImage()),
@@ -194,12 +224,14 @@ public abstract class KeyedWatermarkTestBase
         return new Tensor<double>(data, new[] { c, n, n });
     }
 
-    private Tensor<double> NoiseImage()
+    private Tensor<double> NoiseImage() => NoiseImage(ImageSize);
+
+    private Tensor<double> NoiseImage(int size)
     {
         var random = RandomHelper.CreateSeededRandom(43);
-        var data = new double[ImageChannels * ImageSize * ImageSize];
+        var data = new double[ImageChannels * size * size];
         for (int i = 0; i < data.Length; i++) data[i] = random.NextDouble();
-        return new Tensor<double>(data, new[] { ImageChannels, ImageSize, ImageSize });
+        return new Tensor<double>(data, new[] { ImageChannels, size, size });
     }
 
     private Tensor<double> FlatGradientImage()

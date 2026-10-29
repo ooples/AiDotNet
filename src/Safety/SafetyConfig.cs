@@ -372,9 +372,18 @@ public class WatermarkConfig
     public bool? DetectionMode { get; set; }
 
     /// <summary>
-    /// Gets or sets the watermark strength (0-1). Higher is more robust but may affect quality. Default: 0.5.
+    /// Gets or sets the watermark strength, in (0, 1]. Higher is more robust but may affect quality. Default: 0.5.
     /// </summary>
     public double? WatermarkStrength { get; set; }
+
+    /// <summary>
+    /// Gets or sets the secret key of the image watermark: only a watermarker with the same key embeds or detects
+    /// it. Required when <see cref="ImageWatermarking"/> is enabled, so the application marks images with a key of
+    /// its own; use a long random value (for example 32 random bytes in base64) and keep it secret. When only
+    /// <see cref="DetectionMode"/> is enabled and no key is set, the pipeline detects marks made with the public key,
+    /// which anyone can forge.
+    /// </summary>
+    public string? ImageWatermarkKey { get; set; }
 
     // -- Internal defaults --
     internal bool EffectiveTextWatermarking => TextWatermarking ?? false;

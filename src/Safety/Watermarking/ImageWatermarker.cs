@@ -49,8 +49,11 @@ public class ImageWatermarker<T> : InvisibleImageWatermarker<T>
     /// Embedding amplitude relative to the spread of the DCT coefficients. Higher values are more robust but less
     /// invisible. Default: 0.5.
     /// </param>
-    /// <param name="key">The secret key the watermark is derived from.</param>
-    public ImageWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5, int key = DefaultKey)
+    /// <param name="key">
+    /// The secret key the watermark is derived from. <c>null</c> uses the public
+    /// <see cref="ImageWatermarkerBase{T}.PublicKey"/>, whose marks anyone can forge.
+    /// </param>
+    public ImageWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5, string? key = null)
         : base(watermarkStrength, key)
     {
         if (double.IsNaN(detectionThreshold) || detectionThreshold < 0 || detectionThreshold > 1)

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
@@ -14,7 +15,8 @@ namespace AiDotNet.Safety.Watermarking;
 /// over many full-frame DCT coefficients, so each changes imperceptibly. This implementation is the blind (non-informed)
 /// variant: the watermark is added (c' = c + a * x) rather than multiplied, so detection needs only the key and
 /// not the original image. The coefficients used are those at normalized frequency radius 0.1-0.8, excluding the
-/// first row and column, which carry the energy of image borders and straight gradients.
+/// first row and column, which carry the energy of image borders and straight gradients. Images larger than
+/// <see cref="ImageWatermarkerBase{T}.MaxTileSize"/> pixels per side are marked tile by tile.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> the image is rewritten as a sum of wave patterns (the DCT). A secret, random-looking
@@ -34,9 +36,11 @@ namespace AiDotNet.Safety.Watermarking;
     Authors = "Ingemar J. Cox, Joe Kilian, F. Thomson Leighton, Talal Shamoon")]
 public class InvisibleImageWatermarker<T> : ImageWatermarkerBase<T>
 {
-    private const int PatternSalt = 0x0D57;
     private const double MinRadius = 0.1;
     private const double MaxRadius = 0.8;
+
+    // Tiles are at most MaxTileSize per side, so at most MaxTileSize matrices are ever cached.
+    private static readonly ConcurrentDictionary<int, (double[,] Dct, double[,] Inverse)> DctMatrices = new();
 
     /// <inheritdoc />
     public override string ModuleName => "InvisibleImageWatermarker";
@@ -44,45 +48,41 @@ public class InvisibleImageWatermarker<T> : ImageWatermarkerBase<T>
     /// <inheritdoc />
     protected override string WatermarkDescription => "Spread-spectrum DCT image watermark";
 
+    /// <inheritdoc />
+    protected override int PatternSalt => 0x0D57;
+
     /// <summary>
     /// Initializes a new spread-spectrum DCT image watermarker.
     /// </summary>
     /// <param name="watermarkStrength">Embedding amplitude relative to the spread of the DCT coefficients. Default: 0.3.</param>
-    /// <param name="key">The secret key the watermark sequence is derived from.</param>
-    public InvisibleImageWatermarker(double watermarkStrength = 0.3, int key = DefaultKey)
+    /// <param name="key">
+    /// The secret key the watermark sequence is derived from. <c>null</c> uses the public
+    /// <see cref="ImageWatermarkerBase{T}.PublicKey"/>, whose marks anyone can forge.
+    /// </param>
+    public InvisibleImageWatermarker(double watermarkStrength = 0.3, string? key = null)
         : base(watermarkStrength, key) { }
 
     /// <inheritdoc />
     protected override int CoefficientCount(int height, int width) => Band(height, width).Count;
 
     /// <inheritdoc />
-    protected override double[,] WatermarkDelta(double[,] luminance, double valueScale)
+    protected override double[] TileCoefficients(double[,] tile)
     {
-        int height = luminance.GetLength(0), width = luminance.GetLength(1);
-        var dctH = DctMatrix(height);
-        var dctW = DctMatrix(width);
-        var spectrum = SeparableProduct(dctH, luminance, dctW);
+        int height = tile.GetLength(0), width = tile.GetLength(1);
+        var spectrum = SeparableProduct(Matrices(height).Dct, tile, Matrices(width).Dct);
         var band = Band(height, width);
-
         var coefficients = new double[band.Count];
         for (int k = 0; k < band.Count; k++) coefficients[k] = spectrum[band[k].U, band[k].V];
-        double amplitude = Amplitude(RobustSpread(coefficients), valueScale);
-
-        var pattern = KeyPattern(band.Count, PatternSalt);
-        var mark = new double[height, width];
-        for (int k = 0; k < band.Count; k++) mark[band[k].U, band[k].V] = amplitude * pattern[k];
-        return SeparableProduct(Transpose(dctH), mark, Transpose(dctW));
+        return coefficients;
     }
 
     /// <inheritdoc />
-    protected override double WatermarkZ(double[,] luminance)
+    protected override double[,] TileDelta(int height, int width, double[] coefficientChanges)
     {
-        int height = luminance.GetLength(0), width = luminance.GetLength(1);
-        var spectrum = SeparableProduct(DctMatrix(height), luminance, DctMatrix(width));
         var band = Band(height, width);
-        var coefficients = new double[band.Count];
-        for (int k = 0; k < band.Count; k++) coefficients[k] = spectrum[band[k].U, band[k].V];
-        return CorrelationZ(coefficients, KeyPattern(band.Count, PatternSalt));
+        var mark = new double[height, width];
+        for (int k = 0; k < band.Count; k++) mark[band[k].U, band[k].V] = coefficientChanges[k];
+        return SeparableProduct(Matrices(height).Inverse, mark, Matrices(width).Inverse);
     }
 
     private static List<(int U, int V)> Band(int height, int width)
@@ -99,16 +99,16 @@ public class InvisibleImageWatermarker<T> : ImageWatermarkerBase<T>
         return band;
     }
 
-    // Orthonormal DCT-II matrix: row k is c_k * cos(pi * (2n + 1) * k / (2N)).
-    private static double[,] DctMatrix(int n)
+    // Orthonormal DCT-II matrix (row k is c_k * cos(pi * (2n + 1) * k / (2N))) and its inverse, the transpose.
+    private static (double[,] Dct, double[,] Inverse) Matrices(int n) => DctMatrices.GetOrAdd(n, size =>
     {
-        var m = new double[n, n];
-        for (int k = 0; k < n; k++)
+        var m = new double[size, size];
+        for (int k = 0; k < size; k++)
         {
-            double scale = Math.Sqrt((k == 0 ? 1.0 : 2.0) / n);
-            for (int i = 0; i < n; i++) m[k, i] = scale * Math.Cos(Math.PI * (2 * i + 1) * k / (2.0 * n));
+            double scale = Math.Sqrt((k == 0 ? 1.0 : 2.0) / size);
+            for (int i = 0; i < size; i++) m[k, i] = scale * Math.Cos(Math.PI * (2 * i + 1) * k / (2.0 * size));
         }
 
-        return m;
-    }
+        return (m, Transpose(m));
+    });
 }

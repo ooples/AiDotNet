@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
@@ -23,6 +24,7 @@ namespace AiDotNet.Safety.Watermarking;
 /// The key value is added to the real part of each coefficient and of its conjugate partner (-u, -v), so the change
 /// to the image is real. Detection correlates one coefficient of each conjugate pair against the key; coefficients on
 /// the first row and column are excluded because image borders and straight gradients concentrate energy there.
+/// Images larger than <see cref="ImageWatermarkerBase{T}.MaxTileSize"/> pixels per side are marked tile by tile.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> the Fourier spectrum describes an image as ripples of different sizes and directions. This
@@ -42,9 +44,11 @@ namespace AiDotNet.Safety.Watermarking;
     Authors = "Yuxin Wen, John Kirchenbauer, Jonas Geiping, Tom Goldstein")]
 public class FrequencyImageWatermarker<T> : ImageWatermarkerBase<T>
 {
-    private const int PatternSalt = 0x7EE5;
     private const double MinRadius = 0.08;
     private const double MaxRadius = 0.4;
+
+    // Tiles are at most MaxTileSize per side, so at most MaxTileSize matrix pairs are ever cached.
+    private static readonly ConcurrentDictionary<int, (double[,] Cos, double[,] Sin)> FourierMatrixCache = new();
 
     /// <inheritdoc />
     public override string ModuleName => "FrequencyImageWatermarker";
@@ -52,64 +56,57 @@ public class FrequencyImageWatermarker<T> : ImageWatermarkerBase<T>
     /// <inheritdoc />
     protected override string WatermarkDescription => "Fourier-ring image watermark";
 
+    /// <inheritdoc />
+    protected override int PatternSalt => 0x7EE5;
+
     /// <summary>
     /// Initializes a new Fourier-ring image watermarker.
     /// </summary>
     /// <param name="watermarkStrength">Embedding amplitude relative to the spread of the spectrum's real parts. Default: 0.5.</param>
-    /// <param name="key">The secret key the watermark pattern is derived from.</param>
-    public FrequencyImageWatermarker(double watermarkStrength = 0.5, int key = DefaultKey)
+    /// <param name="key">
+    /// The secret key the watermark pattern is derived from. <c>null</c> uses the public
+    /// <see cref="ImageWatermarkerBase{T}.PublicKey"/>, whose marks anyone can forge.
+    /// </param>
+    public FrequencyImageWatermarker(double watermarkStrength = 0.5, string? key = null)
         : base(watermarkStrength, key) { }
 
     /// <inheritdoc />
     protected override int CoefficientCount(int height, int width) => DetectionBand(height, width).Count;
 
     /// <inheritdoc />
-    protected override double[,] WatermarkDelta(double[,] luminance, double valueScale)
+    protected override double[] TileCoefficients(double[,] tile)
     {
-        int height = luminance.GetLength(0), width = luminance.GetLength(1);
-        var (cosH, sinH) = FourierMatrices(height);
-        var (cosW, sinW) = FourierMatrices(width);
-        var real = RealSpectrum(luminance, cosH, sinH, cosW, sinW);
-
+        int height = tile.GetLength(0), width = tile.GetLength(1);
+        var real = RealSpectrum(tile);
         var band = DetectionBand(height, width);
         var coefficients = new double[band.Count];
         for (int k = 0; k < band.Count; k++) coefficients[k] = real[band[k].U, band[k].V];
-        double amplitude = Amplitude(RobustSpread(coefficients), valueScale);
+        return coefficients;
+    }
 
-        var pattern = KeyPattern(band.Count, PatternSalt);
+    /// <inheritdoc />
+    protected override double[,] TileDelta(int height, int width, double[] coefficientChanges)
+    {
+        var band = DetectionBand(height, width);
         var mark = new double[height, width];
         for (int k = 0; k < band.Count; k++)
         {
             var (u, v) = band[k];
-            mark[u, v] = amplitude * pattern[k];
-            mark[height - u, width - v] = amplitude * pattern[k];
+            mark[u, v] = coefficientChanges[k];
+            mark[height - u, width - v] = coefficientChanges[k];
         }
 
         // The pattern is real and conjugate-symmetric, so its inverse unitary DFT is the real part alone.
-        return RealSpectrum(mark, cosH, sinH, cosW, sinW);
-    }
-
-    /// <inheritdoc />
-    protected override double WatermarkZ(double[,] luminance)
-    {
-        int height = luminance.GetLength(0), width = luminance.GetLength(1);
-        var (cosH, sinH) = FourierMatrices(height);
-        var (cosW, sinW) = FourierMatrices(width);
-        var real = RealSpectrum(luminance, cosH, sinH, cosW, sinW);
-
-        var band = DetectionBand(height, width);
-        var coefficients = new double[band.Count];
-        for (int k = 0; k < band.Count; k++) coefficients[k] = real[band[k].U, band[k].V];
-        var pattern = KeyPattern(band.Count, PatternSalt);
-
-        return CorrelationZ(coefficients, pattern);
+        return RealSpectrum(mark);
     }
 
     // Real part of the unitary 2-D DFT: (C X C^T - S X S^T) / sqrt(HW). For a real, symmetric spectrum the same
     // expression is its inverse.
-    private static double[,] RealSpectrum(double[,] x, double[,] cosH, double[,] sinH, double[,] cosW, double[,] sinW)
+    private static double[,] RealSpectrum(double[,] x)
     {
         int height = x.GetLength(0), width = x.GetLength(1);
+        var (cosH, sinH) = FourierMatrices(height);
+        var (cosW, sinW) = FourierMatrices(width);
         var cc = SeparableProduct(cosH, x, cosW);
         var ss = SeparableProduct(sinH, x, sinW);
         double norm = 1.0 / Math.Sqrt((double)height * width);
@@ -119,20 +116,20 @@ public class FrequencyImageWatermarker<T> : ImageWatermarkerBase<T>
         return result;
     }
 
-    private static (double[,] Cos, double[,] Sin) FourierMatrices(int n)
+    private static (double[,] Cos, double[,] Sin) FourierMatrices(int n) => FourierMatrixCache.GetOrAdd(n, size =>
     {
-        var cos = new double[n, n];
-        var sin = new double[n, n];
-        for (int k = 0; k < n; k++)
-            for (int i = 0; i < n; i++)
+        var cos = new double[size, size];
+        var sin = new double[size, size];
+        for (int k = 0; k < size; k++)
+            for (int i = 0; i < size; i++)
             {
-                double angle = 2.0 * Math.PI * ((long)k * i % n) / n;
+                double angle = 2.0 * Math.PI * ((long)k * i % size) / size;
                 cos[k, i] = Math.Cos(angle);
                 sin[k, i] = Math.Sin(angle);
             }
 
         return (cos, sin);
-    }
+    });
 
     private static bool InAnnulus(int u, int v, int height, int width)
     {
