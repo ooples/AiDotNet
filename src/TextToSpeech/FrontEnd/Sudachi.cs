@@ -3,6 +3,29 @@ using System.Text;
 
 namespace AiDotNet.TextToSpeech.FrontEnd;
 
+/// <summary>Code points of strings (UTF-16 surrogate pairs combined), on every target framework.</summary>
+internal static class SudachiText
+{
+    public static int[] CodePoints(string text)
+    {
+        var points = new List<int>(text.Length);
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                points.Add(char.ConvertToUtf32(text[i], text[i + 1]));
+                i++;
+            }
+            else points.Add(text[i]);
+        }
+        return points.ToArray();
+    }
+
+    public static string Of(int codePoint) => codePoint >= 0xD800 && codePoint <= 0xDFFF ? ((char)codePoint).ToString() : char.ConvertFromUtf32(codePoint);
+
+    public static int Utf8Length(int codePoint) => codePoint < 0x80 ? 1 : codePoint < 0x800 ? 2 : codePoint < 0x10000 ? 3 : 4;
+}
+
 /// <summary>Sudachi's character categories (<c>CategoryType</c>), as bit flags.</summary>
 [Flags]
 internal enum SudachiCategory : uint
@@ -256,7 +279,7 @@ internal sealed class SudachiDictionary
         foreach (var raw in File.ReadLines(path))
         {
             string line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith('#') || line.StartsWith("0x", StringComparison.Ordinal)) continue;
+            if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal) || line.StartsWith("0x", StringComparison.Ordinal)) continue;
             var cols = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (cols.Length < 4) throw new InvalidDataException($"Malformed char.def line '{line}'.");
             CategoryProperties[ParseCategory(cols[0])] = (cols[1] == "1", cols[2] == "1", int.Parse(cols[3], CultureInfo.InvariantCulture));
@@ -268,7 +291,7 @@ internal sealed class SudachiDictionary
         foreach (var raw in File.ReadLines(path))
         {
             string line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith('#')) continue;
+            if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
             var cols = line.Split(',');
             if (cols.Length < 10) throw new InvalidDataException($"Malformed unk.def line '{line}'.");
             var category = ParseCategory(cols[0]);
@@ -285,19 +308,19 @@ internal sealed class SudachiDictionary
         foreach (var raw in File.ReadLines(path))
         {
             string line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith('#')) continue;
+            if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal)) continue;
             var cols = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (cols.Length == 1)
             {
-                var runes = cols[0].EnumerateRunes().ToArray();
+                var runes = SudachiText.CodePoints(cols[0]);
                 if (runes.Length != 1) throw new InvalidDataException($"{cols[0]} is not a character (rewrite.def).");
-                IgnoreNormalize.Add(runes[0].Value);
+                IgnoreNormalize.Add(runes[0]);
             }
             else if (cols.Length == 2)
             {
                 if (Replacements.ContainsKey(cols[0])) throw new InvalidDataException($"{cols[0]} is already defined (rewrite.def).");
                 Replacements[cols[0]] = cols[1];
-                LongestReplacementKey = Math.Max(LongestReplacementKey, cols[0].EnumerateRunes().Count());
+                LongestReplacementKey = Math.Max(LongestReplacementKey, SudachiText.CodePoints(cols[0]).Length);
             }
             else throw new InvalidDataException($"Malformed rewrite.def line '{line}'.");
         }
@@ -323,14 +346,14 @@ internal sealed class SudachiCharacterCategory
         foreach (var raw in File.ReadLines(path))
         {
             string line = raw.Trim();
-            if (line.Length == 0 || line.StartsWith('#') || !line.StartsWith("0x", StringComparison.Ordinal)) continue;
+            if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal) || !line.StartsWith("0x", StringComparison.Ordinal)) continue;
             var cols = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (cols.Length < 2) throw new InvalidDataException($"Malformed char.def line '{line}'.");
             var r = cols[0].Split(new[] { ".." }, StringSplitOptions.None);
             uint begin = uint.Parse(r[0].Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
             uint end = r.Length > 1 ? uint.Parse(r[1].Substring(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture) + 1 : begin + 1;
             var categories = SudachiCategory.None;
-            foreach (var element in cols.Skip(1).TakeWhile(e => !e.StartsWith('#'))) categories |= SudachiDictionary.ParseCategory(element);
+            foreach (var element in cols.Skip(1).TakeWhile(e => !e.StartsWith("#", StringComparison.Ordinal))) categories |= SudachiDictionary.ParseCategory(element);
             ranges.Add((begin, end, categories));
         }
         if (ranges.Count == 0) return new SudachiCharacterCategory(Array.Empty<uint>(), new[] { SudachiCategory.Default });
