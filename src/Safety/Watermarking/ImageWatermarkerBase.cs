@@ -17,7 +17,7 @@ namespace AiDotNet.Safety.Watermarking;
 /// pattern x, z = sum(c_k * x_k) / sqrt(sum(c_k^2)). Without the watermark, or with a different key, z is
 /// approximately standard normal; with it, z grows with the strength and with the number of coefficients.
 /// <see cref="DetectWatermark"/> maps z to a confidence: 0 up to z = 3 (a one-sided false-positive rate near 0.1%),
-/// rising linearly to 1 at z = 6. <see cref="EvaluateImage"/> reports a finding from confidence 0.3 (z = 3.9).
+/// rising linearly to 1 at z = 6. <see cref="EvaluateImage"/> reports a finding from <see cref="ReportThreshold"/> (by default confidence 0.3, z = 3.9).
 /// </para>
 /// <para>
 /// The embedded amplitude per coefficient is the strength times the larger of the coefficients' robust spread and 2%
@@ -38,7 +38,6 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
     /// <summary>The fewest watermark coefficients an image must offer to carry a watermark.</summary>
     protected const int MinimumCoefficients = 64;
 
-    private const double ReportThreshold = 0.3;
     private const double MinimumAmplitudeFraction = 0.02;
 
     /// <summary>
@@ -61,6 +60,9 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
         WatermarkStrength = watermarkStrength;
         WatermarkKey = key;
     }
+
+    /// <summary>The detection confidence from which <see cref="EvaluateImage"/> reports a finding (never at confidence 0). Default: 0.3 (z = 3.9).</summary>
+    protected virtual double ReportThreshold => 0.3;
 
     /// <summary>A short description of the watermark, used in findings (for example "Fourier-ring watermark").</summary>
     protected abstract string WatermarkDescription { get; }
@@ -122,7 +124,8 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
     {
         var findings = new List<SafetyFinding>();
         double score = DetectWatermark(image);
-        if (score >= ReportThreshold)
+        // A confidence of 0 is no evidence at all, so even a zero threshold does not report it.
+        if (score > 0 && score >= ReportThreshold)
         {
             findings.Add(new SafetyFinding
             {

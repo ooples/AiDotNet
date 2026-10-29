@@ -76,7 +76,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // PolicyBase is no longer excluded: the RL agent family asserted agent semantics a policy does not have
         // (Train is a no-op, sampling is stochastic), so policies have their own family, PolicyTestBase (#2139).
         // ImageWatermarkerBase is no longer excluded: the watermarkers embed and detect a keyed mark on their own, and
-        // ImageWatermarkerTestBase checks that round trip, the key and the false-positive side (#2139).
+        // KeyedWatermarkTestBase checks that round trip, the key and the false-positive side (#2139).
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
         // VAEModelBase is no longer excluded: VAEs implement IVAEModel, not IDiffusionModel, so they now have their
         // own family (VAEModelTestBase) instead of being routed to a diffusion family that cannot construct them (#2139).
@@ -655,8 +655,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateDetector", "TargetArtifact" };
 
-    /// <summary>Overridable surface of <c>ImageWatermarkerTestBase</c>.</summary>
-    private static readonly System.Collections.Generic.HashSet<string> ImageWatermarkerTestBaseMembers =
+    /// <summary>Overridable surface of <c>KeyedWatermarkTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> KeyedWatermarkTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateModule", "CreateModuleWithKey", "ImageChannels", "ImageSize" };
 
@@ -13676,7 +13676,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "InstanceSegmenterTestBase"
             || baseClassName == "VideoSafetyModuleTestBase"
             || baseClassName == "TextSafetyModuleTestBase"
-            || baseClassName == "ImageWatermarkerTestBase"
+            || baseClassName == "KeyedWatermarkTestBase"
             || baseClassName == "AudioSafetyModuleTestBase"
             || baseClassName == "VAEModelTestBase"
             || baseClassName == "NoisePredictorTestBase"
@@ -17951,7 +17951,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.InstanceSegmentation => InstanceSegmenterTestBaseMembers,
             TestFamily.VideoSafetyModule => VideoSafetyModuleTestBaseMembers,
             TestFamily.TextSafetyModule => TextSafetyModuleTestBaseMembers,
-            TestFamily.ImageWatermarker => ImageWatermarkerTestBaseMembers,
+            TestFamily.ImageWatermarker => KeyedWatermarkTestBaseMembers,
             TestFamily.AudioSafetyModule => AudioSafetyModuleTestBaseMembers,
             TestFamily.VAE => VAEModelTestBaseMembers,
             TestFamily.NoisePredictor => NoisePredictorTestBaseMembers,
@@ -21633,7 +21633,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.InstanceSegmentation:  return "InstanceSegmenterTestBase";
             case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
             case TestFamily.TextSafetyModule:      return "TextSafetyModuleTestBase";
-            case TestFamily.ImageWatermarker:      return "ImageWatermarkerTestBase";
+            case TestFamily.ImageWatermarker:      return "KeyedWatermarkTestBase";
             case TestFamily.AudioSafetyModule:     return "AudioSafetyModuleTestBase";
             case TestFamily.VAE:                   return "VAEModelTestBase";
             case TestFamily.NoisePredictor:        return "NoisePredictorTestBase";

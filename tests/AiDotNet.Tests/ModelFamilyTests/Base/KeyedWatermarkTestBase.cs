@@ -22,11 +22,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </para>
 /// <para>
 /// The mark must also be invisible, stay in the image's value range, leave the input untouched and be
-/// deterministic. These watermarkers were previously detect-only heuristics with no way to embed a mark, and their
+/// deterministic. The base is not named after the models: the generator counts a test class whose name contains a
+/// model's name followed by "Test" as that model's coverage, so "ImageWatermarkerTestBase" would hide
+/// <c>ImageWatermarker</c> from its own family. These watermarkers were previously detect-only heuristics with no way to embed a mark, and their
 /// tests only checked that a score lay in [0, 1].
 /// </para>
 /// </remarks>
-public abstract class ImageWatermarkerTestBase
+public abstract class KeyedWatermarkTestBase
 {
     /// <summary>Creates the watermarker under test with its default key.</summary>
     protected abstract IImageWatermarker<double> CreateModule();
@@ -124,27 +126,37 @@ public abstract class ImageWatermarkerTestBase
     }
 
     [Fact(Timeout = 60000)]
-    public async Task Mark_IsInvisible_InRange_AndLeavesTheInputUntouched()
+    public async Task Mark_StaysInRange_LeavesTheInputUntouched_AndIsDeterministic()
+    {
+        await Task.Yield();
+        var module = CreateModule();
+        foreach (var (name, image) in Images())
+        {
+            var before = image.ToArray();
+            var marked = module.EmbedWatermark(image);
+
+            Assert.Equal(before, image.ToArray());
+            Assert.Equal(image.Shape.ToArray(), marked.Shape.ToArray());
+            var after = marked.ToArray();
+            for (int i = 0; i < after.Length; i++)
+                Assert.True(after[i] >= 0 && after[i] <= 1, $"{module.ModuleName}: value {after[i]} at {i} of the {name} image left [0, 1].");
+            Assert.Equal(after, module.EmbedWatermark(image).ToArray());
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Mark_IsInvisible()
     {
         await Task.Yield();
         var module = CreateModule();
         var image = NaturalImage();
         var before = image.ToArray();
-        var marked = module.EmbedWatermark(image);
-
-        Assert.Equal(before, image.ToArray());
-        Assert.Equal(image.Shape.ToArray(), marked.Shape.ToArray());
-        var after = marked.ToArray();
+        var after = module.EmbedWatermark(image).ToArray();
         double squared = 0;
-        for (int i = 0; i < after.Length; i++)
-        {
-            Assert.True(after[i] >= 0 && after[i] <= 1, $"{module.ModuleName}: value {after[i]} at {i} left [0, 1].");
-            squared += (after[i] - before[i]) * (after[i] - before[i]);
-        }
+        for (int i = 0; i < after.Length; i++) squared += (after[i] - before[i]) * (after[i] - before[i]);
 
         double psnr = 10 * Math.Log10(1.0 / (squared / after.Length));
         Assert.True(psnr >= 38, $"{module.ModuleName}: PSNR {psnr:F1} dB on the natural image; a visible mark (expected >= 38 dB).");
-        Assert.Equal(after, module.EmbedWatermark(image).ToArray());
     }
 
     [Fact(Timeout = 60000)]

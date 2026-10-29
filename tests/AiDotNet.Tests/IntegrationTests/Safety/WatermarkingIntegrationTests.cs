@@ -102,6 +102,26 @@ public class WatermarkingIntegrationTests
         Assert.NotNull(findings);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_ReportsFromItsDetectionThreshold()
+    {
+        await Task.Yield();
+        var image = CreateRandomImageTensor(3, 32, 32);
+        var marked = new ImageWatermarker<double>().EmbedWatermark(image);
+        double confidence = new ImageWatermarker<double>().DetectWatermark(marked);
+        Assert.True(confidence > 0 && confidence <= 1, $"confidence {confidence} on a marked image");
+
+        var atThreshold = new ImageWatermarker<double>(detectionThreshold: confidence).EvaluateImage(marked);
+        var finding = Assert.Single(atThreshold);
+        Assert.Equal(AiDotNet.Enums.SafetyCategory.Watermarked, finding.Category);
+        Assert.Equal(confidence, finding.Confidence);
+
+        if (confidence < 1)
+            Assert.Empty(new ImageWatermarker<double>(detectionThreshold: Math.Min(1, confidence + 1e-6)).EvaluateImage(marked));
+        Assert.Empty(new ImageWatermarker<double>(detectionThreshold: 0.5).EvaluateImage(image));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ImageWatermarker<double>(detectionThreshold: 1.5));
+    }
+
     #endregion
 
     #region FrequencyImageWatermarker Tests
