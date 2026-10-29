@@ -10646,25 +10646,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      model.FullyQualifiedName.IndexOf(
                          "AiDotNet.TextToSpeech.MultiModal.", System.StringComparison.Ordinal) >= 0)
             {
-                // 177 s of training probes, again with repetition already floored. Note this is
-                // the TextToSpeech.MultiModal AudioPaLM — there are TWO classes with this name,
-                // and the generated test targets this one (see
-                // AiDotNet_TextToSpeech_MultiModal_AudioPaLMTests).
-                //
-                // The options it actually reads, verified against the implementation: EncoderDim,
-                // DecoderDim, HiddenDim, NumEncoderLayers, NumDecoderLayers, NumHeads,
-                // NumFlowSteps, MaxTextLength, MelChannels and HopSize. InterChannels,
-                // FilterChannels and NumDiffusionSteps are inherited from EndToEndTtsOptions but
-                // never consumed, so bounding them would achieve nothing — the layer counts and
-                // widths are what carry the cost.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 64, outputSize: 64), " +
-                    "new AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions { " +
-                    "EncoderDim = 32, DecoderDim = 32, HiddenDim = 32, " +
-                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, " +
-                    "NumFlowSteps = 1, MaxTextLength = 16, MelChannels = 64, HopSize = 64 })";
+                // AudioPaLM is a PaLM decoder over text and audio tokens, a w2v-BERT speech tokenizer fitted by k-means and a
+                // SoundStorm detokenizer (there are TWO classes with this name; the generated test targets this one). The
+                // fixture builds all three at width 16 over SpeechT5's 81-character vocabulary and 8 audio tokens, fits the
+                // tokenizer on two seconds of tones and gives a quarter-second voice.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.Tts<double>()";
             }
             else if (model.ClassName == "CodeSwitchingASR" && model.TypeParameterCount == 1)
             {
@@ -16456,6 +16442,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
+                else if (model.ClassName == "AudioPaLM")
+                {
+                    // AudioPaLM reads a text's character ids and trains on a 16 kHz recording: eight ids, and 6400 samples
+                    // (0.4 s: nine 25 Hz audio tokens). Untrained, its greedy decoding picks among only eight audio tokens and
+                    // can choose the same ones for different texts, so the probes compare the training objective, whose
+                    // logits read every text token.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 6400 };");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
                 else if (model.ClassName == "SpeechT5")

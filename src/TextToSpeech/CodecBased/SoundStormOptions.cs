@@ -62,6 +62,7 @@ public class SoundStormOptions : TtsModelOptions
         SemanticCodes = other.SemanticCodes;
         SemanticFrameRate = other.SemanticFrameRate;
         FirstLevelIterations = other.FirstLevelIterations;
+        IncludeTextToSemantic = other.IncludeTextToSemantic;
         TextModelDim = other.TextModelDim;
         TextFeedForwardDim = other.TextFeedForwardDim;
         TextKeyValueDim = other.TextKeyValueDim;
@@ -136,6 +137,13 @@ public class SoundStormOptions : TtsModelOptions
 
     /// <summary>Confidence-based iterations on the first RVQ level (16); every finer level takes one greedy pass.</summary>
     public int FirstLevelIterations { get; set; } = 16;
+
+    /// <summary>
+    /// Whether the §5 text-to-semantic model (ByT5) is built (true). Off, SoundStorm is the §3 acoustic model and its
+    /// codec alone, which renders semantic tokens another model produced (AudioPaLM's detokenizer); text synthesis then
+    /// needs that other model.
+    /// </summary>
+    public bool IncludeTextToSemantic { get; set; } = true;
 
     // ---------------------------------------------------------------- text-to-semantic (§5, ByT5-large)
 
