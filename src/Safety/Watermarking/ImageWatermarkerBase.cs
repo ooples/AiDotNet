@@ -20,7 +20,7 @@ namespace AiDotNet.Safety.Watermarking;
 /// rising linearly to 1 at z = 6. <see cref="EvaluateImage"/> reports a finding from confidence 0.3 (z = 3.9).
 /// </para>
 /// <para>
-/// The embedded amplitude per coefficient is the strength times the larger of the coefficients' own spread and 2%
+/// The embedded amplitude per coefficient is the strength times the larger of the coefficients' robust spread and 2%
 /// of the image's value range, so smooth images still receive a watermark that survives mild noise.
 /// </para>
 /// <para>
@@ -138,9 +138,9 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
         return findings;
     }
 
-    /// <summary>The per-coefficient amplitude for coefficients whose spread is <paramref name="coefficientStd"/>.</summary>
-    protected double Amplitude(double coefficientStd, double valueScale) =>
-        WatermarkStrength * Math.Max(coefficientStd, MinimumAmplitudeFraction * valueScale);
+    /// <summary>The per-coefficient amplitude for coefficients whose spread is <paramref name="coefficientSpread"/>.</summary>
+    protected double Amplitude(double coefficientSpread, double valueScale) =>
+        WatermarkStrength * Math.Max(coefficientSpread, MinimumAmplitudeFraction * valueScale);
 
     /// <summary>
     /// The key's pseudo-random +/-1 pattern of length <paramref name="count"/>. <paramref name="salt"/> separates the
@@ -170,6 +170,21 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
 
         // Coefficients at rounding-error level (an RMS below 1e-9) carry no evidence either way.
         return energy > 1e-18 * coefficients.Length ? dot / Math.Sqrt(energy) : 0;
+    }
+
+    /// <summary>
+    /// A robust spread of zero-mean coefficients: 1.4826 times the median absolute value, which equals the standard
+    /// deviation for Gaussian coefficients but is not inflated by the few strong coefficients of edges and textures.
+    /// </summary>
+    protected static double RobustSpread(double[] coefficients)
+    {
+        if (coefficients.Length == 0) return 0;
+        var magnitudes = new double[coefficients.Length];
+        for (int i = 0; i < coefficients.Length; i++) magnitudes[i] = Math.Abs(coefficients[i]);
+        Array.Sort(magnitudes);
+        int mid = magnitudes.Length / 2;
+        double median = magnitudes.Length % 2 == 1 ? magnitudes[mid] : 0.5 * (magnitudes[mid - 1] + magnitudes[mid]);
+        return 1.4826 * median;
     }
 
     /// <summary>The sample standard deviation of <paramref name="values"/> (0 for fewer than two values).</summary>

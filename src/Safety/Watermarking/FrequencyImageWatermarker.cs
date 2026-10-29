@@ -74,7 +74,7 @@ public class FrequencyImageWatermarker<T> : ImageWatermarkerBase<T>
         var band = DetectionBand(height, width);
         var coefficients = new double[band.Count];
         for (int k = 0; k < band.Count; k++) coefficients[k] = real[band[k].U, band[k].V];
-        double amplitude = Amplitude(StandardDeviation(coefficients), valueScale);
+        double amplitude = Amplitude(RobustSpread(coefficients), valueScale);
 
         var pattern = KeyPattern(band.Count, PatternSalt);
         var mark = new double[height, width];

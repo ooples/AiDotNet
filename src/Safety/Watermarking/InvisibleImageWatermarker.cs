@@ -66,7 +66,7 @@ public class InvisibleImageWatermarker<T> : ImageWatermarkerBase<T>
 
         var coefficients = new double[band.Count];
         for (int k = 0; k < band.Count; k++) coefficients[k] = spectrum[band[k].U, band[k].V];
-        double amplitude = Amplitude(StandardDeviation(coefficients), valueScale);
+        double amplitude = Amplitude(RobustSpread(coefficients), valueScale);
 
         var pattern = KeyPattern(band.Count, PatternSalt);
         var mark = new double[height, width];
