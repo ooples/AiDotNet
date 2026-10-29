@@ -16,7 +16,7 @@ namespace AiDotNet.Interfaces;
 /// The typical workflow is:
 /// 1. Create a detector with your desired parameters (contamination defaults to 0.1 / 10%)
 /// 2. Call <see cref="Fit"/> to train the detector on your data
-/// 3. Call <see cref="Predict"/> to identify anomalies in new data
+/// 3. Call <c>Predict</c> to identify anomalies in new data
 /// 4. Optionally use <see cref="ScoreAnomalies"/> to get anomaly scores for ranking
 /// </para>
 /// <para>
@@ -63,7 +63,7 @@ public interface IAnomalyDetector<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> While <see cref="Predict"/> gives a binary answer (inlier/outlier),
+    /// <b>For Beginners:</b> While <c>Predict</c> gives a binary answer (inlier/outlier),
     /// this method gives you a "how anomalous" score for each point. Points with higher scores
     /// are more likely to be anomalies. This is useful when you want to:
     /// - Rank points by how unusual they are

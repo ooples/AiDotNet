@@ -68,7 +68,7 @@ public interface IPromptOptimizer<T>
     /// var optimizer = new DiscreteSearchOptimizer();
     ///
     /// // Your evaluation function tests accuracy
-    /// Func<string, double> evaluate = (prompt) =>
+    /// Func&lt;string, double&gt; evaluate = (prompt) =>
     /// {
     ///     double correctCount = 0;
     ///     foreach (var testCase in testSet)
@@ -125,7 +125,7 @@ public interface IPromptOptimizer<T>
     /// Example:
     /// ```csharp
     /// // Evaluation function that calls an API
-    /// async Task<double> evaluateAsync(string prompt)
+    /// async Task&lt;double&gt; evaluateAsync(string prompt)
     /// {
     ///     var results = await TestWithAPIAsync(prompt);
     ///     return CalculateAccuracy(results);

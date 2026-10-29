@@ -7,14 +7,17 @@ namespace AiDotNet.Interfaces;
 /// Interface for models that have optimizable parameters.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[AiDotNet.Configuration.YamlConfigurable("Parameterizable")]
 /// <remarks>
 /// GetParameters, SetParameters and ParameterCount come from
 /// <see cref="IParameterSource{T}"/> -- the minimal contract shared with components that
 /// own parameters without being full models (encoders, projectors, layers).
 /// </remarks>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("Parameterizable")]
 public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
 {
+#if !AIDN_LEGACY_TFM
     /// <summary>
     /// Yields the model's persistent state as bounded tensors, in the exact order used by
     /// <see cref="IParameterSource{T}.GetParameters"/>. Callers iterate without materializing one
@@ -38,7 +41,6 @@ public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
     /// <item>PyTorch-compatibility shims (state_dict-style export)</item>
     /// </list>
     /// </remarks>
-#if !AIDN_LEGACY_TFM
     // Chunked-API contract is .NET-Standard-2.1+ / .NET 10 only. Default
     // interface methods need runtime dispatch support that .NET Framework
     // 4.7.1 doesn't provide, so we omit this from the IParameterizable
@@ -59,17 +61,17 @@ public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
     }
 
     /// <summary>
-    /// Streaming counterpart to <see cref="SetParameters"/>: assigns the model's persistent
+    /// Streaming counterpart to <see cref="IParameterSource{T}.SetParameters"/>: assigns the model's persistent
     /// state from a sequence of chunks supplied in the SAME order
     /// <see cref="GetParameterChunks"/> yields them, WITHOUT ever materializing a flat
     /// <c>Vector&lt;T&gt;</c> of all parameters. Foundation-scale models (&gt;2.1 B params) cannot
-    /// round-trip through the flat <see cref="SetParameters"/> path — the aggregate overflows
+    /// round-trip through the flat <see cref="IParameterSource{T}.SetParameters"/> path — the aggregate overflows
     /// <c>Vector.Length</c>'s <see cref="int"/> contract and OOMs the host — so they override this
     /// to consume one chunk at a time.
     /// </summary>
     /// <remarks>
     /// Default implementation buffers the chunks into a single flat <c>Vector&lt;T&gt;</c> and
-    /// delegates to <see cref="SetParameters"/>. This is correct and back-compatible for tractable
+    /// delegates to <see cref="IParameterSource{T}.SetParameters"/>. This is correct and back-compatible for tractable
     /// models; only foundation-scale types need to override it to stay flat-free.
     /// </remarks>
     void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
@@ -103,8 +105,8 @@ public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
     /// <remarks>
     /// Models that learn their structure during training (decision trees, ensemble methods, clustering)
     /// may not support having random parameters injected before training. The optimizer uses this
-    /// property to decide whether to call <see cref="SetParameters"/> during random initialization.
-    /// The default implementation returns <c>true</c> when <see cref="ParameterCount"/> is greater than zero.
+    /// property to decide whether to call <see cref="IParameterSource{T}.SetParameters"/> during random initialization.
+    /// The default implementation returns <c>true</c> when <see cref="IParameterSource{T}.ParameterCount"/> is greater than zero.
     /// </remarks>
 #if AIDN_LEGACY_TFM
     bool SupportsParameterInitialization { get; }

@@ -49,7 +49,7 @@ public interface ILossFunction<T>
     /// makes it impossible for an analytic backward to drift out of step with the forward it is
     /// supposed to differentiate. Callers obtain gradients either by recording this call on their
     /// own training tape — the preferred form, since one tape then spans forward and loss together —
-    /// or via <see cref="LossFunctionExtensions.ComputeGradient{T}"/> for a standalone gradient.
+    /// or via <see cref="LossFunctionExtensions.ComputeGradient{T}(ILossFunction{T}, Tensor{T}, Tensor{T})"/> for a standalone gradient.
     /// </para>
     /// <para>
     /// Implementations must return a <b>rank-0</b> tensor. A rank-1 <c>[1]</c> result leaves the tape

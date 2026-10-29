@@ -27,6 +27,8 @@ namespace AiDotNet.Interfaces;
 /// for machine learning models.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used in the optimization calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("ModelCache")]
 public interface IModelCache<T, TInput, TOutput>
 {

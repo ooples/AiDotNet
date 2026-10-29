@@ -136,19 +136,6 @@ public interface IActivationFunction<T>
     /// </remarks>
     ComputationNode<T> ApplyToGraph(ComputationNode<T> input);
 
-    /// <summary>
-    /// Calculates the backward pass gradient for this activation function.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes dL/dx = dL/dy * dy/dx.
-    /// For element-wise activations (ReLU, Sigmoid), this is element-wise multiplication.
-    /// For vector activations (Softmax), this involves Jacobian multiplication.
-    /// </para>
-    /// </remarks>
     // Backward removed — tape-based autodiff handles activation gradients.
 
     #region GPU Training Support
@@ -192,29 +179,6 @@ public interface IActivationFunction<T>
     /// <exception cref="NotSupportedException">Thrown if SupportsGpuTraining is false.</exception>
     void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size);
 
-    /// <summary>
-    /// Calculates the backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass (needed for ReLU, GELU, Swish, LeakyReLU).</param>
-    /// <param name="output">The output buffer from the forward pass (needed for Sigmoid, Tanh).</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// <para>
-    /// This method computes the activation gradient entirely on GPU.
-    /// Different activation functions require different cached values from forward pass:
-    /// - ReLU, LeakyReLU, GELU, Swish: Need the input from forward pass
-    /// - Sigmoid, Tanh: Need the output from forward pass
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> During training, we need to compute gradients to update the network.
-    /// This method computes the gradient of the activation function on GPU, which is essential
-    /// for efficient GPU-resident training.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="NotSupportedException">Thrown if SupportsGpuTraining is false.</exception>
     // BackwardGpu removed — tape-based autodiff handles this.
 
     #endregion

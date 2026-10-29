@@ -187,9 +187,10 @@ dotnet_diagnostic.CA2000.severity = error
 # src/XmlDocDiagnostics.globalconfig silences the 20 XML-doc codes for everything; this section
 # overrides it (an .editorconfig section beats a global config) and makes doc defects build
 # errors in AiModelBuilder, AiModelResult, the Serving extensions over it, and the interfaces
-# those types expose in their public signatures. When a further area is fully documented, add
+# those types expose in their public signatures, and every public interface under src/Interfaces (A-4 slice 2).
+# When a further area is fully documented, add
 # its paths here.
-[{src/AiModelBuilder*.cs,src/Models/Results/AiModelResult*.cs,src/AiDotNet.Serving/Extensions/AiModelResultExtensions.cs,src/Interfaces/IAiModelBuilder.cs,src/Interfaces/IFullModel.cs,src/Configuration/IConfiguredView.cs}]
+[{src/AiModelBuilder*.cs,src/Models/Results/AiModelResult*.cs,src/AiDotNet.Serving/Extensions/AiModelResultExtensions.cs,src/Interfaces/IAiModelBuilder.cs,src/Interfaces/IFullModel.cs,src/Configuration/IConfiguredView.cs,src/Interfaces/**.cs}]
 dotnet_diagnostic.CS1591.severity = error
 dotnet_diagnostic.CS1570.severity = error
 dotnet_diagnostic.CS1571.severity = error

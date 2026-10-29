@@ -96,6 +96,7 @@ public class ReasoningContext
 /// </remarks>
 public class CritiqueResult<T>
 {
+    /// <summary>Creates a critique result with every required member set to its default.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public CritiqueResult()
     {
@@ -132,6 +133,7 @@ public class CritiqueResult<T>
     /// </summary>
     public bool PassesThreshold { get; set; }
 
+    /// <summary>Describes the critique: the score, whether it passes the threshold, and the feedback.</summary>
     public override string ToString() =>
         $"Critique Score: {Score} ({(PassesThreshold ? "PASS" : "FAIL")})\n{Feedback}";
 }

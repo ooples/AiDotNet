@@ -16,6 +16,8 @@ namespace AiDotNet.Interfaces;
 /// - Get information about how the model was created and how well it performs
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("PredictiveModel")]
 public interface IPredictiveModel<T, TInput, TOutput> : IModelSerializer
 {
