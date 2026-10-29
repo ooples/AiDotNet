@@ -314,6 +314,22 @@ public static class CompiledTapeTrainingStep<T>
     private static Tensor<T>? _persistentTarget { get => CurrentState.persistentTarget; set => CurrentState.persistentTarget = value; }
 
     /// <summary>
+    /// The input the lazy-initialization forward runs on: one sample when the input and target agree that the leading
+    /// axis is a batch of more than one, else the whole input.
+    /// </summary>
+    /// <remarks>
+    /// That forward exists only to make lazily-sized weights exist (they depend on feature, channel and spatial sizes,
+    /// never the batch; the layers' own shape probe initializes with a batch of one). Its result is discarded, but at
+    /// full batch it computed a whole inference forward: on DenseNet-121 at batch 64, about a gigabyte of activations
+    /// paged in only to be freed, which stayed in the process's working set through training. A leading axis the
+    /// target does not share (a time-major sequence) is not sliced.
+    /// </remarks>
+    internal static Tensor<T> LazyInitializationSample(Tensor<T> input, Tensor<T>? target)
+        => input.Rank >= 2 && target is not null && target.Rank >= 1 && input.Shape[0] > 1
+            && target.Shape[0] == input.Shape[0]
+            ? input.Slice(0, 0, 1)
+            : input;
+    /// <summary>
     /// One persistent input/target pair per batch shape seen since the last full invalidation, so a loop that
     /// alternates shapes - full batches and the short last batch of every epoch - keeps each shape's compiled plan
     /// (whose graph leaves point at that pair) instead of recompiling twice an epoch. Bounded by
@@ -1235,7 +1251,7 @@ public static class CompiledTapeTrainingStep<T>
                 {
                     // Per-step random draws (CompiledStepRandom) are suppressed for the same reason.
                     using var noDraws = CompiledStepRandom<T>.SuppressDraws();
-                    forward(_persistentInput);
+                    forward(LazyInitializationSample(_persistentInput, _persistentTarget));
                 }
                 finally
                 {
