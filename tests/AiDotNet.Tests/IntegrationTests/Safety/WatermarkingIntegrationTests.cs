@@ -118,20 +118,6 @@ public class WatermarkingIntegrationTests
 
     #endregion
 
-    #region NeuralImageWatermarker Tests
-
-    [Fact(Timeout = 120000)]
-    public async Task NeuralImage_DetectsWatermark()
-    {
-        var watermarker = new NeuralImageWatermarker<double>();
-        var tensor = CreateRandomImageTensor(3, 32, 32);
-        var score = watermarker.DetectWatermark(tensor);
-
-        Assert.True(score >= 0 && score <= 1);
-    }
-
-    #endregion
-
     #region InvisibleImageWatermarker Tests
 
     [Fact(Timeout = 120000)]
@@ -245,11 +231,9 @@ public class WatermarkingIntegrationTests
         var tensor = CreateRandomImageTensor(3, 32, 32);
 
         var frequency = new FrequencyImageWatermarker<double>().DetectWatermark(tensor);
-        var neural = new NeuralImageWatermarker<double>().DetectWatermark(tensor);
         var invisible = new InvisibleImageWatermarker<double>().DetectWatermark(tensor);
 
         Assert.True(frequency >= 0 && frequency <= 1);
-        Assert.True(neural >= 0 && neural <= 1);
         Assert.True(invisible >= 0 && invisible <= 1);
     }
 
