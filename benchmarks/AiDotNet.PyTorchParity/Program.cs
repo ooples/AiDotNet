@@ -69,6 +69,15 @@ Console.WriteLine($"[bench] engine: {AiDotNet.Tensors.Engines.AiDotNetEngine.Cur
 // fallback is invisible at the default Silent diagnostic level — only PerStep
 // surfaces the FusedOptimizerPathEvent. With the fix, Hit=True should appear.
 var fusedDiag = Environment.GetEnvironmentVariable("AIDOTNET_FUSED_DIAG") == "1";
+// AiDotNet.Tensors has had no native BLAS since its #368, and nothing reads AIDOTNET_BLAS_THREADS: a run "pinned" with it
+// used the physical core count. AIDOTNET_CPU_THREADS is the setting the CPU kernels honour.
+if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_BLAS_THREADS"))
+    && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_CPU_THREADS")))
+{
+    Console.Error.WriteLine(
+        "[bench] WARNING: AIDOTNET_BLAS_THREADS has no effect; set AIDOTNET_CPU_THREADS to pin AiDotNet's CPU threads " +
+        $"(running at {AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism}).");
+}
 if (fusedDiag)
 {
     // Engine warnings (a failed CUDA graph capture, a GPU kernel fallback) go to Trace; show them here.
@@ -1211,7 +1220,10 @@ internal static class RunEnvironmentProbe
         ThreadCount: Process.GetCurrentProcess().Threads.Count,
         GcServer: System.Runtime.GCSettings.IsServerGC,
         GcConcurrent: false,
-        EngineDevice: AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name);
+        EngineDevice: AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name,
+        // The thread count the CPU kernels actually fan out to (AIDOTNET_CPU_THREADS, else the physical core count),
+        // recorded so a "matched threads" comparison can be checked against the report.
+        CpuThreads: AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism);
 }
 
 internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results);
@@ -1239,7 +1251,8 @@ internal sealed record RunEnvironment(
     int ThreadCount,
     bool GcServer,
     bool GcConcurrent,
-    string EngineDevice);
+    string EngineDevice,
+    int CpuThreads);
 
 internal static class JsonOptions
 {

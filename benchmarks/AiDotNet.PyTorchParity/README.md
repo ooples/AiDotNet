@@ -46,7 +46,7 @@ The comparison reader accepts these reports; the C# report types also deserializ
 ```bash
 # From the repo root. Release is mandatory for meaningful numbers.
 # Match the thread count to the PyTorch side for a fair head-to-head.
-set AIDOTNET_BLAS_THREADS=8          # PowerShell: $env:AIDOTNET_BLAS_THREADS=8
+set AIDOTNET_CPU_THREADS=8           # PowerShell: $env:AIDOTNET_CPU_THREADS=8
 set AIDOTNET_FUSED_DIAG=1            # optional: print fused-path Hit/Miss
 
 dotnet run -c Release --project benchmarks/AiDotNet.PyTorchParity -- \
@@ -73,7 +73,7 @@ python benchmark.py --models mlp,cnn,lstm,transformer --device cpu \
 PyTorch runs **eager** here (no `torch.compile`) on purpose: the AiDotNet side
 runs its own compiled/fused path, and pitting it against a separately compiled
 PyTorch compares two compilation stacks rather than the kernels. Pin both sides
-to the same thread count (`--threads` ↔ `AIDOTNET_BLAS_THREADS`).
+to the same thread count (`--threads` ↔ `AIDOTNET_CPU_THREADS`).
 
 ## 3. Compare
 
@@ -100,7 +100,7 @@ our worst-of-95% steady-state latency still beats their average.
 | `--warmup-min-ms` | `1000` | also warm each batch size for at least this long. .NET runs tier-0 (unoptimized) code until a method has 30 calls and no new tier-0 code has run for 100 ms, so a count-only warm-up timed tier-0 code for whichever batch ran first (#2386) |
 | `--seed` | `1234` | RNG seed |
 | `--output` | `results/{aidotnet,pytorch}.json` | report path |
-| `--threads` (PyTorch) | `0` (all cores) | pin CPU threads; match `AIDOTNET_BLAS_THREADS` |
+| `--threads` (PyTorch) | `0` (all cores) | pin CPU threads; match `AIDOTNET_CPU_THREADS` |
 
 Inference is measured at batch sizes **1, 8, 32, 128** on both sides by default (`--inference-batches`).
 
