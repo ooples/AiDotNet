@@ -87,9 +87,7 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     private readonly List<LayerBase<T>> _s2aFullLayers = new();
     private readonly List<LayerBase<T>> _durationLayers = new();
 
-    private MaskGctEspeakFrontEnd? _espeakFrontEnd;
-    private MaskGctMandarinFrontEnd? _mandarinFrontEnd;
-    private MaskGctJapaneseFrontEnd? _japaneseFrontEnd;
+    private AmphionPhonemizer<T>? _phonemizer;
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
@@ -211,36 +209,9 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>
     /// MaskGCT's <c>g2p_</c>: the phone string and the phone ids of <paramref name="text"/> in <paramref name="language"/>.
     /// </summary>
-    public (string Phonemes, int[] Ids) Phonemize(string text, string language)
-    {
-        if (text is null) throw new ArgumentNullException(nameof(text));
-        if (language is null) throw new ArgumentNullException(nameof(language));
-        _espeakFrontEnd ??= new MaskGctEspeakFrontEnd();
-        Func<string, string, string>? chinese = null;
-        Func<string, string>? japanese = null;
-        if (language is "zh" or "en")
-            chinese = (segment, _) => Mandarin().ChineseToIpa(segment);
-        if (language == "ja") japanese = Japanese().JapaneseToIpa;
-        return _espeakFrontEnd.G2P(text, language, chinese, japanese);
-    }
-
-    private MaskGctMandarinFrontEnd Mandarin()
-    {
-        if (_mandarinFrontEnd is not null) return _mandarinFrontEnd;
-        string path = _options.PolyphoneModelPath
-            ?? throw new InvalidOperationException("Chinese text needs the release's polyphone model; set MaskGCTOptions.PolyphoneModelPath to poly_bert_model.onnx.");
-        var model = new MaskGctPolyphoneModel<T>(Engine);
-        model.Load(path);
-        return _mandarinFrontEnd = new MaskGctMandarinFrontEnd(model.Predict);
-    }
-
-    private MaskGctJapaneseFrontEnd Japanese()
-    {
-        if (_japaneseFrontEnd is not null) return _japaneseFrontEnd;
-        string path = _options.OpenJTalkDictionaryPath
-            ?? throw new InvalidOperationException("Japanese text needs the Open JTalk dictionary; set MaskGCTOptions.OpenJTalkDictionaryPath to open_jtalk_dic_utf_8-1.11.");
-        return _japaneseFrontEnd = new MaskGctJapaneseFrontEnd(new OpenJTalk(path));
-    }
+    public (string Phonemes, int[] Ids) Phonemize(string text, string language) =>
+        (_phonemizer ??= new AmphionPhonemizer<T>(Engine, () => _options.PolyphoneModelPath, () => _options.OpenJTalkDictionaryPath, nameof(MaskGCTOptions)))
+        .Phonemize(text, language);
 
     // ---------------------------------------------------------------- tokens
 
