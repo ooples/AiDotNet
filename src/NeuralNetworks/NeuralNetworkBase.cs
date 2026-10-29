@@ -6893,7 +6893,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // A model whose forward keeps nothing between calls frees its GPU intermediates when the call ends, instead of
         // when a garbage collection finalizes them (ooples/AiDotNet.Tensors#1432); only the output survives.
         // Disposed in the finally below, before the collection there, which must see the intermediates already returned.
-        var resultScope = ReleasesInferenceIntermediates ? TensorScope.Begin() : null;
+        // Not while a layer observer is recording: it keeps intermediate outputs to read after Predict returns.
+        var resultScope = ReleasesInferenceIntermediates && Graph.LayerForwardObserver<T>.Current is null
+            ? TensorScope.Begin()
+            : null;
         using var noGrad = new NoGradScope<T>();
         try
         {
@@ -6903,21 +6906,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         finally
         {
-            _deferLazyShapeResolutionToForward = true;
             try
             {
-                if (wasTraining) SetTrainingMode(true);
+                _deferLazyShapeResolutionToForward = true;
+                try
+                {
+                    if (wasTraining) SetTrainingMode(true);
+                }
+                finally
+                {
+                    _deferLazyShapeResolutionToForward = priorDefer;
+                }
             }
             finally
             {
-                _deferLazyShapeResolutionToForward = priorDefer;
+                // Even when restoring the mode throws: an abandoned scope would keep collecting this thread's GPU results.
+                resultScope?.Dispose();
             }
-            resultScope?.Dispose();
             // The call's intermediates are dead now: run the young collection a GPU backend asked for while they are
             // still young, as a finished training step does, instead of inside the next call's allocation, where it
             // blocked mid-forward (#1432: once per ResNet-50 predict on OpenCL). It runs only while bytes nobody disposed
-            // remain past the backend's threshold, so after the scope above it is usually skipped. Not inside a caller's tape.
-            if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+            // remain past the backend's threshold, so after the scope above it is usually skipped. Not while any thread
+            // records a tape: the process-wide collection would promote that tape's live activation owners.
+            if (!AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive())
                 AiDotNet.Tensors.Engines.DirectGpu.DeviceMemoryReclaim.CollectIfDueAtStepBoundary();
         }
     }
@@ -7060,6 +7071,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             _inferenceRecycleArena = prevRecycle;
         }
+        // #2385: with no host scratch rented, nothing in this arena can back the output (a GPU forward keeps its
+        // result on the device). Detaching anyway downloaded every result to a fresh host array on each call,
+        // a device sync the caller may never need. Same rule as DetachAndRecycleBetweenLayers.
+        if (arena.PeakBackingBytes == 0) return output;
         return DetachFromArena(output);
     }
 

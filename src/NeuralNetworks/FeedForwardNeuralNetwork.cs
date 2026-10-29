@@ -282,7 +282,11 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
             // two different kernels (or make the trace look like a constant zero-operation forward).
             // Fall through to the graph-aware MlpForward primitive in that case. The normal inference
             // hot path retains the allocation-free CompiledMlp plan.
+            // #2385: CompiledMlp is a host-array plan. On a GPU engine it forced device-resident weights back to the
+            // host on every call (TryGetLiveArray), then often fell through to MlpForward anyway. The device's
+            // MlpForward is the path there.
             if (typeof(T) == typeof(float)
+                && !Engine.SupportsGpu
                 && Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation
                 && !GraphCaptureCompatibility.IsActive
                 && TryCompiledMlpPredict(input, weights, biases, hiddenActivation, outputActivation, out output))
