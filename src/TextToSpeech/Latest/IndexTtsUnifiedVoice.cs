@@ -332,7 +332,10 @@ internal sealed class IndexTtsUnifiedVoice<T>
     {
         var c = Configuration;
         int d = c.ModelDim, beams = decoding.Beams;
-        var prefix = _engine.TensorConcatenate(new[] { conditions, TextRows(text), MelRows(new[] { c.StartMel }) }, 0);
+        // prepare_gpt_inputs drops the start and stop text ids (0, which is also bpe.model's <unk>, and 1) before it
+        // wraps the text in them; only generation does this, the teacher-forced forward keeps them.
+        var kept = text.Where(t => t != c.StartText && t != c.StopText).ToArray();
+        var prefix = _engine.TensorConcatenate(new[] { conditions, TextRows(kept), MelRows(new[] { c.StartMel }) }, 0);
         int prompt = prefix.Shape[0];
         var cache = new IndexTtsGpt2Cache<T>();
         var hidden = Gpt.Forward(_engine.Reshape(prefix, new[] { 1, prompt, d }), cache);

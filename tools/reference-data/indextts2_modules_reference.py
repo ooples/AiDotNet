@@ -30,6 +30,9 @@ EMO = dict(output_size=16, linear_units=24, attention_heads=2, num_blocks=1, inp
 FEATURES = 24   # the release hard-codes w2v-BERT's 1024 (conformer inputs, emotion perceiver); narrowed below
 FRAMES, EMO_FRAMES = 13, 9
 TEXT = [3, 7, 11, 4, 9]
+# Texts holding the start and stop text ids (0, which is bpe.model's <unk>, and 1), which prepare_gpt_inputs strips before
+# generation. Writing keeps the first whose codes differ without the strip, so the fixture separates the two.
+STRIP_CANDIDATES = [[12, 0, 2, 1, 19, 6], [0, 0, 5, 1, 1, 8, 0], [1, 9, 0, 14, 0, 3, 1, 1], [0, 1, 0, 1, 7, 0, 1, 0, 1]]
 CODES = [5, 17, 2, 2, 9, 13]
 MELS, DIT_H, DIT_HEADS, DIT_DEPTH, STYLE, SEM, REG = 5, 16, 2, 5, 6, 12, 8
 WN_LAYERS, GPT_A, GPT_B = 3, 10, 7
@@ -176,6 +179,41 @@ def main():
         g = generated[0].tolist()
         out_codes = g[:g.index(STOP_MEL)] if STOP_MEL in g else g
 
+        def generate(tokens):
+            result, _ = gpt.inference_speech(features.unsqueeze(0), torch.tensor([tokens]), None, cond_lengths=torch.tensor([FRAMES]),
+                                             emo_vec=emovec, do_sample=False, num_beams=3, repetition_penalty=10.0,
+                                             length_penalty=0.0, max_generate_length=10)
+            r = result[0].tolist()
+            return r[:r.index(STOP_MEL)] if STOP_MEL in r else r
+        strip_text = stored["strip_text"] if stored else None
+        if args.write:
+            import types
+            import torch.nn.functional as F
+
+            def unstripped(self, conditional_latents, text_inputs, langs=None):
+                # prepare_gpt_inputs without its start/stop filter (one sequence, one condition).
+                text_input = F.pad(F.pad(text_inputs[0], (1, 0), value=self.start_text_token), (0, 1), value=self.stop_text_token)
+                positions = torch.arange(0, text_input.size(-1))
+                text_emb = self.text_embedding(text_input) + self.text_pos_embedding.emb(positions)
+                embeds = torch.cat([conditional_latents.squeeze(0), text_emb])[None]
+                mask = torch.ones(embeds.shape[1] + 1, dtype=torch.long)[None]
+                ids = torch.ones((1, embeds.shape[1] + 1), dtype=torch.long)
+                ids[:, -1] = self.start_mel_token
+                return ids, embeds, mask
+            original = gpt.prepare_gpt_inputs
+            for candidate in STRIP_CANDIDATES:
+                gpt.prepare_gpt_inputs = types.MethodType(unstripped, gpt)
+                try:
+                    plain = generate(candidate)
+                finally:
+                    gpt.prepare_gpt_inputs = original
+                if plain != generate(candidate):
+                    strip_text = candidate
+                    print("strip text", candidate, "stripped", generate(candidate), "unstripped", plain)
+                    break
+            assert strip_text is not None, "no candidate separates stripping from not stripping"
+        stripped_codes = generate(strip_text)
+
         content = inputs["content"]
         frames = 11
         regulated = m["regulator"](content.unsqueeze(0), ylens=torch.tensor([frames]))[0][0]
@@ -203,20 +241,22 @@ def main():
         out["waveform"] = m["vocoder"](vocoder_mel.unsqueeze(0))[0, 0]
 
     if args.write:
-        data = {"state": {n: _fixture.flat(p) for n, p in m.named_parameters()}, "codes": out_codes}
+        data = {"state": {n: _fixture.flat(p) for n, p in m.named_parameters()}, "codes": out_codes,
+                "strip_text": strip_text, "stripped_codes": stripped_codes}
         data.update({key: _fixture.flat(value) for key, value in inputs.items()})
         data.update({key: [float(v) for v in value.reshape(-1).tolist()] for key, value in out.items()})
         _fixture.save(FIXTURE, data, __file__)
         print(f"wrote {FIXTURE}: codes {out_codes}")
         return
-    compare(stored, out, out_codes)
+    compare(stored, out, out_codes, stripped_codes)
 
 
-def compare(stored, out, codes):
+def compare(stored, out, codes, stripped_codes):
     check = _fixture.Comparison("IndexTTS2 modules")
     for key, value in out.items():
         check.floats(key, stored[key], [float(v) for v in value.reshape(-1).tolist()], dtype="float64")
     check.exact("codes", stored["codes"], codes)
+    check.exact("stripped codes", stored["stripped_codes"], stripped_codes)
     check.report()
 
 

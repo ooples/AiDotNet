@@ -107,6 +107,10 @@ public class IndexTts2ModulesReferenceTests
         var generated = release.Generate(release.Conditions(speaker, emotion, null), text,
             new IndexTtsDecoding(false, 3, 30, 0.8, 0.8, 10.0, 10), new Random(1));
         Assert.Equal(f["codes"]!.Select(v => (int)v).ToArray(), generated);
+        // Generation drops the start and stop text ids (prepare_gpt_inputs); this text's codes differ without the strip.
+        var stripped = release.Generate(release.Conditions(speaker, emotion, null), f["strip_text"]!.Select(v => (int)v).ToArray(),
+            new IndexTtsDecoding(false, 3, 30, 0.8, 0.8, 10.0, 10), new Random(1));
+        Assert.Equal(f["stripped_codes"]!.Select(v => (int)v).ToArray(), stripped);
 
         var content = Tensor(f["content"]!, 6, 12);
         var regulated = s2mel.Regulator.Forward(content, 11);
