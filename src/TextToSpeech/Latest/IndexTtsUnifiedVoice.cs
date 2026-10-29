@@ -331,7 +331,7 @@ internal sealed class IndexTtsUnifiedVoice<T>
     public int[] Generate(Tensor<T> conditions, IReadOnlyList<int> text, IndexTtsDecoding decoding, Random random)
     {
         var c = Configuration;
-        int d = c.ModelDim, beams = decoding.Beams, vocabulary = c.MelCodes;
+        int d = c.ModelDim, beams = decoding.Beams;
         var prefix = _engine.TensorConcatenate(new[] { conditions, TextRows(text), MelRows(new[] { c.StartMel }) }, 0);
         int prompt = prefix.Shape[0];
         var cache = new IndexTtsGpt2Cache<T>();
@@ -340,171 +340,22 @@ internal sealed class IndexTtsUnifiedVoice<T>
         // Every beam starts from the same prompt; only beam 0 scores (the others start at -1e9).
         Gpt.Reorder(cache, Enumerable.Repeat(0, beams).ToArray());
         var lastRows = Enumerable.Repeat(last, beams).ToArray();
-
-        // The ids the repetition penalty sees: generate's placeholder prompt (all 1) and BA, then the codes.
-        var sequences = new List<List<int>>();
-        for (int b = 0; b < beams; b++) sequences.Add(new List<int>());
-        var beamScores = new double[beams];
-        for (int b = 1; b < beams; b++) beamScores[b] = -1e9;
-        var hypotheses = new List<(double Score, int[] Codes)>();
-        double worst = 1e9;
-        bool done = false;
-        int keep = 2 * beams;                                           // max(2, 1 + one end token) per beam
-        for (int step = 0; step < decoding.MaxTokens && !done; step++)
+        double[][] LogitsOfLast()
         {
             var logits = Logits(FinalNorm.Forward(_engine.TensorConcatenate(lastRows, 0)));
-            var candidates = new List<(double Score, int Token, int Beam)>();
-            var flat = new double[beams * vocabulary];
-            for (int b = 0; b < beams; b++)
-            {
-                var row = new double[vocabulary];
-                for (int t = 0; t < vocabulary; t++) row[t] = NumOps.ToDouble(logits[b, t]);
-                var scores = Warp(LogSoftmax(row), sequences[b], decoding);
-                for (int t = 0; t < vocabulary; t++) flat[b * vocabulary + t] = scores[t] + beamScores[b];
-            }
-            int[] picked = decoding.Sample ? SampleWithoutReplacement(flat, keep, random) : TopIndices(flat, keep);
-            var ordered = picked.Select(i => (Score: flat[i], Index: i)).OrderByDescending(p => p.Score).ToList();
-
-            int cur = step + 1;                                             // tokens generated after this step
-            var nextScores = new double[beams];
-            var nextTokens = new int[beams];
-            var nextBeams = new int[beams];
-            int filled = 0;
-            for (int rank = 0; rank < ordered.Count && filled < beams; rank++)
-            {
-                int token = ordered[rank].Index % vocabulary, beam = ordered[rank].Index / vocabulary;
-                if (token == c.StopMel)
-                {
-                    if (rank >= beams) continue;
-                    AddHypothesis(hypotheses, ref worst, beams, ordered[rank].Score, sequences[beam].ToArray());
-                }
-                else
-                {
-                    nextScores[filled] = ordered[rank].Score;
-                    nextTokens[filled] = token;
-                    nextBeams[filled] = beam;
-                    filled++;
-                }
-            }
-            if (filled < beams) throw new InvalidOperationException("Too many end tokens among the beam candidates.");
-            // BeamHypotheses.is_done with early_stopping False and length_penalty 0.
-            done = hypotheses.Count >= beams && worst >= ordered.Max(p => p.Score);
-
-            sequences = nextBeams.Select((source, i) => new List<int>(sequences[source]) { nextTokens[i] }).ToList();
-            beamScores = nextScores;
-            if (done || step + 1 >= decoding.MaxTokens) break;
-            Gpt.Reorder(cache, nextBeams);
+            return Enumerable.Range(0, beams).Select(b => Enumerable.Range(0, c.MelCodes).Select(t => NumOps.ToDouble(logits[b, t])).ToArray()).ToArray();
+        }
+        void Advance(int[] sourceBeams, int[] tokens, int generated)
+        {
+            Gpt.Reorder(cache, sourceBeams);
             // GPT2InferenceModel embeds the k-th generated code at semantic position k + 1 (attention_mask length minus the
             // prompt), one past where the teacher-forced forward puts it; the release generates this way.
             var rows = new List<Tensor<T>>();
-            for (int b = 0; b < beams; b++) rows.Add(MelRows(new[] { nextTokens[b] }, cur + 1));
+            for (int b = 0; b < beams; b++) rows.Add(MelRows(new[] { tokens[b] }, generated + 1));
             var next = Gpt.Forward(_engine.Reshape(_engine.TensorConcatenate(rows.ToArray(), 0), new[] { beams, 1, d }), cache);
             lastRows = Enumerable.Range(0, beams).Select(b => _engine.Reshape(_engine.TensorNarrow(next, 0, b, 1), new[] { 1, d })).ToArray();
         }
-        if (!done)
-            for (int b = 0; b < beams; b++) AddHypothesis(hypotheses, ref worst, beams, beamScores[b], sequences[b].ToArray());
-        // finalize: the best hypothesis; Python's sorted() is stable, so among equal scores the last added wins.
-        var best = hypotheses.Select((h, i) => (h, i)).OrderBy(p => p.h.Score).ThenBy(p => p.i).Last().h;
-        return best.Codes;
-    }
-
-    private static void AddHypothesis(List<(double Score, int[] Codes)> hypotheses, ref double worst, int beams, double score, int[] codes)
-    {
-        if (hypotheses.Count < beams || score > worst)
-        {
-            hypotheses.Add((score, codes));
-            if (hypotheses.Count > beams)
-            {
-                var sorted = hypotheses.Select((h, i) => (h.Score, i)).OrderBy(p => p.Score).ThenBy(p => p.i).ToList();
-                hypotheses.RemoveAt(sorted[0].i);
-                worst = sorted[1].Score;
-            }
-            else
-            {
-                worst = Math.Min(score, worst);
-            }
-        }
-    }
-
-    private static double[] LogSoftmax(double[] row)
-    {
-        double max = row.Max(), sum = 0;
-        foreach (var v in row) sum += Math.Exp(v - max);
-        double log = max + Math.Log(sum);
-        return row.Select(v => v - log).ToArray();
-    }
-
-    /// <summary>The logits processors in <c>generate</c>'s order: repetition penalty, then (sampling) temperature, top-k
-    /// and top-p, each keeping at least two tokens.</summary>
-    private double[] Warp(double[] scores, IReadOnlyList<int> generated, IndexTtsDecoding decoding)
-    {
-        var c = Configuration;
-        if (decoding.RepetitionPenalty != 1.0)
-        {
-            var seen = new HashSet<int>(generated) { 1, c.StartMel };
-            foreach (int t in seen)
-            {
-                if (t >= scores.Length) continue;
-                scores[t] = scores[t] < 0 ? scores[t] * decoding.RepetitionPenalty : scores[t] / decoding.RepetitionPenalty;
-            }
-        }
-        if (!decoding.Sample) return scores;
-        if (decoding.Temperature != 1.0)
-            for (int t = 0; t < scores.Length; t++) scores[t] /= decoding.Temperature;
-        if (decoding.TopK > 0)
-        {
-            int k = Math.Min(Math.Max(decoding.TopK, 2), scores.Length);
-            double threshold = scores.OrderByDescending(v => v).ElementAt(k - 1);
-            for (int t = 0; t < scores.Length; t++)
-                if (scores[t] < threshold) scores[t] = double.NegativeInfinity;
-        }
-        if (decoding.TopP < 1.0)
-        {
-            var order = Enumerable.Range(0, scores.Length).OrderBy(t => scores[t]).ToArray();
-            double max = scores.Max(), total = 0;
-            var probabilities = order.Select(t => double.IsNegativeInfinity(scores[t]) ? 0 : Math.Exp(scores[t] - max)).ToArray();
-            total = probabilities.Sum();
-            double cumulative = 0;
-            var remove = new bool[order.Length];
-            for (int i = 0; i < order.Length; i++)
-            {
-                cumulative += probabilities[i] / total;
-                remove[i] = cumulative <= 1 - decoding.TopP;
-            }
-            for (int i = Math.Max(0, order.Length - 2); i < order.Length; i++) remove[i] = false;
-            for (int i = 0; i < order.Length; i++)
-                if (remove[i]) scores[order[i]] = double.NegativeInfinity;
-        }
-        return scores;
-    }
-
-    private static int[] TopIndices(double[] scores, int count) =>
-        Enumerable.Range(0, scores.Length).OrderByDescending(i => scores[i]).ThenBy(i => i).Take(count).ToArray();
-
-    /// <summary><c>torch.multinomial(softmax(scores), count)</c> without replacement: successive draws from the
-    /// renormalized remainder.</summary>
-    private static int[] SampleWithoutReplacement(double[] scores, int count, Random random)
-    {
-        double max = scores.Where(v => !double.IsNegativeInfinity(v)).DefaultIfEmpty(0).Max();
-        var weights = scores.Select(v => double.IsNegativeInfinity(v) ? 0 : Math.Exp(v - max)).ToArray();
-        var picked = new List<int>(count);
-        for (int n = 0; n < count; n++)
-        {
-            double total = weights.Sum();
-            if (total <= 0) break;
-            double u = random.NextDouble() * total, acc = 0;
-            int chosen = -1;
-            for (int i = 0; i < weights.Length; i++)
-            {
-                if (weights[i] <= 0) continue;
-                acc += weights[i];
-                chosen = i;
-                if (acc > u) break;
-            }
-            picked.Add(chosen);
-            weights[chosen] = 0;
-        }
-        return picked.ToArray();
+        return IndexTtsBeamSearch.Generate(c.StartMel, c.StopMel, decoding, random, LogitsOfLast, Advance);
     }
 
     /// <summary>Loads the release's <c>gpt.pth</c> names (the text head, which inference never reads, is not loaded).</summary>

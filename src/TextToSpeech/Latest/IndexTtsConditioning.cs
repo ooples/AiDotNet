@@ -239,11 +239,32 @@ internal sealed class IndexTtsConformerEncoder<T>
     private Tensor<T> Dropout(Tensor<T> x, bool training, Random? random) =>
         training && Configuration.Dropout > 0 && random is not null ? T5Seq2Seq<T>.Dropout(_engine, x, Configuration.Dropout, random) : x;
 
-    /// <summary>The sinusoid table <c>[L, d]</c> of absolute positions 0 … L−1 (sin at even columns, cos at odd).</summary>
+    private double[]? _storedPositions;
+
+    /// <summary>
+    /// Uses a checkpoint's position table (<c>embed.pos_enc.pe</c>, <c>[1, max_len, d]</c>) in place of the computed one.
+    /// The release registers the table as a persistent buffer, so loading a checkpoint replaces the computed sinusoids with
+    /// the stored (float32) ones, and the release runs on those.
+    /// </summary>
+    public void LoadPositionTable(double[] table)
+    {
+        if (table is null) throw new ArgumentNullException(nameof(table));
+        if (table.Length % Configuration.OutputSize != 0) throw new ArgumentException("The table holds whole rows of the encoder's width.", nameof(table));
+        _storedPositions = table;
+    }
+
+    /// <summary>The sinusoid table <c>[L, d]</c> of absolute positions 0 … L−1 (sin at even columns, cos at odd), or the
+    /// first L rows of a loaded table.</summary>
     internal Tensor<T> PositionTable(int length)
     {
         int d = Configuration.OutputSize;
         var table = new Tensor<T>(new[] { length, d });
+        if (_storedPositions is { } stored)
+        {
+            if (length * d > stored.Length) throw new ArgumentException($"The loaded position table holds {stored.Length / d} positions.", nameof(length));
+            for (int i = 0; i < length * d; i++) table[i / d, i % d] = NumOps.FromDouble(stored[i]);
+            return table;
+        }
         for (int p = 0; p < length; p++)
             for (int k = 0; k < d; k += 2)
             {
