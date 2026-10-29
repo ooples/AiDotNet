@@ -5,7 +5,7 @@ namespace AiDotNet.TextToSpeech.FrontEnd;
 
 /// <summary>
 /// Phonemization through eSpeak NG with the behavior of the phonemizer package's espeak backend (version 3.3, with
-/// punctuation preserved, stress removed, language-switch flags removed and the "strip" option), which TTS front ends such
+/// punctuation preserved, stress removed (or kept), language-switch flags removed and the "strip" option), which TTS front ends such
 /// as MaskGCT's call. Written from that behavior, not from phonemizer's source.
 /// </summary>
 /// <remarks>
@@ -27,13 +27,16 @@ internal sealed class EspeakPhonemizer
     private readonly string _language;
     private readonly Func<string, string, string> _espeak;
     private readonly Regex _punctuation;
+    private readonly bool _withStress;
 
     /// <param name="language">eSpeak's language code ("en-us", "fr-fr", "de", "ko", …).</param>
     /// <param name="marks">The punctuation marks kept (each one character).</param>
     /// <param name="espeak">eSpeak's phonemes of (language, text), clauses joined by spaces; null for the installed
     /// library.</param>
-    public EspeakPhonemizer(string language, string marks, Func<string, string, string>? espeak = null)
+    /// <param name="withStress">Whether the stress marks are kept (phonemizer's <c>with_stress</c>; Zonos keeps them).</param>
+    public EspeakPhonemizer(string language, string marks, Func<string, string, string>? espeak = null, bool withStress = false)
     {
+        _withStress = withStress;
         _language = language ?? throw new ArgumentNullException(nameof(language));
         _espeak = espeak ?? ((lang, text) => EspeakNg.Instance.TextToPhonemes(lang, text));
         var set = new StringBuilder();
@@ -105,13 +108,13 @@ internal sealed class EspeakPhonemizer
     }
 
     // eSpeak's output for one piece, cleaned and separated (phonemizer's line post-processing with strip).
-    private static string Clean(string espeak, string phoneSeparator, string wordSeparator)
+    private string Clean(string espeak, string phoneSeparator, string wordSeparator)
     {
         string line = espeak.Trim().Replace("\n", " ").Replace("  ", " ");
         line = RepeatedUnderscores.Replace(line, "_");
         line = line.Replace("_ ", " ");
         line = LanguageFlags.Replace(line, "");
         if (line.Length == 0) return "";
-        return string.Join(wordSeparator, line.Split(' ').Select(word => StressMarks.Replace(word.Trim(), "").Replace("_", phoneSeparator)));
+        return string.Join(wordSeparator, line.Split(' ').Select(word => (_withStress ? word.Trim() : StressMarks.Replace(word.Trim(), "")).Replace("_", phoneSeparator)));
     }
 }
