@@ -116,6 +116,8 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
         var (channels, height, width) = ImageDimensions(image);
         if (CoefficientCount(height, width) < MinimumCoefficients) return 0;
         double z = WatermarkZ(Luminance(ToDoubles(image), channels, height, width));
+        // Non-finite pixels give no usable correlation, so they are no evidence of a watermark.
+        if (double.IsNaN(z) || double.IsInfinity(z)) return 0;
         return Math.Max(0.0, Math.Min(1.0, (z - 3.0) / 3.0));
     }
 

@@ -103,6 +103,17 @@ public class WatermarkingIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_NonFinitePixels_AreNoEvidence()
+    {
+        await Task.Yield();
+        var tensor = CreateRandomImageTensor(3, 32, 32);
+        tensor[5] = double.NaN;
+        var watermarker = new ImageWatermarker<double>(detectionThreshold: 0);
+        Assert.Equal(0.0, watermarker.DetectWatermark(tensor));
+        Assert.Empty(watermarker.EvaluateImage(tensor));
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task ImageWatermarker_ReportsFromItsDetectionThreshold()
     {
         await Task.Yield();
