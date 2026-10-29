@@ -186,9 +186,9 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
         // Leftmost "arxiv.org/abs/", "arxiv.org/pdf/" or "arxiv." directly followed by a dddd.dddd(d) id.
         for (int i = u.IndexOf("arxiv.", StringComparison.Ordinal); i >= 0; i = u.IndexOf("arxiv.", i + 1, StringComparison.Ordinal))
         {
-            foreach (var prefix in ArxivPrefixes)
+            int at = i;
+            foreach (var prefix in ArxivPrefixes.Where(p => string.CompareOrdinal(u, at, p, 0, p.Length) == 0))
             {
-                if (string.CompareOrdinal(u, i, prefix, 0, prefix.Length) != 0) continue;
                 string? id = ArxivIdAt(u, i + prefix.Length);
                 if (id is not null) return "arxiv:" + id;
             }
