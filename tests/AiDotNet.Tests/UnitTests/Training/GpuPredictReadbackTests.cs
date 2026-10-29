@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.UnitTests.Training;
 /// #2385: a warm small-model Predict on a GPU engine paid ~1 ms at every batch size. After GPU training the dense
 /// weights are device-owned, so the host-array CompiledMlp tier downloaded a snapshot of every weight on each call,
 /// rejected it as not live, and fell through to MlpForward; Predict then downloaded the result to detach it from an
-/// arena that had rented nothing. A warm Predict whose result is not read must move no bytes to the host.
+/// arena that had rented nothing. A warm Predict must not build the host plan, and its result must stay on the device.
 /// </summary>
 [Collection("NonParallelIntegration")]
 public class GpuPredictReadbackTests
@@ -72,7 +72,8 @@ public class GpuPredictReadbackTests
             var labels = new Tensor<float>(new[] { Batch, Classes });
             for (int b = 0; b < Batch; b++) labels[b, b % Classes] = 1f;
 
-            network.Train(input, labels);   // leaves the dense weights device-owned
+            // Enough GPU steps for the resident training step to take the weights: they end device-owned.
+            for (int step = 0; step < 10; step++) network.Train(input, labels);
             network.Predict(input);         // warm: chain validation, uploads, kernels
             network.Predict(input);
 
@@ -83,6 +84,14 @@ public class GpuPredictReadbackTests
                 Assert.True(scope.Downloads == 0,
                     $"A warm Predict downloaded {scope.Downloads} time(s):\n" + string.Join("\n", scope.Events));
             }
+
+            // The host-array CompiledMlp plan is the CPU tier; on a GPU engine it snapshotted every weight per call.
+            var plan = typeof(FeedForwardNeuralNetwork<float>)
+                .GetField("_compiledMlpPlan", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("FeedForwardNeuralNetwork no longer has _compiledMlpPlan; update this test.");
+            Assert.Null(plan.GetValue(network));
+            // The result stays on the device until read, instead of being copied into a fresh host tensor per call.
+            Assert.True(output.HasPendingGpuData, "Predict copied its GPU result to the host.");
 
             var actual = output.ToArray();
             AiDotNetEngine.Current = new CpuEngine();
