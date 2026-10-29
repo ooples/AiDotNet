@@ -5,6 +5,8 @@ namespace AiDotNet.Models.Options;
 /// assess the impact of specific events or interventions on a time series.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (typically double or float).</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// <para>
 /// Intervention Analysis extends time series regression by explicitly modeling the effects of known

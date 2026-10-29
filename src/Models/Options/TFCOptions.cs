@@ -19,8 +19,11 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TFCOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     public TFCOptions() { }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public TFCOptions(TFCOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
@@ -34,12 +37,20 @@ public class TFCOptions<T> : TimeSeriesRegressionOptions<T>
         DropoutRate = other.DropoutRate; ContrastiveTemperature = other.ContrastiveTemperature;
     }
 
+    /// <summary>Number of past time steps the model reads as context.</summary>
     public int ContextLength { get; set; } = 200;
+    /// <summary>Number of future time steps to forecast.</summary>
     public int ForecastHorizon { get; set; } = 96;
+    /// <summary>Width of the encoders' hidden representations.</summary>
     public int HiddenDimension { get; set; } = 128;
+    /// <summary>Size of the shared time-frequency space both encoders project into.</summary>
     public int ProjectionDimension { get; set; } = 64;
+    /// <summary>Number of layers of the time-domain encoder.</summary>
     public int NumTimeLayers { get; set; } = 4;
+    /// <summary>Number of layers of the frequency-domain encoder.</summary>
     public int NumFreqLayers { get; set; } = 4;
+    /// <summary>Dropout probability applied during training.</summary>
     public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Temperature of the contrastive (NT-Xent) loss.</summary>
     public double ContrastiveTemperature { get; set; } = 0.07;
 }

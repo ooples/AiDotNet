@@ -361,37 +361,4 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// step size throughout the optimization process.</para>
     /// </remarks>
     public double LearningRateDecreaseFactor { get; set; } = 0.95;
-
-    /// <summary>
-    /// Gets or sets the maximum number of iterations the L-BFGS algorithm will perform before stopping.
-    /// </summary>
-    /// <value>The maximum number of iterations, defaulting to 1000.</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter sets an upper limit on the number of optimization steps the algorithm will take.
-    /// Even if other stopping criteria (such as convergence thresholds) have not been met, the algorithm
-    /// will terminate after this many iterations. This property overrides the base class implementation
-    /// to provide a more suitable default for L-BFGS.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting determines the maximum number of steps the algorithm
-    /// will take before giving up, even if it hasn't found the optimal solution yet.
-    /// 
-    /// Think of this as a safety limit to prevent the algorithm from running forever. The L-BFGS algorithm
-    /// will stop when either:
-    /// - It finds a solution that's good enough (based on other stopping criteria), or
-    /// - It reaches this maximum number of iterations
-    /// 
-    /// The default value of 1000 is typically sufficient for many problems. Consider:
-    /// - Increasing it (e.g., to 2000 or 5000) for complex problems where the algorithm might need
-    ///   more steps to converge to a good solution
-    /// - Decreasing it (e.g., to 500 or less) if you need faster results and can accept a less
-    ///   optimal solution, or if you're just testing the algorithm
-    /// 
-    /// L-BFGS typically converges faster than simpler methods like gradient descent, so it often
-    /// needs fewer iterations to reach a good solution. However, the exact number needed depends
-    /// greatly on your specific problem.
-    /// 
-    /// Note: The default value for MaxIterations is set to 1000 via the constructor, which is more
-    /// appropriate for L-BFGS than the base class default.</para>
-    /// </remarks>
 }

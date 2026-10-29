@@ -13,6 +13,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialA2CAgentOptions<T> : TradingAgentOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialA2CAgentOptions() { }
 

@@ -111,7 +111,7 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     /// - You've observed repeating patterns in your data at specific intervals
     /// - Your industry or domain has specific cyclical behaviors (school semesters, sports seasons, etc.)
     ///
-    /// For example: `SeasonalPeriods = new List<int> { 91, 30 }` would add both quarterly and monthly 
+    /// For example: `SeasonalPeriods = new List&lt;int&gt; { 91, 30 }` would add both quarterly and monthly 
     /// seasonality components to your model.
     /// </para>
     /// </remarks>
@@ -154,7 +154,7 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     /// - You know future special dates that will likely affect your forecasts
     /// - Normal seasonal patterns don't capture these special events adequately
     ///
-    /// For example: `Holidays = new List<DateTime> { new DateTime(2023, 12, 25), new DateTime(2023, 11, 24) }` 
+    /// For example: `Holidays = new List&lt;DateTime&gt; { new DateTime(2023, 12, 25), new DateTime(2023, 11, 24) }` 
     /// would mark Christmas and Black Friday 2023 as special events in your model.
     /// </para>
     /// </remarks>
@@ -658,7 +658,7 @@ public class ProphetOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
     /// - When a significant policy or pricing change was implemented
     /// - The beginning of a pandemic or economic disruption
     ///
-    /// For example: `Changepoints = new List<DateTime> { new DateTime(2020, 3, 15), new DateTime(2021, 6, 1) }` 
+    /// For example: `Changepoints = new List&lt;DateTime&gt; { new DateTime(2020, 3, 15), new DateTime(2021, 6, 1) }` 
     /// would tell the model that important trend changes occurred on March 15, 2020 and June 1, 2021.
     ///
     /// This is an advanced feature that's most useful when you have strong domain knowledge about

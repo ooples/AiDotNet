@@ -35,6 +35,8 @@ public class TimeDiffOptions<T> : TimeSeriesRegressionOptions<T>
         Seed = 1;
     }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public TimeDiffOptions(TimeDiffOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
@@ -57,13 +59,21 @@ public class TimeDiffOptions<T> : TimeSeriesRegressionOptions<T>
         UseAutoregressiveInit = other.UseAutoregressiveInit;
     }
 
+    /// <summary>Number of past time steps the model reads as context.</summary>
     public int ContextLength { get; set; } = 168;
+    /// <summary>Number of future time steps to forecast.</summary>
     public int ForecastHorizon { get; set; } = 24;
+    /// <summary>Width of the denoising network's hidden representations.</summary>
     public int HiddenDimension { get; set; } = 128;
+    /// <summary>Number of layers of the denoising network.</summary>
     public int NumLayers { get; set; } = 4;
+    /// <summary>Number of attention heads.</summary>
     public int NumHeads { get; set; } = 8;
+    /// <summary>Number of diffusion steps.</summary>
     public int DiffusionSteps { get; set; } = 100;
+    /// <summary>Dropout probability applied during training.</summary>
     public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Noise variance (beta) at the first diffusion step of the noise schedule.</summary>
     public double BetaStart { get; set; } = 0.0001;
     /// <summary>
     /// Gets or sets the largest variance the cosine schedule is allowed to reach.

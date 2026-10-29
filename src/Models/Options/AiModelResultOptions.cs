@@ -137,7 +137,7 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// <remarks>
     /// <para>
     /// Stores the fitted preprocessing pipeline used during training so that new input data
-    /// can be transformed the same way. This replaces the legacy <see cref="NormalizationInfo"/>
+    /// can be transformed the same way. This replaces the legacy <c>NormalizationInfo</c>
     /// with a more flexible, composable pipeline approach supporting scalers, encoders, imputers,
     /// and feature generators.
     /// </para>
@@ -164,7 +164,7 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </value>
     /// <remarks>
     /// <para>
-    /// Applied inside <see cref="AiModelResult{T,TInput,TOutput}.Predict"/>
+    /// Applied inside <see cref="AiModelResult{T,TInput,TOutput}.Predict(TInput)"/>
     /// after the model produces its raw output (and after any
     /// <c>PreprocessingInfo</c> target-inverse transform). Without this
     /// wiring the configured postprocessing pipeline was stored on the

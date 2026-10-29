@@ -228,7 +228,7 @@ public class DiffusionModelOptions<T> : ModelOptions
     /// channel-heavy UNets (e.g. SD-Inpainting's 9-channel input where each UNet
     /// forward takes ~5s on CPU). Callers needing full-quality 50+ step output
     /// (DDPM full-sampling per Ho et al. 2020) should pass the step count to
-    /// <see cref="Diffusion.DiffusionModelBase{T}.Generate"/> directly.</para>
+    /// <c>DiffusionModelBase&lt;T&gt;.Generate</c> directly.</para>
     /// </remarks>
     public int DefaultInferenceSteps { get; set; } = 10;
 

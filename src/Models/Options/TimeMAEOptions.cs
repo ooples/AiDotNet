@@ -18,8 +18,11 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TimeMAEOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     public TimeMAEOptions() { }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public TimeMAEOptions(TimeMAEOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
@@ -34,14 +37,23 @@ public class TimeMAEOptions<T> : TimeSeriesRegressionOptions<T>
         DropoutRate = other.DropoutRate; LearningRate = other.LearningRate;
     }
 
+    /// <summary>Number of past time steps the model reads as context.</summary>
     public int ContextLength { get; set; } = 512;
+    /// <summary>Number of future time steps to forecast.</summary>
     public int ForecastHorizon { get; set; } = 96;
+    /// <summary>Number of time steps in each patch the series is split into.</summary>
     public int PatchLength { get; set; } = 16;
+    /// <summary>Width of the model's hidden representations.</summary>
     public int HiddenDimension { get; set; } = 256;
+    /// <summary>Number of encoder layers.</summary>
     public int NumEncoderLayers { get; set; } = 6;
+    /// <summary>Number of decoder layers.</summary>
     public int NumDecoderLayers { get; set; } = 2;
+    /// <summary>Number of attention heads.</summary>
     public int NumHeads { get; set; } = 8;
+    /// <summary>Fraction of patches masked in each training series.</summary>
     public double MaskRatio { get; set; } = 0.75;
+    /// <summary>Dropout probability applied during training.</summary>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>Gets or sets the Adam learning rate used for native training.</summary>

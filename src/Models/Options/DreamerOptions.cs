@@ -35,6 +35,7 @@ public class DreamerOptions<T> : ReinforcementLearningOptions<T>
     private int _observationSize = 1;
     private int _actionSize = 1;
 
+    /// <summary>Number of features in one observation.</summary>
     public int ObservationSize
     {
         get => _observationSize;
@@ -48,6 +49,7 @@ public class DreamerOptions<T> : ReinforcementLearningOptions<T>
         }
     }
 
+    /// <summary>Dimension of the action vector.</summary>
     public int ActionSize
     {
         get => _actionSize;
@@ -62,18 +64,27 @@ public class DreamerOptions<T> : ReinforcementLearningOptions<T>
     }
 
     // World model architecture
+    /// <summary>Size of the latent representation the observation encoder produces.</summary>
     public int LatentSize { get; init; } = 200;
+    /// <summary>Size of the deterministic (recurrent) part of the latent state.</summary>
     public int DeterministicSize { get; init; } = 200;
+    /// <summary>Size of the stochastic part of the latent state.</summary>
     public int StochasticSize { get; init; } = 30;
+    /// <summary>Hidden width of the model's prediction networks.</summary>
     public int HiddenSize { get; init; } = 200;
 
     // Training parameters
+    /// <summary>Length of the sequences sampled for each world-model training batch.</summary>
     public int BatchLength { get; init; } = 50;
+    /// <summary>Number of steps imagined in the learned model when training the actor and critic.</summary>
     public int ImaginationHorizon { get; init; } = 15;
 
     // Model losses
+    /// <summary>Weight of the KL divergence between the posterior and prior latent states.</summary>
     public double KLScale { get; init; } = 1.0;
+    /// <summary>Weight of the reward-prediction loss in the world-model objective.</summary>
     public double RewardScale { get; init; } = 1.0;
+    /// <summary>Weight of the continuation-prediction loss in the world-model objective.</summary>
     public double ContinueScale { get; init; } = 1.0;
 
     /// <summary>

@@ -205,43 +205,43 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// </remarks>
     public double MaxTemperature { get; set; } = 1000.0;
 
-    /// <summary>
-    /// Gets or sets the maximum number of iterations for the annealing process.
-    /// </summary>
-    /// <value>A positive integer, defaulting to 10000.</value>
-    /// <remarks>
-    /// <para>
-    /// This property overrides the MaxIterations property inherited from the base class to provide a more 
-    /// appropriate default value for Simulated Annealing. It specifies the maximum number of iterations allowed 
-    /// before the algorithm terminates, regardless of whether other stopping criteria (such as reaching the 
-    /// minimum temperature) have been met. The default value of 10000 is sufficient for many problems of moderate 
-    /// complexity. For more complex problems with large solution spaces, a higher value might be needed to ensure 
-    /// adequate exploration. For simpler problems or when computational resources are limited, a lower value might 
-    /// be appropriate. This parameter helps prevent the algorithm from running indefinitely in cases where the 
-    /// temperature decreases very slowly or other stopping criteria are difficult to meet.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting limits the total number of solution attempts the algorithm will make.
-    /// 
-    /// The maximum iterations:
-    /// - Ensures the algorithm eventually stops, even if other stopping conditions aren't met
-    /// - Provides a hard limit on computational resources used
-    /// 
-    /// The default value of 10000 means:
-    /// - The algorithm will try at most 10000 different solutions
-    /// - This is usually sufficient for problems of moderate complexity
-    /// 
-    /// Think of it like this:
-    /// - Higher values (e.g., 50000 or 100000): More thorough exploration, better chance of finding optimal solution
-    /// - Lower values (e.g., 1000 or 5000): Faster execution, but might not find the best solution
-    /// 
-    /// When to adjust this value:
-    /// - Increase it for complex problems with large solution spaces
-    /// - Decrease it when you need faster results or have simpler problems
-    /// 
-    /// This parameter works together with MinTemperature - the algorithm stops when either
-    /// the temperature falls below MinTemperature OR the number of iterations reaches MaxIterations.
-    /// </para>
-    /// </remarks>
+    // <summary>
+    // Gets or sets the maximum number of iterations for the annealing process.
+    // </summary>
+    // <value>A positive integer, defaulting to 10000.</value>
+    // <remarks>
+    // <para>
+    // This property overrides the MaxIterations property inherited from the base class to provide a more 
+    // appropriate default value for Simulated Annealing. It specifies the maximum number of iterations allowed 
+    // before the algorithm terminates, regardless of whether other stopping criteria (such as reaching the 
+    // minimum temperature) have been met. The default value of 10000 is sufficient for many problems of moderate 
+    // complexity. For more complex problems with large solution spaces, a higher value might be needed to ensure 
+    // adequate exploration. For simpler problems or when computational resources are limited, a lower value might 
+    // be appropriate. This parameter helps prevent the algorithm from running indefinitely in cases where the 
+    // temperature decreases very slowly or other stopping criteria are difficult to meet.
+    // </para>
+    // <para><b>For Beginners:</b> This setting limits the total number of solution attempts the algorithm will make.
+    // 
+    // The maximum iterations:
+    // - Ensures the algorithm eventually stops, even if other stopping conditions aren't met
+    // - Provides a hard limit on computational resources used
+    // 
+    // The default value of 10000 means:
+    // - The algorithm will try at most 10000 different solutions
+    // - This is usually sufficient for problems of moderate complexity
+    // 
+    // Think of it like this:
+    // - Higher values (e.g., 50000 or 100000): More thorough exploration, better chance of finding optimal solution
+    // - Lower values (e.g., 1000 or 5000): Faster execution, but might not find the best solution
+    // 
+    // When to adjust this value:
+    // - Increase it for complex problems with large solution spaces
+    // - Decrease it when you need faster results or have simpler problems
+    // 
+    // This parameter works together with MinTemperature - the algorithm stops when either
+    // the temperature falls below MinTemperature OR the number of iterations reaches MaxIterations.
+    // </para>
+    // </remarks>
     // Note: SimulatedAnnealing default MaxIterations is set in the constructor
     // to avoid the 'new' keyword which causes JSON serialization issues with
     // duplicate property names in the base and derived class.

@@ -33,24 +33,40 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TRPOOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>Number of features in one observation of the environment state.</summary>
     public int StateSize { get; init; } = 1;
+    /// <summary>Number of discrete actions, or the dimension of the action vector for a continuous action space.</summary>
     public int ActionSize { get; init; } = 1;
+    /// <summary>Whether the action space is continuous rather than discrete.</summary>
     public bool IsContinuous { get; init; } = false;
+    /// <summary>Learning rate of the value network.</summary>
     public T ValueLearningRate { get; init; }
+    /// <summary>Lambda of generalized advantage estimation, trading bias against variance.</summary>
     public T GaeLambda { get; init; }
 
     // TRPO-specific parameters
+    /// <summary>Maximum KL divergence between the old and new policies: the size of the trust region.</summary>
     public T MaxKL { get; init; }  // Maximum KL divergence (trust region size)
+    /// <summary>Damping added to the Fisher-vector product for numerical stability of conjugate gradient.</summary>
     public double Damping { get; init; } = 0.1;  // Damping coefficient for conjugate gradient
+    /// <summary>Number of conjugate-gradient iterations used to compute the natural-gradient direction.</summary>
     public int ConjugateGradientIterations { get; init; } = 10;
+    /// <summary>Maximum number of backtracking steps of the line search.</summary>
     public int LineSearchSteps { get; init; } = 10;
+    /// <summary>Minimum ratio of actual to expected improvement for the line search to accept a step.</summary>
     public double LineSearchAcceptRatio { get; init; } = 0.1;
+    /// <summary>Factor by which the backtracking line search shrinks the step each time it rejects one.</summary>
     public double LineSearchBacktrackCoeff { get; init; } = 0.8;
 
+    /// <summary>Number of environment steps collected before each policy update.</summary>
     public int StepsPerUpdate { get; init; } = 2048;
+    /// <summary>Number of value-function gradient steps per update.</summary>
     public int ValueIterations { get; init; } = 5;
+    /// <summary>Loss function used to train the value network.</summary>
     public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredErrorLoss<T>();
+    /// <summary>Hidden layer sizes of the policy network.</summary>
     public List<int> PolicyHiddenLayers { get; init; } = new List<int> { 64, 64 };
+    /// <summary>Hidden layer sizes of the value network.</summary>
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
     /// <summary>
@@ -58,6 +74,7 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 
+    /// <summary>Creates options with the default values.</summary>
     public TRPOOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();

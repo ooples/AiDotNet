@@ -78,7 +78,7 @@ public class GradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBased
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GradientDescentOptimizerOptions"/> class with default settings.
+    /// Initializes a new instance of the <see cref="GradientDescentOptimizerOptions{T, TInput, TOutput}"/> class with default settings.
     /// </summary>
     /// <remarks>
     /// <para>

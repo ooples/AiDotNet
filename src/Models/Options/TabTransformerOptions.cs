@@ -111,6 +111,7 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// </remarks>
     private int[]? _categoricalCardinalities;
 
+    /// <summary>Number of distinct values of each categorical column, in column order; null when there are no categorical columns.</summary>
     public int[]? CategoricalCardinalities
     {
         get => _categoricalCardinalities;
@@ -152,6 +153,7 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// </remarks>
     private int _numHeads = 8;
 
+    /// <summary>Number of attention heads in each transformer block.</summary>
     public int NumHeads
     {
         get => _numHeads;
