@@ -175,13 +175,17 @@ internal sealed record BenchmarkOptions(
             map.GetValueOrDefault("output", "results/aidotnet.json"),
             map.GetValueOrDefault("verify-step1"),
             map.GetValueOrDefault("inference-batches", "1,8,32,128")
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                // Empty entries are rejected, not dropped, so a mistyped list fails here as it does in benchmark.py.
+                .Split(',', StringSplitOptions.TrimEntries)
                 .Select(ParsePositiveBatch).ToArray());
     }
 
     private static int ParsePositiveBatch(string text)
     {
-        var batch = int.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        if (!int.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int batch))
+        {
+            throw new ArgumentException($"--inference-batches must be comma-separated positive integers; got '{text}'.");
+        }
         if (batch <= 0)
         {
             throw new ArgumentException($"--inference-batches values must be positive; got {batch}.");

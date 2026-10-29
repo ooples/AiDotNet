@@ -20,12 +20,19 @@ Both sides build the same four reference models with matching layer shapes
 loop, and emit the same JSON schema. `pytorch/compare.py` lines the two reports
 up row-by-row.
 
-Seven more families run against their standard PyTorch definitions: `gru` (a GRU twin of the LSTM row), and at CIFAR
+Seven more families run against their standard PyTorch definitions: `gru` (a GRU twin of the LSTM row; see the note
+below), and at CIFAR
 shape `[3, 32, 32]` with 10 classes `resnet18`, `resnet50`, `vgg11`, `mobilenetv2`, `densenet121` and `vit` (patch 4,
 d 192, 6 layers, 3 heads). The AiDotNet side builds each through its own configuration class (`ResNetNetwork`,
 `VGGNetwork`, ...); the PyTorch side uses torchvision, adjusted only where AiDotNet's builder adjusts for a 32x32 input
 (VGG's classifier reads the 512x1x1 map directly, DenseNet uses the CIFAR stem). These rows have no step-1 weight map,
 so `--verify-step1` skips them; each report records both parameter counts instead (they agree within 1.4%).
+
+**The `gru` row is a timing comparison, not a parity row.** PyTorch's `nn.GRU` applies the reset gate after the recurrent
+product, `n = tanh(W_in x + b_in + r * (W_hn h + b_hn))`; AiDotNet's `GRULayer` applies it before,
+`n = tanh(W_in x + b_in + W_hn (r * h) + b_hn)` (Cho et al., Keras `reset_after=False`). The sizes and parameter shapes
+match, but the two compute different functions, so their losses are not expected to agree. The PyTorch report carries
+this as the row's `note`.
 
 Each training report also records `FirstLoss` / `LastLoss` (`first_loss` / `last_loss`): the loss of the first and
 the last training step, as evidence the timed step trains. The last is read after timing. The first is read during

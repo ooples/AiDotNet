@@ -86,6 +86,8 @@ class ModelResult:
     parameters: int
     training: TrainingResult
     inference: list[InferenceBatchResult]
+    # Set when the two rows compute different functions despite matching sizes, so the timing is not a parity result.
+    note: str = ""
 
 
 class ResourceMonitor:
@@ -211,6 +213,13 @@ class TransformerClassifier(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         encoded = self.encoder(self.proj(x))
         return self.head(encoded.mean(dim=1))
+
+
+# nn.GRU applies the reset gate after the recurrent product (n = tanh(W_in x + b_in + r * (W_hn h + b_hn))); AiDotNet's
+# GRULayer applies it before (n = tanh(W_in x + b_in + W_hn (r * h) + b_hn), Cho et al. / Keras reset_after=False).
+GRU_NOTE = ("Different recurrence: nn.GRU applies the reset gate after the recurrent product, AiDotNet's GRULayer "
+            "before it (Keras reset_after=False). Same sizes and parameter shapes; a timing comparison, not parity.")
+MODEL_NOTES = {"gru": GRU_NOTE}
 
 
 class GRUClassifier(nn.Module):
@@ -446,6 +455,20 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
     return results
 
 
+def parse_inference_batches(text: str) -> list[int]:
+    """Comma-separated positive batch sizes; the C# harness takes the same flag with the same contract."""
+    items = [item.strip() for item in text.split(",")]
+    if not items or any(not item for item in items):
+        raise ValueError(f"--inference-batches must be comma-separated positive integers, got {text!r}")
+    try:
+        batches = [int(item) for item in items]
+    except ValueError as error:
+        raise ValueError(f"--inference-batches must be comma-separated positive integers, got {text!r}") from error
+    if any(batch <= 0 for batch in batches):
+        raise ValueError(f"--inference-batches must be positive, got {text!r}")
+    return batches
+
+
 def run(args: argparse.Namespace) -> dict[str, object]:
     seed = args.seed
     random.seed(seed)
@@ -459,6 +482,9 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     else:
         device = torch.device(args.device)
 
+    # Validated before any model trains: a bad entry used to surface only after the first model's training run.
+    inference_batches = parse_inference_batches(args.inference_batches)
+
     model_results: list[ModelResult] = []
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
         model, shape = make_model(name)
@@ -471,8 +497,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown)
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
-                                        [int(b) for b in args.inference_batches.split(",")], args.warmup_min_ms)
-        model_results.append(ModelResult(name, str(device), parameters, training, inference))
+                                        inference_batches, args.warmup_min_ms)
+        model_results.append(ModelResult(name, str(device), parameters, training, inference, MODEL_NOTES.get(name, "")))
 
     return {
         "framework": "PyTorch",
