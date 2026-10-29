@@ -91,7 +91,10 @@ public sealed class BrokerOptionsProfile
 
     /// <summary>Creates a profile for an account authorized up to <paramref name="authorized"/>.</summary>
     /// <param name="authorized">The approval level the account is cleared for.</param>
-    /// <param name="map">The broker's mapping from strategy class to approval level; null uses <see cref="DefaultMap"/>.</param>
+    /// <param name="map">
+    /// The broker's mapping from strategy class to approval level; null uses <see cref="DefaultMap"/>. Classes it
+    /// omits require the highest level.
+    /// </param>
     public BrokerOptionsProfile(OptionsApprovalLevel authorized, IReadOnlyDictionary<OptionStrategyClass, OptionsApprovalLevel>? map = null)
     {
         Authorized = authorized;
@@ -116,8 +119,12 @@ public sealed class BrokerOptionsProfile
 
     /// <summary>The broker approval level that <paramref name="cls"/> requires.</summary>
     /// <param name="cls">The strategy's risk archetype.</param>
-    /// <returns>The required approval level.</returns>
-    public OptionsApprovalLevel LevelFor(OptionStrategyClass cls) => _map[cls];
+    /// <returns>
+    /// The required approval level. A class the map omits requires <see cref="OptionsApprovalLevel.Level5"/>, the
+    /// highest, so an incomplete custom map refuses the strategy rather than permitting it or throwing.
+    /// </returns>
+    public OptionsApprovalLevel LevelFor(OptionStrategyClass cls) =>
+        _map.TryGetValue(cls, out var level) ? level : OptionsApprovalLevel.Level5;
 
     /// <summary>Whether this account may place <paramref name="strategy"/>: options are authorized and the strategy's required level is at most <see cref="Authorized"/>.</summary>
     /// <param name="strategy">The strategy to check.</param>

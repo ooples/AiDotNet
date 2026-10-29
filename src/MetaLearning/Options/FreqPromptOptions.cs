@@ -41,13 +41,19 @@ public class FreqPromptOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     public bool EnableCheckpointing { get; set; } = false;
     /// <inheritdoc/>
     public int CheckpointFrequency { get; set; } = 500;
-    /// <inheritdoc/>
+    /// <summary>Whether to use the first-order approximation of the meta-gradient. Default: true.</summary>
     public bool UseFirstOrder { get; set; } = true;
-    /// <summary>Loss function used in the inner and outer loops; null uses the meta-model's default loss.</summary>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <summary>Optimizer for the outer (meta) update; null uses the algorithm's default.</summary>
+    /// <summary>
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <summary>Optimizer for the inner, per-task adaptation loop; null uses the algorithm's default.</summary>
+    /// <summary>
+    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
+    /// A supplied optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
     /// <summary>Episodic data loader that supplies the meta-training tasks; null when tasks are passed to training directly.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }

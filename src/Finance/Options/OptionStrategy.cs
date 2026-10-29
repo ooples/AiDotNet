@@ -12,7 +12,10 @@ public sealed record OptionLeg(
     double ExpiryYears,
     int Contracts = 1)
 {
-    /// <summary>Shares of the underlying per option contract.</summary>
+    /// <summary>
+    /// The contract multiplier: units of the underlying per contract. For an equity option that is 100 shares; for a
+    /// cash-settled index option it is the cash amount per index point (100 currency units per point).
+    /// </summary>
     public const int ContractMultiplier = 100;
 
     /// <summary>Signed share-equivalent exposure sign: long call / short put are bullish (+), etc.</summary>
@@ -22,6 +25,12 @@ public sealed record OptionLeg(
 /// <summary>An optional stock leg (covered strategies pair stock with options).</summary>
 public sealed record StockLeg(OptionTradeAction Action, int Shares)
 {
+    /// <summary>The number of shares, a non-negative magnitude; the direction comes from <see cref="Action"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if the share count is negative.</exception>
+    public int Shares { get; init; } = Shares >= 0
+        ? Shares
+        : throw new ArgumentOutOfRangeException(nameof(Shares), "Shares is a magnitude; use Action for the direction.");
+
     /// <summary>Share count, positive for a long (bought) leg and negative for a short (sold) one.</summary>
     public int SignedShares => Action == OptionTradeAction.Buy ? Shares : -Shares;
 }
@@ -32,13 +41,15 @@ public sealed record StockLeg(OptionTradeAction Action, int Shares)
 /// profile (max loss, max gain, breakevens) computed by sampling the payoff over a spot grid — robust
 /// for ANY leg combination, not just the textbook ones. Net Greeks come from <see cref="BlackScholes{T}"/>.
 ///
-/// <para>The <see cref="Class"/> classifier is the gate that lets the platform enforce a broker's approval tier:
-/// a strategy with an unhedged short leg is <see cref="OptionStrategyClass.NakedEquity"/> (or
-/// <see cref="OptionStrategyClass.NakedIndex"/> on an index); a vertical (short hedged by a long) is
-/// <see cref="OptionStrategyClass.DefinedRiskSpread"/>; long-only is <see cref="OptionStrategyClass.LongPremium"/>;
-/// covered-by-stock or cash-secured is <see cref="OptionStrategyClass.CoveredOrSecured"/>. A
-/// <see cref="BrokerOptionsProfile"/> maps each class to the broker's approval level. It errs HIGH when unsure
-/// (fail-safe).</para>
+/// <para>The <see cref="Class"/> classifier is the gate that lets the platform enforce a broker's approval tier.
+/// Short calls not covered by stock (100 shares per contract) or by long calls make the strategy
+/// <see cref="OptionStrategyClass.NakedEquity"/> (or <see cref="OptionStrategyClass.NakedIndex"/> on an index).
+/// Short puts not covered by long puts are treated as cash-secured, <see cref="OptionStrategyClass.CoveredOrSecured"/>,
+/// never as naked. A vertical (short hedged by a long) is <see cref="OptionStrategyClass.DefinedRiskSpread"/>,
+/// long-only is <see cref="OptionStrategyClass.LongPremium"/>, and covered-by-stock is
+/// <see cref="OptionStrategyClass.CoveredOrSecured"/>. A <see cref="BrokerOptionsProfile"/> maps each class to the
+/// broker's approval level; a class its map omits requires the highest level, so an incomplete map refuses rather
+/// than permits.</para>
 /// </summary>
 public sealed class OptionStrategy
 {

@@ -12,6 +12,37 @@ namespace AiDotNet.Tests.IntegrationTests.Finance;
 public class OptionStrategyLevelTests
 {
     [Fact]
+    public void A_class_missing_from_a_custom_map_requires_the_highest_level()
+    {
+        // A broker map that forgot DefinedRiskSpread: the gate must refuse below Level5, not throw or permit.
+        var map = new System.Collections.Generic.Dictionary<OptionStrategyClass, OptionsApprovalLevel>
+        {
+            [OptionStrategyClass.None] = OptionsApprovalLevel.None,
+            [OptionStrategyClass.CoveredOrSecured] = OptionsApprovalLevel.Level1,
+            [OptionStrategyClass.LongPremium] = OptionsApprovalLevel.Level2,
+        };
+        var spread = new OptionStrategy("Bull call spread", new[]
+        {
+            new OptionLeg(OptionRight.Call, OptionTradeAction.Buy, 100, 0.25),
+            new OptionLeg(OptionRight.Call, OptionTradeAction.Sell, 110, 0.25),
+        });
+        Assert.Equal(OptionStrategyClass.DefinedRiskSpread, spread.Class);
+
+        var level4 = new BrokerOptionsProfile(OptionsApprovalLevel.Level4, map);
+        Assert.Equal(OptionsApprovalLevel.Level5, level4.LevelFor(OptionStrategyClass.DefinedRiskSpread));
+        Assert.False(level4.IsPermitted(spread));
+        Assert.NotNull(level4.Deny(spread));
+        Assert.True(new BrokerOptionsProfile(OptionsApprovalLevel.Level5, map).IsPermitted(spread));
+    }
+
+    [Fact]
+    public void A_stock_leg_takes_a_non_negative_share_count()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => new StockLeg(OptionTradeAction.Buy, -100));
+        Assert.Equal(-100, new StockLeg(OptionTradeAction.Sell, 100).SignedShares);
+    }
+
+    [Fact]
     public void CoveredCall_CSP_ProtectivePut_classify_as_CoveredOrSecured()
     {
         Assert.Equal(OptionStrategyClass.CoveredOrSecured, OptionStrategy.CoveredCall(105, 0.25).Class);

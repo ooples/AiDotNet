@@ -44,6 +44,8 @@ public class FuzzyCMeansOptions<T> : ClusteringOptions<T>
     /// <value>Number of clusters. Default is 3.</value>
     public int NumClusters { get; set; } = 3;
 
+    private double _fuzziness = 2.0;
+
     /// <summary>
     /// Gets or sets the fuzziness parameter (m).
     /// </summary>
@@ -57,8 +59,6 @@ public class FuzzyCMeansOptions<T> : ClusteringOptions<T>
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown if value is not greater than 1.</exception>
-    private double _fuzziness = 2.0;
-    /// <summary>Fuzziness exponent m (greater than 1): larger values give softer, more overlapping cluster memberships; 2 is the usual choice.</summary>
     public double Fuzziness
     {
         get => _fuzziness;
