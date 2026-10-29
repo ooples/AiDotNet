@@ -58,6 +58,7 @@ public class FuzzyCMeansOptions<T> : ClusteringOptions<T>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown if value is not greater than 1.</exception>
     private double _fuzziness = 2.0;
+    /// <summary>Fuzziness exponent m (greater than 1): larger values give softer, more overlapping cluster memberships; 2 is the usual choice.</summary>
     public double Fuzziness
     {
         get => _fuzziness;

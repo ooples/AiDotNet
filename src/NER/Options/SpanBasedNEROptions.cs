@@ -144,6 +144,7 @@ public class SpanBasedNEROptions
     /// <remarks>The reference configuration uses <c>decay_frequency = 100</c>.</remarks>
     public int DecayFrequency { get; set; } = 100;
 
+    /// <summary>Longest span, in tokens, considered as an entity candidate.</summary>
     public int MaxSpanLength
     {
         get => _maxSpanLength;

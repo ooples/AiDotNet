@@ -10,6 +10,8 @@ namespace AiDotNet.MetaLearning.Options;
 /// arXiv:2001.08735).
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// <para>
 /// Metric-based few-shot learners "often fail to generalize to unseen domains due to large
@@ -129,13 +131,13 @@ public class LFTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.LossFunction"/>
+    /// <summary>Loss function used in the inner and outer loops; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaOptimizer"/>
+    /// <summary>Optimizer for the outer (meta) update; null uses the algorithm's default.</summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerOptimizer"/>
+    /// <summary>Optimizer for the inner, per-task adaptation loop; null uses the algorithm's default.</summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.DataLoader"/>
+    /// <summary>Episodic data loader that supplies the meta-training tasks; null when tasks are passed to training directly.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
@@ -166,6 +168,7 @@ public class LFTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
         AdaptationSteps > 0 &&
         MetaBatchSize > 0;
 
+    /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new LFTOptions<T, TInput, TOutput>(MetaModel)
     {
         LossFunction = LossFunction, MetaOptimizer = MetaOptimizer, InnerOptimizer = InnerOptimizer,

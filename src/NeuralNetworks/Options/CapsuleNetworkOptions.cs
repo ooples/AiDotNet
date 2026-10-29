@@ -13,6 +13,7 @@ public class CapsuleNetworkOptions : NeuralNetworkOptions
     /// </summary>
     private double _learningRate = 0.01;
 
+    /// <summary>Learning rate of the optimizer.</summary>
     public double LearningRate
     {
         get => _learningRate;

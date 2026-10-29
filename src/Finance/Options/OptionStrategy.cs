@@ -12,6 +12,7 @@ public sealed record OptionLeg(
     double ExpiryYears,
     int Contracts = 1)
 {
+    /// <summary>Shares of the underlying per option contract.</summary>
     public const int ContractMultiplier = 100;
 
     /// <summary>Signed share-equivalent exposure sign: long call / short put are bullish (+), etc.</summary>
@@ -21,6 +22,7 @@ public sealed record OptionLeg(
 /// <summary>An optional stock leg (covered strategies pair stock with options).</summary>
 public sealed record StockLeg(OptionTradeAction Action, int Shares)
 {
+    /// <summary>Share count, positive for a long (bought) leg and negative for a short (sold) one.</summary>
     public int SignedShares => Action == OptionTradeAction.Buy ? Shares : -Shares;
 }
 
@@ -30,21 +32,32 @@ public sealed record StockLeg(OptionTradeAction Action, int Shares)
 /// profile (max loss, max gain, breakevens) computed by sampling the payoff over a spot grid — robust
 /// for ANY leg combination, not just the textbook ones. Net Greeks come from <see cref="BlackScholes{T}"/>.
 ///
-/// <para>The <see cref="RequiredLevel"/> classifier is the gate that lets the platform enforce a broker's
-/// approval tier: a strategy with an unhedged short call is <see cref="OptionsApprovalLevel.Uncovered"/>;
-/// a vertical (short hedged by a long) is <see cref="OptionsApprovalLevel.Level3"/>; long-only is Level 2;
-/// covered-by-stock / cash-secured is Level 1. It errs HIGH when unsure (fail-safe).</para>
+/// <para>The <see cref="Class"/> classifier is the gate that lets the platform enforce a broker's approval tier:
+/// a strategy with an unhedged short leg is <see cref="OptionStrategyClass.NakedEquity"/> (or
+/// <see cref="OptionStrategyClass.NakedIndex"/> on an index); a vertical (short hedged by a long) is
+/// <see cref="OptionStrategyClass.DefinedRiskSpread"/>; long-only is <see cref="OptionStrategyClass.LongPremium"/>;
+/// covered-by-stock or cash-secured is <see cref="OptionStrategyClass.CoveredOrSecured"/>. A
+/// <see cref="BrokerOptionsProfile"/> maps each class to the broker's approval level. It errs HIGH when unsure
+/// (fail-safe).</para>
 /// </summary>
 public sealed class OptionStrategy
 {
+    /// <summary>Display name of the strategy (for example "Iron condor").</summary>
     public string Name { get; }
+    /// <summary>The option legs of the strategy.</summary>
     public IReadOnlyList<OptionLeg> Legs { get; }
+    /// <summary>The stock leg of a covered strategy, or null when there is none.</summary>
     public StockLeg? Stock { get; }
 
     /// <summary>True when the underlying is a (cash-settled) index — naked index options are the
     /// highest broker tier, distinct from naked equity options.</summary>
     public bool IsIndexUnderlying { get; }
 
+    /// <summary>Creates a strategy from its legs.</summary>
+    /// <param name="name">Display name of the strategy.</param>
+    /// <param name="legs">The option legs.</param>
+    /// <param name="stock">The stock leg of a covered strategy, or null.</param>
+    /// <param name="isIndexUnderlying">Whether the underlying is a cash-settled index.</param>
     public OptionStrategy(string name, IReadOnlyList<OptionLeg> legs, StockLeg? stock = null, bool isIndexUnderlying = false)
     {
         Name = name;

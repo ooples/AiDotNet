@@ -5,8 +5,13 @@ namespace AiDotNet.Finance.Options;
 /// <summary>Whether the vol edge says to sell, buy, or sit out volatility.</summary>
 public enum VolStance
 {
+    /// <summary>No trade: the edge is inside the thresholds, or an input volatility is not positive.</summary>
     NoTrade,
+
+    /// <summary>Implied volatility is above the forecast: sell volatility.</summary>
     SellVolatility,
+
+    /// <summary>Implied volatility is below the forecast: buy volatility.</summary>
     BuyVolatility,
 }
 

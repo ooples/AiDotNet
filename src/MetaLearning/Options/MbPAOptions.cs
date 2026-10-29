@@ -148,18 +148,21 @@ public class MbPAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.LossFunction"/>
+    /// <summary>Loss function used in the inner and outer loops; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaOptimizer"/>
+    /// <summary>Optimizer for the outer (meta) update; null uses the algorithm's default.</summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerOptimizer"/>
+    /// <summary>Optimizer for the inner, per-task adaptation loop; null uses the algorithm's default.</summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.DataLoader"/>
+    /// <summary>Episodic data loader that supplies the meta-training tasks; null when tasks are passed to training directly.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
+    /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
+    /// <param name="metaModel">The model whose parameters are meta-learned.</param>
     public MbPAOptions(IFullModel<T, TInput, TOutput> metaModel)
     { Guard.NotNull(metaModel); MetaModel = metaModel; }
 
+    /// <inheritdoc/>
     public bool IsValid() =>
         MetaModel != null &&
         LocalLearningRate > 0 &&
@@ -174,6 +177,7 @@ public class MbPAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
         OuterLearningRate > 0 &&
         MetaBatchSize > 0;
 
+    /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new MbPAOptions<T, TInput, TOutput>(MetaModel)
     {
         LossFunction = LossFunction, MetaOptimizer = MetaOptimizer, InnerOptimizer = InnerOptimizer,

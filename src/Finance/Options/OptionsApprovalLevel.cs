@@ -5,14 +5,20 @@ namespace AiDotNet.Finance.Options;
 /// <summary>Call or put.</summary>
 public enum OptionRight
 {
+    /// <summary>The right to buy the underlying at the strike.</summary>
     Call,
+
+    /// <summary>The right to sell the underlying at the strike.</summary>
     Put,
 }
 
 /// <summary>Buy (long) or sell (short) a leg.</summary>
 public enum OptionTradeAction
 {
+    /// <summary>Buy the leg (a long position).</summary>
     Buy,
+
+    /// <summary>Sell the leg (a short position).</summary>
     Sell,
 }
 
@@ -51,11 +57,22 @@ public enum OptionStrategyClass
 /// </summary>
 public enum OptionsApprovalLevel
 {
+    /// <summary>Not approved for options trading.</summary>
     None = 0,
+
+    /// <summary>Tier 1; in the default scheme, covered and cash-secured strategies.</summary>
     Level1 = 1,
+
+    /// <summary>Tier 2; in the default scheme, long options (risk capped at the premium).</summary>
     Level2 = 2,
+
+    /// <summary>Tier 3; in the default scheme, defined-risk spreads.</summary>
     Level3 = 3,
+
+    /// <summary>Tier 4; in the default scheme, naked equity options.</summary>
     Level4 = 4,
+
+    /// <summary>Tier 5; in the default scheme, naked index options.</summary>
     Level5 = 5,
 }
 
@@ -69,8 +86,12 @@ public sealed class BrokerOptionsProfile
 {
     private readonly IReadOnlyDictionary<OptionStrategyClass, OptionsApprovalLevel> _map;
 
+    /// <summary>The approval level this account is cleared for; strategies above it are refused.</summary>
     public OptionsApprovalLevel Authorized { get; }
 
+    /// <summary>Creates a profile for an account authorized up to <paramref name="authorized"/>.</summary>
+    /// <param name="authorized">The approval level the account is cleared for.</param>
+    /// <param name="map">The broker's mapping from strategy class to approval level; null uses <see cref="DefaultMap"/>.</param>
     public BrokerOptionsProfile(OptionsApprovalLevel authorized, IReadOnlyDictionary<OptionStrategyClass, OptionsApprovalLevel>? map = null)
     {
         Authorized = authorized;
@@ -93,8 +114,14 @@ public sealed class BrokerOptionsProfile
     /// <summary>A fully-authorized default-scheme profile (Level5) — convenient for tests/research.</summary>
     public static BrokerOptionsProfile Default { get; } = new(OptionsApprovalLevel.Level5);
 
+    /// <summary>The broker approval level that <paramref name="cls"/> requires.</summary>
+    /// <param name="cls">The strategy's risk archetype.</param>
+    /// <returns>The required approval level.</returns>
     public OptionsApprovalLevel LevelFor(OptionStrategyClass cls) => _map[cls];
 
+    /// <summary>Whether this account may place <paramref name="strategy"/>: options are authorized and the strategy's required level is at most <see cref="Authorized"/>.</summary>
+    /// <param name="strategy">The strategy to check.</param>
+    /// <returns>True when the strategy is permitted.</returns>
     public bool IsPermitted(OptionStrategy strategy) =>
         Authorized != OptionsApprovalLevel.None && (int)LevelFor(strategy.Class) <= (int)Authorized;
 

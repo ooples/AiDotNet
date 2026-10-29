@@ -7,10 +7,13 @@ namespace AiDotNet.Document.Options;
 /// </summary>
 public class SVTROptions : DocumentNeuralNetworkOptions
 {
+    /// <summary>Creates options with the default values.</summary>
     public SVTROptions()
     {
     }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public SVTROptions(SVTROptions other)
     {
         if (other is null)
