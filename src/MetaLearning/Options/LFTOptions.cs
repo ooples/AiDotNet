@@ -131,7 +131,7 @@ public class LFTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss. Inner adaptation trains the classification head with its own head loss (MbPAHeadLoss), not this one.</summary>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss. Inner adaptation trains the output head through its own head loss (MbPAHeadLoss), not this one.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
     /// <summary>
     /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
