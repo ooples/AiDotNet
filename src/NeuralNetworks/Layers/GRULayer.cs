@@ -1014,6 +1014,11 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
                 _lastH = null;
                 _lastHiddenState = finalHidden;
             }
+            else if (_stateful)
+            {
+                // A stateful layer carries the final state into its next call in inference too.
+                _lastHiddenState = finalHidden;
+            }
             _allHiddenStates = null;
             return RestoreOriginalOutputShape(fused, sequenceLength);
         }
@@ -1099,6 +1104,11 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             _lastZ = lastZ;
             _lastR = lastR;
             _lastH = lastH_candidate;
+            _lastHiddenState = currentHiddenState;
+        }
+        else if (_stateful)
+        {
+            // A stateful layer carries the final state into its next call in inference too.
             _lastHiddenState = currentHiddenState;
         }
 

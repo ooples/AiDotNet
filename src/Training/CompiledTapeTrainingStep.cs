@@ -313,9 +313,42 @@ public static class CompiledTapeTrainingStep<T>
     /// </summary>
     private static Tensor<T>? _persistentTarget { get => CurrentState.persistentTarget; set => CurrentState.persistentTarget = value; }
 
+    // Whether the training entry point running on this thread normalized every input's leading axis to the batch.
+    [ThreadStatic] private static bool t_leadingAxisIsBatch;
+
+    /// <summary>Whether a batch-axis declaration is active on this thread (diagnostic and test hook).</summary>
+    internal static bool LeadingAxisIsBatchOnThisThread => t_leadingAxisIsBatch;
+
     /// <summary>
-    /// The input the lazy-initialization forward runs on: one sample when the input and target agree that the leading
-    /// axis is a batch of more than one, else the whole input.
+    /// Declares, for the fused steps this thread runs until the scope is disposed, that each input's leading axis is the
+    /// batch: the caller normalized it (NeuralNetworkBase.TrainCore's batch promotion). Only then may the
+    /// lazy-initialization forward run on one sample; without it the whole input is used.
+    /// </summary>
+    internal static BatchAxisScope DeclareLeadingAxisIsBatch() => new BatchAxisScope(t_leadingAxisIsBatch);
+
+    /// <summary>Restores the previous batch-axis declaration on dispose; a default instance does nothing.</summary>
+    internal readonly struct BatchAxisScope : IDisposable
+    {
+        private readonly bool _active;
+        private readonly bool _previous;
+
+        internal BatchAxisScope(bool previous)
+        {
+            _active = true;
+            _previous = previous;
+            t_leadingAxisIsBatch = true;
+        }
+
+        public void Dispose()
+        {
+            if (_active) t_leadingAxisIsBatch = _previous;
+        }
+    }
+
+    /// <summary>
+    /// The input the lazy-initialization forward runs on: one sample when the caller declared the leading axis the
+    /// batch (<paramref name="leadingAxisIsBatch"/>) and the input and target agree it holds more than one, else the
+    /// whole input.
     /// </summary>
     /// <remarks>
     /// That forward exists only to make lazily-sized weights exist (they depend on feature, channel and spatial sizes,
@@ -324,8 +357,8 @@ public static class CompiledTapeTrainingStep<T>
     /// paged in only to be freed, which stayed in the process's working set through training. A leading axis the
     /// target does not share (a time-major sequence) is not sliced.
     /// </remarks>
-    internal static Tensor<T> LazyInitializationSample(Tensor<T> input, Tensor<T>? target)
-        => input.Rank >= 2 && target is not null && target.Rank >= 1 && input.Shape[0] > 1
+    internal static Tensor<T> LazyInitializationSample(Tensor<T> input, Tensor<T>? target, bool leadingAxisIsBatch)
+        => leadingAxisIsBatch && input.Rank >= 2 && target is not null && target.Rank >= 1 && input.Shape[0] > 1
             && target.Shape[0] == input.Shape[0]
             ? input.Slice(0, 0, 1)
             : input;
@@ -1251,7 +1284,7 @@ public static class CompiledTapeTrainingStep<T>
                 {
                     // Per-step random draws (CompiledStepRandom) are suppressed for the same reason.
                     using var noDraws = CompiledStepRandom<T>.SuppressDraws();
-                    forward(LazyInitializationSample(_persistentInput, _persistentTarget));
+                    forward(LazyInitializationSample(_persistentInput, _persistentTarget, t_leadingAxisIsBatch));
                 }
                 finally
                 {

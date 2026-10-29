@@ -17,25 +17,33 @@ namespace AiDotNet.Tests.UnitTests.Training;
 [Collection("NonParallelIntegration")]
 public class PredictOutputOwnershipTests
 {
-    private static FeedForwardNeuralNetwork<float> PassThrough()
+    private static FeedForwardNeuralNetwork<float> PassThrough(bool reshape = false)
     {
         var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: 4,
             outputSize: 4,
-            layers: new List<ILayer<float>> { new InputLayer<float>(new[] { 4 }) });
+            layers: reshape
+                // The reshape returns a view of its input: an output distinct from the input that shares its storage.
+                ? new List<ILayer<float>> { new InputLayer<float>(new[] { 4 }), new ReshapeLayer<float>(new[] { 2, 2 }) }
+                : new List<ILayer<float>> { new InputLayer<float>(new[] { 4 }) });
         return new FeedForwardNeuralNetwork<float>(arch, lossFunction: new MeanSquaredErrorLoss<float>());
     }
 
-    [Fact]
-    public void Predict_never_returns_the_callers_input_tensor()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Predict_never_returns_the_callers_input_or_a_view_of_it(bool reshape)
     {
+        // The detach this guards runs on the inference-arena path, so the arena is on whatever the environment says.
         var prior = AiDotNetEngine.Current;
+        bool priorArena = InferenceArenaSettings.Enabled;
         try
         {
             AiDotNetEngine.Current = new CpuEngine();
-            var network = PassThrough();
+            InferenceArenaSettings.Enabled = true;
+            var network = PassThrough(reshape);
             var input = new Tensor<float>(new float[] { 1, 2, 3, 4, 5, 6, 7, 8 }, new[] { 2, 4 });
             network.Predict(input);   // warm: chain validation
 
@@ -44,9 +52,17 @@ public class PredictOutputOwnershipTests
             output[0] = 99f;
             Assert.Equal(1f, input[0]);
 
+            // Neither writing to the result nor releasing it may reach the input's storage.
+            output.Dispose();
+            Assert.Equal(new float[] { 1, 2, 3, 4, 5, 6, 7, 8 }, input.ToArray());
+
             network.PredictInBatches(input, 2, (_, _) => { });
             Assert.Equal(new float[] { 1, 2, 3, 4, 5, 6, 7, 8 }, input.ToArray());
         }
-        finally { AiDotNetEngine.Current = prior; }
+        finally
+        {
+            InferenceArenaSettings.Enabled = priorArena;
+            AiDotNetEngine.Current = prior;
+        }
     }
 }

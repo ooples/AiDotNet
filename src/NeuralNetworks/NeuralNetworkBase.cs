@@ -10966,8 +10966,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // A model with its own PredictCore owns its public-input convention (its own batching, time-major audio,
         // token sequences), and prediction leaves its input alone (PrepareInputForTraining); training follows the
         // same rule. Promoting it guessed from the architecture's rank and turned a batched [B, T, F] into rank 4.
-        if (!PredictCoreOwnsPublicInputPreparation())
+        bool leadingAxisIsBatch = !PredictCoreOwnsPublicInputPreparation();
+        if (leadingAxisIsBatch)
             (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+        // The fused step's lazy-initialization forward may then run on one sample (see LazyInitializationSample).
+        using var batchAxis = leadingAxisIsBatch ? Training.CompiledTapeTrainingStep<T>.DeclareLeadingAxisIsBatch() : default;
 
         // Data-dependent LSUV init (Mishkin & Matas 2015): on the FIRST training step, rescale
         // each trainable layer's weights so its output has ~unit variance across this batch. This
@@ -13377,8 +13380,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
         if (FusedTrainingDisabledByConfiguration)
+        {
+            // A committed plan owns the optimizer moments, which cannot move to the eager optimizer: turning the fused step
+            // off now would continue with fresh moments and silently change the trajectory, as a committed failure would.
+            if (FusedSession.IsCommitted)
+                throw new InvalidOperationException(
+                    $"{GetType().Name}'s configuration turned the fused optimizer step off after fused training had committed. " +
+                    "The compiled plan's optimizer moments cannot move to the eager optimizer, so the switch would change the " +
+                    "training trajectory. Set it before the first Train call.");
             return EmitFusedMissAndFallback(
                 $"disabled by {GetType().Name}'s configuration (FusedTrainingDisabledByConfiguration), not by a fallback");
+        }
         if (FusedSession.IsDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)

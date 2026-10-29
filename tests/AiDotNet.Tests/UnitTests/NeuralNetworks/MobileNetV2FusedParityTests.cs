@@ -166,4 +166,45 @@ public class MobileNetV2FusedParityTests
         // the default itself (#2382).
         Assert.False(new MobileNetV2Options().DisableFusedOptimizerStep);
     }
+
+    [Fact]
+    public void Turning_the_fused_step_off_after_it_committed_throws()
+    {
+        // The committed plan owns the optimizer moments; an eager step would continue with fresh ones and change the
+        // trajectory without saying so, so the switch is refused.
+        var prior = AiDotNetEngine.Current;
+        var priorOptions = TensorCodecOptions.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            var x = Seeded(13, Batch, 3, Size, Size);
+            var y = new Tensor<float>(new[] { Batch, Classes });
+            for (int b = 0; b < Batch; b++) y[b, b % Classes] = 1f;
+            var options = new MobileNetV2Options { DisableFusedOptimizerStep = false };
+            var arch = new NeuralNetworkArchitecture<float>(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.MultiClassClassification,
+                inputHeight: Size, inputWidth: Size, inputDepth: 3, outputSize: Classes,
+                layers: Layers("conv-bn"));
+            var net = new MobileNetV2Network<float>(arch,
+                new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, Classes, Size, Size), options: options);
+            net.Predict(x);
+            net.SetTrainingMode(true);
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            int hitsBefore = AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits;
+            net.Train(x, y);
+            net.Train(x, y);
+            Assert.True(AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits > hitsBefore,
+                "the compiled fused step did not engage, so nothing committed");
+
+            options.DisableFusedOptimizerStep = true;
+            var ex = Assert.Throws<InvalidOperationException>(() => net.Train(x, y));
+            Assert.Contains("after fused training had committed", ex.Message);
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(priorOptions);
+            AiDotNetEngine.Current = prior;
+        }
+    }
 }

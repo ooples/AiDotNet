@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -517,9 +517,11 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
             x = seOut;
         }
 
-        // Projection phase (LINEAR - no activation)
+        // Projection phase (LINEAR - no activation). Its fold needs no block activation, so a block whose activation the
+        // fused kernels do not compute (hard-swish) still folds it; the helper itself declines training, a tape, a
+        // capture and an observer.
         Tensor<T> projectBnOut;
-        if (fuse && ConvolutionBatchNormFolding<T>.TryForward(projectConv, projectBn, x, FusedActivationType.None, out var projected))
+        if (!cacheBwd && ConvolutionBatchNormFolding<T>.TryForward(projectConv, projectBn, x, FusedActivationType.None, out var projected))
         {
             projectBnOut = projected;
         }
