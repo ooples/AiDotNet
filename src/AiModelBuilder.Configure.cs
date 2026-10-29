@@ -1604,10 +1604,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Builds the configured model, observing a cancellation token. This is the overload every other
     /// <c>BuildAsync</c> overload delegates to.
     /// </summary>
-    /// <param name="cancellationToken">A token that cancels the build. It is checked before any work starts and
-    /// passed down to the selected training path.</param>
+    /// <param name="cancellationToken">A token that cancels the build. It is checked before any work starts. What it
+    /// does after that depends on the training path: the supervised and streaming paths stop at the next epoch
+    /// boundary and return the model trained so far (they do not throw), and data loading observes it. The
+    /// self-supervised, image-only and evolution paths receive it. The reinforcement-learning and meta-learning
+    /// paths, and the AutoML inner search, do not observe it once training has started.</param>
     /// <returns>A task whose result is the trained <see cref="AiModelResult{T, TInput, TOutput}"/>.</returns>
-    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled before
+    /// training started, or during data loading.</exception>
     /// <exception cref="InvalidOperationException">Thrown if no training path was configured, or the configured
     /// RAG components do not form a valid pipeline.</exception>
     /// <exception cref="NotSupportedException">Streaming training options were configured but the data loader is not

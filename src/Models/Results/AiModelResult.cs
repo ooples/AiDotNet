@@ -2340,21 +2340,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // on the model's normalized scale, inconsistent with Predict(TInput). Those transforms are typed on
             // TOutput; a time-series result has TOutput == Vector<T> (feature matrix -> target vector), so route
             // the forecast through them only in that case (else there is nothing configured to apply).
-            if (typeof(TOutput) == typeof(Vector<T>) && forecast is TOutput forecastAsOutput)
+            if (typeof(TOutput) == typeof(Vector<T>) && forecast is TOutput forecastAsOutput
+                && DenormalizeForecast(forecastAsOutput) is Vector<T> denormalizedVector)
             {
-                var denormalized = PreprocessingInfo?.IsTargetFitted == true
-                    ? PreprocessingInfo.InverseTransformPredictions(forecastAsOutput)
-                    : forecastAsOutput;
-
-                if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
-                {
-                    denormalized = PostprocessingPipeline.Transform(denormalized);
-                }
-
-                if (denormalized is Vector<T> denormalizedVector)
-                {
-                    return denormalizedVector;
-                }
+                return denormalizedVector;
             }
 
             return forecast;
@@ -2492,6 +2481,22 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return reshaped;
     }
 
+    /// <summary>
+    /// Inverts fitted target scaling and applies the postprocessing pipeline to a time-series forecast: the tail every
+    /// other prediction path applies, so a forecast is in the target's original units.
+    /// </summary>
+    private TOutput DenormalizeForecast(TOutput forecast)
+    {
+        var denormalized = PreprocessingInfo?.IsTargetFitted == true
+            ? PreprocessingInfo.InverseTransformPredictions(forecast)
+            : forecast;
+        if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
+        {
+            denormalized = PostprocessingPipeline.Transform(denormalized);
+        }
+        return denormalized;
+    }
+
     private static Vector<T> FlattenRowMajor(Matrix<T> source)
     {
         var flat = new Vector<T>(source.Rows * source.Columns);
@@ -2519,9 +2524,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// these steps, the builder's JIT-compilation and determinism settings are re-applied on the calling thread.
     /// </para>
     /// <para>
-    /// Time-series models are the exception and skip the steps above: for them the number of rows in
-    /// <paramref name="newData"/> is the forecast horizon, and the forecast continues the series the model was
-    /// trained on.
+    /// Time-series models skip the input steps: for them the number of rows in <paramref name="newData"/> is the
+    /// forecast horizon, and the forecast continues the series the model was trained on. Fitted target scaling is
+    /// still inverted and the postprocessing pipeline still applied, so forecasts are in the target's original units.
+    /// The safety filter applies only to <c>Vector&lt;T&gt;</c> and <c>Matrix&lt;T&gt;</c> inputs and outputs;
+    /// <c>Tensor&lt;T&gt;</c> values pass through it unfiltered.
     /// </para>
     /// <para><b>For Beginners:</b> This method makes predictions on new data using the trained model. You pass raw
     /// data in the same shape as your training features, and you get answers back in the same scale as your
@@ -2544,7 +2551,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // behavior; this only changes the facade-facing result.Predict.)
         if (Model is AiDotNet.TimeSeries.TimeSeriesModelBase<T> timeSeriesModel)
         {
-            return ForecastWithTimeSeriesModelInternal(timeSeriesModel, newData);
+            // The model was trained on scaled targets when target scaling was configured: undo it, as every other
+            // prediction path does, so forecasts come back in the target's original units.
+            return DenormalizeForecast(ForecastWithTimeSeriesModelInternal(timeSeriesModel, newData));
         }
 
         // Bridge builder-configured JIT compilation flags into this thread's
