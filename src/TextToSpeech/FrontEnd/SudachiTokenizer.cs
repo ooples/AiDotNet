@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace AiDotNet.TextToSpeech.FrontEnd;
@@ -55,7 +56,7 @@ internal sealed class SudachiTokenizer
             var rune = runes[i];
             string original = rune.ToString();
             string changed = original;
-            if (IsUppercase(rune)) changed = Lowercase(rune);
+            if (IsUppercase(rune.Value)) changed = Lowercase(rune.Value);
             if (!_dic.IgnoreNormalize.Contains(rune.Value)) changed = changed.Normalize(NormalizationForm.FormKC);
             // handle_normalization_slow: replaced only when the first character changes.
             output.Append(changed.EnumerateRunes().FirstOrDefault().Value != rune.Value && changed.Length > 0 ? changed : original);
@@ -64,16 +65,16 @@ internal sealed class SudachiTokenizer
     }
 
     // Rust's char::is_uppercase: the Uppercase property (Lu and Other_Uppercase).
-    private static bool IsUppercase(Rune r) => Rune.IsUpper(r)
-        || (r.Value >= 0x2160 && r.Value <= 0x216F) || (r.Value >= 0x24B6 && r.Value <= 0x24CF)
-        || (r.Value >= 0x1F130 && r.Value <= 0x1F149) || (r.Value >= 0x1F150 && r.Value <= 0x1F169) || (r.Value >= 0x1F170 && r.Value <= 0x1F189);
+    private static bool IsUppercase(int c) => CharUnicodeInfo.GetUnicodeCategory(char.ConvertFromUtf32(c), 0) == UnicodeCategory.UppercaseLetter
+        || (c >= 0x2160 && c <= 0x216F) || (c >= 0x24B6 && c <= 0x24CF)
+        || (c >= 0x1F130 && c <= 0x1F149) || (c >= 0x1F150 && c <= 0x1F169) || (c >= 0x1F170 && c <= 0x1F189);
 
-    private static string Lowercase(Rune r)
+    private static string Lowercase(int c)
     {
-        if (r.Value >= 0x2160 && r.Value <= 0x216F) return new Rune(r.Value + 0x10).ToString();
-        if (r.Value >= 0x24B6 && r.Value <= 0x24CF) return new Rune(r.Value + 0x1A).ToString();
-        if (r.Value == 0x0130) return "i̇";
-        return Rune.ToLowerInvariant(r).ToString();
+        if (c >= 0x2160 && c <= 0x216F) return char.ConvertFromUtf32(c + 0x10);
+        if (c >= 0x24B6 && c <= 0x24CF) return char.ConvertFromUtf32(c + 0x1A);
+        if (c == 0x0130) return "i\u0307";
+        return char.ConvertFromUtf32(c).ToLowerInvariant();
     }
 
     /// <summary>ProlongedSoundMarkPlugin: each run of two or more prolonged sound marks as one "ー".</summary>
