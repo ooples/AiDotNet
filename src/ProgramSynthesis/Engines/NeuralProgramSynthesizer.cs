@@ -15,7 +15,6 @@ using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.ProgramSynthesis.Options;
 using AiDotNet.Tensors.LinearAlgebra;
-using TreeSitter;
 
 namespace AiDotNet.ProgramSynthesis.Engines;
 
@@ -312,12 +311,14 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
             return ValidateSql(program.SourceCode);
         }
 
-        var treeSitterLanguageSpec = GetTreeSitterLanguageSpec(program.Language);
-        if (treeSitterLanguageSpec is not null)
+        // A registered parser (the TreeSitter one ships in the opt-in AiDotNet.CodeAnalysis.TreeSitter package, which
+        // keeps its native grammars out of core) validates precisely; it returns null for a language it cannot parse.
+        if (CodeSyntaxProviders.Provider is { } syntaxProvider)
         {
             try
             {
-                return ValidateWithTreeSitter(treeSitterLanguageSpec.Value, program.SourceCode);
+                if (syntaxProvider.TryValidate(program.Language, program.SourceCode) is { } parsed)
+                    return parsed;
             }
             catch (DllNotFoundException)
             {
@@ -338,38 +339,6 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
         }
 
         return ValidateGenericSource(program.SourceCode);
-    }
-
-    private static (string LibraryName, string FunctionName)? GetTreeSitterLanguageSpec(ProgramLanguage language)
-    {
-        return language switch
-        {
-            ProgramLanguage.CSharp => ("tree-sitter-c-sharp", "tree_sitter_c_sharp"),
-            ProgramLanguage.Python => ("tree-sitter-python", "tree_sitter_python"),
-            ProgramLanguage.Java => ("tree-sitter-java", "tree_sitter_java"),
-            ProgramLanguage.JavaScript => ("tree-sitter-javascript", "tree_sitter_javascript"),
-            ProgramLanguage.TypeScript => ("tree-sitter-typescript", "tree_sitter_typescript"),
-            ProgramLanguage.C => ("tree-sitter-c", "tree_sitter_c"),
-            ProgramLanguage.CPlusPlus => ("tree-sitter-cpp", "tree_sitter_cpp"),
-            ProgramLanguage.Go => ("tree-sitter-go", "tree_sitter_go"),
-            ProgramLanguage.Rust => ("tree-sitter-rust", "tree_sitter_rust"),
-            _ => null
-        };
-    }
-
-    private static bool ValidateWithTreeSitter((string LibraryName, string FunctionName) languageSpec, string sourceCode)
-    {
-        using var language = new Language(languageSpec.LibraryName, languageSpec.FunctionName);
-        using var parser = new Parser(language);
-        using var tree = parser.Parse(sourceCode ?? string.Empty);
-
-        if (tree is null)
-        {
-            return false;
-        }
-
-        var root = tree.RootNode;
-        return !root.HasError && !root.IsError;
     }
 
     private bool ValidateSql(string sourceCode)

@@ -56,7 +56,8 @@ public sealed class CodeTokenizationPipeline : ICodeTokenizationPipeline
         var result = Tokenize(code, language, tokenizer, options, filePath);
 
         if (pipelineOptions.IncludeAst &&
-            TreeSitterAstExtractor.TryExtractAst(code, language, pipelineOptions, out var nodes, out var edges))
+            Engines.CodeSyntaxProviders.Provider is { } syntaxProvider &&
+            syntaxProvider.TryExtractAst(code, language, pipelineOptions, out var nodes, out var edges))
         {
             result.AstNodes = nodes;
             result.AstEdges = edges;

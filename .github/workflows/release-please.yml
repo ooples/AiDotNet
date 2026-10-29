@@ -133,6 +133,7 @@ jobs:
         src/AiDotNet.csproj
         src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj
         src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj
+        src/AiDotNet.CodeAnalysis.TreeSitter/AiDotNet.CodeAnalysis.TreeSitter.csproj
         src/AiDotNet.Storage.Elasticsearch/AiDotNet.Storage.Elasticsearch.csproj
         src/AiDotNet.Storage.Neo4j/AiDotNet.Storage.Neo4j.csproj
         src/AiDotNet.Storage.Postgres/AiDotNet.Storage.Postgres.csproj

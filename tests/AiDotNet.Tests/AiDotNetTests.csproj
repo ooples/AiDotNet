@@ -61,6 +61,7 @@
            - Storage.Sqlite → Storage/SqliteSqlSyntaxValidatorTests.cs -->
     <ProjectReference Include="..\..\src\AiDotNet.Privacy.HE\AiDotNet.Privacy.HE.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Sqlite\AiDotNet.Storage.Sqlite.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.CodeAnalysis.TreeSitter\AiDotNet.CodeAnalysis.TreeSitter.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Dashboard\AiDotNet.Dashboard.csproj" />
   </ItemGroup>
 

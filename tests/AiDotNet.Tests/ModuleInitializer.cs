@@ -21,6 +21,7 @@ internal static class TestModuleInitializer
     internal static void Initialize()
     {
         InitializeCpuMode();
+        RegisterCodeSyntaxProvider();
     }
 #endif
 
@@ -30,6 +31,16 @@ internal static class TestModuleInitializer
     public static void EnsureInitialized()
     {
         InitializeCpuMode();
+        RegisterCodeSyntaxProvider();
+    }
+
+    // TreeSitter moved out of core into the opt-in AiDotNet.CodeAnalysis.TreeSitter package (#2393). The suite was
+    // written against precise parsing, so register it the way an application would. Tests of the no-provider
+    // fallback clear and restore it themselves.
+    private static void RegisterCodeSyntaxProvider()
+    {
+        AiDotNet.ProgramSynthesis.Engines.CodeSyntaxProviders.Provider ??=
+            new AiDotNet.ProgramSynthesis.Tokenization.TreeSitterCodeSyntaxProvider();
     }
 
     private static void InitializeCpuMode()

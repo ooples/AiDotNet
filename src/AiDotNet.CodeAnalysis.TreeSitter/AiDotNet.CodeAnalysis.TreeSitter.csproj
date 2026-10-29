@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Opt-in TreeSitter package (#2393). Carries TreeSitter.DotNet and its native grammars (about 51 MB) so the core
+      AiDotNet package stays free of them. Provides the syntax validator and AST extractor the program synthesizer and
+      the code-tokenization pipeline use when one is registered, and TreeSitterTokenizer. Matches the core TFM set.
+    -->
+    <TargetFrameworks>net10.0;net8.0;net471;net462;netstandard2.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Version>0.204.0</Version>
+    <Title>AiDotNet.CodeAnalysis.TreeSitter</Title>
+    <Description>TreeSitter-backed code analysis for AiDotNet: precise syntax validation for the program synthesizer, AST extraction for the code-tokenization pipeline, and TreeSitterTokenizer. Opt-in: reference this package and register TreeSitterCodeSyntaxProvider via CodeSyntaxProviders.Provider. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
+    <Company>Ooples Finance</Company>
+    <Authors>ooples</Authors>
+    <Copyright>Ooples Finance LLC 2023</Copyright>
+    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+    <PackageTags>ai; aidotnet; tree-sitter; ast; program-synthesis; code-tokenization</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AiDotNet.ProgramSynthesis.Tokenization</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TreeSitter.DotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="True" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
