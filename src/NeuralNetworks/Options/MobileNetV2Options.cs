@@ -36,7 +36,8 @@ public class MobileNetV2Options : ModelHyperparameterOptions
     /// </summary>
     /// <remarks>
     /// Defaults to <see langword="false"/>: the compiled step reproduces the eager tape's loss and update for the
-    /// stem and every inverted-residual variant (expansion, stride 2, residual; #2382). It was <see langword="true"/>
+    /// stem and the inverted-residual blocks MobileNetV2 builds (with and without expansion, stride 1 with the
+    /// residual add, stride 2; #2382). It was <see langword="true"/>
     /// while the eager path froze the top-level batch-norm statistics and the compiled step did not, which read as a
     /// plan defect. Set it to train through the eager tape instead.
     /// </remarks>
