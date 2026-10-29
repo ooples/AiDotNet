@@ -35,11 +35,10 @@ public class MobileNetV2Options : ModelHyperparameterOptions
     /// compiled optimizer step and train through the eager tape path.
     /// </summary>
     /// <remarks>
-    /// The inverted residual and linear bottleneck blocks are non-sequential
-    /// composites with internally materialized depthwise/projection layers.
-    /// The eager tape path mirrors PyTorch autograd for this topology and
-    /// avoids replaying a flattened compiled plan that does not preserve the
-    /// block-local tensor flow.
+    /// Defaults to <see langword="false"/>: the compiled step reproduces the eager tape's loss and update for the
+    /// stem and every inverted-residual variant (expansion, stride 2, residual; #2382). It was <see langword="true"/>
+    /// while the eager path froze the top-level batch-norm statistics and the compiled step did not, which read as a
+    /// plan defect. Set it to train through the eager tape instead.
     /// </remarks>
-    public bool DisableFusedOptimizerStep { get; set; } = true;
+    public bool DisableFusedOptimizerStep { get; set; } = false;
 }

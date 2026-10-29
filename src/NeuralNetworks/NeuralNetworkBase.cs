@@ -13374,6 +13374,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
+        if (FusedTrainingDisabledByConfiguration)
+            return EmitFusedMissAndFallback(
+                $"model option disables fused compiled training ({GetType().Name}: DisableFusedOptimizerStep = true)");
         if (FusedSession.IsDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
