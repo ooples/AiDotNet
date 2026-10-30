@@ -24,7 +24,7 @@ internal sealed class SpeechGptTokenizer
     public SpeechGptTokenizer(SentencePieceModel model, IReadOnlyDictionary<string, int> added)
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
-        _added = new Dictionary<string, int>(added ?? throw new ArgumentNullException(nameof(added)), StringComparer.Ordinal);
+        _added = (added ?? throw new ArgumentNullException(nameof(added))).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
         _addedById = _added.ToDictionary(p => p.Value, p => p.Key);
         _byFirst = _added.Keys.Concat(_special).GroupBy(t => t[0]).ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.Length).ToArray());
     }
