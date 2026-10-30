@@ -171,8 +171,10 @@ internal class PMFModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
+    // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
+    // MetaModel would let every prediction overwrite the meta-model.
     public PMFModel(IFullModel<T, TInput, TOutput> model, Vector<T> adaptedParams)
-    { _model = model; _params = adaptedParams; }
+    { _model = (model ?? throw new ArgumentNullException(nameof(model))).Clone(); _params = adaptedParams; }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input) { InterfaceGuard.Parameterizable(_model).SetParameters(_params); return _model.Predict(input); }

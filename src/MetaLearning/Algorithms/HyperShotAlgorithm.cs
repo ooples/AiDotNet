@@ -314,7 +314,9 @@ internal class HyperShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
     public HyperShotModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
         Vector<T>? generatedKernel, double[]? modulationFactors)
     {
-        _model = model;
+        // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
+        // MetaModel would let every prediction overwrite the meta-model.
+        _model = (model ?? throw new ArgumentNullException(nameof(model))).Clone();
         _backboneParams = backboneParams;
         _generatedKernel = generatedKernel;
         _modulationFactors = modulationFactors;

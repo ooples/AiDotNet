@@ -91,19 +91,24 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     /// <summary>
     /// Initializes the adapting model.
     /// </summary>
-    /// <param name="embeddingNetwork">f_gamma; held fixed, so memory keys stay comparable.</param>
+    /// <remarks>
+    /// The embedding network and the head are copies: the parameter vector of this model spans both, so sharing them
+    /// would let <c>SetParameters</c> on an adapted model rewrite the meta-learner's embedding network and the head
+    /// of every other model adapted from it. The episodic memory is shared, and this model only reads it.
+    /// </remarks>
+    /// <param name="embeddingNetwork">f_gamma; this model holds its own copy, fixed, so memory keys stay comparable.</param>
     /// <param name="memory">The shared episodic memory to retrieve from.</param>
-    /// <param name="trainedOutputParams">theta, the trained head. Never modified in place.</param>
+    /// <param name="trainedOutputParams">theta, the trained head; this model holds its own copy.</param>
     /// <param name="options">MbPA options.</param>
     public MbPAAdaptedModel(
         IFullModel<T, TInput, TOutput> embeddingNetwork,
         MbPAEpisodicMemory<T> memory,
         Vector<T> trainedOutputParams,
         MbPAOptions<T, TInput, TOutput> options)
-        : base(embeddingNetwork)
+        : base((embeddingNetwork ?? throw new ArgumentNullException(nameof(embeddingNetwork))).Clone())
     {
         _memory = memory ?? throw new ArgumentNullException(nameof(memory));
-        _trainedOutputParams = trainedOutputParams ?? throw new ArgumentNullException(nameof(trainedOutputParams));
+        _trainedOutputParams = (trainedOutputParams ?? throw new ArgumentNullException(nameof(trainedOutputParams))).Clone();
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
@@ -260,6 +265,14 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     // SetParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     /// <inheritdoc/>
+    /// <remarks>
+    /// <paramref name="parameters"/> has the layout of <c>GetParameters</c>: the embedding network's parameters, then
+    /// the head's. It was once taken as the head alone, so <c>WithParameters(GetParameters())</c> changed the model.
+    /// </remarks>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-        => new MbPAAdaptedModel<T, TInput, TOutput>(BaseModel, _memory, parameters, _options);
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
 }
