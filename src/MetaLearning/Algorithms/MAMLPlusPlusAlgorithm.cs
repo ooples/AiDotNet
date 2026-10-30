@@ -251,7 +251,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                     ? NumOps.ToDouble(_perStepLearningRates[step])
                     : _mamlOptions.InnerLearningRate;
 
-                taskParams = ApplyGradients(taskParams, gradients, stepLR);
+                taskParams = ApplyInnerGradients(taskParams, gradients, stepLR);
                 ParamModel.SetParameters(taskParams);
             }
 
@@ -377,7 +377,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             grad = ClipGradients(grad);
             double stepLR = NumOps.ToDouble(_perStepLearningRates[step]);
-            taskParams = ApplyGradients(taskParams, grad, stepLR);
+            taskParams = ApplyInnerGradients(taskParams, grad, stepLR);
             ParamModel.SetParameters(taskParams);
         }
 
@@ -425,7 +425,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                 ? NumOps.ToDouble(_perStepLearningRates[step])
                 : _mamlOptions.InnerLearningRate;
 
-            adaptedParams = ApplyGradients(adaptedParams, gradients, stepLR);
+            adaptedParams = ApplyInnerGradients(adaptedParams, gradients, stepLR);
             ParamModel.SetParameters(adaptedParams);
         }
 

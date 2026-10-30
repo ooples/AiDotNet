@@ -153,7 +153,7 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            var newParams = ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
+            var newParams = ApplyOuterGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
             paramModel.SetParameters(newParams);
 
             // Update teacher via EMA

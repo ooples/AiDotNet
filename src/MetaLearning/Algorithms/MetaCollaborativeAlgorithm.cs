@@ -120,7 +120,7 @@ public partial class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearne
 
                 // Apply collaborative modulation
                 var collabGrad = ComputeCollaborativeGradient(grad, tIdx);
-                adaptedParams = ApplyGradients(adaptedParams, collabGrad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, collabGrad, _algoOptions.InnerLearningRate);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -149,7 +149,7 @@ public partial class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearne
 
             // Use domain buffers for collaborative adaptation
             var collabGrad = ComputeCollaborativeGradientFromBuffers(grad);
-            adaptedParams = ApplyGradients(adaptedParams, collabGrad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, collabGrad, _algoOptions.InnerLearningRate);
         }
 
         ParamModel.SetParameters(initParams);

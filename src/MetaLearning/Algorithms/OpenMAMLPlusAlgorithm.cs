@@ -137,7 +137,7 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                 }
                 else
                 {
-                    adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
                 }
 
                 // Multi-step loss: evaluate at each intermediate step
@@ -207,7 +207,7 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             }
             else
             {
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
         }
 
@@ -269,7 +269,7 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                 }
                 else
                 {
-                    adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
                 }
             }
 

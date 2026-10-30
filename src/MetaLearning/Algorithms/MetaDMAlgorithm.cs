@@ -147,7 +147,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
                 // Modulate gradient with augmentation signal (mix real and synthetic influence)
                 var augGrad = ModulateWithSynthetic(realGrad, syntheticFeatures, prototype);
-                adaptedParams = ApplyGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
             }
 
             // Evaluate on query set
@@ -165,7 +165,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update denoiser via SPSA
@@ -192,7 +192,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             ParamModel.SetParameters(adaptedParams);
             var realGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var augGrad = ModulateWithSynthetic(realGrad, syntheticFeatures, prototype);
-            adaptedParams = ApplyGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
         }
 
         ParamModel.SetParameters(baseParams);
@@ -406,7 +406,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 var augGrad = ModulateWithSynthetic(grad, synth, proto);
-                adaptedParams = ApplyGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
             }
 
             ParamModel.SetParameters(adaptedParams);

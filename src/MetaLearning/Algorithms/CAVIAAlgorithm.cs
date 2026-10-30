@@ -242,7 +242,7 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
             // Update body (model) parameters
             var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-            var updatedParams = ApplyGradients(currentParams, accumulatedBodyGradients, _caviaOptions.OuterLearningRate);
+            var updatedParams = ApplyOuterGradients(currentParams, accumulatedBodyGradients, _caviaOptions.OuterLearningRate);
             InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
         }
 

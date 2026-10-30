@@ -142,7 +142,7 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            _priorMean = ApplyGradients(_priorMean, avgGrad, _algoOptions.OuterLearningRate);
+            _priorMean = ApplyOuterGradients(_priorMean, avgGrad, _algoOptions.OuterLearningRate);
             ParamModel.SetParameters(_priorMean);
         }
 

@@ -210,7 +210,7 @@ public partial class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update denoiser and task encoder via SPSA
@@ -286,7 +286,7 @@ public partial class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             ParamModel.SetParameters(current);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            current = ApplyGradients(current, grad, _algoOptions.InnerLearningRate);
+            current = ApplyInnerGradients(current, grad, _algoOptions.InnerLearningRate);
         }
 
         var delta = new Vector<T>(_compressedDim);

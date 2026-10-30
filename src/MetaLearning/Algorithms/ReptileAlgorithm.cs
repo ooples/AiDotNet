@@ -297,7 +297,7 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
             // Apply gradients with inner learning rate
-            parameters = ApplyGradients(parameters, gradients, _reptileOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, gradients, _reptileOptions.InnerLearningRate);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 

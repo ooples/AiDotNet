@@ -134,7 +134,7 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -184,7 +184,7 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
                 for (int d = 0; d < _paramDim; d++)
                     weightedGrad[d] = NumOps.FromDouble(NumOps.ToDouble(weightedGrad[d]) / totalWeight);
 
-            ParamModel.SetParameters(ApplyGradients(initParams, weightedGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(initParams, weightedGrad, _algoOptions.OuterLearningRate));
         }
 
         return ComputeMean(losses);
@@ -202,7 +202,7 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
         ParamModel.SetParameters(initParams);

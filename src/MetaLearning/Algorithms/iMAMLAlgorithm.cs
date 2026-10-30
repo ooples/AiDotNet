@@ -211,7 +211,7 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         // Outer loop: Update meta-parameters
         var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        var updatedMetaParams = ApplyGradients(currentMetaParams, accumulatedMetaGradients, _imamlOptions.OuterLearningRate);
+        var updatedMetaParams = ApplyOuterGradients(currentMetaParams, accumulatedMetaGradients, _imamlOptions.OuterLearningRate);
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
 
         // Return average meta-loss
@@ -282,7 +282,7 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
             // Apply gradients with inner learning rate
-            parameters = ApplyGradients(parameters, gradients, _imamlOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, gradients, _imamlOptions.InnerLearningRate);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 

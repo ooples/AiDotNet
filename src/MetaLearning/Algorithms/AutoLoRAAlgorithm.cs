@@ -162,7 +162,7 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update selection logits and rank components via SPSA

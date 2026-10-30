@@ -275,7 +275,7 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         // Update MetaModel parameters
         var currentParams = ParamModel.GetParameters();
-        var updatedParams = ApplyGradients(currentParams, modelGradients, _options.OuterLearningRate);
+        var updatedParams = ApplyOuterGradients(currentParams, modelGradients, _options.OuterLearningRate);
         ParamModel.SetParameters(updatedParams);
 
         // Update metric scale parameters using finite differences

@@ -163,7 +163,7 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            var newBaseParams = ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate);
+            var newBaseParams = ApplyOuterGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate);
             ParamModel.SetParameters(newBaseParams);
         }
 

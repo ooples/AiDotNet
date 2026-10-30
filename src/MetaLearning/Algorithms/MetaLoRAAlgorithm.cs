@@ -159,7 +159,7 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update basis vectors and initial coefficients via SPSA

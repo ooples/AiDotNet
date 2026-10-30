@@ -282,7 +282,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 
         // Update meta-model parameters
         var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        var updatedParams = ApplyGradients(currentParams, accumulatedMetaGradients, _gnnOptions.OuterLearningRate);
+        var updatedParams = ApplyOuterGradients(currentParams, accumulatedMetaGradients, _gnnOptions.OuterLearningRate);
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
 
         // Update GNN weights using finite differences
@@ -741,7 +741,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             var modulatedGradients = ModulateGradientsWithContext(gradients, graphContext);
 
             // Apply gradients
-            parameters = ApplyGradients(parameters, modulatedGradients, _gnnOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, modulatedGradients, _gnnOptions.InnerLearningRate);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 
@@ -806,7 +806,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         for (int step = 0; step < _gnnOptions.AdaptationSteps; step++)
         {
             var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
-            parameters = ApplyGradients(parameters, gradients, _gnnOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, gradients, _gnnOptions.InnerLearningRate);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 

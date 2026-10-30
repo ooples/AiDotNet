@@ -182,7 +182,7 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update module bank and gating network via SPSA

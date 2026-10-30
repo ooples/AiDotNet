@@ -354,7 +354,7 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         {
             ParamModel.SetParameters(adapted);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adapted = ApplyGradients(adapted, grad, _algoOptions.InnerLearningRate);
+            adapted = ApplyInnerGradients(adapted, grad, _algoOptions.InnerLearningRate);
         }
 
         ParamModel.SetParameters(thetaStart);

@@ -94,7 +94,7 @@ public partial class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
             // Inductive loss
@@ -176,7 +176,7 @@ public partial class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
         ParamModel.SetParameters(initParams);

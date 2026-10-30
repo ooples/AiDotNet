@@ -141,7 +141,7 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
             ParamModel.SetParameters(adaptedParams);

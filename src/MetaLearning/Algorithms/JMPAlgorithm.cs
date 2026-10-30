@@ -87,7 +87,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, phase1LR);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, phase1LR);
             }
 
             // Save Phase 1 result as anchor for Phase 2 regularization
@@ -137,7 +137,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, phase1LR);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, phase1LR);
         }
 
         var phase1Params = new Vector<T>(_paramDim);

@@ -198,7 +198,7 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var adapted = ApplyGradients(ParamModel.GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
+                var adapted = ApplyInnerGradients(ParamModel.GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
                 ParamModel.SetParameters(adapted);
             }
 
@@ -237,7 +237,7 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var adapted = ApplyGradients(ParamModel.GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
+                var adapted = ApplyInnerGradients(ParamModel.GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
                 ParamModel.SetParameters(adapted);
             }
 
@@ -274,7 +274,7 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
         {
             var grad = ComputeGradients(taskModel, task.SupportInput, task.SupportOutput);
-            adaptedParams = ApplyGradients(taskParameters.GetParameters(), grad, _hyperMAMLOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(taskParameters.GetParameters(), grad, _hyperMAMLOptions.InnerLearningRate);
             taskParameters.SetParameters(adaptedParams);
         }
 

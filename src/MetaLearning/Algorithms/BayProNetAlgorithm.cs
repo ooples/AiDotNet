@@ -108,7 +108,7 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
             // Sample S parameter vectors from N(θ_adapted, σ²) and compute ensemble loss
@@ -165,7 +165,7 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
         ParamModel.SetParameters(initParams);
@@ -226,7 +226,7 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
 
             int numSamples = Math.Max(1, _algoOptions.EmbeddingDim / 8);

@@ -254,7 +254,7 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             // Update controller parameters
             var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-            var updatedParams = ApplyGradients(currentParams, accumulatedGradients, _mannOptions.OuterLearningRate);
+            var updatedParams = ApplyOuterGradients(currentParams, accumulatedGradients, _mannOptions.OuterLearningRate);
             InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
         }
 

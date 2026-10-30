@@ -151,7 +151,7 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
             ParamModel.SetParameters(initParams);
             var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(initParams, avgGrad, _camlOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(initParams, avgGrad, _camlOptions.OuterLearningRate));
         }
 
         // Update context module via SPSA
