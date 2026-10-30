@@ -540,10 +540,10 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// Creates default implementations for the nullable interface objects based on optimizer type.
     /// </summary>
     /// <param name="optimizerType">The type of optimizer to create defaults for.</param>
-    /// <returns>An OptimizationAlgorithmOptions<T, TInput, TOutput> instance with appropriate default implementations.</returns>
+    /// <returns>An OptimizationAlgorithmOptions&lt;T, TInput, TOutput> instance with appropriate default implementations.</returns>
     /// <remarks>
     /// <para>
-    /// This method creates a new instance of OptimizationAlgorithmOptions<T, TInput, TOutput> with default implementations
+    /// This method creates a new instance of OptimizationAlgorithmOptions&lt;T, TInput, TOutput> with default implementations
     /// for all the interface properties based on the specified optimizer type.
     /// </para>
     /// <para><b>For Beginners:</b> This method sets up all the necessary components for your chosen

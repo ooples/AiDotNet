@@ -126,9 +126,9 @@ public partial class AddLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Create an AddLayer for combining two 28×28 feature maps with ReLU activation
-    /// var addLayer = new AddLayer<float>(
+    /// var addLayer = new AddLayer&lt;float>(
     ///     new[] { new[] { 32, 28, 28, 64 }, new[] { 32, 28, 28, 64 } },
-    ///     new ReLUActivation<float>()
+    ///     new ReLUActivation&lt;float>()
     /// );
     /// ```
     /// 
@@ -164,9 +164,9 @@ public partial class AddLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Create an AddLayer for combining two feature vectors with Softmax activation
-    /// var addLayer = new AddLayer<float>(
+    /// var addLayer = new AddLayer&lt;float>(
     ///     new[] { new[] { 32, 10 }, new[] { 32, 10 } },
-    ///     new Softmax<float>()
+    ///     new Softmax&lt;float>()
     /// );
     /// ```
     /// 

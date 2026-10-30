@@ -115,8 +115,8 @@ namespace AiDotNet.Tokenization.Models
         /// <remarks>
         /// <para>
         /// CLIP uses a specific token format:
-        /// - Start of text: <|startoftext|>
-        /// - End of text: <|endoftext|>
+        /// - Start of text: &lt;|startoftext|>
+        /// - End of text: &lt;|endoftext|>
         /// </para>
         /// <para><b>For Beginners:</b> CLIP uses special markers to tell the model
         /// where text begins and ends. These are similar to GPT tokens but with

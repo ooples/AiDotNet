@@ -37,7 +37,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
     /// 
     /// This in-memory version is good for:
     /// - Testing FAISS-style indexing patterns
-    /// - Medium-sized collections (< 100K documents)
+    /// - Medium-sized collections (&lt; 100K documents)
     /// - Prototyping before deploying real FAISS
     /// 
     /// Real FAISS provides:

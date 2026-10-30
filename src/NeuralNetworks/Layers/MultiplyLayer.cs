@@ -252,7 +252,7 @@ public partial class MultiplyLayer<T> : LayerBase<T>, IShapeContract
     /// If you call this method, you'll get an error message directing you to use the
     /// correct Forward method that accepts multiple input tensors.
     /// 
-    /// Always use Forward(params Tensor<T>[] inputs) instead of Forward(input) with this layer.
+    /// Always use Forward(params Tensor&lt;T>[] inputs) instead of Forward(input) with this layer.
     /// </para>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)

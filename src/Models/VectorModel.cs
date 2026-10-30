@@ -164,7 +164,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// - Creating a model as part of a genetic algorithm
     /// - Copying or modifying an existing model
     ///
-    /// For example: new VectorModel<double>(new Vector<double>([2.5, -1.3, 0.7]))
+    /// For example: new VectorModel&lt;double>(new Vector&lt;double>([2.5, -1.3, 0.7]))
     /// creates a model that expects 3 features with the specified weights.
     /// </para>
     /// </remarks>

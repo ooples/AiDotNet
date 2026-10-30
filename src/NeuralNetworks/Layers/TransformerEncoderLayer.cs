@@ -614,7 +614,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     ///    - The encoder looks at how each element in the sequence relates to all other elements
     ///    - This creates contextual representations that capture relationships in the data
     /// 
-    /// 2. Add & Normalize:
+    /// 2. Add &amp; Normalize:
     ///    - The original input is added to the attention output (residual connection)
     ///    - Layer normalization stabilizes the values
     /// 
@@ -622,7 +622,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     ///    - Each position is processed independently through the feed-forward network
     ///    - This transforms the representations further
     /// 
-    /// 4. Final Add & Normalize:
+    /// 4. Final Add &amp; Normalize:
     ///    - The output from step 2 is added to the feed-forward output (another residual connection)
     ///    - Final layer normalization is applied
     /// 

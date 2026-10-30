@@ -126,7 +126,7 @@ public class SphericalRBF<T> : IRadialBasisFunction<T>
     /// <para>
     /// This method calculates the derivative of the Spherical RBF with respect to the radius r.
     /// For r > e, the derivative is 0. For r = e, the formula for the derivative is (1.5/e)[(r/e)² - 1].
-    /// The derivative is negative for r < e, indicating that the function decreases with distance within its support.
+    /// The derivative is negative for r &lt; e, indicating that the function decreases with distance within its support.
     /// </para>
     /// <para><b>For Beginners:</b> This method computes how fast the function's value changes
     /// as you move away from the center point.

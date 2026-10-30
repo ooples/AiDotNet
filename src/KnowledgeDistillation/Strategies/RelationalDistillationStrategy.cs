@@ -72,7 +72,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 ///
 /// <para><b>References:</b>
 /// - Park et al. (2019). Relational Knowledge Distillation. CVPR.
-/// - Tung & Mori (2019). Similarity-Preserving Knowledge Distillation. ICCV.
+/// - Tung &amp; Mori (2019). Similarity-Preserving Knowledge Distillation. ICCV.
 /// - Peng et al. (2019). Correlation Congruence for Knowledge Distillation. ICCV.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]

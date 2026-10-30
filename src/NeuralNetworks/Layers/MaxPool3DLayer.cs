@@ -296,7 +296,6 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>, IShapeContract
     #region Parameter Management
 
     /// <summary>
-    /// <summary>
     /// Returns layer-specific metadata for serialization (PoolSize, Stride).
     /// </summary>
     internal override Dictionary<string, string> GetMetadata()

@@ -758,14 +758,6 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         return updatedMatrix;
     }
 
-    /// <summary>
-    /// Reverses an Adam gradient update to recover original parameters.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This override provides accurate reversal for Adam's adaptive update rule:
-    /// params_old = params_new + lr * m_hat / (sqrt(v_hat) + epsilon)
-    /// </para>
     // Per-parameter Adam state for tape-based training (keyed by tensor reference identity).
     // ConcurrentDictionary so the per-tensor moments survive concurrent
     // TrainWithTape steps once HOGWILD! / DDP-shard trainers land (#1369);
@@ -1341,6 +1333,14 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
     }
 
+    /// <summary>
+    /// Reverses an Adam gradient update to recover original parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This override provides accurate reversal for Adam's adaptive update rule:
+    /// params_old = params_new + lr * m_hat / (sqrt(v_hat) + epsilon)
+    /// </para>
     /// <para>
     /// Uses the current moment estimates (_m, _v, _t) to reconstruct the exact
     /// update that was applied, accounting for bias correction and adaptive learning rates.

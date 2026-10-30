@@ -91,7 +91,7 @@ public class ModifiedHuberLossFitnessCalculator<T, TInput, TOutput> : FitnessCal
     /// 
     /// The formula is:
     /// - If z * y = -1: loss = max(0, 1 - z * y)²
-    /// - If z * y < -1: loss = -4 * z * y
+    /// - If z * y &lt; -1: loss = -4 * z * y
     /// where z is the prediction and y is the actual value.
     /// 
     /// This method calls the NeuralNetworkHelper's ModifiedHuberLoss method to perform the actual calculation,

@@ -42,7 +42,7 @@ namespace AiDotNet.Clustering.Subspace;
 /// var options = new CLIQUEOptions&lt;double&gt;();
 /// var cLIQUE = new CLIQUE&lt;double&gt;(options);
 /// cLIQUE.Train(dataMatrix);
-/// Vector<double> labels = cLIQUE.Labels;
+/// Vector&lt;double> labels = cLIQUE.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

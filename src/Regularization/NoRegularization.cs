@@ -7,8 +7,8 @@ namespace AiDotNet.Regularization;
 /// Implements a no-op regularization class that applies no regularization penalty to the model.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
-/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix&lt;T>, Tensor&lt;T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector&lt;T>, Tensor&lt;T>).</typeparam>
 /// <remarks>
 /// <para>
 /// NoRegularization serves as a baseline implementation that passes through all values unchanged.

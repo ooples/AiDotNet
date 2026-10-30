@@ -214,10 +214,10 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Create a layer that randomly turns off 30% of neurons during training
-    /// var dropoutLayer = new DropoutLayer<float>(0.3);
+    /// var dropoutLayer = new DropoutLayer&lt;float>(0.3);
     /// 
     /// // Create a layer with the default 50% dropout rate
-    /// var defaultDropout = new DropoutLayer<float>();
+    /// var defaultDropout = new DropoutLayer&lt;float>();
     /// ```
     /// 
     /// The layer will automatically calculate the proper scaling factor to

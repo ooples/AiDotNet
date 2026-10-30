@@ -41,7 +41,7 @@ namespace AiDotNet.DistributedTraining;
 /// - Memory: Same as wrapped optimizer
 /// - Communication: Much lower - 2x to 100x reduction depending on technique
 /// - Complexity: Moderate - adds compression/decompression overhead
-/// - Accuracy: Slight potential degradation (usually <1% with proper tuning)
+/// - Accuracy: Slight potential degradation (usually &lt;1% with proper tuning)
 /// - Best for: Slow networks, bandwidth-limited scenarios
 /// </para>
 /// <para><b>Implementation Note:</b>

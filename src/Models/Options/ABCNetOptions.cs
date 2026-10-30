@@ -142,6 +142,7 @@ public class ABCNetOptions<T> : NeuralNetworkOptions
     /// Momentum coefficient for the default SGD optimizer.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The paper trains with SGD at momentum 0.9. Exposed for the same reason the learning rate is:
     /// a published default is only useful if a caller can retune it without having to rebuild the
     /// whole optimizer.

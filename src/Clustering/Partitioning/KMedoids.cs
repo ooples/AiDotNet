@@ -45,7 +45,7 @@ namespace AiDotNet.Clustering.Partitioning;
 /// var options = new KMedoidsOptions&lt;double&gt;();
 /// var kMedoids = new KMedoids&lt;double&gt;(options);
 /// kMedoids.Train(dataMatrix);
-/// Vector<double> labels = kMedoids.Labels;
+/// Vector&lt;double> labels = kMedoids.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

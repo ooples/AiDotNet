@@ -46,7 +46,7 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 /// ```
 ///
 /// References:
-/// - Mani & Zhang (2003). "kNN Approach to Unbalanced Data Distributions"
+/// - Mani &amp; Zhang (2003). "kNN Approach to Unbalanced Data Distributions"
 /// </para>
 /// </remarks>
 [ComponentType(ComponentType.Encoder)]

@@ -211,7 +211,7 @@ public class MetaAdaptationResult<T>
     /// <para><b>For Beginners:</b> The overfitting gap tells you if the model "memorized" the
     /// training examples instead of truly learning.
     ///
-    /// - Small gap (< 5-10%): Good generalization
+    /// - Small gap (&lt; 5-10%): Good generalization
     /// - Medium gap (10-20%): Some overfitting, may need tuning
     /// - Large gap (> 20%): Significant overfitting problem
     ///

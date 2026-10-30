@@ -304,11 +304,11 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// ```csharp
     /// // Create a hidden layer with 784 inputs (e.g., from a 28×28 image), 
     /// // 128 outputs, and ReLU activation
-    /// var hiddenLayer = new FullyConnectedLayer<float>(128);
+    /// var hiddenLayer = new FullyConnectedLayer&lt;float>(128);
     /// 
     /// // Create an output layer with 128 inputs (from previous layer),
     /// // 10 outputs (e.g., for 10 classes), and Sigmoid activation
-    /// var outputLayer = new FullyConnectedLayer<float>(10, new SigmoidActivation<float>());
+    /// var outputLayer = new FullyConnectedLayer&lt;float>(10, new SigmoidActivation&lt;float>());
     /// ```
     /// 
     /// The constructor automatically initializes weights with appropriate small random
@@ -477,7 +477,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Create an output layer with Softmax activation for multi-class classification
-    /// var outputLayer = new FullyConnectedLayer<float>(10, new SoftmaxActivation<float>());
+    /// var outputLayer = new FullyConnectedLayer&lt;float>(10, new SoftmaxActivation&lt;float>());
     /// ```
     /// 
     /// Softmax makes sure that increasing one output decreases all others,

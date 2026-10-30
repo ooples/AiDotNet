@@ -520,13 +520,6 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     }
 
     /// <summary>
-    /// Reverses an RMSProp gradient update to recover original parameters.
-    /// </summary>
-    /// <param name="updatedParameters">Parameters after RMSProp update</param>
-    /// <param name="appliedGradients">The gradients that were applied</param>
-    /// <returns>Original parameters before the update</returns>
-    /// <remarks>
-    /// <para>
     /// Updates a solution model using the RMSProp algorithm.
     /// </summary>
     /// <param name="currentSolution">The current solution model to update.</param>

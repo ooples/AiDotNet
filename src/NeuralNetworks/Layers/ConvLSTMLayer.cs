@@ -379,7 +379,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// 
     /// For example, to analyze weather satellite images:
     /// ```csharp
-    /// var convLSTM = new ConvLSTMLayer<float>(
+    /// var convLSTM = new ConvLSTMLayer&lt;float>(
     ///     inputShape: [batchSize: 32, timeSteps: 24, height: 64, width: 64, channels: 1],
     ///     kernelSize: 3,
     ///     filters: 32,

@@ -130,7 +130,7 @@ public partial class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTrac
     /// <c>TrainWithTape</c> directly. This override covers the other direction -- anything reaching the base
     /// trainer without an explicit optimizer argument, which would otherwise fall back to the base Adam 1e-3
     /// default and quietly undo the rate this model needs. (#1789)
-    /// </summary>
+    /// </remarks>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
 

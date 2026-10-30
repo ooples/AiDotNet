@@ -31,7 +31,7 @@ namespace AiDotNet.PhysicsInformed.PDEs
     /// Dimensionless Numbers:
     /// - Péclet number (Pe = vL/D) measures advection vs diffusion strength
     ///   * Pe >> 1: Advection dominates (sharp fronts)
-    ///   * Pe << 1: Diffusion dominates (smooth profiles)
+    ///   * Pe &lt;&lt; 1: Diffusion dominates (smooth profiles)
     ///
     /// Applications:
     /// - Environmental engineering (pollution transport in air/water)

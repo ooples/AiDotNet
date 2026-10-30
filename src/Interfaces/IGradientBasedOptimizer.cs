@@ -7,8 +7,8 @@ namespace AiDotNet.Interfaces;
 /// Defines an interface for optimization algorithms that use gradients to find the best parameters for a model.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
-/// <typeparam name="TInput">The type of input data (e.g., Matrix<T> for regression, Tensor<T> for neural networks).</typeparam>
-/// <typeparam name="TOutput">The type of output data (e.g., Vector<T> for regression, Tensor<T> for neural networks).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T> for regression, Tensor&lt;T> for neural networks).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T> for regression, Tensor&lt;T> for neural networks).</typeparam>
 /// <remarks>
 /// <b>For Beginners:</b> This interface defines methods for algorithms that help machine learning models learn efficiently.
 /// 

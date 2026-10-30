@@ -687,7 +687,9 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     {
         _teacherForcingTarget = null;
         if (succeeded) _trainingStep++;
-    }    /// <summary>
+    }
+
+    /// <summary>
     /// Gets metadata about the DCRNN model.
     /// </summary>
     /// <returns>ModelMetadata containing model information.</returns>

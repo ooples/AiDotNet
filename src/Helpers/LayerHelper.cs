@@ -34223,7 +34223,7 @@ public static partial class LayerHelper<T>
 
     /// <summary>
     /// Creates layers for the Audio-Visual Correspondence network (L3-Net).
-    /// Architecture from "Look, Listen and Learn" (Arandjelovic & Zisserman, ICCV 2017).
+    /// Architecture from "Look, Listen and Learn" (Arandjelovic &amp; Zisserman, ICCV 2017).
     ///
     /// Paper architecture:
     /// - Visual encoder: 4 blocks of [Conv3x3-BN-ReLU, Conv3x3-BN-ReLU, MaxPool2x2], filters 64/128/256/512, GlobalMaxPool -> 512-D

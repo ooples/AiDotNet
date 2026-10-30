@@ -176,7 +176,7 @@ public class ResidualAnalysisFitDetectorOptions : ModelOptions
     /// 
     /// For example, if your model has an R² of 0.85:
     /// - This means it explains 85% of the variation in your data
-    /// - With the default threshold of 0.1, this wouldn't be good enough (as 0.85 < 0.9)
+    /// - With the default threshold of 0.1, this wouldn't be good enough (as 0.85 &lt; 0.9)
     /// - You'd need to either improve your model or increase the threshold
     /// 
     /// R² is one of the most common ways to evaluate regression models, as it directly measures

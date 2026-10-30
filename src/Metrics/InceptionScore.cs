@@ -34,7 +34,7 @@ namespace AiDotNet.Metrics
     /// - IS > 10: Excellent (ImageNet-quality)
     /// - IS 5-10: Good quality
     /// - IS 2-5: Moderate quality
-    /// - IS < 2: Poor quality (random noise ≈ 1)
+    /// - IS &lt; 2: Poor quality (random noise ≈ 1)
     ///
     /// Important notes:
     /// - IS can be "fooled" by mode collapse (generating same high-quality image repeatedly)

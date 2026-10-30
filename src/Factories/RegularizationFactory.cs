@@ -21,7 +21,7 @@ public static class RegularizationFactory
     /// </summary>
     /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
     /// <param name="options">Configuration options for the regularization.</param>
-    /// <returns>An implementation of IRegularization<T> for the specified regularization type.</returns>
+    /// <returns>An implementation of IRegularization&lt;T> for the specified regularization type.</returns>
     /// <exception cref="ArgumentException">Thrown when an unknown regularization type is specified.</exception>
     /// <remarks>
     /// <para>

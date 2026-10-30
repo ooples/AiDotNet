@@ -108,7 +108,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 ///
 /// **Usage example:**
 /// ```csharp
-/// var reasoner = new LogicalReasoner<double>(chatModel);
+/// var reasoner = new LogicalReasoner&lt;double>(chatModel);
 ///
 /// // Deductive reasoning
 /// var result = await reasoner.SolveAsync(

@@ -190,7 +190,7 @@ public interface IFewShotExampleSelector<T>
     ///
     /// Example:
     /// ```csharp
-    /// if (selector.ExampleCount < 5)
+    /// if (selector.ExampleCount &lt; 5)
     /// {
     ///     Console.WriteLine("Warning: Less than 5 examples available");
     /// }

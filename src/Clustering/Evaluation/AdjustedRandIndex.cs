@@ -34,7 +34,7 @@ namespace AiDotNet.Clustering.Evaluation;
 /// Adjusted Rand Index corrects for this:
 /// - ARI = 1: Perfect match
 /// - ARI = 0: No better than random
-/// - ARI < 0: Worse than random (rare)
+/// - ARI &lt; 0: Worse than random (rare)
 /// </para>
 /// </remarks>
 [ComponentType(ComponentType.Evaluator)]

@@ -125,7 +125,7 @@ public interface IContinualLearnerConfig<T>
     /// <remarks>
     /// <para>Controls how quickly old Fisher Information decays when learning new tasks.
     /// Higher values (closer to 1) maintain more memory of old tasks.</para>
-    /// <para><b>Reference:</b> Schwarz et al. "Progress & Compress" (2018)</para>
+    /// <para><b>Reference:</b> Schwarz et al. "Progress &amp; Compress" (2018)</para>
     /// </remarks>
     T OnlineEwcGamma { get; }
 

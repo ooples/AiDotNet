@@ -22,7 +22,7 @@ public static class WindowFunctionFactory
     /// </summary>
     /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
     /// <param name="type">The type of window function to create.</param>
-    /// <returns>An implementation of IWindowFunction<T> for the specified window function type.</returns>
+    /// <returns>An implementation of IWindowFunction&lt;T> for the specified window function type.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported window function type is specified.</exception>
     /// <remarks>
     /// <para>

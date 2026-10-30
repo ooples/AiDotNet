@@ -879,12 +879,12 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         public int FeatureIndex { get; set; }
 
         /// <summary>
-        /// Bin threshold for the split (values <= threshold go left).
+        /// Bin threshold for the split (values &lt;= threshold go left).
         /// </summary>
         public int BinThreshold { get; set; }
 
         /// <summary>
-        /// Left child node (values <= threshold).
+        /// Left child node (values &lt;= threshold).
         /// </summary>
         public HistTree? LeftChild { get; set; }
 
