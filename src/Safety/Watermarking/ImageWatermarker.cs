@@ -23,8 +23,8 @@ namespace AiDotNet.Safety.Watermarking;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.AnomalyDetection)]
-[ModelTask(ModelTask.Classification)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Secure Spread Spectrum Watermarking for Multimedia",
