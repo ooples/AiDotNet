@@ -23,7 +23,6 @@ internal static class DefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> UntestedModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "global::AiDotNet.AutoML.AutoMLEnsembleModel<T>",
             "global::AiDotNet.AutoML.DiffusionAutoML<T>",
             "global::AiDotNet.Finance.AutoML.FinancialAutoML<T>",
             "global::AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>",
