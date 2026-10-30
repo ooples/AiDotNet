@@ -1758,6 +1758,17 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.LazyShape.RecurrentTransformerLazyShapeTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.MultiHeadAttentionFloatGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ParameterGradientPublicationTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ColBERTQueryAugmentationTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.DefaultStackOptionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.FastTextNgramOptionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.InfoGANCodeLayoutTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DenseNetLayerFusionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DerivedTensorCacheTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GRULayerFusedSequenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GruStatefulInferenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.InvertedResidualBlockFusionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.InvertedResidualProjectionFoldTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.MobileNetV2FusedParityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TransformerCustomLayerValidationIssue1317Tests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TransformerDefaultOptimizerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TransformerEncoderBlockLayoutAuditTests.|
