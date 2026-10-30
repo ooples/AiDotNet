@@ -947,6 +947,8 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
     /// </summary>
     public override void ResetState()
     {
+        // Stateless between calls: the forward keeps its intermediates as locals.
+        return;
     }
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)

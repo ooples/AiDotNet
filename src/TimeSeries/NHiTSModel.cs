@@ -709,7 +709,12 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
     public int InputLength => _inputLength;
 
     public override bool SupportsTraining => true;
-    public override void ResetState() { }
+    public override void ResetState()
+    {
+        // This stack retains no forward or recurrent state.
+        return;
+    }
+
     /// <summary>
     /// Persists the constructor's parameters so DeserializationHelper can
     /// reconstruct the layer with paper-faithful dimensions instead of the

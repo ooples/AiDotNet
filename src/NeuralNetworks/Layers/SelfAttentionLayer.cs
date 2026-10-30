@@ -794,11 +794,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             output = Engine.Reshape(output, new[] { sequenceLength, embeddingDimension });
         }
 
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-        }
-
         return output;
     }
 
