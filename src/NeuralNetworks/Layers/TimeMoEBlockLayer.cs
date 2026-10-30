@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -126,8 +126,9 @@ public partial class TimeMoEBlockLayer<T> : LayerBase<T>, IShapeContract
 
         // sequenceLength=1 is the placeholder used by TransformerEncoderLayer; the attention
         // layer supports any rank and reshapes internally.
-        _selfAttention = new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-            activationFunction: new GELUActivation<T>() as IActivationFunction<T>);
+        // No activation on the attention output: Time-MoE's decoder block (Shi et al. 2024) is the standard
+        // pre-norm attention + mixture-of-experts FFN, whose only nonlinearity outside softmax is in the experts.
+        _selfAttention = new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
 
         _norm2 = new LayerNormalizationLayer<T>();
 
