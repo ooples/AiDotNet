@@ -117,34 +117,6 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastQueryNormed;
-    [Scratch]
-    private Tensor<T>? _lastKeyNormed;
-    [Scratch]
-    private Tensor<T>? _lastQueryRmsInv;
-    [Scratch]
-    private Tensor<T>? _lastKeyRmsInv;
-    [Scratch]
-    private Tensor<T>? _lastAttnRaw;
-    [Scratch]
-    private Tensor<T>? _lastAttnNormed;
-    [Scratch]
-    private Tensor<T>? _lastAttnRmsInv;
-    [Scratch]
-    private Tensor<T>? _lastGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastGate;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -349,42 +321,28 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         var k = Engine.Reshape(Engine.TensorMatMul(inputFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(inputFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 2: RMSNorm on Q and K
         var (qNormed, qRmsInv) = ApplyRMSNorm(q, _queryNormScale, batchSize, seqLen);
         var (kNormed, kRmsInv) = ApplyRMSNorm(k, _keyNormScale, batchSize, seqLen);
-        _lastQueryNormed = qNormed;
-        _lastKeyNormed = kNormed;
-        _lastQueryRmsInv = qRmsInv;
-        _lastKeyRmsInv = kRmsInv;
 
         // Step 3: Compute output gate
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
-        _lastGateRaw = gateRaw;
-        _lastGate = gate;
 
         // Step 4: Lightning attention with decay (recurrent form)
         var attnRaw = LightningAttentionForward(qNormed, kNormed, v, batchSize, seqLen);
-        _lastAttnRaw = attnRaw;
 
         // Step 5: RMSNorm on attention output
         var (attnNormed, attnRmsInv) = ApplyRMSNorm(
             attnRaw, _outputNormScale, batchSize, seqLen);
-        _lastAttnNormed = attnNormed;
-        _lastAttnRmsInv = attnRmsInv;
 
         // Step 6: Gated output
         var gatedOutput = Engine.TensorMultiply(gate, attnNormed);
@@ -397,7 +355,6 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -555,20 +512,6 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastQueryNormed = null;
-        _lastKeyNormed = null;
-        _lastQueryRmsInv = null;
-        _lastKeyRmsInv = null;
-        _lastAttnRaw = null;
-        _lastAttnNormed = null;
-        _lastAttnRmsInv = null;
-        _lastGateRaw = null;
-        _lastGate = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

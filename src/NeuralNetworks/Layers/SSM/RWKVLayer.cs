@@ -194,14 +194,6 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastTimeMixOutput;
-    [Scratch]
-    private Tensor<T>? _lastChannelMixOutput;
-    [Scratch]
     private Tensor<T>? _lastReceptance;
     [Scratch]
     private Tensor<T>? _lastWkv;
@@ -423,22 +415,17 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Time mixing sub-layer (with residual)
         var normed1 = ApplyLayerNorm(input3D, _normGamma1, _normBeta1, batchSize, seqLen);
         var timeMixOut = TimeMixingForward(normed1, batchSize, seqLen);
-        _lastTimeMixOutput = timeMixOut;
         var afterTimeMix = Engine.TensorAdd(input3D, timeMixOut);
 
         // Channel mixing sub-layer (with residual)
         var normed2 = ApplyLayerNorm(afterTimeMix, _normGamma2, _normBeta2, batchSize, seqLen);
         var channelMixOut = ChannelMixingForward(normed2, batchSize, seqLen);
-        _lastChannelMixOutput = channelMixOut;
         var output3D = Engine.TensorAdd(afterTimeMix, channelMixOut);
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -675,10 +662,6 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastTimeMixOutput = null;
-        _lastChannelMixOutput = null;
         _lastReceptance = null;
         _lastWkv = null;
         _lastState = null;
