@@ -54,7 +54,7 @@ internal sealed class FishFireflyCodec<T>
         foreach (int factor in c.DownsampleFactors)
             QuantizerDown.Add((Conv(layers, dim, dim, factor, factor, 1, 1, ConvolutionNormalization.None), NewConvNeXt(layers, dim)));
         Quantizer = new ChatTtsGroupedFsq<T>(engine, layers, dim, c.Levels, c.Groups, 1, random);
-        foreach (int factor in c.DownsampleFactors.Reverse())
+        foreach (int factor in Enumerable.Reverse(c.DownsampleFactors))
             QuantizerUp.Add((Transposed(layers, dim, dim, factor, factor, ConvolutionNormalization.None), NewConvNeXt(layers, dim)));
         Pre = Conv(layers, dim, c.HeadChannels, c.PreKernel, 1, 1, 1, ConvolutionNormalization.Weight, kaiming: true);
         int channels = c.HeadChannels;
