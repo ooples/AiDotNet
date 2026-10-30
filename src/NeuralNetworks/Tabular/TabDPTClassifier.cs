@@ -54,13 +54,6 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
-    [Scratch]
-    private Tensor<T>? _backboneOutputCache;
-    [Scratch]
-    private Tensor<T>? _logitsCache;
-    [Scratch]
-    private Tensor<T>? _probabilitiesCache;
-
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
@@ -94,10 +87,8 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     public Tensor<T> Forward(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
         var backboneOutput = ForwardBackbone(numericalFeatures, categoricalIndices);
-        _backboneOutputCache = backboneOutput;
 
         var logits = _classificationHead.Forward(backboneOutput);
-        _logitsCache = logits;
 
         return logits;
     }
@@ -109,7 +100,6 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     {
         var logits = Forward(numericalFeatures, categoricalIndices);
         var probabilities = ApplySoftmax(logits);
-        _probabilitiesCache = probabilities;
         return probabilities;
     }
 
@@ -214,9 +204,6 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _backboneOutputCache = null;
-        _logitsCache = null;
-        _probabilitiesCache = null;
         _classificationHead.ResetState();
     }
 }

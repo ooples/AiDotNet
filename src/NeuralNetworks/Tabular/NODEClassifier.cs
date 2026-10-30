@@ -52,14 +52,6 @@ public class NODEClassifier<T> : NODEBase<T>
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _backboneOutputCache;
-    [Scratch]
-    private Tensor<T>? _logitsCache;
-    [Scratch]
-    private Tensor<T>? _probabilitiesCache;
-
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
@@ -99,10 +91,8 @@ public class NODEClassifier<T> : NODEBase<T>
     public Tensor<T> Forward(Tensor<T> features)
     {
         var backboneOutput = ForwardBackbone(features);
-        _backboneOutputCache = backboneOutput;
 
         var logits = _classificationHead.Forward(backboneOutput);
-        _logitsCache = logits;
 
         return logits;
     }
@@ -114,7 +104,6 @@ public class NODEClassifier<T> : NODEBase<T>
     {
         var logits = Forward(features);
         var probabilities = ApplySoftmax(logits);
-        _probabilitiesCache = probabilities;
         return probabilities;
     }
 
@@ -219,9 +208,6 @@ public class NODEClassifier<T> : NODEBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _backboneOutputCache = null;
-        _logitsCache = null;
-        _probabilitiesCache = null;
         _classificationHead.ResetState();
     }
 }

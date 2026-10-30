@@ -52,12 +52,6 @@ public class NODERegression<T> : NODEBase<T>
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _backboneOutputCache;
-    [Scratch]
-    private Tensor<T>? _predictionsCache;
-
     /// <summary>
     /// Gets the output dimension.
     /// </summary>
@@ -101,10 +95,8 @@ public class NODERegression<T> : NODEBase<T>
     public Tensor<T> Forward(Tensor<T> features)
     {
         var backboneOutput = ForwardBackbone(features);
-        _backboneOutputCache = backboneOutput;
 
         var predictions = _regressionHead.Forward(backboneOutput);
-        _predictionsCache = predictions;
 
         return predictions;
     }
@@ -233,8 +225,6 @@ public class NODERegression<T> : NODEBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _backboneOutputCache = null;
-        _predictionsCache = null;
         _regressionHead.ResetState();
     }
 }

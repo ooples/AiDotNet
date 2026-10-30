@@ -66,14 +66,6 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
     private Tensor<T>? _contextFeatures;
     private Tensor<T>? _contextLabels;
 
-    // Cached values
-    [Scratch]
-    private Tensor<T>? _encodedInputCache;
-    [Scratch]
-    private Tensor<T>? _transformerOutputCache;
-    [Scratch]
-    private Tensor<T>? _mlpOutputCache;
-
     /// <summary>
     /// Gets the number of numerical features.
     /// </summary>
@@ -454,15 +446,12 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             }
         }
 
-        _encodedInputCache = combinedInput;
-
         // Apply transformer blocks
         var transformerOutput = combinedInput;
         foreach (var block in _transformerBlocks)
         {
             transformerOutput = block.Forward(transformerOutput);
         }
-        _transformerOutputCache = transformerOutput;
 
         // Extract only query outputs (last querySize elements)
         var queryOutput = new Tensor<T>([querySize, embDim]);
@@ -481,7 +470,6 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
 
         // Final normalization
         mlpOutput = _finalNorm.Forward(mlpOutput);
-        _mlpOutputCache = mlpOutput;
 
         return mlpOutput;
     }
@@ -536,10 +524,6 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _encodedInputCache = null;
-        _transformerOutputCache = null;
-        _mlpOutputCache = null;
-
         _featureEncoder.ResetState();
 
         foreach (var enc in _categoricalEncoders)
@@ -596,12 +580,6 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         // Layer norms
         private readonly LayerNormalizationLayer<TBlock> _norm1;
         private readonly LayerNormalizationLayer<TBlock> _norm2;
-
-        // Cached values
-        [Scratch]
-        private Tensor<TBlock>? _inputCache;
-        [Scratch]
-        private Tensor<TBlock>? _attentionOutputCache;
 
         /// <summary>
         /// Summed from the SAME traversal the vector uses, so the two cannot disagree.
@@ -757,7 +735,6 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
 
         public Tensor<TBlock> Forward(Tensor<TBlock> input)
         {
-            _inputCache = input;
             int seqLen = input.Shape[0];
 
             Tensor<TBlock> x;
@@ -777,7 +754,6 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
 
             var attentionOutput = ComputeCausalAttention(query, key, value, seqLen);
             attentionOutput = MatMul(attentionOutput, _outputWeights);
-            _attentionOutputCache = attentionOutput;
 
             // Residual connection
             var eng = AiDotNetEngine.Current;
@@ -908,9 +884,6 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
 
         public void ResetState()
         {
-            _inputCache = null;
-            _attentionOutputCache = null;
-
             // Zero gradients
             var eng = AiDotNetEngine.Current;
             eng.TensorFill(_queryGrad, NumOps.Zero);

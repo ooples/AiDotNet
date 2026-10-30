@@ -427,6 +427,9 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
 
     public Vector<T> Forward(Vector<T> state)
     {
+        // The per-layer vectors below are read only by UpdateWeights' manual backward, so they are
+        // copied out only when such a backward can run.
+        bool cacheForBackward = ManualBackwardCache<T>.ShouldCacheActivationsForManualBackward;
         _lastSharedInputs.Clear();
         _lastSharedOutputs.Clear();
         _lastValueInputs.Clear();
@@ -438,35 +441,35 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
         var sharedTensor = Tensor<T>.FromVector(state);
         foreach (var layer in _sharedLayers)
         {
-            _lastSharedInputs.Add(sharedTensor.ToVector());
+            if (cacheForBackward) _lastSharedInputs.Add(sharedTensor.ToVector());
             sharedTensor = layer.Forward(sharedTensor);
-            _lastSharedOutputs.Add(sharedTensor.ToVector());
+            if (cacheForBackward) _lastSharedOutputs.Add(sharedTensor.ToVector());
         }
         var sharedOutput = sharedTensor.ToVector();
-        _lastSharedOutput = sharedOutput;
+        ManualBackwardCache<T>.SaveForBackward(ref _lastSharedOutput, sharedOutput);
 
         // Value stream
         var valueTensor = sharedTensor;
         foreach (var layer in _valueLayers)
         {
-            _lastValueInputs.Add(valueTensor.ToVector());
+            if (cacheForBackward) _lastValueInputs.Add(valueTensor.ToVector());
             valueTensor = layer.Forward(valueTensor);
-            _lastValueOutputs.Add(valueTensor.ToVector());
+            if (cacheForBackward) _lastValueOutputs.Add(valueTensor.ToVector());
         }
         var valueOutput = valueTensor.ToVector();
-        _lastValueOutput = valueOutput;
+        ManualBackwardCache<T>.SaveForBackward(ref _lastValueOutput, valueOutput);
         T value = valueOutput[0];
 
         // Advantage stream
         var advantageTensor = sharedTensor;
         foreach (var layer in _advantageLayers)
         {
-            _lastAdvantageInputs.Add(advantageTensor.ToVector());
+            if (cacheForBackward) _lastAdvantageInputs.Add(advantageTensor.ToVector());
             advantageTensor = layer.Forward(advantageTensor);
-            _lastAdvantageOutputs.Add(advantageTensor.ToVector());
+            if (cacheForBackward) _lastAdvantageOutputs.Add(advantageTensor.ToVector());
         }
         var advantageOutput = advantageTensor.ToVector();
-        _lastAdvantageOutput = advantageOutput;
+        ManualBackwardCache<T>.SaveForBackward(ref _lastAdvantageOutput, advantageOutput);
 
         // Compute mean advantage for centering
         T meanAdvantage = _numOps.Zero;

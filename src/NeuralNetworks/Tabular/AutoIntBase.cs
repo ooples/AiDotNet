@@ -55,17 +55,15 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
     protected int MLPOutputDimension { get; }
 
-    // Caches
+    // Caches for the embedding-gradient backward
     [Scratch]
     private Tensor<T>? _numericalFeaturesCache;
     [Scratch]
     private Matrix<int>? _categoricalIndicesCache;
-    [Scratch]
-    private Tensor<T>? _embeddedFeaturesCache;
-    [Scratch]
-    private List<Tensor<T>>? _interactingOutputsCache;
-    [Scratch]
-    private Tensor<T>? _mlpOutputCache;
+
+    // Batch size of the last forward, which scales the learning rate in UpdateParameters. Kept apart
+    // from the caches above so that skipping them when no backward runs cannot change the update.
+    private int _forwardBatchSize;
 
     // Embedding gradients
     private readonly Tensor<T> _numericalEmbeddingsGrad;
@@ -292,20 +290,21 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
     protected Tensor<T> ForwardBackbone(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
         int batchSize = numericalFeatures.Shape[0];
-        _interactingOutputsCache = [];
-        _numericalFeaturesCache = numericalFeatures;
-        _categoricalIndicesCache = categoricalIndices;
+        _forwardBatchSize = batchSize;
+        ManualBackwardCache<T>.SaveForBackward(ref _numericalFeaturesCache, numericalFeatures);
+        if (categoricalIndices is not null)
+            ManualBackwardCache<T>.SaveForBackward(ref _categoricalIndicesCache, categoricalIndices);
+        else
+            _categoricalIndicesCache = null;
 
         // Embed features
         var embedded = EmbedFeatures(numericalFeatures, categoricalIndices);
-        _embeddedFeaturesCache = embedded;
 
         // Apply interacting layers
         var current = embedded;
         foreach (var layer in _interactingLayers)
         {
             current = layer.Forward(current);
-            _interactingOutputsCache.Add(current);
         }
 
         // Flatten
@@ -326,7 +325,6 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
             mlpOutput = mlpLayer.Forward(mlpOutput);
         }
 
-        _mlpOutputCache = mlpOutput;
         return mlpOutput;
     }
 
@@ -408,7 +406,7 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
     public virtual void UpdateParameters(T learningRate)
     {
         // Scale learning rate by batch size to normalize gradients that were accumulated across samples
-        int batchSize = _numericalFeaturesCache?.Shape[0] ?? 1;
+        int batchSize = _forwardBatchSize > 0 ? _forwardBatchSize : 1;
         var scaledLr = batchSize > 1
             ? NumOps.Divide(learningRate, NumOps.FromDouble(batchSize))
             : learningRate;
@@ -451,9 +449,7 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
     {
         _numericalFeaturesCache = null;
         _categoricalIndicesCache = null;
-        _embeddedFeaturesCache = null;
-        _interactingOutputsCache = null;
-        _mlpOutputCache = null;
+        _forwardBatchSize = 0;
 
         foreach (var layer in _interactingLayers)
         {
