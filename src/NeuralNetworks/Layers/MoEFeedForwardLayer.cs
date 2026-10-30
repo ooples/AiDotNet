@@ -102,6 +102,9 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
     private readonly int _hiddenSize;
 
+    /// <summary>The experts' gate activation (constructor argument), persisted so a reload uses the same one.</summary>
+    private readonly IActivationFunction<T> _expertActivation;
+
     /// <summary>Creates a sparse MoE feed-forward layer.</summary>
     /// <param name="hiddenSize">Model (residual stream) dimension.</param>
     /// <param name="ffnDim">Each expert's inner (intermediate) dimension.</param>
@@ -127,6 +130,7 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _topK = topK;
         _sharedFfnDim = sharedFfnDim;
         var act = activation ?? new SiLUActivation<T>();
+        _expertActivation = act;
 
         _router = new DenseLayer<T>(numExperts, activationFunction: new IdentityActivation<T>());
         _gate = new DenseLayer<T>[numExperts];
@@ -323,5 +327,27 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         foreach (var l in SubLayers()) l.ResetState();
+    }
+
+    /// <summary>
+    /// Persists the constructor's full argument set so <c>DeserializationHelper</c> can rebuild the layer: the
+    /// widths, the expert count, the routing top-k, the shared-expert width, and the experts' gate activation.
+    /// </summary>
+    /// <remarks>
+    /// The layer had no metadata of its own, so neither it nor any decoder block that receives it could be rebuilt
+    /// from a standalone save. Expert weights travel in the flat parameter vector.
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["HiddenSize"] = _hidden.ToString(ci);
+        metadata["FfnDim"] = _ffnDim.ToString(ci);
+        metadata["NumExperts"] = _numExperts.ToString(ci);
+        metadata["TopK"] = _topK.ToString(ci);
+        metadata["SharedFfnDim"] = _sharedFfnDim.ToString(ci);
+        var activationType = _expertActivation.GetType();
+        metadata["ExpertActivationType"] = activationType.AssemblyQualifiedName ?? activationType.FullName ?? string.Empty;
+        return metadata;
     }
 }

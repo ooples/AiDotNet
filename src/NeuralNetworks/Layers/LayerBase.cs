@@ -8204,6 +8204,51 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         return diagnostics;
     }
 
+    /// <summary>Prefix under which a composite persists the attention sublayer it received through its constructor.</summary>
+    internal const string AttentionSublayerPrefix = "Attn.";
+
+    /// <summary>Prefix under which a composite persists the mixture-of-experts FFN it received through its constructor.</summary>
+    internal const string MoeSublayerPrefix = "Moe.";
+
+    /// <summary>Key, under a sublayer's prefix, of the sublayer's type name.</summary>
+    internal const string SublayerTypeKey = "LayerType";
+
+    /// <summary>Key, under a sublayer's prefix, of the sublayer's input shape.</summary>
+    internal const string SublayerInputShapeKey = "InputShape";
+
+    /// <summary>Key, under a sublayer's prefix, of the sublayer's output shape.</summary>
+    internal const string SublayerOutputShapeKey = "OutputShape";
+
+    /// <summary>
+    /// Persists a sublayer that was handed to this layer's constructor (rather than built by it) as a self-contained
+    /// sub-blob under <paramref name="prefix"/>: its type name, its own metadata, and its shapes.
+    /// </summary>
+    /// <param name="metadata">This layer's metadata being assembled.</param>
+    /// <param name="prefix">The key prefix, for example <c>"Attn."</c>; must end with a separator.</param>
+    /// <param name="sublayer">The injected sublayer.</param>
+    /// <remarks>
+    /// <para>
+    /// A composite that receives a polymorphic sublayer (an attention layer, a mixture-of-experts FFN) cannot rebuild
+    /// it from its own constructor arguments, because those arguments ARE the sublayer. Without this, the composite
+    /// had no way to come back from a standalone save at all. The sublayer's own <c>GetMetadata</c> already carries
+    /// its full configuration (heads, KV heads, RoPE, causal mask, projection bias and so on), so nesting it verbatim
+    /// keeps one owner per setting; <c>DeserializationHelper</c> rebuilds it recursively through the normal
+    /// <c>CreateLayerFromType</c> path. Weights still travel in the composite's flat parameter vector.
+    /// </para>
+    /// </remarks>
+    protected static void WriteSublayerMetadata(Dictionary<string, string> metadata, string prefix, LayerBase<T> sublayer)
+    {
+        if (metadata is null) throw new ArgumentNullException(nameof(metadata));
+        if (string.IsNullOrEmpty(prefix)) throw new ArgumentException("A sublayer prefix is required.", nameof(prefix));
+        if (sublayer is null) throw new ArgumentNullException(nameof(sublayer));
+
+        foreach (var kv in sublayer.GetMetadata())
+            metadata[prefix + kv.Key] = kv.Value;
+        metadata[prefix + SublayerTypeKey] = sublayer.GetType().Name;
+        metadata[prefix + SublayerInputShapeKey] = string.Join(",", sublayer.GetInputShape());
+        metadata[prefix + SublayerOutputShapeKey] = string.Join(",", sublayer.GetOutputShape());
+    }
+
     /// <summary>
     /// Returns layer-specific metadata for serialization purposes.
     /// </summary>

@@ -2926,8 +2926,10 @@ public static class DeserializationHelper
                 && peG != Enums.PositionalEncodingType.None)
             {
                 double ropeThetaG = TryGetDouble(additionalParams, "RoPETheta") ?? 10000.0;
+                // Payloads written before the table length was persisted were configured with the sequence length.
+                int positionalMaxG = TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? seqLen;
                 var cfgMethod = type.GetMethod("ConfigurePositionalEncoding");
-                cfgMethod?.Invoke(instance, new object[] { peG, ropeThetaG, seqLen });
+                cfgMethod?.Invoke(instance, new object[] { peG, ropeThetaG, positionalMaxG });
             }
         }
         else if (genericDef.Name == "PreLNTransformerBlock`1")
@@ -2946,32 +2948,83 @@ public static class DeserializationHelper
             var activationFuncTypePln = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? ffnActivationPln = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncTypePln);
 
-            string? attnTypePlnRaw = additionalParams != null && additionalParams.TryGetValue("Attn.LayerType", out var atObj)
-                ? atObj?.ToString() : null;
-            if (attnTypePlnRaw is null || attnTypePlnRaw.Length == 0)
-                throw new InvalidOperationException(
-                    $"{genericDef.Name} requires 'Attn.LayerType' metadata to rebuild its attention sublayer.");
-            string attnTypePln = attnTypePlnRaw;
-            int[] attnInPln = TryGetIntArray(additionalParams, "Attn.InputShape") ?? inputShape;
-            int[] attnOutPln = TryGetIntArray(additionalParams, "Attn.OutputShape") ?? outputShape;
-            var attnParamsPln = new Dictionary<string, object>();
-            if (additionalParams != null)
-            {
-                foreach (var kv in additionalParams)
-                {
-                    if (kv.Key.Length > 5 && kv.Key.StartsWith("Attn.", StringComparison.Ordinal)
-                        && kv.Key != "Attn.LayerType" && kv.Key != "Attn.InputShape" && kv.Key != "Attn.OutputShape")
-                    {
-                        attnParamsPln[kv.Key.Substring(5)] = kv.Value;
-                    }
-                }
-            }
-            var attnLayerPln = CreateLayerFromType<T>(attnTypePln, attnInPln, attnOutPln, attnParamsPln) as LayerBase<T>
-                ?? throw new InvalidOperationException(
-                    $"{genericDef.Name}: rebuilt attention '{attnTypePln}' is not a LayerBase<T>.");
+            var attnLayerPln = RestoreSublayer<T>(genericDef.Name, additionalParams,
+                LayerBase<T>.AttentionSublayerPrefix, inputShape, outputShape);
 
             instance = new NeuralNetworks.Layers.PreLNTransformerBlock<T>(
                 hsPln, ffPln, attnLayerPln, (IActivationFunction<T>?)ffnActivationPln, gatedPln);
+        }
+        else if (genericDef.Name == "CohereDecoderBlock`1")
+        {
+            // (int hiddenSize, int ffnDim, LayerBase<T> attention, double layerNormEpsilon).
+            instance = new NeuralNetworks.Layers.CohereDecoderBlock<T>(
+                RequirePositiveInt(genericDef.Name, additionalParams, "HiddenSize"),
+                RequirePositiveInt(genericDef.Name, additionalParams, "FfnDim"),
+                RestoreSublayer<T>(genericDef.Name, additionalParams,
+                    LayerBase<T>.AttentionSublayerPrefix, inputShape, outputShape),
+                RequireDouble(genericDef.Name, additionalParams, "LayerNormEpsilon"));
+        }
+        else if (genericDef.Name == "StarCoder2DecoderBlock`1")
+        {
+            // (int hiddenSize, int ffnDim, LayerBase<T> attention, double layerNormEpsilon).
+            instance = new NeuralNetworks.Layers.StarCoder2DecoderBlock<T>(
+                RequirePositiveInt(genericDef.Name, additionalParams, "HiddenSize"),
+                RequirePositiveInt(genericDef.Name, additionalParams, "FfnDim"),
+                RestoreSublayer<T>(genericDef.Name, additionalParams,
+                    LayerBase<T>.AttentionSublayerPrefix, inputShape, outputShape),
+                RequireDouble(genericDef.Name, additionalParams, "LayerNormEpsilon"));
+        }
+        else if (genericDef.Name == "Gemma2DecoderBlock`1")
+        {
+            // (int hiddenSize, int ffnDim, LayerBase<T> attention, double rmsNormEpsilon).
+            instance = new NeuralNetworks.Layers.Gemma2DecoderBlock<T>(
+                RequirePositiveInt(genericDef.Name, additionalParams, "HiddenSize"),
+                RequirePositiveInt(genericDef.Name, additionalParams, "FfnDim"),
+                RestoreSublayer<T>(genericDef.Name, additionalParams,
+                    LayerBase<T>.AttentionSublayerPrefix, inputShape, outputShape),
+                RequireDouble(genericDef.Name, additionalParams, "RmsNormEpsilon"));
+        }
+        else if (genericDef.Name == "DbrxDecoderBlock`1")
+        {
+            // (int hiddenSize, LayerBase<T> attention, MoEFeedForwardLayer<T> moe, double layerNormEpsilon).
+            instance = new NeuralNetworks.Layers.DbrxDecoderBlock<T>(
+                RequirePositiveInt(genericDef.Name, additionalParams, "HiddenSize"),
+                RestoreSublayer<T>(genericDef.Name, additionalParams,
+                    LayerBase<T>.AttentionSublayerPrefix, inputShape, outputShape),
+                RestoreSublayer<T, NeuralNetworks.Layers.MoEFeedForwardLayer<T>>(genericDef.Name, additionalParams,
+                    LayerBase<T>.MoeSublayerPrefix, inputShape, outputShape),
+                RequireDouble(genericDef.Name, additionalParams, "LayerNormEpsilon"));
+        }
+        else if (genericDef.Name == "MoEDecoderBlock`1")
+        {
+            // (int hiddenSize, LayerBase<T> attention, MoEFeedForwardLayer<T> moe, double rmsNormEpsilon).
+            instance = new NeuralNetworks.Layers.MoEDecoderBlock<T>(
+                RequirePositiveInt(genericDef.Name, additionalParams, "HiddenSize"),
+                RestoreSublayer<T>(genericDef.Name, additionalParams,
+                    LayerBase<T>.AttentionSublayerPrefix, inputShape, outputShape),
+                RestoreSublayer<T, NeuralNetworks.Layers.MoEFeedForwardLayer<T>>(genericDef.Name, additionalParams,
+                    LayerBase<T>.MoeSublayerPrefix, inputShape, outputShape),
+                RequireDouble(genericDef.Name, additionalParams, "RmsNormEpsilon"));
+        }
+        else if (genericDef.Name == "MoEFeedForwardLayer`1")
+        {
+            // (int hiddenSize, int ffnDim, int numExperts, int topK, IActivationFunction<T>? activation, int sharedFfnDim).
+            int numExpertsMoe = RequirePositiveInt(genericDef.Name, additionalParams, "NumExperts");
+            int topKMoe = RequirePositiveInt(genericDef.Name, additionalParams, "TopK");
+            if (topKMoe > numExpertsMoe)
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} metadata is corrupt: TopK ({topKMoe}) exceeds NumExperts ({numExpertsMoe}).");
+            int sharedFfnMoe = TryGetInt(additionalParams, "SharedFfnDim") ?? 0;
+            if (sharedFfnMoe < 0)
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} metadata is corrupt: SharedFfnDim ({sharedFfnMoe}) is negative.");
+            var activationFuncTypeMoe = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var expertActivationMoe = (IActivationFunction<T>?)TryCreateActivationInstance(
+                additionalParams, "ExpertActivationType", activationFuncTypeMoe);
+            instance = new NeuralNetworks.Layers.MoEFeedForwardLayer<T>(
+                RequirePositiveInt(genericDef.Name, additionalParams, "HiddenSize"),
+                RequirePositiveInt(genericDef.Name, additionalParams, "FfnDim"),
+                numExpertsMoe, topKMoe, expertActivationMoe, sharedFfnMoe);
         }
         else if (genericDef.Name == "MesaNetLayer`1")
         {
@@ -4732,6 +4785,86 @@ public static class DeserializationHelper
                 return parsed;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Rebuilds a sublayer that a composite received through its constructor, from the sub-blob the composite wrote
+    /// under <paramref name="prefix"/> with <c>LayerBase.WriteSublayerMetadata</c>.
+    /// </summary>
+    /// <param name="ownerName">The composite's type name, for error messages.</param>
+    /// <param name="additionalParams">The composite's metadata.</param>
+    /// <param name="prefix">The sublayer's key prefix, for example <c>"Attn."</c>.</param>
+    /// <param name="fallbackInputShape">The input shape to use when the sub-blob carries none.</param>
+    /// <param name="fallbackOutputShape">The output shape to use when the sub-blob carries none.</param>
+    /// <returns>The rebuilt sublayer, configured from its own metadata through <see cref="CreateLayerFromType"/>.</returns>
+    /// <exception cref="InvalidOperationException">The sub-blob has no type, or rebuilds to something that is not a
+    /// layer.</exception>
+    private static LayerBase<T> RestoreSublayer<T>(
+        string ownerName,
+        Dictionary<string, object>? additionalParams,
+        string prefix,
+        int[] fallbackInputShape,
+        int[] fallbackOutputShape)
+        => RestoreSublayer<T, LayerBase<T>>(ownerName, additionalParams, prefix, fallbackInputShape, fallbackOutputShape);
+
+    /// <inheritdoc cref="RestoreSublayer{T}"/>
+    /// <typeparam name="TLayer">The sublayer type the composite's constructor requires.</typeparam>
+    private static TLayer RestoreSublayer<T, TLayer>(
+        string ownerName,
+        Dictionary<string, object>? additionalParams,
+        string prefix,
+        int[] fallbackInputShape,
+        int[] fallbackOutputShape)
+        where TLayer : LayerBase<T>
+    {
+        string typeKey = prefix + LayerBase<T>.SublayerTypeKey;
+        string inputKey = prefix + LayerBase<T>.SublayerInputShapeKey;
+        string outputKey = prefix + LayerBase<T>.SublayerOutputShapeKey;
+
+        string? typeName = additionalParams != null && additionalParams.TryGetValue(typeKey, out var typeObj)
+            ? typeObj?.ToString() : null;
+        if (typeName is null || typeName.Length == 0)
+            throw new InvalidOperationException(
+                $"{ownerName} requires '{typeKey}' metadata to rebuild its injected sublayer.");
+
+        var nested = new Dictionary<string, object>();
+        if (additionalParams != null)
+        {
+            foreach (var kv in additionalParams)
+            {
+                if (kv.Key.Length > prefix.Length && kv.Key.StartsWith(prefix, StringComparison.Ordinal)
+                    && kv.Key != typeKey && kv.Key != inputKey && kv.Key != outputKey)
+                {
+                    nested[kv.Key.Substring(prefix.Length)] = kv.Value;
+                }
+            }
+        }
+
+        int[] input = TryGetIntArray(additionalParams, inputKey) ?? fallbackInputShape;
+        int[] output = TryGetIntArray(additionalParams, outputKey) ?? fallbackOutputShape;
+        return CreateLayerFromType<T>(typeName, input, output, nested) as TLayer
+            ?? throw new InvalidOperationException(
+                $"{ownerName}: rebuilt sublayer '{typeName}' under '{prefix}' is not a {typeof(TLayer).Name}.");
+    }
+
+    /// <summary>Reads a required, positive integer constructor argument from a layer's metadata.</summary>
+    private static int RequirePositiveInt(string ownerName, Dictionary<string, object>? additionalParams, string key)
+    {
+        int value = TryGetInt(additionalParams, key)
+            ?? throw new InvalidOperationException($"{ownerName} requires '{key}' metadata.");
+        if (value <= 0)
+            throw new InvalidOperationException($"{ownerName} metadata is corrupt: '{key}' ({value}) must be positive.");
+        return value;
+    }
+
+    /// <summary>Reads a required, finite, positive floating-point constructor argument from a layer's metadata.</summary>
+    private static double RequireDouble(string ownerName, Dictionary<string, object>? additionalParams, string key)
+    {
+        double value = TryGetDouble(additionalParams, key)
+            ?? throw new InvalidOperationException($"{ownerName} requires '{key}' metadata.");
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0.0)
+            throw new InvalidOperationException($"{ownerName} metadata is corrupt: '{key}' ({value}) must be positive and finite.");
+        return value;
     }
 
     private static object? TryCreateActivationInstance(
