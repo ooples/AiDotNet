@@ -37,7 +37,7 @@ public class NPBMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public double InnerLearningRate { get; set; } = 0.01;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.OuterLearningRate"/>
     public double OuterLearningRate { get; set; } = 0.001;
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.AdaptationSteps"/>
+    /// <summary>Number of gradient steps taken on each task's support set. Default: 1.</summary>
     public int AdaptationSteps { get; set; } = 1;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaBatchSize"/>
     public int MetaBatchSize { get; set; } = 4;
@@ -57,11 +57,17 @@ public class NPBMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <summary>Gets or sets the loss function.</summary>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <summary>Gets or sets the outer loop optimizer.</summary>
+    /// <summary>
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <summary>Gets or sets the inner loop optimizer.</summary>
+    /// <summary>
+    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
+    /// A supplied optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
     /// <summary>Gets or sets the episodic data loader.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }

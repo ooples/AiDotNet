@@ -116,27 +116,18 @@ public class CAVIAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// Default: null (uses the model's default loss function).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The loss function measures how well the adapted model performs on query examples.
-    /// Cross-entropy is typical for classification, MSE for regression.
-    /// </para>
-    /// </remarks>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for outer loop updates (shared parameter updates).
-    /// Default: null (uses built-in SGD with OuterLearningRate).
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner loop updates (context parameter updates).
-    /// Default: null (uses built-in SGD with InnerLearningRate).
+    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
+    /// A supplied optimizer is only reset along with the learner.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 

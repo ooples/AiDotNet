@@ -34,6 +34,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// <example>
 /// <code>
 /// var vae = AutoencoderKL&lt;float&gt;.StableDiffusionV1();
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 512, 512 });
 /// var latent = vae.Encode(image, sampleMode: false); // [1, 4, 64, 64] for a [1, 3, 512, 512] image
 /// var decoded = vae.Decode(latent);
 /// </code>

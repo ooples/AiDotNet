@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -215,6 +215,9 @@ internal sealed class LayerForwardObserver<T> : IDisposable
             return false;
         }
     }
+
+    /// <summary>Drops the recorded calls and the tensors they reference, once they have been read.</summary>
+    public void ReleaseRecording() => _calls.Clear();
 
     /// <inheritdoc />
     public void Dispose()

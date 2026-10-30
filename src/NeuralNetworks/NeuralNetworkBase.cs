@@ -5794,6 +5794,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // it should have declared [-1, 16].
                     currentShape = outShape;
                     if (outShape.Length >= 2) lastGoodShape = outShape;
+                    else if (TryApplyFeatureAxisWidth(layer, lastGoodShape, outShape) is { } carried)
+                        lastGoodShape = carried;
                 }
 
                 // ...but the layer must not keep CLAIMING the spatial dims this walk inferred. They
@@ -5818,6 +5820,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// The sequence shape after a per-feature layer, or null when the layer is not one.
+    /// </summary>
+    /// <remarks>
+    /// A dense or normalization layer declares rank-1 shapes ([features] in, [width] out) but runs along the last axis
+    /// of a [time, features] sequence, keeping the leading axes. The walk records only rank-2+ outputs as its
+    /// fallback, so without this the fallback stayed at the shape from before the projection: in EfficientConformer
+    /// the stage-1 frame splicer resolved from [32, 64] (the stage-0 splicer's output) where its real input is
+    /// [32, 32], declared [16, 128] while computing [16, 64], and every training step failed its shape check.
+    /// It applies only when the layer's own input is exactly the fallback's last axis.
+    /// </remarks>
+    private static int[]? TryApplyFeatureAxisWidth(ILayer<T> layer, int[] lastGoodShape, int[] outShape)
+    {
+        if (outShape.Length != 1 || lastGoodShape.Length < 2) return null;
+        int[] inShape;
+        try { inShape = layer.GetInputShape(); }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return null; }
+        if (inShape.Length != 1 || inShape[0] != lastGoodShape[^1]) return null;
+        var carried = (int[])lastGoodShape.Clone();
+        carried[^1] = outShape[0];
+        return carried;
     }
 
     /// <summary>
@@ -6293,6 +6318,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             observed = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
         }
+        catch
+        {
+            // The recording holds every layer's activations; a failed forward must not leave them alive.
+            trace?.ReleaseRecording();
+            throw;
+        }
         finally
         {
             trace?.Dispose();
@@ -6303,16 +6334,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // untraced path, and a second forward would draw a stochastic layer's randomness twice (a
         // seeded Monte Carlo dropout call then differed from the next one). Under an enclosing
         // observer the re-run would take the same unfolded path, so it is skipped there too.
-        output = trace is null || !trace.SuppressedFolding || enclosedByObserver
-            ? observed
-            : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
+        try
+        {
+            output = trace is null || !trace.SuppressedFolding || enclosedByObserver
+                ? observed
+                : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
 
-        // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
-        // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
-        // of this method's caller - Layers was still EMPTY, because these stacks materialise during
-        // the forward. A check that runs before the layers exist cannot fail, and would have shipped
-        // as a diagnostic that silently never fired.
-        ReportArchitectureLayerDisagreement();
+            // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
+            // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
+            // of this method's caller - Layers was still EMPTY, because these stacks materialise during
+            // the forward. A check that runs before the layers exist cannot fail, and would have shipped
+            // as a diagnostic that silently never fired.
+            ReportArchitectureLayerDisagreement();
+        }
+        catch
+        {
+            trace?.ReleaseRecording();
+            throw;
+        }
 
         if (trace is not null)
         {
@@ -6323,6 +6362,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             catch
             {
                 // Diagnostic only.
+            }
+            finally
+            {
+                // The recording holds every layer's input and output of that forward. Drop it here, so a
+                // context that captured the observer (a thread or task started during the forward) cannot
+                // keep those activations alive.
+                trace.ReleaseRecording();
             }
         }
 

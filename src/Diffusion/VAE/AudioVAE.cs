@@ -35,6 +35,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// <example>
 /// <code>
 /// var vae = new AudioVAE&lt;float&gt;();
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16000 }); // one second at 16 kHz
 /// var mel = vae.AudioToMelSpectrogram(waveform);   // [1, 1, frames, 64]
 /// var latent = vae.Encode(mel, sampleMode: false); // [1, 8, frames / 4, 16]
 /// </code>
