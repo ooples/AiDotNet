@@ -715,7 +715,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.NeuralNetworks.Layers.ConvLSTMLayer<T>._lastInput",
             "AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>._lastInput",
             "AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>._lastOutput",
-            "AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>._optimizedVerifiedForShape",
             "AiDotNet.NeuralNetworks.Layers.CrossAttentionLayer<T>._lastContext",
             "AiDotNet.NeuralNetworks.Layers.CrossAttentionLayer<T>._lastOutput",
             "AiDotNet.NeuralNetworks.Layers.CrossAttentionLayer<T>._lastQuery",

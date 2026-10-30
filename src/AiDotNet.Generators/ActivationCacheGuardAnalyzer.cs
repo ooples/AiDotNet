@@ -290,7 +290,8 @@ public class ActivationCacheGuardAnalyzer : DiagnosticAnalyzer
     {
         if (depth > 4) return false;
 
-        if (condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(i => IsGuardName(i.Identifier.Text)))
+        if (condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+            .Any(i => IsGuardName(i.Identifier.Text) && !IsNegatedWithin(i, condition)))
             return true;
 
         var conjuncts = new List<ExpressionSyntax>();
@@ -305,6 +306,33 @@ public class ActivationCacheGuardAnalyzer : DiagnosticAnalyzer
             if (model.GetSymbolInfo(identifier).Symbol is not ILocalSymbol local) continue;
             var initializer = LocalInitializer(local, scope);
             if (initializer is not null && IsGuardCondition(initializer, model, scope, depth + 1)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when the guard name is read negated inside the condition: <c>!ShouldCacheForBackward</c>, or compared
+    /// with <c>== false</c> / <c>!= true</c>. A write under a negated guard runs exactly when no backward is coming.
+    /// </summary>
+    private static bool IsNegatedWithin(SyntaxNode name, ExpressionSyntax condition)
+    {
+        // Start from the whole operand: this.ShouldCacheForBackward and base.ShouldCacheForBackward negate as one.
+        SyntaxNode operand = name.Parent is MemberAccessExpressionSyntax member && member.Name == name ? member : name;
+        if (operand == condition) return false;
+        for (SyntaxNode? node = operand.Parent; node is not null; operand = node, node = node.Parent)
+        {
+            if (node is PrefixUnaryExpressionSyntax unary && unary.IsKind(SyntaxKind.LogicalNotExpression)) return true;
+            if (node is BinaryExpressionSyntax comparison
+                && (comparison.IsKind(SyntaxKind.EqualsExpression) || comparison.IsKind(SyntaxKind.NotEqualsExpression)))
+            {
+                var other = comparison.Left == operand ? comparison.Right : comparison.Left;
+                bool againstFalse = StripParentheses(other).IsKind(SyntaxKind.FalseLiteralExpression);
+                bool againstTrue = StripParentheses(other).IsKind(SyntaxKind.TrueLiteralExpression);
+                if (comparison.IsKind(SyntaxKind.EqualsExpression) ? againstFalse : againstTrue) return true;
+            }
+
+            if (node == condition) break;
         }
 
         return false;

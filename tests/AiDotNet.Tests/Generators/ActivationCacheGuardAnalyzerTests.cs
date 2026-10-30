@@ -162,10 +162,30 @@ public sealed class Subject : LayerBase
     {
         var diagnostics = await RunAsync(Layer(
             "    private Tensor<double> _lastInput;",
-            "        if (ShouldCacheForBackward) { _lastInput = input; }
-        else { _lastInput = weights; }"));
+            "        if (ShouldCacheForBackward) { _lastInput = input; }\n        else { _lastInput = weights; }"));
 
         Assert.Single(Unguarded(diagnostics));
+    }
+
+    // A negated guard runs exactly when no backward is coming. Mutation: drop the IsNegatedWithin check in
+    // IsGuardCondition, so any mention of a ShouldCache* name counts as a guard.
+    [Theory]
+    [InlineData("        if (!ShouldCacheForBackward) _lastInput = input;")]
+    [InlineData("        if (!this.ShouldCacheForBackward) _lastInput = input;")]
+    [InlineData("        if (ShouldCacheForBackward == false) _lastInput = input;")]
+    [InlineData("        if (!(IsTrainingMode && ShouldCacheForBackward)) _lastInput = input;")]
+    public async Task NegatedGuard_IsReported(string body)
+    {
+        Assert.Single(Unguarded(await RunAsync(Layer("    private Tensor<double> _lastInput;", body))));
+    }
+
+    // Mutation: make IsNegatedWithin treat every comparison as a negation.
+    [Fact]
+    public async Task GuardComparedWithTrue_IsNotReported()
+    {
+        Assert.Empty(Unguarded(await RunAsync(Layer(
+            "    private Tensor<double> _lastInput;",
+            "        if (ShouldCacheForBackward == true) _lastInput = input;"))));
     }
 
     // Mutation: delete the IsGuardedValue check in AnalyzeMethod.
