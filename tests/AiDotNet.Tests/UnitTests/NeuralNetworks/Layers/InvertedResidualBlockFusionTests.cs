@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -70,5 +71,62 @@ public class InvertedResidualBlockFusionTests
             if (unfused[i] >= 6) clampedHigh++;
         }
         Assert.Contains(fused, v => Math.Abs(v) > 1e-6);   // not a degenerate all-zero output
+    }
+
+    /// <summary>Counts the subtractions whose right operand is one particular tensor.</summary>
+    private sealed class CountingEngine : CpuEngine
+    {
+        internal object? Subtrahend;
+        internal int Subtractions;
+
+        public override Tensor<T> TensorSubtract<T>(Tensor<T> a, Tensor<T> b)
+        {
+            if (ReferenceEquals(b, Subtrahend)) Subtractions++;
+            return base.TensorSubtract(a, b);
+        }
+    }
+
+    private static double[] Forward(InvertedResidualBlock<double> block, Tensor<double> x, bool fold)
+    {
+        bool previous = InferenceFusionSettings.FoldBatchNormIntoConvolution;
+        try
+        {
+            InferenceFusionSettings.FoldBatchNormIntoConvolution = fold;
+            return block.Forward(x).ToArray();
+        }
+        finally { InferenceFusionSettings.FoldBatchNormIntoConvolution = previous; }
+    }
+
+    [Fact]
+    public void DepthwiseFold_ComputesTheShiftedMeanOnce_AndRebuildsItAfterABiasWrite()
+    {
+        var block = TrainedBlock<double>(16, 16, 6, 1, seed: 13);
+        var field = typeof(InvertedResidualBlock<double>).GetField("_dwConv",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("InvertedResidualBlock has no _dwConv field.");
+        var dwConv = Assert.IsType<ConvolutionalLayer<double>>(field.GetValue(block));
+        var bias = dwConv.BiasesForFolding ?? throw new InvalidOperationException("the depthwise convolution has no bias.");
+        var x = Random<double>(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(6), new[] { 2, 16, 8, 8 }, 3.0);
+
+        var engine = new CountingEngine { Subtrahend = bias };
+        var previousEngine = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = engine;
+            Forward(block, x, fold: true);
+            Forward(block, x, fold: true);
+        }
+        finally { AiDotNetEngine.Current = previousEngine; }
+        // mean - bias is the same for both predicts: one subtraction, not one per predict.
+        Assert.Equal(1, engine.Subtractions);
+
+        // An in-place write advances only the bias's version; the cached mean - bias must follow it.
+        bias.SetFlat(0, bias.GetFlat(0) + 0.5);
+        var fused = Forward(block, x, fold: true);
+        var unfused = Forward(block, x, fold: false);
+        Assert.Equal(unfused.Length, fused.Length);
+        for (int i = 0; i < fused.Length; i++)
+            Assert.True(Math.Abs(unfused[i] - fused[i]) <= 1e-10 + 1e-9 * Math.Abs(unfused[i]),
+                $"[{i}]: unfused {unfused[i]}, fused {fused[i]}");
     }
 }

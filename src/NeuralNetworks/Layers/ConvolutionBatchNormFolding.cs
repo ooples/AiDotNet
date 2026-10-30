@@ -38,22 +38,12 @@ internal static class ConvolutionBatchNormFolding<T>
         FusedActivationType activation, out Tensor<T> output)
     {
         output = input;
-        if (!InferenceFusionSettings.FoldBatchNormIntoConvolution) return false;
-        if (input.Rank != 4 || conv.InTrainingMode || norm.InTrainingMode) return false;
-        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>() || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
-            return false;
-        if (LayerBase<T>.IsInferringShapes) return false;
+        if (!CanFuse(norm, conv, input)) return false;
         if (!conv.CanFoldFollowingBatchNorm || input.Shape[1] != conv.InputDepth) return false;
         if (!norm.TryGetFoldingStatistics(conv.OutputDepth, out var gamma, out var beta, out var mean, out var variance,
                 out double epsilon))
             return false;
-        // Last, so the observer learns only of a fold that would otherwise have run: a traced forward
-        // that suppressed one differs from an untraced forward by rounding (NeuralNetworkBase re-runs it).
-        if (LayerForwardObserver<T>.Current is { } observer)
-        {
-            observer.NoteSuppressedFolding();
-            return false;
-        }
+        if (ObserverSuppresses()) return false;
 
         // The engine folds and caches (AiDotNet.Tensors' FusedConv2DBatchNorm, ooples/AiDotNet.Tensors#1432): rebuilt when a
         // source tensor's identity or version changes, and on a GPU folded on the device when the parameters live only
@@ -74,21 +64,14 @@ internal static class ConvolutionBatchNormFolding<T>
         FusedActivationType activation, out Tensor<T> output)
     {
         output = input;
-        if (!InferenceFusionSettings.FoldBatchNormIntoConvolution) return false;
+        if (!CanFuse(norm, conv: null, input)) return false;
         // BatchNormInference reads the activation as one contiguous span (as BatchNormalizationLayer's own fused path
         // requires); a strided view takes the layer's unfused path instead.
-        if (input.Rank != 4 || !input.IsContiguous || norm.InTrainingMode) return false;
-        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>() || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
-            return false;
-        if (LayerBase<T>.IsInferringShapes) return false;
+        if (!input.IsContiguous) return false;
         if (!norm.TryGetFoldingStatistics(input.Shape[1], out var gamma, out var beta, out var mean, out var variance,
                 out double epsilon))
             return false;
-        if (LayerForwardObserver<T>.Current is { } observer)
-        {
-            observer.NoteSuppressedFolding();
-            return false;
-        }
+        if (ObserverSuppresses()) return false;
 
         output = AiDotNetEngine.Current.BatchNormInference(input, gamma, beta, mean, variance, epsilon, activation);
         return true;
@@ -104,28 +87,53 @@ internal static class ConvolutionBatchNormFolding<T>
         Tensor<T> input, FusedActivationType activation, out Tensor<T> output)
     {
         output = input;
-        if (!InferenceFusionSettings.FoldBatchNormIntoConvolution) return false;
-        if (input.Rank != 4 || conv.InTrainingMode || norm.InTrainingMode) return false;
-        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>() || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
-            return false;
-        if (LayerBase<T>.IsInferringShapes) return false;
+        if (!CanFuse(norm, conv, input)) return false;
         if (!conv.CanFoldBiasIntoFollowingBatchNorm || input.Shape[1] != conv.InputDepth) return false;
         if (!norm.TryGetFoldingStatistics(conv.OutputDepth, out var gamma, out var beta, out var mean, out var variance,
                 out double epsilon))
             return false;
-        if (LayerForwardObserver<T>.Current is { } observer)
-        {
-            observer.NoteSuppressedFolding();
-            return false;
-        }
+        if (ObserverSuppresses()) return false;
 
         var engine = AiDotNetEngine.Current;
         var depthwise = engine.DepthwiseConv2D(input, conv.KernelsForFolding, new[] { conv.Stride, conv.Stride },
             new[] { conv.Padding, conv.Padding });
-        var shiftedMean = conv.BiasesForFolding is { } bias ? engine.TensorSubtract(mean, bias) : mean;
+        // mean - bias is the same for every predict, so it is computed once and kept until the mean or the bias is
+        // replaced or written (a SetParameters, a deserialization, a training step), like the folded convolution weights.
+        var shiftedMean = conv.BiasesForFolding is { } bias
+            ? conv.FoldedBatchNormMean.GetOrBuild(engine, SubtractBias, mean, bias)
+            : mean;
         output = engine.BatchNormInference(depthwise, gamma, beta, shiftedMean, variance, epsilon, activation);
         return true;
     }
+
+    /// <summary>
+    /// The conditions every fusion here shares: folding is on, the input is rank 4, neither layer is training, no
+    /// gradient tape is recording, no graph is being captured, and no layer is inferring shapes.
+    /// </summary>
+    private static bool CanFuse(BatchNormalizationLayer<T> norm, ConvolutionalLayer<T>? conv, Tensor<T> input)
+        => InferenceFusionSettings.FoldBatchNormIntoConvolution
+           && input.Rank == 4
+           && !norm.InTrainingMode
+           && (conv is null || !conv.InTrainingMode)
+           && !AiDotNet.Autodiff.GradientRecording.IsRecording<T>()
+           && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+           && !LayerBase<T>.IsInferringShapes;
+
+    /// <summary>
+    /// True, after telling it, when a forward observer is attached. Checked last, so the observer learns only of a fold
+    /// that would otherwise have run: a traced forward that suppressed one differs from an untraced forward by rounding
+    /// (NeuralNetworkBase re-runs it).
+    /// </summary>
+    private static bool ObserverSuppresses()
+    {
+        if (LayerForwardObserver<T>.Current is not { } observer) return false;
+        observer.NoteSuppressedFolding();
+        return true;
+    }
+
+    private static Tensor<T> SubtractBias(IEngine engine, Tensor<T>[] meanAndBias)
+        => engine.TensorSubtract(meanAndBias[0], meanAndBias[1]);
+
     /// <summary>
     /// The engine-fusable form of <paramref name="activation"/>: None for no activation, ReLU and ReLU6 for exactly those
     /// activation types (a subclass may compute something else, so it does not qualify). False otherwise.

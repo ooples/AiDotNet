@@ -320,6 +320,22 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     internal Tensor<T>? BiasesForFolding => UseBias ? _biases : null;
 
     /// <summary>
+    /// A following batch norm's running mean minus this depthwise convolution's bias, cached across predicts by
+    /// <see cref="ConvolutionBatchNormFolding{T}.TryDepthwiseBatchNormActivation"/>.
+    /// </summary>
+    internal DerivedTensorCache<T> FoldedBatchNormMean { get; } = new();
+
+    /// <summary>
+    /// Drops <see cref="FoldedBatchNormMean"/> on a training-mode transition: training moves the bias and the running
+    /// mean, and a device-side update need not advance the host tensors' versions the cache keys on.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        if (isTraining != IsTrainingMode) FoldedBatchNormMean.Invalidate();
+        base.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
     /// Whether a following batch norm can fold into this convolution: a dense (ungrouped) convolution with no
     /// activation of its own whose kernels are allocated, [OutputDepth, InputDepth, KernelSize, KernelSize].
     /// </summary>
