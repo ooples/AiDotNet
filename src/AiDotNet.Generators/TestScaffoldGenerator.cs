@@ -8711,15 +8711,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "GLM4Voice" && model.TypeParameterCount == 1)
             {
-                // GLM-4-Voice keeps its paper-scale production defaults. The generated invariant
-                // fixture exercises the same public codec-LM stack with bounded dimensions so the
-                // transformer tape and codec projection fit the 16 GB runner under shard load.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 4, outputSize: 32), " +
-                    "new AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions { TextEncoderDim = 32, LLMDim = 32, " +
-                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 4, NumCodebooks = 1, CodebookSize = 32, " +
-                    "DropoutRate = 0.0, MaxTextLength = 4 })";
+                // GLM-4-Voice is a ChatGLM language model over text and speech tokens, a Whisper-VQ speech tokenizer and a
+                // flow-matching decoder with HiFT. The fixture builds all three tiny over a 256-byte tiktoken vocabulary with
+                // GLM-4's special tokens and 12 speech tokens.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.GLM4VoiceFixture.Tts<double>()";
             }
             else if ((model.ClassName is "GriffinLanguageModel" or "HawkLanguageModel") &&
                      model.TypeParameterCount == 1)
@@ -16058,7 +16053,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "BarkModel" or "FishSpeech"
                         or "XTTSv2Clone"
-                        or "GLM4Voice" or "SeedTTS";
+                        or "SeedTTS";
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataShortIterations => 1;"
                     : "    protected override int MoreDataShortIterations => 3;");
@@ -16066,7 +16061,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
                 if (model.ClassName is "Bark" or "BarkModel"
-                    or "GLM4Voice" or "SeedTTS"
+                    or "SeedTTS"
                     || IsValleCodecLMModel(model.ClassName))
                 {
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
@@ -22167,7 +22162,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoiceClone" or "Chatterbox"
             or "SeedTTS" or "SeedTTSClone"
             or "SpeechGPT" or "SpiritLM"
-            or "GLM4Voice" or "WhisperSpeech"
+            or "WhisperSpeech"
             // SparkTTS exposes the same discrete codec-token contract.
             or "SparkTTS"
             || IsValleCodecLMModel(className);
@@ -22197,7 +22192,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // head is 1 x 16 wide (production stays 1 x 4096).
             "SparkTTS" => 16,
             "FishSpeech" or "FishSpeechV15" => 32,
-            "GLM4Voice" => 32,
             "UniAudio" => 32,
             "XTTSv2" => 16,
             "XTTSv2Clone" => 1024,
@@ -22219,8 +22213,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return IsValleCodecLMModel(className)
             || className is "Bark" or "BarkModel"
-            || className is "GLM4Voice"
-                or "SeedTTS" or "SeedTTSClone"
+            || className is "SeedTTS" or "SeedTTSClone"
                 or "SpeechGPT" or "SpiritLM"
                 ? 64 : 256;
     }
