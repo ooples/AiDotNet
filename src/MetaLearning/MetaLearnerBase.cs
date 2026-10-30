@@ -885,6 +885,36 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     }
 
     /// <summary>
+    /// Takes one inner-loop step on a coefficient array in place, for algorithms that adapt a small set of
+    /// coefficients (prompt, LoRA or gating weights) rather than a parameter vector.
+    /// </summary>
+    /// <param name="parameters">The coefficients being adapted; updated in place.</param>
+    /// <param name="gradients">The gradients at <paramref name="parameters"/>.</param>
+    /// <param name="innerLearningRate">The SGD step size, used only when no inner optimizer was supplied.</param>
+    /// <param name="firstStep">Whether this step starts a new adaptation, which resets the inner optimizer.</param>
+    protected void ApplyInnerGradientsInPlace(double[] parameters, double[] gradients, double innerLearningRate, bool firstStep)
+    {
+        if (InnerOptimizer is null)
+        {
+            for (int i = 0; i < parameters.Length; i++)
+                parameters[i] -= innerLearningRate * gradients[i];
+            return;
+        }
+
+        var current = new Vector<T>(parameters.Length);
+        var gradient = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            current[i] = NumOps.FromDouble(parameters[i]);
+            gradient[i] = NumOps.FromDouble(gradients[i]);
+        }
+
+        var updated = ApplyInnerGradients(current, gradient, innerLearningRate, firstStep);
+        for (int i = 0; i < parameters.Length; i++)
+            parameters[i] = NumOps.ToDouble(updated[i]);
+    }
+
+    /// <summary>
     /// Takes one inner-loop step over several parameter groups at once, as one optimizer step over their
     /// concatenation, so a stateful <see cref="InnerOptimizer"/> keeps one consistent state for all of them.
     /// </summary>

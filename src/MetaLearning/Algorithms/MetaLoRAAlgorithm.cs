@@ -90,7 +90,7 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
-               optimizerUse: MetaLearnerOptimizerUse.Outer)
+               optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
@@ -138,11 +138,13 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Project gradient onto each basis vector: ∂L/∂c_j = scaling * ⟨∂L/∂θ', v_j⟩
+                var stepGradient = new double[coeffs.Length];
                 for (int j = 0; j < _rank; j++)
                 {
                     double gradCoeff = _scalingFactor * DotProductWithBasis(fullGrad, j);
-                    coeffs[j] -= _algoOptions.InnerLearningRate * gradCoeff;
+                    stepGradient[j] = gradCoeff;
                 }
+                ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Evaluate on query set with final adapted params
@@ -189,11 +191,13 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
             var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
+            var stepGradient = new double[coeffs.Length];
             for (int j = 0; j < _rank; j++)
             {
                 double gradCoeff = _scalingFactor * DotProductWithBasis(fullGrad, j);
-                coeffs[j] -= _algoOptions.InnerLearningRate * gradCoeff;
+                stepGradient[j] = gradCoeff;
             }
+            ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
 
         var finalParams = ComputeAdaptedParams(baseParams, coeffs);
@@ -257,11 +261,13 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 var adaptedParams = ComputeAdaptedParams(baseParams, coeffs);
                 ParamModel.SetParameters(adaptedParams);
                 var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+                var stepGradient = new double[coeffs.Length];
                 for (int j = 0; j < _rank; j++)
                 {
                     double gradCoeff = _scalingFactor * DotProductWithBasis(fullGrad, j);
-                    coeffs[j] -= _algoOptions.InnerLearningRate * gradCoeff;
+                    stepGradient[j] = gradCoeff;
                 }
+                ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
             var finalAdapted = ComputeAdaptedParams(baseParams, coeffs);
