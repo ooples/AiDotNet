@@ -371,9 +371,9 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             return Engine.TensorNegate(Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(meanEntropy, _a2cOptions.EntropyCoefficient)));
         });
 
-        // Combined loss for monitoring
-        var totalLoss = NumOps.Add(policyLoss,
-            NumOps.Multiply(_a2cOptions.ValueLossCoefficient, valueLoss));
+        // Reported loss: the two losses each network minimised. They are trained by separate optimizers,
+        // so no coefficient weights one against the other.
+        var totalLoss = NumOps.Add(policyLoss, valueLoss);
 
         LossHistory.Add(totalLoss);
         _trajectory.Clear();

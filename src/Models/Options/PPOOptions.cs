@@ -92,15 +92,6 @@ public class PPOOptions<T> : ModelOptions
     public T EntropyCoefficient { get; set; }
 
     /// <summary>
-    /// Value function loss coefficient.
-    /// </summary>
-    /// <remarks>
-    /// Typical values: 0.5-1.0.
-    /// Weight of value loss relative to policy loss.
-    /// </remarks>
-    public T ValueLossCoefficient { get; set; }
-
-    /// <summary>
     /// Maximum gradient norm for gradient clipping.
     /// </summary>
     /// <remarks>
@@ -160,6 +151,5 @@ public class PPOOptions<T> : ModelOptions
         GaeLambda = numOps.FromDouble(0.95);
         ClipEpsilon = numOps.FromDouble(0.2);
         EntropyCoefficient = numOps.FromDouble(0.01);
-        ValueLossCoefficient = numOps.FromDouble(0.5);
     }
 }

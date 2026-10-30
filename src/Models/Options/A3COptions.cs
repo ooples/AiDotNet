@@ -37,7 +37,6 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
     public T PolicyLearningRate { get; init; }
     public T ValueLearningRate { get; init; }
     public T EntropyCoefficient { get; init; }
-    public T ValueLossCoefficient { get; init; }
 
     // A3C-specific parameters
     public int NumWorkers { get; init; } = 4;  // Number of parallel agents
@@ -62,7 +61,6 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
         PolicyLearningRate = numOps.FromDouble(0.0001);
         ValueLearningRate = numOps.FromDouble(0.0005);
         EntropyCoefficient = numOps.FromDouble(0.01);
-        ValueLossCoefficient = numOps.FromDouble(0.5);
         DiscountFactor = numOps.FromDouble(0.99);
     }
 }
