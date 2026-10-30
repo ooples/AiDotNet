@@ -380,7 +380,7 @@ internal partial class BarkTransformerStageLayer<T> : LayerBase<T>, IShapeContra
                 layerIndex: layer,
                 useCausalMask: true,
                 activationFunction: new IdentityActivation<T>());
-            replacement.SetParameters(source.GetParameters());
+            AiDotNet.Models.Parameters.ParameterTransfer.CopyLayer(source, replacement);
             _blocks[layer].ReplaceAttention(replacement);
         }
 

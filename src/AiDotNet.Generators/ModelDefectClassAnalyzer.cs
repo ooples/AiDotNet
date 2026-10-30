@@ -362,49 +362,46 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
     }
 
     // One key per paper whatever link form a model cites: arXiv ids (with or without the 10.48550 DOI
-    // prefix and version suffix), then DOIs, then the bare URL.
-    //
-    // Plain string scanning, not Regex: the patterns were linear, but a Regex match timeout is a wall-clock budget,
-    // and on a saturated build machine the 1 s budget expired and failed the whole compile with AD0001
-    // (RegexMatchTimeoutException) - a nondeterministic build failure on a deterministic input.
+    // prefix and version suffix), then DOIs, then the bare URL. Parsed with string scans, not regexes: the
+    // analyzer runs once per cited paper on every build, and a regex's match timeout fired on a starved CI
+    // runner (AD0001 RegexMatchTimeoutException on these linear patterns), failing the whole build.
     internal static string NormalizePaper(string url)
     {
         string u = url.Trim().ToLowerInvariant().TrimEnd('/');
-        // (?:arxiv\.org/(?:abs|pdf)/|arxiv\.)(\d{4}\.\d{4,5}), leftmost match.
-        for (int i = 0; i < u.Length; i++)
+        // Leftmost "arxiv.org/abs/", "arxiv.org/pdf/" or "arxiv." directly followed by a dddd.dddd(d) id.
+        for (int i = u.IndexOf("arxiv.", StringComparison.Ordinal); i >= 0; i = u.IndexOf("arxiv.", i + 1, StringComparison.Ordinal))
         {
-            string? id = null;
-            if (string.CompareOrdinal(u, i, "arxiv.org/abs/", 0, 14) == 0 || string.CompareOrdinal(u, i, "arxiv.org/pdf/", 0, 14) == 0)
-                id = ArxivId(u, i + 14);
-            if (id is null && string.CompareOrdinal(u, i, "arxiv.", 0, 6) == 0)
-                id = ArxivId(u, i + 6);
-            if (id is not null) return "arxiv:" + id;
+            int at = i;
+            foreach (var prefix in ArxivPrefixes.Where(p => string.CompareOrdinal(u, at, p, 0, p.Length) == 0))
+            {
+                string? id = ArxivIdAt(u, i + prefix.Length);
+                if (id is not null) return "arxiv:" + id;
+            }
         }
-        // doi\.org/(.+)$
         int doi = u.IndexOf("doi.org/", StringComparison.Ordinal);
-        if (doi >= 0 && doi + 8 < u.Length) return "doi:" + u.Substring(doi + 8);
-        // ^https?://(www\.)?
-        int scheme = u.StartsWith("https://", StringComparison.Ordinal) ? 8 : u.StartsWith("http://", StringComparison.Ordinal) ? 7 : 0;
-        if (scheme == 0) return u;
-        string bare = u.Substring(scheme);
-        return bare.StartsWith("www.", StringComparison.Ordinal) ? bare.Substring(4) : bare;
+        if (doi >= 0 && doi + "doi.org/".Length < u.Length) return "doi:" + u.Substring(doi + "doi.org/".Length);
+        // The scheme, then "www.", are dropped only from a link that has one (the regex was ^https?://(www\.)?).
+        string bare;
+        if (u.StartsWith("https://", StringComparison.Ordinal)) bare = u.Substring("https://".Length);
+        else if (u.StartsWith("http://", StringComparison.Ordinal)) bare = u.Substring("http://".Length);
+        else return u;
+        return bare.StartsWith("www.", StringComparison.Ordinal) ? bare.Substring("www.".Length) : bare;
     }
 
-    // \d{4}\.\d{4,5} at position start (greedy), or null.
-    private static string? ArxivId(string u, int start)
+    private static readonly string[] ArxivPrefixes = { "arxiv.org/abs/", "arxiv.org/pdf/", "arxiv." };
+
+    // Four digits, a dot, then four or five digits (five when present), starting at index start.
+    private static string? ArxivIdAt(string s, int start)
     {
-        int i = start;
-        for (int k = 0; k < 4; k++, i++)
-            if (i >= u.Length || u[i] < '0' || u[i] > '9') return null;
-        if (i >= u.Length || u[i] != '.') return null;
-        i++;
-        int digits = 0;
-        while (digits < 5 && i < u.Length && u[i] >= '0' && u[i] <= '9')
+        int Digits(int from, int max)
         {
-            i++;
-            digits++;
+            int n = 0;
+            while (n < max && from + n < s.Length && s[from + n] >= '0' && s[from + n] <= '9') n++;
+            return n;
         }
-        return digits >= 4 ? u.Substring(start, i - start) : null;
+        if (Digits(start, 4) != 4 || start + 4 >= s.Length || s[start + 4] != '.') return null;
+        int tail = Digits(start + 5, 5);
+        return tail >= 4 ? s.Substring(start, 5 + tail) : null;
     }
 
     /// <summary>

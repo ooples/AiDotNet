@@ -994,12 +994,12 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             {
                 bestLoss = meanLoss;
                 epochsWithoutImprovement = 0;
-                bestWeights = CloneWeights(_weights);
-                bestBiases = CloneVectors(_biases);
-                bestBnGamma = CloneVectors(_bnGamma);
-                bestBnBeta = CloneVectors(_bnBeta);
-                bestBnRunningMean = CloneVectors(_bnRunningMean);
-                bestBnRunningVariance = CloneVectors(_bnRunningVariance);
+                bestWeights = AiDotNet.Training.HostStateCheckpoint<T>.Capture(_weights, bestWeights);
+                bestBiases = AiDotNet.Training.HostStateCheckpoint<T>.Capture(_biases, bestBiases);
+                bestBnGamma = AiDotNet.Training.HostStateCheckpoint<T>.Capture(_bnGamma, bestBnGamma);
+                bestBnBeta = AiDotNet.Training.HostStateCheckpoint<T>.Capture(_bnBeta, bestBnBeta);
+                bestBnRunningMean = AiDotNet.Training.HostStateCheckpoint<T>.Capture(_bnRunningMean, bestBnRunningMean);
+                bestBnRunningVariance = AiDotNet.Training.HostStateCheckpoint<T>.Capture(_bnRunningVariance, bestBnRunningVariance);
             }
             else
             {
@@ -1304,47 +1304,6 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             double step = lr * (mk / biasCorrection1) / (Math.Sqrt(vk / biasCorrection2) + eps);
             parameter[k] = NumOps.FromDouble(NumOps.ToDouble(parameter[k]) - step);
         }
-    }
-
-    /// <summary>
-    /// Deep-copies the weight matrices, so early stopping can restore the best epoch.
-    /// </summary>
-    private static List<Matrix<T>> CloneWeights(List<Matrix<T>> source)
-    {
-        var copy = new List<Matrix<T>>(source.Count);
-        foreach (var w in source)
-        {
-            var c = new Matrix<T>(w.Rows, w.Columns);
-            for (int i = 0; i < w.Rows; i++)
-            {
-                for (int j = 0; j < w.Columns; j++)
-                {
-                    c[i, j] = w[i, j];
-                }
-            }
-            copy.Add(c);
-        }
-
-        return copy;
-    }
-
-    /// <summary>
-    /// Deep-copies model-state vectors, so early stopping can restore the best epoch.
-    /// </summary>
-    private static List<Vector<T>> CloneVectors(List<Vector<T>> source)
-    {
-        var copy = new List<Vector<T>>(source.Count);
-        foreach (var b in source)
-        {
-            var c = new Vector<T>(b.Length);
-            for (int i = 0; i < b.Length; i++)
-            {
-                c[i] = b[i];
-            }
-            copy.Add(c);
-        }
-
-        return copy;
     }
 
     /// <summary>
