@@ -1,4 +1,4 @@
-// Copyright (c) AiDotNet. All rights reserved.
+// Copyright (c) CrowdTrainer LLC. All rights reserved.
 // #1632 / #95 item: wire + verify KV-cache autoregressive decode. The KV cache only saves
 // compute if a decode loop feeds ONE token at a time and relies on the cache instead of
 // recomputing the whole prefix. This proves that incremental cached decode (token-by-token)
