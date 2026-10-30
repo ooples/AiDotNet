@@ -28,7 +28,6 @@ internal static class DefectBaselines
             "global::AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer<T, TInput, TOutput>",
             "global::AiDotNet.DistributedTraining.TensorParallelPagedModel<T>",
             "global::AiDotNet.Finance.AutoML.FinancialAutoML<T>",
-            "global::AiDotNet.KnowledgeDistillation.FeatureDistillationStrategy<T>",
             "global::AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>",
             "global::AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>",
             "global::AiDotNet.MetaLearning.Algorithms.NeuralProcessModel<T, TInput, TOutput>",
