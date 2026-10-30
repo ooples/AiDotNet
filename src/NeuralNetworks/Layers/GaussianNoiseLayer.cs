@@ -272,5 +272,6 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Nothing to clear: the forward keeps no per-pass state.
+        return;
     }
 }
