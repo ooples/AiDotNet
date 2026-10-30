@@ -46,6 +46,19 @@ internal sealed class AntiAliasedSnake<T>
     /// <summary>The wrapped per-channel activation.</summary>
     internal LayerBase<T> Activation { get; }
 
+    /// <summary>Loads the checkpoint's filter buffers (<c>upsample.filter</c>, <c>downsample.lowpass.filter</c>, 12 taps each):
+    /// a released model runs on these stored (float32) values rather than the recomputed Kaiser-sinc.</summary>
+    internal void LoadFilters(double[] up, double[] down)
+    {
+        if (up.Length != Taps || down.Length != Taps) throw new InvalidDataException($"BigVGAN's filters have {Taps} taps.");
+        for (int i = 0; i < Taps; i++)
+        {
+            // UpSample1d convolves with ratio · filter.
+            _upFilter[0, 0, 0, i] = NumOps.FromDouble(2 * up[i]);
+            _downFilter[0, 0, 0, i] = NumOps.FromDouble(down[i]);
+        }
+    }
+
     internal static double[] KaiserSinc(double cutoff, double halfWidth, int kernel)
     {
         bool even = kernel % 2 == 0;
@@ -258,6 +271,10 @@ internal sealed class BigVganGenerator<T>
         }
         void Act(AntiAliasedSnake<T> activation, string name)
         {
+            // name is "{activation}.act"; the stored filters sit beside it when the checkpoint keeps them.
+            string root = name.Substring(0, name.Length - ".act".Length);
+            if (read(root + ".upsample.filter") is { } up && read(root + ".downsample.lowpass.filter") is { } down)
+                activation.LoadFilters(up, down);
             switch (activation.Activation)
             {
                 case AiDotNet.Audio.Codecs.XCodec2SnakeBetaLayer<T> beta:

@@ -107,7 +107,9 @@ internal sealed class HubertNetwork<T>
     /// and after each of the first <paramref name="layers"/> encoder layers (torchaudio's
     /// <c>extract_features(num_layers)</c>; with pre-norm layers the final norm is not applied).
     /// </summary>
-    public IReadOnlyList<Tensor<T>> Forward(Tensor<T> audio, int layers)
+    /// <param name="padded">fairseq's frame padding mask (true on padding), as <c>forward_padding_mask</c> fits it to the
+    /// frames: padded frames are zeroed before the position convolution and are not attended to. Null for none.</param>
+    public IReadOnlyList<Tensor<T>> Forward(Tensor<T> audio, int layers, bool[]? padded = null)
     {
         var c = Configuration;
         if (layers < 0 || layers > EncoderLayers.Count) throw new ArgumentOutOfRangeException(nameof(layers), $"The network holds {EncoderLayers.Count} layers.");
@@ -116,15 +118,47 @@ internal sealed class HubertNetwork<T>
         var h = _engine.Reshape(audio, new[] { samples, 1 });                                          // [S, 1]
         for (int i = 0; i < ConvLayers.Count; i++) h = ConvBlock(ConvLayers[i], h, c.ConvKernels[i], c.ConvStrides[i]);
         var hidden = Projection.Forward(ProjectionNorm.Forward(h));
+        int frames = hidden.Shape[0];
+        Tensor<T>? keyBias = null;
+        if (padded is not null)
+        {
+            var mask = FitPaddingMask(padded, frames);
+            var keep = new Tensor<T>(new[] { frames, 1 });
+            keyBias = new Tensor<T>(new[] { frames, frames });
+            for (int t = 0; t < frames; t++)
+            {
+                keep[t, 0] = mask[t] ? NumOps.Zero : NumOps.One;
+                if (mask[t])
+                    for (int q = 0; q < frames; q++) keyBias[q, t] = NumOps.FromDouble(double.NegativeInfinity);
+            }
+            hidden = _engine.TensorMultiply(hidden, _engine.TensorTile(keep, new[] { 1, hidden.Shape[1] }));
+        }
         hidden = _engine.TensorAdd(hidden, ActivationHelper.ExactGelu(Positional(hidden), _engine));
         if (!c.LayerNormFirst) hidden = EncoderNorm.Forward(hidden);
         var states = new List<Tensor<T>> { hidden };
         for (int i = 0; i < layers; i++)
         {
-            hidden = Encode(EncoderLayers[i], hidden);
+            hidden = Encode(EncoderLayers[i], hidden, keyBias);
             states.Add(hidden);
         }
         return states;
+    }
+
+    /// <summary>fairseq's <c>forward_padding_mask</c>: the mask trimmed of <c>size % frames</c> entries at the end and
+    /// grouped into <c>frames</c> runs, a frame padded when its whole run is.</summary>
+    internal static bool[] FitPaddingMask(bool[] padded, int frames)
+    {
+        int extra = padded.Length % frames;
+        int length = padded.Length - extra, per = length / frames;
+        if (per < 1) throw new ArgumentException("The padding mask is shorter than the frames.", nameof(padded));
+        var mask = new bool[frames];
+        for (int t = 0; t < frames; t++)
+        {
+            bool all = true;
+            for (int j = 0; j < per; j++) all &= padded[t * per + j];
+            mask[t] = all;
+        }
+        return mask;
     }
 
     // The position convolution reads [B, L, H].
@@ -155,7 +189,7 @@ internal sealed class HubertNetwork<T>
         return ActivationHelper.ExactGelu(y, _engine);
     }
 
-    private Tensor<T> Attention(EncoderLayer l, Tensor<T> x)
+    private Tensor<T> Attention(EncoderLayer l, Tensor<T> x, Tensor<T>? keyBias)
     {
         int length = x.Shape[0], heads = Configuration.Heads, e = Configuration.HiddenSize / heads;
         Tensor<T> Heads(DenseLayer<T> projection) =>
@@ -164,6 +198,8 @@ internal sealed class HubertNetwork<T>
         var k = Heads(l.Key);
         var v = Heads(l.Value);
         var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })), NumOps.FromDouble(1.0 / Math.Sqrt(e)));
+        if (keyBias is not null)
+            scores = _engine.TensorAdd(scores, _engine.TensorTile(_engine.Reshape(keyBias, new[] { 1, length, length }), new[] { heads, 1, 1 }));
         var context = _engine.BatchMatMul(_engine.Softmax(scores, axis: 2), v);
         return l.Output.Forward(_engine.Reshape(_engine.TensorPermute(context, new[] { 1, 0, 2 }), new[] { length, heads * e }));
     }
@@ -171,14 +207,14 @@ internal sealed class HubertNetwork<T>
     private Tensor<T> FeedForward(EncoderLayer l, Tensor<T> x) =>
         l.FeedForwardOutput.Forward(ActivationHelper.ExactGelu(l.Intermediate.Forward(x), _engine));
 
-    private Tensor<T> Encode(EncoderLayer l, Tensor<T> x)
+    private Tensor<T> Encode(EncoderLayer l, Tensor<T> x, Tensor<T>? keyBias = null)
     {
         if (Configuration.LayerNormFirst)
         {
-            x = _engine.TensorAdd(x, Attention(l, l.AttentionNorm.Forward(x)));
+            x = _engine.TensorAdd(x, Attention(l, l.AttentionNorm.Forward(x), keyBias));
             return _engine.TensorAdd(x, FeedForward(l, l.FinalNorm.Forward(x)));
         }
-        x = l.AttentionNorm.Forward(_engine.TensorAdd(x, Attention(l, x)));
+        x = l.AttentionNorm.Forward(_engine.TensorAdd(x, Attention(l, x, keyBias)));
         return l.FinalNorm.Forward(_engine.TensorAdd(x, FeedForward(l, x)));
     }
 

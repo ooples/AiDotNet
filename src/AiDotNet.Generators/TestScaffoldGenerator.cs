@@ -7828,32 +7828,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // voice.
                 constructorExpr = "AiDotNet.Tests.TextToSpeech.MegaTts3Fixture.Create<double>()";
             }
-            else if ((model.ClassName == "FireRedTTS" || model.ClassName == "SparkTTS")
+            else if (model.ClassName == "SparkTTS"
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
-                // FireRedTTS production defaults are foundation-scale: an 8x1024 codec-token
-                // head behind a 2048-wide, 24-layer autoregressive decoder. SpeakerConsistency
-                // performs two complete forwards, so the generated fixture exceeds the CPU gate
-                // even though PredictCore correctly forces evaluation mode. Exercise the same
-                // embedding -> text encoder -> codec-LM -> token-head topology at smoke scale.
-                // Dropout stays disabled so the exact deterministic-speaker assertion remains
-                // meaningful; production defaults and inference behavior are unchanged.
-                //
-                // SparkTTS joins from the Q-S shard for the same reason, measured: it keeps
-                // Qwen2.5's 1536-wide / 28-layer decoder over a 1x4096 codec head and OOM-killed
-                // the shard (System.OutOfMemoryException out of FusedLinearBackwardCore with the
-                // test host at ~10 GB resident), taking the rest of its own class down with it —
-                // 9 cascaded failures including several that reported in 1-3 s because the process
-                // had no headroom left. It is also on the IsCodecLMTokenModel list, so the fixture
-                // feeds the discrete token IDs its EmbeddingLayer-first stack declares instead of
-                // 640 continuous mel features.
-                string codecBasedOptionsType = model.ClassName switch
-                {
-                    "SparkTTS" => "AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions",
-                    _ => "AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions",
-                };
+                // SparkTTS keeps Qwen2.5's 1536-wide / 28-layer decoder over a 1x4096 codec head and OOM-killed the Q-S
+                // shard (System.OutOfMemoryException out of FusedLinearBackwardCore with the test host at ~10 GB
+                // resident), taking the rest of its own class down with it. Exercise the same embedding -> text encoder ->
+                // codec-LM -> token-head topology at smoke scale; dropout stays disabled so the deterministic-speaker
+                // assertion remains meaningful. It is on the IsCodecLMTokenModel list, so the fixture feeds the discrete
+                // token IDs its EmbeddingLayer-first stack declares.
+                string codecBasedOptionsType = "AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions";
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
@@ -7886,7 +7872,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // LossStrictlyDecreasesOnMemorizationTask, which the smaller fixture also settles
                 // by keeping training stable at the default step size.
                 // Exercise the same embedding -> text encoder -> codec-LM -> token-head topology
-                // at smoke scale through the public options, exactly as the FireRedTTS bound above
+                // at smoke scale through the public options, exactly as the SparkTTS bound above
                 // does for the same base. Production defaults are unchanged.
                 // NumCodebooks stays at 2, NOT 1. Several models routed here have a genuine
                 // MULTI-codebook contract that collapses at 1: Voicebox is non-autoregressive over
@@ -11061,6 +11047,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, NumHeads = 2, " +
                     "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "FireRedTTS" && model.TypeParameterCount == 1)
+            {
+                // FireRedTTS's networks are foundation-scale; the fixture keeps each at width 8-64 with one layer or block and
+                // teaches its GPT to read text first (an untrained GPT-2 barely does, measured): see FireRedTtsFixture.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.FireRedTtsFixture.Create<double>()";
             }
             else if (model.ClassName is "FishSpeech" or "FishSpeechV15" && model.TypeParameterCount == 1)
             {
@@ -16449,6 +16441,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "FireRedTTS")
+                {
+                    // FireRedTTS reads a text's token ids and trains on a 24 kHz recording's semantic tokens: eight ids, and
+                    // 9600 samples (ten 40 ms tokens). Generation samples its tokens, so the probes compare the training
+                    // objective, which reads the text.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 9600 };");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName is "FishSpeech" or "FishSpeechV15")
                 {
                     // Fish Speech reads a text's token ids and trains on a recording at the codec's rate: eight ids, and 1024
@@ -16716,7 +16723,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
@@ -22138,7 +22145,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className is "GPTSoVITS" or "Bark" or "BarkModel"
-            or "FireRedTTS"
             or "UniAudio" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
@@ -22169,7 +22175,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "CosyVoice3" => 16,
             "CosyVoiceClone" => 16,
             "Chatterbox" => 16,
-            "FireRedTTS" => 16,
             // SparkTTS: the CI-smoke fixture pins NumCodebooks = 1, CodebookSize = 16, so its codec
             // head is 1 x 16 wide (production stays 1 x 4096).
             "SparkTTS" => 16,
