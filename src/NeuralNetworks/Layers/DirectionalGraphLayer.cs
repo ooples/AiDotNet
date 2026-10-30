@@ -158,29 +158,10 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
-    /// The adjacency matrix reshaped to 3D for batched operations.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _adjForBatch;
-
-    /// <summary>
-    /// Cached values for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastIncoming;
-    [Scratch]
-    private Tensor<T>? _lastOutgoing;
-    [Scratch]
-    private Tensor<T>? _lastSelf;
+    // Saved for the manual gating backward (BackwardThroughGating) only when one can run.
     [Scratch]
     private Tensor<T>? _lastCombined;
     [Scratch]
@@ -462,7 +443,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
             processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
-        _lastInput = processInput;
         int numNodes = processInput.Shape[1];
         int inputFeatures = processInput.Shape[2];
 
@@ -496,48 +476,47 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
             adjForBatch = _adjacencyMatrix;
         }
 
-        // Store for backward pass
-        _adjForBatch = adjForBatch;
-
         // Step 1: Aggregate incoming edges (nodes that point TO this node)
         // A[i,j] = 1 means edge from j to i (j→i)
         // For incoming: multiply A @ X @ W_in
         var xwIn = BatchedMatMul3Dx2D(processInput, _incomingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
-        _lastIncoming = Engine.BatchMatMul(adjForBatch, xwIn);
+        var incoming = Engine.BatchMatMul(adjForBatch, xwIn);
         var biasIn = BroadcastBias(_incomingBias, batchSize, numNodes);
-        _lastIncoming = Engine.TensorAdd(_lastIncoming, biasIn);
+        incoming = Engine.TensorAdd(incoming, biasIn);
 
         // Step 2: Aggregate outgoing edges (nodes that this node points TO)
         // For outgoing: multiply A^T @ X @ W_out
         var adjTransposed = Engine.TensorPermute(adjForBatch, [0, 2, 1]).Contiguous(); // Batched transpose
         var xwOut = BatchedMatMul3Dx2D(processInput, _outgoingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
-        _lastOutgoing = Engine.BatchMatMul(adjTransposed, xwOut);
+        var outgoing = Engine.BatchMatMul(adjTransposed, xwOut);
         var biasOut = BroadcastBias(_outgoingBias, batchSize, numNodes);
-        _lastOutgoing = Engine.TensorAdd(_lastOutgoing, biasOut);
+        outgoing = Engine.TensorAdd(outgoing, biasOut);
 
         // Step 3: Transform self features: X @ W_self + b_self
-        _lastSelf = BatchedMatMul3Dx2D(processInput, _selfWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
+        var selfFeatures = BatchedMatMul3Dx2D(processInput, _selfWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         var biasSelf = BroadcastBias(_selfBias, batchSize, numNodes);
-        _lastSelf = Engine.TensorAdd(_lastSelf, biasSelf);
+        selfFeatures = Engine.TensorAdd(selfFeatures, biasSelf);
 
         // Step 4: Concatenate incoming, outgoing, and self features
-        _lastCombined = ConcatenateFeatures(_lastIncoming, _lastOutgoing, _lastSelf, batchSize, numNodes);
+        var combined = ConcatenateFeatures(incoming, outgoing, selfFeatures, batchSize, numNodes);
+        SaveForBackward(ref _lastCombined, combined);
 
-        Tensor<T> gatedCombined = _lastCombined;
+        Tensor<T> gatedCombined = combined;
 
         // Step 5: Apply gating if enabled
         if (_useGating && _gateWeights != null && _gateBias != null)
         {
             // Compute gates: combined @ W_gate + b_gate
-            var gateLogits = BatchedMatMul3Dx2D(_lastCombined, _gateWeights, batchSize, numNodes, 3 * _outputFeatures, 3);
+            var gateLogits = BatchedMatMul3Dx2D(combined, _gateWeights, batchSize, numNodes, 3 * _outputFeatures, 3);
             var gateBiasBroadcast = BroadcastBias(_gateBias, batchSize, numNodes);
             gateLogits = Engine.TensorAdd(gateLogits, gateBiasBroadcast);
 
             // Apply sigmoid to get gates
-            _lastGates = ApplySigmoid(gateLogits);
+            var gates = ApplySigmoid(gateLogits);
+            SaveForBackward(ref _lastGates, gates);
 
             // Apply gates to each of the three feature groups
-            gatedCombined = ApplyGatesToFeatures(_lastCombined, _lastGates, batchSize, numNodes, _outputFeatures);
+            gatedCombined = ApplyGatesToFeatures(combined, gates, batchSize, numNodes, _outputFeatures);
         }
 
         // Step 6: Final combination: gatedCombined @ W_comb + b_comb
@@ -546,12 +525,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         output = Engine.TensorAdd(output, combinationBiasBroadcast);
 
         var result = ApplyActivation(output);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
 
         // Reshape output to match original input shape (except for feature dimension)
         if (_originalInputShape != null && _originalInputShape.Length == 2)
@@ -790,14 +763,8 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastIncoming = null;
-        _lastOutgoing = null;
-        _lastSelf = null;
         _lastCombined = null;
         _lastGates = null;
-        _adjForBatch = null;
         _incomingWeightsGradient = null;
         _outgoingWeightsGradient = null;
         _selfWeightsGradient = null;

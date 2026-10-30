@@ -139,24 +139,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
-    /// Cached input from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached pre-activation output from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
-    /// Cached output from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Cached diffused features for backward pass [numVertices, InputChannels * NumTimeScales].
     /// </summary>
     [AiDotNet.Attributes.Scratch]
@@ -604,8 +586,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
                 "Eigenbasis or Laplacian must be set via SetEigenbasis or SetLaplacian before calling Forward.");
         }
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         bool hasBatch = input.Rank == 3;
         int numVertices = hasBatch ? input.Shape[1] : input.Shape[0];
         int inputChannels = hasBatch ? input.Shape[2] : input.Shape[1];
@@ -629,9 +609,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
             output = ProcessSingle(input, numVertices);
         }
 
-        _lastPreActivation = output;
         var activated = ApplyActivation(output);
-        _lastOutput = activated;
 
         return activated;
     }
@@ -1396,9 +1374,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastPreActivation = null;
-        _lastOutput = null;
         _diffusedFeatures = null;
         _weightsGradient = null;
         _biasesGradient = null;

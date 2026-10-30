@@ -154,27 +154,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     private Tensor<T> _biases;
 
     /// <summary>
-    /// Stored input data from the most recent forward pass, used for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// During the backward pass (training), the layer needs access to the input data from the forward
-    /// pass to calculate the gradients for the kernels. This tensor stores that input data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the network's memory of what input it just processed.
-    /// 
-    /// The layer remembers:
-    /// - The exact input it received
-    /// - So it can calculate exactly how to improve its filters
-    /// 
-    /// Just like a student remembering the exact problems they got wrong on a test,
-    /// this helps the layer learn precisely from its mistakes.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
@@ -183,71 +162,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// Indicates whether a batch dimension was added during forward pass.
     /// </summary>
     private bool _addedBatchDimension;
-
-    /// <summary>
-    /// Stored output from the depthwise convolution step, used for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the intermediate output after applying the depthwise convolution
-    /// but before the pointwise convolution. It's needed during backpropagation to calculate
-    /// the gradients for the pointwise kernels.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the network's memory of the intermediate results.
-    /// 
-    /// The layer remembers:
-    /// - The output after the first filtering step (depthwise)
-    /// - Before the second mixing step (pointwise)
-    /// 
-    /// This helps the layer understand how each step contributed to any errors,
-    /// so it can improve both steps independently.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastDepthwiseOutput;
-
-    /// <summary>
-    /// Stored final output data from the most recent forward pass, used for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the final output after both convolution steps, bias addition, and
-    /// activation. It's used during backpropagation to calculate the derivatives through
-    /// the activation function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the network's memory of the final result it produced.
-    /// 
-    /// The layer remembers:
-    /// - The final output after all processing steps
-    /// - So it can calculate how to improve based on any errors
-    /// 
-    /// Like keeping track of your final answer to see exactly where you went wrong.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
-    /// Stored pre-activation output from the most recent forward pass, used for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the output before the activation function is applied. It's needed during
-    /// backpropagation because some activation functions (like Sigmoid, Tanh) require the pre-activation
-    /// value to compute their derivative correctly, rather than the post-activation value.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the network's memory of the result before the activation function.
-    ///
-    /// The layer remembers:
-    /// - The output after convolution and bias addition, but before activation
-    /// - This is needed because some activation functions need the "raw" value to compute their derivative
-    ///
-    /// Think of it like remembering the score before applying a curve - you need the original score
-    /// to calculate how much the curve changed things.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Calculated gradients for the depthwise kernels during backpropagation.
@@ -913,8 +827,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
             throw new ArgumentException($"DepthwiseSeparableConvolutionalLayer requires at least 3D input, got {rank}D");
         }
 
-        _lastInput = input4D;
-
         // Input is already in NCHW format [batch, channels, H, W]
         var inputNCHW = input4D;
 
@@ -923,9 +835,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
 
         // Step 1: Depthwise convolution using Engine (NCHW format)
         var depthwiseOutputNCHW = Engine.DepthwiseConv2D(inputNCHW, _depthwiseKernels, strideArr, paddingArr);
-
-        // Cache in NCHW format for backward pass
-        _lastDepthwiseOutput = depthwiseOutputNCHW;
 
         // Step 2: Pointwise convolution (1x1 conv) with fused bias and activation
         var fusedActivation = GetFusedActivationType();
@@ -942,9 +851,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
                 0, 0,   // padding
                 1, 1,   // dilation
                 fusedActivation);
-
-            // Store activated output for backward pass
-            _lastPreActivation = activated;
         }
         else
         {
@@ -957,12 +863,8 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
             var biasReshaped = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
             pointwiseOutputNCHW = Engine.TensorAdd(pointwiseOutputNCHW, biasReshaped);
 
-            // Cache pre-activation for derivative computation
-            _lastPreActivation = pointwiseOutputNCHW;
             activated = ApplyActivation(pointwiseOutputNCHW);
         }
-
-        _lastOutput = activated;
 
         // Return with matching dimensions to preserve original tensor rank
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -1292,10 +1194,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastDepthwiseOutput = null;
-        _lastOutput = null;
-        _lastPreActivation = null;
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
         _biasesGradient = null;

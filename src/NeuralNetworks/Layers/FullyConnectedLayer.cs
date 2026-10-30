@@ -153,53 +153,9 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biases;
 
     /// <summary>
-    /// The input tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the input received during the last forward pass. It is necessary for computing
-    /// gradients during the backward pass (backpropagation).
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what input data was processed most recently.
-    /// 
-    /// During training:
-    /// - The layer needs to remember what input values it processed
-    /// - This helps when calculating how to improve the weights and biases
-    /// - It's like keeping your work when solving a math problem
-    /// 
-    /// This value is automatically cleared between training batches to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Tracks whether the last forward pass input was rank-1, so backward can preserve rank.
     /// </summary>
     private bool _inputWas1D;
-
-    /// <summary>
-    /// The output tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the output produced during the last forward pass. It is used during
-    /// backpropagation to compute certain gradients, particularly for activation functions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores what the layer output after its most recent calculation.
-    /// 
-    /// During training:
-    /// - The network needs to remember what predictions it made
-    /// - This helps calculate how to improve the weights and biases
-    /// - The output values are used when computing how to adjust parameters
-    /// 
-    /// This is also cleared after each training batch to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// The gradients for the weights, computed during backpropagation.
@@ -579,8 +535,6 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
             input = Engine.Reshape(input, new[] { 1, input.Length });
         }
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Compute output = input * weights^T + biases using Engine operations
         // input: [batchSize, inputSize]
         // weights: [outputSize, inputSize]
@@ -596,13 +550,6 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
         var biasedOutput = Engine.TensorAdd(linearOutput, biasBroadcast);
 
         var result = ApplyActivation(biasedOutput);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastPreActivation = biasedOutput;
-            _lastOutput = result;
-        }
 
         // Preserve original rank: if input was 1D, output should be 1D
         if (_inputWas1D)
@@ -700,10 +647,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
-        _lastPreActivation = null;
+        // Clear gradients from the backward pass
         _weightsGradient = null;
         _biasesGradient = null;
         _gpuInputShape = [];
