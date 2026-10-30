@@ -43,8 +43,6 @@ public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>, IShape
     private readonly TemporalSelfAttention<T> _temporalAttention;
     private readonly LayerNormalizationLayer<T> _spatialNorm;
     private readonly LayerNormalizationLayer<T> _temporalNorm;
-    [Scratch]
-    private Tensor<T>? _lastInput;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -100,9 +98,6 @@ public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>, IShape
     /// </summary>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // #1668: skip the backward-activation cache in inference so the denoise-loop
-        // arena can recycle scratch without aliasing a stale reference.
-        _lastInput = ShouldCacheForBackward ? input : null;
 
         // Spatial attention with residual
         var spatialNormed = _spatialNorm.Forward(input);
@@ -150,7 +145,6 @@ public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>, IShape
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
         _spatialAttention.ResetState();
         _temporalAttention.ResetState();
         _spatialNorm.ResetState();
