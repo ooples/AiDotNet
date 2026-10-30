@@ -11,15 +11,15 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class FastTextNgramOptionTests
 {
-    // Covers the OPT tokenizer's ids, which the default tokenizer produces, at a small subword table.
-    private const int VocabSize = 50272;
+    // The default tokenizer's vocabulary size; the softmax head must be the same width.
+    private const int VocabSize = 30000;
 
     private static FastText<double> Create(int minN, int maxN) =>
         new FastText<double>(
             new NeuralNetworkArchitecture<double>(
                 inputType: InputType.OneDimensional,
                 taskType: NeuralNetworkTaskType.MultiClassClassification,
-                inputSize: 32, outputSize: 128),
+                inputSize: 32, outputSize: VocabSize),
             new FastTextOptions
             {
                 VocabSize = VocabSize, BucketSize = 1024, EmbeddingDimension = 16, MaxSequenceLength = 32,

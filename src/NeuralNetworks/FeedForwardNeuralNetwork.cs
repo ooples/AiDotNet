@@ -159,7 +159,7 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultFeedForwardLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultFeedForwardLayers(Architecture, _options.HiddenLayers));
         }
     }
 

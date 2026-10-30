@@ -72,6 +72,18 @@ public class SpikingNeuralNetworkOptions : ModelHyperparameterOptions
     public int SimulationSteps { get; set; } = 100;
 
     /// <summary>
+    /// Gets or sets the size of each hidden spiking (LIF) layer of the default stack, input side first.
+    /// Default: <c>{ 128, 64 }</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Used only when the architecture supplies no layers of its own. The default stack is the
+    /// surrogate-gradient network of Neftci et al. 2019: these LIF layers, then a non-spiking readout.
+    /// </para>
+    /// </remarks>
+    public int[] HiddenLayers { get; set; } = { 128, 64 };
+
+    /// <summary>
     /// Gets or sets time step. Default: <c>0.1</c>.
     /// </summary>
     public double TimeStep { get; set; } = 0.1;

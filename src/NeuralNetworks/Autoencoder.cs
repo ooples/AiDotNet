@@ -294,7 +294,7 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture, _options.LatentSize ?? 0));
         }
 
         // EncodedSize = latent dimension = the bottleneck (narrowest) width in the

@@ -475,7 +475,7 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(Architecture, _options.HiddenLayers));
         }
 
         // Extract layer sizes starting with input size, then output sizes of RBM layers only

@@ -33,6 +33,19 @@ public class DeepBoltzmannMachineOptions : ModelHyperparameterOptions
     public int Epochs { get; set; } = 10;
 
     /// <summary>
+    /// Gets or sets the hidden units of each Boltzmann layer, input side first; null derives two layers of
+    /// min(500, 4 x input size).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Salakhutdinov &amp; Hinton 2009 used two hidden layers of 500 and 1000 units on MNIST; set
+    /// <c>new[] { 500, 1000 }</c> to reproduce that. Used only when the architecture supplies no layers of
+    /// its own.
+    /// </para>
+    /// </remarks>
+    public int[]? HiddenLayers { get; set; }
+
+    /// <summary>
     /// Gets or sets learning rate decay. Default: <c>1.0</c>.
     /// </summary>
     /// <remarks>

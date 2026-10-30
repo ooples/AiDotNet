@@ -171,7 +171,7 @@ public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultRNNLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultRNNLayers(Architecture, _options.HiddenSize ?? 0, _options.NumLayers));
         }
     }
 
