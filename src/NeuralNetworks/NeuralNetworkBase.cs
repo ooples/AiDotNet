@@ -6899,10 +6899,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // answers from its own path (FeedForwardNeuralNetwork's fused dense predict) never did, so detection never
             // finalized and every Predict ran it again: both SetTrainingMode transitions built and SHA-256 hashed the
             // parameter layout, about a sixth of a GPU MLP's batch-32 inference. Recorded here for every model.
-            if (!_firstForwardCompleted)
+            // Retried until detection finalizes (a count that threw is read again next call), with lazy-shape resolution
+            // deferred as in the mode transitions: a branch this forward did not visit must not be resolved from the
+            // architecture's shape instead of its eventual input.
+            _firstForwardCompleted = true;
+            if (!_streamingAutoDetectFinalized)
             {
-                _firstForwardCompleted = true;
-                TryAutoEnableWeightStreaming();
+                bool priorRetryDefer = _deferLazyShapeResolutionToForward;
+                _deferLazyShapeResolutionToForward = true;
+                try
+                {
+                    TryAutoEnableWeightStreaming();
+                }
+                finally
+                {
+                    _deferLazyShapeResolutionToForward = priorRetryDefer;
+                }
             }
             return output;
         }

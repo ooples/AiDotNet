@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading;
 using AiDotNet.Interfaces;
@@ -104,10 +105,15 @@ public class AutoDetectWeightStreamingTests
         {
             get
             {
-                Interlocked.Increment(ref _parameterCountReads);
+                long reads = Interlocked.Increment(ref _parameterCountReads);
+                if (reads <= ThrowingReads)
+                    throw new InvalidOperationException("Parameter count not readable yet.");
                 return _fixedCount;
             }
         }
+
+        /// <summary>How many first ParameterCount reads throw, as a partially built model's can.</summary>
+        public int ThrowingReads { get; set; }
 
         public long ParameterCountReadCount => Interlocked.Read(ref _parameterCountReads);
 
@@ -137,6 +143,31 @@ public class AutoDetectWeightStreamingTests
         Assert.Equal(readsAfterFirst, net.ParameterCountReadCount);
         Assert.False(net.IsWeightStreamingActive, "A below-threshold model must stay eager.");
     }
+    [Fact]
+    public void OwnPredictPath_CountThatThrew_IsRetriedUntilDetectionFinalizes()
+    {
+        // Already in inference mode, so Predict makes no SetTrainingMode transition: the funnel's own retry is the only
+        // detection call. A count that threw on the first Predict must be read again on the next one, then never again.
+        // Every count read during the first Predict throws (as a partially built model's can). The second Predict must
+        // read the count again, succeed and finalize detection; the third reads it no more.
+        var net = new OwnPredictPathNetwork(fixedCount: 1_000_000_000L);
+        net.SetThresholdForTest(10_000_000_000L);
+        net.SetTrainingMode(false);
+        net.ThrowingReads = int.MaxValue;   // every read during the first Predict throws
+        var input = new Tensor<float>(new[] { 1, 1 });
+        long beforeFirst = net.ParameterCountReadCount;
+        net.Predict(input);
+        long afterFirst = net.ParameterCountReadCount;
+        Assert.True(afterFirst > beforeFirst, "The first Predict must attempt detection.");
+        net.ThrowingReads = 0;
+        net.Predict(input);
+        long afterRetry = net.ParameterCountReadCount;
+        Assert.True(afterRetry > afterFirst, "The second Predict must retry the count the first one could not read.");
+        net.Predict(input);
+        Assert.Equal(afterRetry, net.ParameterCountReadCount);
+        Assert.False(net.IsWeightStreamingActive, "A below-threshold model must stay eager.");
+    }
+
     [Fact]
     public void BelowThreshold_AutoStreaming_DoesNotEngage()
     {
