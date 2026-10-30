@@ -637,7 +637,9 @@ internal class R2D2Model<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
     public R2D2Model(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
         Vector<T>? ridgeWeights, double lambda, double[]? modulationFactors)
     {
-        _model = model;
+        // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
+        // MetaModel would let every prediction overwrite the meta-model.
+        _model = (model ?? throw new ArgumentNullException(nameof(model))).Clone();
         _backboneParams = backboneParams;
         _ridgeWeights = ridgeWeights;
         _lambda = lambda;

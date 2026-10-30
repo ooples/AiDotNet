@@ -207,7 +207,9 @@ internal class OpenMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
     public OpenMAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> p,
         double threshold, Vector<T>? supportFeatures)
     {
-        _model = model;
+        // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
+        // MetaModel would let every prediction overwrite the meta-model.
+        _model = (model ?? throw new ArgumentNullException(nameof(model))).Clone();
         _params = p;
         _threshold = threshold;
         _supportFeatures = supportFeatures;

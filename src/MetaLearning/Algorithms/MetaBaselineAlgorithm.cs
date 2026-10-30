@@ -148,7 +148,9 @@ internal class MetaBaselineModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     public MetaBaselineModel(IFullModel<T, TInput, TOutput> model, Vector<T> p,
         Vector<T>? supportPrototypes, double temperature, double[]? modulationFactors)
     {
-        _model = model;
+        // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
+        // MetaModel would let every prediction overwrite the meta-model.
+        _model = (model ?? throw new ArgumentNullException(nameof(model))).Clone();
         _params = p;
         _supportPrototypes = supportPrototypes;
         _temperature = Math.Max(temperature, 1e-10);
