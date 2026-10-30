@@ -6293,6 +6293,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             observed = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
         }
+        catch
+        {
+            // The recording holds every layer's activations; a failed forward must not leave them alive.
+            trace?.ReleaseRecording();
+            throw;
+        }
         finally
         {
             trace?.Dispose();
@@ -6303,16 +6309,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // untraced path, and a second forward would draw a stochastic layer's randomness twice (a
         // seeded Monte Carlo dropout call then differed from the next one). Under an enclosing
         // observer the re-run would take the same unfolded path, so it is skipped there too.
-        output = trace is null || !trace.SuppressedFolding || enclosedByObserver
-            ? observed
-            : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
+        try
+        {
+            output = trace is null || !trace.SuppressedFolding || enclosedByObserver
+                ? observed
+                : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
 
-        // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
-        // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
-        // of this method's caller - Layers was still EMPTY, because these stacks materialise during
-        // the forward. A check that runs before the layers exist cannot fail, and would have shipped
-        // as a diagnostic that silently never fired.
-        ReportArchitectureLayerDisagreement();
+            // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
+            // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
+            // of this method's caller - Layers was still EMPTY, because these stacks materialise during
+            // the forward. A check that runs before the layers exist cannot fail, and would have shipped
+            // as a diagnostic that silently never fired.
+            ReportArchitectureLayerDisagreement();
+        }
+        catch
+        {
+            trace?.ReleaseRecording();
+            throw;
+        }
 
         if (trace is not null)
         {
