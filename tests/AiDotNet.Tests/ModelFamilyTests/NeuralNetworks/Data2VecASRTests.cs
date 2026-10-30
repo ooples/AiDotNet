@@ -24,21 +24,31 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// </remarks>
 public class Data2VecASRTests : AudioNNModelTestBase
 {
-    protected override int[] InputShape => [1, 16, 32];
+    // data2vec reads the raw waveform; [1, 64, 32] is 2048 samples, six 20 ms frames.
+    protected override int[] InputShape => [1, 64, 32];
 
     protected override AiDotNet.Interfaces.INeuralNetworkModel<double> CreateNetwork()
     {
+        // The regularizers are off so the invariants see a deterministic objective (the paper's values stay defaults).
         var options = new Data2VecASROptions
         {
+            MaxAudioLengthSeconds = 2,
             EncoderDim = 64,
             NumEncoderLayers = 2,
             NumAttentionHeads = 4,
-            NumMels = 32,
+            FeedForwardDim = 128,
             VocabSize = 64,
             DropoutRate = 0.0,
+            ActivationDropout = 0.0,
+            FeatureProjectionDropout = 0.0,
+            FinalDropout = 0.0,
+            LayerDrop = 0.0,
+            MaskTimeProbability = 0.0,
         };
         var architecture = new NeuralNetworkArchitecture<double>(
-            inputFeatures: options.NumMels, outputSize: options.VocabSize);
+            inputType: AiDotNet.Enums.InputType.TwoDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence,
+            inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: options.VocabSize);
         return new Data2VecASR<double>(architecture, options);
     }
 }

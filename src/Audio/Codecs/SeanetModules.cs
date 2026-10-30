@@ -153,7 +153,9 @@ internal sealed class StreamableConvTranspose1d<T>
 /// <summary>
 /// SEANet's LSTM block (reference <c>SLSTM</c>): a stack of LSTM layers over time whose output is added to its input.
 /// Bidirectional (SpeechTokenizer's encoder, as <c>nn.LSTM(dim, dim, layers, bidirectional=True)</c>) runs each direction at
-/// the full width, feeds later layers both directions' outputs, and adds the input repeated twice to the 2·dim output.
+/// the full width, feeds later layers both directions' outputs, and adds the input repeated twice to the 2·dim output;
+/// half-width bidirectional (FireRedTTS's tokenizer, <c>nn.LSTM(dim, dim // 2, layers, bidirectional=True)</c>) runs each
+/// direction at dim / 2, so the output keeps dim channels and the input is added once.
 /// </summary>
 internal sealed class SeanetLstm<T>
 {
@@ -161,20 +163,24 @@ internal sealed class SeanetLstm<T>
     private readonly List<(LSTMCellLayer<T> Forward, LSTMCellLayer<T>? Backward)> _layers = new();
     private readonly int _dim;
 
-    public SeanetLstm(IEngine engine, int dim, int layers, bool bidirectional, List<LayerBase<T>> owner)
+    /// <param name="halfWidth">Bidirectional at dim / 2 per direction (FireRedTTS); requires <paramref name="bidirectional"/>.</param>
+    public SeanetLstm(IEngine engine, int dim, int layers, bool bidirectional, List<LayerBase<T>> owner, bool halfWidth = false)
     {
+        if (halfWidth && (!bidirectional || dim % 2 != 0)) throw new ArgumentException("A half-width LSTM is bidirectional over an even width.", nameof(halfWidth));
         _engine = engine;
         _dim = dim;
         _bidirectional = bidirectional;
+        _halfWidth = halfWidth;
+        int hidden = halfWidth ? dim / 2 : dim;
         for (int l = 0; l < layers; l++)
         {
-            int input = l > 0 && bidirectional ? 2 * dim : dim;
-            var forward = new LSTMCellLayer<T>(input, dim);
+            int input = l > 0 && bidirectional ? 2 * hidden : dim;
+            var forward = new LSTMCellLayer<T>(input, hidden);
             owner.Add(forward);
             LSTMCellLayer<T>? backward = null;
             if (bidirectional)
             {
-                backward = new LSTMCellLayer<T>(input, dim);
+                backward = new LSTMCellLayer<T>(input, hidden);
                 owner.Add(backward);
             }
             _layers.Add((forward, backward));
@@ -182,9 +188,10 @@ internal sealed class SeanetLstm<T>
     }
 
     private readonly bool _bidirectional;
+    private readonly bool _halfWidth;
 
-    /// <summary>The output channels: 2·dim when bidirectional, dim otherwise.</summary>
-    public int OutputDim => _bidirectional ? 2 * _dim : _dim;
+    /// <summary>The output channels: 2·dim when bidirectional at the full width, dim otherwise.</summary>
+    public int OutputDim => _bidirectional && !_halfWidth ? 2 * _dim : _dim;
 
     /// <summary>The backward-direction cells by layer (the reference's <c>lstm.*_l{k}_reverse</c>), when bidirectional.</summary>
     internal IReadOnlyList<LSTMCellLayer<T>?> BackwardCells => _layers.Select(l => l.Backward).ToList();
@@ -219,7 +226,7 @@ internal sealed class SeanetLstm<T>
             var f = Run(forward, y, reverse: false);
             y = backward is null ? f : _engine.TensorConcatenate(new[] { f, Run(backward, y, reverse: true) }, 1);
         }
-        var skip = _bidirectional ? _engine.TensorConcatenate(new[] { rows, rows }, 1) : rows;
+        var skip = _bidirectional && !_halfWidth ? _engine.TensorConcatenate(new[] { rows, rows }, 1) : rows;
         var sum = _engine.TensorAdd(y, skip);
         return _engine.Reshape(_engine.TensorTranspose(sum), new[] { 1, OutputDim, t });
     }

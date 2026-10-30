@@ -45,6 +45,8 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data", "https://arxiv.org/abs/2101.07597", Year = 2021, Authors = "Wang et al.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2006.11477",
+    "UniSpeech keeps the wav2vec 2.0 model (Wang et al. 2021, section 2) and adds a supervised phonetic CTC objective during pre-training, so it runs on the wav2vec 2.0 network.")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, WarmupFraction = 0.1,
                 MinLearningRate = 0, Schedule = LearningRateSchedulerType.LinearWarmup,
                 PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
@@ -63,15 +65,19 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 public partial class UniSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly UniSpeechOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode;
+    private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private Audio.Foundations.Wav2Vec2CtcStack<T>? _stack;
+    private readonly Random _random;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public UniSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, UniSpeechOptions? options = null) : base(architecture) { _options = options ?? new UniSpeechOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public UniSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, UniSpeechOptions? options = null) : base(architecture) { _options = options ?? new UniSpeechOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1); base.NumMels = 0; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
     public UniSpeech(NeuralNetworkArchitecture<T> architecture, UniSpeechOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new UniSpeechOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1); base.NumMels = 0; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using UniSpeech's unified SSL/supervised encoder with CTC.
@@ -84,15 +90,7 @@ public partial class UniSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         var features = PreprocessAudio(audio);
         Tensor<T> logits;
 
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            logits = OnnxEncoder.Run(features);
-        }
-        else
-        {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
-        }
+        logits = Logits(features, training: false);
 
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
@@ -109,19 +107,62 @@ public partial class UniSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("UniSpeech does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFoundationASRLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, featureDim: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        _stack = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network: UniSpeech's wav2vec 2.0 encoder (layer-norm feature encoder over the raw waveform, stable pre-norm Transformer) with a CTC head, as transformers' UniSpeechForCTC builds it. It used to be a generic encoder over mel features with the feature encoder approximated with dense (#2321).
+        _stack = new Audio.Foundations.Wav2Vec2CtcStack<T>(Engine, _options.ToConfiguration(), _options.VocabSize, _options.Seed ?? 42);
+        Layers.AddRange(_stack.Layers);
+    }
+
+    /// <summary>Loads a transformers <c>*ForCTC</c> state dict (<c>unispeech.*</c> and <c>lm_head.*</c>).</summary>
+    /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
+    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        if (_stack is null) throw new InvalidOperationException("Weights load into the native network.");
+        _stack.LoadTorchWeights(read, "unispeech.");
+    }
+
+    // The network reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_stack is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_stack is not null)
+            return _stack.Run(input, training, _random, freezeFeatureEncoder: training && _options.FreezeFeatureEncoder, _options.FinalDropout);
+        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _stack is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
+        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
+            && _stack is not null && _stack.IsFeatureEncoderLayer(Layers[layerIndex])
+            ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
+            : declared;
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "UniSpeech-Native" : "UniSpeech-ONNX", Description = "UniSpeech: unified SSL + supervised + CTC (Microsoft, 2021)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "UniSpeech-Native" : "UniSpeech-ONNX", Description = "UniSpeech: unified SSL + supervised + CTC (Microsoft, 2021)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
 

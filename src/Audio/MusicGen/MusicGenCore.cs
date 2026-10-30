@@ -210,10 +210,13 @@ internal sealed class MusicGenCore<T>
 
     // The logits [K, L, N] of the new positions `sequence[:, from .. from + length)`. In prefix mode the conditioning
     // `memory` [P, D] precedes step 0, so the steps sit at positions P + s and the first call carries the prefix.
-    private Tensor<T> Run(int[,] sequence, int from, int length, Tensor<T> memory, List<(Tensor<T>, Tensor<T>)>? cache, bool training, Random random)
+    // `added` [S, D], when given, is added to the steps' embeddings (FireRedTTS's acoustic LM adds the semantic tokens).
+    private Tensor<T> Run(int[,] sequence, int from, int length, Tensor<T> memory, List<(Tensor<T>, Tensor<T>)>? cache, bool training, Random random,
+        Tensor<T>? added = null)
     {
         int prefix = Configuration.CrossAttention ? 0 : memory.Shape[0];
         var x = Embed(sequence, from, length);
+        if (added is not null) x = _engine.TensorAdd(x, _engine.TensorNarrow(added, 0, from, length));
         int position = prefix + from;
         if (prefix > 0 && from == 0)
         {
@@ -234,19 +237,21 @@ internal sealed class MusicGenCore<T>
     // ------------------------------------------------------------------ model operations
 
     /// <summary>The logits <c>[K, S, N]</c> of a pattern sequence <c>[K, S]</c> given the conditioning <c>[Lc, D]</c>.</summary>
-    public Tensor<T> Logits(int[,] sequence, Tensor<T> memory, bool training, Random random)
-        => Run(sequence, 0, sequence.GetLength(1), memory, null, training, random);
+    /// <param name="added">Rows <c>[S, D]</c> added to the steps' embeddings, or null.</param>
+    public Tensor<T> Logits(int[,] sequence, Tensor<T> memory, bool training, Random random, Tensor<T>? added = null)
+        => Run(sequence, 0, sequence.GetLength(1), memory, null, training, random, added);
 
     /// <summary>
     /// The training objective (audiocraft <c>MusicGenSolver._compute_cross_entropy</c>): the cross-entropy of each
     /// codebook's codes over the steps the pattern predicts them at, averaged over its valid steps, then over the
     /// codebooks.
     /// </summary>
-    public Tensor<T> Loss(int[,] codes, Tensor<T> memory, bool training, Random random)
+    /// <param name="added">Rows <c>[T + 1, D]</c> added to the pattern steps' embeddings, or null.</param>
+    public Tensor<T> Loss(int[,] codes, Tensor<T> memory, bool training, Random random, Tensor<T>? added = null)
     {
         var c = Configuration;
         int k = codes.GetLength(0), t = codes.GetLength(1);
-        var logits = Logits(MusicGenDelayPattern.TrainingSequence(codes, c.Delays, Special), memory, training, random);   // [K, T+1, N]
+        var logits = Logits(MusicGenDelayPattern.TrainingSequence(codes, c.Delays, Special), memory, training, random, added);   // [K, T+1, N]
         var logProbabilities = _engine.TensorLogSoftmax(logits, axis: 2);
         var weights = new Tensor<T>(logits._shape);
         for (int q = 0; q < k; q++)
@@ -267,8 +272,9 @@ internal sealed class MusicGenCore<T>
     /// <c>uncond + guidance · (cond − uncond)</c> when an unconditional memory is given, and <paramref name="choose"/>
     /// picks each codebook's code from its logits; codes the pattern has no slot for stay special.
     /// </summary>
+    /// <param name="added">Rows <c>[frames + max delay + 1, D]</c> added to the pattern steps' embeddings, or null.</param>
     public int[,] Generate(Tensor<T> memory, Tensor<T>? unconditional, double guidance, int frames, Func<double[], int> choose,
-        int[,]? prompt = null)
+        int[,]? prompt = null, Tensor<T>? added = null)
     {
         var c = Configuration;
         int k = c.Codebooks, maxDelay = c.Delays.Max(), steps = frames + maxDelay + 1;
@@ -293,10 +299,10 @@ internal sealed class MusicGenCore<T>
         for (int offset = start; offset < steps; offset++)
         {
             int length = offset - previous;
-            var condLogits = Run(sequence, previous, length, memory, condCache, false, random);
+            var condLogits = Run(sequence, previous, length, memory, condCache, false, random, added);
             Tensor<T>? uncondLogits = unconditional is null || uncondCache is null
                 ? null
-                : Run(sequence, previous, length, unconditional, uncondCache, false, random);
+                : Run(sequence, previous, length, unconditional, uncondCache, false, random, added);
             for (int q = 0; q < k; q++)
             {
                 var logits = new double[c.CodebookSize];
