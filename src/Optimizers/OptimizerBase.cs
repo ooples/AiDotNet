@@ -1349,7 +1349,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 {
                     try
                     {
-                        userParameterizable.SetParameters(bestParameterizable.GetParameters());
+                        AiDotNet.Models.Parameters.ParameterTransfer.Copy(bestParameterizable, userParameterizable);
                         bestSolutionForResult = userModel;
                     }
                     catch (ArgumentException)

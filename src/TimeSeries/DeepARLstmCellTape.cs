@@ -108,6 +108,31 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
     }
 
     /// <summary>
+    /// Runs the cell over a whole sequence from a zero state: <paramref name="input"/> is <c>[B, L, inputSize]</c>,
+    /// the result every timestep's hidden state, <c>[B, L, H]</c>. The same LSTM as <see cref="Step"/> (gate order
+    /// i, f, g, o; one bias), as the single engine op that compiled training records as one fused node.
+    /// </summary>
+    public Tensor<T> Sequence(Tensor<T> input)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return Engine.LstmSequenceForward(input, null, null, _wx, _wh, _bias, null, returnSequences: true);
+        if (input.Rank != 3 || input.Shape[2] != _wx.Shape[1])
+            throw new ArgumentException("Expected [batch, time, input] with the cell's input width.", nameof(input));
+        int batch = input.Shape[0], hiddenSize = _wh.Shape[1];
+        if (input.Shape[1] == 0) return new Tensor<T>(new[] { batch, 0, hiddenSize });
+        var hidden = new Tensor<T>(new[] { batch, hiddenSize });
+        var cell = new Tensor<T>(new[] { batch, hiddenSize });
+        var steps = new Tensor<T>[input.Shape[1]];
+        for (int t = 0; t < steps.Length; t++)
+        {
+            var x = Engine.Reshape(Engine.TensorNarrow(input, 1, t, 1), new[] { batch, input.Shape[2] });
+            (hidden, cell) = Engine.TensorLstmCell(x, hidden, cell, _wx, _wh, _bias);
+            steps[t] = hidden;
+        }
+        return Engine.TensorStack(steps, 1);
+    }
+
+    /// <summary>
     /// Computes one LSTM step. Inputs are column-major: <paramref name="xt"/> is
     /// <c>[inputSize, B]</c>, <paramref name="hPrev"/> and <paramref name="cPrev"/> are
     /// <c>[H, B]</c>. Returns the new hidden and cell states, both <c>[H, B]</c>. The same

@@ -45,6 +45,9 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Scaling Speech Technology to 1,000+ Languages", "https://arxiv.org/abs/2305.13516", Year = 2023, Authors = "Pratap et al.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2006.11477",
+    "MMS pre-trains and fine-tunes the wav2vec 2.0 model (Pratap et al. 2023) in its stable-layer-norm form at 1B "
+    + "parameters, adding per-language attention adapters, so it runs on the wav2vec 2.0 network with adapters.")]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98,
                 Schedule = LearningRateSchedulerType.TriStage,
                 WarmupFraction = 0.10, HoldFraction = 0.40, MinLearningRate = 0,
@@ -55,15 +58,18 @@ public partial class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
+    // The paper network (wav2vec 2.0 with attention adapters + CTC head) on the native path; null in ONNX mode or with custom layers.
+    private Audio.Foundations.Wav2Vec2CtcStack<T>? _stack;
+    private readonly Random _random;
 
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public MMS(NeuralNetworkArchitecture<T> architecture, string modelPath, MMSOptions? options = null) : base(architecture) { _options = options ?? new MMSOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw", "yo", "ha" }; InitializeLayers(); }
+    public MMS(NeuralNetworkArchitecture<T> architecture, string modelPath, MMSOptions? options = null) : base(architecture) { _options = options ?? new MMSOptions(); Options = _options; _useNativeMode = false; _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1); base.SampleRate = _options.SampleRate; base.NumMels = 0; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw", "yo", "ha" }; InitializeLayers(); }
     public MMS(NeuralNetworkArchitecture<T> architecture, MMSOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MMSOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw", "yo", "ha" }; InitializeLayers(); }
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1); base.SampleRate = _options.SampleRate; base.NumMels = 0; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw", "yo", "ha" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using MMS's multilingual SSL encoder with CTC.
@@ -76,15 +82,7 @@ public partial class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var features = PreprocessAudio(audio);
         Tensor<T> logits;
 
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            logits = OnnxEncoder.Run(features);
-        }
-        else
-        {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
-        }
+        logits = Logits(features, training: false);
 
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
@@ -101,7 +99,7 @@ public partial class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
         // MMS uses language-specific adapter weights rather than a separate LID head.
@@ -116,15 +114,60 @@ public partial class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("MMS does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFoundationASRLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, featureDim: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        _stack = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network: wav2vec 2.0 (layer-norm feature encoder, stable pre-norm Transformer) with an attention
+        // adapter in every layer and a CTC head, as transformers' Wav2Vec2ForCTC builds facebook/mms-1b-all. It used
+        // to be a generic encoder over mel features with the feature encoder "approximated with dense" (#2321).
+        _stack = new Audio.Foundations.Wav2Vec2CtcStack<T>(Engine, _options.ToConfiguration(), _options.VocabSize, _options.Seed ?? 42);
+        Layers.AddRange(_stack.Layers);
+    }
+
+    /// <summary>Loads a transformers <c>Wav2Vec2ForCTC</c> state dict (<c>wav2vec2.*</c> and <c>lm_head.*</c>).</summary>
+    /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
+    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        if (_stack is null) throw new InvalidOperationException("Weights load into the native MMS network.");
+        _stack.LoadTorchWeights(read, "wav2vec2.");
+    }
+
+    // MMS reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_stack is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_stack is not null)
+            return _stack.Run(input, training, _random, freezeFeatureEncoder: training && _options.FreezeFeatureEncoder, _options.FinalDropout);
+        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _stack is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
+        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
+            && _stack is not null && _stack.IsFeatureEncoderLayer(Layers[layerIndex])
+            ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
+            : declared;
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "MMS-Native" : "MMS-ONNX", Description = "MMS: 1100+ language SSL + CTC (Meta, 2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "MMS-Native" : "MMS-ONNX", Description = "MMS: 1100+ language SSL + CTC (Meta, 2023)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
 

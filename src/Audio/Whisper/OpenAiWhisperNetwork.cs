@@ -22,6 +22,10 @@ internal sealed record WhisperDimensions(int Mels, int AudioContext, int AudioSt
     /// <summary>Encodes audio of any length up to the audio context (the positions cut to it), as MegaTTS 3's aligner does,
     /// instead of requiring the 30-second window.</summary>
     public bool VariableAudioLength { get; init; }
+
+    /// <summary>Builds and loads the audio encoder only (LLaMA-Omni's speech encoder, <c>whisper.load_model(...).encoder</c>);
+    /// the text decoder and its weights are left out.</summary>
+    public bool EncoderOnly { get; init; }
 }
 
 /// <summary>
@@ -84,12 +88,15 @@ internal sealed class OpenAiWhisperNetwork<T>
         for (int i = 0; i < d.AudioLayers; i++) EncoderBlocks.Add(NewBlock(d.AudioState, false));
         PostNormWeight = Values(d.AudioState);
         PostNormBias = Values(d.AudioState);
-        TokenEmbedding = Values(d.Vocabulary * d.TextState);
-        TextPositions = Values(d.TextContext * d.TextState);
-        for (int i = 0; i < d.TextLayers; i++) DecoderBlocks.Add(NewBlock(d.TextState, true));
-        NormWeight = Values(d.TextState);
-        NormBias = Values(d.TextState);
-        if (d.UntiedOutput)
+        if (!d.EncoderOnly)
+        {
+            TokenEmbedding = Values(d.Vocabulary * d.TextState);
+            TextPositions = Values(d.TextContext * d.TextState);
+            for (int i = 0; i < d.TextLayers; i++) DecoderBlocks.Add(NewBlock(d.TextState, true));
+            NormWeight = Values(d.TextState);
+            NormBias = Values(d.TextState);
+        }
+        if (d.UntiedOutput && !d.EncoderOnly)
         {
             OutputProjection = Linear(d.TextState, d.Vocabulary);
             OutputBias = Values(d.Vocabulary);
@@ -104,11 +111,12 @@ internal sealed class OpenAiWhisperNetwork<T>
     public List<Block> EncoderBlocks { get; } = new();
     public BiasFreeLinearLayer<T> PostNormWeight { get; }
     public BiasFreeLinearLayer<T> PostNormBias { get; }
-    public BiasFreeLinearLayer<T> TokenEmbedding { get; }
-    public BiasFreeLinearLayer<T> TextPositions { get; }
+    /// <summary>The text decoder's token table; null for an encoder-only network, as are its positions and final norm.</summary>
+    public BiasFreeLinearLayer<T>? TokenEmbedding { get; }
+    public BiasFreeLinearLayer<T>? TextPositions { get; }
     public List<Block> DecoderBlocks { get; } = new();
-    public BiasFreeLinearLayer<T> NormWeight { get; }
-    public BiasFreeLinearLayer<T> NormBias { get; }
+    public BiasFreeLinearLayer<T>? NormWeight { get; }
+    public BiasFreeLinearLayer<T>? NormBias { get; }
     public BiasFreeLinearLayer<T>? OutputProjection { get; }
     public BiasFreeLinearLayer<T>? OutputBias { get; }
 
@@ -236,6 +244,8 @@ internal sealed class OpenAiWhisperNetwork<T>
     {
         var d = Dimensions;
         int offset = cache?.Length ?? 0, n = tokens.Count;
+        if (TokenEmbedding is null || TextPositions is null || NormWeight is null || NormBias is null)
+            throw new InvalidOperationException("This Whisper network is encoder-only.");
         var table = _engine.Reshape(Value(TokenEmbedding), new[] { d.Vocabulary, d.TextState });
         var index = new Tensor<int>(new[] { n }, new Vector<int>(tokens.ToArray()));
         var x = _engine.TensorIndexSelect(table, index, 0);
@@ -292,6 +302,7 @@ internal sealed class OpenAiWhisperNetwork<T>
         for (int i = 0; i < EncoderBlocks.Count; i++) LoadBlock(EncoderBlocks[i], $"encoder.blocks.{i}", d.AudioState);
         Vector(PostNormWeight, "encoder.ln_post.weight", new[] { d.AudioState });
         Vector(PostNormBias, "encoder.ln_post.bias", new[] { d.AudioState });
+        if (TokenEmbedding is null || TextPositions is null || NormWeight is null || NormBias is null) return;
         Vector(TokenEmbedding, "decoder.token_embedding.weight", new[] { d.Vocabulary, d.TextState });
         Vector(TextPositions, "decoder.positional_embedding", new[] { d.TextContext, d.TextState });
         for (int i = 0; i < DecoderBlocks.Count; i++) LoadBlock(DecoderBlocks[i], $"decoder.blocks.{i}", d.TextState);

@@ -7,7 +7,31 @@ on:
       - main
     paths:
       - 'src/AiDotNet.Playground.Functions/**'
+      - 'src/AiDotNet.Playground.Execution/**'
+      - 'scripts/verify-playground-isolation.py'
+      - 'scripts/test_playground_isolation.py'
       - '.github/workflows/azure-functions-deploy.yml'
+      - 'scripts/verify-playground-package.py'
+      - 'scripts/check-playground-routes.py'
+      - 'scripts/test_playground_package.py'
+      - 'scripts/test_playground_routes.py'
+      - 'scripts/test_playground_event_state.py'
+      - 'website/supabase/migrations/*playground_stripe*.sql'
+      - 'tests/AiDotNet.Playground.Functions.Tests/**'
+  pull_request:
+    paths:
+      - 'src/AiDotNet.Playground.Functions/**'
+      - 'src/AiDotNet.Playground.Execution/**'
+      - 'scripts/verify-playground-isolation.py'
+      - 'scripts/test_playground_isolation.py'
+      - '.github/workflows/azure-functions-deploy.yml'
+      - 'scripts/verify-playground-package.py'
+      - 'scripts/check-playground-routes.py'
+      - 'scripts/test_playground_package.py'
+      - 'scripts/test_playground_routes.py'
+      - 'scripts/test_playground_event_state.py'
+      - 'website/supabase/migrations/*playground_stripe*.sql'
+      - 'tests/AiDotNet.Playground.Functions.Tests/**'
   workflow_dispatch:  # Allow manual trigger
 
 concurrency:
@@ -16,14 +40,19 @@ concurrency:
 
 env:
   AZURE_FUNCTIONAPP_NAME: aidotnet-playground
+  AZURE_EXECUTIONAPP_NAME: aidotnet-playground-execution
+  AZURE_FUNCTIONAPP_RESOURCE_GROUP: aidotnet-playground_group
   AZURE_FUNCTIONAPP_PACKAGE_PATH: src/AiDotNet.Playground.Functions
   DOTNET_VERSION: '10.0.x'
 
+permissions:
+  contents: read
+
 jobs:
-  build-and-deploy:
-    name: Build and Deploy
+  build:
+    name: Build and Verify
     runs-on: ubuntu-latest
-    # The functions project references src/AiDotNet.csproj, so this build compiles the library's
+    # The execution project references src/AiDotNet.csproj, so this build compiles the library's
     # net10.0 target too (about 6.5 minutes on a 128-core workstation; several times that on a
     # 4-core hosted runner, where CodeQL's traced net10.0 build of it takes about 26 minutes).
     # 15 minutes was sized for restoring a prebuilt AiDotNet package.
@@ -31,7 +60,9 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
@@ -47,20 +78,117 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Restore dependencies
-        run: dotnet restore ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+        run: dotnet restore tests/AiDotNet.Playground.Functions.Tests
 
-      - name: Build
-        run: dotnet build ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release --no-restore
+      - name: Test durable Stripe event state against PostgreSQL
+        run: python3 scripts/test_playground_event_state.py
+
+      - name: Build and test webhook and execution contracts
+        run: dotnet test tests/AiDotNet.Playground.Functions.Tests -c Release --no-restore -p:GeneratePackageOnBuild=false
 
       - name: Publish
-        run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release -o ./publish --no-build
+        # The existing app is Windows Consumption. A portable publish carries mobile/macOS/Linux
+        # native libraries and exhausted Kudu's temporary disk during the recovery upload.
+        # Keep reference PDBs for diagnostics, but omit XML documentation from the runtime package.
+        # Reuse the library built by the test step; publish each Functions host for Windows.
+        run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release -r win-x64 --self-contained false -o ./publish -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false -p:AllowedReferenceRelatedFileExtensions=.pdb
+
+      - name: Publish isolated execution service
+        run: dotnet publish src/AiDotNet.Playground.Execution -c Release -r win-x64 --self-contained false -o ./publish-execution -p:BuildProjectReferences=false -p:GeneratePackageOnBuild=false -p:AllowedReferenceRelatedFileExtensions=.pdb
+
+      - name: Verify both required functions are packaged
+        run: |
+          python3 scripts/test_playground_package.py
+          python3 scripts/test_playground_routes.py
+          python3 scripts/test_playground_isolation.py
+          python3 scripts/verify-playground-package.py ./publish
+          python3 scripts/verify-playground-package.py ./publish-execution --execution
+
+      - name: Upload verified deployment artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playground-functions
+          path: |
+            ./publish
+            ./publish-execution
+          include-hidden-files: true
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy Verified Artifact
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # Required for azure/login OIDC federation
+    steps:
+      - name: Checkout route verification script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/check-playground-routes.py
+            scripts/verify-playground-isolation.py
+          sparse-checkout-cone-mode: false
+
+      - name: Download verified deployment artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: playground-functions
+          path: .
+
+      - name: Check federated deployment configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Configure federated Azure deployment first; see docs/playground-webhook-recovery.md ($name is missing)."
+              exit 1
+            fi
+          done
+
+      - name: Sign in to Azure without publishing passwords
+        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2
+        with:
+          client-id: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify app and storage isolation before deploying
+        run: python3 scripts/verify-playground-isolation.py "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" "$AZURE_FUNCTIONAPP_NAME" "$AZURE_EXECUTIONAPP_NAME"
+
+      - name: Deploy isolated code execution
+        uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1
+        with:
+          app-name: ${{ env.AZURE_EXECUTIONAPP_NAME }}
+          package: ./publish-execution
+
+      - name: Configure public execution proxy
+        shell: bash
+        run: |
+          hostname=$(az functionapp show --resource-group "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" --name "$AZURE_EXECUTIONAPP_NAME" --query defaultHostName --output tsv)
+          test -n "$hostname"
+          az functionapp config appsettings set --resource-group "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" --name "$AZURE_FUNCTIONAPP_NAME" --settings "PLAYGROUND_EXECUTION_URL=https://$hostname/api/execute" --output none
 
       - name: Deploy to Azure Functions
-        uses: Azure/functions-action@v1
+        uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1
         with:
           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
           package: ./publish
-          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+
+      - name: Check public routes reject unsigned or empty requests
+        shell: bash
+        run: |
+          hostname=$(az functionapp show --resource-group "$AZURE_FUNCTIONAPP_RESOURCE_GROUP" --name "$AZURE_FUNCTIONAPP_NAME" --query defaultHostName --output tsv)
+          test -n "$hostname"
+          echo "DEPLOYED_APP_URL=https://$hostname" >> "$GITHUB_ENV"
+          python3 scripts/check-playground-routes.py "https://$hostname"
 
       - name: Deployment Summary
         if: success()
@@ -69,6 +197,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Azure Functions deployed to:" >> $GITHUB_STEP_SUMMARY
           echo "- **App Name**: ${{ env.AZURE_FUNCTIONAPP_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net" >> $GITHUB_STEP_SUMMARY
-          echo "- **API Endpoint**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net/api/execute" >> $GITHUB_STEP_SUMMARY
-          echo "- **Stripe Webhook**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net/api/stripe-webhook" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: $DEPLOYED_APP_URL" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Endpoint**: $DEPLOYED_APP_URL/api/execute" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stripe Webhook**: $DEPLOYED_APP_URL/api/stripe-webhook" >> $GITHUB_STEP_SUMMARY

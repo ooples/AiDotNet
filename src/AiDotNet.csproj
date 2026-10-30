@@ -75,8 +75,10 @@
   <ItemGroup>
     <Compile Remove="AiDotNet.Playground\**" />
     <Compile Remove="AiDotNet.Playground.Functions\**" />
+    <Compile Remove="AiDotNet.Playground.Execution\**" />
     <None Remove="AiDotNet.Playground\**" />
     <None Remove="AiDotNet.Playground.Functions\**" />
+    <None Remove="AiDotNet.Playground.Execution\**" />
   </ItemGroup>
 
 	<ItemGroup>
