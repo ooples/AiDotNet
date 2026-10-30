@@ -48,7 +48,7 @@ public class DefaultStackOptionTests
     {
         var arch = new NeuralNetworkArchitecture<double>(inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Regression, inputHeight: 5, inputWidth: 3, outputSize: 2);
-        int Count(int hidden, int layers) => new RecurrentNeuralNetwork<double>(arch,
+        long Count(int hidden, int layers) => new RecurrentNeuralNetwork<double>(arch,
             options: new RecurrentNeuralNetworkOptions { HiddenSize = hidden, NumLayers = layers }).ParameterCount;
 
         Assert.NotEqual(Count(7, 1), Count(9, 1));
@@ -58,7 +58,7 @@ public class DefaultStackOptionTests
     [Fact]
     public void RadialBasisNetwork_ReadsNumCenters()
     {
-        int Count(int centers) => new RadialBasisFunctionNetwork<double>(Vector(4, 2),
+        long Count(int centers) => new RadialBasisFunctionNetwork<double>(Vector(4, 2),
             options: new RadialBasisFunctionNetworkOptions { NumCenters = centers }).ParameterCount;
 
         Assert.NotEqual(Count(5), Count(9));
@@ -76,7 +76,7 @@ public class DefaultStackOptionTests
     [Fact]
     public void DeepBeliefNetwork_StacksTheGivenRbms()
     {
-        int Count(params int[] hidden) => new DeepBeliefNetwork<double>(Vector(4, 2),
+        long Count(params int[] hidden) => new DeepBeliefNetwork<double>(Vector(4, 2),
             options: new DeepBeliefNetworkOptions { HiddenLayers = hidden }).ParameterCount;
 
         Assert.NotEqual(Count(6, 4), Count(6, 5));
@@ -86,7 +86,7 @@ public class DefaultStackOptionTests
     [Fact]
     public void DeepBoltzmannMachine_StacksTheGivenLayers()
     {
-        int Count(params int[] hidden) => new DeepBoltzmannMachine<double>(Vector(4, 2),
+        long Count(params int[] hidden) => new DeepBoltzmannMachine<double>(Vector(4, 2),
             options: new DeepBoltzmannMachineOptions { HiddenLayers = hidden }).ParameterCount;
 
         Assert.NotEqual(Count(5), Count(7));
@@ -96,7 +96,7 @@ public class DefaultStackOptionTests
     [Fact]
     public void QuantumNetwork_ReadsTheQuantumLayerCount()
     {
-        int Count(int layers) => new QuantumNeuralNetwork<double>(Vector(4, 2), numQubits: 2,
+        long Count(int layers) => new QuantumNeuralNetwork<double>(Vector(4, 2), numQubits: 2,
             options: new QuantumNeuralNetworkOptions { NumLayers = layers }).ParameterCount;
 
         Assert.NotEqual(Count(1), Count(3));
@@ -124,7 +124,7 @@ public class DefaultStackOptionTests
     [Fact]
     public void SpikingNetwork_BuildsTheGivenHiddenLayers()
     {
-        int Count(params int[] hidden) => new SpikingNeuralNetwork<double>(Vector(4, 2),
+        long Count(params int[] hidden) => new SpikingNeuralNetwork<double>(Vector(4, 2),
             (AiDotNet.Interfaces.IActivationFunction<double>?)null,
             options: new SpikingNeuralNetworkOptions { HiddenLayers = hidden }).ParameterCount;
 
@@ -134,7 +134,7 @@ public class DefaultStackOptionTests
     [Fact]
     public void ResidualNetwork_ReadsTheBlockCount()
     {
-        int Count(int blocks) => new ResidualNeuralNetwork<double>(Vector(8, 2),
+        long Count(int blocks) => new ResidualNeuralNetwork<double>(Vector(8, 2),
             options: new ResidualNeuralNetworkOptions { NumResidualBlocks = blocks }).ParameterCount;
 
         Assert.NotEqual(Count(1), Count(3));
