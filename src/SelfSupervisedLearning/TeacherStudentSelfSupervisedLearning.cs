@@ -166,15 +166,9 @@ public abstract partial class TeacherStudentSSL<T> : SelfSupervisedLearningMetho
         // Update teacher encoder
         TeacherEncoder.UpdateFromMainEncoder(_encoder);
 
-        // Update teacher projector with EMA
-        var momentum = NumOps.FromDouble(TeacherEncoder.Momentum);
-        var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
-
-        var studentParams = (_projector ?? throw new InvalidOperationException("Projector has not been initialized.")).GetParameters();
-        var teacherParams = TeacherProjector.GetParameters();
-        TeacherProjector.SetParameters(Engine.Add(
-            Engine.Multiply(teacherParams, momentum),
-            Engine.Multiply(studentParams, oneMinusMomentum)));
+        ProjectorParameterTransfer<T>.Update(
+            _projector ?? throw new InvalidOperationException("Projector has not been initialized."),
+            TeacherProjector, TeacherEncoder.Momentum);
     }
 
     /// <inheritdoc />

@@ -34,8 +34,14 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bootstrap Your Own Latent - A New Approach to Self-Supervised Learning", "https://arxiv.org/abs/2006.07733", Year = 2020, Authors = "Jean-Bastien Grill, Florian Strub, Florent Altché, Corentin Tallec, Pierre Richemond, Elena Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Guo, Mohammad Gheshlaghi Azar, Bilal Piot, Koray Kavukcuoglu, Rémi Munos, Michal Valko")]
-public class SymmetricProjector<T> : IProjectorHead<T>
+public class SymmetricProjector<T> : IProjectorHead<T>, AiDotNet.Models.Parameters.IParameterChunkSource<T>, AiDotNet.Models.Parameters.IParameterLayoutSource
 {
+    IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> AiDotNet.Models.Parameters.IParameterChunkSource<T>.GetParameterStateChunks()
+        => ProjectorParameterTransfer<T>.StateChunks(this);
+
+    IReadOnlyList<AiDotNet.Models.Parameters.ParameterSlotDescriptor> AiDotNet.Models.Parameters.IParameterLayoutSource.GetParameterLayout()
+        => ProjectorParameterTransfer<T>.Layout(this);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
     private const double BatchNormEpsilon = 1e-5;

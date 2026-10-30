@@ -43,8 +43,17 @@ namespace AiDotNet.Diffusion;
 /// </remarks>
 public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     AiDotNet.Interfaces.ISelfSupervisedModel, AiDotNet.Models.Parameters.IParameterManifestProvider,
-    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
+    /// <summary>Exposes canonical registered state for device-side checkpoints.</summary>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        EnsureComponentsRegistered();
+        return AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(
+            this, typeof(DiffusionModelBase<T>), _parameterRegistry, GetParameters);
+    }
+
+
     // Held across Train calls: the fused plan owns the optimizer state, so a session built per call would
     // restart the moments every step.
     private AiDotNet.Training.FusedTrainingSession<T>? _fusedSession;
@@ -623,9 +632,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// </summary>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
     {
-        var p = GetParameters();
-        if (p.Length == 0) return System.Linq.Enumerable.Empty<Tensor<T>>();
-        return new[] { new Tensor<T>(new[] { p.Length }, p) };
+        return GetParameterStateChunks().Select(chunk => chunk.Tensor);
     }
 
     /// <summary>
@@ -638,15 +645,10 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
         if (chunks is null) throw new ArgumentNullException(nameof(chunks));
-        // Detach any copy-on-write-shared weights before mutating in place — SetParameters writes
-        // through raw spans that bypass the COW write barrier, so without this a chunk assignment
-        // could corrupt a sibling clone. Same guard Train() applies.
         EnsureOwnWeights();
-
-        // Buffer the chunk stream into one flat vector and delegate to SetParameters. Shared with
-        // VAEModelBase, NoisePredictorBase's legacy fallback, and the composite latent-diffusion models
-        // via DiffusionParameterChunkHelper (single source of truth for the framing/validation rules).
-        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+        EnsureComponentsRegistered();
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(DiffusionModelBase<T>), chunks, _parameterRegistry, SetParameters, OnParametersRestored);
     }
 
     /// <inheritdoc/>

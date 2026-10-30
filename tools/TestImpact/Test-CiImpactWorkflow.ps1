@@ -242,7 +242,8 @@ Assert-Contract ([bool] $codeqlBuild) 'the traced CodeQL job has no build step'
 foreach ($codeqlProject in @(
         'src/AiDotNet.csproj -c Release --no-restore -f net10.0',
         'src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore',
-        'src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore')) {
+        'src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore',
+        'src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj -c Release --no-restore')) {
     Assert-Contract ($codeqlBuild.Contains("dotnet build $codeqlProject")) `
         "CodeQL's traced build does not compile '$codeqlProject'"
     $projectPath = $codeqlProject.Split(' ')[0]

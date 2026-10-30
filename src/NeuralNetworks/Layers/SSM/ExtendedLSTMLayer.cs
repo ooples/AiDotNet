@@ -131,10 +131,6 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     [Scratch]
     private Tensor<T>? _lastOutput;
     [Scratch]
-    private Tensor<T>? _lastCellStates;
-    [Scratch]
-    private Tensor<T>? _lastNormStates;
-    [Scratch]
     private Tensor<T>? _lastInputGates;
     [Scratch]
     private Tensor<T>? _lastForgetGates;
@@ -306,134 +302,45 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
 
         _lastInput = input3D;
 
-        int headBatch = batchSize * _numHeads;
-        var outputList = new List<Tensor<T>>(seqLen);
-        var qList = new List<Tensor<T>>(seqLen);
-        var kList = new List<Tensor<T>>(seqLen);
-        var vList = new List<Tensor<T>>(seqLen);
-        var iList = new List<Tensor<T>>(seqLen);
-        var fList = new List<Tensor<T>>(seqLen);
-        var oList = new List<Tensor<T>>(seqLen);
-        var hiddenList = new List<Tensor<T>>(seqLen);
-
-        // Keep every recurrent update on the engine graph. The former scalar writes made C_t and
-        // n_t detached values; the residual allowed an input gradient to exist, but it was not the
-        // derivative of the actual mLSTM output and none of the gate/Q/K/V weights could train.
-        var cellState = Tensor<T>.CreateDefault(
-            new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
-        var normState = Tensor<T>.CreateDefault(
-            new[] { headBatch, _headDimension, 1 }, NumOps.Zero);
-        var mState = Tensor<T>.CreateDefault(new[] { headBatch, 1, 1 }, NumOps.FromDouble(-1e30));
-        var keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
+        // Project the full sequence once. The matrix-memory scan accepts scalar gates per head;
+        // preserve this layer's historical first-coordinate selection and log stabilization.
+        var flat = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
+        Tensor<T> Project(Tensor<T> weights, Tensor<T>? bias = null)
+        {
+            var projected = Engine.TensorMatMul(flat, weights);
+            if (bias is not null) projected = Engine.TensorAdd(projected, Engine.Reshape(bias, new[] { 1, modelDim }));
+            return Engine.Reshape(projected, new[] { batchSize, seqLen, modelDim });
+        }
+        Tensor<T> HeadGate(Tensor<T> gate) => Engine.Reshape(Engine.TensorNarrow(
+            Engine.Reshape(gate, new[] { batchSize, seqLen, _numHeads, _headDimension }), 3, 0, 1),
+            new[] { batchSize, seqLen, _numHeads });
+        var q = Project(_queryWeights); var k = Project(_keyWeights); var v = Project(_valueWeights);
+        var inputLogits = Project(_inputGateWeights, _inputGateBias);
+        var forget = Engine.Sigmoid(Project(_forgetGateWeights, _forgetGateBias));
+        var outputGate = Engine.Sigmoid(Project(_outputGateWeights, _outputGateBias));
+        var logInput = HeadGate(inputLogits);
+        var logForget = Engine.TensorLog(Engine.TensorMax(HeadGate(forget),
+            Tensor<T>.CreateDefault(new[] { batchSize, seqLen, _numHeads }, NumOps.FromDouble(1e-30))));
+        var m = Tensor<T>.CreateDefault(new[] { batchSize, 1, _numHeads }, NumOps.FromDouble(-1e30));
+        var inputScales = new Tensor<T>[seqLen]; var forgetScales = new Tensor<T>[seqLen];
         for (int t = 0; t < seqLen; t++)
         {
-            var x_t = Engine.TensorSliceAxis(input3D, axis: 1, index: t); // [batch, modelDim]
-
-            // Gate computations
-            var iGateRaw = Engine.TensorAdd(
-                Engine.TensorMatMul(x_t, _inputGateWeights),
-                Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension }));
-            var fGateRaw = Engine.TensorAdd(
-                Engine.TensorMatMul(x_t, _forgetGateWeights),
-                Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension }));
-            var oGate = Engine.Sigmoid(Engine.TensorAdd(
-                Engine.TensorMatMul(x_t, _outputGateWeights),
-                Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })));
-
-            var fGate = Engine.Sigmoid(fGateRaw);
-
-            // Q, K, V projections
-            var q = Engine.TensorMatMul(x_t, _queryWeights);
-            var k = Engine.TensorMultiplyScalar(
-                Engine.TensorMatMul(x_t, _keyWeights), keyScale);
-            var v = Engine.TensorMatMul(x_t, _valueWeights);
-
-            Tensor<T> AsHeads(Tensor<T> z) => Engine.Reshape(z,
-                new[] { headBatch, _headDimension });
-            var qHead = AsHeads(q);
-            var kHead = AsHeads(k);
-            var vHead = AsHeads(v);
-            var iHead = AsHeads(iGateRaw);
-            var fHead = AsHeads(fGate);
-            var oHead = AsHeads(oGate);
-
-            // The paper uses one stabilizer/gate scalar per head; match the historical forward's
-            // first coordinate selection, but use a tape-tracked slice rather than scalar reads.
-            var logI = Engine.Reshape(Engine.TensorSlice(iHead,
-                new[] { 0, 0 }, new[] { headBatch, 1 }), new[] { headBatch, 1, 1 });
-            var fScalar = Engine.Reshape(Engine.TensorSlice(fHead,
-                new[] { 0, 0 }, new[] { headBatch, 1 }), new[] { headBatch, 1, 1 });
-            var logF = Engine.TensorLog(Engine.TensorMax(
-                fScalar, Tensor<T>.CreateDefault(fScalar.Shape.ToArray(), NumOps.FromDouble(1e-30))));
-            var carryLog = Engine.TensorAdd(logF, mState);
-            var mNew = Engine.TensorMax(carryLog, logI);
-            var iScale = Engine.TensorExp(Engine.TensorSubtract(logI, mNew));
-            var fScale = Engine.TensorExp(Engine.TensorSubtract(carryLog, mNew));
-            mState = mNew;
-
-            var qCol = Engine.Reshape(qHead, new[] { headBatch, _headDimension, 1 });
-            var kCol = Engine.Reshape(kHead, new[] { headBatch, _headDimension, 1 });
-            var vCol = Engine.Reshape(vHead, new[] { headBatch, _headDimension, 1 });
-            var kRow = Engine.TensorPermute(kCol, new[] { 0, 2, 1 });
-            cellState = Engine.TensorAdd(
-                Engine.TensorMultiply(cellState, fScale),
-                Engine.TensorMultiply(Engine.BatchMatMul(vCol, kRow), iScale));
-            normState = Engine.TensorAdd(
-                Engine.TensorMultiply(normState, fScale),
-                Engine.TensorMultiply(kCol, iScale));
-
-            var numerator = Engine.BatchMatMul(cellState, qCol);
-            var denominator = Engine.TensorMax(
-                Engine.TensorAbs(Engine.BatchMatMul(
-                    Engine.TensorPermute(normState, new[] { 0, 2, 1 }), qCol)),
-                Tensor<T>.CreateDefault(new[] { headBatch, 1, 1 }, NumOps.One));
-            var oScalar = Engine.Reshape(Engine.TensorSlice(oHead,
-                new[] { 0, 0 }, new[] { headBatch, 1 }), new[] { headBatch, 1, 1 });
-            var normalized = Engine.TensorDivide(
-                Engine.TensorMultiply(numerator, oScalar),
-                Engine.TensorTile(denominator, new[] { 1, _headDimension, 1 }));
-            var h_t = Engine.Reshape(normalized, new[] { batchSize, _modelDimension });
-
-            iList.Add(Engine.Reshape(iGateRaw, new[] { batchSize, 1, _modelDimension }));
-            fList.Add(Engine.Reshape(fGate, new[] { batchSize, 1, _modelDimension }));
-            oList.Add(Engine.Reshape(oGate, new[] { batchSize, 1, _modelDimension }));
-            qList.Add(Engine.Reshape(q, new[] { batchSize, 1, _modelDimension }));
-            kList.Add(Engine.Reshape(k, new[] { batchSize, 1, _modelDimension }));
-            vList.Add(Engine.Reshape(v, new[] { batchSize, 1, _modelDimension }));
-            hiddenList.Add(Engine.Reshape(h_t, new[] { batchSize, 1, _modelDimension }));
-
-            // Output projection
-            var y_t = Engine.TensorMatMul(h_t, _outputProjectionWeights);
-            var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-            y_t = Engine.TensorAdd(y_t, outBias);
-
-            outputList.Add(Engine.Reshape(y_t, new[] { batchSize, 1, _modelDimension }));
+            var li = Engine.TensorNarrow(logInput, 1, t, 1);
+            var carry = Engine.TensorAdd(Engine.TensorNarrow(logForget, 1, t, 1), m);
+            var next = Engine.TensorMax(carry, li);
+            inputScales[t] = Engine.TensorExp(Engine.TensorSubtract(li, next));
+            forgetScales[t] = Engine.TensorExp(Engine.TensorSubtract(carry, next));
+            m = next;
         }
+        // Only the scalar stabilizer is sequential here; the matrix recurrence and its BPTT
+        // are one shared engine operation. The scan applies the original 1/sqrt(headDim) key scale.
+        var hidden = Engine.XLstmScanForward(q, k, v, Engine.TensorConcatenate(inputScales, 1),
+            Engine.TensorConcatenate(forgetScales, 1), HeadGate(outputGate), _numHeads);
+        var output = Engine.Reshape(Engine.TensorAdd(Engine.TensorMatMul(
+            Engine.Reshape(hidden, new[] { batchSize * seqLen, modelDim }), _outputProjectionWeights),
+            Engine.Reshape(_outputProjectionBias, new[] { 1, modelDim })), new[] { batchSize, seqLen, modelDim });
 
-        // Assemble the [batch, seqLen, modelDim] output on the tape so gradients
-        // reach the output-projection weights (and bias).
-        var output = Engine.TensorConcatenate(outputList.ToArray(), axis: 1);
-
-        // Residual + output normalization — the xLSTM block (Beck et al. 2024,
-        // §2.3 / Fig. 3: each mLSTM cell lives in a normalized residual block).
-        //
-        // Two problems are fixed here together:
-        //  1. Gradient flow. The covariance-cell recurrence above is computed with
-        //     in-place scalar updates (the matrix state C_t / normalizer n_t are
-        //     inherently sequential), so it is OFF the autodiff tape: the gradient
-        //     cannot cross it to reach the input/gate/q/k/v projections or any
-        //     upstream layer. The residual skip `output + input` re-attaches the
-        //     block output to its input ON the tape, so gradients reach every
-        //     projection in this cell AND propagate to the layers below it.
-        //  2. Signal collapse. The cell output C_t q_t is a product of sub-unit
-        //     projections that the max(|n·q|, 1) normalizer never up-scales, so
-        //     stacking N cells shrinks the activations ~5 orders of magnitude per
-        //     layer (≈1e-77 by 4 layers) and the backward pass underflows to zero.
-        //     Normalizing the block output to unit scale stops the collapse.
-        //
-        // Fixed unit-gamma / zero-beta (created once) keeps the serialized
-        // parameter layout unchanged (no extra trainable tensors).
+        // Preserve the normalized residual block and its serialized parameter layout.
         output = Engine.TensorAdd(output, input3D);
         if (_outputNormGamma is null || _outputNormBeta is null)
         {
@@ -449,15 +356,12 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
         }
         output = Engine.LayerNorm(output, _outputNormGamma, _outputNormBeta, 1e-5, out _, out _);
 
-        _lastCellStates = cellState;
-        _lastNormStates = normState;
-        _lastInputGates = Engine.TensorConcatenate(iList.ToArray(), 1);
-        _lastForgetGates = Engine.TensorConcatenate(fList.ToArray(), 1);
-        _lastOutputGates = Engine.TensorConcatenate(oList.ToArray(), 1);
-        _lastQ = Engine.TensorConcatenate(qList.ToArray(), 1);
-        _lastK = Engine.TensorConcatenate(kList.ToArray(), 1);
-        _lastV = Engine.TensorConcatenate(vList.ToArray(), 1);
-        _lastHiddenPreProj = Engine.TensorConcatenate(hiddenList.ToArray(), 1);
+        // The scan owns recurrent caches; retain only the projection caches used by the layer.
+        _lastInputGates = inputLogits;
+        _lastForgetGates = forget;
+        _lastOutputGates = outputGate;
+        _lastQ = q; _lastK = k; _lastV = v;
+        _lastHiddenPreProj = hidden;
 
         var result = ApplyActivation(output);
         _lastOutput = result;
@@ -533,8 +437,6 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     {
         _lastInput = null;
         _lastOutput = null;
-        _lastCellStates = null;
-        _lastNormStates = null;
         _lastInputGates = null;
         _lastForgetGates = null;
         _lastOutputGates = null;

@@ -121,8 +121,43 @@ try {
 }
 finally { Pop-Location }
 # The Build job's narrowed ledger comes first; select-shards' is the fallback when it published none.
-Assert-True ($workflow -match '(?m)^          EXPECTED_SHARD_MATRIX: \$\{\{ needs\.build\.outputs\.ledger_matrix \|\| needs\.select-shards\.outputs\.ledger_matrix \}\}\r?$') `
+# #2369 moved this value out of the environment to avoid Linux's per-string size limit.
+$matrixWriter = [regex]::Match($workflow,
+    '(?ms)^      - name: Write expected shard matrix\r?\n        shell: pwsh\r?\n        run: \|\r?\n(?<code>.*?)(?=^      - name:)')
+Assert-True $matrixWriter.Success 'The file-based expected shard matrix writer is missing.'
+$matrixExpression = '${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}'
+Assert-True ($matrixWriter.Groups['code'].Value.Contains($matrixExpression)) `
     'Regression inventory does not require imported ordinary shards.'
+Assert-True ($workflow -notmatch '(?m)^ +EXPECTED_SHARD_MATRIX:') `
+    'The large shard matrix must not be transported through the environment.'
+$matrixReader = [regex]::Match($workflow,
+    '(?ms)^          \$matrixJson = Get-Content -LiteralPath expected-shard-matrix\.json -Raw\r?\n.*?(?=^          "inventory_valid=true")')
+Assert-True $matrixReader.Success 'Regression analysis no longer reads the expected matrix file.'
+$readerCode = [regex]::Replace($matrixReader.Value, '(?m)^          ', '').Replace(
+    './.github/scripts/get-selected-shard-names.ps1',
+    "'$PSScriptRoot/../../.github/scripts/get-selected-shard-names.ps1'")
+$transportRoot = Join-Path ([IO.Path]::GetTempPath()) "ci-shard-transport-$([Guid]::NewGuid().ToString('N'))"
+$null = New-Item -ItemType Directory -Path $transportRoot
+Push-Location $transportRoot
+try {
+    # Execute the shipping writer and reader with an imported ledger large enough to exceed 128 KiB.
+    foreach ($matrix in @('[]', (ConvertTo-Json -InputObject @([pscustomobject]@{ name = 'Ordinary'; filter = ('x' * 140000) }) -Compress))) {
+        $writerCode = [regex]::Replace($matrixWriter.Groups['code'].Value, '(?m)^          ', '').Replace($matrixExpression, $matrix)
+        & ([scriptblock]::Create($writerCode))
+        $emptyRejected = $false
+        try { . ([scriptblock]::Create($readerCode)) }
+        catch { if ($matrix -eq '[]') { $emptyRejected = $true } else { throw } }
+        Assert-True ($matrixJson.Trim() -ceq $matrix) 'The expected ledger was truncated during file transport.'
+        if ($matrix -eq '[]') { Assert-True $emptyRejected 'An empty ordinary inventory was silently accepted.' }
+        else { Assert-True ($expectedShardNames.Count -eq 1 -and $expectedShardNames[0] -ceq 'Ordinary') `
+            'File transport lost imported ordinary evidence.' }
+    }
+}
+finally {
+    Pop-Location
+    Remove-Item -LiteralPath (Join-Path $transportRoot 'expected-shard-matrix.json') -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $transportRoot
+}
 $outputPath = Join-Path ([IO.Path]::GetTempPath()) "ci-workloads-$([Guid]::NewGuid().ToString('N')).txt"
 $previousOutput = $env:GITHUB_OUTPUT
 try {

@@ -29,6 +29,8 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly Regex _split;
         private readonly bool _nfc;
         private readonly bool _ignoreMerges;
+        // Pre-tokenizers before the regular expression, in order: Digits (individual) and Punctuation, each isolating.
+        private readonly string[] _isolators;
         private readonly Dictionary<byte, char> _byteToChar = BpeTokenizer.BuildByteToUnicode();
         private readonly Dictionary<char, byte> _charToByte;
         private readonly ConcurrentDictionary<string, int[]> _cache = new(StringComparer.Ordinal);
@@ -37,8 +39,9 @@ namespace AiDotNet.Tokenization.Algorithms
 
         public ByteLevelBpeTokenizer(Dictionary<string, int> vocabulary, Dictionary<string, int> merges,
             IEnumerable<(string Content, int Id, bool Special)> addedTokens, string? splitPattern, bool nfc, bool ignoreMerges,
-            int[]? templatePrefix = null, int[]? templateSuffix = null)
+            int[]? templatePrefix = null, int[]? templateSuffix = null, IEnumerable<string>? isolators = null)
         {
+            _isolators = (isolators ?? Array.Empty<string>()).ToArray();
             _templatePrefix = templatePrefix ?? Array.Empty<int>();
             _templateSuffix = templateSuffix ?? Array.Empty<int>();
             _vocabulary = vocabulary ?? throw new ArgumentNullException(nameof(vocabulary));
@@ -90,6 +93,7 @@ namespace AiDotNet.Tokenization.Algorithms
                 rank++;
             }
             bool ignoreMerges = (bool?)model["ignore_merges"] ?? false;
+            var isolators = new List<string>();
             bool nfc = false;
             var normalizer = root["normalizer"];
             if (normalizer is JObject n)
@@ -116,6 +120,14 @@ namespace AiDotNet.Tokenization.Algorithms
                         if ((string?)step["behavior"] != "Isolated" || (bool?)step["invert"] == true)
                             throw new NotSupportedException("Only an isolated, non-inverted Split is supported.");
                         pattern = (string?)step["pattern"]?["Regex"] ?? throw new NotSupportedException("Only a regular-expression Split is supported.");
+                        break;
+                    case "Digits":
+                        if ((bool?)step["individual_digits"] != true) throw new NotSupportedException("Only Digits with individual_digits is supported.");
+                        isolators.Add("Digits");
+                        break;
+                    case "Punctuation":
+                        if (((string?)step["behavior"] ?? "Isolated") != "Isolated") throw new NotSupportedException("Only an isolated Punctuation split is supported.");
+                        isolators.Add("Punctuation");
                         break;
                     case "ByteLevel":
                         if ((bool?)step["add_prefix_space"] == true) throw new NotSupportedException("ByteLevel's add_prefix_space is not supported.");
@@ -154,7 +166,7 @@ namespace AiDotNet.Tokenization.Algorithms
                         throw new NotSupportedException($"Post-processor {(string?)processor["type"]} is not supported.");
                 }
             }
-            return new ByteLevelBpeTokenizer(vocabulary, merges, added, pattern, nfc, ignoreMerges, prefix.ToArray(), suffix.ToArray());
+            return new ByteLevelBpeTokenizer(vocabulary, merges, added, pattern, nfc, ignoreMerges, prefix.ToArray(), suffix.ToArray(), isolators);
         }
 
         /// <summary>The largest token id plus one.</summary>
@@ -230,7 +242,51 @@ namespace AiDotNet.Tokenization.Algorithms
         private void EncodeOrdinary(string segment, List<int> ids)
         {
             if (segment.Length == 0) return;
-            string text = _nfc ? segment.Normalize(NormalizationForm.FormC) : segment;
+            string normalized = _nfc ? segment.Normalize(NormalizationForm.FormC) : segment;
+            foreach (var piece in Isolate(normalized)) EncodeSplit(piece, ids);
+        }
+
+        // HF's Digits (individual) and Punctuation (Isolated) pre-tokenizers in order: each matching character becomes a piece
+        // of its own. Digits are char::is_numeric (Nd, Nl, No); punctuation is ASCII punctuation or a Unicode P* category.
+        private IEnumerable<string> Isolate(string text)
+        {
+            IEnumerable<string> pieces = new[] { text };
+            foreach (var kind in _isolators)
+            {
+                var next = new List<string>();
+                foreach (var piece in pieces)
+                {
+                    int start = 0;
+                    for (int i = 0; i < piece.Length;)
+                    {
+                        int width = char.IsHighSurrogate(piece[i]) && i + 1 < piece.Length && char.IsLowSurrogate(piece[i + 1]) ? 2 : 1;
+                        var category = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(piece, i);
+                        bool isolate = kind == "Digits"
+                            ? category is System.Globalization.UnicodeCategory.DecimalDigitNumber or System.Globalization.UnicodeCategory.LetterNumber
+                                or System.Globalization.UnicodeCategory.OtherNumber
+                            : (piece[i] < 128 && "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~".IndexOf(piece[i]) >= 0) || category is
+                                System.Globalization.UnicodeCategory.ConnectorPunctuation or System.Globalization.UnicodeCategory.DashPunctuation
+                                or System.Globalization.UnicodeCategory.OpenPunctuation or System.Globalization.UnicodeCategory.ClosePunctuation
+                                or System.Globalization.UnicodeCategory.InitialQuotePunctuation or System.Globalization.UnicodeCategory.FinalQuotePunctuation
+                                or System.Globalization.UnicodeCategory.OtherPunctuation;
+                        if (isolate)
+                        {
+                            if (i > start) next.Add(piece.Substring(start, i - start));
+                            next.Add(piece.Substring(i, width));
+                            start = i + width;
+                        }
+                        i += width;
+                    }
+                    if (start < piece.Length) next.Add(piece.Substring(start));
+                }
+                pieces = next;
+            }
+            return pieces;
+        }
+
+        private void EncodeSplit(string text, List<int> ids)
+        {
+            if (text.Length == 0) return;
             int position = 0;
             foreach (Match match in _split.Matches(text))
             {

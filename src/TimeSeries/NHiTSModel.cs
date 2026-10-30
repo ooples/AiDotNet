@@ -267,7 +267,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         // model worse. This is standard best-model checkpointing and needs no change
         // to the public options.
         double bestLoss = double.PositiveInfinity;
-        List<Vector<T>>? bestSnapshot = null;
+        Tensor<T>[]? bestSnapshot = null;
 
         // Valid window positions (idx with a full lookback AND target horizon), used
         // to score each epoch's FROZEN end-of-epoch weights for best-checkpoint
@@ -331,9 +331,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
             if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
             {
                 bestLoss = epochLoss;
-                bestSnapshot = new List<Vector<T>>(_stacks.Count);
-                foreach (var stack in _stacks)
-                    bestSnapshot.Add(stack.GetParameters());
+                bestSnapshot = SnapshotParameters(trainableParams, bestSnapshot);
             }
 
             // Surface the epoch to facade callbacks / patience-based early stopping (a diverged epoch reports
@@ -347,10 +345,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         // Restore the best checkpoint so late-epoch divergence cannot degrade the
         // returned model.
         if (bestSnapshot is not null)
-        {
-            for (int s = 0; s < _stacks.Count; s++)
-                _stacks[s].SetParameters(bestSnapshot[s]);
-        }
+            RestoreParameters(trainableParams, bestSnapshot);
     }
 
     /// <summary>

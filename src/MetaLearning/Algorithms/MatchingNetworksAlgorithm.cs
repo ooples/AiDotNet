@@ -478,19 +478,11 @@ internal sealed class MatchingMetric<T>
 
         Tensor<T> Run(TapeLstmCell<T> cell, bool reverse)
         {
-            var output = new Tensor<T>(new[] { 1, width });
-            var state = new Tensor<T>(new[] { 1, width });
-            Tensor<T>? outputs = null;
-            for (int step = 0; step < rows; step++)
-            {
-                int i = reverse ? rows - 1 - step : step;
-                var x = engine.TensorMatMul(Selector(1, rows, 0, i), support);
-                (output, state) = cell.Step(x, new[] { output }, state);
-                var placed = engine.TensorMatMul(Selector(rows, 1, i, 0), output);
-                outputs = outputs is null ? placed : engine.TensorAdd(outputs, placed);
-            }
-
-            return outputs ?? new Tensor<T>(new[] { rows, width });
+            var sequence = engine.Reshape(support, new[] { 1, rows, width });
+            if (reverse) sequence = engine.TensorFlip(sequence, new[] { 1 });
+            var output = cell.Sequence(sequence);
+            if (reverse) output = engine.TensorFlip(output, new[] { 1 });
+            return engine.Reshape(output, new[] { rows, width });
         }
 
         // g(x_i, S) = h_fwd_i + h_bwd_i + g'(x_i): the backward recursion starts from i = |S|.
@@ -619,13 +611,6 @@ internal sealed class MatchingMetric<T>
         _attention?.CopyGradients(gradients, queryContext, 0);
     }
 
-    /// <summary>A <c>[rows, columns]</c> tensor with a single one at <c>(row, column)</c>.</summary>
-    private static Tensor<T> Selector(int rows, int columns, int row, int column)
-    {
-        var selector = new Tensor<T>(new[] { rows, columns });
-        selector[row * columns + column] = Ops.One;
-        return selector;
-    }
 }
 
 /// <summary>
