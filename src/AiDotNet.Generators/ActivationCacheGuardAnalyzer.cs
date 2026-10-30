@@ -304,6 +304,8 @@ public class ActivationCacheGuardAnalyzer : DiagnosticAnalyzer
         foreach (var identifier in condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
         {
             if (model.GetSymbolInfo(identifier).Symbol is not ILocalSymbol local) continue;
+            // if (!cacheBwd) runs exactly when no backward is coming, so a negated stand-in is not a guard.
+            if (IsNegatedWithin(identifier, condition)) continue;
             var initializer = LocalInitializer(local, scope);
             if (initializer is not null && IsGuardCondition(initializer, model, scope, depth + 1)) return true;
         }

@@ -25,7 +25,7 @@ namespace AiDotNet.Attributes;
 /// genuinely needs the value again on a later call.</para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
-public sealed class KeepsActivationAttribute : Attribute
+internal sealed class KeepsActivationAttribute : Attribute
 {
     /// <summary>Why the field must keep its value beyond the forward pass that wrote it.</summary>
     public string Reason { get; }

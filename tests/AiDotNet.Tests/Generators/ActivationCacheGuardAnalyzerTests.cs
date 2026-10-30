@@ -174,6 +174,8 @@ public sealed class Subject : LayerBase
     [InlineData("        if (!this.ShouldCacheForBackward) _lastInput = input;")]
     [InlineData("        if (ShouldCacheForBackward == false) _lastInput = input;")]
     [InlineData("        if (!(IsTrainingMode && ShouldCacheForBackward)) _lastInput = input;")]
+    [InlineData("        bool cacheBwd = ShouldCacheForBackward;\n        if (!cacheBwd) _lastInput = input;")]
+    [InlineData("        bool cacheBwd = ShouldCacheForBackward;\n        if (cacheBwd == false) _lastInput = input;")]
     public async Task NegatedGuard_IsReported(string body)
     {
         Assert.Single(Unguarded(await RunAsync(Layer("    private Tensor<double> _lastInput;", body))));

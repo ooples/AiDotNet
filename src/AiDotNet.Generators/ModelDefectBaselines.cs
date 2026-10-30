@@ -599,7 +599,7 @@ internal static class ModelDefectBaselines
             "AiDotNet.VisionLanguage.VideoLanguage.VideoLLaVA<T>",
         };
 
-    /// <summary>ADN0065: fields written unguarded in a forward when the rule became an error, 820 fields (898 write sites); keyed Containing.Type.field.</summary>
+    /// <summary>ADN0065: fields still written unguarded in a forward, 566 after the activation-cache sweeps (820 fields, 898 write sites, when the rule became an error); keyed Containing.Type.field.</summary>
     internal static readonly System.Collections.Generic.HashSet<string> UnguardedActivationCaches =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
