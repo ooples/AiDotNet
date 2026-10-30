@@ -163,7 +163,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.SpeechRecognition.Multilingual.Chirp<T>",
             "AiDotNet.SpeechRecognition.Multilingual.Chirp2<T>",
             "AiDotNet.SpeechRecognition.Multilingual.Chirp3<T>",
-            "AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>",
             "AiDotNet.SpeechRecognition.Multilingual.OWSM<T>",
             "AiDotNet.SpeechRecognition.Multilingual.USM<T>",
             "AiDotNet.SpeechRecognition.NeMo.CanaryFlash<T>",
