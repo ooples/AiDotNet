@@ -186,10 +186,11 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         }
 
         double beta = _protoNetsOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_attentionQuery.Length > 0) _attentionQuery = ApplyGradients(_attentionQuery, attentionGradient, beta);
-        if (_mahalanobisLogScale.Length > 0) _mahalanobisLogScale = ApplyGradients(_mahalanobisLogScale, mahalanobisGradient, beta);
-        if (_classLogScale.Length > 0) _classLogScale = ApplyGradients(_classLogScale, classGradient, beta);
+        var updated = ApplyOuterGradients(beta, (body, bodyGradient), (_attentionQuery, attentionGradient), (_mahalanobisLogScale, mahalanobisGradient), (_classLogScale, classGradient));
+        ParamModel.SetParameters(updated[0]);
+        _attentionQuery = updated[1];
+        _mahalanobisLogScale = updated[2];
+        _classLogScale = updated[3];
 
         return NumOps.Divide(totalLoss, batchSize);
     }

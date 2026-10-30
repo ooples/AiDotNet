@@ -160,11 +160,12 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
         }
 
         double beta = _relationOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_relationWeights.Length > 0) _relationWeights = ApplyGradients(_relationWeights, relationGradient, beta);
-        if (_featureTransform.Length > 0) _featureTransform = ApplyGradients(_featureTransform, transformGradient, beta);
-        if (_poolingWeights.Length > 0) _poolingWeights = ApplyGradients(_poolingWeights, poolingGradient, beta);
-        if (_shotWeights.Length > 0) _shotWeights = ApplyGradients(_shotWeights, shotGradient, beta);
+        var updated = ApplyOuterGradients(beta, (body, bodyGradient), (_relationWeights, relationGradient), (_featureTransform, transformGradient), (_poolingWeights, poolingGradient), (_shotWeights, shotGradient));
+        ParamModel.SetParameters(updated[0]);
+        _relationWeights = updated[1];
+        _featureTransform = updated[2];
+        _poolingWeights = updated[3];
+        _shotWeights = updated[4];
 
         return NumOps.Divide(totalLoss, batchSize);
     }

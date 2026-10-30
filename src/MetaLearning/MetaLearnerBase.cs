@@ -914,7 +914,8 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         int total = 0;
         foreach (var (parameters, gradients) in groups)
         {
-            if (parameters.Length != gradients.Length)
+            // An empty group (a disabled component) contributes nothing, whatever its gradient holds.
+            if (parameters.Length > 0 && parameters.Length != gradients.Length)
                 throw new ArgumentException("Each group's gradient must have its parameters' length.", nameof(groups));
             total += parameters.Length;
         }

@@ -138,11 +138,9 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
 
         double beta = _mclOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_projectionWeights.Length > 0)
-        {
-            _projectionWeights = ApplyGradients(_projectionWeights, projectionGradient, beta);
-        }
+        var updated = ApplyOuterGradients(beta, (body, bodyGradient), (_projectionWeights, projectionGradient));
+        ParamModel.SetParameters(updated[0]);
+        _projectionWeights = updated[1];
 
         return NumOps.Divide(totalLoss, batchSize);
     }
