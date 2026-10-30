@@ -129,30 +129,6 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastConvOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastBeta;
-    [Scratch]
-    private Tensor<T>? _lastAlpha;
-    [Scratch]
-    private Tensor<T>? _lastGate;
-    [Scratch]
-    private Tensor<T>? _lastGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastSiluConv;
-    [Scratch]
-    private Tensor<T>? _lastDeltaRuleOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -335,46 +311,34 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Short convolution
         var convOutput = DepthwiseConv1DForward(input3D, batchSize, seqLen);
         var siluConv = Engine.Swish(convOutput);
-        _lastConvOutput = convOutput;
-        _lastSiluConv = siluConv;
 
         // Step 2: Q, K, V projections
         var siluFlat = Engine.Reshape(siluConv, new[] { batchSize * seqLen, _modelDimension });
         var q = Engine.Reshape(Engine.TensorMatMul(siluFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         var k = Engine.Reshape(Engine.TensorMatMul(siluFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(siluFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 3: Gates
         var betaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(siluFlat, _betaWeights),
             Engine.Reshape(_betaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var beta = Engine.Sigmoid(betaRaw);
-        _lastBeta = beta;
 
         var alphaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(siluFlat, _alphaWeights),
             Engine.Reshape(_alphaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
-        _lastAlpha = alpha;
 
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(siluFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
-        _lastGate = gate;
-        _lastGateRaw = gateRaw;
 
         // Step 4: Delta rule recurrence per head
         var output = Engine.GatedDeltaNetScanForward(q, k, v, alpha, beta, _numHeads);
-        _lastDeltaRuleOutput = output;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(output, gate);
@@ -387,7 +351,6 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -504,18 +467,6 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastConvOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastBeta = null;
-        _lastAlpha = null;
-        _lastGate = null;
-        _lastGateRaw = null;
-        _lastSiluConv = null;
-        _lastDeltaRuleOutput = null;
         _originalInputShape = null;
         _convWeightsGradient = null;
         _convBiasGradient = null;
