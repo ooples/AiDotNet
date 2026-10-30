@@ -53,6 +53,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 ///     inputSize: 168, outputSize: 24);
 ///
 /// var model = new CCDM&lt;double&gt;(architecture);
+/// var history = Tensor&lt;double&gt;.CreateRandom(new[] { 1, 168 });          // the last 168 observations
 /// var forecast = model.Forecast(history);                                  // median of 100 paths
 /// var bands = model.Forecast(history, quantiles: new[] { 0.1, 0.5, 0.9 }); // [1, horizon, 3]
 /// </code>

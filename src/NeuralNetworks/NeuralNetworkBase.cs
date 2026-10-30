@@ -5794,6 +5794,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // it should have declared [-1, 16].
                     currentShape = outShape;
                     if (outShape.Length >= 2) lastGoodShape = outShape;
+                    else if (TryApplyFeatureAxisWidth(layer, lastGoodShape, outShape) is { } carried)
+                        lastGoodShape = carried;
                 }
 
                 // ...but the layer must not keep CLAIMING the spatial dims this walk inferred. They
@@ -5818,6 +5820,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// The sequence shape after a per-feature layer, or null when the layer is not one.
+    /// </summary>
+    /// <remarks>
+    /// A dense or normalization layer declares rank-1 shapes ([features] in, [width] out) but runs along the last axis
+    /// of a [time, features] sequence, keeping the leading axes. The walk records only rank-2+ outputs as its
+    /// fallback, so without this the fallback stayed at the shape from before the projection: in EfficientConformer
+    /// the stage-1 frame splicer resolved from [32, 64] (the stage-0 splicer's output) where its real input is
+    /// [32, 32], declared [16, 128] while computing [16, 64], and every training step failed its shape check.
+    /// It applies only when the layer's own input is exactly the fallback's last axis.
+    /// </remarks>
+    private static int[]? TryApplyFeatureAxisWidth(ILayer<T> layer, int[] lastGoodShape, int[] outShape)
+    {
+        if (outShape.Length != 1 || lastGoodShape.Length < 2) return null;
+        int[] inShape;
+        try { inShape = layer.GetInputShape(); }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return null; }
+        if (inShape.Length != 1 || inShape[0] != lastGoodShape[^1]) return null;
+        var carried = (int[])lastGoodShape.Clone();
+        carried[^1] = outShape[0];
+        return carried;
     }
 
     /// <summary>
