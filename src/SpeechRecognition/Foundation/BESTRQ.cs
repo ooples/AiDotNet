@@ -9,31 +9,39 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.SpeechRecognition.Foundation;
 
 /// <summary>
-/// BEST-RQ: BERT-based self-supervised learning with random-projection quantizer
+/// BEST-RQ: a Conformer speech encoder pre-trained to predict the labels a fixed random-projection quantizer assigns to the
+/// masked input, with a CTC layer for recognition.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Self-supervised Learning with Random-Projection Quantizer for Speech Recognition" (Chiu et al., Google, 2022)</item></list></para>
-/// <para><b>For Beginners:</b> BEST-RQ simplifies self-supervised speech pre-training by replacing learned codebooks with a fixed random-projection quantizer. Input speech features are projected by a random matrix and nearest-neighbor quantized to provide targets for masked pre...</para>
+/// <para><b>For Beginners:</b> BEST-RQ learns from unlabeled speech by hiding parts of it and guessing what was hidden. The
+/// "answers" come from a random matrix and a random codebook that are never trained: each chunk of the original audio
+/// features is projected by the matrix and labelled with its nearest codebook entry. After this pre-training the encoder
+/// is fine-tuned on transcribed speech.</para>
 /// <para>
-/// BEST-RQ simplifies self-supervised speech pre-training by replacing learned codebooks with a fixed random-projection quantizer. Input speech features are projected by a random matrix and nearest-neighbor quantized to provide targets for masked prediction. This eliminates the complex codebook learning of wav2vec 2.0 and the iterative clustering of HuBERT, while achieving competitive ASR performance. The simplicity enables efficient pre-training at scale.
+/// The network is the paper's 0.6B non-streaming model (section 4.1.1): normalized 80-bin log-mel input at a 10 ms stride,
+/// two stride-2 convolutions for 4x reduction, and 24 Conformer XL blocks (Zhang et al. 2020: 1024 wide, 8 heads, kernel 5,
+/// no relative positional embedding). <see cref="Pretrain"/> runs the masked-prediction objective of section 3.2; ordinary
+/// training fine-tunes through a projection layer and a CTC layer (the paper fine-tunes an RNN-T decoder instead).
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a BEST-RQ model for self-supervised speech pre-training
+/// // Create a BEST-RQ recognizer (Conformer XL with a CTC layer)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
-///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
 /// var model = new BESTRQ&lt;double&gt;(architecture);
 ///
-/// // Or load a pre-trained ONNX model for random-projection quantized ASR
+/// // Or load an exported ONNX model
 /// var onnxModel = new BESTRQ&lt;double&gt;(architecture, "bestrq.onnx");
 /// </code>
 /// </example>
@@ -46,38 +54,43 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-supervised Learning with Random-Projection Quantizer for Speech Recognition", "https://arxiv.org/abs/2202.01855", Year = 2022, Authors = "Chiu et al.")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.004, WarmupSteps = 25000,
-                Source = "Chiu et al. 2022, Sec. 4: the Adam optimizer with a 0.004 peak learning rate "
-                        + "and 25000 warmup steps. The separate constant 1e-4 at batch size 256 in the "
-                        + "same section trains the quantizer, not this model.")]
+                Schedule = LearningRateSchedulerType.Noam, Phase = TrainingPhase.PreTraining,
+                Source = "Chiu et al. 2022, Sec. 4.1.1: pre-training uses the Transformer learning rate schedule "
+                        + "(Vaswani et al. 2017) and the Adam optimizer with a 0.004 peak learning rate and 25000 "
+                        + "warm-up steps, at batch size 2048.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4, WarmupSteps = 5000,
+                Schedule = LearningRateSchedulerType.Noam, Phase = TrainingPhase.FineTuning,
+                Source = "Chiu et al. 2022, Sec. 4.1.1: fine-tuning uses the Transformer schedule with a lower rate for "
+                        + "the pre-trained encoder (0.0003 peak, 5000 warm-up steps) than for the decoder (0.001 peak, "
+                        + "1500 warm-up steps). This row is the encoder's, which holds nearly all the weights.")]
 public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
-    /// <remarks>
-    /// Measured from this model's own output head, and deliberately NOT from the random-projection
-    /// quantizer's codebook that gives BEST-RQ its name: <c>InitializeLayers</c> builds
-    /// <c>LayerHelper&lt;T&gt;.CreateDefaultFoundationASRLayers(..., vocabSize: _options.VocabSize, ...)</c>,
-    /// whose LAST emitted layer is the CTC fine-tuning head
-    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. The codebook belongs to self-supervised
-    /// pre-training and appears nowhere in the emitted stack. <c>PredictCore</c> delegates to the base
-    /// fold and <c>PostprocessOutput</c> is the identity.
-    /// </remarks>
+    /// <remarks>The CTC layer's width: the pre-training softmax over the codebook is used only by <see cref="Pretrain"/>.</remarks>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
     private readonly BESTRQOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _suppliedOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _pretrainingOptimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private BestRqNetwork<T>? _network;
+    private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
+    internal BestRqNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public BESTRQ(NeuralNetworkArchitecture<T> architecture, string modelPath, BESTRQOptions? options = null) : base(architecture) { _options = options ?? new BESTRQOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public BESTRQ(NeuralNetworkArchitecture<T> architecture, BESTRQOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new BESTRQOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
-        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public BESTRQ(NeuralNetworkArchitecture<T> architecture, string modelPath, BESTRQOptions? options = null) : base(architecture) { _options = options ?? new BESTRQOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = 0; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public BESTRQ(NeuralNetworkArchitecture<T> architecture, BESTRQOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new BESTRQOptions(); Options = _options; _useNativeMode = true; _suppliedOptimizer = optimizer; _optimizer = optimizer
+        // Ordinary training fine-tunes on transcripts; Pretrain builds the pre-training recipe's optimizer.
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.FineTuning)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = 0; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
-    /// Transcribes audio using BEST-RQ's random-projection quantizer encoder with CTC.
-    /// Per Chiu et al. (2022): speech features are quantized via fixed random projections
-    /// for masked prediction targets. The SSL encoder + CTC head transcribes speech.
+    /// Transcribes audio: the encoder, projection and CTC layer give per-frame distributions, decoded greedily.
     /// </summary>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
@@ -85,15 +98,7 @@ public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var features = PreprocessAudio(audio);
         Tensor<T> logits;
 
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            logits = OnnxEncoder.Run(features);
-        }
-        else
-        {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
-        }
+        logits = Logits(features, training: false);
 
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
@@ -110,25 +115,107 @@ public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("BESTRQ does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFoundationASRLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, featureDim: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        _network = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network: Conformer XL over normalized log-mel features, with the fixed random-projection quantizer,
+        // the pre-training softmax and the fine-tuning projection + CTC layer (Chiu et al. 2022). It used to be a generic
+        // Transformer template with no quantizer at all (#2321).
+        var layers = new List<LayerBase<T>>();
+        _network = new BestRqNetwork<T>(Engine, layers, _options, Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42));
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        Layers.AddRange(layers);
+    }
+
+    // BEST-RQ reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_network is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private double[] Samples(Tensor<T> waveform, int offset, int count)
+    {
+        var samples = new double[count];
+        var span = waveform.Data.Span;
+        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
+        return samples;
+    }
+
+    // CTC logits [frames, vocab] for a waveform [S], or [batch, frames, vocab] for [batch, S].
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        if (input.Rank == 1) return _network.CtcLogits(_network.Encode(_network.Features(Samples(input, 0, input.Length)), training));
+        int rows = input.Shape[0], samples = input.Length / rows;
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+            outputs[r] = _network.CtcLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
+        return Engine.TensorStack(outputs, 0);
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    /// <summary>
+    /// The masked-prediction pre-training loss of waveforms <c>[S]</c> or <c>[batch, S]</c> (Chiu et al. 2022, section
+    /// 3.2), averaged over the batch: the encoder sees the input with spans replaced by noise and predicts, at every masked
+    /// frame, the label the fixed random-projection quantizer gives the unmasked input.
+    /// </summary>
+    /// <param name="audio">The waveforms.</param>
+    /// <param name="random">The mask and noise draws; the model's own generator when null.</param>
+    public T PretrainingLoss(Tensor<T> audio, Random? random = null)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxEncoder is not null)
-            return OnnxEncoder.Run(input);
-        return base.PredictCore(input);
+        using var _ = new NoGradScope<T>();
+        return PretrainingLossTensor(audio, training: false, random ?? _random)[0];
     }
+
+    private Tensor<T> PretrainingLossTensor(Tensor<T> audio, bool training, Random random)
+    {
+        var network = _network ?? throw new InvalidOperationException("Pre-training runs on the native BEST-RQ network.");
+        int rows = audio.Rank == 1 ? 1 : audio.Shape[0], samples = audio.Length / rows;
+        Tensor<T>? total = null;
+        for (int r = 0; r < rows; r++)
+        {
+            var loss = network.PretrainingLoss(Samples(audio, r * samples, samples), training, random);
+            total = total is null ? loss : Engine.TensorAdd(total, loss);
+        }
+        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(audio)), NumOps.FromDouble(1.0 / rows));
+    }
+
+    /// <summary>One self-supervised pre-training step (section 3.2) on waveforms <c>[S]</c> or <c>[batch, S]</c>.</summary>
+    /// <param name="audio">The unlabeled waveforms.</param>
+    /// <returns>The step's loss.</returns>
+    public T Pretrain(Tensor<T> audio)
+    {
+        ThrowIfDisposed();
+        if (_network is null) throw new NotSupportedException("Pre-training runs on the native BEST-RQ network.");
+        // A caller's optimizer serves both phases; otherwise the paper's pre-training recipe (section 4.1.1).
+        _pretrainingOptimizer ??= _suppliedOptimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.PreTraining)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+    }
+
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "BESTRQ-Native" : "BESTRQ-ONNX", Description = "BEST-RQ: random-projection quantizer SSL + CTC (Google, 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "BESTRQ-Native" : "BESTRQ-ONNX", Description = "BEST-RQ: Conformer XL pre-trained with a random-projection quantizer, with a CTC layer (Google, 2022)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
 

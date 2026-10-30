@@ -12278,20 +12278,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "BESTRQ" && model.TypeParameterCount == 1)
             {
-                // BEST-RQ production retains its 768-wide, 12-layer SSL encoder and
-                // 5,000-way posterior head. FP32 was insufficient: batch-consistency
-                // inference exhausted the runner while lazily materializing an encoder
-                // FFN. Exercise the same feature projection -> residual Transformer
-                // encoder -> random-quantizer/CTC posterior topology through public
-                // options at bounded scale; the fixed-quantizer semantics remain owned
-                // by BESTRQ while this differentiable stack predicts its targets.
+                // BEST-RQ's defaults are the paper's 0.6B Conformer XL (24 blocks, 1024 wide) with an 8192-entry
+                // codebook. The fixture is the same log-mel -> conv subsampling -> Conformer -> projection + CTC
+                // network and quantizer at width 32, 2 blocks, 32 mel bins and a 64-entry codebook.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.Foundation.BESTRQOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 16, MaxAudioLengthSeconds = 1, DropoutRate = 0.0 })";
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, CodebookSize = 64, VocabSize = 16, " +
+                    "MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "XTTSv2" && model.TypeParameterCount == 1)
             {
@@ -17026,6 +17022,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // overstates recurrent work while violating the public streaming input contract.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 512 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
+            }
+            else if (model.ClassName == "BESTRQ")
+            {
+                // BEST-RQ reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 16 };");
             }
             else if (model.ClassName == "W2vBert")
             {
