@@ -6238,8 +6238,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!GradientCorrectnessInvariantApplicable) return;
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var targetA = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
-        var targetB = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+        // The targets the model's real training consumes: a declared objective may derive its target from the
+        // input (a reconstruction, GloVe's co-occurrence counts), and then two proposed targets are one target.
+        var targetA = ResolveTrainingObjectiveTarget(
+            network, input, CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng));
+        var targetB = ResolveTrainingObjectiveTarget(
+            network, input, CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng));
 
         // FIXTURE GUARD, and it is not a formality — without it this invariant manufactures findings.
         // MakeTargetWellPosedForLoss projects a target into the shape its loss can actually use, and for

@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Training;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
@@ -87,21 +88,16 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     private List<ColumnMetadata> _columns = new();
     private Random _random;
 
-    // Transformer layers (auxiliary, Q/K/V/Out projections + FFN per layer)
-    private readonly List<FullyConnectedLayer<T>> _attentionQueryLayers = new();
-    private readonly List<FullyConnectedLayer<T>> _attentionKeyLayers = new();
-    private readonly List<FullyConnectedLayer<T>> _attentionValueLayers = new();
-    private readonly List<FullyConnectedLayer<T>> _attentionOutputLayers = new();
-    private readonly List<FullyConnectedLayer<T>> _ffnLayer1s = new();
-    private readonly List<FullyConnectedLayer<T>> _ffnLayer2s = new();
-
-    // Residual dropout, one per transformer block, driven by REaLTabFormerOptions.DropoutRate.
-    // Parameterless, so it stays out of the Layers list that the FFN pairs are indexed from.
-    private readonly List<DropoutLayer<T>> _ffnDropouts = new();
+    // The GPT-2 decoder (token + position embeddings, causal blocks, final norm), built for the fitted vocabulary.
+    // Its feed-forward pairs are the Layers list's when the default layers are in use.
+    private CausalTokenTransformer<T>? _transformer;
 
     // Per-column output heads (auxiliary, depend on data columns)
     private readonly List<FullyConnectedLayer<T>> _outputHeads = new();
     private readonly List<int> _vocabSizes = new();
+    // Column c's tokens are ids _tokenOffsets[c] .. _tokenOffsets[c] + _vocabSizes[c] - 1 of the shared vocabulary; id 0
+    // is the beginning-of-row token.
+    private readonly List<int> _tokenOffsets = new();
 
     // Column tokenization info
     private readonly List<double[]> _binEdges = new();
@@ -194,54 +190,27 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     }
 
     /// <summary>
-    /// Builds the transformer attention layers (auxiliary, not user-overridable).
+    /// Builds the decoder for the fitted vocabulary (beginning-of-row token plus every column's tokens) and one output
+    /// head per column over that column's tokens.
     /// </summary>
-    private void BuildTransformerAttention()
+    private void BuildNetworks()
     {
-        _attentionQueryLayers.Clear();
-        _attentionKeyLayers.Clear();
-        _attentionValueLayers.Clear();
-        _attentionOutputLayers.Clear();
-        _ffnLayer1s.Clear();
-        _ffnLayer2s.Clear();
-        _ffnDropouts.Clear();
-
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int d = _embDim;
-
-        for (int l = 0; l < _options.NumLayers; l++)
+        _tokenOffsets.Clear();
+        int vocabulary = 1;
+        foreach (int size in _vocabSizes)
         {
-            _attentionQueryLayers.Add(new FullyConnectedLayer<T>(d, identity));
-            _attentionKeyLayers.Add(new FullyConnectedLayer<T>(d, identity));
-            _attentionValueLayers.Add(new FullyConnectedLayer<T>(d, identity));
-            _attentionOutputLayers.Add(new FullyConnectedLayer<T>(d, identity));
-
-            // FFN layers reference the Layers list for user-overridable layers
-            if (!_usingCustomLayers && Layers.Count >= (l + 1) * 2)
-            {
-                _ffnLayer1s.Add((FullyConnectedLayer<T>)Layers[l * 2]);
-                _ffnLayer2s.Add((FullyConnectedLayer<T>)Layers[l * 2 + 1]);
-            }
-            else
-            {
-                _ffnLayer1s.Add(new FullyConnectedLayer<T>(_options.FeedForwardDimension, relu));
-                _ffnLayer2s.Add(new FullyConnectedLayer<T>(d, identity));
-            }
-
-            _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
+            _tokenOffsets.Add(vocabulary);
+            vocabulary += size;
         }
-    }
 
-    /// <summary>
-    /// Builds per-column output heads (auxiliary, depend on data columns and vocab sizes).
-    /// </summary>
-    private void BuildOutputHeads()
-    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var feedForward = CausalTokenTransformer<T>.PairFeedForward(
+            Layers, _options.NumLayers, _options.FeedForwardDimension, _embDim, relu);
+        _transformer = new CausalTokenTransformer<T>(
+            vocabulary, Math.Max(1, _seqLength), _embDim, _options.NumHeads, _options.DropoutRate, feedForward);
+
         _outputHeads.Clear();
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-        int d = _embDim;
-
         for (int col = 0; col < _seqLength; col++)
         {
             _outputHeads.Add(new FullyConnectedLayer<T>(_vocabSizes[col], identity));
@@ -256,32 +225,17 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
-        _columns = columns.ToList();
-        _seqLength = columns.Count;
+        var tokenizedData = PrepareForData(data, columns);
 
-        // Step 1: Tokenize data
-        PrepareTokenization(data, columns);
-        var tokenizedData = TokenizeData(data);
-
-        // Step 2: Build transformer attention and output heads
-        BuildTransformerAttention();
-        BuildOutputHeads();
-
-        // Step 3: Training loop
-        int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        int numBatches = Math.Max(1, data.Rows / batchSize);
-        T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
-
+        int batchSize = Math.Max(1, Math.Min(_options.BatchSize, data.Rows));
+        var order = Enumerable.Range(0, data.Rows).ToArray();
         for (int epoch = 0; epoch < epochCount; epoch++)
         {
-            for (int batch = 0; batch < numBatches; batch++)
+            Shuffle(order);
+            for (int start = 0; start < data.Rows; start += batchSize)
             {
-                int startRow = batch * batchSize;
-                int endRow = Math.Min(startRow + batchSize, data.Rows);
-
-                for (int row = startRow; row < endRow; row++)
-                {
-                }
+                int count = Math.Min(batchSize, data.Rows - start);
+                TrainStep(tokenizedData, order, start, count);
             }
         }
 
@@ -301,44 +255,153 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// One training step of the autoregressive objective on <paramref name="realData"/>'s rows as one batch. The first
+    /// call (or one with a new column count) fits the tokenizer and builds the networks from these rows, every column
+    /// continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        TrainStep(TokenizeData(rows), Enumerable.Range(0, rows.Rows).ToArray(), 0, rows.Rows);
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the tokenizer to <paramref name="data"/> and builds the networks for its vocabulary; returns the tokens.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = columns.ToList();
+        _seqLength = columns.Count;
+        PrepareTokenization(data, columns);
+        BuildNetworks();
+        return TokenizeData(data);
+    }
+
+    /// <summary>
+    /// One step of the GPT-2 objective (Solatorio and Dupriez 2023 §3): the mean over columns of the cross-entropy of
+    /// each column's token given the tokens of the columns before it, over the rows <paramref name="order"/>[start ..
+    /// start + count).
+    /// </summary>
+    private void TrainStep(Matrix<T> tokenizedData, int[] order, int start, int count)
+    {
+        var transformer = _transformer ?? throw new InvalidOperationException("The decoder was not built.");
+
+        int totalVocab = _vocabSizes.Sum();
+        var inputs = new Tensor<T>([count, _seqLength]);
+        var targets = new Tensor<T>([count, totalVocab]);
+        for (int b = 0; b < count; b++)
+        {
+            int row = order[start + b];
+            int targetOffset = 0;
+            for (int col = 0; col < _seqLength; col++)
+            {
+                int token = (int)NumOps.ToDouble(tokenizedData[row, col]);
+                if (col + 1 < _seqLength) inputs[b, col + 1] = NumOps.FromDouble(_tokenOffsets[col] + token);
+                targets[b, targetOffset + token] = NumOps.One;
+                targetOffset += _vocabSizes[col];
+            }
+        }
+
+        var layers = new List<ILayer<T>>(transformer.Layers);
+        layers.AddRange(_outputHeads);
+        var trainable = layers.OfType<ITrainableLayer<T>>().ToList();
+        AiDotNet.Training.FusedTrainingStep<T>.Step(
+            this, trainable, inputs, targets,
+            forward: x => ColumnLogits(transformer.Forward(x, training: true)),
+            computeLoss: ColumnCrossEntropy,
+            optimizer: _optimizer,
+            extraTensors: TapeTrainingStep<T>.CollectParameters(layers));
+    }
+
+    /// <summary>
+    /// Every column's logits side by side [batch, sum of vocabularies]: column c's head on the hidden state at position
+    /// c, which has seen the beginning-of-row token and the tokens of columns 0 .. c-1.
+    /// </summary>
+    private Tensor<T> ColumnLogits(Tensor<T> hidden)
+    {
+        int batch = hidden.Shape[0];
+        int columns = Math.Min(_outputHeads.Count, hidden.Shape[1]);
+        var logits = new Tensor<T>[columns];
+        for (int col = 0; col < columns; col++)
+            logits[col] = _outputHeads[col].Forward(PositionHidden(hidden, col));
+        return logits.Length == 1 ? logits[0] : Engine.TensorConcatenate(logits, axis: 1);
+    }
+
+    private Tensor<T> PositionHidden(Tensor<T> hidden, int position)
+    {
+        int batch = hidden.Shape[0];
+        int d = hidden.Shape[2];
+        return Engine.Reshape(Engine.TensorSlice(hidden, [0, position, 0], [batch, 1, d]), [batch, d]);
+    }
+
+    /// <summary>
+    /// The mean over columns of the batch-mean softmax cross-entropy of each column's logits against its one-hot target.
+    /// </summary>
+    private Tensor<T> ColumnCrossEntropy(Tensor<T> logits, Tensor<T> targets)
+    {
+        int batch = logits.Shape[0];
+        int offset = 0;
+        Tensor<T>? total = null;
+        foreach (int size in _vocabSizes)
+        {
+            var columnLogits = Engine.TensorSlice(logits, [0, offset], [batch, size]);
+            var columnTargets = Engine.TensorSlice(targets, [0, offset], [batch, size]);
+            var logp = Engine.TensorLog(Engine.TensorAddScalar(Engine.Softmax(columnLogits, axis: 1), NumOps.FromDouble(1e-8)));
+            var perRow = Engine.ReduceSum(Engine.TensorMultiply(columnTargets, logp), [1], keepDims: false);
+            var ce = Engine.TensorNegate(Engine.ReduceMean(perRow, [0], keepDims: false));
+            total = total is null ? ce : Engine.TensorAdd(total, ce);
+            offset += size;
+        }
+        return Engine.TensorMultiplyScalar(total ?? new Tensor<T>([1]), NumOps.FromDouble(1.0 / Math.Max(1, _vocabSizes.Count)));
+    }
+
+    private void Shuffle(int[] order)
+    {
+        for (int i = order.Length - 1; i > 0; i--)
+        {
+            int j = _random.Next(i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+    }
+
+    /// <inheritdoc />
     public Matrix<T> Generate(int numSamples, Vector<T>? conditionColumn = null, Vector<T>? conditionValue = null)
     {
-        if (_outputHeads.Count == 0)
+        var transformer = _transformer;
+        if (transformer is null || _outputHeads.Count == 0)
         {
             throw new InvalidOperationException("Generator is not fitted. Call Fit() first.");
         }
-
-        var result = new Matrix<T>(numSamples, _seqLength);
-
-        for (int i = 0; i < numSamples; i++)
+        if (numSamples <= 0)
         {
-            var tokenSequence = new int[_seqLength];
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
+        }
 
-            // Autoregressive generation: left to right
-            for (int col = 0; col < _seqLength; col++)
+        // Autoregressive sampling, left to right, every sample at once: column c is drawn from its head on position
+        // c of the prefix (beginning-of-row token, then the columns drawn so far).
+        var tokens = new int[numSamples, _seqLength];
+        var prefix = new Tensor<T>([numSamples, _seqLength]);
+        for (int col = 0; col < _seqLength; col++)
+        {
+            var window = col + 1 == _seqLength ? prefix : Engine.TensorSlice(prefix, [0, 0], [numSamples, col + 1]);
+            var hidden = transformer.Forward(window, training: false);
+            var logits = _outputHeads[col].Forward(PositionHidden(hidden, col));
+            for (int i = 0; i < numSamples; i++)
             {
-                // Compute embedding for all columns generated so far
-                var embeddings = ComputeEmbeddings(tokenSequence, col + 1);
-
-                // Run through transformer
-                var hiddenStates = TransformerForward(embeddings, col + 1);
-
-                // Get logits for current column from its output head
-                var lastHidden = ExtractColumnHidden(hiddenStates, col);
-                var logits = _outputHeads[col].Forward(VectorToTensor(lastHidden));
-
-                // Sample with temperature
-                int sampledToken = SampleFromLogits(logits, _options.Temperature);
-                tokenSequence[col] = sampledToken;
-            }
-
-            // Detokenize
-            for (int col = 0; col < _seqLength; col++)
-            {
-                result[i, col] = NumOps.FromDouble(DetokenizeValue(col, tokenSequence[col]));
+                int token = SampleFromLogits(logits, i, _options.Temperature);
+                tokens[i, col] = token;
+                if (col + 1 < _seqLength) prefix[i, col + 1] = NumOps.FromDouble(_tokenOffsets[col] + token);
             }
         }
 
+        var result = new Matrix<T>(numSamples, _seqLength);
+        for (int i = 0; i < numSamples; i++)
+            for (int col = 0; col < _seqLength; col++)
+                result[i, col] = NumOps.FromDouble(DetokenizeValue(col, tokens[i, col]));
         return result;
     }
 
@@ -444,247 +507,29 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
 
     #endregion
 
-    #region Forward Pass
-
-    private Vector<T> ComputeEmbeddings(int[] tokens, int length)
-    {
-        int d = _embDim;
-        var embeddings = new Vector<T>(length * d);
-
-        for (int pos = 0; pos < length; pos++)
-        {
-            int token = pos < tokens.Length ? tokens[pos] : 0;
-            int vocabSize = _vocabSizes[pos];
-
-            // Token embedding: scale token index to [-1, 1] and project
-            double tokenScale = vocabSize > 1 ? (2.0 * token / (vocabSize - 1) - 1.0) : 0;
-
-            for (int j = 0; j < d; j++)
-            {
-                double posEnc;
-                if (j % 2 == 0)
-                {
-                    posEnc = Math.Sin(pos / Math.Pow(10000.0, (double)j / d));
-                }
-                else
-                {
-                    posEnc = Math.Cos(pos / Math.Pow(10000.0, (double)(j - 1) / d));
-                }
-
-                // Combine token and position
-                double val = tokenScale * 0.1 + posEnc;
-                embeddings[pos * d + j] = NumOps.FromDouble(val);
-            }
-        }
-
-        return embeddings;
-    }
-
-    private Vector<T> TransformerForward(Vector<T> embeddings, int seqLen)
-    {
-        int d = _embDim;
-        var current = embeddings;
-
-        for (int l = 0; l < _options.NumLayers; l++)
-        {
-            // Causal self-attention
-            current = CausalSelfAttention(current, seqLen, l);
-
-            // Feed-forward network per position
-            current = FeedForwardPerPosition(current, seqLen, l);
-        }
-
-        return current;
-    }
-
-    private Vector<T> CausalSelfAttention(Vector<T> input, int seqLen, int layerIdx)
-    {
-        int d = _embDim;
-        var output = new Vector<T>(seqLen * d);
-
-        for (int pos = 0; pos < seqLen; pos++)
-        {
-            var queryInput = ExtractPosition(input, pos, d);
-            var queryTensor = _attentionQueryLayers[layerIdx].Forward(VectorToTensor(queryInput));
-            var query = TensorToVector(queryTensor, d);
-
-            // Compute attention weights over positions [0, pos]
-            var attnWeights = new double[pos + 1];
-            double maxWeight = double.MinValue;
-
-            for (int k = 0; k <= pos; k++)
-            {
-                var keyInput = ExtractPosition(input, k, d);
-                var keyTensor = _attentionKeyLayers[layerIdx].Forward(VectorToTensor(keyInput));
-                var key = TensorToVector(keyTensor, d);
-
-                double dot = 0;
-                for (int j = 0; j < d; j++)
-                {
-                    dot += NumOps.ToDouble(query[j]) * NumOps.ToDouble(key[j]);
-                }
-                attnWeights[k] = dot / Math.Sqrt(d);
-                if (attnWeights[k] > maxWeight) maxWeight = attnWeights[k];
-            }
-
-            // Softmax
-            double sumExp = 0;
-            for (int k = 0; k <= pos; k++)
-            {
-                attnWeights[k] = Math.Exp(attnWeights[k] - maxWeight);
-                sumExp += attnWeights[k];
-            }
-            for (int k = 0; k <= pos; k++)
-            {
-                attnWeights[k] /= Math.Max(sumExp, 1e-10);
-            }
-
-            // Weighted sum of values
-            var attnOutput = new double[d];
-            for (int k = 0; k <= pos; k++)
-            {
-                var valInput = ExtractPosition(input, k, d);
-                var valTensor = _attentionValueLayers[layerIdx].Forward(VectorToTensor(valInput));
-                var val = TensorToVector(valTensor, d);
-
-                for (int j = 0; j < d; j++)
-                {
-                    attnOutput[j] += attnWeights[k] * NumOps.ToDouble(val[j]);
-                }
-            }
-
-            // Output projection + residual
-            var attnVec = new Vector<T>(d);
-            for (int j = 0; j < d; j++) attnVec[j] = NumOps.FromDouble(attnOutput[j]);
-            var projTensor = _attentionOutputLayers[layerIdx].Forward(VectorToTensor(attnVec));
-            var proj = TensorToVector(projTensor, d);
-
-            for (int j = 0; j < d; j++)
-            {
-                double residual = NumOps.ToDouble(input[pos * d + j]);
-                output[pos * d + j] = NumOps.FromDouble(NumOps.ToDouble(proj[j]) + residual);
-            }
-        }
-
-        return output;
-    }
-
-    private Vector<T> FeedForwardPerPosition(Vector<T> input, int seqLen, int layerIdx)
-    {
-        int d = _embDim;
-        var output = new Vector<T>(seqLen * d);
-
-        for (int pos = 0; pos < seqLen; pos++)
-        {
-            var posInput = ExtractPosition(input, pos, d);
-            var hidden = _ffnLayer1s[layerIdx].Forward(VectorToTensor(posInput));
-            var ffnOut = _ffnLayer2s[layerIdx].Forward(hidden);
-            if (layerIdx < _ffnDropouts.Count)
-            {
-                _ffnDropouts[layerIdx].SetTrainingMode(IsTrainingMode);
-                ffnOut = _ffnDropouts[layerIdx].Forward(ffnOut);
-            }
-            var ffnVec = TensorToVector(ffnOut, d);
-
-            // Residual connection
-            for (int j = 0; j < d; j++)
-            {
-                output[pos * d + j] = NumOps.FromDouble(
-                    NumOps.ToDouble(ffnVec[j]) + NumOps.ToDouble(input[pos * d + j]));
-            }
-        }
-
-        return output;
-    }
-
-    private Vector<T> ExtractColumnHidden(Vector<T> hiddenStates, int col)
-    {
-        int d = _embDim;
-        var result = new Vector<T>(d);
-        for (int j = 0; j < d && (col * d + j) < hiddenStates.Length; j++)
-        {
-            result[j] = hiddenStates[col * d + j];
-        }
-        return result;
-    }
-
-    private static Vector<T> ExtractPosition(Vector<T> sequence, int pos, int dim)
-    {
-        var result = new Vector<T>(dim);
-        for (int j = 0; j < dim && (pos * dim + j) < sequence.Length; j++)
-        {
-            result[j] = sequence[pos * dim + j];
-        }
-        return result;
-    }
-
-    #endregion
-
-    #region Training
-
-    private Tensor<T> ComputeCrossEntropyGrad(Tensor<T> logits, int targetToken)
-    {
-        var grad = new Tensor<T>(logits._shape);
-        double maxVal = double.MinValue;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal) maxVal = v;
-        }
-
-        double sumExp = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            sumExp += Math.Exp(NumOps.ToDouble(logits[i]) - maxVal);
-        }
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double softmax = Math.Exp(NumOps.ToDouble(logits[i]) - maxVal) / Math.Max(sumExp, 1e-10);
-            double target = i == targetToken ? 1.0 : 0.0;
-            grad[i] = NumOps.FromDouble(softmax - target);
-        }
-
-        return grad;
-    }
-
-    private void UpdateTransformerParameters(T lr)
-    {
-        // Note: Transformer attention and FFN layers are used in Forward() during training,
-        // but their Backward() is not called in the current simplified implementation.
-        // FullyConnectedLayer.UpdateParameters() throws if Backward() was never called
-        // (because _weightsGradient is null). Until proper backward propagation through
-        // transformer layers is implemented (requires full attention backward), we skip
-        // these updates. Output heads are updated in TrainRow() after their Backward() call.
-    }
-
-    #endregion
-
     #region Sampling
 
-    private int SampleFromLogits(Tensor<T> logits, double temperature)
+    private int SampleFromLogits(Tensor<T> logits, int row, double temperature)
     {
-        int vocabSize = logits.Length;
+        int vocabSize = logits.Shape[1];
         if (vocabSize == 0) return 0;
+        double t = Math.Max(temperature, 1e-10);
 
-        // Apply temperature
         double maxVal = double.MinValue;
         for (int i = 0; i < vocabSize; i++)
         {
-            double v = NumOps.ToDouble(logits[i]) / Math.Max(temperature, 1e-10);
+            double v = NumOps.ToDouble(logits[row, i]) / t;
             if (v > maxVal) maxVal = v;
         }
 
-        // Compute probabilities
         var probs = new double[vocabSize];
         double sumExp = 0;
         for (int i = 0; i < vocabSize; i++)
         {
-            probs[i] = Math.Exp(NumOps.ToDouble(logits[i]) / Math.Max(temperature, 1e-10) - maxVal);
+            probs[i] = Math.Exp(NumOps.ToDouble(logits[row, i]) / t - maxVal);
             sumExp += probs[i];
         }
 
-        // Normalize and sample
         double u = _random.NextDouble() * sumExp;
         double cumulative = 0;
         for (int i = 0; i < vocabSize; i++)
@@ -751,54 +596,6 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
                 ["using_custom_layers"] = _usingCustomLayers
             }
         };
-    }
-
-    #endregion
-
-    #region Helpers
-
-    /// <summary>
-    /// Sanitizes a gradient tensor by clamping NaN/Inf and clipping to max norm.
-    /// </summary>
-    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
-    {
-        var result = new Tensor<T>(grad._shape);
-        double normSq = 0;
-
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double val = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val)) val = 0;
-            result[i] = NumOps.FromDouble(val);
-            normSq += val * val;
-        }
-
-        double norm = Math.Sqrt(normSq + 1e-12);
-        if (norm > maxNorm)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.FromDouble(NumOps.ToDouble(result[i]) * scale);
-            }
-        }
-
-        return result;
-    }
-
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
-
-    private static Vector<T> TensorToVector(Tensor<T> t, int length)
-    {
-        var v = new Vector<T>(length);
-        int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
     }
 
     #endregion

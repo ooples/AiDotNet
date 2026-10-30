@@ -339,23 +339,30 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
         }
     }
 
-    /// <summary>
-    /// Trains the TVAE on a single sample by running one tape-connected ELBO
-    /// optimization step (encode → reparameterize → decode → reconstruction + KL).
-    /// </summary>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: a tape-connected ELBO step (encode, reparameterize, decode,
+    /// reconstruction + KL) per row. The first call (or one with a new column count) prepares the transformer and
+    /// networks from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
     {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        var transformedData = transformer.Transform(rows);
         SetTrainingMode(true);
         try
         {
-            ElboStep(input);
+            TrainBatch(transformedData, 0, rows.Rows, NumOps.FromDouble(_options.LearningRate / rows.Rows));
         }
         finally
         {
             SetTrainingMode(false);
         }
 
-        return true;
+        IsFitted = true;
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -383,20 +390,9 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
+        var transformedData = PrepareForData(data, columns);
 
-        // Step 1: Fit transformer (same VGM + one-hot as CTGAN)
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, _columns);
-        _dataWidth = _transformer.TransformedWidth;
-
-        // Step 2: Transform data
-        var transformedData = _transformer.Transform(data);
-
-        // Step 3: Rebuild layers with actual data dimensions
-        RebuildLayersWithActualDimensions(_dataWidth);
-
-        // Step 4: Training loop
+        // Training loop
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         int numBatches = Math.Max(1, data.Rows / batchSize);
         T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
@@ -464,24 +460,12 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
-
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
+            var transformedData = PrepareForData(data, columns);
 
-            // Step 1: Fit transformer
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-
-            // Step 2: Transform data
-            var transformedData = _transformer.Transform(data);
-
-            // Step 3: Rebuild layers with actual data dimensions
-            RebuildLayersWithActualDimensions(_dataWidth);
-
-            // Step 4: Training loop
+            // Training loop
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
             int numBatches = Math.Max(1, data.Rows / batchSize);
             T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
@@ -505,6 +489,24 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
 
             IsFitted = true;
         }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/> and builds the encoder and decoder for the transformed width;
+    /// returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = PrepareColumns(data, columns);
+
+        // Fit transformer (same VGM + one-hot as CTGAN)
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+
+        // Rebuild layers with actual data dimensions
+        RebuildLayersWithActualDimensions(_dataWidth);
+        return _transformer.Transform(data);
     }
 
     #endregion

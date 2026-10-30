@@ -345,7 +345,93 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
+        var transformedData = PrepareForData(data, columns);
 
+        // Compute noise multiplier from privacy budget
+        ComputeNoiseMultiplier(data.Rows, epochCount);
+        _cumulativeEpsilon = 0;
+
+        // Training loop with privacy budget check
+        int numPacks = PacksPerBatch(_options.BatchSize);
+        int numBatches = Math.Max(1, data.Rows / (numPacks * _options.PacSize));
+
+        bool privacyBudgetExhausted = false;
+        for (int epoch = 0; epoch < epochCount && !privacyBudgetExhausted; epoch++)
+        {
+            for (int batch = 0; batch < numBatches && !privacyBudgetExhausted; batch++)
+            {
+                privacyBudgetExhausted = !TrainBatch(transformedData, numPacks, data.Rows);
+            }
+        }
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
+    {
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
+
+        await Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var transformedData = PrepareForData(data, columns);
+            ComputeNoiseMultiplier(data.Rows, epochCount);
+            _cumulativeEpsilon = 0;
+
+            int numPacks = PacksPerBatch(_options.BatchSize);
+            int numBatches = Math.Max(1, data.Rows / (numPacks * _options.PacSize));
+
+            bool privacyBudgetExhausted = false;
+            for (int epoch = 0; epoch < epochCount && !privacyBudgetExhausted; epoch++)
+            {
+                ct.ThrowIfCancellationRequested();
+                for (int batch = 0; batch < numBatches && !privacyBudgetExhausted; batch++)
+                {
+                    privacyBudgetExhausted = !TrainBatch(transformedData, numPacks, data.Rows);
+                }
+            }
+        }, ct).ConfigureAwait(false);
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>, charged to the privacy budget like every Fit step. The first call
+    /// (or one with a new column count) prepares the transformer, sampler and networks from these rows, every column
+    /// continuous, and sizes the noise multiplier for the configured epochs over them. A call once the (epsilon, delta)
+    /// budget is spent throws: training further would release more than the budget allows.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+        {
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+            ComputeNoiseMultiplier(rows.Rows, _options.Epochs);
+            _cumulativeEpsilon = 0;
+        }
+        if (_cumulativeEpsilon >= _options.Epsilon)
+        {
+            throw new InvalidOperationException(
+                $"The privacy budget (epsilon = {_options.Epsilon}) is spent: {_cumulativeEpsilon} has been charged. " +
+                "Further training would exceed the differential-privacy guarantee.");
+        }
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        TrainBatch(transformer.Transform(rows), PacksPerBatch(rows.Rows), rows.Rows);
+        IsFitted = true;
+    }
+
+    private int PacksPerBatch(int rows) => Math.Max(1, rows / _options.PacSize);
+
+    /// <summary>
+    /// Fits the transformer and the conditional sampler to <paramref name="data"/> and builds the networks for the
+    /// transformed width; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
         _columns = PrepareColumns(data, columns);
 
         // Step 1: Fit transformer
@@ -367,130 +453,32 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         InitializeTrainingBuffers(genInputDim);
 
         // Step 5: Transform data
-        var transformedData = _transformer.Transform(data);
-
-        // Step 6: Compute noise multiplier from privacy budget
-        ComputeNoiseMultiplier(data.Rows, epochCount);
-        _cumulativeEpsilon = 0;
-
-        // Step 7: Training loop with privacy budget check
-        T lr = NumOps.FromDouble(_options.LearningRate);
-        int pacSize = _options.PacSize;
-        int batchSize = _options.BatchSize;
-        int numPacks = Math.Max(1, batchSize / pacSize);
-        int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
-
-        bool privacyBudgetExhausted = false;
-        for (int epoch = 0; epoch < epochCount && !privacyBudgetExhausted; epoch++)
-        {
-            if (_cumulativeEpsilon >= _options.Epsilon)
-            {
-                break; // Privacy budget exhausted
-            }
-
-            for (int batch = 0; batch < numBatches && !privacyBudgetExhausted; batch++)
-            {
-                // DP-SGD-faithful schedule (Abadi et al. 2016 §3 over CTGAN's
-                // PacGAN-packed WGAN-GP). Critic step applies the per-step
-                // (clip, noise) primitive on its tape-computed gradients;
-                // generator step does the standard untrained-critic max.
-                //
-                // CRITICAL: charge privacy budget for EVERY critic step,
-                // not just once per outer batch. Each TrainDiscriminatorStepBatchedDP
-                // touches real data and consumes one DP-SGD privacy slot;
-                // accumulating only the outer-loop's stepEpsilon under-counts
-                // by a factor of DiscriminatorSteps and lets the early-stop
-                // guard (_cumulativeEpsilon >= _options.Epsilon) leak budget.
-                // Check budget INSIDE the inner loop too — without that
-                // mid-epoch exit, a critic step can push the run past the
-                // (ε, δ) target and the remaining steps in that epoch still
-                // execute, consuming extra privacy.
-                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                {
-                    TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
-                    _cumulativeEpsilon += ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
-                    if (_cumulativeEpsilon >= _options.Epsilon)
-                    {
-                        privacyBudgetExhausted = true;
-                        break;
-                    }
-                }
-                if (!privacyBudgetExhausted) TrainGeneratorStepBatched(transformedData, numPacks);
-            }
-        }
-
-        IsFitted = true;
+        return _transformer.Transform(data);
     }
 
-    /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
+    /// <summary>
+    /// One batch of the DP-SGD-faithful schedule (Abadi et al. 2016 §3 over CTGAN's PacGAN-packed WGAN-GP); false
+    /// when the privacy budget ran out during it.
+    /// </summary>
+    /// <remarks>
+    /// The critic step applies the per-step (clip, noise) primitive on its tape-computed gradients; the generator step
+    /// is the standard untrained-critic max. The budget is charged for EVERY critic step, not once per batch: each one
+    /// touches real data and is its own DP-SGD privacy event, and charging only per batch under-counted by
+    /// DiscriminatorSteps and let the early stop leak budget. The check sits inside the critic loop for the same
+    /// reason: a critic step can push the run past the (epsilon, delta) target, and no further critic or generator
+    /// step may run once it has.
+    /// </remarks>
+    private bool TrainBatch(Matrix<T> transformedData, int numPacks, int datasetSize)
     {
-        int epochCount = epochs ?? _options.Epochs;
-        ValidateFitInputs(data, columns, epochCount);
-
-        _columns = PrepareColumns(data, columns);
-
-        await Task.Run(() =>
+        for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
         {
-            ct.ThrowIfCancellationRequested();
-
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-
-            _sampler = new CTGANDataSampler<T>(_random);
-            _sampler.Fit(data, _columns);
-            _condWidth = _sampler.ConditionalVectorWidth;
-
-            _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
-
-            int genInputDim = _options.EmbeddingDimension + _condWidth;
-            RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
-            InitializeTrainingBuffers(genInputDim);
-
-            var transformedData = _transformer.Transform(data);
-
-            ComputeNoiseMultiplier(data.Rows, epochCount);
-            _cumulativeEpsilon = 0;
-
-            T lr = NumOps.FromDouble(_options.LearningRate);
-            int pacSize = _options.PacSize;
-            int batchSize = _options.BatchSize;
-            int numPacks = Math.Max(1, batchSize / pacSize);
-            int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
-
-            bool privacyBudgetExhausted = false;
-            for (int epoch = 0; epoch < epochCount && !privacyBudgetExhausted; epoch++)
-            {
-                ct.ThrowIfCancellationRequested();
-                if (_cumulativeEpsilon >= _options.Epsilon) break;
-
-                for (int batch = 0; batch < numBatches && !privacyBudgetExhausted; batch++)
-                {
-                    // Charge privacy budget per critic step — each one touches
-                    // real data and is its own DP-SGD privacy event. Charging
-                    // only the outer-loop step under-counts by DiscriminatorSteps
-                    // and leaks budget past the early-stop guard. The mid-batch
-                    // privacy-exhaustion break stops further critic + generator
-                    // updates so a single critic step can't push the run past
-                    // the (ε, δ) target and still execute the remaining steps.
-                    for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                    {
-                        TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
-                        _cumulativeEpsilon += ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
-                        if (_cumulativeEpsilon >= _options.Epsilon)
-                        {
-                            privacyBudgetExhausted = true;
-                            break;
-                        }
-                    }
-                    if (privacyBudgetExhausted) break;
-                    TrainGeneratorStepBatched(transformedData, numPacks);
-                }
-            }
-        }, ct).ConfigureAwait(false);
-
-        IsFitted = true;
+            TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
+            _cumulativeEpsilon += ComputeStepPrivacyCost(datasetSize, numPacks * _options.PacSize);
+            if (_cumulativeEpsilon >= _options.Epsilon)
+                return false;
+        }
+        TrainGeneratorStepBatched(transformedData, numPacks);
+        return true;
     }
 
     /// <inheritdoc />

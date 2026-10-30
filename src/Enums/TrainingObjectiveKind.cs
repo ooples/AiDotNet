@@ -40,4 +40,11 @@ public enum TrainingObjectiveKind
     /// train: the target is the second modality's batch, paired row by row with the input.
     /// </summary>
     ContrastiveAlignment,
+
+    /// <summary>
+    /// A weighted least-squares factorization of co-occurrence statistics, as GloVe trains (Pennington et al. 2014,
+    /// Eq. 8): the target is the log co-occurrence counted from the input's token sequences, or supplied with explicit
+    /// word pairs.
+    /// </summary>
+    CooccurrenceFactorization,
 }

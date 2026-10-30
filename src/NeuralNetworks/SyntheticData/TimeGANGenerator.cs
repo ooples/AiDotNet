@@ -343,13 +343,15 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// supervisor step, embedder fine-tune, after one reconstruction and one supervised step. Without this a Train call
     /// differentiated the generator's GRU stack (Layers) against the target directly, which is not TimeGAN's objective.
     /// </summary>
-    /// <remarks>The input's last axis is the feature width; the axis before it is time ([T, F] is one sequence,
+    /// <remarks>The data's last axis is the feature width; the axis before it is time ([T, F] is one sequence,
     /// [B, T, F] is B sequences, [F] is one time step).</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override void TrainOnBatch(Tensor<T> realData)
     {
+        var input = realData;
         int width = input.Shape[input.Shape.Length - 1];
         int steps = input.Shape.Length >= 2 ? input.Shape[input.Shape.Length - 2] : 1;
-        if (width <= 0 || steps <= 0) return false;
+        if (width <= 0 || steps <= 0)
+            throw new ArgumentException("A training batch needs at least one time step of at least one feature.", nameof(realData));
         if (width != _dataWidth || _recoveryOutput is null)
         {
             _dataWidth = width;
@@ -373,7 +375,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         TrainDiscriminatorStepBatched(sequences, 0, end);
         TrainGeneratorStepBatched(sequences, 0, end);
         TrainEmbeddingStepBatched(sequences, 0, end);
-        return true;
+        IsFitted = true;
     }
 
     #endregion

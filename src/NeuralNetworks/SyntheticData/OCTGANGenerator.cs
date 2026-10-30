@@ -244,20 +244,8 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
-        _columns = columns.ToList();
+        var trainData = PrepareForData(data, columns);
 
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, columns);
-        _dataWidth = _transformer.TransformedWidth;
-        var transformedData = _transformer.Transform(data);
-
-        _minorityData = ExtractMinorityData(data, transformedData, columns);
-        var trainData = _minorityData.Rows > 0 ? _minorityData : transformedData;
-
-        RebuildLayersWithActualDimensions();
-        InitializeSVDDCenter(trainData);
-
-        T lr = NumOps.FromDouble(_options.LearningRate);
         int batchSize = Math.Min(_options.BatchSize, trainData.Rows);
         int numBatches = Math.Max(1, trainData.Rows / batchSize);
 
@@ -266,22 +254,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             for (int batch = 0; batch < numBatches; batch++)
             {
                 int batchStart = batch * batchSize;
-                int batchEnd = Math.Min(batchStart + batchSize, trainData.Rows);
-                int actualBatchSize = batchEnd - batchStart;
-
-                T scaledLr = NumOps.FromDouble(_options.LearningRate / actualBatchSize);
-
-                SetTrainingMode(true);
-                try
-                {
-                    for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                    {
-                        TrainDiscriminatorStep(trainData, batchStart, batchEnd, scaledLr);
-                    }
-                    TrainGeneratorStep(actualBatchSize, scaledLr);
-                }
-                finally { SetTrainingMode(false); }
-                UpdateSVDDCenter(trainData, batchStart, batchEnd);
+                TrainBatch(trainData, batchStart, Math.Min(batchStart + batchSize, trainData.Rows));
             }
         }
 
@@ -298,6 +271,49 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             cancellationToken.ThrowIfCancellationRequested();
             Fit(data, columns, epochCount);
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/>, keeps its minority rows (all rows when there is no minority
+    /// class), builds the networks and starts the SVDD center on them; returns the rows to train on.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = columns.ToList();
+
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, columns);
+        _dataWidth = _transformer.TransformedWidth;
+        var transformedData = _transformer.Transform(data);
+
+        _minorityData = ExtractMinorityData(data, transformedData, columns);
+        var trainData = _minorityData.Rows > 0 ? _minorityData : transformedData;
+
+        RebuildLayersWithActualDimensions();
+        InitializeSVDDCenter(trainData);
+        return trainData;
+    }
+
+    /// <summary>
+    /// One batch on rows [batchStart, batchEnd): the SVDD discriminator steps, the generator step, then the SVDD center
+    /// update.
+    /// </summary>
+    private void TrainBatch(Matrix<T> trainData, int batchStart, int batchEnd)
+    {
+        int actualBatchSize = batchEnd - batchStart;
+        T scaledLr = NumOps.FromDouble(_options.LearningRate / actualBatchSize);
+
+        SetTrainingMode(true);
+        try
+        {
+            for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+            {
+                TrainDiscriminatorStep(trainData, batchStart, batchEnd, scaledLr);
+            }
+            TrainGeneratorStep(actualBatchSize, scaledLr);
+        }
+        finally { SetTrainingMode(false); }
+        UpdateSVDDCenter(trainData, batchStart, batchEnd);
     }
 
     /// <inheritdoc />
@@ -813,25 +829,24 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <inheritdoc />
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>'s minority rows (all of them when it has no minority class): the SVDD
+    /// discriminator steps, the generator step and the center update. The first call (or one with a new column count)
+    /// prepares the transformer, networks and SVDD center from these rows, every column continuous. The supervised step
+    /// this replaced trained the generator toward the target row for whatever noise came in, which is not OCT-GAN's
+    /// objective and never trained the discriminator.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
     {
-        // Full OCT-GAN training (SVDD discriminator + generator) runs in Fit. This
-        // single-step entry point trains the generator (the Layers chain) to
-        // reconstruct the target via a tape step. The previous body was a no-op.
-        SetTrainingMode(true);
-        try
-        {
-            StepOver(() =>
-            {
-                var output = GeneratorForward(input);
-                var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
-                var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
-                return ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            }, BuildGeneratorLayerList(), _generatorOptimizer);
-        }
-        finally { SetTrainingMode(false); }
-
-        return true;
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        var transformedData = transformer.Transform(rows);
+        var minority = ExtractMinorityData(rows, transformedData, _columns);
+        var trainData = minority.Rows > 0 ? minority : transformedData;
+        TrainBatch(trainData, 0, trainData.Rows);
+        IsFitted = true;
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.

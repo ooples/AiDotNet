@@ -269,18 +269,7 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
-        _columns = PrepareColumns(data, columns);
-
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, _columns);
-        _dataWidth = _transformer.TransformedWidth;
-
-        RebuildLayersForDataWidth();
-
-        var transformedData = _transformer.Transform(data);
-
-        ComputeNoiseSchedule();
-        _realAutoCorr = ComputeAutocorrelation(transformedData);
+        var transformedData = PrepareForData(data, columns);
 
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
 
@@ -301,22 +290,11 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
-        _columns = PrepareColumns(data, columns);
 
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-
-            RebuildLayersForDataWidth();
-
-            var transformedData = _transformer.Transform(data);
-
-            ComputeNoiseSchedule();
-            _realAutoCorr = ComputeAutocorrelation(transformedData);
+            var transformedData = PrepareForData(data, columns);
 
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
 
@@ -332,6 +310,43 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }, ct).ConfigureAwait(false);
 
         IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: a denoising step at sampled timesteps with the autocorrelation
+    /// term. The first call (or one with a new column count) prepares the transformer, noise schedule and denoiser from
+    /// these rows, every column continuous, and takes their autocorrelation as the real one.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        TrainBatch(transformer.Transform(rows), 0, rows.Rows);
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/>, builds the denoiser for the transformed width, computes the noise
+    /// schedule and records the real data's autocorrelation; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = PrepareColumns(data, columns);
+
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+
+        RebuildLayersForDataWidth();
+
+        var transformedData = _transformer.Transform(data);
+
+        ComputeNoiseSchedule();
+        _realAutoCorr = ComputeAutocorrelation(transformedData);
+        return transformedData;
     }
 
     /// <inheritdoc />
@@ -482,8 +497,9 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 }
             }
 
-            // Eager fallback: GANDALF pattern (forward -> loss -> backward -> update).
-            Train(input, targetNoise);
+            // Eager fallback: the standard supervised step of the denoiser on (noisy row + time, noise). Not Train,
+            // which on a generator is one step of this whole objective.
+            TrainStandardStep(input, targetNoise);
         }
     }
 

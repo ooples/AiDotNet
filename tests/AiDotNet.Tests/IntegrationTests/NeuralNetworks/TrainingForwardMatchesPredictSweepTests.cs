@@ -161,6 +161,9 @@ public class TrainingForwardMatchesPredictSweepTests
         ["Cutie"] = "trains against a provisional memory entry, predicts against the frame memory bank",
         // MIA-VSR Sec. 3.3 (the model's docs): the training forward samples Gumbel keep-masks for the L_mask term.
         ["MIAVSR"] = "samples Gumbel keep-masks in training",
+        // Pennington et al. 2014 Eq. 8: training fits w_i . w~_j + b_i + b~_j to log X_ij over co-occurring pairs;
+        // inference returns the word vectors W + W~ (Section 4.3).
+        ["GloVe"] = "trains the co-occurrence pair objective, predicts the word vectors",
     };
 
     private static string? DesignedTrainingForward(Type model)

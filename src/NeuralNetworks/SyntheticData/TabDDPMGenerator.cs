@@ -313,26 +313,9 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
+        var (numericalData, categoricalData) = PrepareForData(data, columns);
 
-        // Step 1: Analyze column layout
-        AnalyzeColumns(_columns);
-
-        // Step 2: Preprocess data
-        var (numericalData, categoricalData) = PreprocessData(data, _columns);
-
-        // Step 3: Initialize diffusion processes
-        _gaussianDiffusion = new GaussianDiffusion<T>(
-            _options.NumTimesteps, _options.BetaStart, _options.BetaEnd,
-            _options.BetaSchedule, _random);
-
-        _multinomialDiffusion = new MultinomialDiffusion<T>(
-            _options.NumCategoricalDiffusionSteps, _options.BetaStart, _options.BetaEnd, _random);
-
-        // Step 4: Build layers with actual dimensions
-        RebuildLayersWithActualDimensions();
-
-        // Step 5: Training loop
+        // Training loop
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         int numBatches = Math.Max(1, data.Rows / batchSize);
         T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
@@ -364,23 +347,10 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
-
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-
-            AnalyzeColumns(_columns);
-            var (numericalData, categoricalData) = PreprocessData(data, _columns);
-
-            _gaussianDiffusion = new GaussianDiffusion<T>(
-                _options.NumTimesteps, _options.BetaStart, _options.BetaEnd,
-                _options.BetaSchedule, _random);
-
-            _multinomialDiffusion = new MultinomialDiffusion<T>(
-                _options.NumCategoricalDiffusionSteps, _options.BetaStart, _options.BetaEnd, _random);
-
-            RebuildLayersWithActualDimensions();
+            var (numericalData, categoricalData) = PrepareForData(data, columns);
 
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
             int numBatches = Math.Max(1, data.Rows / batchSize);
@@ -407,6 +377,58 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
             IsFitted = true;
         }, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: the Gaussian (numerical) and multinomial (categorical) denoising
+    /// step. The first call (or one with a new column count) prepares the column layout, statistics, diffusion processes
+    /// and denoiser from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_gaussianDiffusion is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var (numericalData, categoricalData) = PreprocessData(rows, _columns);
+        SetTrainingMode(true);
+        try
+        {
+            TrainBatch(numericalData, categoricalData, 0, rows.Rows, NumOps.FromDouble(_options.LearningRate / rows.Rows));
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Prepares the columns and their statistics from <paramref name="data"/>, analyzes the column layout, starts the
+    /// diffusion processes and builds the denoiser; returns the preprocessed numerical and categorical data.
+    /// </summary>
+    private (Matrix<T> Numerical, Matrix<T> Categorical) PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = PrepareColumns(data, columns);
+
+        // Analyze column layout
+        AnalyzeColumns(_columns);
+
+        // Preprocess data
+        var preprocessed = PreprocessData(data, _columns);
+
+        // Initialize diffusion processes
+        _gaussianDiffusion = new GaussianDiffusion<T>(
+            _options.NumTimesteps, _options.BetaStart, _options.BetaEnd,
+            _options.BetaSchedule, _random);
+
+        _multinomialDiffusion = new MultinomialDiffusion<T>(
+            _options.NumCategoricalDiffusionSteps, _options.BetaStart, _options.BetaEnd, _random);
+
+        // Build layers with actual dimensions
+        RebuildLayersWithActualDimensions();
+        return preprocessed;
     }
 
     /// <inheritdoc/>

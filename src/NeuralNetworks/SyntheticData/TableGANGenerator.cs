@@ -265,6 +265,43 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
+        var transformedData = PrepareForData(data, columns);
+        int batchSize = Math.Min(_options.BatchSize, data.Rows);
+        int numBatches = Math.Max(1, data.Rows / batchSize);
+
+        for (int epoch = 0; epoch < epochCount; epoch++)
+        {
+            for (int batch = 0; batch < numBatches; batch++)
+            {
+                TrainBatch(transformedData, batchSize);
+            }
+        }
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: the critic steps, then the generator step. The first call (or one
+    /// with a new column count) prepares the transformer and networks from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        TrainBatch(transformer.Transform(rows), rows.Rows);
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/>, records the real statistics the information loss matches and
+    /// builds the generator, critic and (with a label column) classifier for the transformed width; returns the
+    /// transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
         _columns = columns.ToList();
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
         _transformer.Fit(data, columns);
@@ -304,36 +341,29 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
             BuildClassifier(_numClasses);
         }
 
-        int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        int numBatches = Math.Max(1, data.Rows / batchSize);
+        return transformedData;
+    }
 
-        // Tape-based WGAN training (Park et al. 2018 / WGAN family pattern).
-        // Critic minimizes E[D(fake)] - E[D(real)]; generator minimizes
-        // -E[D(G(z))]. Both networks update through GradientTape.ComputeGradients
-        // + TapeStepContext + optimizer.Step because the codebase migrated from
-        // manual Backward() to tape-based autodiff (LayerBase.cs:1593) — any
-        // remaining call site that runs layer.UpdateParameters(lr) without
-        // an intervening tape throws "Backward pass must be called before
-        // updating parameters." See WGANGP.TrainStep for the canonical pattern.
-        for (int epoch = 0; epoch < epochCount; epoch++)
+    /// <summary>One batch of the paper's schedule: DiscriminatorSteps critic updates per generator update.</summary>
+    /// <remarks>
+    /// Tape-based WGAN training (Park et al. 2018 / WGAN family pattern). The critic minimizes E[D(fake)] - E[D(real)];
+    /// the generator minimizes -E[D(G(z))]. Both networks update through GradientTape.ComputeGradients +
+    /// TapeStepContext + optimizer.Step: the codebase migrated from manual Backward() to tape-based autodiff, and a call
+    /// site that runs layer.UpdateParameters(lr) without an intervening tape throws "Backward pass must be called
+    /// before updating parameters." See WGANGP.TrainStep for the canonical pattern.
+    /// </remarks>
+    private void TrainBatch(Matrix<T> transformedData, int batchSize)
+    {
+        for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
         {
-            for (int batch = 0; batch < numBatches; batch++)
-            {
-                // Paper's training schedule: DiscriminatorSteps critic updates per generator update.
-                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                {
-                    var realBatch = BuildRealBatchTensor(transformedData, batchSize);
-                    var noiseBatch = GenerateNoiseBatchTensor(batchSize);
-                    TrainDiscriminatorStepBatched(realBatch, noiseBatch);
-                }
-
-                var genNoise = GenerateNoiseBatchTensor(batchSize);
-                var generatorTargetBatch = BuildRealBatchTensor(transformedData, batchSize);
-                TrainGeneratorStepBatched(genNoise, generatorTargetBatch);
-            }
+            var realBatch = BuildRealBatchTensor(transformedData, batchSize);
+            var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+            TrainDiscriminatorStepBatched(realBatch, noiseBatch);
         }
 
-        IsFitted = true;
+        var genNoise = GenerateNoiseBatchTensor(batchSize);
+        var generatorTargetBatch = BuildRealBatchTensor(transformedData, batchSize);
+        TrainGeneratorStepBatched(genNoise, generatorTargetBatch);
     }
 
     /// <inheritdoc />

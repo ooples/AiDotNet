@@ -396,19 +396,9 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         int epochCount = epochs ?? _options.VAEEpochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
+        var transformedData = PrepareForData(data, columns);
 
-        // Step 1: Fit transformer
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, _columns);
-        _dataWidth = _transformer.TransformedWidth;
-
-        var transformedData = _transformer.Transform(data);
-
-        // Step 2: Rebuild layers with actual data dimensions
-        RebuildLayersWithActualDimensions(_dataWidth);
-
-        // Step 3: Train VAE
+        // Train VAE
         int vaeBatchSize = Math.Min(_options.BatchSize, data.Rows);
         int vaeNumBatches = Math.Max(1, data.Rows / vaeBatchSize);
         T vaeLr = NumOps.FromDouble(_options.VAELearningRate / vaeBatchSize);
@@ -433,12 +423,11 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         }
         finally { SetTrainingMode(false); }
 
-        // Step 4: Encode all data to latent space
+        // Encode all data to latent space
         var latentCodes = EncodeAllData(transformedData);
 
-        // Step 5: Build and train latent diffusion model
-        _latentDiffusion = new GaussianDiffusion<T>(
-            _options.DiffusionSteps, _options.BetaStart, _options.BetaEnd, "linear", _random);
+        // Build and train latent diffusion model
+        CreateLatentDiffusion();
 
         int diffBatchSize = Math.Min(_options.BatchSize, data.Rows);
         int diffNumBatches = Math.Max(1, data.Rows / diffBatchSize);
@@ -468,19 +457,10 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         int epochCount = epochs ?? _options.VAEEpochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
-
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-
-            var transformedData = _transformer.Transform(data);
-
-            RebuildLayersWithActualDimensions(_dataWidth);
+            var transformedData = PrepareForData(data, columns);
 
             int vaeBatchSize = Math.Min(_options.BatchSize, data.Rows);
             int vaeNumBatches = Math.Max(1, data.Rows / vaeBatchSize);
@@ -509,8 +489,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
             var latentCodes = EncodeAllData(transformedData);
 
-            _latentDiffusion = new GaussianDiffusion<T>(
-                _options.DiffusionSteps, _options.BetaStart, _options.BetaEnd, "linear", _random);
+            CreateLatentDiffusion();
 
             int diffBatchSize = Math.Min(_options.BatchSize, data.Rows);
             int diffNumBatches = Math.Max(1, data.Rows / diffBatchSize);
@@ -534,6 +513,71 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         }, ct).ConfigureAwait(false);
 
         IsFitted = true;
+    }
+
+    // Training calls taken since the data was last prepared: the first VAEEpochs of them train the VAE, the rest the
+    // latent diffusion model on the trained VAE's codes, in Fit's order.
+    private int _trainCalls;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit epoch's step on <paramref name="realData"/> as a single batch, in Fit's two stages: the first VAEEpochs
+    /// calls train the VAE (reconstruction + KL), the rest encode the batch with it and take a denoising step of the
+    /// latent diffusion model. The first call (or one with a new column count) prepares the transformer and networks
+    /// from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+        {
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+            _trainCalls = 0;
+        }
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        var transformedData = transformer.Transform(rows);
+        SetTrainingMode(true);
+        try
+        {
+            if (_trainCalls < _options.VAEEpochs)
+            {
+                TrainVAEBatch(transformedData, 0, rows.Rows, NumOps.FromDouble(_options.VAELearningRate / rows.Rows));
+            }
+            else
+            {
+                if (_latentDiffusion is null) CreateLatentDiffusion();
+                TrainDiffusionBatch(EncodeAllData(transformedData), 0, rows.Rows,
+                    NumOps.FromDouble(_options.DiffusionLearningRate / rows.Rows));
+            }
+        }
+        finally { SetTrainingMode(false); }
+        _trainCalls++;
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/> and builds the VAE and denoiser for the transformed width; returns
+    /// the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = PrepareColumns(data, columns);
+
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+
+        RebuildLayersWithActualDimensions(_dataWidth);
+        _latentDiffusion = null;
+        return _transformer.Transform(data);
+    }
+
+    // An explicit construction assigned to the field: the generated state restore replays it to rebuild the
+    // diffusion schedule of a fitted model (ModelStateGenerator.FittedInfrastructureRepairs).
+    private void CreateLatentDiffusion()
+    {
+        _latentDiffusion = new GaussianDiffusion<T>(
+            _options.DiffusionSteps, _options.BetaStart, _options.BetaEnd, "linear", _random);
     }
 
     /// <summary>

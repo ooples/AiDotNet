@@ -317,49 +317,17 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
-        _columns = columns.ToList();
-
-        // Transform data
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, columns);
-        _dataWidth = _transformer.TransformedWidth;
-        var transformedData = _transformer.Transform(data);
-
-        // Rebuild networks with actual data dimensions
-        RebuildLayersWithActualDimensions();
-
-        // Partition data for teachers
-        var partitions = PartitionData(transformedData, _options.NumTeachers);
-
+        var (transformedData, partitions) = PrepareForData(data, columns);
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        T lr = NumOps.FromDouble(_options.LearningRate);
 
         // Phase 1: Pre-train teachers on their partitions
-        int teacherEpochs = Math.Max(1, epochCount / 4);
-        SetTrainingMode(true);
-        try
-        {
-            for (int epoch = 0; epoch < teacherEpochs; epoch++)
-                for (int tIdx = 0; tIdx < _options.NumTeachers; tIdx++)
-                    TrainTeacher(tIdx, partitions[tIdx], batchSize, lr);
-        }
-        finally { SetTrainingMode(false); }
+        int teacherEpochs = TeacherEpochs(epochCount);
+        for (int epoch = 0; epoch < teacherEpochs; epoch++)
+            TrainTeachers(partitions, batchSize);
 
         // Phase 2: Joint student + generator training
-        int jointEpochs = epochCount - teacherEpochs;
-        for (int epoch = 0; epoch < jointEpochs; epoch++)
-        {
-            SetTrainingMode(true);
-            try
-            {
-                for (int step = 0; step < _options.StudentSteps; step++)
-                {
-                    TrainStudentStep(transformedData, batchSize, lr);
-                }
-                TrainGeneratorStep(batchSize);
-            }
-            finally { SetTrainingMode(false); }
-        }
+        for (int epoch = teacherEpochs; epoch < epochCount; epoch++)
+            TrainStudentAndGenerator(transformedData, batchSize);
 
         IsFitted = true;
     }
@@ -372,55 +340,81 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            _columns = columns.ToList();
-
-            // Transform data
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, columns);
-            _dataWidth = _transformer.TransformedWidth;
-            var transformedData = _transformer.Transform(data);
-
-            // Rebuild networks with actual data dimensions
-            RebuildLayersWithActualDimensions();
-
-            // Partition data for teachers
-            var partitions = PartitionData(transformedData, _options.NumTeachers);
-
+            var (transformedData, partitions) = PrepareForData(data, columns);
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
-            T lr = NumOps.FromDouble(_options.LearningRate);
 
-            // Phase 1: Pre-train teachers
-            int teacherEpochs = Math.Max(1, epochCount / 4);
+            int teacherEpochs = TeacherEpochs(epochCount);
             for (int epoch = 0; epoch < teacherEpochs; epoch++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                for (int tIdx = 0; tIdx < _options.NumTeachers; tIdx++)
-                {
-                    TrainTeacher(tIdx, partitions[tIdx], batchSize, lr);
-                }
+                TrainTeachers(partitions, batchSize);
             }
 
-            // Phase 2: Joint training
-            int jointEpochs = epochCount - teacherEpochs;
-            for (int epoch = 0; epoch < jointEpochs; epoch++)
+            for (int epoch = teacherEpochs; epoch < epochCount; epoch++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-
-                SetTrainingMode(true);
-                try
-                {
-                    for (int step = 0; step < _options.StudentSteps; step++)
-                    {
-                        TrainStudentStep(transformedData, batchSize, lr);
-                    }
-                    TrainGeneratorStep(batchSize);
-                }
-                finally { SetTrainingMode(false); }
+                TrainStudentAndGenerator(transformedData, batchSize);
             }
 
             IsFitted = true;
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Training calls taken since the data was last prepared: the first TeacherEpochs of them train the teachers, the way
+    // Fit's first epochs do.
+    private int _trainCalls;
+
+    private static int TeacherEpochs(int epochCount) => Math.Max(1, epochCount / 4);
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/>, builds the networks and partitions the transformed rows among
+    /// the teachers; returns the transformed data and the partitions.
+    /// </summary>
+    private (Matrix<T> TransformedData, List<Matrix<T>> Partitions) PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = columns.ToList();
+
+        // Transform data
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, columns);
+        _dataWidth = _transformer.TransformedWidth;
+        var transformedData = _transformer.Transform(data);
+
+        // Rebuild networks with actual data dimensions
+        RebuildLayersWithActualDimensions();
+
+        // Partition data for teachers
+        return (transformedData, PartitionData(transformedData, _options.NumTeachers));
+    }
+
+    /// <summary>Phase 1, one epoch: each teacher trains on its own disjoint partition.</summary>
+    private void TrainTeachers(List<Matrix<T>> partitions, int batchSize)
+    {
+        T lr = NumOps.FromDouble(_options.LearningRate);
+        SetTrainingMode(true);
+        try
+        {
+            for (int tIdx = 0; tIdx < _options.NumTeachers && tIdx < partitions.Count; tIdx++)
+                if (partitions[tIdx].Rows > 0)
+                    TrainTeacher(tIdx, partitions[tIdx], batchSize, lr);
+        }
+        finally { SetTrainingMode(false); }
+    }
+
+    /// <summary>Phase 2, one epoch: the student steps on the teachers' noisy votes, then the generator step.</summary>
+    private void TrainStudentAndGenerator(Matrix<T> transformedData, int batchSize)
+    {
+        T lr = NumOps.FromDouble(_options.LearningRate);
+        SetTrainingMode(true);
+        try
+        {
+            for (int step = 0; step < _options.StudentSteps; step++)
+            {
+                TrainStudentStep(transformedData, batchSize, lr);
+            }
+            TrainGeneratorStep(batchSize);
+        }
+        finally { SetTrainingMode(false); }
     }
 
     /// <inheritdoc />
@@ -950,29 +944,28 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc />
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <remarks>
+    /// One Fit epoch on <paramref name="realData"/>, in Fit's two phases: the first calls (as many as Fit's teacher
+    /// epochs for the configured Epochs) train each teacher on its partition of the batch, the rest take the student
+    /// steps on the teachers' noisy votes and the generator step. The first call (or one with a new column count)
+    /// prepares the transformer and networks from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
     {
-        // Full PATE-GAN training (teachers + student + generator) runs in Fit. This
-        // single-step entry point trains the generator (the Layers chain that Predict
-        // runs) to reconstruct the target via a tape-connected step, satisfying the
-        // NeuralNetworkBase contract. The previous body was a no-op.
-        SetTrainingMode(true);
-        try
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
         {
-            StepOver(() =>
-            {
-                var output = GeneratorForward(TensorToVector(input, input.Length));
-                var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
-                var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
-                return ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            }, BuildGeneratorLayerList(), _generatorOptimizer);
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+            _trainCalls = 0;
         }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-
-        return true;
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        var transformedData = transformer.Transform(rows);
+        if (_trainCalls < TeacherEpochs(_options.Epochs))
+            TrainTeachers(PartitionData(transformedData, _options.NumTeachers), rows.Rows);
+        else
+            TrainStudentAndGenerator(transformedData, rows.Rows);
+        _trainCalls++;
+        IsFitted = true;
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.

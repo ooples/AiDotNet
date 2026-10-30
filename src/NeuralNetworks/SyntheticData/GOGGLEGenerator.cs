@@ -327,14 +327,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
-        _columns = new List<ColumnMetadata>(columns);
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, columns);
-        _dataWidth = _transformer.TransformedWidth;
-        var transformedData = _transformer.Transform(data);
-
-        // Rebuild all auxiliary layers with actual dimensions
-        RebuildAuxiliaryLayers();
+        var transformedData = PrepareForData(data, columns);
 
         // Minibatching, as every other generator in this family does it (TVAE, the
         // closest analogue, is the reference). BatchSize bounds how many rows one
@@ -357,10 +350,9 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     int end = Math.Min(start + batchSize, rowOrder.Length);
                     for (int i = start; i < end; i++)
                     {
-                        var rowVec = GetRow(transformedData, rowOrder[i]);
-                        var inputTensor = VectorToTensor(rowVec);
+                        var inputTensor = VectorToTensor(GetRow(transformedData, rowOrder[i]));
                         // For an autoencoder, target == input.
-                        Train(inputTensor, inputTensor);
+                        ElboStep(inputTensor, inputTensor);
                     }
                 }
             }
@@ -382,6 +374,53 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             ct.ThrowIfCancellationRequested();
             Fit(data, columns, epochCount);
         }, ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: an ELBO + structure-regularisation step per row, the row its own
+    /// target. The first call (or one with a new column count) prepares the transformer and networks from these rows,
+    /// every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        var transformedData = transformer.Transform(rows);
+        SetTrainingMode(true);
+        try
+        {
+            for (int i = 0; i < transformedData.Rows; i++)
+            {
+                var row = VectorToTensor(GetRow(transformedData, i));
+                ElboStep(row, row);
+            }
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/> and rebuilds the encoder, decoder and adjacency for the
+    /// transformed width; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = new List<ColumnMetadata>(columns);
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, columns);
+        _dataWidth = _transformer.TransformedWidth;
+        var transformedData = _transformer.Transform(data);
+
+        // Rebuild all auxiliary layers with actual dimensions
+        RebuildAuxiliaryLayers();
+        return transformedData;
     }
 
     /// <inheritdoc />
@@ -756,7 +795,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// that computed a loss scalar and discarded it without ever updating
     /// any parameter.
     /// </summary>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    private bool ElboStep(Tensor<T> input, Tensor<T> expectedOutput)
     {
         EnsureSizedForInput(input);
         SetTrainingMode(true);

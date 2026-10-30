@@ -371,32 +371,78 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         return GeneratorForwardWithResidual(input);
     }
 
-    /// <summary>
-    /// Trains the CopulaGAN network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input noise tensor.</param>
-    /// <param name="expectedOutput">The expected real data tensor.</param>
+    /// <inheritdoc />
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This runs a single training step for the generator.
-    /// The full GAN training loop (alternating discriminator/generator) happens in Fit().
-    /// This method is provided for compatibility with the NeuralNetworkBase pattern.
-    /// </para>
+    /// One Fit batch on <paramref name="realData"/>, through the fitted copula and VGM transforms: the critic steps,
+    /// then the generator step. The first call (or one with a new column count) fits the copula, transformer, sampler
+    /// and networks to these rows, every column continuous.
     /// </remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override void TrainOnBatch(Tensor<T> realData)
     {
-        // CopulaGAN is trained adversarially through Fit() / FitAsync (the copula
-        // transform is fit statistically and the GAN is trained with the
-        // alternating critic/generator loop). The NeuralNetworkBase supervised
-        // Train(input, expected) contract does not map onto a GAN's minimax
-        // objective — silently running a forward + loss but skipping every
-        // parameter update would report a misleading "training" loss while
-        // making zero learning progress, which is worse than failing fast.
-        throw new NotSupportedException(
-            "CopulaGAN is trained adversarially; the supervised Train(input, expected) " +
-            "contract does not map onto its minimax objective. Use Fit(IEnumerable<Tensor<T>>) " +
-            "or FitAsync to drive the alternating discriminator/generator loop, which fits " +
-            "the copula transform and runs the WGAN critic + generator updates.");
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        TrainBatch(transformer.Transform(ApplyFittedCopulaTransform(rows)), PacksPerBatch(rows.Rows));
+        IsFitted = true;
+    }
+
+    private int PacksPerBatch(int rows) => Math.Max(1, rows / _options.PacSize);
+
+    /// <summary>
+    /// Fits the Gaussian copula to <paramref name="data"/>'s continuous columns, then the VGM transformer and the
+    /// conditional sampler to the copula-transformed data, and builds the networks; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = PrepareColumns(data, columns);
+
+        // Identify continuous columns and apply Gaussian copula transform
+        _continuousColumnIndices.Clear();
+        _sortedValues.Clear();
+        for (int col = 0; col < columns.Count; col++)
+        {
+            if (columns[col].IsNumerical)
+            {
+                _continuousColumnIndices.Add(col);
+            }
+        }
+        var copulaData = ApplyCopulaTransform(data);
+
+        // Fit the VGM transformer on copula-transformed data
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(copulaData, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+
+        // Fit the data sampler
+        _sampler = new CTGANDataSampler<T>(_random);
+        _sampler.Fit(copulaData, _columns);
+        _condWidth = _sampler.ConditionalVectorWidth;
+
+        // Compute packed input dimension
+        _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
+
+        // Rebuild layers with actual data dimensions
+        int genInputDim = _options.EmbeddingDimension + _condWidth;
+        RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+
+        // Pre-allocate training buffers
+        InitializeTrainingBuffers(genInputDim);
+
+        return _transformer.Transform(copulaData);
+    }
+
+    /// <summary>
+    /// One batch of the paper-faithful WGAN-GP schedule: DiscriminatorSteps critic updates per generator update, both
+    /// via GradientTape.
+    /// </summary>
+    private void TrainBatch(Matrix<T> transformedData, int numPacks)
+    {
+        for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
+        {
+            TrainDiscriminatorStepBatched(transformedData, numPacks);
+        }
+        TrainGeneratorStepBatched(transformedData, numPacks);
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -425,59 +471,15 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
-
-        // Step 1: Identify continuous columns and apply Gaussian copula transform
-        _continuousColumnIndices.Clear();
-        _sortedValues.Clear();
-        for (int col = 0; col < columns.Count; col++)
-        {
-            if (columns[col].IsNumerical)
-            {
-                _continuousColumnIndices.Add(col);
-            }
-        }
-        var copulaData = ApplyCopulaTransform(data);
-
-        // Step 2: Fit the VGM transformer on copula-transformed data
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(copulaData, _columns);
-        _dataWidth = _transformer.TransformedWidth;
-
-        // Step 3: Fit the data sampler
-        _sampler = new CTGANDataSampler<T>(_random);
-        _sampler.Fit(copulaData, _columns);
-        _condWidth = _sampler.ConditionalVectorWidth;
-
-        // Step 4: Compute packed input dimension
-        _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
-
-        // Step 5: Rebuild layers with actual data dimensions
-        int genInputDim = _options.EmbeddingDimension + _condWidth;
-        RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
-
-        // Step 6: Transform data
-        var transformedData = _transformer.Transform(copulaData);
-
-        // Step 7: Training loop
-        T lr = NumOps.FromDouble(_options.LearningRate);
-        int pacSize = _options.PacSize;
-        int batchSize = _options.BatchSize;
-        int numPacks = Math.Max(1, batchSize / pacSize);
-        int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
+        var transformedData = PrepareForData(data, columns);
+        int numPacks = PacksPerBatch(_options.BatchSize);
+        int numBatches = Math.Max(1, data.Rows / (numPacks * _options.PacSize));
 
         for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int batch = 0; batch < numBatches; batch++)
             {
-                // Paper-faithful WGAN-GP schedule: DiscriminatorSteps critic
-                // updates per generator update. Both via GradientTape to
-                // satisfy the autodiff migration (LayerBase.cs:1593).
-                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                {
-                    TrainDiscriminatorStepBatched(transformedData, numPacks);
-                }
-                TrainGeneratorStepBatched(transformedData, numPacks);
+                TrainBatch(transformedData, numPacks);
             }
         }
 
@@ -490,57 +492,19 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
-
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-
-            _continuousColumnIndices.Clear();
-            _sortedValues.Clear();
-            for (int col = 0; col < columns.Count; col++)
-            {
-                if (columns[col].IsNumerical)
-                {
-                    _continuousColumnIndices.Add(col);
-                }
-            }
-            var copulaData = ApplyCopulaTransform(data);
-
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(copulaData, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-
-            _sampler = new CTGANDataSampler<T>(_random);
-            _sampler.Fit(copulaData, _columns);
-            _condWidth = _sampler.ConditionalVectorWidth;
-
-            _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
-
-            int genInputDim = _options.EmbeddingDimension + _condWidth;
-            RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
-
-            // Pre-allocate training buffers
-            InitializeTrainingBuffers(genInputDim);
-
-            var transformedData = _transformer.Transform(copulaData);
-
-            T lr = NumOps.FromDouble(_options.LearningRate);
-            int pacSize = _options.PacSize;
-            int batchSize = _options.BatchSize;
-            int numPacks = Math.Max(1, batchSize / pacSize);
-            int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
+            var transformedData = PrepareForData(data, columns);
+            int numPacks = PacksPerBatch(_options.BatchSize);
+            int numBatches = Math.Max(1, data.Rows / (numPacks * _options.PacSize));
 
             for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 ct.ThrowIfCancellationRequested();
                 for (int batch = 0; batch < numBatches; batch++)
                 {
-                    for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                    {
-                        TrainDiscriminatorStepBatched(transformedData, numPacks);
-                    }
-                    TrainGeneratorStepBatched(transformedData, numPacks);
+                    TrainBatch(transformedData, numPacks);
                 }
             }
         }, ct).ConfigureAwait(false);
@@ -1047,6 +1011,28 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </summary>
     private Matrix<T> ApplyCopulaTransform(Matrix<T> data)
     {
+        foreach (int col in _continuousColumnIndices)
+        {
+            var sorted = new double[data.Rows];
+            for (int i = 0; i < data.Rows; i++)
+            {
+                sorted[i] = NumOps.ToDouble(data[i, col]);
+            }
+
+            Array.Sort(sorted);
+            _sortedValues.Add(sorted);
+        }
+
+        return ApplyFittedCopulaTransform(data);
+    }
+
+    /// <summary>
+    /// Maps each continuous column through the empirical CDF <see cref="ApplyCopulaTransform"/> fitted, then the
+    /// standard normal quantile. On the fitting data this is that transform; later rows (a training call's batch) are
+    /// ranked against the fitted values.
+    /// </summary>
+    private Matrix<T> ApplyFittedCopulaTransform(Matrix<T> data)
+    {
         var result = new Matrix<T>(data.Rows, data.Columns);
 
         for (int i = 0; i < data.Rows; i++)
@@ -1057,30 +1043,23 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             }
         }
 
-        foreach (int col in _continuousColumnIndices)
+        for (int idx = 0; idx < _continuousColumnIndices.Count && idx < _sortedValues.Count; idx++)
         {
-            var values = new double[data.Rows];
-            for (int i = 0; i < data.Rows; i++)
-            {
-                values[i] = NumOps.ToDouble(data[i, col]);
-            }
-
-            var sorted = new double[data.Rows];
-            Array.Copy(values, sorted, data.Rows);
-            Array.Sort(sorted);
-            _sortedValues.Add(sorted);
+            int col = _continuousColumnIndices[idx];
+            var sorted = _sortedValues[idx];
 
             for (int i = 0; i < data.Rows; i++)
             {
-                int rank = Array.BinarySearch(sorted, values[i]);
+                double value = NumOps.ToDouble(data[i, col]);
+                int rank = Array.BinarySearch(sorted, value);
                 if (rank < 0) rank = ~rank;
                 int lo = rank;
-                while (lo > 0 && sorted[lo - 1] == values[i]) lo--;
+                while (lo > 0 && sorted[lo - 1] == value) lo--;
                 int hi = rank;
-                while (hi < sorted.Length - 1 && sorted[hi + 1] == values[i]) hi++;
+                while (hi < sorted.Length - 1 && sorted[hi + 1] == value) hi++;
                 double midRank = (lo + hi) / 2.0;
 
-                double u = (midRank + 1.0) / (data.Rows + 1.0);
+                double u = (midRank + 1.0) / (sorted.Length + 1.0);
                 u = Math.Max(1e-6, Math.Min(1.0 - 1e-6, u));
                 double z = NormalQuantile(u);
                 result[i, col] = NumOps.FromDouble(z);

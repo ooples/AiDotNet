@@ -439,23 +439,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
-
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, _columns);
-        _dataWidth = _transformer.TransformedWidth;
-        var transformedData = _transformer.Transform(data);
-
-        // Phase 1: Search over configurations
-        var bestConfig = SearchConfigurations(transformedData);
-
-        // Phase 2: Apply best configuration and train
-        _numTimesteps = bestConfig.Timesteps;
-        ComputeNoiseSchedule(bestConfig.Schedule, bestConfig.Timesteps);
-
-        int teDim = _options.TimestepEmbeddingDimension;
-        int inputDim = _dataWidth + teDim;
-        RebuildDenoiserLayers(bestConfig.MLPDims, inputDim, _dataWidth);
+        var transformedData = PrepareForData(data, columns);
 
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
@@ -483,25 +467,10 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
-
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-            var transformedData = _transformer.Transform(data);
-
-            var bestConfig = SearchConfigurations(transformedData);
-
-            _numTimesteps = bestConfig.Timesteps;
-            ComputeNoiseSchedule(bestConfig.Schedule, bestConfig.Timesteps);
-
-            int teDim = _options.TimestepEmbeddingDimension;
-            int inputDim = _dataWidth + teDim;
-            RebuildDenoiserLayers(bestConfig.MLPDims, inputDim, _dataWidth);
+            var transformedData = PrepareForData(data, columns);
 
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
             T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
@@ -523,6 +492,51 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         }, ct).ConfigureAwait(false);
 
         IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: a denoising step at sampled timesteps. The first call (or one with a
+    /// new column count) prepares the transformer, searches the configurations and builds the denoiser from these
+    /// rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        var transformedData = transformer.Transform(rows);
+        SetTrainingMode(true);
+        try { TrainBatch(transformedData, 0, rows.Rows, NumOps.FromDouble(_options.LearningRate / rows.Rows)); }
+        finally { SetTrainingMode(false); }
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/>, searches the denoiser configurations on it (phase 1) and applies
+    /// the best one (phase 2: noise schedule and denoiser); returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = PrepareColumns(data, columns);
+
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+        var transformedData = _transformer.Transform(data);
+
+        // Phase 1: Search over configurations
+        var bestConfig = SearchConfigurations(transformedData);
+
+        // Phase 2: Apply best configuration
+        _numTimesteps = bestConfig.Timesteps;
+        ComputeNoiseSchedule(bestConfig.Schedule, bestConfig.Timesteps);
+
+        int teDim = _options.TimestepEmbeddingDimension;
+        int inputDim = _dataWidth + teDim;
+        RebuildDenoiserLayers(bestConfig.MLPDims, inputDim, _dataWidth);
+        return transformedData;
     }
 
     /// <summary>

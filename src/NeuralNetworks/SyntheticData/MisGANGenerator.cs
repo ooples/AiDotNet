@@ -353,6 +353,30 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
+        var transformedData = PrepareForData(data, columns);
+
+        // Training loop
+        int batchSize = Math.Min(_options.BatchSize, data.Rows);
+        int numBatches = Math.Max(1, data.Rows / batchSize);
+
+        for (int epoch = 0; epoch < epochCount; epoch++)
+        {
+            for (int batch = 0; batch < numBatches; batch++)
+            {
+                int batchStart = batch * batchSize;
+                TrainBatch(transformedData, batchStart, Math.Min(batchStart + batchSize, data.Rows));
+            }
+        }
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/> and builds the data generator (unless custom layers were
+    /// supplied), the data and mask discriminators and the mask generator; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
         _columns = columns.ToList();
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
         _transformer.Fit(data, columns);
@@ -385,43 +409,31 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         BuildMaskGenerator();
         BuildMaskDiscriminator();
         MaterializeSubNetworks();
+        return transformedData;
+    }
 
-        // Training loop
-        int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        int numBatches = Math.Max(1, data.Rows / batchSize);
-
-        for (int epoch = 0; epoch < epochCount; epoch++)
+    /// <summary>
+    /// One batch on rows [batchStart, batchEnd): several WGAN critic updates (data and mask discriminators) per
+    /// generator update (data and mask generators).
+    /// </summary>
+    private void TrainBatch(Matrix<T> transformedData, int batchStart, int batchEnd)
+    {
+        SetTrainingMode(true);
+        try
         {
-            for (int batch = 0; batch < numBatches; batch++)
+            for (int dStep = 0; dStep < Math.Max(1, _options.DiscriminatorSteps); dStep++)
             {
-                int batchStart = batch * batchSize;
-                int batchEnd = Math.Min(batchStart + batchSize, data.Rows);
-                int actualBatchSize = batchEnd - batchStart;
-
-                T scaledLr = NumOps.FromDouble(_options.LearningRate / actualBatchSize);
-
-                SetTrainingMode(true);
-                try
-                {
-                    // WGAN: several critic (discriminator) updates per generator update.
-                    for (int dStep = 0; dStep < Math.Max(1, _options.DiscriminatorSteps); dStep++)
-                    {
-                        TrainDataDiscriminatorStep(transformedData, batchStart, batchEnd);
-                        TrainMaskDiscriminatorStep(transformedData, batchStart, batchEnd);
-                    }
-
-                    // Generator updates (data + mask).
-                    TrainDataGeneratorStep(batchStart, batchEnd);
-                    TrainMaskGeneratorStep(batchStart, batchEnd);
-                }
-                finally
-                {
-                    SetTrainingMode(false);
-                }
+                TrainDataDiscriminatorStep(transformedData, batchStart, batchEnd);
+                TrainMaskDiscriminatorStep(transformedData, batchStart, batchEnd);
             }
-        }
 
-        IsFitted = true;
+            TrainDataGeneratorStep(batchStart, batchEnd);
+            TrainMaskGeneratorStep(batchStart, batchEnd);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />
@@ -795,37 +807,20 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <inheritdoc />
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: the data and mask critics, then the data and mask generators. The
+    /// first call (or one with a new column count) prepares the transformer and the four networks from these rows,
+    /// every column continuous. The supervised step this replaced trained the data generator toward the target row for
+    /// whatever noise came in, which is not MisGAN's objective and never trained the mask networks.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
     {
-        // The full adversarial training (data + mask GANs) runs in Fit. This
-        // single-step entry point trains the data generator (the Layers chain,
-        // i.e. what Predict runs) to reconstruct the target via a tape-connected
-        // step, satisfying the NeuralNetworkBase training contract. The previous
-        // body was a no-op, so the generated training invariants saw no change.
-        SetTrainingMode(true);
-        try
-        {
-            // Honor the ctor-supplied / task-default loss function (tape-connected) rather than hardcoding squared
-            // error; fall back to the squared error only if the configured loss does not expose a tape implementation.
-            var packed = Training.StepInputPacking<T>.Pack(input, expectedOutput);
-            int[] inputShape = input._shape;
-            int inputLength = input.Length;
-            int targetLength = expectedOutput.Length;
-            StepOver(BuildDataGenLayerList(), packed, step =>
-            {
-                var output = DataGeneratorForward(Training.StepInputPacking<T>.Slice(step, 0, inputShape));
-                var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
-                var target = Training.StepInputPacking<T>.Slice(step, inputLength, new[] { targetLength });
-                return LossFunction is LossFunctions.LossFunctionBase<T> tapeLoss
-                    ? tapeLoss.ComputeTapeLoss(flatOut, target)
-                    : ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            }, _dataGenOptimizer);        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-
-        return true;
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        TrainBatch(transformer.Transform(rows), 0, rows.Rows);
+        IsFitted = true;
     }
 
     /// <inheritdoc />

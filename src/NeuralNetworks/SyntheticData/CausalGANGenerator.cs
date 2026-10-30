@@ -360,7 +360,75 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     {
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
+        var transformedData = PrepareForData(data, columns);
+        T lr = NumOps.FromDouble(_options.LearningRate);
+        int batchSize = Math.Min(_options.BatchSize, data.Rows);
+        int numBatches = Math.Max(1, data.Rows / batchSize);
 
+        for (int epoch = 0; epoch < epochCount; epoch++)
+        {
+            for (int batch = 0; batch < numBatches; batch++)
+            {
+                TrainBatch(transformedData, batchSize);
+            }
+
+            UpdateAdjacencyAugmentedLagrangian(lr);
+        }
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
+    {
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
+
+        await Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var transformedData = PrepareForData(data, columns);
+            T lr = NumOps.FromDouble(_options.LearningRate);
+            int batchSize = Math.Min(_options.BatchSize, data.Rows);
+            int numBatches = Math.Max(1, data.Rows / batchSize);
+
+            for (int epoch = 0; epoch < epochCount; epoch++)
+            {
+                ct.ThrowIfCancellationRequested();
+                for (int batch = 0; batch < numBatches; batch++)
+                {
+                    TrainBatch(transformedData, batchSize);
+                }
+                UpdateAdjacencyAugmentedLagrangian(lr);
+            }
+        }, ct).ConfigureAwait(false);
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit epoch on <paramref name="realData"/> as a single batch: the critic and generator steps, then the
+    /// augmented-Lagrangian update of the causal adjacency. The first call (or one with a new column count) prepares
+    /// the data transformer and networks from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        TrainBatch(transformer.Transform(rows), rows.Rows);
+        UpdateAdjacencyAugmentedLagrangian(NumOps.FromDouble(_options.LearningRate));
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the data transformer to <paramref name="data"/>, starts the causal adjacency near zero and builds the
+    /// networks for the transformed width; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
         _columns = PrepareColumns(data, columns);
 
         // Step 1: Fit the data transformer
@@ -389,89 +457,21 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
         // Step 4: Build networks with actual dimensions
         RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth);
-
-        // Step 5: Training loop
-        T lr = NumOps.FromDouble(_options.LearningRate);
-        int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        int numBatches = Math.Max(1, data.Rows / batchSize);
-
-        for (int epoch = 0; epoch < epochCount; epoch++)
-        {
-            for (int batch = 0; batch < numBatches; batch++)
-            {
-                // Paper-faithful CausalGAN training schedule (Kocaoglu et al.
-                // 2018 + NOTEARS / Zheng et al. 2018 §3.2). Critic + generator
-                // both via GradientTape; the causal adjacency matrix is
-                // updated separately via augmented Lagrangian after each
-                // epoch.
-                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                {
-                    TrainDiscriminatorStepBatched(transformedData, batchSize);
-                }
-                TrainGeneratorStepBatched(batchSize);
-            }
-
-            UpdateAdjacencyAugmentedLagrangian(lr);
-        }
-
-        IsFitted = true;
+        return transformedData;
     }
 
-    /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
+    /// <summary>
+    /// One batch of the paper-faithful CausalGAN schedule (Kocaoglu et al. 2018 + NOTEARS / Zheng et al. 2018 §3.2):
+    /// the critic steps, then the generator step, both via GradientTape. The causal adjacency is updated separately,
+    /// via augmented Lagrangian, once per epoch.
+    /// </summary>
+    private void TrainBatch(Matrix<T> transformedData, int batchSize)
     {
-        int epochCount = epochs ?? _options.Epochs;
-        ValidateFitInputs(data, columns, epochCount);
-
-        _columns = PrepareColumns(data, columns);
-
-        await Task.Run(() =>
+        for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
         {
-            ct.ThrowIfCancellationRequested();
-
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-            var transformedData = _transformer.Transform(data);
-
-            _adjacency = new Matrix<T>(_dataWidth, _dataWidth);
-            for (int i = 0; i < _dataWidth; i++)
-            {
-                for (int j = 0; j < _dataWidth; j++)
-                {
-                    if (i != j)
-                    {
-                        _adjacency[i, j] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
-                    }
-                }
-            }
-
-            _lagrangeAlpha = 0.0;
-            _lagrangeRho = 1.0;
-            _prevDagConstraint = double.MaxValue;
-
-            RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth);
-
-            T lr = NumOps.FromDouble(_options.LearningRate);
-            int batchSize = Math.Min(_options.BatchSize, data.Rows);
-            int numBatches = Math.Max(1, data.Rows / batchSize);
-
-            for (int epoch = 0; epoch < epochCount; epoch++)
-            {
-                ct.ThrowIfCancellationRequested();
-                for (int batch = 0; batch < numBatches; batch++)
-                {
-                    for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                    {
-                        TrainDiscriminatorStepBatched(transformedData, batchSize);
-                    }
-                    TrainGeneratorStepBatched(batchSize);
-                }
-                UpdateAdjacencyAugmentedLagrangian(lr);
-            }
-        }, ct).ConfigureAwait(false);
-
-        IsFitted = true;
+            TrainDiscriminatorStepBatched(transformedData, batchSize);
+        }
+        TrainGeneratorStepBatched(batchSize);
     }
 
     /// <summary>

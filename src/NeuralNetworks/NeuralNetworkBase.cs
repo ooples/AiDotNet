@@ -5756,22 +5756,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// Resolves <paramref name="layer"/>'s shape from the running
-    /// <paramref name="currentShape"/>, falling back to <paramref name="lastGoodShape"/>
-    /// (the last rank-&gt;=2 shape) when the running shape is rejected — which happens
-    /// when an intervening shape-preserving layer reported a degenerate rank-1 output
-    /// that poisoned the walk. On success advances <paramref name="currentShape"/> to
-    /// the layer's output (and refreshes <paramref name="lastGoodShape"/> when that
-    /// output is rank &gt;= 2). Shape-only: never allocates weights or consumes RNG.
-    /// Returns false only when neither shape resolves the layer.
-    /// </summary>
-    /// <summary>
     /// <paramref name="declared"/> with each unknown (non-positive) axis taken from <paramref name="known"/>, the two
-    /// aligned on their trailing axes; null when an unknown axis has no known counterpart.
+    /// aligned on their trailing axes. Null when no axis is known (a fully dynamic declaration says nothing, so the walk
+    /// keeps passing its shape through) or an unknown axis has no known counterpart.
     /// </summary>
     private static int[]? FillUnknownAxes(int[]? declared, int[] known)
     {
         if (declared is null || declared.Length == 0 || declared.Length > known.Length) return null;
+        if (!System.Array.Exists(declared, d => d > 0)) return null;
         var filled = new int[declared.Length];
         int offset = known.Length - declared.Length;
         for (int k = 0; k < declared.Length; k++)
@@ -5782,6 +5774,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return filled;
     }
 
+    /// <summary>
+    /// Resolves <paramref name="layer"/>'s shape from the running
+    /// <paramref name="currentShape"/>, falling back to <paramref name="lastGoodShape"/>
+    /// (the last rank-&gt;=2 shape) when the running shape is rejected — which happens
+    /// when an intervening shape-preserving layer reported a degenerate rank-1 output
+    /// that poisoned the walk. On success advances <paramref name="currentShape"/> to
+    /// the layer's output (and refreshes <paramref name="lastGoodShape"/> when that
+    /// output is rank &gt;= 2). Shape-only: never allocates weights or consumes RNG.
+    /// Returns false only when neither shape resolves the layer.
+    /// </summary>
     private bool TryAdvanceLayerShape(ILayer<T> layer, ref int[] currentShape, ref int[] lastGoodShape)
     {
         var candidates = ReferenceEquals(lastGoodShape, currentShape)
@@ -5814,7 +5816,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     currentShape = outShape;
                     if (outShape.Length >= 2) lastGoodShape = outShape;
                 }
-                else if (FillUnknownAxes(outShape, lastGoodShape) is { } filled)
+                else if (FillUnknownAxes(outShape, tryShape) is { } filled)
                 {
                     // A layer that declares a data-dependent axis (a Conformer block's [-1, features]) still fixed
                     // the rest. Skipping it left the walk on the shape before the block, and the next layer that

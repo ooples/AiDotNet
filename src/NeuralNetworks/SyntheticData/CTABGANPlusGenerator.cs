@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Training;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
@@ -102,54 +103,40 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
     private int _packedInputDim;
     private Random _random;
 
+    // WGAN-GP Adam instances for the critic and the auxiliary classifier, separate from the generator's so their
+    // moment estimates never cross-contaminate.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _classifierOptimizer;
+
+    // Held across Train calls. The fused plan owns the critic optimizer's state, so a step object built per call
+    // re-traced and recompiled every call and restarted the optimizer at t = 1.
+    private AiDotNet.Training.WganGpFusedStep<T>? _wganFusedStep;
+
+    // Each categorical column's (offset, width) in the transformed row, in the conditional vector's column order.
+    private readonly List<(int Offset, int Width)> _catOutputBlocks = new();
+
     // Generator batch normalization layers (auxiliary, always created to match Layers)
     private readonly List<BatchNormalizationLayer<T>> _genBNLayers = new();
 
     // Discriminator layers (auxiliary, not user-overridable)
     private readonly List<ILayer<T>> _discLayers = new();
-    private readonly List<DropoutLayer<T>> _discDropoutLayers = new();
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
-    private int _discLastHiddenDim;
 
-    // Auxiliary classifier head (separate from discriminator's critic head)
+    // Auxiliary classifier (Zhao et al. 2021 §3.1): an MLP of the critic's hidden widths and a class head, predicting
+    // the target column from the rest of a row. It is a separate network from the critic.
+    private readonly List<ILayer<T>> _classifierLayers = new();
     private FullyConnectedLayer<T>? _classifierHead;
     private int _numClasses;
     private int _targetColTransformOffset;
+    // False when the data has no categorical target column, which leaves the classifier and its loss out.
+    private bool _hasClassifierTarget;
 
     // Cached pre-activations for proper backward passes
     [Scratch]
     private readonly List<Tensor<T>> _genPreActivations = new();
-    [Scratch]
-    private readonly List<Tensor<T>> _discPreActivations = new();
 
     // Whether custom layers are being used (disables residual connection logic)
     private bool _usingCustomLayers;
-
-    // Pre-allocated training buffers to avoid per-row GC pressure
-    [Scratch]
-    private Tensor<T>? _oneGrad;
-    [Scratch]
-    private Tensor<T>? _negOneGrad;
-    [Scratch]
-    private Vector<T>? _packedRealBuf;
-    [Scratch]
-    private Vector<T>? _packedFakeBuf;
-    [Scratch]
-    private Vector<T>? _noiseBuf;
-    [Scratch]
-    private Vector<T>? _genInputBuf;
-    [Scratch]
-    private Vector<T>? _realSingleBuf;
-    [Scratch]
-    private Vector<T>? _fakeSingleBuf;
-    [Scratch]
-    private Vector<T>? _realRowBuf;
-    [Scratch]
-    private Vector<T>? _fakeRowBuf;
-    [Scratch]
-    private Vector<T>? _interpolatedBuf;
-    [Scratch]
-    private Tensor<T>? _sampleGradBuf;
 
     /// <summary>
     /// Gets the CTAB-GAN+-specific options.
@@ -193,16 +180,35 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
     {
         _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // WGAN-GP Adam configuration (Gulrajani et al. 2017): beta1 = 0.5, beta2 = 0.9.
+        AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
+            new(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.5,
+                Beta2 = 0.9,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
             });
+        _optimizer = optimizer ?? MakeAdam();
+        _discriminatorOptimizer = MakeAdam();
+        _classifierOptimizer = MakeAdam();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         InitializeLayers();
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _wganFusedStep?.Dispose();
+            _wganFusedStep = null;
+        }
+        base.Dispose(disposing);
     }
 
     #region Layer Initialization (GANDALF Pattern)
@@ -272,25 +278,31 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
         // Discriminator is always rebuilt with actual dimensions
         _discLayers.Clear();
-        _discDropoutLayers.Clear();
         _discLayerDims.Clear();
         _discLayers.AddRange(LayerHelper<T>.CreateDefaultCTABGANPlusDiscriminatorLayers(
             discInputDim, _options.DiscriminatorDimensions, _options.DiscriminatorDropout));
 
         BuildDiscriminatorDimensionMap(discInputDim);
 
-        // Build auxiliary classifier head from last hidden dim
+        // Auxiliary classifier: hidden dense layers of the critic's widths (LeakyReLU applied in the forward), then
+        // the class head.
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        _classifierLayers.Clear();
+        foreach (int dim in _options.DiscriminatorDimensions)
+        {
+            _classifierLayers.Add(new DenseLayer<T>(dim, identity));
+        }
         _classifierHead = new FullyConnectedLayer<T>(_numClasses, identity);
+        _wganFusedStep?.Dispose();
+        _wganFusedStep = null;
     }
 
     /// <summary>
-    /// Builds a dimension map for the discriminator layers to support manual backward pass.
+    /// Records each critic dense layer's (input, output) widths; the last entry marks the score head.
     /// </summary>
     private void BuildDiscriminatorDimensionMap(int inputDim)
     {
         _discLayerDims.Clear();
-        _discDropoutLayers.Clear();
 
         int prevDim = inputDim;
         var discDims = _options.DiscriminatorDimensions;
@@ -298,10 +310,8 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         for (int i = 0; i < discDims.Length; i++)
         {
             _discLayerDims.Add((prevDim, discDims[i]));
-            _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
             prevDim = discDims[i];
         }
-        _discLastHiddenDim = prevDim;
         _discLayerDims.Add((prevDim, 1));
     }
 
@@ -337,34 +347,6 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         return GeneratorForwardWithResidual(input);
     }
 
-    /// <summary>
-    /// Trains the CTAB-GAN+ network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input noise tensor.</param>
-    /// <param name="expectedOutput">The expected real data tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This runs a single training step for the generator.
-    /// The full GAN training loop (alternating discriminator/generator) happens in Fit().
-    /// This method is provided for compatibility with the NeuralNetworkBase pattern.
-    /// </para>
-    /// </remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // CTAB-GAN+ is trained adversarially through Fit() / FitAsync (alternating
-        // critic and generator updates with the auxiliary classifier and
-        // information loss). The NeuralNetworkBase supervised Train(input,
-        // expected) contract does not map onto a GAN's minimax objective —
-        // silently running a forward + loss but skipping every parameter
-        // update would report a misleading "training" loss while making zero
-        // learning progress, which is worse than failing fast.
-        throw new NotSupportedException(
-            "CTAB-GAN+ is trained adversarially; the supervised Train(input, expected) " +
-            "contract does not map onto its minimax objective. Use Fit(IEnumerable<Tensor<T>>) " +
-            "or FitAsync to drive the alternating discriminator/generator loop with the " +
-            "auxiliary classifier and information losses.");
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     #endregion
@@ -391,12 +373,78 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
+        var transformedData = PrepareForData(data, columns);
+        int numPacks = PacksPerBatch(_options.BatchSize);
+        int numBatches = Math.Max(1, data.Rows / (numPacks * _options.PacSize));
+
+        for (int epoch = 0; epoch < epochCount; epoch++)
+        {
+            for (int batch = 0; batch < numBatches; batch++)
+            {
+                TrainBatch(transformedData, numPacks);
+            }
+        }
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
+    {
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
+
+        await Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var transformedData = PrepareForData(data, columns);
+            int numPacks = PacksPerBatch(_options.BatchSize);
+            int numBatches = Math.Max(1, data.Rows / (numPacks * _options.PacSize));
+
+            for (int epoch = 0; epoch < epochCount; epoch++)
+            {
+                ct.ThrowIfCancellationRequested();
+                for (int batch = 0; batch < numBatches; batch++)
+                {
+                    TrainBatch(transformedData, numPacks);
+                }
+            }
+        }, ct).ConfigureAwait(false);
+
+        IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: the critic steps, the auxiliary classifier step, then the generator
+    /// step, over as many packs as the rows fill. The first call (or one with a new column count) prepares the
+    /// transformer, sampler and networks from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        TrainBatch(transformer.Transform(rows), PacksPerBatch(rows.Rows));
+        IsFitted = true;
+    }
+
+    private int PacksPerBatch(int rows) => Math.Max(1, rows / _options.PacSize);
+
+    /// <summary>
+    /// Fits the VGM transformer and the conditional sampler to <paramref name="data"/>, finds the classifier's target
+    /// column and builds the networks for the transformed width; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
         _columns = PrepareColumns(data, columns);
 
         // Step 1: Fit transformer
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
         _transformer.Fit(data, _columns);
         _dataWidth = _transformer.TransformedWidth;
+        BuildCategoricalOutputBlocks();
 
         // Step 2: Fit sampler
         _sampler = new CTGANDataSampler<T>(_random);
@@ -412,81 +460,26 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         // Step 5: Rebuild layers with actual data dimensions
         int genInputDim = _options.EmbeddingDimension + _condWidth;
         RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
-        InitializeTrainingBuffers(genInputDim);
 
         // Step 6: Transform data
-        var transformedData = _transformer.Transform(data);
-
-        // Step 7: Training loop
-        T lr = NumOps.FromDouble(_options.LearningRate);
-        int pacSize = _options.PacSize;
-        int batchSize = _options.BatchSize;
-        int numPacks = Math.Max(1, batchSize / pacSize);
-        int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
-
-        for (int epoch = 0; epoch < epochCount; epoch++)
-        {
-            for (int batch = 0; batch < numBatches; batch++)
-            {
-                for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                {
-                }
-
-            }
-        }
-
-        IsFitted = true;
+        return _transformer.Transform(data);
     }
 
-    /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
+    /// <summary>
+    /// One batch of the paper's schedule (Zhao et al. 2023 §3): DiscriminatorSteps WGAN-GP critic steps, one step of the
+    /// auxiliary classifier on real rows, then one generator step, all through GradientTape.
+    /// </summary>
+    private void TrainBatch(Matrix<T> transformedData, int numPacks)
     {
-        int epochCount = epochs ?? _options.Epochs;
-        ValidateFitInputs(data, columns, epochCount);
-
-        _columns = PrepareColumns(data, columns);
-
-        await Task.Run(() =>
+        for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
         {
-            ct.ThrowIfCancellationRequested();
-
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-
-            _sampler = new CTGANDataSampler<T>(_random);
-            _sampler.Fit(data, _columns);
-            _condWidth = _sampler.ConditionalVectorWidth;
-
-            IdentifyTargetColumn(_columns);
-
-            _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
-
-            int genInputDim = _options.EmbeddingDimension + _condWidth;
-            RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
-            InitializeTrainingBuffers(genInputDim);
-
-            var transformedData = _transformer.Transform(data);
-
-            T lr = NumOps.FromDouble(_options.LearningRate);
-            int pacSize = _options.PacSize;
-            int batchSize = _options.BatchSize;
-            int numPacks = Math.Max(1, batchSize / pacSize);
-            int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
-
-            for (int epoch = 0; epoch < epochCount; epoch++)
-            {
-                ct.ThrowIfCancellationRequested();
-                for (int batch = 0; batch < numBatches; batch++)
-                {
-                    for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                    {
-                    }
-                }
-            }
-        }, ct).ConfigureAwait(false);
-
-        IsFitted = true;
+            TrainDiscriminatorStepBatched(transformedData, numPacks);
+        }
+        if (_hasClassifierTarget)
+        {
+            TrainClassifierStepBatched(transformedData, numPacks * _options.PacSize);
+        }
+        TrainGeneratorStepBatched(transformedData, numPacks);
     }
 
     /// <summary>
@@ -578,24 +571,19 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
             }
         }
 
-        if (targetIdx >= 0 && targetIdx < columns.Count && columns[targetIdx].IsCategorical)
+        // The target's one-hot block in the transformed row. Its width is the transformer's (the categories actually
+        // seen), which is what the classifier predicts and the slices below read.
+        if (targetIdx >= 0 && targetIdx < columns.Count && columns[targetIdx].IsCategorical && _transformer is not null
+            && _transformer.GetTransformInfo(targetIdx) is { IsContinuous: false, Width: >= 2 } target)
         {
-            _numClasses = Math.Max(columns[targetIdx].NumCategories, 2);
-
-            // Find the transform offset for the target column
-            if (_transformer is not null)
-            {
-                _targetColTransformOffset = 0;
-                for (int c = 0; c < targetIdx && c < columns.Count; c++)
-                {
-                    var info = _transformer.GetTransformInfo(c);
-                    _targetColTransformOffset += info.Width;
-                }
-            }
+            _hasClassifierTarget = true;
+            _numClasses = target.Width;
+            _targetColTransformOffset = target.StartOffset;
         }
         else
         {
-            _numClasses = 2; // Binary fallback
+            _hasClassifierTarget = false;
+            _numClasses = 2;
             _targetColTransformOffset = 0;
         }
     }
@@ -605,68 +593,367 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
     #region GAN Training Steps
 
     /// <summary>
-    /// Computes the gradient of the auxiliary classifier loss with respect to logits.
-    /// Uses softmax cross-entropy gradient: softmax(logits) - one_hot(target).
+    /// WGAN-GP critic step (Gulrajani et al. 2017) over PacSize-packed samples (PacGAN, Lin et al. 2018), through the
+    /// shared critic step and its single replay-safe gradient penalty.
     /// </summary>
-    private Tensor<T> ComputeClassifierGradient(Tensor<T> logits, Vector<T> packedData)
+    private void TrainDiscriminatorStepBatched(Matrix<T> transformedData, int numPacks)
     {
-        // Extract target class from packed data (first sample's target column)
-        int targetClass = 0;
-        if (_targetColTransformOffset < packedData.Length)
-        {
-            double bestVal = double.MinValue;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                int idx = _targetColTransformOffset + c;
-                if (idx < packedData.Length)
-                {
-                    double v = NumOps.ToDouble(packedData[idx]);
-                    if (v > bestVal) { bestVal = v; targetClass = c; }
-                }
-            }
-        }
+        if (_sampler is null) return;
 
-        // Softmax + cross-entropy gradient
-        var grad = new Tensor<T>(logits._shape);
-        double maxVal = double.MinValue;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal) maxVal = v;
-        }
-
-        double sumExp = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            sumExp += Math.Exp(NumOps.ToDouble(logits[i]) - maxVal);
-        }
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double softmax = Math.Exp(NumOps.ToDouble(logits[i]) - maxVal) / Math.Max(sumExp, 1e-10);
-            double target = i == targetClass ? 1.0 : 0.0;
-            grad[i] = NumOps.FromDouble(softmax - target);
-        }
-
-        return grad;
+        var (realPacked, fakePacked) = BuildPackedRealAndFakeBatches(transformedData, numPacks);
+        AiDotNet.Training.WassersteinCriticStep<T>.Step(
+            this,
+            _discLayers,
+            realPacked,
+            fakePacked,
+            input => DiscriminatorForwardBatched(input, isTraining: true).Score,
+            _options.GradientPenaltyWeight,
+            _discriminatorOptimizer,
+            _random,
+            ref _wganFusedStep);
     }
 
     /// <summary>
-    /// Adds information loss gradient to the generator gradient.
-    /// Penalizes divergence of generated data statistics from real data statistics.
+    /// Auxiliary classifier step (Zhao et al. 2021 §3.1): cross-entropy of the classifier's prediction of the target
+    /// column from the rest of each real row.
     /// </summary>
-    private void AddInformationLossGradient(Tensor<T> grad, Vector<T> fakeRow, Matrix<T> transformedData)
+    private void TrainClassifierStepBatched(Matrix<T> transformedData, int batchSize)
     {
-        if (_options.InformationWeight < 1e-10) return;
+        var head = _classifierHead;
+        if (head is null) return;
 
-        int sampleRow = _random.Next(transformedData.Rows);
-        for (int j = 0; j < grad.Length && j < fakeRow.Length && j < transformedData.Columns; j++)
+        var real = new Tensor<T>([batchSize, _dataWidth]);
+        for (int b = 0; b < batchSize; b++)
         {
-            double fake = NumOps.ToDouble(fakeRow[j]);
-            double real = NumOps.ToDouble(transformedData[sampleRow, j]);
-            double infoGrad = 2.0 * (fake - real) * _options.InformationWeight;
-            grad[j] = NumOps.FromDouble(NumOps.ToDouble(grad[j]) + infoGrad);
+            int row = _random.Next(transformedData.Rows);
+            for (int j = 0; j < _dataWidth; j++) real[b, j] = transformedData[row, j];
         }
+        var labels = Engine.TensorSlice(real, [0, _targetColTransformOffset], [batchSize, _numClasses]);
+
+        var classifierLayers = new List<ILayer<T>>(_classifierLayers) { head };
+        var trainable = classifierLayers.OfType<ITrainableLayer<T>>().ToList();
+        AiDotNet.Training.FusedTrainingStep<T>.Step(
+            head, trainable, real, labels,
+            forward: ClassifierForwardBatched,
+            computeLoss: ClassifierCrossEntropy,
+            optimizer: _classifierOptimizer,
+            extraTensors: TapeTrainingStep<T>.CollectParameters(classifierLayers));
+    }
+
+    /// <summary>
+    /// Generator step (Zhao et al. 2023 §3): the WGAN loss -E[D(G(z, c))], plus the conditional loss that makes the
+    /// generator honour its condition (Xu et al. 2019 §4.3), ClassifierWeight times the classifier's cross-entropy
+    /// against each generated row's own target, and InformationWeight times the information loss. The critic and
+    /// classifier score the samples in evaluation mode and are not in the parameter group, so only the generator moves.
+    /// </summary>
+    private void TrainGeneratorStepBatched(Matrix<T> transformedData, int numPacks)
+    {
+        if (_sampler is null) return;
+
+        var generatorLayers = new List<ILayer<T>>();
+        generatorLayers.AddRange(Layers);
+        foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
+        var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
+        if (trainableGenLayers.Count == 0) return;
+
+        int totalSamples = numPacks * _options.PacSize;
+        int embedDim = _options.EmbeddingDimension;
+        int condDim = _condWidth;
+        var noiseBatch = GenerateNoiseBatchTensor(totalSamples);
+        var (condBatch, maskBatch) = SampleCondMaskBatch(totalSamples);
+        // The step's input carries [noise | cond | mask] side by side so a replayed plan sees fresh samples.
+        var fusedInput = Engine.TensorConcatenate([noiseBatch, condBatch, maskBatch], axis: 1);
+
+        // The real batch the information loss compares against: packed rows with their own conditions.
+        var (realPacked, _) = BuildPackedRealAndFakeBatches(transformedData, numPacks, includeFake: false);
+
+        // Fwd's intermediates, reused by Loss (the fused-step contract runs Fwd before Loss).
+        Tensor<T>? capturedAct = null;
+        Tensor<T>? capturedCond = null;
+        Tensor<T>? capturedMask = null;
+        Tensor<T>? capturedFakeFeatures = null;
+        Tensor<T> Fwd(Tensor<T> packed)
+        {
+            var gi = Engine.TensorSlice(packed, [0, 0], [totalSamples, embedDim + condDim]);
+            var act = ApplyOutputActivationsBatched(GeneratorForwardWithResidualBatched(gi));
+            var cond = Engine.TensorSlice(packed, [0, embedDim], [totalSamples, condDim]);
+            capturedAct = act;
+            capturedCond = cond;
+            capturedMask = Engine.TensorSlice(packed, [0, embedDim + condDim], [totalSamples, condDim]);
+            var withCond = condDim > 0 ? Engine.TensorConcatenate([act, cond], axis: 1) : act;
+            var (score, features) = DiscriminatorForwardBatched(withCond.Reshape([numPacks, _packedInputDim]), false);
+            capturedFakeFeatures = features;
+            return score;
+        }
+        Tensor<T> Loss(Tensor<T> scores, Tensor<T> _)
+        {
+            var act = capturedAct;
+            var cond = capturedCond;
+            var mask = capturedMask;
+            var fakeFeatures = capturedFakeFeatures;
+            if (act is null || cond is null || mask is null || fakeFeatures is null)
+                throw new InvalidOperationException(
+                    "CTAB-GAN+ generator step: the forward's intermediates were not captured before the loss ran.");
+
+            var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var loss = Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
+            if (condDim > 0 && _catOutputBlocks.Count > 0)
+            {
+                loss = Engine.TensorAdd(loss, ConditionalCrossEntropy(act, cond, mask));
+            }
+            if (_hasClassifierTarget && _options.ClassifierWeight > 0)
+            {
+                // Each generated row's own target block is its label: a constant, so the gradient reaches the
+                // generator through the classifier's view of the rest of the row.
+                var labels = Engine.TensorSlice(act, [0, _targetColTransformOffset], [totalSamples, _numClasses]);
+                var ce = ClassifierCrossEntropy(ClassifierForwardBatched(act), new Tensor<T>(labels.ToArray(), labels._shape));
+                loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(ce, NumOps.FromDouble(_options.ClassifierWeight)));
+            }
+            if (_options.InformationWeight > 0)
+            {
+                var realFeatures = DiscriminatorForwardBatched(realPacked, false).Features;
+                var info = InformationLoss(new Tensor<T>(realFeatures.ToArray(), realFeatures._shape), fakeFeatures);
+                loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(info, NumOps.FromDouble(_options.InformationWeight)));
+            }
+            return loss;
+        }
+
+        AiDotNet.Training.FusedTrainingStep<T>.Step(
+            this, trainableGenLayers, fusedInput, new Tensor<T>(new[] { 1 }),
+            forward: Fwd,
+            computeLoss: Loss,
+            optimizer: _optimizer,
+            extraTensors: TapeTrainingStep<T>.CollectParameters(generatorLayers));
+    }
+
+    /// <summary>
+    /// Information loss (Zhao et al. 2021 §3.1): the L2 distances between the batch mean and between the batch standard
+    /// deviation of the critic's last hidden features on real and on generated packs.
+    /// </summary>
+    private Tensor<T> InformationLoss(Tensor<T> realFeatures, Tensor<T> fakeFeatures)
+    {
+        var eps = NumOps.FromDouble(1e-8);
+        Tensor<T> L2(Tensor<T> a, Tensor<T> b)
+            => Engine.TensorSqrt(Engine.TensorAddScalar(
+                Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(a, b)), [0], keepDims: false), eps));
+        Tensor<T> Std(Tensor<T> f)
+            => Engine.TensorSqrt(Engine.TensorAddScalar(Engine.ReduceVariance(f, [0], keepDims: false), eps));
+
+        var meanTerm = L2(Engine.ReduceMean(realFeatures, [0], keepDims: false), Engine.ReduceMean(fakeFeatures, [0], keepDims: false));
+        var stdTerm = L2(Std(realFeatures), Std(fakeFeatures));
+        return Engine.TensorAdd(meanTerm, stdTerm);
+    }
+
+    /// <summary>
+    /// The mean softmax cross-entropy of <paramref name="logits"/> [N, classes] against one-hot (or soft)
+    /// <paramref name="labels"/> [N, classes].
+    /// </summary>
+    private Tensor<T> ClassifierCrossEntropy(Tensor<T> logits, Tensor<T> labels)
+    {
+        var logp = Engine.TensorLog(Engine.TensorAddScalar(Engine.Softmax(logits, axis: 1), NumOps.FromDouble(1e-8)));
+        var perRow = Engine.ReduceSum(Engine.TensorMultiply(labels, logp), [1], keepDims: false);
+        return Engine.TensorNegate(Engine.ReduceMean(perRow, [0], keepDims: false));
+    }
+
+    /// <summary>
+    /// The auxiliary classifier's logits [N, classes] for transformed rows [N, dataWidth], from every block but the
+    /// target column's: the hidden layers with LeakyReLU (slope 0.2), then the class head.
+    /// </summary>
+    private Tensor<T> ClassifierForwardBatched(Tensor<T> rows)
+    {
+        int n = rows.Shape[0];
+        int width = rows.Shape[1];
+        int end = _targetColTransformOffset + _numClasses;
+        var parts = new List<Tensor<T>>(2);
+        if (_targetColTransformOffset > 0)
+            parts.Add(Engine.TensorSlice(rows, [0, 0], [n, _targetColTransformOffset]));
+        if (end < width)
+            parts.Add(Engine.TensorSlice(rows, [0, end], [n, width - end]));
+        var current = parts.Count switch
+        {
+            0 => new Tensor<T>([n, 1]),
+            1 => parts[0],
+            _ => Engine.TensorConcatenate(parts.ToArray(), axis: 1),
+        };
+
+        T leakySlope = NumOps.FromDouble(0.2);
+        foreach (var layer in _classifierLayers)
+        {
+            current = Engine.LeakyReLU(layer.Forward(current), leakySlope);
+        }
+        var head = _classifierHead ?? throw new InvalidOperationException("The auxiliary classifier was not built.");
+        return head.Forward(current);
+    }
+
+    /// <summary>
+    /// Records each categorical column's (offset, width) in the transformed row, in the conditional vector's order.
+    /// </summary>
+    private void BuildCategoricalOutputBlocks()
+    {
+        _catOutputBlocks.Clear();
+        if (_transformer is null) return;
+        for (int col = 0; col < _columns.Count; col++)
+        {
+            var info = _transformer.GetTransformInfo(col);
+            if (!info.IsContinuous)
+                _catOutputBlocks.Add((info.StartOffset, info.Width));
+        }
+    }
+
+    /// <summary>
+    /// Samples conditional vectors with their masks (Xu et al. 2019 §4.3): [N, condWidth] one-hot conditions and
+    /// [N, condWidth] masks that are 1 over the selected column's block.
+    /// </summary>
+    private (Tensor<T> Cond, Tensor<T> Mask) SampleCondMaskBatch(int batchSize)
+    {
+        var cond = new Tensor<T>([batchSize, _condWidth]);
+        var mask = new Tensor<T>([batchSize, _condWidth]);
+        if (_sampler is null || _condWidth == 0) return (cond, mask);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, mv, _, _, _) = _sampler.SampleCondVecWithMask();
+            for (int j = 0; j < _condWidth; j++) { cond[b, j] = cv[j]; mask[b, j] = mv[j]; }
+        }
+        return (cond, mask);
+    }
+
+    /// <summary>
+    /// Conditional loss (Xu et al. 2019 §4.3): the cross-entropy between each condition and the generator's softmax
+    /// over the conditioned column, masked to that column.
+    /// </summary>
+    private Tensor<T> ConditionalCrossEntropy(Tensor<T> fakeActivated, Tensor<T> condBatch, Tensor<T> maskBatch)
+    {
+        int batch = fakeActivated.Shape[0];
+        var blocks = new List<Tensor<T>>(_catOutputBlocks.Count);
+        foreach (var (offset, width) in _catOutputBlocks)
+            blocks.Add(Engine.TensorSlice(fakeActivated, [0, offset], [batch, width]));
+        var alignedGen = blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
+
+        var logp = Engine.TensorLog(Engine.TensorAddScalar(alignedGen, NumOps.FromDouble(1e-8)));
+        var masked = Engine.TensorMultiply(Engine.TensorMultiply(maskBatch, condBatch), logp);
+        var perRow = Engine.ReduceSum(masked, [1], keepDims: false);
+        return Engine.TensorNegate(Engine.ReduceMean(perRow, [0], keepDims: false));
+    }
+
+    /// <summary>
+    /// The packed real batch [numPacks, packedInputDim] (sampled rows with the conditions that drew them) and, unless
+    /// <paramref name="includeFake"/> is false, the packed generated batch for the same conditions.
+    /// </summary>
+    private (Tensor<T> RealPacked, Tensor<T> FakePacked) BuildPackedRealAndFakeBatches(
+        Matrix<T> transformedData, int numPacks, bool includeFake = true)
+    {
+        int totalSamples = numPacks * _options.PacSize;
+        var (condBatch, rowIndices) = SampleConditionalBatchWithRows(transformedData.Rows, totalSamples);
+
+        var realFlat = new Tensor<T>([totalSamples, _dataWidth]);
+        int cols = Math.Min(_dataWidth, transformedData.Columns);
+        for (int s = 0; s < totalSamples; s++)
+        {
+            for (int j = 0; j < cols; j++) realFlat[s, j] = transformedData[rowIndices[s], j];
+        }
+        var realSingles = _condWidth > 0 ? Engine.TensorConcatenate([realFlat, condBatch], axis: 1) : realFlat;
+        var realPacked = realSingles.Reshape([numPacks, _packedInputDim]);
+        if (!includeFake) return (realPacked, realPacked);
+
+        var genInput = Engine.TensorConcatenate([GenerateNoiseBatchTensor(totalSamples), condBatch], axis: 1);
+        var fakeActivated = ApplyOutputActivationsBatched(GeneratorForwardWithResidualBatched(genInput));
+        var fakeSingles = _condWidth > 0 ? Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1) : fakeActivated;
+        return (realPacked, fakeSingles.Reshape([numPacks, _packedInputDim]));
+    }
+
+    /// <summary>
+    /// Samples a condition per sample by training-by-sampling (Xu et al. 2019 §4.3) with the row it drew.
+    /// </summary>
+    private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int dataRows, int batchSize)
+    {
+        var batch = new Tensor<T>([batchSize, _condWidth]);
+        var rowIndices = new int[batchSize];
+        if (_sampler is null) return (batch, rowIndices);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, rowIndex) = _sampler.SampleConditionAndRow();
+            int cols = Math.Min(_condWidth, cv.Length);
+            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+            rowIndices[b] = rowIndex >= 0 && rowIndex < dataRows ? rowIndex : _random.Next(dataRows);
+        }
+
+        return (batch, rowIndices);
+    }
+
+    /// <summary>
+    /// [batchSize, EmbeddingDimension] standard-normal noise.
+    /// </summary>
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize)
+    {
+        var noise = new Tensor<T>([batchSize, _options.EmbeddingDimension]);
+        for (int i = 0; i < noise.Length; i++) noise[i] = SampleStandardNormal();
+        return noise;
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked <see cref="GeneratorForwardWithResidual"/>: each hidden layer sees the previous output
+    /// concatenated with the input, then batch normalisation and ReLU.
+    /// </summary>
+    private Tensor<T> GeneratorForwardWithResidualBatched(Tensor<T> input)
+    {
+        if (_usingCustomLayers)
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+
+        var h = input;
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            if (i > 0) h = Engine.TensorConcatenate([h, input], axis: 1);
+            h = Layers[i].Forward(h);
+            if (i < _genBNLayers.Count) h = _genBNLayers[i].Forward(h);
+            h = Engine.ReLU(h);
+        }
+        h = Engine.TensorConcatenate([h, input], axis: 1);
+        return Layers[^1].Forward(h);
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked <see cref="ApplyOutputActivations"/>: tanh on each continuous value, softmax over each mode
+    /// and each categorical block.
+    /// </summary>
+    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output)
+    {
+        if (_transformer is null) return Engine.TensorTanh(output);
+
+        int batch = output.Shape[0];
+        int totalWidth = output.Shape[1];
+        var blocks = new List<Tensor<T>>(_columns.Count * 2);
+        int idx = 0;
+        for (int col = 0; col < _columns.Count && idx < totalWidth; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+            if (transform.IsContinuous)
+            {
+                blocks.Add(Engine.TensorTanh(Engine.TensorSlice(output, [0, idx], [batch, 1])));
+                idx++;
+                int modeLength = Math.Min(transform.Width - 1, totalWidth - idx);
+                if (modeLength > 0)
+                {
+                    blocks.Add(Engine.Softmax(Engine.TensorSlice(output, [0, idx], [batch, modeLength]), axis: 1));
+                    idx += modeLength;
+                }
+            }
+            else
+            {
+                int blockLength = Math.Min(transform.Width, totalWidth - idx);
+                blocks.Add(Engine.Softmax(Engine.TensorSlice(output, [0, idx], [batch, blockLength]), axis: 1));
+                idx += blockLength;
+            }
+        }
+        if (idx < totalWidth)
+        {
+            blocks.Add(Engine.TensorTanh(Engine.TensorSlice(output, [0, idx], [batch, totalWidth - idx])));
+        }
+        return blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
     }
 
     #endregion
@@ -674,92 +961,33 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
     #region Discriminator Forward/Backward
 
     /// <summary>
-    /// Runs the discriminator forward pass, returning critic score, classifier logits, and hidden output.
+    /// Batched, tape-tracked critic forward over packed rows: dense layers with LeakyReLU (slope 0.2), dropout while
+    /// training. Returns the score [numPacks, 1] and the last hidden activation the information loss compares.
     /// </summary>
-    private (Tensor<T> CriticScore, Tensor<T> ClassLogits, Tensor<T> HiddenOutput) DiscriminatorForward(
-        Tensor<T> input, bool isTraining)
+    private (Tensor<T> Score, Tensor<T> Features) DiscriminatorForwardBatched(Tensor<T> input, bool isTraining)
     {
-        _discPreActivations.Clear();
         var current = input;
+        var features = input;
+        T leakySlope = NumOps.FromDouble(0.2);
         int layerIdx = 0;
 
         for (int i = 0; i < _discLayers.Count; i++)
         {
-            var layer = _discLayers[i];
-
-            if (layer is DropoutLayer<T> dropout)
+            if (_discLayers[i] is DropoutLayer<T> dropout)
             {
-                if (isTraining)
-                {
-                    current = dropout.Forward(current);
-                }
+                if (isTraining) current = dropout.Forward(current);
                 continue;
             }
 
             bool isLastDense = layerIdx == _discLayerDims.Count - 1;
-            current = layer.Forward(current);
-
-            if (!isLastDense)
-            {
-                _discPreActivations.Add(CloneTensor(current));
-                current = ApplyLeakyReLU(current);
-            }
-
+            if (isLastDense) features = current;
+            current = _discLayers[i].Forward(current);
+            if (!isLastDense) current = Engine.LeakyReLU(current, leakySlope);
             layerIdx++;
         }
 
-        var hidden = CloneTensor(current);
-
-        // For the last dense layer, current is already the critic score
-        // We need the hidden layer output (before the critic head) for classifier
-        // Recompute: the hidden output is what goes into the critic head
-        // Since the critic head is the last dense layer, we need the pre-critic-head activation
-        Tensor<T> classLogits;
-        if (_classifierHead is not null && _discPreActivations.Count > 0)
-        {
-            // Use the last pre-activation after LeakyReLU (which is the input to the critic head)
-            // We need to apply LeakyReLU to the last hidden pre-activation
-            var lastHiddenPreAct = _discPreActivations[^1];
-            var lastHiddenAct = ApplyLeakyReLU(lastHiddenPreAct);
-            classLogits = _classifierHead.Forward(lastHiddenAct);
-        }
-        else
-        {
-            classLogits = new Tensor<T>([_numClasses]);
-        }
-
-        return (current, classLogits, hidden);
+        return (current, features);
     }
-
-    /// <summary>
-    /// Updates discriminator parameters with a given learning rate.
-    /// </summary>
-    private void UpdateDiscriminatorParameters(T learningRate)
-    {
-        foreach (var layer in _discLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-    }
-
-    /// <summary>
-    /// Updates generator parameters with a given learning rate.
-    /// </summary>
-    private void UpdateGeneratorParameters(T learningRate)
-    {
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-        foreach (var bn in _genBNLayers)
-        {
-            bn.UpdateParameters(learningRate);
-        }
-    }
-
-    #endregion
-
-    #region Gradient Penalty
 
     #endregion
 
@@ -813,43 +1041,6 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         return result;
     }
 
-    private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero)
-                ? gradOutput[i]
-                : NumOps.Multiply(slope, gradOutput[i]);
-        }
-        return result;
-    }
-
     /// <summary>
     /// Applies tanh to continuous columns and softmax to categorical/mode columns.
     /// </summary>
@@ -898,45 +1089,6 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         var result = Engine.Softmax(slice, -1);
         result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
         idx += actualCount;
-    }
-
-    #endregion
-
-    #region Gradient Safety Utilities
-
-    /// <summary>
-    /// Applies NaN sanitization and gradient norm clipping in a single operation.
-    /// </summary>
-    private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
-    {
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                grad[i] = NumOps.Zero;
-            }
-        }
-
-        if (maxNorm <= 0) return grad;
-
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            normSq += v * v;
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm <= maxNorm) return grad;
-
-        double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad._shape);
-        for (int i = 0; i < grad.Length; i++)
-        {
-            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-        }
-        return clipped;
     }
 
     #endregion
@@ -1079,73 +1231,6 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
     #endregion
 
-    #region Training Buffer Management
-
-    /// <summary>
-    /// Pre-allocates all training buffers once to eliminate per-row GC pressure.
-    /// Must be called after RebuildLayersWithActualDimensions when all dimensions are known.
-    /// </summary>
-    private void InitializeTrainingBuffers(int genInputDim)
-    {
-        _oneGrad = new Tensor<T>([1]);
-        _oneGrad[0] = NumOps.One;
-        _negOneGrad = new Tensor<T>([1]);
-        _negOneGrad[0] = NumOps.Negate(NumOps.One);
-
-        _packedRealBuf = new Vector<T>(_packedInputDim);
-        _packedFakeBuf = new Vector<T>(_packedInputDim);
-        _noiseBuf = new Vector<T>(_options.EmbeddingDimension);
-        _genInputBuf = new Vector<T>(genInputDim);
-
-        int singleDim = _dataWidth + _condWidth;
-        _realSingleBuf = new Vector<T>(singleDim);
-        _fakeSingleBuf = new Vector<T>(singleDim);
-        _realRowBuf = new Vector<T>(_dataWidth);
-        _fakeRowBuf = new Vector<T>(_dataWidth);
-        _interpolatedBuf = new Vector<T>(_packedInputDim);
-        _sampleGradBuf = new Tensor<T>([_dataWidth]);
-    }
-
-    /// <summary>
-    /// Fills a pre-allocated vector with standard normal samples (Box-Muller).
-    /// </summary>
-    private void FillStandardNormal(Vector<T> buf)
-    {
-        for (int i = 0; i < buf.Length; i++)
-        {
-            buf[i] = SampleStandardNormal();
-        }
-    }
-
-    /// <summary>
-    /// Copies a row from a matrix into a pre-allocated vector.
-    /// </summary>
-    private static void FillRow(Vector<T> buf, Matrix<T> matrix, int row)
-    {
-        int cols = Math.Min(buf.Length, matrix.Columns);
-        for (int j = 0; j < cols; j++) buf[j] = matrix[row, j];
-    }
-
-    /// <summary>
-    /// Concatenates two vectors into a pre-allocated destination buffer.
-    /// </summary>
-    private static void ConcatInto(Vector<T> dest, Vector<T> a, Vector<T> b)
-    {
-        for (int i = 0; i < a.Length; i++) dest[i] = a[i];
-        for (int i = 0; i < b.Length; i++) dest[a.Length + i] = b[i];
-    }
-
-    /// <summary>
-    /// Copies tensor values into a pre-allocated vector buffer.
-    /// </summary>
-    private static void FillFromTensor(Vector<T> buf, Tensor<T> t)
-    {
-        int copyLen = Math.Min(buf.Length, t.Length);
-        for (int i = 0; i < copyLen; i++) buf[i] = t[i];
-    }
-
-    #endregion
-
     #region Random Sampling Utilities
 
     private T SampleStandardNormal()
@@ -1192,14 +1277,6 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         return t;
     }
 
-    private static Vector<T> TensorToVector(Tensor<T> t, int length)
-    {
-        var v = new Vector<T>(length);
-        int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
-    }
-
     private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
     {
         var result = new Tensor<T>([a.Length + b.Length]);
@@ -1213,11 +1290,6 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         var clone = new Tensor<T>(source._shape);
         for (int i = 0; i < source.Length; i++) clone[i] = source[i];
         return clone;
-    }
-
-    private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
-    {
-        return Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
     }
 
     #endregion

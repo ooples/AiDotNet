@@ -305,19 +305,9 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
+        var transformedData = PrepareForData(data, columns);
 
-        // Step 1: Fit transformer
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, _columns);
-        _dataWidth = _transformer.TransformedWidth;
-
-        // Rebuild layers with correct transformed data dimensions
-        RebuildLayersForDataWidth();
-
-        var transformedData = _transformer.Transform(data);
-
-        // Step 2: Training loop
+        // Training loop
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         int numBatches = Math.Max(1, data.Rows / batchSize);
 
@@ -340,19 +330,10 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
 
-        _columns = PrepareColumns(data, columns);
-
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
-
-            _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-            _transformer.Fit(data, _columns);
-            _dataWidth = _transformer.TransformedWidth;
-
-            RebuildLayersForDataWidth();
-
-            var transformedData = _transformer.Transform(data);
+            var transformedData = PrepareForData(data, columns);
 
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
             int numBatches = Math.Max(1, data.Rows / batchSize);
@@ -370,6 +351,38 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }, ct).ConfigureAwait(false);
 
         IsFitted = true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: the flow-matching step. The first call (or one with a new column
+    /// count) prepares the transformer and networks from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        TrainBatch(transformer.Transform(rows), 0, rows.Rows);
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/> and builds the networks for the transformed width; returns the
+    /// transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = PrepareColumns(data, columns);
+
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, _columns);
+        _dataWidth = _transformer.TransformedWidth;
+
+        // Rebuild layers with correct transformed data dimensions
+        RebuildLayersForDataWidth();
+        return _transformer.Transform(data);
     }
 
     /// <summary>
@@ -539,8 +552,9 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             for (int j = 0; j < xt.Length; j++) input[j] = xt[j];
             for (int j = 0; j < timeEmbed.Length; j++) input[xt.Length + j] = timeEmbed[j];
 
-            // Use Train() method (GANDALF pattern: forward → loss → backward → update)
-            Train(input, targetVelocity);
+            // The standard supervised step of the velocity network on (x_t + time, v*). Not Train, which on a
+            // generator is one step of this whole objective.
+            TrainStandardStep(input, targetVelocity);
         }
     }
 

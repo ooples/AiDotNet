@@ -30,6 +30,22 @@ public class GloVeOptions : EmbeddingModelOptions
         MaxGradNorm = 1.0;
     }
 
+    /// <summary>
+    /// Gets or sets the symmetric context window, in words, used when co-occurrences are counted from token
+    /// sequences. A pair d words apart adds 1/d to X_ij (Pennington et al. 2014, Section 4.2, which uses 10).
+    /// </summary>
+    public int WindowSize { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets x_max, the co-occurrence count at which the weighting f(X_ij) of Eq. 9 reaches 1 (the paper uses 100).
+    /// </summary>
+    public double XMax { get; set; } = 100.0;
+
+    /// <summary>
+    /// Gets or sets α, the exponent of the weighting f(X_ij) = (X_ij / x_max)^α below x_max (the paper uses 3/4).
+    /// </summary>
+    public double Alpha { get; set; } = 0.75;
+
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
@@ -40,5 +56,8 @@ public class GloVeOptions : EmbeddingModelOptions
     public void Validate()
     {
         ValidateCore();
+        if (WindowSize <= 0) throw new ArgumentException("WindowSize must be positive.", nameof(WindowSize));
+        if (!(XMax > 0)) throw new ArgumentException("XMax must be positive.", nameof(XMax));
+        if (!(Alpha > 0)) throw new ArgumentException("Alpha must be positive.", nameof(Alpha));
     }
 }

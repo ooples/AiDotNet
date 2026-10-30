@@ -307,23 +307,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
-        _columns = new List<ColumnMetadata>(columns);
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, columns);
-        _dataWidth = _transformer.TransformedWidth;
-        _numColumns = columns.Count;
-        var transformedData = _transformer.Transform(data);
-
-        // Compute column widths from transformer
-        _colWidths.Clear();
-        for (int c = 0; c < _numColumns; c++)
-        {
-            var info = _transformer.GetTransformInfo(c);
-            _colWidths.Add(info.Width);
-        }
-
-        // Rebuild all layers with the actual per-column widths.
-        BuildLayers();
+        var transformedData = PrepareForData(data, columns);
 
         // Masked-prediction training (the TabTransformer-Gen objective): for each
         // row, randomly mask a fraction of columns (zero their values) and train
@@ -349,13 +333,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
                 int end = Math.Min(start + batchSize, rowOrder.Length);
                 for (int oi = start; oi < end; oi++)
                 {
-                    int r = rowOrder[oi];
-                    var fullRow = GetRow(transformedData, r);
-                    var maskedRow = ApplyColumnMask(fullRow, maskedCols);
-
-                    var inputTensor = VectorToTensor(maskedRow);
-                    var targetTensor = VectorToTensor(fullRow);
-                    Train(inputTensor, targetTensor);
+                    MaskedReconstructionStep(GetRow(transformedData, rowOrder[oi]), maskedCols);
                 }
             }
         }
@@ -410,6 +388,57 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
             Fit(data, columns, epochCount);
         }, ct);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit batch on <paramref name="realData"/>: a masked-reconstruction step per row. The first call (or one with
+    /// a new column count) prepares the transformer and the per-column layers from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        var transformedData = transformer.Transform(rows);
+        int maskedCols = Math.Max(1, (int)Math.Round(_options.MaskRatio * _numColumns));
+        for (int r = 0; r < transformedData.Rows; r++)
+            MaskedReconstructionStep(GetRow(transformedData, r), maskedCols);
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/>, records each column's transformed width and rebuilds the layers
+    /// for them; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = new List<ColumnMetadata>(columns);
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, columns);
+        _dataWidth = _transformer.TransformedWidth;
+        _numColumns = columns.Count;
+        var transformedData = _transformer.Transform(data);
+
+        // Compute column widths from transformer
+        _colWidths.Clear();
+        for (int c = 0; c < _numColumns; c++)
+        {
+            var info = _transformer.GetTransformInfo(c);
+            _colWidths.Add(info.Width);
+        }
+
+        // Rebuild all layers with the actual per-column widths.
+        BuildLayers();
+        return transformedData;
+    }
+
+    /// <summary>
+    /// The TabTransformer-Gen objective on one row: mask <paramref name="maskedCols"/> random columns and take the
+    /// standard gradient step reconstructing the full row from the rest.
+    /// </summary>
+    private void MaskedReconstructionStep(Vector<T> fullRow, int maskedCols)
+        => TrainStandardStep(VectorToTensor(ApplyColumnMask(fullRow, maskedCols)), VectorToTensor(fullRow));
 
     /// <inheritdoc />
     public Matrix<T> Generate(int numSamples, Vector<T>? conditionColumn = null, Vector<T>? conditionValue = null)

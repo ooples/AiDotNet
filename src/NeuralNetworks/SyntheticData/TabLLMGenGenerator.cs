@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Training;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
@@ -93,17 +94,11 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private readonly List<int> _colVocabSizes = new();
     private int _specialTokenOffset;
 
-    // Transformer auxiliary layers (Q, K, V projections + output projections per layer)
-    private readonly List<FullyConnectedLayer<T>> _queryLayers = new();
-    private readonly List<FullyConnectedLayer<T>> _keyLayers = new();
-    private readonly List<FullyConnectedLayer<T>> _valueLayers = new();
-    private readonly List<FullyConnectedLayer<T>> _outProjLayers = new();
+    // The causal decoder over the serialised row (token + position embeddings, causal blocks, final norm), built for
+    // the fitted vocabulary. Its feed-forward pairs are the Layers list's when the default layers are in use.
+    private CausalTokenTransformer<T>? _transformer;
 
-    // Residual dropout, one per transformer layer, driven by TabLLMGenOptions.DropoutRate.
-    private readonly List<DropoutLayer<T>> _ffnDropouts = new();
-
-    // Token embedding and output head (auxiliary)
-    private FullyConnectedLayer<T>? _tokenEmbedding;
+    // Next-token head over the whole vocabulary.
     private FullyConnectedLayer<T>? _outputHead;
 
     // Whether custom layers are being used
@@ -198,12 +193,10 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
             var gelu = new GELUActivation<T>() as IActivationFunction<T>;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-            _ffnDropouts.Clear();
             for (int layer = 0; layer < _options.NumLayers; layer++)
             {
                 Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
                 Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
-                _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
             }
             _usingCustomLayers = false;
         }
@@ -214,39 +207,23 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </summary>
     private void RebuildAuxiliaryLayers()
     {
-        _queryLayers.Clear();
-        _keyLayers.Clear();
-        _valueLayers.Clear();
-        _outProjLayers.Clear();
-
         int embDim = _options.EmbeddingDimension;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        _tokenEmbedding = new FullyConnectedLayer<T>(embDim, identity);
-
-        for (int layer = 0; layer < _options.NumLayers; layer++)
-        {
-            _queryLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
-            _keyLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
-            _valueLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
-            _outProjLayers.Add(new FullyConnectedLayer<T>(embDim, identity));
-        }
-
-        _outputHead = new FullyConnectedLayer<T>(_vocabSize, identity);
+        var gelu = new GELUActivation<T>() as IActivationFunction<T>;
 
         // Rebuild default FFN layers if not using custom layers
         if (!_usingCustomLayers)
         {
             Layers.Clear();
-            int ffnDim = _options.FeedForwardDimension;
-            var gelu = new GELUActivation<T>() as IActivationFunction<T>;
-
-            for (int layer = 0; layer < _options.NumLayers; layer++)
-            {
-                Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
-                Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
-            }
+            Layers.AddRange(CausalTokenTransformer<T>.DefaultFeedForwardLayers(
+                _options.NumLayers, _options.FeedForwardDimension, embDim, gelu));
         }
+
+        var feedForward = CausalTokenTransformer<T>.PairFeedForward(
+            Layers, _options.NumLayers, _options.FeedForwardDimension, embDim, gelu);
+        _transformer = new CausalTokenTransformer<T>(
+            _vocabSize, Math.Max(1, _seqLength), embDim, _options.NumHeads, _options.DropoutRate, feedForward);
+        _outputHead = new FullyConnectedLayer<T>(_vocabSize, identity);
     }
 
     #endregion
@@ -257,25 +234,17 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
-        _columns = new List<ColumnMetadata>(columns);
+        var tokenizedData = PrepareForData(data, columns);
 
-        // Build vocabulary and tokenization
-        BuildTokenization(data, columns);
-
-        // Build transformer layers with actual vocab dimensions
-        RebuildAuxiliaryLayers();
-
-        // Tokenize all data
-        var tokenizedData = TokenizeData(data, columns);
-
-        int batchSize = Math.Min(_options.BatchSize, data.Rows);
-        T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
-
+        int batchSize = Math.Max(1, Math.Min(_options.BatchSize, data.Rows));
+        var order = Enumerable.Range(0, data.Rows).ToArray();
         for (int epoch = 0; epoch < epochCount; epoch++)
         {
-            for (int b = 0; b < data.Rows; b += batchSize)
+            Shuffle(order);
+            for (int start = 0; start < data.Rows; start += batchSize)
             {
-                int end = Math.Min(b + batchSize, data.Rows);
+                int count = Math.Min(batchSize, data.Rows - start);
+                TrainStep(tokenizedData, order, start, count);
             }
         }
 
@@ -291,22 +260,143 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// One next-token step on <paramref name="realData"/>'s rows as one batch. The first call (or one with a new column
+    /// count) fits the vocabulary and builds the networks from these rows, every column continuous.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+        TrainStep(TokenizeData(rows, _columns), Enumerable.Range(0, rows.Rows).ToArray(), 0, rows.Rows);
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the vocabulary to <paramref name="data"/> and builds the networks for it; returns the serialised rows.
+    /// </summary>
+    private List<int[]> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = new List<ColumnMetadata>(columns);
+        BuildTokenization(data, columns);
+        RebuildAuxiliaryLayers();
+        return TokenizeData(data, columns);
+    }
+
+    /// <summary>
+    /// One causal language-modelling step over the rows <paramref name="order"/>[start .. start + count): the
+    /// cross-entropy of every value token given the START token and the serialised row before it. Schema tokens are
+    /// fixed by the column order, so they are context, not targets.
+    /// </summary>
+    private void TrainStep(List<int[]> tokenizedData, int[] order, int start, int count)
+    {
+        var transformer = _transformer ?? throw new InvalidOperationException("The decoder was not built.");
+        var head = _outputHead ?? throw new InvalidOperationException("The output head was not built.");
+
+        int columns = _columns.Count;
+        var inputs = new Tensor<T>([count, _seqLength]);
+        var targets = new Tensor<T>([columns * count, _vocabSize]);
+        for (int b = 0; b < count; b++)
+        {
+            var tokens = tokenizedData[order[start + b]];
+            inputs[b, 0] = NumOps.FromDouble(StartToken);
+            for (int pos = 0; pos + 1 < _seqLength; pos++) inputs[b, pos + 1] = NumOps.FromDouble(tokens[pos]);
+            for (int c = 0; c < columns; c++) targets[c * count + b, tokens[ValuePosition(c)]] = NumOps.One;
+        }
+
+        var layers = new List<ILayer<T>>(transformer.Layers) { head };
+        var trainable = layers.OfType<ITrainableLayer<T>>().ToList();
+        AiDotNet.Training.FusedTrainingStep<T>.Step(
+            this, trainable, inputs, targets,
+            forward: x => ValueLogits(transformer.Forward(x, training: true), head),
+            computeLoss: CrossEntropy,
+            optimizer: _optimizer,
+            extraTensors: TapeTrainingStep<T>.CollectParameters(layers));
+    }
+
+    // START, END and MASK are ids 0, 1, 2; START opens every serialised row.
+    private const int StartToken = 0;
+
+    // Column c's value token follows its schema tokens.
+    private int ValuePosition(int column) => column * (_options.SchemaTokensPerColumn + 1) + _options.SchemaTokensPerColumn;
+
+    /// <summary>
+    /// The head's logits at every column's value position, column-major [columns * batch, vocabulary].
+    /// </summary>
+    private Tensor<T> ValueLogits(Tensor<T> hidden, FullyConnectedLayer<T> head)
+    {
+        int columns = _columns.Count;
+        var positions = new Tensor<T>[columns];
+        for (int c = 0; c < columns; c++) positions[c] = PositionHidden(hidden, ValuePosition(c));
+        return head.Forward(columns == 1 ? positions[0] : Engine.TensorConcatenate(positions, axis: 0));
+    }
+
+    private Tensor<T> PositionHidden(Tensor<T> hidden, int position)
+    {
+        int batch = hidden.Shape[0];
+        int d = hidden.Shape[2];
+        return Engine.Reshape(Engine.TensorSlice(hidden, [0, position, 0], [batch, 1, d]), [batch, d]);
+    }
+
+    /// <summary>The batch-mean softmax cross-entropy of <paramref name="logits"/> against one-hot <paramref name="targets"/>.</summary>
+    private Tensor<T> CrossEntropy(Tensor<T> logits, Tensor<T> targets)
+    {
+        var logp = Engine.TensorLog(Engine.TensorAddScalar(Engine.Softmax(logits, axis: 1), NumOps.FromDouble(1e-8)));
+        var perRow = Engine.ReduceSum(Engine.TensorMultiply(targets, logp), [1], keepDims: false);
+        return Engine.TensorNegate(Engine.ReduceMean(perRow, [0], keepDims: false));
+    }
+
+    private void Shuffle(int[] order)
+    {
+        for (int i = order.Length - 1; i > 0; i--)
+        {
+            int j = _random.Next(i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+    }
+
+    /// <inheritdoc />
     public Matrix<T> Generate(int numSamples, Vector<T>? conditionColumn = null, Vector<T>? conditionValue = null)
     {
-        if (_outputHead is null)
+        var transformer = _transformer;
+        var head = _outputHead;
+        if (transformer is null || head is null)
         {
             throw new InvalidOperationException("Generator is not fitted. Call Fit() before Generate().");
         }
+        if (numSamples <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
+        }
+
+        // Autoregressive sampling, every sample at once: each column's schema tokens are written, then its value token
+        // is drawn from the head on the prefix, restricted to that column's tokens.
+        int schemaTokens = _options.SchemaTokensPerColumn;
+        var prefix = new Tensor<T>([numSamples, _seqLength]);
+        for (int i = 0; i < numSamples; i++) prefix[i, 0] = NumOps.FromDouble(StartToken);
 
         var result = new Matrix<T>(numSamples, _columns.Count);
-
-        for (int i = 0; i < numSamples; i++)
+        int valueTokenBase = _specialTokenOffset + _columns.Count * schemaTokens;
+        for (int c = 0; c < _columns.Count; c++)
         {
-            var row = GenerateRow();
-            for (int j = 0; j < _columns.Count && j < row.Length; j++)
+            int schemaBase = _specialTokenOffset + c * schemaTokens;
+            int valuePos = ValuePosition(c);
+            for (int s = 0; s < schemaTokens; s++)
             {
-                result[i, j] = row[j];
+                for (int i = 0; i < numSamples; i++) prefix[i, valuePos - schemaTokens + s + 1] = NumOps.FromDouble(schemaBase + s);
             }
+
+            var window = valuePos + 1 == _seqLength ? prefix : Engine.TensorSlice(prefix, [0, 0], [numSamples, valuePos + 1]);
+            var logits = head.Forward(PositionHidden(transformer.Forward(window, training: false), valuePos));
+            for (int i = 0; i < numSamples; i++)
+            {
+                int valueToken = SampleFromLogits(logits, i, valueTokenBase, _colVocabSizes[c]);
+                if (valuePos + 1 < _seqLength) prefix[i, valuePos + 1] = NumOps.FromDouble(valueToken);
+                result[i, c] = NumOps.FromDouble(DetokenizeValue(valueToken - valueTokenBase, c));
+            }
+
+            valueTokenBase += _colVocabSizes[c];
         }
 
         return result;
@@ -487,71 +577,25 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
     #endregion
 
-    #region Training
-
-    #endregion
-
     #region Generation
 
-    private Vector<T> GenerateRow()
-    {
-        int embDim = _options.EmbeddingDimension;
-        int schemaTokens = _options.SchemaTokensPerColumn;
-        var result = new Vector<T>(_columns.Count);
-
-        var generatedEmbeddings = new List<Vector<T>>();
-
-        int valueTokenBase = _specialTokenOffset + _columns.Count * schemaTokens;
-
-        for (int c = 0; c < _columns.Count; c++)
-        {
-            // Add schema tokens
-            int schemaBase = _specialTokenOffset + c * schemaTokens;
-            for (int s = 0; s < schemaTokens; s++)
-            {
-                int token = schemaBase + s;
-                generatedEmbeddings.Add(EmbedToken(token));
-            }
-
-            // Apply transformer and predict value token
-            var outputs = ApplyCausalTransformer(generatedEmbeddings);
-            var lastOutput = outputs[^1];
-
-            if (_outputHead is not null)
-            {
-                var logitsTensor = _outputHead.Forward(VectorToTensor(lastOutput));
-                var logits = TensorToVector(logitsTensor, _vocabSize);
-
-                int valueToken = SampleFromLogits(logits, valueTokenBase, _colVocabSizes[c]);
-                int relativeToken = valueToken - valueTokenBase;
-
-                generatedEmbeddings.Add(EmbedToken(valueToken));
-
-                result[c] = NumOps.FromDouble(DetokenizeValue(relativeToken, c));
-            }
-
-            valueTokenBase += _colVocabSizes[c];
-        }
-
-        return result;
-    }
-
-    private int SampleFromLogits(Vector<T> logits, int tokenStart, int numTokens)
+    private int SampleFromLogits(Tensor<T> logits, int row, int tokenStart, int numTokens)
     {
         double temperature = Math.Max(0.01, _options.Temperature);
+        int vocab = logits.Shape[1];
 
         double maxLogit = double.MinValue;
-        for (int i = 0; i < numTokens && (tokenStart + i) < logits.Length; i++)
+        for (int i = 0; i < numTokens && (tokenStart + i) < vocab; i++)
         {
-            double v = NumOps.ToDouble(logits[tokenStart + i]) / temperature;
+            double v = NumOps.ToDouble(logits[row, tokenStart + i]) / temperature;
             if (v > maxLogit) maxLogit = v;
         }
 
         var probs = new double[numTokens];
         double sumExp = 0;
-        for (int i = 0; i < numTokens && (tokenStart + i) < logits.Length; i++)
+        for (int i = 0; i < numTokens && (tokenStart + i) < vocab; i++)
         {
-            probs[i] = Math.Exp(NumOps.ToDouble(logits[tokenStart + i]) / temperature - maxLogit);
+            probs[i] = Math.Exp(NumOps.ToDouble(logits[row, tokenStart + i]) / temperature - maxLogit);
             sumExp += probs[i];
         }
 
@@ -564,248 +608,6 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
         }
 
         return tokenStart + numTokens - 1;
-    }
-
-    #endregion
-
-    #region Transformer
-
-    private List<Vector<T>> ApplyCausalTransformer(List<Vector<T>> embeddings)
-    {
-        int embDim = _options.EmbeddingDimension;
-        var current = new List<Vector<T>>(embeddings);
-
-        for (int layer = 0; layer < _options.NumLayers; layer++)
-        {
-            var attended = CausalSelfAttention(current, layer);
-
-            // Residual + FFN
-            var ffnOut = new List<Vector<T>>();
-            for (int pos = 0; pos < current.Count; pos++)
-            {
-                // Residual from attention
-                for (int d = 0; d < embDim && d < attended[pos].Length; d++)
-                {
-                    attended[pos][d] = NumOps.Add(attended[pos][d], current[pos][d]);
-                }
-
-                // FFN through Layers (2 layers per transformer layer)
-                int ffn1Idx = layer * 2;
-                int ffn2Idx = layer * 2 + 1;
-
-                Tensor<T> h2;
-                if (ffn1Idx < Layers.Count && ffn2Idx < Layers.Count)
-                {
-                    var h1 = Layers[ffn1Idx].Forward(VectorToTensor(attended[pos]));
-                    h2 = Layers[ffn2Idx].Forward(h1);
-                    if (layer < _ffnDropouts.Count)
-                    {
-                        _ffnDropouts[layer].SetTrainingMode(IsTrainingMode);
-                        h2 = _ffnDropouts[layer].Forward(h2);
-                    }
-                }
-                else
-                {
-                    h2 = VectorToTensor(attended[pos]);
-                }
-                var ffnVec = TensorToVector(h2, embDim);
-
-                // Residual from FFN
-                for (int d = 0; d < embDim; d++)
-                {
-                    ffnVec[d] = NumOps.Add(ffnVec[d], attended[pos][d]);
-                }
-
-                ffnOut.Add(ffnVec);
-            }
-
-            current = ffnOut;
-        }
-
-        return current;
-    }
-
-    private List<Vector<T>> CausalSelfAttention(List<Vector<T>> embeds, int layerIdx)
-    {
-        int embDim = _options.EmbeddingDimension;
-        double scale = 1.0 / Math.Sqrt(embDim);
-        int seqLen = embeds.Count;
-
-        var queries = new List<Vector<T>>();
-        var keys = new List<Vector<T>>();
-        var values = new List<Vector<T>>();
-
-        for (int pos = 0; pos < seqLen; pos++)
-        {
-            queries.Add(TensorToVector(_queryLayers[layerIdx].Forward(VectorToTensor(embeds[pos])), embDim));
-            keys.Add(TensorToVector(_keyLayers[layerIdx].Forward(VectorToTensor(embeds[pos])), embDim));
-            values.Add(TensorToVector(_valueLayers[layerIdx].Forward(VectorToTensor(embeds[pos])), embDim));
-        }
-
-        // Causal attention
-        var output = new List<Vector<T>>();
-        for (int i = 0; i < seqLen; i++)
-        {
-            var scores = new double[i + 1];
-            double maxScore = double.MinValue;
-
-            for (int j = 0; j <= i; j++)
-            {
-                double dot = 0;
-                for (int d = 0; d < embDim; d++)
-                    dot += NumOps.ToDouble(queries[i][d]) * NumOps.ToDouble(keys[j][d]);
-                scores[j] = dot * scale;
-                if (scores[j] > maxScore) maxScore = scores[j];
-            }
-
-            double sumExp = 0;
-            for (int j = 0; j <= i; j++)
-            {
-                scores[j] = Math.Exp(scores[j] - maxScore);
-                sumExp += scores[j];
-            }
-
-            var attnOut = new Vector<T>(embDim);
-            for (int j = 0; j <= i; j++)
-            {
-                double weight = scores[j] / Math.Max(sumExp, 1e-10);
-                for (int d = 0; d < embDim; d++)
-                {
-                    attnOut[d] = NumOps.Add(attnOut[d],
-                        NumOps.FromDouble(weight * NumOps.ToDouble(values[j][d])));
-                }
-            }
-
-            var projected = _outProjLayers[layerIdx].Forward(VectorToTensor(attnOut));
-            output.Add(TensorToVector(projected, embDim));
-        }
-
-        return output;
-    }
-
-    #endregion
-
-    #region Helpers
-
-    private Vector<T> EmbedToken(int token)
-    {
-        var oneHot = new Vector<T>(_vocabSize);
-        if (token >= 0 && token < _vocabSize)
-        {
-            oneHot[token] = NumOps.FromDouble(1.0);
-        }
-
-        if (_tokenEmbedding is not null)
-        {
-            var tensor = _tokenEmbedding.Forward(VectorToTensor(oneHot));
-            return TensorToVector(tensor, _options.EmbeddingDimension);
-        }
-
-        return CreateStandardNormalVector(_options.EmbeddingDimension);
-    }
-
-    private Vector<T> ComputeSoftmax(Vector<T> logits)
-    {
-        double maxVal = double.MinValue;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal) maxVal = v;
-        }
-
-        var result = new Vector<T>(logits.Length);
-        double sumExp = 0;
-        for (int i = 0; i < logits.Length; i++)
-            sumExp += Math.Exp(NumOps.ToDouble(logits[i]) - maxVal);
-        for (int i = 0; i < logits.Length; i++)
-            result[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logits[i]) - maxVal) / Math.Max(sumExp, 1e-10));
-
-        return result;
-    }
-
-    /// <summary>
-    /// Creates a vector of standard normal random values using Box-Muller transform.
-    /// </summary>
-    private Vector<T> CreateStandardNormalVector(int size)
-    {
-        var v = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            double u1 = Math.Max(1e-10, _random.NextDouble());
-            double u2 = _random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(normal);
-        }
-        return v;
-    }
-
-    /// <summary>
-    /// Sanitizes a gradient tensor by replacing NaN/Inf values with zero and applying gradient clipping.
-    /// </summary>
-    private static Tensor<T> SanitizeAndClipGradient(Tensor<T> grad, double maxNorm)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = ops.ToDouble(grad[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                grad[i] = ops.Zero;
-            }
-            else
-            {
-                normSq += v * v;
-            }
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm > maxNorm)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < grad.Length; i++)
-            {
-                grad[i] = ops.FromDouble(ops.ToDouble(grad[i]) * scale);
-            }
-        }
-
-        return grad;
-    }
-
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
-
-    private static Vector<T> TensorToVector(Tensor<T> t, int length)
-    {
-        var v = new Vector<T>(length);
-        int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
-    }
-
-    /// <summary>
-    /// Gets the current parameter vector from all layers.
-    /// </summary>
-    private Vector<T> GetParameterVector()
-    {
-        int totalParams = 0;
-        foreach (var layer in Layers)
-            totalParams += (int)layer.ParameterCount;
-
-        var parameters = new Vector<T>(totalParams);
-        int offset = 0;
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-                parameters[offset + i] = layerParams[i];
-            offset += (int)layer.ParameterCount;
-        }
-        return parameters;
     }
 
     #endregion

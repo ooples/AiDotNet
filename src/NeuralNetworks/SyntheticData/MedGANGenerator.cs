@@ -422,16 +422,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
         int epochCount = epochs ?? _options.Epochs;
-        _columns = new List<ColumnMetadata>(columns);
-
-        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
-        _transformer.Fit(data, columns);
-        _dataWidth = _transformer.TransformedWidth;
-        var transformedData = _transformer.Transform(data);
-
-        BuildOutputGroups();
-        LearnObservedRanges(transformedData);
-        RebuildLayersWithActualDimensions();
+        var transformedData = PrepareForData(data, columns);
 
         double noiseMultiplier = _options.EnablePrivacy
             ? ComputeNoiseMultiplier(data.Rows, epochCount)
@@ -441,10 +432,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         if (batchSize <= 0) { IsFitted = true; return; }
 
         // --- Stage 1: pre-train the autoencoder on the real records ---
-        int? configuredPretrainEpochs = _options.AutoencoderPretrainEpochs;
-        int pretrainEpochs = configuredPretrainEpochs
-            ?? Math.Max(1, (int)Math.Round(epochCount * _options.AutoencoderPretrainFraction));
-        pretrainEpochs = Math.Min(pretrainEpochs, epochCount);
+        int pretrainEpochs = PretrainEpochs(epochCount);
 
         for (int epoch = 0; epoch < pretrainEpochs; epoch++)
         {
@@ -459,12 +447,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         {
             for (int b = 0; b < data.Rows; b += batchSize)
             {
-                int end = Math.Min(b + batchSize, data.Rows);
-                for (int d = 0; d < _options.DiscriminatorSteps; d++)
-                {
-                    TrainDiscriminatorStepBatched(transformedData, b, end, noiseMultiplier);
-                }
-                TrainGeneratorStepBatched(end - b);
+                TrainGanBatch(transformedData, b, Math.Min(b + batchSize, data.Rows), noiseMultiplier);
             }
         }
 
@@ -477,6 +460,73 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     {
         int epochCount = epochs ?? _options.Epochs;
         return Task.Run(() => Fit(data, columns, epochCount), cancellationToken);
+    }
+
+    // Training calls taken since the data was last prepared: the first PretrainEpochs of them pretrain the autoencoder,
+    // the way Fit's first epochs do.
+    private int _trainCalls;
+    private double _trainNoiseMultiplier;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// One Fit epoch's step on <paramref name="realData"/> as a single batch, in Fit's two stages: the first calls
+    /// pre-train the autoencoder (as many as Fit's pretrain epochs for the configured Epochs), the rest take the GAN's
+    /// critic and generator steps with the decoder still training. The first call (or one with a new column count)
+    /// prepares the transformer and networks from these rows, every column continuous, and with privacy enabled sizes
+    /// the noise multiplier for the configured epochs over them.
+    /// </remarks>
+    protected override void TrainOnBatch(Tensor<T> realData)
+    {
+        var rows = RowsOf(realData);
+        if (_transformer is null || _columns.Count != rows.Columns)
+        {
+            PrepareForData(rows, ContinuousColumns(rows.Columns));
+            _trainCalls = 0;
+            _trainNoiseMultiplier = _options.EnablePrivacy ? ComputeNoiseMultiplier(rows.Rows, _options.Epochs) : 0.0;
+        }
+        var transformer = _transformer ?? throw new InvalidOperationException("The data transformer was not prepared.");
+        var transformedData = transformer.Transform(rows);
+        if (_trainCalls < PretrainEpochs(_options.Epochs))
+            PretrainAutoencoderStep(transformedData, 0, rows.Rows);
+        else
+            TrainGanBatch(transformedData, 0, rows.Rows, _trainNoiseMultiplier);
+        _trainCalls++;
+        IsFitted = true;
+    }
+
+    private int PretrainEpochs(int epochCount)
+        => Math.Min(
+            _options.AutoencoderPretrainEpochs
+                ?? Math.Max(1, (int)Math.Round(epochCount * _options.AutoencoderPretrainFraction)),
+            epochCount);
+
+    /// <summary>
+    /// Fits the transformer to <paramref name="data"/>, records the output groups and observed ranges and builds the
+    /// networks for the transformed width; returns the transformed data.
+    /// </summary>
+    private Matrix<T> PrepareForData(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
+    {
+        _columns = new List<ColumnMetadata>(columns);
+
+        _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
+        _transformer.Fit(data, columns);
+        _dataWidth = _transformer.TransformedWidth;
+        var transformedData = _transformer.Transform(data);
+
+        BuildOutputGroups();
+        LearnObservedRanges(transformedData);
+        RebuildLayersWithActualDimensions();
+        return transformedData;
+    }
+
+    /// <summary>Stage 2 on rows [start, end): DiscriminatorSteps critic steps, then the generator step.</summary>
+    private void TrainGanBatch(Matrix<T> transformedData, int start, int end, double noiseMultiplier)
+    {
+        for (int d = 0; d < _options.DiscriminatorSteps; d++)
+        {
+            TrainDiscriminatorStepBatched(transformedData, start, end, noiseMultiplier);
+        }
+        TrainGeneratorStepBatched(end - start);
     }
 
     /// <inheritdoc />
