@@ -17,6 +17,11 @@ namespace AiDotNet.Tokenization.Algorithms
         /// <summary>cl100k's, as GLM-4 uses it: <c>(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}|
         /// ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+</c>.</summary>
         Cl100k,
+
+        /// <summary>Fish Speech 1.5's (<c>FISH_TIKTOKEN_PATTERN</c>): <c>(?i:'s|'t|'re|'ve|'m|'ll|'d)|\p{P}|[^\r\n\p{L}\p{N}]?\p{L}+|
+        /// \p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(\?!\S)|\s+</c>: punctuation and digits one at a time, and the release's
+        /// <c>(\?!\S)</c>, a literal "?!" rather than a lookahead.</summary>
+        Fish,
     }
 
     /// <summary>
@@ -154,7 +159,8 @@ namespace AiDotNet.Tokenization.Algorithms
             var pieces = new List<string>();
             for (int position = 0; position < text.Length;)
             {
-                int length = _pattern == TiktokenPattern.Cl100k ? Cl100kTokenLength(text, position, text.Length) : PreTokenLength(text, position, text.Length);
+                int length = _pattern == TiktokenPattern.Cl100k ? Cl100kTokenLength(text, position, text.Length)
+                    : _pattern == TiktokenPattern.Fish ? FishTokenLength(text, position, text.Length) : PreTokenLength(text, position, text.Length);
                 pieces.Add(text.Substring(position, length));
                 position += length;
             }
@@ -166,7 +172,8 @@ namespace AiDotNet.Tokenization.Algorithms
             int position = start;
             while (position < end)
             {
-                int length = _pattern == TiktokenPattern.Cl100k ? Cl100kTokenLength(text, position, end) : PreTokenLength(text, position, end);
+                int length = _pattern == TiktokenPattern.Cl100k ? Cl100kTokenLength(text, position, end)
+                    : _pattern == TiktokenPattern.Fish ? FishTokenLength(text, position, end) : PreTokenLength(text, position, end);
                 var utf8 = Encoding.UTF8.GetBytes(text.Substring(position, length));
                 string piece = ToKey(utf8, 0, utf8.Length);
                 if (_ranks.TryGetValue(piece, out int whole)) ids.Add(whole);
@@ -283,6 +290,51 @@ namespace AiDotNet.Tokenization.Algorithms
         private static bool IsNewline(char c) => c is '\r' or '\n';
 
         /// <summary>The length of cl100k's pattern match at <paramref name="position"/>, its alternatives in order.</summary>
+        private static int FishTokenLength(string text, int position, int end)
+        {
+            // (?i:'s|'t|'re|'ve|'m|'ll|'d)
+            if (text[position] == '\'' && position + 1 < end)
+            {
+                char a = char.ToLowerInvariant(text[position + 1]);
+                if (a is 's' or 't' or 'm' or 'd') return 2;
+                if (position + 2 < end)
+                {
+                    char b = char.ToLowerInvariant(text[position + 2]);
+                    if ((a == 'r' && b == 'e') || (a == 'v' && b == 'e') || (a == 'l' && b == 'l')) return 3;
+                }
+            }
+            var kind = KindAt(text, position, out int width);
+            // \p{P}: one punctuation character.
+            if (IsPunctuation(text, position)) return width;
+            // [^\r\n\p{L}\p{N}]?\p{L}+ (the optional character cannot be punctuation, which the branch above took)
+            if (kind == Kind.Letter) return RunEnd(text, position, end, Kind.Letter) - position;
+            if (kind != Kind.Number && !IsNewline(text[position]) && position + width < end && KindAt(text, position + width, out _) == Kind.Letter)
+                return RunEnd(text, position + width, end, Kind.Letter) - position;
+            // \p{N}: one digit.
+            if (kind == Kind.Number) return width;
+            //  ?[^\s\p{L}\p{N}]+[\r\n]*
+            int from = text[position] == ' ' && position + 1 < end && KindAt(text, position + 1, out _) == Kind.Other ? position + 1 : position;
+            if (KindAt(text, from, out _) == Kind.Other)
+            {
+                int index = RunEnd(text, from, end, Kind.Other);
+                while (index < end && IsNewline(text[index])) index++;
+                return index - position;
+            }
+            // \s*[\r\n]+ : the whitespace run up to and including its last newline.
+            int spaceEnd = RunEnd(text, position, end, Kind.Space);
+            for (int i = spaceEnd - 1; i >= position; i--)
+                if (IsNewline(text[i])) return i + 1 - position;
+            // \s+(\?!\S): the run, a literal "?!" and one non-space character.
+            if (spaceEnd + 2 < end && text[spaceEnd] == '?' && text[spaceEnd + 1] == '!' && KindAt(text, spaceEnd + 2, out int w) != Kind.Space)
+                return spaceEnd + 2 + w - position;
+            // \s+
+            return spaceEnd - position;
+        }
+
+        private static bool IsPunctuation(string text, int index) => CharUnicodeInfo.GetUnicodeCategory(text, index) is UnicodeCategory.ConnectorPunctuation
+            or UnicodeCategory.DashPunctuation or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation
+            or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation or UnicodeCategory.OtherPunctuation;
+
         private static int Cl100kTokenLength(string text, int position, int end)
         {
             // (?i:'s|'t|'re|'ve|'m|'ll|'d)

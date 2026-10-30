@@ -21744,32 +21744,6 @@ public static partial class LayerHelper<T>
         yield return new FullyConnectedLayer<T>(semanticDim, (IActivationFunction<T>?)null);
     }
 
-    /// <summary>Creates default layers for Fish Speech semantic LM.</summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultFishSpeechLayers(
-        int semanticDim = 1024, int numSemanticLayers = 24,
-        int numSemanticHeads = 16, int codebookSize = 8192,
-        double dropoutRate = 0.1)
-    {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-
-        // Text + GFSQ token embedding
-        yield return new FullyConnectedLayer<T>(semanticDim, geluActivation);
-
-        // Transformer layers
-        for (int i = 0; i < numSemanticLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numSemanticHeads, (semanticDim) / (numSemanticHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(semanticDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(semanticDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // Output projection to GFSQ codebook
-        yield return new FullyConnectedLayer<T>(codebookSize, (IActivationFunction<T>?)null);
-    }
-
     #endregion
 
     #region Multimodal Batch 22

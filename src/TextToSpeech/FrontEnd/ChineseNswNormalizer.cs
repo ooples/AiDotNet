@@ -22,7 +22,7 @@ internal static class ChineseNswNormalizer
         + "针|线|管|名|位|身|堂|课|本|页|家|户|层|丝|毫|厘|分|钱|两|斤|担|铢|石|钧|锱|忽|(千|毫|微)克|"
         + "毫|厘|分|寸|尺|丈|里|寻|常|铺|程|(千|分|厘|毫|微)米|撮|勺|合|升|斗|石|盘|碗|碟|叠|桶|笼|盆|"
         + "盒|杯|钟|斛|锅|簋|篮|盘|桶|罐|瓶|壶|卮|盏|箩|箱|煲|啖|袋|钵|年|月|日|季|刻|时|周|天|秒|分|旬|"
-        + "纪|岁|世|更|夜|春|夏|秋|冬|代|伏|辈|丸|泡|粒|颗|幢|堆|条|根|支|道|面|片|张|颗|块)";
+        + "纪|岁|世|更|夜|春|夏|秋|冬|代|伏|辈|丸|泡|粒|颗|幢|堆|条|根|支|道|面|片|张|颗|块";
 
     private static readonly Regex DatePattern = new(@"\D+((([089]\d|(19|20)\d{2})年)?(\d{1,2}月(\d{1,2}[日号])?)?)");
     private static readonly Regex MoneyPattern = new(@"\D+((\d+(\.\d+)?)[多余几]?" + CurrencyUnits + @"(\d" + CurrencyUnits + "?)?)");
@@ -30,13 +30,16 @@ internal static class ChineseNswNormalizer
     private static readonly Regex FixedPattern = new(@"\D((0(10|2[1-3]|[3-9]\d{2})-?)?[1-9]\d{6,7})\D");
     private static readonly Regex FractionPattern = new(@"(\d+/\d+)");
     private static readonly Regex PercentagePattern = new(@"(\d+(\.\d+)?%)");
-    private static readonly Regex QuantifierPattern = new(@"(\d+(\.\d+)?)[多余几]?" + Quantifiers);
+    private static readonly Regex QuantifierPattern = new(@"(\d+(\.\d+)?)[多余几]?" + Quantifiers + ")");
+    // Fish Speech 1.4's copy (fish_speech/text/chn_text_norm) adds 人 and 抽 to the measure words.
+    private static readonly Regex FishSpeechQuantifierPattern = new(@"(\d+(\.\d+)?)[多余几]?" + Quantifiers + "|人|抽)");
     private static readonly Regex DigitStringPattern = new(@"(\d{4,32})");
     private static readonly Regex NumberPattern = new(@"(\d+(\.\d+)?)");
     private static readonly Regex Particular = new("(([a-zA-Z]+)二([a-zA-Z]+))");
 
-    /// <summary><c>NSWNormalizer(text).normalize(remove_punc=False)</c>.</summary>
-    public static string Normalize(string raw)
+    /// <summary><c>NSWNormalizer(text).normalize(remove_punc=False)</c>; with <paramref name="fishSpeech"/>, Fish Speech
+    /// 1.4's copy (<c>ChnNormedText(raw_text=text).normalize()</c>), whose measure words add 人 and 抽.</summary>
+    public static string Normalize(string raw, bool fishSpeech = false)
     {
         string text = "^" + raw + "$";
         text = ReplaceEach(text, DatePattern, g => g[1], DateToChinese);
@@ -50,7 +53,7 @@ internal static class ChineseNswNormalizer
         });
         text = text.Replace('％', '%');
         text = ReplaceEach(text, PercentagePattern, g => g[1], p => "百分之" + NumberToChinese(p.Trim().Trim('%')));
-        text = ReplaceEach(text, QuantifierPattern, g => g[1], n => NumberToChinese(n));
+        text = ReplaceEach(text, fishSpeech ? FishSpeechQuantifierPattern : QuantifierPattern, g => g[1], n => NumberToChinese(n));
         text = ReplaceEach(text, DigitStringPattern, g => g[1], d => NumberToChinese(d, alternateTwo: false, useUnits: false));
         text = ReplaceEach(text, NumberPattern, g => g[1], n => NumberToChinese(n));
         foreach (Match m in Particular.Matches(text).Cast<Match>().ToList())
