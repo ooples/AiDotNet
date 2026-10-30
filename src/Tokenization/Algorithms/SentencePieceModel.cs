@@ -114,8 +114,6 @@ public sealed class SentencePieceModel
             throw new NotSupportedException($"Only unigram, BPE and character SentencePiece models are supported (model_type {modelType}).");
         if (modelType == 4 && (byteFallback || pieces.Any(p => p.Type == ByteType)))
             throw new NotSupportedException("Character SentencePiece models with byte fallback are not supported.");
-        if (modelType == 2 && pieces.Any(p => p.Type == UserDefined))
-            throw new NotSupportedException("BPE SentencePiece models with user-defined symbols are not supported.");
         if (modelType == 1 && (byteFallback || pieces.Any(p => p.Type == ByteType)))
             throw new NotSupportedException("Unigram SentencePiece models with byte fallback are not supported.");
         _bpe = modelType == 2;
@@ -295,12 +293,18 @@ public sealed class SentencePieceModel
     /// <summary>The BPE segmentation of normalized text (<c>bpe_model.cc</c>), with byte fallback for unknown characters.</summary>
     private List<(string Piece, int Id)> EncodeBpe(string normalized)
     {
-        // Symbols are the Unicode characters, linked so merged ones drop out.
+        // Symbols are the Unicode characters, linked so merged ones drop out; a user-defined piece at a position (the
+        // longest) is one frozen symbol that never merges (bpe_model.cc's PrefixMatcher and Symbol::freeze).
         var symbols = new List<string>();
+        var frozen = new List<bool>();
         for (int i = 0; i < normalized.Length; i++)
         {
             int length = char.IsHighSurrogate(normalized[i]) && i + 1 < normalized.Length ? 2 : 1;
+            bool userDefined = false;
+            foreach (var (endOffset, id) in _trie.Prefixes(normalized, i))
+                if (_types[id] == UserDefined && endOffset - i >= length) { length = endOffset - i; userDefined = true; }
             symbols.Add(normalized.Substring(i, length));
+            frozen.Add(userDefined);
             i += length - 1;
         }
         int n = symbols.Count;
@@ -347,7 +351,7 @@ public sealed class SentencePieceModel
             => a.Score > b.Score || (a.Score == b.Score && a.Left < b.Left);
         void MaybeAdd(int left, int right)
         {
-            if (left < 0 || right < 0) return;
+            if (left < 0 || right < 0 || frozen[left] || frozen[right]) return;
             string piece = symbols[left] + symbols[right];
             if (!_bpePieces.TryGetValue(piece, out int id)) return;
             Push((left, right, _scores[id], piece.Length));
