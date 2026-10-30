@@ -127,32 +127,6 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _normBeta;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastXBranch;
-    [Scratch]
-    private Tensor<T>? _lastZBranch;
-    [Scratch]
-    private Tensor<T>? _lastConvOutput;
-    [Scratch]
-    private Tensor<T>? _lastSiluOutput;
-    [Scratch]
-    private Tensor<T>? _lastSsdOutput;
-    [Scratch]
-    private Tensor<T>? _lastGatedOutput;
-    [Scratch]
-    private Tensor<T>? _lastDelta;
-    [Scratch]
-    private Tensor<T>? _lastDeltaPreSoftplus;
-    [Scratch]
-    private Tensor<T>? _lastB;
-    [Scratch]
-    private Tensor<T>? _lastC;
-    [Scratch]
-    private Tensor<T>? _lastNormInput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -432,8 +406,6 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Input projection -> x and z branches
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
@@ -443,15 +415,11 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
 
         var xBranch = SliceTensor(projected3D, 2, 0, _innerDimension);
         var zBranch = SliceTensor(projected3D, 2, _innerDimension, _innerDimension);
-        _lastXBranch = xBranch;
-        _lastZBranch = zBranch;
         // Step 2: Conv1D on x branch
         var convOutput = DepthwiseConv1DForward(xBranch, batchSize, seqLen);
-        _lastConvOutput = convOutput;
 
         // Step 3: SiLU activation
         var siluOutput = Engine.Swish(convOutput);
-        _lastSiluOutput = siluOutput;
 
         // Step 4: Project to B, C, delta
         var siluFlat = Engine.Reshape(siluOutput, new[] { batchSize * seqLen, _innerDimension });
@@ -463,24 +431,17 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         var dtBias2D = Engine.Reshape(_dtProjectionBias, new[] { 1, _numHeads });
         dtParam = Engine.TensorAdd(dtParam, dtBias2D);
         var dt3D = Engine.Reshape(dtParam, new[] { batchSize, seqLen, _numHeads });
-        _lastDeltaPreSoftplus = dt3D;
         var delta = Engine.Softplus(dt3D);
-        _lastDelta = delta;
-        _lastB = bParam;
-        _lastC = cParam;
 
         // Step 5: SSD computation (multi-head selective scan)
         var ssdOutput = SSDForward(siluOutput, delta, bParam, cParam, batchSize, seqLen);
-        _lastSsdOutput = ssdOutput;
 
         // Step 6: RMS Norm (simplified group norm)
-        _lastNormInput = ssdOutput;
         var normedOutput = ApplyRMSNorm(ssdOutput, batchSize, seqLen);
 
         // Step 7: Output gating: y = normed * SiLU(z)
         var zGate = Engine.Swish(zBranch);
         var gatedOutput = Engine.TensorMultiply(normedOutput, zGate);
-        _lastGatedOutput = gatedOutput;
 
         // Step 8: Output projection
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _innerDimension });
@@ -490,7 +451,6 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -1116,19 +1076,6 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastXBranch = null;
-        _lastZBranch = null;
-        _lastConvOutput = null;
-        _lastSiluOutput = null;
-        _lastSsdOutput = null;
-        _lastGatedOutput = null;
-        _lastDelta = null;
-        _lastDeltaPreSoftplus = null;
-        _lastB = null;
-        _lastC = null;
-        _lastNormInput = null;
         _originalInputShape = null;
         _inputProjectionWeightsGradient = null;
         _inputProjectionBiasGradient = null;

@@ -149,20 +149,10 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _lastOutput;
-    private Tensor<T>? _lastEmaInput;
     private Tensor<T>? _lastEmaStatesReal;
     private Tensor<T>? _lastEmaStatesImag;
-    private Tensor<T>? _lastEmaOutputNorm;
     private Tensor<T>? _lastEmaOutputPreNorm;
     private Tensor<T>? _lastEmaStdInv;
-    private Tensor<T>? _lastQuery;
-    private Tensor<T>? _lastKey;
-    private Tensor<T>? _lastValue;
-    private Tensor<T>? _lastGate;
-    private Tensor<T>? _lastGateRaw;
-    private Tensor<T>? _lastAttentionOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -345,8 +335,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: CEMA (Complex Exponential Moving Average) via kernel convolution
         var cemaOutput = CEMAKernelForward(input3D, batchSize, seqLen);
 
@@ -361,22 +349,16 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         var k = Engine.Reshape(Engine.TensorMatMul(inputFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(inputFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 4: Scaled dot-product attention per head (causal)
         var attentionOutput = CausalLinearAttention.ScaledDotProduct(
             Engine, q, k, v, _numHeads, causal: true);
-        _lastAttentionOutput = attentionOutput;
 
         // Step 5: Gating between attention and CEMA outputs
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _gateWeights),
             Engine.Reshape(_gateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Sigmoid(gateRaw);
-        _lastGate = gate;
-        _lastGateRaw = gateRaw;
 
         // y = gate * attention_out + (1 - gate) * cema_projected
         var ones = CreateOnesLike(gate);
@@ -392,7 +374,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -426,7 +407,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         var emaInput3D = Engine.Reshape(
             emaInput,
             new[] { batchSize, seqLen, _emaDimension });
-        _lastEmaInput = emaInput3D;
 
         // ComplexDiagonalSsmScanForward accepts [B,T,G,W]. With G=emaDim,
         // W=state=1, its maps are scalar and this is an O(B*T*emaDim)
@@ -470,7 +450,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         _lastEmaStdInv = Engine.TensorReciprocal(
             Engine.TensorSqrt(
                 Engine.TensorAddScalar(variance, NumOps.FromDouble(eps))));
-        _lastEmaOutputNorm = normed;
         return normed;
     }
 
@@ -481,7 +460,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         var emaInput = Engine.TensorMatMul(inputFlat, _emaInputWeights);
         emaInput = Engine.TensorAdd(emaInput, _emaInputBias.Reshape(1, _emaDimension));
         var emaInput3D = emaInput.Reshape(batchSize, seqLen, _emaDimension);
-        _lastEmaInput = emaInput3D;
 
         // CEMA recurrence with complex coefficients
         // State is complex: h_real + i * h_imag
@@ -552,7 +530,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         var varPlusEps = Engine.TensorAddScalar(variance, NumOps.FromDouble(eps));
         var stdInv = Engine.TensorReciprocal(Engine.TensorSqrt(varPlusEps));
 
-        _lastEmaOutputNorm = outputNorm;
         _lastEmaStdInv = stdInv;
         return outputNorm;
     }
@@ -931,20 +908,10 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastEmaInput = null;
         _lastEmaStatesReal = null;
         _lastEmaStatesImag = null;
-        _lastEmaOutputNorm = null;
         _lastEmaOutputPreNorm = null;
         _lastEmaStdInv = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastGate = null;
-        _lastGateRaw = null;
-        _lastAttentionOutput = null;
         _originalInputShape = null;
         _emaAlphaRealGradient = null;
         _emaAlphaImagGradient = null;
