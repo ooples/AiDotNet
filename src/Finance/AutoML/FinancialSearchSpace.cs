@@ -173,7 +173,9 @@ public sealed class FinancialSearchSpace
         searchSpace["LikelihoodType"] = new ParameterRange
         {
             Type = ParameterType.Categorical,
-            CategoricalValues = new List<object> { "Gaussian", "StudentT", "NegativeBinomial" },
+            // DeepAR's native path implements only the Gaussian likelihood; sampling StudentT or NegativeBinomial
+            // made every such trial fail its options validation.
+            CategoricalValues = new List<object> { "Gaussian" },
             DefaultValue = "Gaussian"
         };
         return searchSpace;
