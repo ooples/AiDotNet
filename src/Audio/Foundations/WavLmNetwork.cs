@@ -27,6 +27,16 @@ internal sealed record WavLmConfiguration
     /// <summary>transformers' <c>do_stable_layer_norm</c> (WavLM-Large): pre-norm encoder layers and the encoder's layer
     /// norm after the last layer, rather than post-norm layers after it.</summary>
     public bool StableLayerNorm { get; init; }
+
+    /// <summary>Whether the network carries the learned mask embedding (<c>masked_spec_embed</c>) that SpecAugment time
+    /// masking writes over masked frames in train mode; frozen consumers leave it out.</summary>
+    public bool UseMaskEmbedding { get; init; }
+
+    /// <summary>Frames per SpecAugment time mask. Default: 10.</summary>
+    public int MaskTimeLength { get; init; } = 10;
+
+    /// <summary>Fewest SpecAugment time masks per utterance. Default: 2.</summary>
+    public int MaskTimeMinMasks { get; init; } = 2;
 }
 
 /// <summary>
@@ -40,6 +50,14 @@ internal sealed record WavLmConfiguration
 /// LayerDrop. WavLM-Large's layout (<see cref="WavLmConfiguration.LayerNormFeatureEncoder"/>,
 /// <see cref="WavLmConfiguration.StableLayerNorm"/>) is transformers' <c>WavLMEncoderStableLayerNorm</c>. Its layers are
 /// added to the owner's list.</remarks>
+/// <summary>
+/// WavLM's training regularizers as transformers applies them in train mode: dropout after the feature projection, on
+/// the encoder input, on the attention probabilities, inside and after each feed-forward block and after attention, and
+/// LayerDrop, which skips each layer after the first with the given probability.
+/// </summary>
+internal sealed record WavLmRegularization(Random Random, double HiddenDropout, double AttentionDropout, double ActivationDropout,
+    double FeatureProjectionDropout, double LayerDrop, double MaskTimeProbability = 0);
+
 internal sealed class WavLmNetwork<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -73,6 +91,7 @@ internal sealed class WavLmNetwork<T>
         Projection = Linear(c.HiddenSize);
         PositionalConv = Own(new Wav2Vec2PositionalConvLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups));
         EncoderNorm = Norm(c.HiddenSize);
+        if (c.UseMaskEmbedding) MaskEmbedding = Own(new BiasFreeLinearLayer<T>(1, c.HiddenSize));
         RelativeEmbedding = Own(new TiedEmbeddingLayer<T>(c.RelativePositionBuckets, c.Heads));
         for (int i = 0; i < c.Layers; i++)
         {
@@ -100,6 +119,9 @@ internal sealed class WavLmNetwork<T>
     public DenseLayer<T> Projection { get; }
     public Wav2Vec2PositionalConvLayer<T> PositionalConv { get; }
     public LayerNormalizationLayer<T> EncoderNorm { get; }
+
+    /// <summary>The learned mask embedding (<c>masked_spec_embed</c>), when <see cref="WavLmConfiguration.UseMaskEmbedding"/>.</summary>
+    public BiasFreeLinearLayer<T>? MaskEmbedding { get; }
     public TiedEmbeddingLayer<T> RelativeEmbedding { get; }
     public List<Layer> EncoderLayers { get; } = new();
 
@@ -116,16 +138,22 @@ internal sealed class WavLmNetwork<T>
     /// <c>output_hidden_states</c> lists them: the encoder's input (after the position embedding and layer norm) and
     /// every layer's output; with <see cref="WavLmConfiguration.StableLayerNorm"/>, each layer's input and, last, the
     /// final layer's output after the encoder's layer norm (<c>last_hidden_state</c>).</summary>
-    public IReadOnlyList<Tensor<T>> HiddenStates(Tensor<T> audio)
+    public IReadOnlyList<Tensor<T>> HiddenStates(Tensor<T> audio) => HiddenStates(audio, null);
+
+    /// <summary>The hidden states with <paramref name="regularization"/>'s dropout and LayerDrop applied (train mode); null
+    /// is evaluation mode.</summary>
+    public IReadOnlyList<Tensor<T>> HiddenStates(Tensor<T> audio, WavLmRegularization? regularization)
     {
+        _regularization = regularization;
         var c = Configuration;
         int samples = audio.Length;
         if (Frames(samples) <= 0)
             throw new ArgumentException($"{samples} samples are fewer than WavLM's receptive field.", nameof(audio));
         var h = _engine.Reshape(audio, new[] { samples, 1 });
         for (int i = 0; i < Convs.Count; i++) h = ConvBlock(i, h);
-        var hidden = Projection.Forward(ProjectionNorm.Forward(h));                                            // [L, H]
+        var hidden = Drop(Projection.Forward(ProjectionNorm.Forward(h)), regularization?.FeatureProjectionDropout ?? 0); // [L, H]
         int length = hidden.Shape[0];
+        if (regularization is { MaskTimeProbability: > 0 } && MaskEmbedding is not null) hidden = Mask(hidden, regularization);
         var batched = _engine.Reshape(hidden, new[] { 1, length, c.HiddenSize });
         batched = _engine.TensorAdd(batched, ActivationHelper.ExactGelu(PositionalConv.Forward(batched), _engine));
         hidden = _engine.Reshape(batched, new[] { length, c.HiddenSize });
@@ -133,19 +161,20 @@ internal sealed class WavLmNetwork<T>
         if (c.StableLayerNorm)
         {
             var stable = new List<Tensor<T>>();
-            foreach (var layer in EncoderLayers)
+            hidden = Drop(hidden, regularization?.HiddenDropout ?? 0);
+            for (int i = 0; i < EncoderLayers.Count; i++)
             {
                 stable.Add(hidden);
-                hidden = EncodeStable(layer, hidden, bias);
+                if (!SkipLayer(i)) hidden = EncodeStable(EncoderLayers[i], hidden, bias);
             }
             stable.Add(EncoderNorm.Forward(hidden));
             return stable;
         }
-        hidden = EncoderNorm.Forward(hidden);
+        hidden = Drop(EncoderNorm.Forward(hidden), regularization?.HiddenDropout ?? 0);
         var states = new List<Tensor<T>> { hidden };
-        foreach (var layer in EncoderLayers)
+        for (int i = 0; i < EncoderLayers.Count; i++)
         {
-            hidden = Encode(layer, hidden, bias);
+            if (!SkipLayer(i)) hidden = Encode(EncoderLayers[i], hidden, bias);
             states.Add(hidden);
         }
         return states;
@@ -197,6 +226,47 @@ internal sealed class WavLmNetwork<T>
         return _engine.Reshape(_engine.TensorTranspose(values), new[] { Configuration.Heads, length, length });
     }
 
+    // The regularization of the forward in progress (null: evaluation mode).
+    private WavLmRegularization? _regularization;
+
+    // SpecAugment time masking (transformers _compute_mask_indices): ⌊p·L/M + U(0, 1)⌋ spans of M frames, at least the
+    // minimum, written over by the mask embedding.
+    private Tensor<T> Mask(Tensor<T> hidden, WavLmRegularization r)
+    {
+        var c = Configuration;
+        int length = hidden.Shape[0], width = c.HiddenSize, span = Math.Min(c.MaskTimeLength, length);
+        int spans = Math.Max((int)(r.MaskTimeProbability * length / span + r.Random.NextDouble()), c.MaskTimeMinMasks);
+        if (spans * span > length) spans = length / span;
+        var masked = new bool[length];
+        foreach (var start in Enumerable.Range(0, length - span + 1).OrderBy(_ => r.Random.Next()).Take(spans))
+            for (int t = start; t < start + span; t++) masked[t] = true;
+        var keep = new Tensor<T>(new[] { length, 1 });
+        var replace = new Tensor<T>(new[] { length, 1 });
+        for (int t = 0; t < length; t++)
+        {
+            keep[t, 0] = masked[t] ? NumOps.Zero : NumOps.One;
+            replace[t, 0] = masked[t] ? NumOps.One : NumOps.Zero;
+        }
+        var embedding = (MaskEmbedding ?? throw new InvalidOperationException("The network has no mask embedding."))
+            .Forward(new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.One })));                     // [1, H]
+        return _engine.TensorAdd(_engine.TensorMultiply(hidden, _engine.TensorTile(keep, new[] { 1, width })),
+            _engine.TensorMultiply(_engine.TensorTile(embedding, new[] { length, 1 }), _engine.TensorTile(replace, new[] { 1, width })));
+    }
+
+    // transformers' LayerDrop: each layer after the first is skipped with probability LayerDrop in train mode.
+    private bool SkipLayer(int index)
+        => _regularization is { } r && index > 0 && r.LayerDrop > 0 && r.Random.NextDouble() < r.LayerDrop;
+
+    // Inverted dropout: zero with probability p, scale the rest by 1 / (1 − p).
+    private Tensor<T> Drop(Tensor<T> x, double p)
+    {
+        if (_regularization is not { } r || p <= 0) return x;
+        var mask = new Tensor<T>(x._shape);
+        var keep = NumOps.FromDouble(1.0 / (1.0 - p));
+        for (int i = 0; i < mask.Length; i++) mask[i] = r.Random.NextDouble() < p ? NumOps.Zero : keep;
+        return _engine.TensorMultiply(x, mask);
+    }
+
     private Tensor<T> Heads(DenseLayer<T> projection, Tensor<T> x)
     {
         int length = x.Shape[0], heads = Configuration.Heads, e = Configuration.HiddenSize / heads;
@@ -222,23 +292,97 @@ internal sealed class WavLmNetwork<T>
         var v = Heads(l.Value, x);
         var scores = _engine.TensorAdd(_engine.TensorMultiplyScalar(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })),
             NumOps.FromDouble(1.0 / Math.Sqrt(e))), gated);
-        var context = _engine.BatchMatMul(_engine.Softmax(scores, axis: 2), v);
-        return l.Output.Forward(_engine.Reshape(_engine.TensorPermute(context, new[] { 1, 0, 2 }), new[] { length, heads * e }));
+        var context = _engine.BatchMatMul(Drop(_engine.Softmax(scores, axis: 2), _regularization?.AttentionDropout ?? 0), v);
+        return Drop(l.Output.Forward(_engine.Reshape(_engine.TensorPermute(context, new[] { 1, 0, 2 }), new[] { length, heads * e })),
+            _regularization?.HiddenDropout ?? 0);
     }
 
     private Tensor<T> Encode(Layer l, Tensor<T> x, Tensor<T> bias)
     {
         x = l.AttentionNorm.Forward(_engine.TensorAdd(x, Attention(l, x, bias)));
-        var hidden = l.FeedForwardOutput.Forward(ActivationHelper.ExactGelu(l.Intermediate.Forward(x), _engine));
-        return l.FinalNorm.Forward(_engine.TensorAdd(x, hidden));
+        return l.FinalNorm.Forward(_engine.TensorAdd(x, FeedForward(l, x)));
     }
 
     // WavLMEncoderLayerStableLayerNorm: pre-norm attention and feed-forward, each added to its input.
     private Tensor<T> EncodeStable(Layer l, Tensor<T> x, Tensor<T> bias)
     {
         x = _engine.TensorAdd(x, Attention(l, l.AttentionNorm.Forward(x), bias));
-        var hidden = l.FeedForwardOutput.Forward(ActivationHelper.ExactGelu(l.Intermediate.Forward(l.FinalNorm.Forward(x)), _engine));
-        return _engine.TensorAdd(x, hidden);
+        return _engine.TensorAdd(x, FeedForward(l, l.FinalNorm.Forward(x)));
+    }
+
+    // WavLMFeedForward: intermediate dense, GELU, dropout (activation_dropout), output dense, dropout (hidden_dropout).
+    private Tensor<T> FeedForward(Layer l, Tensor<T> x)
+    {
+        var inner = Drop(ActivationHelper.ExactGelu(l.Intermediate.Forward(x), _engine), _regularization?.ActivationDropout ?? 0);
+        return Drop(l.FeedForwardOutput.Forward(inner), _regularization?.HiddenDropout ?? 0);
+    }
+
+    /// <summary>Initializes every weight as transformers' <c>WavLMModel</c> does for a fresh model.</summary>
+    public void InitializeLikeReference(Random random)
+    {
+        var c = Configuration;
+        double Normal() => Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
+        double[] Gaussian(int count, double std)
+        {
+            var a = new double[count];
+            for (int i = 0; i < count; i++) a[i] = std * Normal();
+            return a;
+        }
+        void Linear(DenseLayer<T> layer, int inputs, int outputs)
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, Gaussian(outputs * inputs, 0.02), new double[outputs]);
+        // The feature encoder's bias-free convolutions: Kaiming normal over the fan-in k · C_in.
+        for (int i = 0; i < Convs.Count; i++)
+        {
+            int inputs = (i == 0 ? 1 : c.ConvDims[i - 1]) * c.ConvKernels[i];
+            TorchParameters.Linear(Convs[i], inputs, c.ConvDims[i], Gaussian(c.ConvDims[i] * inputs, Math.Sqrt(2.0 / inputs)));
+        }
+        // WavLMFeatureProjection: U(±√(1/in)) for the weight and the bias.
+        double bound = Math.Sqrt(1.0 / c.ConvDims[^1]);
+        var projectionWeight = new double[c.HiddenSize * c.ConvDims[^1]];
+        var projectionBias = new double[c.HiddenSize];
+        for (int i = 0; i < projectionWeight.Length; i++) projectionWeight[i] = (2 * random.NextDouble() - 1) * bound;
+        for (int i = 0; i < projectionBias.Length; i++) projectionBias[i] = (2 * random.NextDouble() - 1) * bound;
+        TorchParameters.Linear(_engine, Projection, c.ConvDims[^1], c.HiddenSize, projectionWeight, projectionBias);
+        // WavLMPositionalConvEmbedding: N(0, 2·√(1/(k·C_in))) on the weight, weight_norm's g = ‖v‖ per tap, zero bias.
+        int perGroup = c.HiddenSize / c.PositionalConvGroups, kernel = c.PositionalConvKernel;
+        var direction = Gaussian(c.HiddenSize * perGroup * kernel, 2 * Math.Sqrt(1.0 / ((double)kernel * c.HiddenSize)));
+        var (pv, pg, pb) = PositionalConv.WeightNormParameters;
+        for (int i = 0; i < direction.Length; i++) pv[i] = NumOps.FromDouble(direction[i]);
+        for (int t = 0; t < kernel; t++)
+        {
+            double sum = 0;
+            for (int o = 0; o < c.HiddenSize; o++)
+                for (int j = 0; j < perGroup; j++)
+                {
+                    double d = direction[(o * perGroup + j) * kernel + t];
+                    sum += d * d;
+                }
+            pg[t] = NumOps.FromDouble(Math.Sqrt(sum));
+        }
+        for (int i = 0; i < c.HiddenSize; i++) pb[i] = NumOps.Zero;
+        _engine.InvalidatePersistentTensor(pv);
+        _engine.InvalidatePersistentTensor(pg);
+        _engine.InvalidatePersistentTensor(pb);
+        // masked_spec_embed: U(0, 1).
+        if (MaskEmbedding is not null)
+        {
+            var mask = new double[c.HiddenSize];
+            for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble();
+            TorchParameters.Linear(MaskEmbedding, 1, c.HiddenSize, mask);
+        }
+        // nn.Embedding under the base initializer: N(0, 0.02). The gate constants stay at one, as constructed.
+        RelativeEmbedding.LoadTable(Gaussian(c.RelativePositionBuckets * c.Heads, 0.02));
+        int headWidth = c.HiddenSize / c.Heads;
+        foreach (var l in EncoderLayers)
+        {
+            Linear(l.Query, c.HiddenSize, c.HiddenSize);
+            Linear(l.Key, c.HiddenSize, c.HiddenSize);
+            Linear(l.Value, c.HiddenSize, c.HiddenSize);
+            Linear(l.Output, c.HiddenSize, c.HiddenSize);
+            Linear(l.Gate, headWidth, 8);
+            Linear(l.Intermediate, c.HiddenSize, c.IntermediateSize);
+            Linear(l.FeedForwardOutput, c.IntermediateSize, c.HiddenSize);
+        }
     }
 
     /// <summary>Loads a transformers <c>WavLMModel</c> state dict (the position convolution's weight norm under its old
@@ -293,6 +437,7 @@ internal sealed class WavLmNetwork<T>
         _engine.InvalidatePersistentTensor(pg);
         _engine.InvalidatePersistentTensor(pb);
         Norm(EncoderNorm, "encoder.layer_norm", h);
+        if (MaskEmbedding is not null) TorchParameters.Linear(MaskEmbedding, 1, h, read("masked_spec_embed", new[] { h }));
         RelativeEmbedding.LoadTable(read("encoder.layers.0.attention.rel_attn_embed.weight", new[] { c.RelativePositionBuckets, c.Heads }));
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
