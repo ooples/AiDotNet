@@ -239,7 +239,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>",
             "AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>",
             "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>",
-            "AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T>",
             "AiDotNet.TextToSpeech.MultiModal.LlamaOmni<T>",
             "AiDotNet.TextToSpeech.MultiModal.MinMo<T>",
             "AiDotNet.TextToSpeech.MultiModal.Moshi<T>",

@@ -17,17 +17,35 @@ public enum CosyVoiceFlowLoss
     SquaredError,
 }
 
+/// <summary>How a CosyVoice 1 flow stretches its encoded tokens to the mel's frames.</summary>
+internal enum CosyVoiceRegulator
+{
+    /// <summary>CosyVoice's <c>InterpolateRegulator</c>: linear interpolation; at inference the prompt's and the text's
+    /// tokens are stretched separately (<see cref="CosyVoiceFlow{T}.StretchForInference"/>).</summary>
+    Linear,
+
+    /// <summary>GLM-4-Voice's fork: nearest-neighbour interpolation, and at inference the whole sequence (prompt and
+    /// text) stretched at once to the frames of all its tokens.</summary>
+    Nearest,
+}
+
 /// <summary>The sizes of CosyVoice 1's flow model (<c>MaskedDiffWithXvec</c> with its encoder, length regulator and
 /// conditional flow matching), or with <c>Causal</c> CosyVoice 2's <c>CausalMaskedDiffWithXvec</c>: an
 /// <see cref="UpsampleConformerEncoder{T}"/> giving each token <c>TokenMelRatio</c> mel frames (no length regulator) and the
 /// causal estimator, both chunked in streaming by the encoder's <c>StaticChunkSize</c> (the estimator by that times the
 /// ratio).</summary>
+/// <param name="Regulator">The stretch of the encoded tokens (GLM-4-Voice's fork: <see cref="CosyVoiceRegulator.Nearest"/>).</param>
+/// <param name="PromptRatio">The largest prompt prefix training draws, as a fraction of the mel's frames (CosyVoice 0.3,
+/// GLM-4-Voice 0.8).</param>
+/// <param name="CosineTrainingTime">Whether training's t ~ U(0, 1) goes through the cosine schedule 1 − cos(πt/2), as
+/// GLM-4-Voice's <c>compute_loss</c> does.</param>
 internal sealed record CosyVoiceFlowConfiguration(
-    int VocabSize, int InputSize, int OutputSize, int SpeakerDim, int InputFrameRate, int SampleRate, int HopSize,
+    int VocabSize, int InputSize, int OutputSize, int SpeakerDim, double InputFrameRate, int SampleRate, int HopSize,
     WenetEncoderConfiguration Encoder, int RegulatorStages, int[] DecoderChannels, int DecoderHeads, int DecoderHeadDim,
     int DecoderBlocksPerLevel, int DecoderMidBlocks, double SigmaMin, double TrainingCfgRate, double InferenceCfgRate,
     int Timesteps, CosyVoiceFlowLoss Loss = CosyVoiceFlowLoss.AbsoluteError, bool Causal = false, int TokenMelRatio = 1,
-    int Lookahead = 3);
+    int Lookahead = 3, CosyVoiceRegulator Regulator = CosyVoiceRegulator.Linear, double PromptRatio = 0.3,
+    bool CosineTrainingTime = false);
 
 /// <summary>
 /// CosyVoice 1's flow model (FunAudioLLM/CosyVoice <c>cosyvoice/flow</c>: <c>MaskedDiffWithXvec</c>,
@@ -107,11 +125,15 @@ internal sealed class CosyVoiceFlow<T>
     public NormedConv1DLayer<T>? RegulatorOut { get; }
     public MatchaDecoder<T> Decoder { get; }
 
-    /// <summary>Mel frames for a number of speech tokens: <c>int(tokens / frame rate · sample rate / hop)</c>, or
-    /// <c>tokens · TokenMelRatio</c> for the causal flow.</summary>
-    public int MelFrames(int tokens) => Configuration.Causal
-        ? tokens * Configuration.TokenMelRatio
-        : (int)(tokens / (double)Configuration.InputFrameRate * Configuration.SampleRate / Configuration.HopSize);
+    /// <summary>Mel frames for a number of speech tokens: <c>int(tokens / frame rate · sample rate / hop)</c> in float32
+    /// as torch computes it on an integer tensor, or <c>tokens · TokenMelRatio</c> for the causal flow.</summary>
+    public int MelFrames(int tokens)
+    {
+        if (Configuration.Causal) return tokens * Configuration.TokenMelRatio;
+        float seconds = (float)tokens / (float)Configuration.InputFrameRate;
+        float samples = seconds * (float)Configuration.SampleRate;
+        return (int)(samples / (float)Configuration.HopSize);
+    }
 
     /// <summary>The projected x-vector <c>[OutputSize]</c>: L2-normalized, then the affine layer.</summary>
     public Tensor<T> ProjectSpeaker(Tensor<T> xvector)
@@ -159,6 +181,20 @@ internal sealed class CosyVoiceFlow<T>
         return _engine.Reshape(_engine.TensorMatMul(_engine.Reshape(x, new[] { channels, frames }), weights), new[] { 1, channels, size });
     }
 
+    /// <summary>
+    /// PyTorch's <c>F.interpolate(x, size, mode="nearest")</c> over the frames of <c>[1, C, T]</c>: output frame i reads
+    /// source frame min(⌊i · (T / size)⌋, T − 1), the scale and product in float32 as ATen's <c>nearest_idx</c> computes them.
+    /// </summary>
+    internal Tensor<T> InterpolateNearest(Tensor<T> x, int size)
+    {
+        int channels = x.Shape[1], frames = x.Shape[2];
+        var index = new Tensor<int>(new[] { size });
+        float scale = (float)frames / size;
+        for (int i = 0; i < size; i++)
+            index[i] = frames == size ? i : size == 2 * frames ? i >> 1 : Math.Min((int)Math.Floor((float)(i * scale)), frames - 1);
+        return _engine.Reshape(_engine.TensorIndexSelect(_engine.Reshape(x, new[] { channels, frames }), index, 1), new[] { 1, channels, size });
+    }
+
     /// <summary>The regulator's stages on <c>[1, C, frames]</c>: (conv, GroupNorm(1), Mish) per stage, then a 1×1 conv.</summary>
     internal Tensor<T> Regulate(Tensor<T> x)
     {
@@ -177,7 +213,7 @@ internal sealed class CosyVoiceFlow<T>
     public Tensor<T> Stretch(Tensor<T> encoded, int frames)
     {
         var channels = _engine.Reshape(_engine.TensorTranspose(encoded), new[] { 1, encoded.Shape[1], encoded.Shape[0] });
-        return Regulate(Interpolate(channels, frames));
+        return Regulate(Configuration.Regulator == CosyVoiceRegulator.Nearest ? InterpolateNearest(channels, frames) : Interpolate(channels, frames));
     }
 
     /// <summary>The estimator on <c>[1, OutputSize, frames]</c> inputs: x, μ, the projected x-vector repeated over the
@@ -222,8 +258,9 @@ internal sealed class CosyVoiceFlow<T>
 
     /// <summary>
     /// <c>MaskedDiffWithXvec.forward</c> for one utterance with every random draw made from <paramref name="random"/>:
-    /// half the time no prompt, otherwise a prefix of U{0, …, ⌊0.3 · frames⌋} frames of the target as the condition;
-    /// t ~ U(0, 1); the noise; and the conditions dropped with probability <see cref="CosyVoiceFlowConfiguration.TrainingCfgRate"/>.
+    /// half the time no prompt, otherwise a prefix of U{0, …, ⌊<see cref="CosyVoiceFlowConfiguration.PromptRatio"/> · frames⌋}
+    /// frames of the target as the condition; t ~ U(0, 1) (through the cosine schedule when
+    /// <see cref="CosyVoiceFlowConfiguration.CosineTrainingTime"/>); the noise; and the conditions dropped with probability <see cref="CosyVoiceFlowConfiguration.TrainingCfgRate"/>.
     /// </summary>
     /// <param name="tokens">The utterance's speech tokens.</param>
     /// <param name="mel">Its mel <c>[1, OutputSize, frames]</c>.</param>
@@ -248,11 +285,12 @@ internal sealed class CosyVoiceFlow<T>
         {
             mu = Stretch(Encode(tokens, training, random), frames);
         }
-        int prompt = random.NextDouble() < 0.5 ? 0 : random.Next((int)(0.3 * frames) + 1);
+        int prompt = random.NextDouble() < 0.5 ? 0 : random.Next((int)(c.PromptRatio * frames) + 1);
         var condition = new Tensor<T>(new[] { 1, c.OutputSize, frames });
         for (int m = 0; m < c.OutputSize; m++)
             for (int f = 0; f < prompt; f++) condition[0, m, f] = mel[0, m, f];
         double t = random.NextDouble();
+        if (c.CosineTrainingTime) t = 1 - Math.Cos(t * 0.5 * Math.PI);
         var noise = new Tensor<T>(new[] { 1, c.OutputSize, frames });
         for (int i = 0; i < noise.Length; i++)
             noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
@@ -308,7 +346,12 @@ internal sealed class CosyVoiceFlow<T>
         if (promptTokens.Count > 0 && promptMel is null)
             throw new ArgumentException("A prompt's tokens need the prompt's mel.", nameof(promptMel));
         int promptFrames = promptTokens.Count > 0 && promptMel is not null ? promptMel.Shape[0] : 0;
-        int textFrames = MelFrames(tokens.Count), total = promptFrames + textFrames;
+        bool whole = c.Regulator == CosyVoiceRegulator.Nearest;
+        // GLM-4-Voice sizes the whole sequence by all its tokens; the frames after the prompt's mel are the output.
+        int textFrames = whole ? MelFrames(promptTokens.Count + tokens.Count) - promptFrames : MelFrames(tokens.Count);
+        int total = promptFrames + textFrames;
+        if (textFrames <= 0)
+            throw new ArgumentException($"The prompt's mel has {promptFrames} frames; all {promptTokens.Count + tokens.Count} tokens give only {MelFrames(promptTokens.Count + tokens.Count)}.", nameof(promptMel));
         if (noise.Length != c.OutputSize * total)
             throw new ArgumentException($"The noise must be [1, {c.OutputSize}, {total}].", nameof(noise));
 
@@ -327,6 +370,15 @@ internal sealed class CosyVoiceFlow<T>
             var causalMu = _engine.Reshape(_engine.TensorTranspose(encoded), new[] { 1, c.OutputSize, total });
             var causalMel = Sample(causalMu, ProjectSpeaker(xvector), causalCondition, _engine.Reshape(noise, new[] { 1, c.OutputSize, total }), streaming);
             return _engine.TensorSlice(causalMel, new[] { 0, 0, promptFrames }, new[] { 1, c.OutputSize, textFrames });
+        }
+        if (whole)
+        {
+            var wholeCondition = new Tensor<T>(new[] { 1, c.OutputSize, total });
+            if (promptMel is not null)
+                for (int f = 0; f < promptFrames; f++)
+                    for (int m = 0; m < c.OutputSize; m++) wholeCondition[0, m, f] = promptMel[f, m];
+            var wholeMel = Sample(Stretch(encoded, total), ProjectSpeaker(xvector), wholeCondition, _engine.Reshape(noise, new[] { 1, c.OutputSize, total }));
+            return _engine.TensorSlice(wholeMel, new[] { 0, 0, promptFrames }, new[] { 1, c.OutputSize, textFrames });
         }
         var promptEncoded = promptTokens.Count > 0
             ? _engine.TensorSlice(encoded, new[] { 0, 0 }, new[] { promptTokens.Count, width })
