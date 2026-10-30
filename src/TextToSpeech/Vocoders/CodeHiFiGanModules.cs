@@ -23,6 +23,13 @@ internal sealed record CodeHiFiGanConfiguration
     /// <inheritdoc cref="DurationHidden"/>
     public int DurationKernel { get; init; } = 3;
 
+    /// <summary>The duration predictor's dropout in training (<c>var_pred_dropout</c>: 0.5).</summary>
+    public double DurationDropout { get; init; } = 0.5;
+
+    /// <summary>Speaker embeddings (speech-resynthesis' <c>multispkr</c>: a table of 200); 0 for a single-speaker
+    /// vocoder.</summary>
+    public int Speakers { get; init; }
+
     /// <summary>Samples per unit frame: the upsampling rates' product (320).</summary>
     public int HopSize => UpsampleRates.Aggregate(1, (a, b) => a * b);
 }
@@ -37,7 +44,12 @@ internal sealed record CodeHiFiGanConfiguration
 /// ReLU, LayerNorm, a second convolution with ReLU, LayerNorm, and a linear map to a log duration. A unit lasts
 /// <c>max(1, round(exp(d) − 1))</c> frames, with torch's round-half-to-even. The generator is HiFi-GAN V1 with type-1
 /// residual blocks on the embeddings (<see cref="HiFiGanGenerator{T}"/>).</para>
-/// <para>Inference only: the speech models that use it load a released vocoder and keep it frozen.</para>
+/// <para>Multi-speaker (<see cref="CodeHiFiGanConfiguration.Speakers"/>; speech-resynthesis'
+/// <c>DurationCodeGenerator</c>): a speaker's embedding, repeated over the frames, is concatenated to the unit embeddings
+/// before the generator.</para>
+/// <para>Training (<see cref="TrainingForward"/>) reads frame-level codes; the duration predictor learns the log
+/// (duration + 1) of each run of a code (<c>process_duration</c>: the first and last runs, cut by the segment, left out)
+/// by mean squared error.</para>
 /// </remarks>
 internal sealed class CodeHiFiGan<T>
 {
@@ -67,7 +79,12 @@ internal sealed class CodeHiFiGan<T>
             DurationProjection = Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
             TorchParameters.Linear(engine, DurationProjection, h, 1, Enumerable.Range(0, h).Select(_ => Uniform(h)).ToArray(), new[] { Uniform(h) });
         }
-        Generator = new HiFiGanGenerator<T>(engine, c.EmbeddingDim, c.InitialChannels, c.UpsampleRates, c.UpsampleKernels, c.ResblockKernels,
+        if (c.Speakers > 0)
+        {
+            SpeakerEmbedding = Add(new TiedEmbeddingLayer<T>(c.Speakers, c.EmbeddingDim));
+            SpeakerEmbedding.Reinitialize(Normal);
+        }
+        Generator = new HiFiGanGenerator<T>(engine, c.EmbeddingDim * (c.Speakers > 0 ? 2 : 1), c.InitialChannels, c.UpsampleRates, c.UpsampleKernels, c.ResblockKernels,
             c.ResblockDilations, resblockType1: true, initialization: initialization);
         layers.AddRange(Generator.Layers);
     }
@@ -79,6 +96,9 @@ internal sealed class CodeHiFiGan<T>
     public NormedConv1DLayer<T>? DurationConv2 { get; }
     public LayerNormalizationLayer<T>? DurationNorm2 { get; }
     public DenseLayer<T>? DurationProjection { get; }
+
+    /// <summary>The speaker table; null for a single-speaker vocoder.</summary>
+    public TiedEmbeddingLayer<T>? SpeakerEmbedding { get; }
     public HiFiGanGenerator<T> Generator { get; }
 
     private Tensor<T> Embed(IReadOnlyList<int> units)
@@ -92,8 +112,9 @@ internal sealed class CodeHiFiGan<T>
         return Embedding.Forward(ids);                                                                            // [L, E]
     }
 
-    /// <summary>The predicted log durations <c>[L]</c> of units (<c>VariancePredictor</c> at inference).</summary>
-    public Tensor<T> LogDurations(IReadOnlyList<int> units)
+    /// <summary>The predicted log durations <c>[L]</c> of units (<c>VariancePredictor</c>; its dropout when
+    /// <paramref name="random"/> is given).</summary>
+    public Tensor<T> LogDurations(IReadOnlyList<int> units, Random? random = null)
     {
         if (DurationConv1 is null || DurationNorm1 is null || DurationConv2 is null || DurationNorm2 is null || DurationProjection is null)
             throw new InvalidOperationException("This vocoder has no duration predictor.");
@@ -101,9 +122,54 @@ internal sealed class CodeHiFiGan<T>
         var x = _engine.Reshape(_engine.TensorTranspose(Embed(units)), new[] { 1, Configuration.EmbeddingDim, length });
         Tensor<T> Rows(Tensor<T> channels) => _engine.TensorTranspose(_engine.Reshape(channels, new[] { channels.Shape[1], length }));
         Tensor<T> Channels(Tensor<T> rows) => _engine.Reshape(_engine.TensorTranspose(rows), new[] { 1, rows.Shape[1], length });
-        var h = DurationNorm1.Forward(Rows(_engine.ReLU(DurationConv1.Forward(x))));
-        h = DurationNorm2.Forward(Rows(_engine.ReLU(DurationConv2.Forward(Channels(h)))));
+        Tensor<T> Drop(Tensor<T> t) => random is not null && Configuration.DurationDropout > 0
+            ? AiDotNet.TextToSpeech.CodecBased.T5Seq2Seq<T>.Dropout(_engine, t, Configuration.DurationDropout, random) : t;
+        var h = Drop(DurationNorm1.Forward(Rows(_engine.ReLU(DurationConv1.Forward(x)))));
+        h = Drop(DurationNorm2.Forward(Rows(_engine.ReLU(DurationConv2.Forward(Channels(h))))));
         return _engine.Reshape(DurationProjection.Forward(h), new[] { length });
+    }
+
+    // The unit embeddings [L, E] of rows, a speaker's embedding concatenated to each, as [1, channels, L].
+    private Tensor<T> GeneratorInput(Tensor<T> rows, int? speaker)
+    {
+        int frames = rows.Shape[0];
+        if (SpeakerEmbedding is not null)
+        {
+            if (speaker is null || speaker < 0 || speaker >= Configuration.Speakers)
+                throw new ArgumentOutOfRangeException(nameof(speaker), $"This vocoder voices speakers 0 … {Configuration.Speakers - 1}.");
+            var embedding = SpeakerEmbedding.Forward(new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(speaker.Value) })));
+            rows = _engine.TensorConcatenate(new[] { rows, _engine.TensorBroadcastTo(_engine.Reshape(embedding, new[] { 1, Configuration.EmbeddingDim }), new[] { frames, Configuration.EmbeddingDim }) }, 1);
+        }
+        return _engine.Reshape(_engine.TensorTranspose(rows), new[] { 1, rows.Shape[1], frames });
+    }
+
+    /// <summary>
+    /// The training forward (speech-resynthesis' <c>DurationCodeGenerator.forward</c> in training): the waveform of
+    /// frame-level codes, as they are, and the duration predictor's loss, the mean squared error of its log durations
+    /// against log(run length + 1) over each run of a code (the first and last runs left out when there are more than
+    /// two, since a segment cuts them).
+    /// </summary>
+    public (Tensor<T> Waveform, Tensor<T>? DurationLoss) TrainingForward(IReadOnlyList<int> codes, int? speaker, Random random)
+    {
+        if (codes is null || codes.Count == 0) throw new ArgumentException("There are no codes.", nameof(codes));
+        Tensor<T>? durationLoss = null;
+        if (DurationConv1 is not null)
+        {
+            var runs = new List<(int Code, int Start, int Count)>();
+            for (int i = 0; i < codes.Count; i++)
+            {
+                if (i > 0 && codes[i] == codes[i - 1]) runs[runs.Count - 1] = (runs[^1].Code, runs[^1].Start, runs[^1].Count + 1);
+                else runs.Add((codes[i], i, 1));
+            }
+            var kept = runs.Count > 2 ? runs.Skip(1).Take(runs.Count - 2).ToList() : runs;
+            var logDurations = LogDurations(kept.Select(r => r.Code).ToArray(), random);
+            var targets = new Tensor<T>(new[] { kept.Count }, new Vector<T>(kept.Select(r => NumOps.FromDouble(Math.Log(r.Count + 1))).ToArray()));
+            var difference = _engine.TensorSubtract(logDurations, targets);
+            durationLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null, false),
+                NumOps.FromDouble(1.0 / kept.Count));
+        }
+        var wave = Generator.Forward(GeneratorInput(Embed(codes), speaker));
+        return (_engine.Reshape(wave, new[] { wave.Length }), durationLoss);
     }
 
     /// <summary>Each unit's frames: <c>max(1, round(exp(d) − 1))</c> of its log duration, rounding half to even.</summary>
@@ -119,7 +185,7 @@ internal sealed class CodeHiFiGan<T>
     /// The waveform <c>[frames · hop]</c> of discrete units (<c>CodeHiFiGANVocoder.forward</c>): the embeddings, each
     /// repeated by its predicted duration when <paramref name="durationPrediction"/>, through the generator.
     /// </summary>
-    public Tensor<T> Forward(IReadOnlyList<int> units, bool durationPrediction = true)
+    public Tensor<T> Forward(IReadOnlyList<int> units, bool durationPrediction = true, int? speaker = null)
     {
         if (units is null || units.Count == 0) throw new ArgumentException("There are no units.", nameof(units));
         var rows = Embed(units);
@@ -132,9 +198,7 @@ internal sealed class CodeHiFiGan<T>
                 for (int r = 0; r < durations[i]; r++) index[at++] = i;
             rows = _engine.TensorIndexSelect(rows, index, 0);
         }
-        int frames = rows.Shape[0];
-        var x = _engine.Reshape(_engine.TensorTranspose(rows), new[] { 1, Configuration.EmbeddingDim, frames });
-        var wave = Generator.Forward(x);
+        var wave = Generator.Forward(GeneratorInput(rows, speaker));
         return _engine.Reshape(wave, new[] { wave.Length });
     }
 
@@ -146,6 +210,7 @@ internal sealed class CodeHiFiGan<T>
         var c = Configuration;
         double[] Need(string name) => read(prefix + name) ?? throw new InvalidDataException($"The vocoder checkpoint has no tensor '{prefix}{name}'.");
         Embedding.LoadTable(Need("dict.weight"));
+        if (SpeakerEmbedding is not null) SpeakerEmbedding.LoadTable(Need("spkr.weight"));
         if (DurationConv1 is not null && DurationNorm1 is not null && DurationConv2 is not null && DurationNorm2 is not null && DurationProjection is not null)
         {
             DurationConv1.LoadTorchWeights(Need("dur_predictor.conv1.0.weight"), null, Need("dur_predictor.conv1.0.bias"));
