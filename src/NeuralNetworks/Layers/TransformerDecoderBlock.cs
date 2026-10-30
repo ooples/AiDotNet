@@ -308,6 +308,19 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
         metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["FfnDim"] = _ffnDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // Both attentions' causal mask, attention dropout and positional encoding are configured AFTER construction
+        // (an autoregressive decoder sets UseCausalMask on SelfAttentionLayer), so the constructor arguments above
+        // cannot rebuild them. A replaced self-attention (LoRA / quantized wrapper) is not rebuilt by the deserializer
+        // either way, so only a hosted MultiHeadAttentionLayer's settings are written.
+        if (_selfAttention is MultiHeadAttentionLayer<T> selfAttention)
+            selfAttention.WriteConfigurationMetadata(metadata, SelfAttentionMetadataPrefix);
+        _crossAttention.WriteConfigurationMetadata(metadata, CrossAttentionMetadataPrefix);
         return metadata;
     }
+
+    /// <summary>Key prefix under which <see cref="GetMetadata"/> persists the self-attention's settings.</summary>
+    internal const string SelfAttentionMetadataPrefix = "SelfAttn.";
+
+    /// <summary>Key prefix under which <see cref="GetMetadata"/> persists the cross-attention's settings.</summary>
+    internal const string CrossAttentionMetadataPrefix = "CrossAttn.";
 }
