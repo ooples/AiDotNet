@@ -88,6 +88,11 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     private T _alpha;
     private int _updateCount;
 
+    // CQL-Lagrange multiplier α' in log space, initialised to log 1 as in the reference implementation.
+    private double _logAlphaPrime;
+    private readonly ScalarAdam _alphaPrimeOptimizer;
+    private readonly ScalarAdam _alphaOptimizer;
+
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
@@ -105,6 +110,9 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         _logAlpha = NumOps.Log(_options.InitialTemperature);
         _alpha = _options.InitialTemperature;
+        _logAlphaPrime = 0.0;
+        _alphaOptimizer = new ScalarAdam(_numOps.ToDouble(_options.AlphaLearningRate));
+        _alphaPrimeOptimizer = new ScalarAdam(_numOps.ToDouble(_options.QLearningRate));
 
         // Initialize networks directly in constructor
         _policyNetwork = CreatePolicyNetwork();
@@ -168,7 +176,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, null);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_options.PolicyLearningRate));
     }
 
     private NeuralNetwork<T> CreateQNetwork()
@@ -194,7 +202,9 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.QLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.QLearningRate),
+            lossFunction: _options.QLossFunction);
     }
 
     private void InitializeBuffer()
@@ -276,6 +286,35 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             return _numOps.Zero;
         }
 
+        int gradientSteps = Math.Max(1, _options.GradientSteps);
+        T totalLoss = _numOps.Zero;
+        for (int step = 0; step < gradientSteps; step++)
+        {
+            totalLoss = _numOps.Add(totalLoss, TrainStep());
+        }
+
+        _updateCount++;
+        return _numOps.Divide(totalLoss, _numOps.FromDouble(gradientSteps));
+    }
+
+    /// <summary>The Lagrange multiplier α' of the conservative penalty (fixed at 1 unless CQLLagrange is set).</summary>
+    internal double ConservativeMultiplier => Math.Exp(_logAlphaPrime);
+
+    /// <summary>The SAC entropy temperature α.</summary>
+    internal double EntropyTemperature => _numOps.ToDouble(_alpha);
+
+    /// <summary>
+    /// The CQL(H) regulariser E_s[log Σ_a exp Q(s,a)] − E_(s,a)~D[Q(s,a)] measured on the most recent step,
+    /// averaged over the two critics, before the CQLAlpha weight.
+    /// </summary>
+    internal double LastConservativeGap { get; private set; }
+
+    /// <summary>
+    /// One CQL(H) gradient step (Kumar et al. 2020, Eq. 4 with the Lagrangian of Eq. 30 when CQLLagrange is set),
+    /// built on SAC as the paper's continuous-control experiments are.
+    /// </summary>
+    private T TrainStep()
+    {
         var batch = _offlineBuffer.Sample(_options.BatchSize);
         int n = batch.Count;
         if (n == 0) return _numOps.Zero;
@@ -283,201 +322,262 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         int stateDim = _options.StateSize;
         int actionDim = _options.ActionSize;
         int saDim = stateDim + actionDim;
+        int samples = Math.Max(1, _options.CQLNumActions);
         T gamma = _options.DiscountFactor;
 
-        // --- Twin-Q Bellman regression (Kumar et al. 2020, eq. for the standard TD term) ---
-        // Build the data state-action inputs and the clipped double-Q TD targets:
-        //   y = r + gamma * (1 - done) * min(Q'_1(s', a'), Q'_2(s', a')),  a' ~ pi(s').
-        var dataSA = new Tensor<T>([n, saDim]);
+        // Rows: the n dataset pairs, then for every state its `samples` uniform actions followed by its `samples`
+        // policy actions, so the sampled block reshapes to [n, 2·samples] one state per row.
+        int rows = n + 2 * n * samples;
+        var qInput = new Tensor<T>([rows, saDim]);
         var tdTargets = new Tensor<T>([n, 1]);
-        var randSA = new Tensor<T>([n, saDim]);
-        var consTargets = new Tensor<T>([n, 1]);
-        var policyInputs = new Tensor<T>([n, stateDim]);
-        var policyTargets = new Tensor<T>([n, actionDim * 2]);
+        var batchStates = new Tensor<T>([n, stateDim]);
+        var nextStateActions = new Tensor<T>([n, saDim]);
+
+        // log of the proposal density each sampled action is divided by in the importance-sampled log-sum-exp
+        // (Kumar et al. 2020, Appendix F): Unif([-1,1]^d) has density 2^-d, and a policy sample has π(a|s).
+        var densityCorrection = new Tensor<T>([n, 2 * samples]);
+        double uniformLogDensity = -actionDim * Math.Log(2.0);
+
+        var policyOutputs = _policyNetwork.Predict(StatesTensor(batch, useNext: false)).ToVector();
+        var nextPolicyOutputs = _policyNetwork.Predict(StatesTensor(batch, useNext: true)).ToVector();
+        int policyWidth = actionDim * 2;
 
         for (int i = 0; i < n; i++)
         {
             var exp = batch[i];
-            var stateTensor = Tensor<T>.FromVector(exp.State);
-
-            // Next action from the (current) policy — deterministic mean for a stable target.
-            var nextAction = SelectAction(exp.NextState, training: false);
-            var nextSA = ConcatenateStateAction(exp.NextState, nextAction);
-            var nextSATensor = Tensor<T>.FromVector(nextSA);
-            T q1Next = _targetQ1Network.Predict(nextSATensor).ToVector()[0];
-            T q2Next = _targetQ2Network.Predict(nextSATensor).ToVector()[0];
-            T minNext = _numOps.LessThan(q1Next, q2Next) ? q1Next : q2Next;
-
-            T y = exp.Reward;
-            if (!exp.Done)
+            for (int j = 0; j < stateDim; j++)
             {
-                y = _numOps.Add(y, _numOps.Multiply(gamma, minNext));
+                batchStates[i, j] = exp.State[j];
+                qInput[i, j] = exp.State[j];
+                nextStateActions[i, j] = exp.NextState[j];
             }
+            for (int k = 0; k < actionDim; k++) qInput[i, stateDim + k] = exp.Action[k];
 
-            var dataAction = ConcatenateStateAction(exp.State, exp.Action);
-            for (int j = 0; j < saDim; j++) dataSA[i, j] = dataAction[j];
-            tdTargets[i, 0] = y;
+            var (nextAction, _) = SampleSquashedAction(nextPolicyOutputs, i * policyWidth);
+            for (int k = 0; k < actionDim; k++) nextStateActions[i, stateDim + k] = nextAction[k];
 
-            // --- CQL conservative penalty: push Q DOWN on out-of-distribution (random) actions ---
-            // so the agent does not over-estimate the value of actions absent from the dataset.
-            // Realised as a regression of Q(s, a_random) toward (current value − CQLAlpha).
-            var randomAction = new Vector<T>(actionDim);
-            for (int k = 0; k < actionDim; k++)
-                randomAction[k] = _numOps.FromDouble(_random.NextDouble() * 2.0 - 1.0);
-            var randomSAVec = ConcatenateStateAction(exp.State, randomAction);
-            var randomSATensor = Tensor<T>.FromVector(randomSAVec);
-            T qRand = _q1Network.Predict(randomSATensor).ToVector()[0];
-            for (int j = 0; j < saDim; j++) randSA[i, j] = randomSAVec[j];
-            consTargets[i, 0] = _numOps.Subtract(qRand, _options.CQLAlpha);
-
-            // --- Policy improvement (CQL is built on SAC; Kumar et al. 2020 §3.2): the actor
-            // MAXIMISES the (conservative) Q. We take the squashed policy mean as the current
-            // action, estimate ∇a min(Q1,Q2) by central finite differences (the deterministic
-            // policy gradient), and regress the policy mean toward the Q-ascending action target
-            // a + step·∇a Q. log_std targets 0. The conservative critic keeps this maximisation
-            // from exploiting over-valued out-of-distribution actions. ---
-            var polOut = _policyNetwork.Predict(stateTensor).ToVector();
-            var aCur = new Vector<T>(actionDim);
-            for (int k = 0; k < actionDim; k++) aCur[k] = MathHelper.Tanh<T>(polOut[k]);
-            var qGrad = FiniteDiffMinQActionGradient(exp.State, aCur);
-            T polStep = _numOps.FromDouble(0.05);
-            for (int j = 0; j < stateDim; j++) policyInputs[i, j] = exp.State[j];
-            for (int k = 0; k < actionDim; k++)
+            int sampleBase = n + i * 2 * samples;
+            for (int m = 0; m < samples; m++)
             {
-                policyTargets[i, k] = MathHelper.Clamp<T>(
-                    _numOps.Add(aCur[k], _numOps.Multiply(polStep, qGrad[k])),
-                    _numOps.FromDouble(-1), _numOps.FromDouble(1));   // mean -> Q-ascending action
-                policyTargets[i, actionDim + k] = _numOps.Zero;       // log_std -> 0
+                int row = sampleBase + m;
+                for (int j = 0; j < stateDim; j++) qInput[row, j] = exp.State[j];
+                for (int k = 0; k < actionDim; k++)
+                    qInput[row, stateDim + k] = _numOps.FromDouble(_random.NextDouble() * 2.0 - 1.0);
+                densityCorrection[i, m] = _numOps.FromDouble(-uniformLogDensity);
+            }
+            for (int m = 0; m < samples; m++)
+            {
+                int row = sampleBase + samples + m;
+                var (action, logProb) = SampleSquashedAction(policyOutputs, i * policyWidth);
+                for (int j = 0; j < stateDim; j++) qInput[row, j] = exp.State[j];
+                for (int k = 0; k < actionDim; k++) qInput[row, stateDim + k] = action[k];
+                densityCorrection[i, samples + m] = _numOps.FromDouble(-logProb);
             }
         }
 
-        // Apply the gradient updates (each Train() is a tape-based forward/backward/step).
-        _q1Network.Train(dataSA, tdTargets);
-        _q2Network.Train(dataSA, tdTargets);
-        _q1Network.Train(randSA, consTargets);
-        _q2Network.Train(randSA, consTargets);
-        _policyNetwork.Train(policyInputs, policyTargets);
+        // Clipped double-Q TD target with a' ~ π(·|s') and no entropy bonus in the backup (the reference
+        // implementation's deterministic backup): y = r + γ(1 − done)·min(Q'_1, Q'_2)(s', a').
+        var q1Next = _targetQ1Network.Predict(nextStateActions).ToVector();
+        var q2Next = _targetQ2Network.Predict(nextStateActions).ToVector();
+        for (int i = 0; i < n; i++)
+        {
+            T minNext = _numOps.LessThan(q1Next[i], q2Next[i]) ? q1Next[i] : q2Next[i];
+            tdTargets[i, 0] = batch[i].Done
+                ? batch[i].Reward
+                : _numOps.Add(batch[i].Reward, _numOps.Multiply(gamma, minNext));
+        }
 
-        T totalLoss = _numOps.Add(
-            _numOps.Add(_q1Network.GetLastLoss(), _q2Network.GetLastLoss()),
-            _policyNetwork.GetLastLoss());
+        double alphaPrime = Math.Min(Math.Exp(_logAlphaPrime), 1e6);
+        double penaltyWeight = _numOps.ToDouble(_options.CQLAlpha);
+        double targetGap = _options.CQLLagrange ? _numOps.ToDouble(_options.CQLTargetActionGap) : 0.0;
 
-        // Update temperature
+        double gap1 = TrainConservativeCritic(_q1Network, qInput, tdTargets, densityCorrection, n, samples, alphaPrime * penaltyWeight);
+        double gap2 = TrainConservativeCritic(_q2Network, qInput, tdTargets, densityCorrection, n, samples, alphaPrime * penaltyWeight);
+        LastConservativeGap = 0.5 * (gap1 + gap2);
+
+        // Lagrangian dual ascent on α' (Kumar et al. 2020, Eq. 30): max_{α' ≥ 0} α'·(CQLAlpha·gap − τ). The
+        // reference implementation descends L(α') = −½·α'·Σ_i (CQLAlpha·gap_i − τ) in log α' with the critics'
+        // optimizer settings, which is what QLearningRate is.
+        if (_options.CQLLagrange)
+        {
+            double alphaPrimeGradient = -0.5 * alphaPrime * ((penaltyWeight * gap1 - targetGap) + (penaltyWeight * gap2 - targetGap));
+            _logAlphaPrime = _alphaPrimeOptimizer.Step(_logAlphaPrime, alphaPrimeGradient);
+        }
+
+        T policyLoss = TrainPolicy(batchStates, n);
+
         if (_options.AutoTuneTemperature)
         {
-            UpdateTemperature(batch);
+            UpdateTemperature(policyOutputs, n);
         }
 
-        // Soft update target networks
         SoftUpdateTargetNetworks();
 
-        _updateCount++;
+        T criticLoss = _numOps.Add(_q1Network.GetLastLoss(), _q2Network.GetLastLoss());
+        return _numOps.Divide(_numOps.Add(criticLoss, policyLoss), _numOps.FromDouble(3));
+    }
 
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(3));
+    private Tensor<T> StatesTensor(List<Experience<T, Vector<T>, Vector<T>>> batch, bool useNext)
+    {
+        var states = new Tensor<T>([batch.Count, _options.StateSize]);
+        for (int i = 0; i < batch.Count; i++)
+        {
+            var source = useNext ? batch[i].NextState : batch[i].State;
+            for (int j = 0; j < _options.StateSize; j++) states[i, j] = source[j];
+        }
+        return states;
     }
 
     /// <summary>
-    /// Central finite-difference estimate of ∇a min(Q1(s,a), Q2(s,a)) — the action gradient the
-    /// SAC-based CQL actor ascends (the deterministic policy gradient), used because the critics
-    /// expose no analytic gradient w.r.t. their action input.
+    /// One critic step on the QLossFunction Bellman error plus <paramref name="penaltyScale"/> times the CQL(H)
+    /// regulariser; returns the regulariser measured before the step.
     /// </summary>
-    private Vector<T> FiniteDiffMinQActionGradient(Vector<T> state, Vector<T> action)
+    private double TrainConservativeCritic(INeuralNetwork<T> critic, Tensor<T> qInput, Tensor<T> tdTargets,
+        Tensor<T> densityCorrection, int n, int samples, double penaltyScale)
     {
-        var grad = new Vector<T>(action.Length);
-        T eps = _numOps.FromDouble(1e-3);
-        T twoEps = _numOps.FromDouble(2e-3);
-        for (int i = 0; i < action.Length; i++)
+        int width = 2 * samples;
+
+        // log Σ exp is shift-invariant, so subtracting each row's maximum (a constant taken from the current
+        // critic) changes nothing mathematically and keeps exp from overflowing.
+        var current = critic.Predict(qInput).ToVector();
+        var rowShift = new Tensor<T>([n, width]);
+        var rowShiftVector = new Tensor<T>([n]);
+        double gap = 0.0;
+        for (int i = 0; i < n; i++)
         {
-            var aPlus = action.Clone();
-            var aMinus = action.Clone();
-            aPlus[i] = _numOps.Add(action[i], eps);
-            aMinus[i] = _numOps.Subtract(action[i], eps);
-            var saPlus = Tensor<T>.FromVector(ConcatenateStateAction(state, aPlus));
-            var saMinus = Tensor<T>.FromVector(ConcatenateStateAction(state, aMinus));
-            T qPlus1 = _q1Network.Predict(saPlus).ToVector()[0];
-            T qPlus2 = _q2Network.Predict(saPlus).ToVector()[0];
-            T qMinus1 = _q1Network.Predict(saMinus).ToVector()[0];
-            T qMinus2 = _q2Network.Predict(saMinus).ToVector()[0];
-            T qPlus = _numOps.LessThan(qPlus1, qPlus2) ? qPlus1 : qPlus2;
-            T qMinus = _numOps.LessThan(qMinus1, qMinus2) ? qMinus1 : qMinus2;
-            grad[i] = _numOps.Divide(_numOps.Subtract(qPlus, qMinus), twoEps);
-        }
-        return grad;
-    }
-
-    private T ComputeCQLPenalty(Vector<T> state, Vector<T> dataAction, T q1Value, T q2Value)
-    {
-        // CQL penalty: E[Q(s, a_random)] - Q(s, a_data)
-        // This pushes down Q-values for random actions while keeping data actions accurate
-
-        T randomQSum = _numOps.Zero;
-        int numSamples = _options.CQLNumActions;
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            // Sample random action
-            var randomAction = new Vector<T>(_options.ActionSize);
-            for (int j = 0; j < _options.ActionSize; j++)
+            double max = double.NegativeInfinity;
+            for (int m = 0; m < width; m++)
             {
-                randomAction[j] = _numOps.FromDouble(_random.NextDouble() * 2 - 1);  // [-1, 1]
+                max = Math.Max(max, _numOps.ToDouble(current[n + i * width + m]) + _numOps.ToDouble(densityCorrection[i, m]));
             }
-
-            var stateAction = ConcatenateStateAction(state, randomAction);
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-            var q1RandomTensor = _q1Network.Predict(stateActionTensor);
-            var q2RandomTensor = _q2Network.Predict(stateActionTensor);
-            var q1Random = q1RandomTensor.ToVector()[0];
-            var q2Random = q2RandomTensor.ToVector()[0];
-
-            var avgQRandom = _numOps.Divide(_numOps.Add(q1Random, q2Random), _numOps.FromDouble(2));
-            randomQSum = _numOps.Add(randomQSum, avgQRandom);
-        }
-
-        var avgRandomQ = _numOps.Divide(randomQSum, _numOps.FromDouble(numSamples));
-        var avgDataQ = _numOps.Divide(_numOps.Add(q1Value, q2Value), _numOps.FromDouble(2));
-
-        // Penalty = alpha * (E[Q(s, a_random)] - Q(s, a_data))
-        var gap = _numOps.Subtract(avgRandomQ, avgDataQ);
-        return _numOps.Multiply(_options.CQLAlpha, gap);
-    }
-
-    private void UpdateTemperature(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        // Temperature update using entropy target
-        // Loss: alpha * (entropy - target_entropy)
-        // Gradient: d_loss/d_log_alpha = alpha * (entropy - target_entropy)
-
-        T avgEntropy = _numOps.Zero;
-        foreach (var experience in batch)
-        {
-            var policyOutputTensor = _policyNetwork.Predict(Tensor<T>.FromVector(experience.State));
-            var policyOutput = policyOutputTensor.ToVector();
-
-            T entropy = _numOps.Zero;
-            for (int tempIdx = 0; tempIdx < _options.ActionSize; tempIdx++)
+            double sum = 0.0;
+            for (int m = 0; m < width; m++)
             {
-                var logStd = policyOutput[_options.ActionSize + tempIdx];
-                logStd = MathHelper.Clamp<T>(logStd, _numOps.FromDouble(-20), _numOps.FromDouble(2));
-                var gaussianConst = _numOps.FromDouble(0.5 * (1.0 + System.Math.Log(2.0 * System.Math.PI)));
-                entropy = _numOps.Add(entropy, _numOps.Add(gaussianConst, logStd));
+                sum += Math.Exp(_numOps.ToDouble(current[n + i * width + m]) + _numOps.ToDouble(densityCorrection[i, m]) - max);
+                rowShift[i, m] = _numOps.FromDouble(max);
             }
-            avgEntropy = _numOps.Add(avgEntropy, entropy);
+            rowShiftVector[i] = _numOps.FromDouble(max);
+            gap += max + Math.Log(sum) - Math.Log(width) - _numOps.ToDouble(current[i]);
         }
-        avgEntropy = _numOps.Divide(avgEntropy, _numOps.FromDouble(batch.Count));
+        gap /= n;
 
-        // Target entropy: -dim(action_space)
-        var targetEntropy = _numOps.FromDouble(-_options.ActionSize);
-        var entropyGap = _numOps.Subtract(avgEntropy, targetEntropy);
+        var trainable = (NeuralNetworkBase<T>)critic;
+        trainable.TrainWithCustomLoss(qInput, q =>
+        {
+            var qData = Engine.TensorSlice(q, [0, 0], [n, 1]);
+            // Bellman error under QLossFunction (mean squared error by default, as in the paper).
+            var bellman = Engine.Reshape(_options.QLossFunction.ComputeTapeLoss(qData, tdTargets), [1]);
 
-        // Update log_alpha: log_alpha -= lr * alpha * entropy_gap
-        var alphaLr = _numOps.FromDouble(0.0003);
-        var alphaGrad = _numOps.Multiply(_alpha, entropyGap);
-        var alphaUpdate = _numOps.Multiply(alphaLr, alphaGrad);
-        _logAlpha = _numOps.Subtract(_logAlpha, alphaUpdate);
+            var sampled = Engine.Reshape(Engine.TensorSlice(q, [n, 0], [n * width, 1]), [n, width]);
+            var shifted = Engine.TensorSubtract(Engine.TensorAdd(sampled, densityCorrection), rowShift);
+            var logSumExp = Engine.TensorAdd(
+                Engine.TensorLog(Engine.ReduceSum(Engine.TensorExp(shifted), [1], keepDims: false)),
+                rowShiftVector);
+            var conservative = Engine.TensorSubtract(
+                Engine.TensorAddScalar(
+                    Engine.ReduceMean(logSumExp, [0], keepDims: false), _numOps.FromDouble(-Math.Log(width))),
+                Engine.ReduceMean(qData, [0, 1], keepDims: false));
 
-        // Update alpha from log_alpha
-        _alpha = NumOps.Exp(_logAlpha);
+            return Engine.TensorAdd(bellman,
+                Engine.TensorMultiplyScalar(Engine.Reshape(conservative, [1]), _numOps.FromDouble(penaltyScale)));
+        });
+
+        return gap;
     }
+
+    /// <summary>
+    /// SAC policy improvement (Haarnoja et al. 2018) against the conservative critics: minimise
+    /// E[α·log π(ã|s) − min_i Q_i(s, ã)] with ã = tanh(μ + σ·ε) reparameterised on the tape.
+    /// </summary>
+    private T TrainPolicy(Tensor<T> batchStates, int n)
+    {
+        int actionSize = _options.ActionSize;
+        T alpha = _alpha;
+        var trainableActor = (NeuralNetworkBase<T>)_policyNetwork;
+        return trainableActor.TrainWithCustomLoss(batchStates, actorOutput =>
+        {
+            var means = Engine.TensorSlice(actorOutput, [0, 0], [n, actionSize]);
+            var logStds = Engine.TensorClamp(
+                Engine.TensorSlice(actorOutput, [0, actionSize], [n, actionSize]),
+                _numOps.FromDouble(-20), _numOps.FromDouble(2));
+            var noise = new Tensor<T>([n, actionSize]);
+            for (int i = 0; i < noise.Length; i++)
+                noise[i] = GetSeededNormalRandom(_numOps.Zero, _numOps.One, _random);
+            var preSquash = Engine.TensorAdd(means, Engine.TensorMultiply(Engine.TensorExp(logStds), noise));
+            var actions = PolicyDistributionHelper<T>.SquashAction(Engine, preSquash, 1.0);
+            var logProbs = PolicyDistributionHelper<T>.ComputeSquashedGaussianLogProb(Engine, means, logStds, preSquash, 1.0);
+
+            // The critics are forwarded on the tape so dQ/dã reaches the actor; TrainWithCustomLoss updates only
+            // the actor's own tensors.
+            var stateAction = Engine.TensorConcatenate([batchStates, actions], axis: 1);
+            var minQ = Engine.TensorMin(
+                ((NeuralNetworkBase<T>)_q1Network).ForwardForTraining(stateAction),
+                ((NeuralNetworkBase<T>)_q2Network).ForwardForTraining(stateAction));
+            var objective = Engine.TensorSubtract(
+                Engine.TensorMultiplyScalar(logProbs, alpha),
+                Engine.ReduceSum(minQ, [1], keepDims: false));
+            return Engine.ReduceMean(objective, [0], keepDims: false);
+        });
+    }
+
+    /// <summary>
+    /// Samples ã = tanh(μ + σ·ε) from the policy head at <paramref name="offset"/> and returns it with
+    /// log π(ã|s), including the tanh change-of-variables term (Haarnoja et al. 2018, Appendix C).
+    /// </summary>
+    private (Vector<T> Action, double LogProb) SampleSquashedAction(Vector<T> policyOutputs, int offset)
+    {
+        int actionSize = _options.ActionSize;
+        var action = new Vector<T>(actionSize);
+        double logProb = 0.0;
+        for (int k = 0; k < actionSize; k++)
+        {
+            double mean = _numOps.ToDouble(policyOutputs[offset + k]);
+            double logStd = Math.Min(Math.Max(_numOps.ToDouble(policyOutputs[offset + actionSize + k]), -20.0), 2.0);
+            double epsilon = _numOps.ToDouble(GetSeededNormalRandom(_numOps.Zero, _numOps.One, _random));
+            double squashed = Math.Tanh(mean + Math.Exp(logStd) * epsilon);
+            action[k] = _numOps.FromDouble(squashed);
+            logProb += -0.5 * epsilon * epsilon - logStd - 0.5 * Math.Log(2.0 * Math.PI)
+                - Math.Log(1.0 - squashed * squashed + 1e-6);
+        }
+        return (action, logProb);
+    }
+
+    /// <summary>
+    /// SAC automatic entropy tuning (Haarnoja et al. 2018b, Eq. 18): descend
+    /// J(α) = E[−α·(log π(a|s) + H̄)] in log α at AlphaLearningRate, where the target entropy H̄ is
+    /// TargetEntropy, or −dim(A) when it is not configured.
+    /// </summary>
+    private void UpdateTemperature(Vector<T> policyOutputs, int n)
+    {
+        double meanLogProb = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            meanLogProb += SampleSquashedAction(policyOutputs, i * _options.ActionSize * 2).LogProb;
+        }
+        meanLogProb /= n;
+
+        double gradient = -(meanLogProb + ResolvedTargetEntropy);
+        double logAlpha = _alphaOptimizer.Step(_numOps.ToDouble(_logAlpha), gradient);
+        _logAlpha = _numOps.FromDouble(logAlpha);
+        _alpha = _numOps.FromDouble(Math.Exp(logAlpha));
+    }
+
+    /// <summary>
+    /// TargetEntropy, or the −dim(A) heuristic of Haarnoja et al. 2018b when it is unset. TargetEntropy is declared
+    /// <c>T?</c> on an unconstrained generic, which for float and double is not <c>Nullable&lt;T&gt;</c>: an unset
+    /// value reads as zero, so zero is treated as unset, exactly as the base class treats a zero learning rate.
+    /// </summary>
+    private double ResolvedTargetEntropy
+    {
+        get
+        {
+            var configured = _options.TargetEntropy;
+            return configured is null || _numOps.Equals(configured, _numOps.Zero)
+                ? -_options.ActionSize
+                : _numOps.ToDouble(configured);
+        }
+    }
+
 
     private void SoftUpdateTargetNetworks()
     {

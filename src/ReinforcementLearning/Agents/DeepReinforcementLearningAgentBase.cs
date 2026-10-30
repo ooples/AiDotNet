@@ -123,6 +123,41 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     }
 
     /// <summary>
+    /// The Adam optimizer (β1 = 0.9, β2 = 0.999, ε = 1e-8) a network trains with at
+    /// <paramref name="learningRate"/>, for handing to the network's constructor.
+    /// </summary>
+    /// <param name="learningRate">The network's step size; must be positive and finite.</param>
+    /// <returns>An optimizer that the network's <c>Train</c> and <c>TrainWithCustomLoss</c> step with.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The learning rate is not positive and finite.</exception>
+    /// <remarks>
+    /// A network built without an optimizer trains with the network's own default rate, so an agent option
+    /// such as a critic or value learning rate only takes effect when the network is constructed with this.
+    /// Before this existed every deep agent's per-network learning-rate option was stored and never reached
+    /// the network it named.
+    /// </remarks>
+    protected static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateNetworkOptimizer(T learningRate)
+    {
+        double rate = MathHelper.GetNumericOperations<T>().ToDouble(learningRate);
+        if (!(rate > 0.0) || double.IsInfinity(rate))
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate), rate,
+                "A network learning rate must be positive and finite.");
+        }
+
+        return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = rate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+            });
+    }
+
+    /// <summary>
     /// Disposes of resources used by the agent, including every network registered in <see cref="Networks"/>.
     /// </summary>
     /// <remarks>
