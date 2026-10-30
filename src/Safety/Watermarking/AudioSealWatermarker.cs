@@ -1,41 +1,50 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Watermarking;
 
 /// <summary>
-/// Audio watermarker using AudioSeal-style localized watermarking for voice cloning detection.
+/// Localized keyed audio watermark: the spread-spectrum mark of <see cref="AudioWatermarker{T}"/>, detected segment by
+/// segment so it reports which parts of a recording carry the mark.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Implements a localized watermarking approach inspired by Meta AI's AudioSeal.
-/// Instead of embedding a single global watermark, embeds localized watermarks
-/// that can identify which specific segments are AI-generated even in partially
-/// modified audio.
+/// AudioSeal (San Roman et al. 2024) introduced localized detection: a detector that says, for each part of a clip,
+/// whether that part is watermarked, so a recording that splices generated speech into real speech is caught and the
+/// generated part located. AudioSeal reaches this with a jointly trained generator and detector network, which this
+/// library does not ship. This class provides the same localization with a keyed spread-spectrum mark instead: the
+/// audio is marked frame by frame as in <see cref="AudioWatermarker{T}"/>, and <see cref="DetectSegments"/> runs the
+/// correlation test on each segment of <c>segmentSamples</c> samples separately.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> This watermarker adds tiny signatures to small segments of
-/// audio. Unlike a global watermark, it can tell you exactly which parts of a recording
-/// are AI-generated and which parts are real — useful for detecting partial deepfakes.
+/// <see cref="AudioWatermarkerBase{T}.Detect"/> asks whether any part is marked: it takes the strongest of the pooled
+/// test and the per-segment tests and applies a Bonferroni correction for their number, so the false-positive rate of
+/// a single test holds. Segments are on the original frame grid, so localization covers edits that replace audio in
+/// place; cropping or inserting audio shifts the grid and is not covered.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> this watermarker can tell you which seconds of a recording carry your watermark, not just
+/// whether the recording does, which helps when only part of a clip was AI-generated.
 /// </para>
 /// <para>
 /// <b>References:</b>
-/// - AudioSeal: Localized watermarking for speech (Meta AI, 2024, arxiv:2401.17264)
+/// - San Roman, Fernandez, Elsahar, Defossez, Furon, Tran. Proactive Detection of Voice Cloning with Localized
+///   Watermarking (AudioSeal, ICML 2024) — the localization objective, not the network
+/// - Kirovski, Malvar. Spread-Spectrum Watermarking of Audio Signals (IEEE TSP, 2003) — the mark itself
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.SignalProcessing)]
 [ModelCategory(ModelCategory.AnomalyDetection)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
+[ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("AudioSeal: Proactive Detection of Voice Cloning with Localized Watermarking",
-    "https://arxiv.org/abs/2401.17264",
-    Year = 2024,
-    Authors = "Robin San Roman, Pierre Fernandez, et al.")]
+[ResearchPaper("Spread-Spectrum Watermarking of Audio Signals",
+    "https://doi.org/10.1109/TSP.2003.809384",
+    Year = 2003,
+    Authors = "Darko Kirovski, Henrique S. Malvar")]
 public class AudioSealWatermarker<T> : AudioWatermarkerBase<T>
 {
     private readonly int _segmentSize;
@@ -43,111 +52,82 @@ public class AudioSealWatermarker<T> : AudioWatermarkerBase<T>
     /// <inheritdoc />
     public override string ModuleName => "AudioSealWatermarker";
 
+    /// <inheritdoc />
+    protected override string WatermarkDescription => "Localized spread-spectrum audio watermark";
+
+    /// <inheritdoc />
+    protected override int PatternSalt => 0x4C4F4331; // "LOC1"
+
     /// <summary>
-    /// Initializes a new AudioSeal-style watermarker.
+    /// Initializes a new localized audio watermarker.
     /// </summary>
-    /// <param name="watermarkStrength">Embedding strength (0.0-1.0). Default: 0.5.</param>
-    /// <param name="segmentSamples">Segment size in samples for localized detection. Default: 4096.</param>
-    public AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096)
-        : base(watermarkStrength)
+    /// <param name="watermarkStrength">
+    /// Embedding strength, positive, as in <see cref="AudioWatermarker{T}"/>. Default: 0.5.
+    /// </param>
+    /// <param name="segmentSamples">
+    /// Segment length in samples for localized detection; frames are assigned to the segment their first sample
+    /// falls in. Default: 4096 (0.26 s at 16 kHz).
+    /// </param>
+    /// <param name="key">The secret key; <c>null</c> uses the published <see cref="WatermarkKey.Public"/> key.</param>
+    public AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096, string? key = null)
+        : base(watermarkStrength, key)
     {
+        if (segmentSamples <= 0)
+            throw new ArgumentOutOfRangeException(nameof(segmentSamples), "The segment length must be positive.");
         _segmentSize = segmentSamples;
     }
 
+    /// <summary>
+    /// Runs the correlation test on each segment separately.
+    /// </summary>
+    /// <param name="audioSamples">The audio samples to check.</param>
+    /// <param name="sampleRate">The sample rate in Hz.</param>
+    /// <returns>
+    /// One result per segment that contains at least one full frame, in order; segment i starts at sample
+    /// i x segmentSamples. Each result's confidence is that of its own test, without a correction for the number of
+    /// segments.
+    /// </returns>
+    public IReadOnlyList<WatermarkResult> DetectSegments(Vector<T> audioSamples, int sampleRate) =>
+        Segments(FrameStatistics(audioSamples, sampleRate));
+
     /// <inheritdoc />
-    public override double DetectWatermark(Vector<T> audioSamples, int sampleRate)
+    public override WatermarkResult Detect(Vector<T> audioSamples, int sampleRate)
     {
-        if (audioSamples.Length < _segmentSize) return 0;
-
-        int numSegments = audioSamples.Length / _segmentSize;
-        if (numSegments < 2) return 0;
-
-        int watermarkedSegments = 0;
-
-        for (int s = 0; s < numSegments; s++)
-        {
-            int offset = s * _segmentSize;
-            double segmentScore = DetectSegmentWatermark(audioSamples, offset, _segmentSize);
-            if (segmentScore >= 0.4) watermarkedSegments++;
-        }
-
-        return (double)watermarkedSegments / numSegments;
+        var frames = FrameStatistics(audioSamples, sampleRate);
+        int units = 0;
+        foreach (var f in frames) units += f.Count;
+        double best = PooledZ(frames);
+        var segments = Segments(frames);
+        foreach (var segment in segments)
+            if (segment.ScoredUnits > 0 && segment.ZScore > best) best = segment.ZScore;
+        int tests = segments.Count > 1 ? segments.Count + 1 : 1;
+        return AudioResult(WatermarkStatistics.BonferroniZ(best, tests), units);
     }
 
-    private double DetectSegmentWatermark(Vector<T> samples, int offset, int length)
+    private List<WatermarkResult> Segments(IReadOnlyList<(int StartSample, double Numerator, double Energy, int Count)> frames)
     {
-        // Analyze per-segment statistics for localized watermark patterns
-        double energy = 0;
-        double zeroCrossings = 0;
-        double prevVal = 0;
-
-        int analyzeLength = Math.Min(length, samples.Length - offset);
-        for (int i = 0; i < analyzeLength; i++)
+        var results = new List<WatermarkResult>();
+        if (frames.Count == 0) return results;
+        int segments = (frames[frames.Count - 1].StartSample / _segmentSize) + 1;
+        var numerators = new double[segments];
+        var energies = new double[segments];
+        var units = new int[segments];
+        foreach (var f in frames)
         {
-            double val = NumOps.ToDouble(samples[offset + i]);
-            energy += val * val;
-
-            if (i > 0 && ((val >= 0 && prevVal < 0) || (val < 0 && prevVal >= 0)))
-            {
-                zeroCrossings++;
-            }
-            prevVal = val;
+            int s = f.StartSample / _segmentSize;
+            numerators[s] += f.Numerator;
+            energies[s] += f.Energy;
+            units[s] += f.Count;
         }
 
-        if (analyzeLength < 64) return 0;
-
-        double avgEnergy = energy / analyzeLength;
-        double zcRate = zeroCrossings / analyzeLength;
-
-        // Watermarked segments tend to have more uniform energy and specific ZC rates
-        // Natural speech: highly variable energy; watermarked: more consistent
-        double energyScore = avgEnergy > 0.001 && avgEnergy < 0.1 ? 0.5 : 0;
-
-        // Check for periodic patterns in the signal (watermark carriers)
-        double periodicity = 0;
-        int step = analyzeLength / 8;
-        for (int lag = step; lag < analyzeLength / 2; lag += step)
-        {
-            double corr = 0;
-            int count = 0;
-            for (int i = 0; i + lag < analyzeLength; i += 4)
-            {
-                double a = NumOps.ToDouble(samples[offset + i]);
-                double b = NumOps.ToDouble(samples[offset + i + lag]);
-                corr += a * b;
-                count++;
-            }
-            if (count > 0)
-            {
-                double avgCorr = Math.Abs(corr / count);
-                if (avgCorr > periodicity) periodicity = avgCorr;
-            }
-        }
-
-        double periodicityScore = periodicity > 0.01 ? Math.Min(1.0, periodicity / 0.05) : 0;
-
-        return (energyScore + periodicityScore) / 2.0;
+        for (int s = 0; s < segments; s++)
+            results.Add(AudioResult(WatermarkStatistics.CorrelationZ(numerators[s], energies[s]), units[s]));
+        return results;
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> EvaluateAudio(Vector<T> audioSamples, int sampleRate)
-    {
-        var findings = new List<SafetyFinding>();
-        double score = DetectWatermark(audioSamples, sampleRate);
+    protected override void EmbedFrame(double[] band, double[] pattern, double frameRms) => AdditiveEmbed(band, pattern, frameRms);
 
-        if (score >= 0.3)
-        {
-            findings.Add(new SafetyFinding
-            {
-                Category = SafetyCategory.Watermarked,
-                Severity = SafetySeverity.Info,
-                Confidence = score,
-                Description = $"AudioSeal-style localized watermark detected in {score * 100:F0}% of segments.",
-                RecommendedAction = SafetyAction.Log,
-                SourceModule = ModuleName
-            });
-        }
-
-        return findings;
-    }
+    /// <inheritdoc />
+    protected override bool DetectionWeights(double[] band, double[] weights) => AdditiveWeights(band, weights);
 }
