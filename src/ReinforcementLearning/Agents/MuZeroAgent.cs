@@ -638,7 +638,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return oneHot;
     }
 
-    private static bool SameVector(Vector<T> a, Vector<T> b)
+    private bool SameVector(Vector<T> a, Vector<T> b)
     {
         if (a.Length != b.Length) return false;
         for (int i = 0; i < a.Length; i++) if (!NumOps.Equals(a[i], b[i])) return false;
