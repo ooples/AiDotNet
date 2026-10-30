@@ -202,7 +202,7 @@ public class MobileNetV2FusedParityTests
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.MultiClassClassification,
                 inputHeight: Size, inputWidth: Size, inputDepth: 3, outputSize: Classes,
-                layers: Layers("conv-bn"));
+                layers: Layers(StackVariant.ConvBatchNorm));
             var net = new MobileNetV2Network<float>(arch,
                 new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, Classes, Size, Size), options: options);
             net.Predict(x);
