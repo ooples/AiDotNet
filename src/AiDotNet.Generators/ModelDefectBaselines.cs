@@ -151,7 +151,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T>",
             "AiDotNet.SpeechRecognition.CTCVariants.InterCTC<T>",
             "AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTC<T>",
-            "AiDotNet.SpeechRecognition.Foundation.BESTRQ<T>",
             "AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASR<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASRLLM<T>",
