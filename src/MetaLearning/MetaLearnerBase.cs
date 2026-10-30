@@ -862,6 +862,29 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     }
 
     /// <summary>
+    /// Takes one inner-loop step whose place in the adaptation the caller states, for loops that step a slice or a
+    /// copy rather than the vector the previous step returned.
+    /// </summary>
+    /// <param name="parameters">The parameters being adapted.</param>
+    /// <param name="gradients">The gradients at <paramref name="parameters"/>.</param>
+    /// <param name="innerLearningRate">The SGD step size, used only when no inner optimizer was supplied.</param>
+    /// <param name="firstStep">Whether this step starts a new adaptation, which resets the inner optimizer.</param>
+    /// <returns>The adapted parameters.</returns>
+    protected Vector<T> ApplyInnerGradients(Vector<T> parameters, Vector<T> gradients, double innerLearningRate, bool firstStep)
+    {
+        var optimizer = InnerOptimizer;
+        if (optimizer is null)
+            return ApplyGradients(parameters, gradients, innerLearningRate);
+
+        if (firstStep)
+            optimizer.Reset();
+
+        var updated = optimizer.UpdateParameters(parameters, gradients);
+        _lastInnerStep = new[] { updated };
+        return updated;
+    }
+
+    /// <summary>
     /// Takes one inner-loop step over several parameter groups at once, as one optimizer step over their
     /// concatenation, so a stateful <see cref="InnerOptimizer"/> keeps one consistent state for all of them.
     /// </summary>
