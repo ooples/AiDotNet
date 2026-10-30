@@ -94,7 +94,12 @@ public class ExperienceReplayBufferTests
             Assert.All(points, p => Assert.Equal(task, (int)p.Input[0]));
         }
 
-        Assert.Equal(buffer.Count, buffer.GetTaskCounts().Values.Sum());
+        // 30 slots over 4 tasks: the fourth task takes 30 / 4 = 7, and each earlier task keeps (30 - 7) / 3 = 7.
+        // Evicting task by task against stale indices takes points from the wrong task, so these counts drift.
+        var counts = buffer.GetTaskCounts();
+        for (int task = 0; task < 4; task++)
+            Assert.Equal(7, counts[task]);
+        Assert.Equal(buffer.Count, counts.Values.Sum());
     }
 
     [Fact]
