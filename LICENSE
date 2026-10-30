@@ -1,6 +1,27 @@
 Business Source License 1.1
 License text copyright © 2017 MariaDB Corporation Ab, All Rights Reserved. "Business Source License" is a trademark of MariaDB Corporation Ab.
 
+Parameters
+
+Licensor:             CrowdTrainer LLC
+Licensed Work:        AiDotNet (the "Software")
+Additional Use Grant: You may use the Licensed Work for any non-commercial
+                      purpose, including education, research, personal
+                      projects, and internal evaluation. Training and
+                      inference operations are unrestricted regardless of
+                      license status.
+Change Date:          Four years from the date of each release
+Change License:       Apache License 2.0
+
+For information about alternative licensing arrangements for the Software,
+please visit: https://aidotnet.dev/license (licensing@aidotnet.dev)
+
+Notice
+
+The Business Source License (this document, or the "License") is not an Open
+Source license. However, the Licensed Work will eventually be made available
+under an Open Source License, as stated in this License.
+
 Terms
 
 The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant, above, permitting limited production use.
@@ -30,9 +51,9 @@ In consideration of the right to use this License's text and the "Business Sourc
 3. To specify a Change Date.
 4. Not to modify this License in any other way.
 Standard License Header
-Copyright (C) 2026 Franklin Moormann
-Use of this software is governed by the Business Source License included in the LICENSE.TXT file and at www.mariadb.com/bsl11.
+Copyright (C) 2024-2026 CrowdTrainer LLC
+Use of this software is governed by the Business Source License included in the LICENSE file and at www.mariadb.com/bsl11.
 
-Change Date:
+Change Date: Four years from the date of each release
 
-On the date above, in accordance with the Business Source License, use of this software will be governed by the open source license specified in the LICENSE.TXT file.
+On the date above, in accordance with the Business Source License, use of this software will be governed by the open source license specified in the LICENSE file.
