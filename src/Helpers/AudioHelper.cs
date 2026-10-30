@@ -487,13 +487,37 @@ public static class AudioHelper<T>
     /// Hz, computed as a strided convolution so it is differentiable on the gradient tape. The output has
     /// ⌈to · samples / from⌉ samples.
     /// </summary>
-    public static Tensor<T> ResampleBandLimited(IEngine engine, Tensor<T> audio, int from, int to)
+    public static Tensor<T> ResampleBandLimited(IEngine engine, Tensor<T> audio, int from, int to) =>
+        ResampleSinc(engine, audio, from, to, 6, 0.99, null);
+
+    /// <summary>
+    /// torchaudio's <c>functional.resample</c> with <c>resampling_method="sinc_interp_kaiser"</c>: the windowed-sinc
+    /// resampler of <see cref="ResampleBandLimited"/> with a Kaiser window <c>I₀(β √(1 − (t / w)²)) / I₀(β)</c> over
+    /// <paramref name="lowpassFilterWidth"/> zero crossings. The defaults are the "kaiser_best" settings (width 50,
+    /// roll-off 0.917347, β 12.9846) that FireRedTTS's prompt mel uses.
+    /// </summary>
+    public static Tensor<T> ResampleKaiser(IEngine engine, Tensor<T> audio, int from, int to, int lowpassFilterWidth = 50,
+        double rolloff = 0.917347, double beta = 12.9846) =>
+        ResampleSinc(engine, audio, from, to, lowpassFilterWidth, rolloff, beta);
+
+    // The modified Bessel function of the first kind of order 0, by its power series (|x| up to ~700 converges in double).
+    private static double BesselI0(double x)
+    {
+        double sum = 1, term = 1, quarter = x * x / 4;
+        for (int k = 1; k < 500; k++)
+        {
+            term *= quarter / ((double)k * k);
+            sum += term;
+            if (term < sum * 1e-17) break;
+        }
+        return sum;
+    }
+
+    private static Tensor<T> ResampleSinc(IEngine engine, Tensor<T> audio, int from, int to, int zeroCrossings, double rolloff, double? beta)
     {
         if (from <= 0 || to <= 0) throw new ArgumentOutOfRangeException(nameof(from), "Sample rates must be positive.");
         if (from == to) return audio;
         int gcd = Gcd(from, to), orig = from / gcd, target = to / gcd;
-        const int zeroCrossings = 6;
-        const double rolloff = 0.99;
         double baseFrequency = Math.Min(orig, target) * rolloff;
         int width = (int)Math.Ceiling((double)zeroCrossings * orig / baseFrequency);
         int taps = 2 * width + orig;
@@ -503,7 +527,9 @@ public static class AudioHelper<T>
             {
                 double t = (-(double)phase / target + (double)(j - width) / orig) * baseFrequency;
                 t = Math.Max(-zeroCrossings, Math.Min(zeroCrossings, t));
-                double window = Math.Pow(Math.Cos(t * Math.PI / zeroCrossings / 2), 2);
+                double window = beta is { } b
+                    ? BesselI0(b * Math.Sqrt(Math.Max(0, 1 - (t / zeroCrossings) * (t / zeroCrossings)))) / BesselI0(b)
+                    : Math.Pow(Math.Cos(t * Math.PI / zeroCrossings / 2), 2);
                 double x = t * Math.PI;
                 double sinc = x == 0 ? 1.0 : Math.Sin(x) / x;
                 kernel[phase, 0, 0, j] = NumOps.FromDouble(sinc * window * baseFrequency / orig);
