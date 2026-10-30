@@ -34,6 +34,10 @@ public partial class TestScaffoldGenerator
     private const string OptionSensitivityHarnessMetadataName = "AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness";
     private const string PaperDefaultsHarnessMetadataName = "AiDotNet.Tests.ModelFamilyTests.Base.PaperDefaultsHarness";
 
+    // The xUnit category every paper-fidelity test carries. The PR shards exclude it (Invoke-Shard.ps1); the
+    // paper-fidelity lanes select it (tools/PaperFidelity/Invoke-PaperFidelitySlice.ps1).
+    private const string PaperFidelityCategory = "PaperFidelity";
+
     private static readonly DiagnosticDescriptor MissingPaperTests = new(
         id: "ADNGEN003",
         title: "Model has no hand-written paper test",
@@ -263,6 +267,7 @@ public partial class TestScaffoldGenerator
         sb.AppendLine("    /// Skipped cases are ADNOPT001-baselined (never read) or carry an [OptionBehaviourExempt] reason.");
         sb.AppendLine("    /// </summary>");
         sb.AppendLine("    [Xunit.SkippableTheory(Timeout = 300000)]");
+        sb.AppendLine($"    [Xunit.Trait(\"Category\", \"{PaperFidelityCategory}\")]");
         foreach (var optionCase in model.OptionSensitivityCases)
         {
             sb.Append("    [Xunit.InlineData(\"").Append(optionCase.Property).Append('"');
@@ -304,6 +309,7 @@ public partial class TestScaffoldGenerator
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
         sb.AppendLine();
         sb.AppendLine("/// <summary>Every options class's constructor must ship the values its [PaperDefault] declarations cite.</summary>");
+        sb.AppendLine($"[Xunit.Trait(\"Category\", \"{PaperFidelityCategory}\")]");
         sb.AppendLine("public class GeneratedPaperDefaultsTests");
         sb.AppendLine("{");
         foreach (var options in declaring.OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
@@ -324,7 +330,7 @@ public partial class TestScaffoldGenerator
             sb.AppendLine();
             sb.AppendLine("    [Xunit.Fact]");
             sb.AppendLine($"    public void {ToGeneratedIdentifier(options.ToDisplayString())}_ShipsPaperDefaults()");
-            sb.AppendLine($"        => global::AiDotNet.Tests.ModelFamilyTests.Base.PaperDefaultsHarness.AssertConstructorDefaultsMatchPaper(typeof({closed}));");
+            sb.AppendLine($"        => global::AiDotNet.Tests.ModelFamilyTests.Base.PaperDefaultsHarness.AssertConstructorDefaultsMatchPaper(typeof(GeneratedPaperDefaultsTests), typeof({closed}));");
         }
 
         sb.AppendLine("}");

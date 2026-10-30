@@ -29,6 +29,12 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 public static class RuntimeFidelityBaseline
 {
+    /// <summary>The recorded outcome of a toy-task test that cleared its bound.</summary>
+    public const string ToyTaskLearned = "Learned";
+
+    /// <summary>The recorded outcome of a toy-task test that did not clear its bound.</summary>
+    public const string ToyTaskNotLearned = "NotLearned";
+
     /// <summary>
     /// Option-sensitivity failures, keyed <c>ModelGenericTypeDefinitionFullName::OptionName</c>
     /// (for example <c>AiDotNet.ReinforcementLearning.Agents.DQNAgent`1::WarmupSteps</c>), with the
@@ -50,13 +56,17 @@ public static class RuntimeFidelityBaseline
     /// <summary>
     /// Applies <see cref="ToyTaskFailures"/> to one toy-task outcome: pass, skip as a known defect, or fail.
     /// </summary>
+    /// <param name="fixtureType">The concrete test class, for the machine-readable result record.</param>
     /// <param name="modelType">The runtime type of the model under test.</param>
     /// <param name="testName">The toy-task test's name.</param>
     /// <param name="learned">Whether the model cleared the improvement bound.</param>
     /// <param name="failureMessage">What was measured, for the failure or skip message.</param>
-    public static void EnforceToyTask(Type modelType, string testName, bool learned, string failureMessage)
+    public static void EnforceToyTask(Type fixtureType, Type modelType, string testName, bool learned, string failureMessage)
     {
-        string key = OptionSensitivityHarness.ModelKey(modelType) + "::" + testName;
+        string modelKey = OptionSensitivityHarness.ModelKey(modelType);
+        string key = modelKey + "::" + testName;
+        PaperFidelityResultLog.Record(PaperFidelityCheck.ToyTask, fixtureType, modelKey, testName,
+            learned ? ToyTaskLearned : ToyTaskNotLearned, learned ? null : failureMessage);
         bool baselined = ToyTaskFailures.Contains(key);
         if (learned)
         {

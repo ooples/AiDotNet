@@ -1088,6 +1088,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     protected virtual double ToyTaskMaximumMseRatio => 0.5;
 
     [SkippableFact(Timeout = 60000)]
+    [Trait("Category", "PaperFidelity")]
     public async Task LearnsToyTask_LinearTarget()
     {
         await Task.Yield();
@@ -1116,7 +1117,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
             : double.PositiveInfinity;
 
         bool learned = mse <= ToyTaskMaximumMseRatio * baselineMse;
-        RuntimeFidelityBaseline.EnforceToyTask(model.GetType(), nameof(LearnsToyTask_LinearTarget), learned,
+        RuntimeFidelityBaseline.EnforceToyTask(GetType(), model.GetType(), nameof(LearnsToyTask_LinearTarget), learned,
             $"On a noisy linear target the regressor's held-out MSE is {mse:E4}; predicting the training mean gives "
             + $"{baselineMse:E4}, and at most {ToyTaskMaximumMseRatio:F2} of that is required.");
     }

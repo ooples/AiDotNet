@@ -25,12 +25,27 @@ public static class PaperDefaultsHarness
     /// Constructs <paramref name="optionsType"/> with its parameterless constructor and asserts every
     /// <see cref="PaperDefaultAttribute"/> on it (including inherited ones) holds.
     /// </summary>
+    /// <param name="fixtureType">The generated test class, for the machine-readable result record.</param>
     /// <param name="optionsType">The closed options type to construct.</param>
-    public static void AssertConstructorDefaultsMatchPaper(Type optionsType)
+    public static void AssertConstructorDefaultsMatchPaper(Type fixtureType, Type optionsType)
     {
+        if (fixtureType is null) throw new ArgumentNullException(nameof(fixtureType));
         if (optionsType is null) throw new ArgumentNullException(nameof(optionsType));
-        object instance = Activator.CreateInstance(optionsType)
-            ?? throw new InvalidOperationException($"{optionsType.Name} could not be constructed.");
+        string recordedName = optionsType.IsGenericType
+            ? optionsType.GetGenericTypeDefinition().FullName ?? optionsType.Name
+            : optionsType.FullName ?? optionsType.Name;
+        object instance;
+        try
+        {
+            instance = Activator.CreateInstance(optionsType)
+                ?? throw new InvalidOperationException($"{optionsType.Name} could not be constructed.");
+        }
+        catch (Exception ex)
+        {
+            PaperFidelityResultLog.Record(PaperFidelityCheck.PaperDefaults, fixtureType, null, recordedName,
+                PaperFidelityResultLog.ErrorOutcome, $"{ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
 
         var mismatches = new List<string>();
         int declared = 0;
@@ -47,6 +62,9 @@ public static class PaperDefaultsHarness
             }
         }
 
+        PaperFidelityResultLog.Record(PaperFidelityCheck.PaperDefaults, fixtureType, null, recordedName,
+            declared == 0 ? "NoDeclarations" : mismatches.Count == 0 ? "Matches" : "Mismatch",
+            declared == 0 ? "no [PaperDefault] declarations" : mismatches.Count == 0 ? null : string.Join("; ", mismatches));
         Assert.True(declared > 0, $"{optionsType.Name} declares no [PaperDefault]; this test should not have been generated.");
         Assert.True(mismatches.Count == 0,
             $"{optionsType.Name} does not ship the values its paper states:\n  " + string.Join("\n  ", mismatches));

@@ -159,14 +159,43 @@ public static class OptionSensitivityHarness
     public static void AssertChangesObservableBehaviour<TModel>(Type fixtureType, string option, OptionSensitivityProbe<TModel> probe)
         where TModel : class
     {
-        var report = Measure(fixtureType, option, probe);
+        OptionSensitivityReport report;
+        try
+        {
+            report = Measure(fixtureType, option, probe);
+        }
+        catch (Exception ex)
+        {
+            PaperFidelityResultLog.Record(PaperFidelityCheck.OptionSensitivity, fixtureType, null, option,
+                PaperFidelityResultLog.ErrorOutcome, $"{ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
+
+        PaperFidelityResultLog.Record(PaperFidelityCheck.OptionSensitivity, fixtureType, report.ModelKey, report.Option,
+            report.Outcome.ToString(), report.Outcome == OptionSensitivityOutcome.Sensitive ? null : report.Detail);
         Enforce(report);
     }
+
+    /// <summary>
+    /// Whether an outcome may be listed in <see cref="RuntimeFidelityBaseline.OptionSensitivity"/>.
+    /// <see cref="OptionSensitivityOutcome.NonDeterministic"/> and <see cref="OptionSensitivityOutcome.UnknownOption"/>
+    /// are not: the first means the harness could not attribute a difference, the second that the generator
+    /// and the runtime disagree about the options type. Both are harness or model bugs to fix, never known
+    /// defects to carry, so they always fail.
+    /// </summary>
+    public static bool IsBaselineMaterial(OptionSensitivityOutcome outcome) =>
+        outcome != OptionSensitivityOutcome.Sensitive
+        && outcome != OptionSensitivityOutcome.NonDeterministic
+        && outcome != OptionSensitivityOutcome.UnknownOption;
 
     /// <summary>Applies the runtime baseline to a measurement: pass, skip as known, or fail.</summary>
     public static void Enforce(OptionSensitivityReport report)
     {
+        if (report is null) throw new ArgumentNullException(nameof(report));
         bool baselined = RuntimeFidelityBaseline.OptionSensitivity.TryGetValue(report.BaselineKey, out var expected);
+        Assert.False(baselined && !IsBaselineMaterial(expected),
+            $"'{report.BaselineKey}' is listed in RuntimeFidelityBaseline.OptionSensitivity as {expected}, which is a harness "
+            + "or model bug rather than a known defect; remove the entry and fix the cause.");
         if (report.Outcome == OptionSensitivityOutcome.Sensitive)
         {
             Assert.False(baselined,

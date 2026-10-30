@@ -14,11 +14,10 @@ namespace AiDotNet.Generators;
 /// </remarks>
 internal static class OptionsFidelityBaselines
 {
-    /// <summary>ADNOPT001: options properties nothing in the library reads, 2207 entries, keyed DeclaringType.Property.</summary>
+    /// <summary>ADNOPT001: options properties nothing in the library reads, 2206 entries, keyed DeclaringType.Property.</summary>
     internal static readonly System.Collections.Generic.HashSet<string> UnreadOptions =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "AiDotNet.Audio.AudioGen.AudioGenOptions.Seed",
             "AiDotNet.Audio.AudioLDM.AudioLDMOptions.ClapEncoderPath",
             "AiDotNet.Audio.AudioLDM.AudioLDMOptions.OnnxOptions",
             "AiDotNet.Audio.AudioLDM.AudioLDMOptions.UNetPath",

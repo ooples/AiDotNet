@@ -1902,6 +1902,141 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  # PAPER FIDELITY, IMPACT-GATED. The option-sensitivity, toy-task and paper-defaults tests carry
+  # Category=PaperFidelity, which every shard above excludes (Invoke-Shard.ps1). On a pull request they
+  # run here for the test classes the change can reach, read from the Build job's TypeImpact plan
+  # (Select-AffectedTests.ps1 plans a paper-fidelity entry beside the shards). Where that plan cannot
+  # narrow - a generator change without a base build, a non-C# runtime file, a shared base reaching
+  # more classes than TypeImpact narrows to - the full sweep runs instead, in the same slices
+  # paper-fidelity-nightly.yml runs every night. tools/PaperFidelity/PaperFidelity.ps1 has the rule.
+  paper-fidelity-plan:
+    name: Paper fidelity - plan
+    runs-on: ubuntu-latest
+    needs: [build, validation-source, select-shards]
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    if: "${{ github.event_name == 'pull_request' && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') }}"
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      slices: ${{ steps.plan.outputs.slices }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      # Absent when the Build job passed through before planning; the selection then runs the full sweep.
+      - name: Download the test-level plan
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
+        with:
+          name: type-impact-plan
+          path: type-impact
+
+      - name: Select the paper-fidelity classes
+        id: plan
+        shell: pwsh
+        env:
+          REQUIRES_SHARDS: ${{ needs.select-shards.outputs.requires_shards }}
+        run: |
+          . ./tools/PaperFidelity/PaperFidelity.ps1
+          $selection = Resolve-PaperFidelitySelection -PlanFile 'type-impact/type-impact-plan.json' -RequiresShards ($env:REQUIRES_SHARDS -eq 'true')
+          $count = Get-PaperFidelitySliceCount -Selection $selection
+          New-Item -ItemType Directory -Force -Path paper-fidelity-plan | Out-Null
+          [IO.File]::WriteAllLines((Join-Path (Get-Location) 'paper-fidelity-plan/classes.txt'), [string[]] @($selection.Classes))
+          "mode=$($selection.Mode)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "slices=$(ConvertTo-Json -InputObject @(0..([Math]::Max(0, $count - 1))) -Compress)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "### Paper fidelity`n`n**$($selection.Mode)** ($count slice(s)): $($selection.Reason)." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Host "paper fidelity: $($selection.Mode) in $count slice(s) - $($selection.Reason)"
+
+      - name: Upload the class list
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: paper-fidelity-plan
+          path: paper-fidelity-plan
+          retention-days: 7
+
+  paper-fidelity:
+    name: Paper fidelity - slice ${{ matrix.slice }}
+    runs-on: ubuntu-latest
+    needs: [paper-fidelity-plan, build, validation-source, select-shards]
+    # A full-sweep fallback runs what one nightly slice runs; the budget matches that lane.
+    timeout-minutes: 350
+    permissions:
+      actions: read
+      contents: read
+    if: "${{ github.event_name == 'pull_request' && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && (needs.paper-fidelity-plan.outputs.mode == 'Impact' || needs.paper-fidelity-plan.outputs.mode == 'Full') }}"
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        slice: ${{ fromJSON(needs.paper-fidelity-plan.outputs.slices) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Download required build artifact
+        timeout-minutes: 25
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./tools/TestImpact/Receive-RequiredArtifact.ps1 `
+            -Repository '${{ github.repository }}' `
+            -ArtifactId '${{ needs.build.outputs.artifact_id }}' `
+            -ExpectedDigest '${{ needs.build.outputs.artifact_digest }}' `
+            -Destination '.' `
+            -RunId '${{ github.run_id }}' `
+            -JobIndex '${{ strategy.job-index }}'
+
+      - name: Download the class list
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
+        with:
+          name: paper-fidelity-plan
+          path: paper-fidelity-plan
+
+      - name: Restore dependencies
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+
+      - name: Run paper-fidelity slice
+        shell: pwsh
+        env:
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+          PAPER_FIDELITY_MODE: ${{ needs.paper-fidelity-plan.outputs.mode }}
+          PAPER_FIDELITY_SLICE: ${{ matrix.slice }}
+          PAPER_FIDELITY_SLICES: ${{ strategy.job-total }}
+        run: |
+          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
+          $arguments = @{ Slice = [int] $env:PAPER_FIDELITY_SLICE; SliceCount = [int] $env:PAPER_FIDELITY_SLICES }
+          if ($env:PAPER_FIDELITY_MODE -ceq 'Impact') { $arguments.ClassListFile = 'paper-fidelity-plan/classes.txt' }
+          ./tools/PaperFidelity/Invoke-PaperFidelitySlice.ps1 @arguments
+
+      - name: Upload paper-fidelity results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: paper-fidelity-results-pr-${{ matrix.slice }}
+          path: artifacts/paper-fidelity
+          if-no-files-found: ignore
+          retention-days: 14
+
   # Aggregate every shard's TRX into one durable outcome ledger and one static status check.
   # Pull requests compare against the exact base SHA's master ledger. During rollout, when that
   # master run predates compact ledgers, the resolver downloads its legacy TRX artifacts once.

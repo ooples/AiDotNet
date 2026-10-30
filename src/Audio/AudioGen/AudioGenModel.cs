@@ -335,7 +335,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <param name="topP">Top-p (nucleus) sampling threshold (default: 0.0 = disabled).</param>
     /// <param name="guidanceScale">Classifier-free guidance scale (default: 3.0).</param>
     /// <param name="channels">Number of audio channels, 1=mono, 2=stereo (default: 1).</param>
-    /// <param name="seed">Random seed for reproducibility. Null for non-deterministic generation.</param>
+    /// <param name="seed">Random seed for reproducibility. Overrides <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/> on the options; null for both means non-deterministic generation.</param>
     /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -441,8 +441,10 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             _optimizer = optimizer;
             _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
-            _random = seed.HasValue
-                ? RandomHelper.CreateSeededRandom(seed.Value)
+            // The explicit argument wins; otherwise the options' Seed (ModelOptions.Seed) applies.
+            int? effectiveSeed = seed ?? _options.Seed;
+            _random = effectiveSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(effectiveSeed.Value)
                 : RandomHelper.CreateSecureRandom();
 
             InitializeLayers();
@@ -476,7 +478,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <param name="numCodebooks">Number of EnCodec codebooks (default: 4).</param>
     /// <param name="codebookSize">Size of each codebook vocabulary (default: 1024).</param>
     /// <param name="maxTextLength">Maximum text sequence length (default: 256).</param>
-    /// <param name="seed">Random seed for reproducibility. Null for non-deterministic generation.</param>
+    /// <param name="seed">Random seed for reproducibility. Overrides <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/> on the options; null for both means non-deterministic generation.</param>
     /// <param name="tokenizer">Optional tokenizer for text processing. If null, creates a T5-style default.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
@@ -559,8 +561,10 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         // stable) and matches what Copet et al. 2023 use during pretraining.
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
+        // The explicit argument wins; otherwise the options' Seed (ModelOptions.Seed) applies.
+        int? effectiveSeed = seed ?? _options.Seed;
+        _random = effectiveSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(effectiveSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
         InitializeLayers();

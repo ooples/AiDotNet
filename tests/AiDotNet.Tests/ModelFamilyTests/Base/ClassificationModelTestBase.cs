@@ -604,6 +604,7 @@ public abstract class ClassificationModelTestBase<T> : System.IDisposable
     protected virtual double ToyTaskAccuracyFloor => 0.9;
 
     [SkippableFact(Timeout = 60000)]
+    [Trait("Category", "PaperFidelity")]
     public async Task LearnsToyTask_SeparableBlobs()
     {
         await Task.Yield();
@@ -638,7 +639,7 @@ public abstract class ClassificationModelTestBase<T> : System.IDisposable
 
         bool learned = accuracy >= ToyTaskAccuracyFloor
             && (crossEntropy is null || crossEntropy.Value < uniformCrossEntropy);
-        RuntimeFidelityBaseline.EnforceToyTask(model.GetType(), nameof(LearnsToyTask_SeparableBlobs), learned,
+        RuntimeFidelityBaseline.EnforceToyTask(GetType(), model.GetType(), nameof(LearnsToyTask_SeparableBlobs), learned,
             $"On {NumClasses} separable Gaussian blobs the classifier reached accuracy {accuracy:F4} (chance {chance:F4}, "
             + $"required >= {ToyTaskAccuracyFloor:F2})"
             + (crossEntropy is null

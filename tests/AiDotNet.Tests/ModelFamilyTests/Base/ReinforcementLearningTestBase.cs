@@ -1202,6 +1202,7 @@ public abstract class ReinforcementLearningTestBase<T>
     protected virtual double BanditImprovementBound => 0.5;
 
     [SkippableFact(Timeout = 300000)]
+    [Trait("Category", "PaperFidelity")]
     public async Task LearnsToyTask_TwoArmedBandit()
     {
         Skip.IfNot(SupportsSingleAgentOnlineLoop,
@@ -1239,7 +1240,7 @@ public abstract class ReinforcementLearningTestBase<T>
         double after = trainedGreedy is null ? before : BanditReturn(trainedGreedy, paid, unpaid);
         bool learned = after - before >= BanditImprovementBound;
 
-        RuntimeFidelityBaseline.EnforceToyTask(modelType, nameof(LearnsToyTask_TwoArmedBandit), learned,
+        RuntimeFidelityBaseline.EnforceToyTask(GetType(), modelType, nameof(LearnsToyTask_TwoArmedBandit), learned,
             $"On a one-state two-armed bandit the greedy return went from {before:F4} to {after:F4} after {steps} "
             + $"training steps; a rise of at least {BanditImprovementBound:F2} is required (return is -1 at the unpaid "
             + "arm and +1 at the paid one)."
