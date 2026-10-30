@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Enums;
 using AiDotNet.Safety;
 using AiDotNet.Safety.Watermarking;
 using Xunit;

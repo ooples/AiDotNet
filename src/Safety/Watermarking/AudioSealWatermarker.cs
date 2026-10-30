@@ -83,9 +83,10 @@ public class AudioSealWatermarker<T> : AudioWatermarkerBase<T>
     /// <param name="audioSamples">The audio samples to check.</param>
     /// <param name="sampleRate">The sample rate in Hz.</param>
     /// <returns>
-    /// One result per segment that contains at least one full frame, in order; segment i starts at sample
-    /// i x segmentSamples. Each result's confidence is that of its own test, without a correction for the number of
-    /// segments.
+    /// One result per segment, in order, up to the last segment a frame starts in; segment i starts at sample
+    /// i x segmentSamples. A segment shorter than a frame can contain no frame start; its result has
+    /// <see cref="WatermarkResult.ScoredUnits"/> 0. Each result's confidence is that of its own test, without a
+    /// correction for the number of segments.
     /// </returns>
     public IReadOnlyList<WatermarkResult> DetectSegments(Vector<T> audioSamples, int sampleRate) =>
         Segments(FrameStatistics(audioSamples, sampleRate));
@@ -97,10 +98,11 @@ public class AudioSealWatermarker<T> : AudioWatermarkerBase<T>
         int units = 0;
         foreach (var f in frames) units += f.Count;
         double best = PooledZ(frames);
-        var segments = Segments(frames);
-        foreach (var segment in segments)
-            if (segment.ScoredUnits > 0 && segment.ZScore > best) best = segment.ZScore;
-        int tests = segments.Count > 1 ? segments.Count + 1 : 1;
+        // Only segments that scored a frame are tests; counting empty ones would over-correct the Bonferroni bound.
+        var scored = Segments(frames).Where(segment => segment.ScoredUnits > 0).ToList();
+        foreach (var segment in scored)
+            if (segment.ZScore > best) best = segment.ZScore;
+        int tests = scored.Count > 1 ? scored.Count + 1 : 1;
         return AudioResult(WatermarkStatistics.BonferroniZ(best, tests), units);
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Safety;
 using AiDotNet.Safety.Multimodal;

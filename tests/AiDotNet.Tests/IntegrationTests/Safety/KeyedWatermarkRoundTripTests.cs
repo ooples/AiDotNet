@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AiDotNet.Enums;
 using AiDotNet.Agentic.Models.Local;
 using AiDotNet.Safety;
 using AiDotNet.Safety.Watermarking;
