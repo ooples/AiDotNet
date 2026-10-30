@@ -108,4 +108,23 @@ public partial class MoEDecoderBlock<T> : LayerBase<T>, IShapeContract
     {
         foreach (var l in SubLayers()) l.ResetState();
     }
+
+    /// <summary>
+    /// Persists what the constructor needs to rebuild this block: its own scalar arguments, and each injected sublayer
+    /// as a self-contained sub-blob (see <see cref="LayerBase{T}.WriteSublayerMetadata"/>).
+    /// </summary>
+    /// <remarks>
+    /// The injected sublayers are constructor ARGUMENTS, so without this the block had no standalone deserialization
+    /// path at all: a block saved and reloaded on its own could not come back.
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["HiddenSize"] = _hiddenSize.ToString(ci);
+        metadata["RmsNormEpsilon"] = _rmsNormEpsilon.ToString("R", ci);
+        WriteSublayerMetadata(metadata, AttentionSublayerPrefix, _attention);
+        WriteSublayerMetadata(metadata, MoeSublayerPrefix, _moe);
+        return metadata;
+    }
 }

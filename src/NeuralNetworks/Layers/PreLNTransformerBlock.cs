@@ -348,11 +348,7 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
         // round-trip; the deserializer reconstructs it recursively via CreateLayerFromType (which restores its
         // full config, e.g. GQA RoPE / causal mask). Without this the block had no known deserialization
         // constructor and cloning it threw — leaving the paged incremental-serving clone of a decoder inert.
-        foreach (var kv in _attention.GetMetadata())
-            metadata["Attn." + kv.Key] = kv.Value;
-        metadata["Attn.LayerType"] = _attention.GetType().Name;
-        metadata["Attn.InputShape"] = string.Join(",", _attention.GetInputShape());
-        metadata["Attn.OutputShape"] = string.Join(",", _attention.GetOutputShape());
+        WriteSublayerMetadata(metadata, AttentionSublayerPrefix, _attention);
         return metadata;
     }
 
