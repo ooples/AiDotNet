@@ -149,6 +149,11 @@ public class RLOptimizerFactoryTests
 
         Assert.Equal(2, factory.Created.Count);
         Assert.NotSame(factory.Created[0], factory.Created[1]);
+        // And each agent's joint step holds the optimizer the factory gave it, not a fallback SGD.
+        var joint = typeof(QMIXAgent<double>).GetField("_jointOptimizer", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(joint);
+        Assert.Same(factory.Created[0], joint.GetValue(agents[0]));
+        Assert.Same(factory.Created[1], joint.GetValue(agents[1]));
     }
 
     private static Vector<double> State(int step, int agent)

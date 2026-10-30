@@ -413,7 +413,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     // The joint step's optimizer, built on first use: Options.OptimizerFactory's when set, else plain SGD.
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _jointOptimizer;
 
-    /// <summary>One plain-SGD step on the TD loss over the agent and mixing networks, from a packed step.</summary>
+    /// <summary>One joint-optimizer step on the TD loss over the agent and mixing networks, from a packed step.</summary>
     private void TrainJointStep(Tensor<T> packed, int globalStateLength)
     {
         var agentBases = _agentNetworks.Cast<NeuralNetworkBase<T>>().ToList();
