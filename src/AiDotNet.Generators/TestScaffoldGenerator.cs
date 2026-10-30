@@ -16986,6 +16986,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // - Dreamer (Hafner et al. 2020): model-based; the policy is improved against an IMAGINED
             //   value, so it follows the learned world model's reward head rather than the reward
             //   stream directly, and the world model needs far more than a unit-test budget to fit.
+            // - Decision Transformer (Chen et al. 2021): OFFLINE return-conditioned behaviour cloning.
+            //   It does no policy improvement at all; it imitates whichever dataset action accompanies
+            //   the return-to-go it is conditioned on, so it moves toward a paid action only when the
+            //   requested return happens to coincide with that action's return-to-go. Its own return-
+            //   conditioning is tested directly in DecisionTransformerPaperTests.
             if (model.ClassName == "A2CAgent"
                 || model.ClassName == "PPOAgent"
                 || model.ClassName == "TRPOAgent"
@@ -16993,7 +16998,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 || model.ClassName == "SARSALambdaAgent"
                 || model.ClassName == "CQLAgent"
                 || model.ClassName == "IQLAgent"
-                || model.ClassName == "DreamerAgent")
+                || model.ClassName == "DreamerAgent"
+                || model.ClassName == "DecisionTransformerAgent")
             {
                 sb.AppendLine("    protected override bool FollowsOnlineReward => false;");
             }
