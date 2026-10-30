@@ -7,34 +7,35 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Safety.Image;
 
 /// <summary>
-/// Image safety classifier that uses color histogram analysis and statistical features
-/// for content classification across NSFW and violence categories.
+/// Colour-heuristic image safety classifier: flags possible NSFW content from the fraction of skin-coloured pixels and
+/// possible violence from red-channel dominance and dark/bright contrast. Despite its name it does not use CLIP.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Analyzes images by decomposing pixel data into per-channel statistics and computing
-/// features that correlate with unsafe content categories. Uses skin-tone color distribution
-/// analysis for NSFW detection and red-channel dominance with high-contrast analysis for
-/// violence detection.
+/// The NSFW score combines the fraction of pixels inside the RGB skin-colour cluster of Kovac, Peer and Solina (2003)
+/// (r &gt; 95, g &gt; 40, b &gt; 20, r &gt; g, r &gt; b, |r - g| &gt; 15, here with extra HSV bounds) with how
+/// contiguous those pixels are; the violence score combines the fraction of red-dominant pixels with high-contrast
+/// features. These are fixed hand-set rules, not a learned model: skin tones,
+/// sunsets, wood and red objects trigger them, and they cannot tell nudity from portraits. Treat a finding as a weak
+/// signal for review, not a classification. A CLIP-based check that compares image and concept embeddings is
+/// available through <c>TextImageAlignmentChecker</c> when a CLIP model (for example <c>ClipNeuralNetwork</c>) is
+/// supplied.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> This classifier examines the colors and patterns in an image to
-/// estimate whether it contains inappropriate content. It looks at things like how much
-/// skin-colored area is present (for NSFW) or how much red/dark contrast exists (for violence).
+/// <b>For Beginners:</b> This classifier examines the colors in an image to estimate whether it might contain
+/// inappropriate content. It looks at how much skin-colored area is present (for NSFW) and how much red/dark contrast
+/// exists (for violence). It is a quick colour check, not an AI model that understands the picture.
 /// </para>
 /// <para>
 /// <b>How it works:</b>
 /// 1. Extract per-channel statistics from the image tensor using generic numeric operations
-/// 2. For NSFW: compute skin-tone pixel fraction using HSV-space color ranges
+/// 2. For NSFW: compute the skin-tone pixel fraction (RGB skin rule with HSV bounds) and its clustering
 /// 3. For violence: compute red-channel dominance ratio and high-contrast features
 /// 4. Combine features into a weighted score and compare against thresholds
 /// </para>
 /// <para>
 /// <b>References:</b>
-/// - Safe-CLIP: Removing NSFW concepts from CLIP representations (2024, arxiv:2311.16254)
-/// - UnsafeBench: 11 categories, GPT-4V achieves top F1 (Qu et al., 2024, arxiv:2405.03486)
-/// - DiffGuard: Text-based safety checker for diffusion models (2024, arxiv:2412.00064)
-/// - Skin detection using HSV color space (Kovac et al., 2003)
+/// - Kovac, Peer, Solina. Human Skin Colour Clustering for Face Detection (EUROCON 2003) — the skin rule
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -42,12 +43,12 @@ namespace AiDotNet.Safety.Image;
 [ModelCategory(ModelCategory.Classifier)]
 [ModelCategory(ModelCategory.AnomalyDetection)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Safe-CLIP: Removing NSFW Concepts from Vision-and-Language Models",
-    "https://arxiv.org/abs/2311.16254",
-    Year = 2024,
-    Authors = "Samuele Poppi, Tobia Carletti, Marco Galatolo, et al.")]
+[ResearchPaper("Human Skin Colour Clustering for Face Detection",
+    "https://doi.org/10.1109/EURCON.2003.1248169",
+    Year = 2003,
+    Authors = "Jure Kovac, Peter Peer, Franc Solina")]
 internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
 {
 
@@ -70,10 +71,10 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     /// Initializes a new image safety classifier.
     /// </summary>
     /// <param name="nsfwThreshold">
-    /// Cosine similarity threshold for NSFW detection (0-1). Default: 0.8.
+    /// Skin-colour score threshold for NSFW findings (0-1). Default: 0.8.
     /// </param>
     /// <param name="violenceThreshold">
-    /// Cosine similarity threshold for violence detection (0-1). Default: 0.75.
+    /// Red-dominance and contrast score threshold for violence findings (0-1). Default: 0.75.
     /// </param>
     /// <param name="detectNSFW">Whether to detect NSFW content. Default: true.</param>
     /// <param name="detectViolence">Whether to detect violent content. Default: true.</param>

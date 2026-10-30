@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+﻿using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -9,27 +10,35 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Safety.Multimodal;
 
 /// <summary>
-/// Checks semantic alignment between text descriptions and associated images to detect
-/// mismatched or deceptive text-image pairs.
+/// Checks whether an image matches its caption, to catch unsafe images passed off under a safe description. With a
+/// CLIP model it compares CLIP embeddings; without one it falls back to colour heuristics.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Analyzes whether the visual content of an image is consistent with its text description.
-/// Uses feature extraction from both modalities to compute alignment scores. Misalignment
-/// can indicate deceptive content (safe text paired with unsafe image), phishing, or
-/// misinformation.
+/// <b>With a CLIP model</b> (an <see cref="IMultimodalEmbedding{T}"/> such as <c>ClipNeuralNetwork</c>, which loads
+/// the image and text encoders from ONNX files), <see cref="EvaluateAlignment"/> runs CLIP zero-shot classification
+/// (Radford et al. 2021): the image embedding is compared with the embeddings of the caption and of three unsafe-concept
+/// prompts (graphic violence, sexually explicit content, hateful symbols), the cosine similarities are scaled by the
+/// CLIP logit scale of 100 and turned into probabilities with a softmax, and a finding is reported when an unsafe
+/// concept takes at least <c>mismatchThreshold</c> of the probability while the caption itself does not describe
+/// unsafe content. The image must already be preprocessed to the model input: 3 x ImageSize x ImageSize values.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> This module checks if what an image shows matches what the text
-/// says about it. For example, if someone labels an image "cute puppy" but the image shows
-/// something violent, this module catches that mismatch.
+/// <b>Without a CLIP model</b> the image side is a colour heuristic (skin-coloured and red-dominant pixel fractions)
+/// and the text side a keyword list. That fallback does not understand either modality and only flags a "safe" caption
+/// on a skin- or red-heavy image; treat it as a weak signal.
+/// </para>
+/// <para>
+/// <see cref="EvaluateText"/> checks the text alone, for captions that claim to be safe while naming unsafe content.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This module checks if what an image shows matches what the text says about it. For example,
+/// if someone labels an image "cute puppy" but the image shows something violent, a CLIP model sees that the picture
+/// is closer to "graphic violence" than to "cute puppy" and the module reports the mismatch.
 /// </para>
 /// <para>
 /// <b>References:</b>
-/// - CLIP: Learning transferable visual models from natural language (OpenAI, 2021)
-/// - OmniSafeBench-MM: Multimodal safety evaluation (2025)
-/// - MM-SafetyBench: 13 scenarios for multimodal safety (ECCV 2024)
-/// - Cross-modal jailbreak attacks on multimodal LLMs (2024)
+/// - Radford et al., Learning Transferable Visual Models From Natural Language Supervision (CLIP, ICML 2021)
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -47,6 +56,18 @@ namespace AiDotNet.Safety.Multimodal;
 public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
 {
     private readonly double _mismatchThreshold;
+    private readonly IMultimodalEmbedding<T>? _clip;
+
+    // The CLIP logit scale is learned and clipped at 100 during training (Radford et al. 2021, section 2.5).
+    private const double ClipLogitScale = 100.0;
+
+    // Zero-shot prompts for the unsafe concepts, in the CLIP "a photo of ..." prompt style.
+    private static readonly (string Prompt, SafetyCategory Category)[] UnsafeConcepts =
+    {
+        ("a photo of graphic violence, blood and gore", SafetyCategory.ViolenceGraphic),
+        ("a sexually explicit photo containing nudity", SafetyCategory.SexualExplicit),
+        ("a photo of hateful symbols and hate propaganda", SafetyCategory.HateSpeech),
+    };
 
     // Keywords for visual content categories
     private static readonly Dictionary<string, string[]> VisualCategoryKeywords = new()
@@ -70,10 +91,20 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
     /// <summary>
     /// Initializes a new text-image alignment checker.
     /// </summary>
-    /// <param name="mismatchThreshold">Threshold for flagging misalignment (0-1). Default: 0.5.</param>
-    public TextImageAlignmentChecker(double mismatchThreshold = 0.5)
+    /// <param name="mismatchThreshold">
+    /// Threshold for flagging misalignment (0-1): with CLIP, the zero-shot probability of an unsafe concept; without
+    /// it, the heuristic mismatch score. Default: 0.5.
+    /// </param>
+    /// <param name="clipModel">
+    /// A CLIP model used to compare the image with its caption, for example a <c>ClipNeuralNetwork</c> loaded from
+    /// its ONNX image and text encoders. <c>null</c> uses the colour-heuristic fallback.
+    /// </param>
+    public TextImageAlignmentChecker(double mismatchThreshold = 0.5, IMultimodalEmbedding<T>? clipModel = null)
     {
+        if (double.IsNaN(mismatchThreshold) || mismatchThreshold < 0 || mismatchThreshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(mismatchThreshold), "The mismatch threshold must be between 0 and 1.");
         _mismatchThreshold = mismatchThreshold;
+        _clip = clipModel;
     }
 
     /// <inheritdoc />
@@ -119,13 +150,19 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
         var findings = new List<SafetyFinding>();
         if (string.IsNullOrWhiteSpace(text)) return findings;
 
-        var span = image.Data.Span;
-        if (span.Length < 16) return findings;
-
+        if (image is null) throw new ArgumentNullException(nameof(image));
         string lower = text.ToLowerInvariant();
 
         // Extract text category signals
         var textCategories = ClassifyTextContent(lower);
+
+        if (_clip is not null)
+        {
+            return EvaluateAlignmentWithClip(text, image, textCategories, _clip);
+        }
+
+        var span = image.Data.Span;
+        if (span.Length < 16) return findings;
 
         // Extract image visual signals
         var imageFeatures = ExtractImageFeatures(span, image._shape);
@@ -153,6 +190,62 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
                     });
                 }
             }
+        }
+
+        return findings;
+    }
+
+    // CLIP zero-shot: softmax over 100 x cos(image, prompt) for the caption and the unsafe-concept prompts.
+    private IReadOnlyList<SafetyFinding> EvaluateAlignmentWithClip(
+        string caption, Tensor<T> image, Dictionary<string, double> textCategories, IMultimodalEmbedding<T> clip)
+    {
+        var findings = new List<SafetyFinding>();
+        int expected = 3 * clip.ImageSize * clip.ImageSize;
+        var pixels = image.ToArray();
+        if (pixels.Length != expected)
+            throw new ArgumentException(
+                $"The CLIP model expects a preprocessed 3 x {clip.ImageSize} x {clip.ImageSize} image ({expected} values); got {pixels.Length}.",
+                nameof(image));
+
+        // A caption that itself names unsafe content is not misaligned with an unsafe image.
+        if (textCategories["violent"] > 0 || textCategories["nsfw"] > 0 || textCategories["hateful"] > 0) return findings;
+
+        var imageData = new double[pixels.Length];
+        for (int i = 0; i < pixels.Length; i++) imageData[i] = NumOps.ToDouble(pixels[i]);
+        var imageEmbedding = clip.EncodeImage(imageData);
+
+        var logits = new double[UnsafeConcepts.Length + 1];
+        logits[0] = ClipLogitScale * NumOps.ToDouble(clip.ComputeSimilarity(imageEmbedding, clip.EncodeText(caption)));
+        for (int c = 0; c < UnsafeConcepts.Length; c++)
+            logits[c + 1] = ClipLogitScale * NumOps.ToDouble(clip.ComputeSimilarity(imageEmbedding, clip.EncodeText(UnsafeConcepts[c].Prompt)));
+
+        double max = logits.Max();
+        double total = 0;
+        var probabilities = new double[logits.Length];
+        for (int i = 0; i < logits.Length; i++)
+        {
+            probabilities[i] = Math.Exp(logits[i] - max);
+            total += probabilities[i];
+        }
+
+        for (int i = 0; i < probabilities.Length; i++) probabilities[i] /= total;
+
+        int best = 0;
+        for (int c = 1; c < UnsafeConcepts.Length; c++)
+            if (probabilities[c + 1] > probabilities[best + 1]) best = c;
+        double probability = probabilities[best + 1];
+        if (probability >= _mismatchThreshold)
+        {
+            findings.Add(new SafetyFinding
+            {
+                Category = SafetyCategory.Manipulated,
+                Severity = SafetySeverity.High,
+                Confidence = probability,
+                Description = $"Text-image misalignment: CLIP matches the image to '{UnsafeConcepts[best].Prompt}' " +
+                              $"({UnsafeConcepts[best].Category}) with probability {probability:F3}, against {probabilities[0]:F3} for its caption.",
+                RecommendedAction = SafetyAction.Warn,
+                SourceModule = ModuleName
+            });
         }
 
         return findings;
