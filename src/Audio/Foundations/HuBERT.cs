@@ -43,6 +43,9 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HuBERT: Self-Supervised Speech Representation Learning by Masked Prediction of Hidden Units", "https://arxiv.org/abs/2106.07447", Year = 2021, Authors = "Wei-Ning Hsu, Benjamin Bolte, Yao-Hung Hubert Tsai, Kushal Lakhotia, Ruslan Salakhutdinov, Abdelrahman Mohamed")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2006.11477",
+    "HuBERT keeps the wav2vec 2.0 model (Hsu et al. 2021, section 3) and changes only the pre-training target to masked "
+    + "prediction of clustered hidden units, so it runs on the wav2vec 2.0 network.")]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98,
                 LearningRate = 5e-4, Variant = "base",
                 Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.08,
@@ -72,6 +75,9 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private Wav2Vec2Network<T>? _network;
+    private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
     #endregion
 
@@ -168,6 +174,14 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     {
         ThrowIfDisposed();
         if (IsOnnxMode) return ExtractEmbeddings(audio);
+        if (_network is not null)
+        {
+            int target = layerIndex < 0 ? _options.NumLayers + layerIndex : layerIndex;
+            if (target < 0 || target >= _options.NumLayers)
+                throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                    $"Layer index {layerIndex} is out of range. Valid range: [{-_options.NumLayers}, {_options.NumLayers - 1}].");
+            return Unbatch(audio, Encode(audio).LayerStates[target + 1]);
+        }
 
         int targetLayer = layerIndex < 0 ? _options.NumLayers + layerIndex : layerIndex;
         if (targetLayer < 0 || targetLayer >= _options.NumLayers)
@@ -197,11 +211,18 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
         // Extract all layer outputs and combine with weights
         var layerOutputs = new List<Tensor<T>>();
         var c = audio;
-        foreach (var l in Layers)
+        if (_network is not null)
         {
-            c = l.Forward(c);
-            if (l is TransformerEncoderBlock<T>) layerOutputs.Add(c);
+            var states = Encode(audio).LayerStates;
+            for (int i = 1; i < states.Count; i++) layerOutputs.Add(Unbatch(audio, states[i]));
+            c = layerOutputs[^1];
         }
+        else
+            foreach (var l in Layers)
+            {
+                c = l.Forward(c);
+                if (l is TransformerEncoderBlock<T>) layerOutputs.Add(c);
+            }
 
         if (layerOutputs.Count == 0) return c;
 
@@ -266,19 +287,46 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultFoundationModelLayers(
-            featureEncoderDim: _options.FeatureEncoderDim, hiddenDim: _options.HiddenDim,
-            numLayers: _options.NumLayers, numAttentionHeads: _options.NumAttentionHeads,
-            feedForwardDim: _options.FeedForwardDim, dropoutRate: _options.DropoutRate));
+        _network = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network: HuBERT keeps wav2vec 2.0's model (convolutional feature encoder over the raw waveform,
+        // convolutional positional embedding, Transformer) and changes only the pre-training target (Hsu et al. 2021,
+        // section 3). It used to be a generic template with the feature encoder approximated (#2321).
+        var layers = new List<LayerBase<T>>();
+        _network = new Wav2Vec2Network<T>(Engine, layers, _options.ToConfiguration());
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        _network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42));
+        Layers.AddRange(layers);
     }
+
+    /// <summary>Loads a transformers <c>HubertModel</c> state dict (its unprefixed names).</summary>
+    /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
+    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        if (_network is null) throw new InvalidOperationException("Weights load into the native HuBERT network.");
+        _network.LoadTorchWeights(read);
+    }
+
+    private Wav2Vec2Network<T>.Output Encode(Tensor<T> audio)
+    {
+        if (_network is null) throw new InvalidOperationException("The native network is not initialized.");
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return _network.Forward(audio, training: false, _random);
+    }
+
+    private Tensor<T> Unbatch(Tensor<T> audio, Tensor<T> x)
+        => audio.Rank == 1 ? Engine.Reshape(x, new[] { x.Shape[1], x.Shape[2] }) : x;
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_network is not null) return Unbatch(input, _network.Forward(input, training: false, _random).Hidden);
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _network is null ? base.ForwardForTraining(input) : Unbatch(input, _network.Forward(input, training: true, _random).Hidden);
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

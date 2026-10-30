@@ -117,8 +117,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.Audio.Classification.AudioEventDetector<T>",
             "AiDotNet.Audio.Classification.GenreClassifier<T>",
             "AiDotNet.Audio.Classification.SceneClassifier<T>",
-            "AiDotNet.Audio.Foundations.HuBERT<T>",
-            "AiDotNet.Audio.Foundations.WavLM<T>",
             "AiDotNet.Audio.Speaker.SpeakerDiarizer<T>",
             "AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor<T>",
             "AiDotNet.Audio.SpeechRecognition.Conformer<T>",
