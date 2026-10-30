@@ -51,11 +51,11 @@ public class ActivationCacheGuardAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor UnguardedCacheWrite = new(
         "ADN0065",
         "Backward-activation cache written without ShouldCacheForBackward",
-        "'{0}' is written directly in '{1}', so this activation stays reachable for the whole "
+        "'{0}' is written directly in '{2}.{1}', so this activation stays reachable for the whole "
             + "forward even when no backward will read it. Route the write through the base instead "
             + "-- 'SaveForBackward(ref {0}, value)' -- which keeps the decision in one place, the way "
             + "PyTorch's ctx.save_for_backward owns saved-tensor lifetime rather than the module. If the "
-            + "field must outlive the pass on purpose, declare it with [KeepsActivation(\"why\")]",
+            + "field must outlive the pass on purpose, declare it with [KeepsActivation(\"why\")].",
         "AiDotNet.Performance",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -191,7 +191,8 @@ public class ActivationCacheGuardAnalyzer : DiagnosticAnalyzer
                 UnguardedCacheWrite,
                 node.GetLocation(),
                 field.Name,
-                method.Identifier.Text));
+                method.Identifier.Text,
+                field.ContainingType.ToDisplayString()));
         }
     }
 
