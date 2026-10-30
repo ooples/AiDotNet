@@ -388,6 +388,13 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.MetaLearning.MetaLearnerBase`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Interfaces.IMetaLearnerOptions{`0},AiDotNet.Interfaces.IEpisodicDataLoader{`0,`1,`2},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,`1,`2},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,`1,`2})</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.CLAPModelOptions.get_AudioEncoderHeads</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -717,6 +724,13 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.MetaLearning.MetaLearnerBase`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Interfaces.IMetaLearnerOptions{`0},AiDotNet.Interfaces.IEpisodicDataLoader{`0,`1,`2},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,`1,`2},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,`1,`2})</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.CLAPModelOptions.get_AudioEncoderHeads</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
@@ -1040,6 +1054,13 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Memory.PooledTensor`1.#ctor(AiDotNet.Memory.TensorPool{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.MetaLearning.MetaLearnerBase`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Interfaces.IMetaLearnerOptions{`0},AiDotNet.Interfaces.IEpisodicDataLoader{`0,`1,`2},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,`1,`2},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,`1,`2})</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>

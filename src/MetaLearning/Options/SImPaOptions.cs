@@ -59,13 +59,13 @@ public class SImPaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <summary>Loss function for meta-training; null uses the default multi-class classification loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
     /// <summary>
-    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
-    /// supplied optimizer is only reset along with the learner.
+    /// Must stay null: this algorithm's meta-update is part of the method rather than a plain gradient step, so a
+    /// supplied optimizer is rejected when the learner is built.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
     /// <summary>
-    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
-    /// A supplied optimizer is only reset along with the learner.
+    /// Must stay null: this algorithm takes no plain gradient inner step (it adapts without one, or by its own
+    /// update rule), so a supplied optimizer is rejected when the learner is built.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
     /// <summary>Episodic data loader that supplies the meta-training tasks; null when tasks are passed to training directly.</summary>

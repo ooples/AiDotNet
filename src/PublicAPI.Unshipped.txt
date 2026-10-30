@@ -94,6 +94,7 @@
 *REMOVED*AiDotNet.Memory.TensorPool<T>.TensorPool(AiDotNet.Memory.PoolingOptions! options) -> void
 *REMOVED*AiDotNet.Memory.TensorPool<T>.TensorPool(int maxPoolSizeMB) -> void
 *REMOVED*AiDotNet.Memory.TensorPool<T>.TotalPooledTensors.get -> int
+*REMOVED*AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.MetaLearnerBase(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! metaModel, AiDotNet.Interfaces.ILossFunction<T>! lossFunction, AiDotNet.Interfaces.IMetaLearnerOptions<T>! options, AiDotNet.Interfaces.IEpisodicDataLoader<T, TInput, TOutput>? dataLoader = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null) -> void
 *REMOVED*AiDotNet.NeuralNetworks.Layers.LayerBase<T>.Workspace.get -> AiDotNet.Memory.LayerWorkspace<T>?
 *REMOVED*AiDotNet.NeuralNetworks.Layers.LayerBase<T>.Workspace.set -> void
 *REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>
@@ -101,6 +102,9 @@
 *REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>.Invalidate() -> void
 *REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>.MultiSlotFusedStep(object! owner) -> void
 *REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>.TryStep(System.Func<System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>! parameterProvider, System.Action? zeroGradAction, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! freshSlotData, System.Func<System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! forward, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! computeLoss, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! optimizer, out T lossValue) -> bool
+*REMOVED*System.ArrayPolyfill
+*REMOVED*System.IO.FilePolyfill
+*REMOVED*System.MathPolyfill
 *REMOVED*const AiDotNet.Autodiff.Testing.NumericalGradient<T>.Defaults.AbsoluteTolerance = 1E-06 -> double
 *REMOVED*const AiDotNet.Autodiff.Testing.NumericalGradient<T>.Defaults.Epsilon = 1E-05 -> double
 *REMOVED*const AiDotNet.Autodiff.Testing.NumericalGradient<T>.Defaults.RelativeTolerance = 0.0001 -> double
@@ -123,11 +127,21 @@
 *REMOVED*static System.MathPolyfill.Clamp(float value, float min, float max) -> float
 *REMOVED*static System.MathPolyfill.Clamp(int value, int min, int max) -> int
 *REMOVED*static System.MathPolyfill.Log2(double value) -> double
-*REMOVED*System.ArrayPolyfill
-*REMOVED*System.IO.FilePolyfill
-*REMOVED*System.MathPolyfill
 AiDotNet.Memory.InferenceContext<T>.InferenceContext() -> void
 AiDotNet.Memory.InferenceContext<T>.InferenceContext(int maxPoolSizeMB) -> void
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients, double innerLearningRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients, double innerLearningRate, bool firstStep) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(double innerLearningRate, params (AiDotNet.Tensors.LinearAlgebra.Vector<T>! Parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! Gradients)[]! groups) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>![]!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradientsInPlace(double[]! parameters, double[]! gradients, double innerLearningRate, bool firstStep) -> void
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyOuterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients, double outerLearningRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyOuterGradients(double outerLearningRate, params (AiDotNet.Tensors.LinearAlgebra.Vector<T>! Parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! Gradients)[]! groups) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>![]!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.MetaLearnerBase(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! metaModel, AiDotNet.Interfaces.ILossFunction<T>! lossFunction, AiDotNet.Interfaces.IMetaLearnerOptions<T>! options, AiDotNet.Interfaces.IEpisodicDataLoader<T, TInput, TOutput>? dataLoader = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null, AiDotNet.MetaLearning.MetaLearnerOptimizerUse optimizerUse = AiDotNet.MetaLearning.MetaLearnerOptimizerUse.InnerAndOuter) -> void
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.RequirePlainSgdInnerSteps(bool required, string! configuration) -> void
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse.Inner = 2 -> AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse.InnerAndOuter = AiDotNet.MetaLearning.MetaLearnerOptimizerUse.Outer | AiDotNet.MetaLearning.MetaLearnerOptimizerUse.Inner -> AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse.None = 0 -> AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse.Outer = 1 -> AiDotNet.MetaLearning.MetaLearnerOptimizerUse
 AiDotNet.Models.Parameters.ResizableTensorFieldParameterSource<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
 AiDotNet.Models.Parameters.TensorFieldParameterSource<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
 virtual AiDotNet.AutoML.AutoMLModelBase<T, TInput, TOutput>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
