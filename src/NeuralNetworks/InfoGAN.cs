@@ -332,6 +332,8 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     {
         // Without options the explicit code width keeps its historical meaning: every code continuous.
         // With options, the width has to be the categorical and continuous layout they describe.
+        if (latentCodeSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(latentCodeSize), latentCodeSize, "Latent code size must be positive.");
         _options = options ?? new InfoGANOptions { NumCategoricalCodes = 0, NumContinuousCodes = latentCodeSize };
         _options.Validate();
         Options = _options;
@@ -348,8 +350,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
             throw new ArgumentNullException(nameof(discriminatorArchitecture));
         if (qNetworkArchitecture is null)
             throw new ArgumentNullException(nameof(qNetworkArchitecture));
-        if (latentCodeSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(latentCodeSize), latentCodeSize, "Latent code size must be positive.");
         if (_options.MutualInfoCoefficient < 0)
             throw new ArgumentOutOfRangeException(nameof(_options.MutualInfoCoefficient), _options.MutualInfoCoefficient, "Mutual information coefficient must be non-negative.");
 
