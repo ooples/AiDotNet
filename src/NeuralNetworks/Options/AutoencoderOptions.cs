@@ -25,6 +25,20 @@ public class AutoencoderOptions : ModelHyperparameterOptions
     public int Epochs { get; set; } = 1;
 
     /// <summary>
+    /// Gets or sets the width of the bottleneck (the code) in the default stack; null derives it as
+    /// max(input size / 4, 4).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Used only when the architecture supplies no layers of its own. The default stack is
+    /// input → hidden → bottleneck → hidden → output, with the hidden width max(input / 2, 8).
+    /// </para>
+    /// <para><b>For Beginners:</b> How many numbers each input is compressed into. Smaller forces a
+    /// more aggressive summary.</para>
+    /// </remarks>
+    public int? LatentSize { get; set; }
+
+    /// <summary>
     /// Throws when a value on this instance cannot produce a working model.
     /// </summary>
     public void Validate()

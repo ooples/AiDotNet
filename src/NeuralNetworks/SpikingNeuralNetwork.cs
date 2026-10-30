@@ -287,7 +287,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultSpikingLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultSpikingLayers(Architecture, hiddenLayerSizes: _options.HiddenLayers));
         }
     }
 

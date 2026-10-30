@@ -1229,10 +1229,15 @@ public static partial class LayerHelper<T>
     /// tasks like feature learning, dimensionality reduction, and generating new data similar to the training set.
     /// </para>
     /// </remarks>
+    /// <param name="hiddenLayerSizes">Hidden units of each Boltzmann layer, input side first; null derives two
+    /// layers of min(500, 4 x input).</param>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepBoltzmannMachineLayers(
-        NeuralNetworkArchitecture<T> architecture)
+        NeuralNetworkArchitecture<T> architecture,
+        IReadOnlyList<int>? hiddenLayerSizes = null)
     {
         ValidateLayerParameters(1, 32, architecture.OutputSize);
+        if (hiddenLayerSizes is not null && (hiddenLayerSizes.Count == 0 || hiddenLayerSizes.Any(width => width < 1)))
+            throw new ArgumentException("A DBM needs at least one hidden layer, each with a positive width.", nameof(hiddenLayerSizes));
 
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape[0];
@@ -1243,19 +1248,21 @@ public static partial class LayerHelper<T>
         // hidden2 derives from hidden1 (latent capacity), NOT from OutputSize (projection head).
         const int DefaultDbmHiddenCap = 500;
         const int DefaultDbmHiddenMultiplier = 4;
-        int hidden1 = Math.Min(DefaultDbmHiddenCap, inputSize * DefaultDbmHiddenMultiplier);
-        int hidden2 = hidden1;
+        int derived = Math.Min(DefaultDbmHiddenCap, inputSize * DefaultDbmHiddenMultiplier);
+        IReadOnlyList<int> hidden = hiddenLayerSizes ?? new[] { derived, derived };
 
         // RBM layers per Salakhutdinov & Hinton 2009 (no BatchNorm — DBMs use CD pretraining, not BN).
         // Build into a list and chain-resolve so callers see ParameterCount > 0
         // immediately (the eager RBM ctors actually allocate, so this is mostly
         // for the trailing DenseLayer, but keeping the helper consistent).
-        var layers = new List<ILayer<T>>
+        var layers = new List<ILayer<T>>();
+        int visible = inputSize;
+        foreach (int width in hidden)
         {
-            new RBMLayer<T>(inputSize, hidden1, new SigmoidActivation<T>() as IActivationFunction<T>),
-            new RBMLayer<T>(hidden1, hidden2, new SigmoidActivation<T>() as IActivationFunction<T>),
-            new DenseLayer<T>(architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>),
-        };
+            layers.Add(new RBMLayer<T>(visible, width, new SigmoidActivation<T>() as IActivationFunction<T>));
+            visible = width;
+        }
+        layers.Add(new DenseLayer<T>(architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>));
         ChainResolveLazyLayers(layers, new[] { inputSize });
         foreach (var layer in layers) yield return layer;
     }
@@ -1677,8 +1684,11 @@ public static partial class LayerHelper<T>
     /// has two main parts: an encoder that compresses the data and a decoder that reconstructs it.
     /// </para>
     /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultAutoEncoderLayers(NeuralNetworkArchitecture<T> architecture)
+    /// <param name="latentSize">Width of the bottleneck in the default stack; 0 derives it as max(input / 4, 4).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultAutoEncoderLayers(NeuralNetworkArchitecture<T> architecture, int latentSize = 0)
     {
+        if (latentSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(latentSize), latentSize, "Latent size must be positive, or 0 to derive it.");
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape.Length > 0 ? inputShape.Aggregate(1, (a, b) => a * b) : architecture.CalculatedInputSize;
         int rootInputSize = inputSize;
@@ -1690,7 +1700,7 @@ public static partial class LayerHelper<T>
         {
             int outputSize = architecture.OutputSize > 0 ? architecture.OutputSize : inputSize;
             int hidden1 = Math.Max(inputSize / 2, 8);
-            int bottleneck = Math.Max(inputSize / 4, 4);
+            int bottleneck = latentSize > 0 ? latentSize : Math.Max(inputSize / 4, 4);
             int hidden2 = hidden1;
             layerSizes = [inputSize, hidden1, bottleneck, hidden2, outputSize];
         }
@@ -1831,8 +1841,14 @@ public static partial class LayerHelper<T>
     /// effectively, especially when you don't have a lot of labeled training data.
     /// </para>
     /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultDeepBeliefNetworkLayers(NeuralNetworkArchitecture<T> architecture)
+    /// <param name="hiddenLayerSizes">Hidden units of each stacked RBM, input side first; null is Hinton,
+    /// Osindero &amp; Teh 2006's 500-500-2000.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepBeliefNetworkLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        IReadOnlyList<int>? hiddenLayerSizes = null)
     {
+        if (hiddenLayerSizes is not null && (hiddenLayerSizes.Count == 0 || hiddenLayerSizes.Any(width => width < 1)))
+            throw new ArgumentException("A DBN needs at least one RBM, each with a positive hidden width.", nameof(hiddenLayerSizes));
         // RBM stack sizes follow Hinton 2006 / Hinton & Salakhutdinov 2006:
         //   inputSize → 500 → 500 → 2000  (three RBMs forming the deep
         //   feature-extraction stack), with a separate supervised projection
@@ -1848,7 +1864,8 @@ public static partial class LayerHelper<T>
         // strictly on the supervised projection head matches the paper.
         // CalculatedInputSize (flattened per-sample dims), NOT GetInputShape()[0] — the latter is the
         // batch/sample axis (=1 for tabular), which would make the first RBM RBM(1->500) and collapse it.
-        int[] rbmStackSizes = [architecture.CalculatedInputSize, 500, 500, 2000];
+        int[] rbmStackSizes = new[] { architecture.CalculatedInputSize }
+            .Concat(hiddenLayerSizes ?? new[] { 500, 500, 2000 }).ToArray();
 
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
@@ -2421,8 +2438,11 @@ public static partial class LayerHelper<T>
             double refractoryPeriod = 2.0,
             bool useLayerNormalization = false,
             bool useOutputConversion = true,
-            int timeSteps = 20)
+            int timeSteps = 20,
+            IReadOnlyList<int>? hiddenLayerSizes = null)
     {
+        if (hiddenLayerSizes is not null && (hiddenLayerSizes.Count == 0 || hiddenLayerSizes.Any(width => width < 1)))
+            throw new ArgumentException("Every hidden layer width must be positive, and there must be at least one.", nameof(hiddenLayerSizes));
         // Get input and output dimensions
         var inputShape = architecture.GetInputShape();
 
@@ -2453,7 +2473,8 @@ public static partial class LayerHelper<T>
             // Default architecture with two hidden layers
             // Per Neftci et al. 2019: hidden spiking layers + non-spiking readout.
             // Last SpikingLayer stays at hidden size; DenseLayer projects to outputSize.
-            layerSizes = new List<int> { inputSize, 128, 64 };
+            layerSizes = new List<int> { inputSize };
+            layerSizes.AddRange(hiddenLayerSizes ?? new[] { 128, 64 });
         }
 
         // Hidden LIF layer sizes = the layer stack minus the input dimension
@@ -2692,16 +2713,21 @@ public static partial class LayerHelper<T>
         NeuralNetworkArchitecture<T> architecture,
         int numHeads = 8,
         int numLayers = 2,
-        double dropoutRate = 0.6)
+        double dropoutRate = 0.6,
+        int hiddenSize = 64)
     {
         if (architecture.CalculatedInputSize <= 0 || architecture.OutputSize <= 0)
         {
             throw new InvalidOperationException("The network must have valid input and output dimensions.");
         }
+        if (hiddenSize <= 0 || numHeads <= 0 || hiddenSize % numHeads != 0)
+        {
+            throw new ArgumentException(
+                $"hiddenSize ({hiddenSize}) must be a positive multiple of numHeads ({numHeads}).", nameof(hiddenSize));
+        }
 
         int inputSize = architecture.CalculatedInputSize;
         int outputSize = architecture.OutputSize;
-        int hiddenSize = 64;
 
         int currentInputDim = inputSize;
 
@@ -3138,19 +3164,26 @@ public static partial class LayerHelper<T>
     /// including hidden layer sizes and activation functions.
     /// </para>
     /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultRNNLayers(NeuralNetworkArchitecture<T> architecture)
+    /// <param name="hiddenSize">Width of every recurrent layer; 0 derives it as max(64, input, output).</param>
+    /// <param name="recurrentLayerCount">Number of stacked recurrent layers (default: 2).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultRNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenSize = 0,
+        int recurrentLayerCount = 2)
     {
+        if (hiddenSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), hiddenSize, "Hidden size must be positive, or 0 to derive it.");
+        if (recurrentLayerCount < 1)
+            throw new ArgumentOutOfRangeException(nameof(recurrentLayerCount), recurrentLayerCount, "An RNN needs at least one recurrent layer.");
+
         // Get input and output dimensions from the architecture
         // For 2D input [seqLen, features], the input size is the feature dimension
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
         int outputSize = architecture.OutputSize;
 
-        // Default hidden layer size
-        int hiddenSize = Math.Max(64, Math.Max(inputSize, outputSize));
-
-        // Default number of recurrent layers
-        int recurrentLayerCount = 2;
+        if (hiddenSize == 0)
+            hiddenSize = Math.Max(64, Math.Max(inputSize, outputSize));
 
         // Input layer
         yield return new InputLayer<T>(inputSize);
@@ -3289,15 +3322,20 @@ public static partial class LayerHelper<T>
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
     /// <exception cref="ArgumentException">Thrown when numQubits is not positive.</exception>
+    /// <param name="numQuantumLayers">How many quantum-layer-plus-measurement blocks the stack has (default: 2).
+    /// A dense layer of the hidden width sits between consecutive blocks.</param>
     public static IEnumerable<ILayer<T>> CreateDefaultQuantumNetworkLayers(
             NeuralNetworkArchitecture<T> architecture,
-            int numQubits = 4)
+            int numQubits = 4,
+            int numQuantumLayers = 2)
     {
         if (architecture == null)
             throw new ArgumentNullException(nameof(architecture));
 
         if (numQubits <= 0)
             throw new ArgumentException("Number of qubits must be positive", nameof(numQubits));
+        if (numQuantumLayers <= 0)
+            throw new ArgumentException("A quantum network needs at least one quantum layer.", nameof(numQuantumLayers));
 
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape[0];
@@ -3310,20 +3348,23 @@ public static partial class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // First quantum layer with measurement
-        // QuantumLayer outputs quantumDim values regardless of its outputSize parameter
-        yield return new QuantumLayer<T>(inputSize, quantumDim, numQubits);
-        yield return new MeasurementLayer<T>(quantumDim);
-
-        // Add a dense layer after measurement to project to hiddenSize
-        yield return new DenseLayer<T>(
-            outputSize: hiddenSize,
-            activationFunction: new ReLUActivation<T>()
-        );
-
-        // Second quantum layer with measurement
-        yield return new QuantumLayer<T>(hiddenSize, quantumDim, numQubits);
-        yield return new MeasurementLayer<T>(quantumDim);
+        // Quantum layers with measurement. QuantumLayer outputs quantumDim values regardless of its
+        // outputSize parameter, so a dense layer projects each measurement back to hiddenSize before
+        // the next quantum layer.
+        int quantumInput = inputSize;
+        for (int block = 0; block < numQuantumLayers; block++)
+        {
+            yield return new QuantumLayer<T>(quantumInput, quantumDim, numQubits);
+            yield return new MeasurementLayer<T>(quantumDim);
+            if (block < numQuantumLayers - 1)
+            {
+                yield return new DenseLayer<T>(
+                    outputSize: hiddenSize,
+                    activationFunction: new ReLUActivation<T>()
+                );
+                quantumInput = hiddenSize;
+            }
+        }
 
         // Final dense layer to map to output size. Use identity so the
         // task-appropriate activation below owns the output non-linearity
@@ -3445,7 +3486,11 @@ public static partial class LayerHelper<T>
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
     /// <exception cref="InvalidOperationException">Thrown when input size or output size is not positive.</exception>
-    public static IEnumerable<ILayer<T>> CreateDefaultNeuralNetworkLayers(NeuralNetworkArchitecture<T> architecture)
+    /// <param name="hiddenLayerSizes">Explicit hidden-layer widths, input side first; null sizes them from
+    /// <see cref="NeuralNetworkArchitecture{T}.Complexity"/>.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralNetworkLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        IReadOnlyList<int>? hiddenLayerSizes = null)
     {
         // Validate input
         if (architecture == null)
@@ -3480,8 +3525,13 @@ public static partial class LayerHelper<T>
             throw new InvalidOperationException("Output size must be greater than zero.");
         }
 
-        // Determine hidden layer sizes based on network complexity
-        List<int> hiddenLayerSizes = new List<int>();
+        if (hiddenLayerSizes is not null && (hiddenLayerSizes.Count == 0 || hiddenLayerSizes.Any(width => width < 1)))
+        {
+            throw new ArgumentException("Every hidden layer width must be positive, and there must be at least one.", nameof(hiddenLayerSizes));
+        }
+
+        // Determine hidden layer sizes based on network complexity, unless the caller gave them.
+        List<int> widths = new List<int>();
 
         // Floor every hidden width at MinHiddenWidth: for low-dimensional tabular inputs the
         // unfloored formulas produce width-1/2 hidden layers, which are DEGENERATE — with a width-2
@@ -3490,29 +3540,30 @@ public static partial class LayerHelper<T>
         // gradient and only the output bias trains: the network is permanently a constant function.
         const int MinHiddenWidth = 8;
 
-        switch (architecture.Complexity)
+        if (hiddenLayerSizes is not null) widths.AddRange(hiddenLayerSizes);
+        else switch (architecture.Complexity)
         {
             case NetworkComplexity.Simple:
                 // One hidden layer with size between input and output
-                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, (inputSize + outputSize) / 2));
+                widths.Add(Math.Max(MinHiddenWidth, (inputSize + outputSize) / 2));
                 break;
 
             case NetworkComplexity.Medium:
                 // Two hidden layers
-                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize * 2));
-                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize));
+                widths.Add(Math.Max(MinHiddenWidth, inputSize * 2));
+                widths.Add(Math.Max(MinHiddenWidth, inputSize));
                 break;
 
             case NetworkComplexity.Deep:
                 // Three hidden layers
-                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize * 2));
-                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize * 2));
-                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize));
+                widths.Add(Math.Max(MinHiddenWidth, inputSize * 2));
+                widths.Add(Math.Max(MinHiddenWidth, inputSize * 2));
+                widths.Add(Math.Max(MinHiddenWidth, inputSize));
                 break;
 
             default:
                 // Default to one hidden layer
-                hiddenLayerSizes.Add(Math.Max(MinHiddenWidth, inputSize));
+                widths.Add(Math.Max(MinHiddenWidth, inputSize));
                 break;
         }
 
@@ -3538,9 +3589,9 @@ public static partial class LayerHelper<T>
         // hidden layers; an empty list means "linear / single-layer
         // network", and forcing a ReLU head before the output Dense
         // changes the requested architecture.
-        for (int i = 0; i < hiddenLayerSizes.Count; i++)
+        for (int i = 0; i < widths.Count; i++)
         {
-            int hiddenSize = hiddenLayerSizes[i];
+            int hiddenSize = widths[i];
             layers.Add(new DenseLayer<T>(hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>));
             layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
         }
@@ -3930,9 +3981,25 @@ public static partial class LayerHelper<T>
         int hiddenLayerSize = 64)
     {
         ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
+        return CreateDefaultFeedForwardLayers(architecture, Enumerable.Repeat(hiddenLayerSize, hiddenLayerCount).ToArray());
+    }
+
+    /// <summary>
+    /// Creates default layers for a feed-forward neural network with the given hidden-layer widths.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
+    /// <param name="hiddenLayerSizes">The width of each hidden layer, input side first. Each must be positive.</param>
+    /// <returns>A collection of layers forming a feed-forward neural network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultFeedForwardLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        IReadOnlyList<int> hiddenLayerSizes)
+    {
+        if (hiddenLayerSizes is null || hiddenLayerSizes.Count == 0)
+            throw new ArgumentException("A feed-forward network needs at least one hidden layer.", nameof(hiddenLayerSizes));
+        foreach (int width in hiddenLayerSizes)
+            ValidateLayerParameters(hiddenLayerSizes.Count, width, architecture.OutputSize);
 
         var inputShape = architecture.GetInputShape();
-        int inputSize = inputShape.Aggregate((a, b) => a * b);  // Flatten multi-dimensional input
 
         // Build the layer chain into a list, chain-resolve from the
         // architecture's input shape, then yield. Lazy DenseLayers
@@ -3944,10 +4011,9 @@ public static partial class LayerHelper<T>
         {
             layers.Add(new FlattenLayer<T>());
         }
-        layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
-        for (int i = 1; i < hiddenLayerCount; i++)
+        foreach (int width in hiddenLayerSizes)
         {
-            layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
+            layers.Add(new DenseLayer<T>(width, new ReLUActivation<T>() as IActivationFunction<T>));
         }
         var outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
         layers.Add(new DenseLayer<T>(architecture.OutputSize, outputActivation));

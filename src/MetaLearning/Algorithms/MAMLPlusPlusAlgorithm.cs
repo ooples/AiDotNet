@@ -547,7 +547,9 @@ internal class MAMLPlusPlusModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     /// <param name="adaptedParams">Task-adapted parameters.</param>
     public MAMLPlusPlusModel(IFullModel<T, TInput, TOutput> model, Vector<T> adaptedParams)
     {
-        _model = model;
+        // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
+        // MetaModel would let every prediction overwrite the meta-model.
+        _model = (model ?? throw new ArgumentNullException(nameof(model))).Clone();
         _adaptedParams = adaptedParams;
     }
 

@@ -178,7 +178,7 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralNetworkLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralNetworkLayers(Architecture, _options.HiddenLayers));
         }
     }
 

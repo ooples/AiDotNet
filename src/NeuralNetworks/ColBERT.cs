@@ -117,7 +117,9 @@ namespace AiDotNet.NeuralNetworks
             _numLayers = _options.NumLayers;
             _numHeads = _options.NumHeads;
             _feedForwardDim = _options.FeedForwardDim;
-            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
+            // ColBERT is BERT-based, and its query augmentation pads with BERT's [MASK]; the WordPiece tokenizer
+            // carries that token, where the GPT-style default has none.
+            _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.RoBERTa);
 
             InitializeLayersCore(false);
         }
@@ -181,6 +183,53 @@ namespace AiDotNet.NeuralNetworks
             var tokens = tokenResult.TokenIds.Take(MaxTokens).ToList();
             if (tokens.Count == 0) tokens.Add(0);
 
+            return EncodeTokens(tokens);
+        }
+
+        /// <summary>
+        /// Encodes a search query the way ColBERT's query encoder does: exactly
+        /// <see cref="ColBERTOptions.MaxQueryLength"/> token embeddings.
+        /// </summary>
+        /// <param name="query">The query text.</param>
+        /// <returns>A MaxQueryLength x OutputDimension matrix of normalized token embeddings, or an empty
+        /// matrix for a blank query.</returns>
+        /// <remarks>
+        /// <para>
+        /// Khattab &amp; Zaharia 2020, section 3.2: a query longer than N<sub>q</sub> tokens is truncated, and a
+        /// shorter one is padded with [MASK] tokens up to N<sub>q</sub>. The masks are encoded like any other
+        /// token, so they become learned query-expansion terms that take part in MaxSim scoring. Documents
+        /// are not padded; encode them with <see cref="EmbedLateInteraction(string)"/>.
+        /// </para>
+        /// <para><b>For Beginners:</b> Use this for the search text and <see cref="EmbedLateInteraction(string)"/>
+        /// for the passages being searched, then compare them with <see cref="LateInteractionScore"/>.</para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">The tokenizer has no mask token to pad with.</exception>
+        public Matrix<T> EmbedQueryLateInteraction(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+                return new Matrix<T>(0, _outputDim);
+
+            int queryLength = _options.MaxQueryLength;
+            var tokens = _tokenizer.Encode(query).TokenIds.Take(queryLength).ToList();
+            if (tokens.Count < queryLength)
+            {
+                string mask = _tokenizer.SpecialTokens.MaskToken;
+                if (string.IsNullOrEmpty(mask) || !_tokenizer.Vocabulary.ContainsToken(mask))
+                {
+                    throw new InvalidOperationException(
+                        "ColBERT pads queries with the tokenizer's mask token, and this tokenizer has none. " +
+                        "Use a BERT-style tokenizer (one with [MASK]).");
+                }
+
+                int maskId = _tokenizer.Vocabulary.GetTokenId(mask);
+                while (tokens.Count < queryLength) tokens.Add(maskId);
+            }
+
+            return EncodeTokens(tokens);
+        }
+
+        private Matrix<T> EncodeTokens(List<int> tokens)
+        {
             var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
             var output = Predict(inputTensor); // [1, seqLen, outputDim]
 

@@ -72,6 +72,13 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Huang et al. 2017, Sec. 4: SGD with Nesterov momentum 0.9 without dampening and weight decay 1e-4, initial learning rate 0.1 divided by 10 at 50% and 75% of the total epochs, batch size 64 on CIFAR (256 on ImageNet). The decay points are kept as the fractions the paper states rather than transcribed for one epoch count. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <summary>
+    /// The generated DenseNet keeps nothing between calls, so each Predict frees its GPU intermediates when it ends
+    /// (#2383: without it every op allocated a fresh device buffer and process memory grew to 4.6-7.4 GB at b1-b16).
+    /// Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the default.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates => Architecture.Layers is not { Count: > 0 };
+
     /// <inheritdoc/>
     /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
     protected override bool SizesLayersFromOptions => true;

@@ -361,13 +361,25 @@ public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelB
     public Vector<T>? AdaptedSupportFeatures => _contextRepresentation;
     public double[]? ParameterModulationFactors => null;
 
+    /// <summary>
+    /// Initializes the adapted model from the meta-model and the parameters conditioned on the context set.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Predict"/> pushes the conditioned parameters into the base model, so the base model is a copy of
+    /// <paramref name="model"/>: handing over the meta-learner's own meta-model would let every prediction overwrite
+    /// it, and the next adaptation would start from another task's parameters. The parameter vector is copied for the
+    /// same reason.
+    /// </remarks>
+    /// <param name="model">The meta-model; this adapted model works on its own copy.</param>
+    /// <param name="parameters">The parameters conditioned on the context set.</param>
+    /// <param name="contextRepresentation">The aggregated context representation, or null.</param>
     public NeuralProcessModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> parameters,
         Vector<T>? contextRepresentation)
-        : base(model)
+        : base((model ?? throw new ArgumentNullException(nameof(model))).Clone())
     {
-        _parameters = parameters;
+        _parameters = (parameters ?? throw new ArgumentNullException(nameof(parameters))).Clone();
         _contextRepresentation = contextRepresentation;
     }
 

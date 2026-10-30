@@ -457,8 +457,20 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         _lastInput = cacheBwd ? input : null;
         Tensor<T> x = input;
 
+        // In inference each convolution's batch norm (and the block activation after it) folds into the convolution,
+        // and the depthwise stage, whose batch norm cannot fold, runs batch norm and activation as one pass: a
+        // MobileNetV2 predict otherwise spent most of its time in separate batch-norm and four-op ReLU6 passes. Each
+        // helper declines (training, a tape, a capture, an observer) and the stage then runs unfused, as below.
+        var blockActivation = FusedActivationType.None;
+        bool fuse = !cacheBwd && ConvolutionBatchNormFolding<T>.TryGetFusedActivation(ScalarActivation, out blockActivation);
+
         // Expansion phase (if expansion > 1)
-        if (_hasExpansion && _expandConv is not null && _expandBn is not null)
+        if (_hasExpansion && _expandConv is not null && _expandBn is not null
+            && fuse && ConvolutionBatchNormFolding<T>.TryForward(_expandConv, _expandBn, x, blockActivation, out var expanded))
+        {
+            x = expanded;
+        }
+        else if (_hasExpansion && _expandConv is not null && _expandBn is not null)
         {
             var expandOut = _expandConv.Forward(x);
             _lastExpandOut = cacheBwd ? expandOut : null;
@@ -470,13 +482,27 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         }
 
         // Depthwise convolution phase
-        var dwOut = dwConv.Forward(x);
-        _lastDwOut = cacheBwd ? dwOut : null;
-        var dwBnOut = dwBn.Forward(dwOut);
-        _lastDwBnOut = cacheBwd ? dwBnOut : null;
-        var dwActOut = ApplyBlockActivation(dwBnOut);
-        _lastDwActOut = cacheBwd ? dwActOut : null;
-        x = dwActOut;
+        if (fuse && ConvolutionBatchNormFolding<T>.TryDepthwiseBatchNormActivation(dwConv, dwBn, x, blockActivation, out var dwFolded))
+        {
+            x = dwFolded;
+        }
+        else
+        {
+            var dwOut = dwConv.Forward(x);
+            _lastDwOut = cacheBwd ? dwOut : null;
+            if (fuse && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(dwBn, dwOut, blockActivation, out var dwFused))
+            {
+                x = dwFused;
+            }
+            else
+            {
+                var dwBnOut = dwBn.Forward(dwOut);
+                _lastDwBnOut = cacheBwd ? dwBnOut : null;
+                var dwActOut = ApplyBlockActivation(dwBnOut);
+                _lastDwActOut = cacheBwd ? dwActOut : null;
+                x = dwActOut;
+            }
+        }
 
         // Squeeze-and-Excitation phase (optional)
         // Note: SE layer expects NHWC format, but our tensors are in NCHW format
@@ -491,11 +517,21 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
             x = seOut;
         }
 
-        // Projection phase (LINEAR - no activation)
-        var projectOut = projectConv.Forward(x);
-        _lastProjectOut = cacheBwd ? projectOut : null;
-        var projectBnOut = projectBn.Forward(projectOut);
-        _lastProjectBnOut = cacheBwd ? projectBnOut : null;
+        // Projection phase (LINEAR - no activation). Its fold needs no block activation, so a block whose activation the
+        // fused kernels do not compute (hard-swish) still folds it; the helper itself declines training, a tape, a
+        // capture and an observer.
+        Tensor<T> projectBnOut;
+        if (!cacheBwd && ConvolutionBatchNormFolding<T>.TryForward(projectConv, projectBn, x, FusedActivationType.None, out var projected))
+        {
+            projectBnOut = projected;
+        }
+        else
+        {
+            var projectOut = projectConv.Forward(x);
+            _lastProjectOut = cacheBwd ? projectOut : null;
+            projectBnOut = projectBn.Forward(projectOut);
+            _lastProjectBnOut = cacheBwd ? projectBnOut : null;
+        }
 
         // Residual connection (only if dimensions match)
         if (_useResidual)

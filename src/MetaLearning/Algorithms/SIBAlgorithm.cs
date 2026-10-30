@@ -363,7 +363,9 @@ internal class SIBModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     public SIBModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
         Vector<T>? centroids, double[]? modulationFactors)
     {
-        _model = model;
+        // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
+        // MetaModel would let every prediction overwrite the meta-model.
+        _model = (model ?? throw new ArgumentNullException(nameof(model))).Clone();
         _backboneParams = backboneParams;
         _centroids = centroids;
         _modulationFactors = modulationFactors;

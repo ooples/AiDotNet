@@ -1679,6 +1679,9 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LayerTestBaseHarnessRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LossCompatibleTargetProjectionTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Diffusion.MGIETests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.AdaptedMetaModelTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.MbPAAdaptedModelTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.NeuralProcessModelTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.ActivationLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerWithReLUInvariantTests.|
@@ -1758,6 +1761,17 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.LazyShape.RecurrentTransformerLazyShapeTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.MultiHeadAttentionFloatGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ParameterGradientPublicationTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ColBERTQueryAugmentationTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.DefaultStackOptionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.FastTextNgramOptionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.InfoGANCodeLayoutTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DenseNetLayerFusionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DerivedTensorCacheTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GRULayerFusedSequenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GruStatefulInferenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.InvertedResidualBlockFusionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.InvertedResidualProjectionFoldTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.MobileNetV2FusedParityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TransformerCustomLayerValidationIssue1317Tests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TransformerDefaultOptimizerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TransformerEncoderBlockLayoutAuditTests.|

@@ -25,6 +25,20 @@ public class DeepBeliefNetworkOptions : ModelHyperparameterOptions
     public int Epochs { get; set; } = 10;
 
     /// <summary>
+    /// Gets or sets the hidden units of each stacked RBM, input side first. Default: <c>{ 500, 500, 2000 }</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default is the stack Hinton, Osindero &amp; Teh 2006 trained on MNIST (784-500-500-2000). Used
+    /// only when the architecture supplies no layers of its own; a supervised head maps the last width
+    /// to the output.
+    /// </para>
+    /// <para><b>For Beginners:</b> Each entry is one layer of feature detectors, learned one layer at a
+    /// time before the whole network is fine-tuned.</para>
+    /// </remarks>
+    public int[] HiddenLayers { get; set; } = { 500, 500, 2000 };
+
+    /// <summary>
     /// Throws when a value on this instance cannot produce a working model.
     /// </summary>
     public void Validate()

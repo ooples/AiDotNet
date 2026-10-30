@@ -25,6 +25,19 @@ public class ResidualNeuralNetworkOptions : ModelHyperparameterOptions
     public int Epochs { get; set; } = 10;
 
     /// <summary>
+    /// Gets or sets how many residual blocks the default stack has. Default: <c>3</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Used only when the architecture supplies no layers of its own. Each block is two layers with an
+    /// identity shortcut around them (He et al. 2016).
+    /// </para>
+    /// <para><b>For Beginners:</b> More blocks make the network deeper; the shortcuts keep a deep stack
+    /// trainable.</para>
+    /// </remarks>
+    public int NumResidualBlocks { get; set; } = 3;
+
+    /// <summary>
     /// Throws when a value on this instance cannot produce a working model.
     /// </summary>
     public void Validate()

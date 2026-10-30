@@ -203,7 +203,7 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
         Options = _options;
         NumHeads = _options.NumHeads;
         DropoutRate = _options.DropoutRate;
-        HiddenDim = 64; // Default hidden dimension
+        HiddenDim = _options.HiddenSize;
         NumLayers = _options.NumLayers;
 
         // The graph-aware layer builder intentionally leaves the per-node prediction
@@ -243,7 +243,7 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
             // Filter out trailing SoftmaxActivation — it applies softmax over all
             // (nodes × classes) elements, which is incorrect for multi-node graph output.
             foreach (var layer in LayerHelper<T>.CreateDefaultGraphAttentionLayers(
-                Architecture, NumHeads, NumLayers, DropoutRate))
+                Architecture, NumHeads, NumLayers, DropoutRate, _options.HiddenSize))
             {
                 if (layer is ActivationLayer<T>)
                     continue;
