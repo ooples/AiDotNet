@@ -156,24 +156,6 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     private Vector<T>? _scalingVectorBGradient;
 
     /// <summary>
-    /// Cached normalized direction from the last forward pass, used in backpropagation.
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _lastNormalizedDirection;
-
-    /// <summary>
-    /// Stored input from the forward pass, needed for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stored intermediate value from forward pass, needed for backward pass.
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _lastIntermediate;
-
-    /// <summary>
     /// Initializes a new DVoRA adapter wrapping an existing layer.
     /// </summary>
     /// <param name="baseLayer">The layer to adapt with DVoRA.</param>
@@ -494,8 +476,6 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input.Clone();
-
         if (!_freezeBaseLayer)
         {
             _baseLayer.Forward(input);
@@ -558,7 +538,6 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Compute: afterB * B (shared, frozen) → [batchSize, outputSize]
         Matrix<T> afterSharedB = afterB.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized.")));
-        _lastIntermediate = afterSharedB.Clone();
 
         // Apply scaling vector d element-wise: afterSharedB * diag(d) → [batchSize, outputSize]
         Matrix<T> veraContribution = new Matrix<T>(batchSize, outputSize);
@@ -612,10 +591,10 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Normalize the adapted direction: d_norm = d' / ||d'|| - DoRA component
-        _lastNormalizedDirection = NormalizeRows(adaptedDirection);
+        Matrix<T> normalizedDirection = NormalizeRows(adaptedDirection);
 
         // Recompose weights: W' = m * d_norm - DoRA component
-        Matrix<T> finalWeights = RecomposeWeights(_lastNormalizedDirection);
+        Matrix<T> finalWeights = RecomposeWeights(normalizedDirection);
 
         // Compute output: y = input @ W'^T + bias
         Matrix<T> outputMatrix = inputMatrix.Multiply(finalWeights.Transpose());
@@ -837,9 +816,6 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         _baseLayer.ResetState();
-        _lastInput = null;
-        _lastNormalizedDirection = null;
-        _lastIntermediate = null;
         _magnitudeGradient = null;
         _scalingVectorDGradient = null;
         _scalingVectorBGradient = null;

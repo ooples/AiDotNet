@@ -107,12 +107,6 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     private bool _isTraining;
 
     /// <summary>
-    /// Cached input from the last forward pass for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _cachedInput;
-
-    /// <summary>
     /// Cached active rank from the last forward pass for gradient computation.
     /// </summary>
     private int _cachedActiveRank;
@@ -286,8 +280,7 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
             ? _activeRanks[_random.Next(_activeRanks.Length)]  // Random rank during training
             : _currentDeploymentRank;                          // Fixed rank during inference
 
-        // Cache input and active rank for backward pass
-        _cachedInput = input.Clone();
+        // Record the active rank
         _cachedActiveRank = activeRank;
 
         // Forward through base layer
@@ -296,7 +289,7 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         // CRITICAL: Prime _loraLayer caches by calling Forward, then mask to activeRank
         // This ensures _loraLayer.Backward will have fresh cached inputs for gradient computation
         Tensor<T> fullLoraOutput = _loraLayer.Forward(input);
-        Tensor<T> loraOutput = MaskOutputToRank(fullLoraOutput, activeRank);
+        Tensor<T> loraOutput = MaskOutputToRank(input, fullLoraOutput, activeRank);
 
         // Sum the outputs
         Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
@@ -307,6 +300,7 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Masks the full LoRA output to only include contributions from the first 'rank' components.
     /// </summary>
+    /// <param name="input">The input of this forward pass, from which the rank-restricted output is recomputed.</param>
     /// <param name="fullOutput">The full LoRA output from all maxRank components.</param>
     /// <param name="rank">Number of components to use (nested dropout rank).</param>
     /// <returns>Masked LoRA output tensor using only first 'rank' components.</returns>
@@ -317,7 +311,7 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// cached inputs for gradient computation, then we mask the output to match the nested dropout rank.
     /// </para>
     /// </remarks>
-    private Tensor<T> MaskOutputToRank(Tensor<T> fullOutput, int rank)
+    private Tensor<T> MaskOutputToRank(Tensor<T> input, Tensor<T> fullOutput, int rank)
     {
         // If using full rank, return as-is
         if (rank == _maxRank)
@@ -327,11 +321,7 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Recompute with rank restriction using ForwardWithRank logic
         // (We must recompute rather than mask, since LoRA output is input*A*B, not linearly separable by rank)
-        if (_cachedInput == null)
-        {
-            throw new InvalidOperationException("MaskOutputToRank called without cached input");
-        }
-        return ForwardWithRank(_cachedInput, rank);
+        return ForwardWithRank(input, rank);
     }
 
     /// <summary>
