@@ -532,11 +532,172 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
 
         var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
         var random = CreateSearchRandom();
+        var state = CreateSearchState(initialParameters);
+        double stop = Convert.ToDouble(tolerance);
+
+        while (state.Generation < maxIterations && state.Sigma > stop)
+        {
+            var generation = Ask(state, random);
+
+            var values = new double[generation.Points.Count];
+            for (int k = 0; k < values.Length; k++)
+            {
+                values[k] = Convert.ToDouble(search.Evaluate(generation.Points[k]));
+            }
+
+            TellCore(state, generation, values);
+
+            if (state.IsDegenerate) break;
+        }
+
+        return search.BestPoint;
+    }
+
+    /// <summary>
+    /// Starts an incremental (ask/tell) CMA-ES search centred on <paramref name="initialParameters"/>.
+    /// </summary>
+    /// <param name="initialParameters">The initial mean of the search distribution.</param>
+    /// <returns>A search state at generation zero: identity covariance, zero evolution paths, and the configured
+    /// initial step size (0.3 when <c>InitialStepSize</c> is not positive).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="initialParameters"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="initialParameters"/> is empty.</exception>
+    /// <remarks>
+    /// <para>
+    /// The population size is the configured <c>PopulationSize</c> (at least 4), or Hansen's default
+    /// 4 + floor(3 ln n) when it is not positive. <see cref="Minimize"/> runs exactly this sequence --
+    /// <c>CreateSearchState</c>, then <see cref="Ask"/> and <see cref="Tell"/> once per generation -- so a caller that
+    /// spreads the generations over several calls follows the same search.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when you cannot evaluate a whole run at once -- for example, when each
+    /// generation is one step of a longer training loop. Keep the returned state and pass it to every Ask and Tell.
+    /// </para>
+    /// </remarks>
+    public CMAESSearchState CreateSearchState(Vector<T> initialParameters)
+    {
+        Guard.NotNull(initialParameters);
+        if (initialParameters.Length == 0)
+        {
+            throw new ArgumentException(
+                "Initial parameters must contain at least one element.",
+                nameof(initialParameters));
+        }
 
         int n = initialParameters.Length;
         int lambda = _options.PopulationSize > 0
             ? Math.Max(4, _options.PopulationSize)
             : 4 + (int)(3.0 * Math.Log(n));
+
+        var mean = new double[n];
+        for (int i = 0; i < n; i++) mean[i] = Convert.ToDouble(initialParameters[i]);
+
+        return new CMAESSearchState
+        {
+            Dimension = n,
+            PopulationSize = lambda,
+            Generation = 0,
+            Mean = mean,
+            Sigma = _options.InitialStepSize > 0 ? _options.InitialStepSize : 0.3,
+            PathSigma = new double[n],
+            PathC = new double[n],
+            Covariance = CmaIdentityRows(n),
+        };
+    }
+
+    /// <summary>
+    /// Samples the next generation of a search: lambda points m + sigma * y_k with y_k = A z_k ~ N(0, C), where A is
+    /// the lower Cholesky factor of C and z_k is standard normal.
+    /// </summary>
+    /// <param name="state">The search to sample from; it is not modified.</param>
+    /// <param name="random">The generator the standard normal draws come from.</param>
+    /// <returns>The generation's candidate points, to be evaluated and passed back to <see cref="Tell"/>.</returns>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="InvalidOperationException">The state's step size is not a positive finite number.</exception>
+    public CMAESGeneration<T> Ask(CMAESSearchState state, Random random)
+    {
+        Guard.NotNull(state);
+        Guard.NotNull(random);
+        if (state.IsDegenerate)
+        {
+            throw new InvalidOperationException(
+                $"The search's step size ({state.Sigma}) is not a positive finite number, so no generation can be sampled.");
+        }
+
+        int n = state.Dimension;
+        int lambda = state.PopulationSize;
+        var factor = CmaCholesky(state.Covariance, n);
+
+        var draws = new double[lambda][];
+        var points = new Vector<T>[lambda];
+
+        for (int k = 0; k < lambda; k++)
+        {
+            var z = new double[n];
+            for (int i = 0; i < n; i++) z[i] = NextGaussian(random);
+
+            var y = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                double total = 0.0;
+                for (int j = 0; j <= i; j++) total += factor[i, j] * z[j];
+                y[i] = total;
+            }
+
+            var point = new Vector<T>(n);
+            for (int i = 0; i < n; i++)
+            {
+                point[i] = NumOps.FromDouble(state.Mean[i] + state.Sigma * y[i]);
+            }
+
+            draws[k] = y;
+            points[k] = point;
+        }
+
+        return new CMAESGeneration<T>(points, draws, factor, state.Generation);
+    }
+
+    /// <summary>
+    /// Updates a search from the fitness of the generation <see cref="Ask"/> sampled (lower is better): weighted
+    /// recombination of the best mu draws moves the mean, the evolution paths are updated, C receives the rank-one
+    /// and rank-mu updates, and sigma follows cumulative step-size adaptation (Hansen 2016, "The CMA Evolution
+    /// Strategy: A Tutorial", Section 4 and Table 1).
+    /// </summary>
+    /// <param name="state">The search the generation was sampled from; it is advanced by one generation.</param>
+    /// <param name="generation">The generation returned by <see cref="Ask"/> for this state.</param>
+    /// <param name="fitness">The objective value of each point, in the order of <c>generation.Points</c>.</param>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="ArgumentException">The fitness count does not match the population.</exception>
+    /// <exception cref="InvalidOperationException">The generation was not sampled from this state's current
+    /// generation, or has already been told.</exception>
+    public void Tell(CMAESSearchState state, CMAESGeneration<T> generation, IReadOnlyList<T> fitness)
+    {
+        Guard.NotNull(state);
+        Guard.NotNull(generation);
+        Guard.NotNull(fitness);
+        if (fitness.Count != generation.Points.Count)
+        {
+            throw new ArgumentException(
+                $"Expected {generation.Points.Count} fitness values, got {fitness.Count}.", nameof(fitness));
+        }
+
+        var values = new double[fitness.Count];
+        for (int k = 0; k < values.Length; k++) values[k] = Convert.ToDouble(fitness[k]);
+        TellCore(state, generation, values);
+    }
+
+    private static void TellCore(CMAESSearchState state, CMAESGeneration<T> generation, double[] values)
+    {
+        if (generation.Told)
+            throw new InvalidOperationException("This generation has already been told to the search.");
+        if (generation.GenerationIndex != state.Generation || generation.Draws.Length != state.PopulationSize
+            || (generation.Draws.Length > 0 && generation.Draws[0].Length != state.Dimension))
+        {
+            throw new InvalidOperationException(
+                "The generation was not sampled from this search state's current generation.");
+        }
+        generation.Told = true;
+
+        int n = state.Dimension;
+        int lambda = state.PopulationSize;
         int mu = Math.Max(1, lambda / 2);
 
         // Rank-based recombination weights, log-decreasing so the best sample counts for most.
@@ -571,109 +732,73 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
 
         double expectedNorm = Math.Sqrt(n) * (1.0 - 1.0 / (4.0 * n) + 1.0 / (21.0 * n * n));
 
-        var mean = new double[n];
-        for (int i = 0; i < n; i++) mean[i] = Convert.ToDouble(initialParameters[i]);
+        var draws = generation.Draws;
+        var factor = generation.Factor;
+        var mean = state.Mean;
+        var pathSigma = state.PathSigma;
+        var pathC = state.PathC;
+        var covariance = state.Covariance;
+        double sigma = state.Sigma;
 
-        double sigma = _options.InitialStepSize > 0 ? _options.InitialStepSize : 0.3;
-        double stop = Convert.ToDouble(tolerance);
+        var order = Enumerable.Range(0, lambda).OrderBy(k => values[k]).ToArray();
 
-        var pathSigma = new double[n];
-        var pathC = new double[n];
-        var covariance = CmaIdentity(n);
-
-        for (int generation = 0; generation < maxIterations && sigma > stop; generation++)
+        var weightedDraw = new double[n];
+        for (int i = 0; i < n; i++)
         {
-            var factor = CmaCholesky(covariance, n);
+            double drawTotal = 0.0;
+            for (int r = 0; r < mu; r++) drawTotal += weights[r] * draws[order[r]][i];
 
-            var draws = new double[lambda][];
-            var values = new double[lambda];
-
-            for (int k = 0; k < lambda; k++)
-            {
-                var z = new double[n];
-                for (int i = 0; i < n; i++) z[i] = NextGaussian(random);
-
-                var y = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    double total = 0.0;
-                    for (int j = 0; j <= i; j++) total += factor[i, j] * z[j];
-                    y[i] = total;
-                }
-
-                var point = new Vector<T>(n);
-                for (int i = 0; i < n; i++)
-                {
-                    point[i] = NumOps.FromDouble(mean[i] + sigma * y[i]);
-                }
-
-                draws[k] = y;
-                values[k] = Convert.ToDouble(search.Evaluate(point));
-            }
-
-            var order = Enumerable.Range(0, lambda).OrderBy(k => values[k]).ToArray();
-
-            var weightedDraw = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                double drawTotal = 0.0;
-                for (int r = 0; r < mu; r++) drawTotal += weights[r] * draws[order[r]][i];
-
-                weightedDraw[i] = drawTotal;
-                mean[i] += sigma * drawTotal;
-            }
-
-            // The conjugate path needs C^(-1/2) times the mean shift; with the Cholesky factor
-            // that is a forward substitution against the weighted draw.
-            var conjugate = CmaForwardSolve(factor, weightedDraw, n);
-
-            double pathSigmaNorm = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                pathSigma[i] = (1.0 - cSigma) * pathSigma[i]
-                    + Math.Sqrt(cSigma * (2.0 - cSigma) * muEffective) * conjugate[i];
-
-                pathSigmaNorm += pathSigma[i] * pathSigma[i];
-            }
-
-            pathSigmaNorm = Math.Sqrt(pathSigmaNorm);
-
-            // The Heaviside switch stops a long path inflating the covariance just after the step
-            // size has grown, which would count the same evidence twice.
-            double heaviside =
-                pathSigmaNorm / Math.Sqrt(1.0 - Math.Pow(1.0 - cSigma, 2.0 * (generation + 1)))
-                    < (1.4 + 2.0 / (n + 1.0)) * expectedNorm ? 1.0 : 0.0;
-
-            for (int i = 0; i < n; i++)
-            {
-                pathC[i] = (1.0 - cc) * pathC[i]
-                    + heaviside * Math.Sqrt(cc * (2.0 - cc) * muEffective) * weightedDraw[i];
-            }
-
-            double decay = 1.0 - c1 - cmu + (1.0 - heaviside) * c1 * cc * (2.0 - cc);
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    double rankMu = 0.0;
-                    for (int r = 0; r < mu; r++)
-                    {
-                        rankMu += weights[r] * draws[order[r]][i] * draws[order[r]][j];
-                    }
-
-                    covariance[i, j] = decay * covariance[i, j]
-                        + c1 * pathC[i] * pathC[j]
-                        + cmu * rankMu;
-                }
-            }
-
-            sigma *= Math.Exp((cSigma / dSigma) * (pathSigmaNorm / expectedNorm - 1.0));
-
-            if (double.IsNaN(sigma) || double.IsInfinity(sigma) || sigma <= 0.0) break;
+            weightedDraw[i] = drawTotal;
+            mean[i] += sigma * drawTotal;
         }
 
-        return search.BestPoint;
+        // The conjugate path needs C^(-1/2) times the mean shift; with the Cholesky factor
+        // that is a forward substitution against the weighted draw.
+        var conjugate = CmaForwardSolve(factor, weightedDraw, n);
+
+        double pathSigmaNorm = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            pathSigma[i] = (1.0 - cSigma) * pathSigma[i]
+                + Math.Sqrt(cSigma * (2.0 - cSigma) * muEffective) * conjugate[i];
+
+            pathSigmaNorm += pathSigma[i] * pathSigma[i];
+        }
+
+        pathSigmaNorm = Math.Sqrt(pathSigmaNorm);
+
+        // The Heaviside switch stops a long path inflating the covariance just after the step
+        // size has grown, which would count the same evidence twice.
+        double heaviside =
+            pathSigmaNorm / Math.Sqrt(1.0 - Math.Pow(1.0 - cSigma, 2.0 * (state.Generation + 1)))
+                < (1.4 + 2.0 / (n + 1.0)) * expectedNorm ? 1.0 : 0.0;
+
+        for (int i = 0; i < n; i++)
+        {
+            pathC[i] = (1.0 - cc) * pathC[i]
+                + heaviside * Math.Sqrt(cc * (2.0 - cc) * muEffective) * weightedDraw[i];
+        }
+
+        double decay = 1.0 - c1 - cmu + (1.0 - heaviside) * c1 * cc * (2.0 - cc);
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                double rankMu = 0.0;
+                for (int r = 0; r < mu; r++)
+                {
+                    rankMu += weights[r] * draws[order[r]][i] * draws[order[r]][j];
+                }
+
+                covariance[i][j] = decay * covariance[i][j]
+                    + c1 * pathC[i] * pathC[j]
+                    + cmu * rankMu;
+            }
+        }
+
+        state.Sigma = sigma * Math.Exp((cSigma / dSigma) * (pathSigmaNorm / expectedNorm - 1.0));
+        state.Generation++;
     }
 
     /// <summary>An identity matrix as plain doubles, for the sampling arithmetic.</summary>
@@ -684,11 +809,23 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         return identity;
     }
 
+    /// <summary>An identity matrix stored as rows, the covariance a search starts from.</summary>
+    private static double[][] CmaIdentityRows(int n)
+    {
+        var identity = new double[n][];
+        for (int i = 0; i < n; i++)
+        {
+            identity[i] = new double[n];
+            identity[i][i] = 1.0;
+        }
+        return identity;
+    }
+
     /// <summary>
     /// The lower Cholesky factor, with a diagonal shift if the covariance has drifted out of
     /// positive definiteness - which rounding will eventually cause on a long run.
     /// </summary>
-    private static double[,] CmaCholesky(double[,] matrix, int n)
+    private static double[,] CmaCholesky(double[][] matrix, int n)
     {
         for (double shift = 0.0; ; shift = shift == 0.0 ? 1e-12 : shift * 100.0)
         {
@@ -699,7 +836,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             {
                 for (int j = 0; j <= i; j++)
                 {
-                    double total = matrix[i, j] + (i == j ? shift : 0.0);
+                    double total = matrix[i][j] + (i == j ? shift : 0.0);
                     for (int k = 0; k < j; k++) total -= factor[i, k] * factor[j, k];
 
                     if (i == j)

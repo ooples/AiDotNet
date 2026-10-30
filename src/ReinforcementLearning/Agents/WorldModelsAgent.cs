@@ -29,6 +29,34 @@ public enum WorldModelsTrainingStage
 }
 
 /// <summary>
+/// Where a <see cref="WorldModelsAgent{T}"/> stands in its V -> M -> C training cycle.
+/// </summary>
+/// <remarks>
+/// Plain data so it travels with the agent through Clone and serialization: a copy taken mid-stage resumes the same
+/// epoch order and, in the Controller stage, the same CMA-ES search.
+/// </remarks>
+public sealed class WorldModelsTrainingCycle
+{
+    /// <summary>Gets or sets the stage the next Train() call runs.</summary>
+    public WorldModelsTrainingStage Stage { get; set; } = WorldModelsTrainingStage.Vision;
+
+    /// <summary>Gets or sets whether the current stage's epoch order has been drawn.</summary>
+    public bool StagePrepared { get; set; }
+
+    /// <summary>Gets or sets the shuffled replay slots (Vision) or window starts (Memory) of the current epoch.</summary>
+    public List<int> EpochOrder { get; set; } = new List<int>();
+
+    /// <summary>Gets or sets the position in <see cref="EpochOrder"/> of the next batch.</summary>
+    public int EpochCursor { get; set; }
+
+    /// <summary>Gets or sets the number of epochs the current stage has completed.</summary>
+    public int EpochsCompleted { get; set; }
+
+    /// <summary>Gets or sets the Controller stage's CMA-ES search, or null outside that stage.</summary>
+    public CMAESSearchState? ControllerSearch { get; set; }
+}
+
+/// <summary>
 /// World Models agent (Ha &amp; Schmidhuber 2018): a VAE (V), an MDN-RNN (M) and a CMA-ES-evolved controller (C)
 /// trained inside M's dream.
 /// </summary>
@@ -55,13 +83,14 @@ public enum WorldModelsTrainingStage
 /// windows of the current epoch, each at most RNNSequenceLength long and never crossing an episode end; inputs
 /// are z sampled afresh from V's posterior on every step, as the paper does to avoid overfitting a single sample.
 /// After RNNEpochs passes, the stage moves to Controller.</description></item>
-/// <item><description><b>Controller</b>: a complete CMA-ES run of ControllerGenerations generations of
-/// ControllerPopulationSize candidates, each scored by the mean cumulative predicted reward of
-/// ControllerEvaluationRollouts dream rollouts of up to RolloutLength steps, started from V's encodings of stored
-/// observations. No external environment is needed. The cycle then restarts at Vision.</description></item>
+/// <item><description><b>Controller</b>: one CMA-ES generation of ControllerPopulationSize candidates, each scored
+/// by the mean cumulative predicted reward of ControllerEvaluationRollouts dream rollouts of up to RolloutLength
+/// steps, started from V's encodings of stored observations; the controller becomes the search distribution's
+/// mean. No external environment is needed. The search state persists across calls (and through Clone and
+/// serialization); after ControllerGenerations generations the cycle restarts at Vision.</description></item>
 /// </list>
 /// The returned value is the loss of the unit just run: the VAE loss, the MDN-RNN loss, or the negated mean dream
-/// return of the evolved controller.
+/// return of the generation's candidates.
 /// </para>
 /// <para><b>For Beginners:</b>
 /// World Models is inspired by how humans learn: we build mental models
@@ -138,12 +167,9 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
 
-    // Training-cycle bookkeeping (see the class remarks).
-    private WorldModelsTrainingStage _stage;
-    private bool _stagePrepared;
-    private List<int> _epochOrder;
-    private int _epochCursor;
-    private int _epochsCompleted;
+    // Where the V -> M -> C cycle stands, including the Controller stage's CMA-ES search; carried through Clone and
+    // serialization so a copy resumes the cycle (and the search) exactly where the original was.
+    private WorldModelsTrainingCycle _cycle;
     private T _lastDreamReturn;
 
     // Deterministic base seeds for each sub-network's lazy weight init, so a
@@ -216,9 +242,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
 
-        _stage = WorldModelsTrainingStage.Vision;
-        _stagePrepared = false;
-        _epochOrder = new List<int>();
+        _cycle = new WorldModelsTrainingCycle();
         _lastDreamReturn = NumOps.Zero;
 
         Networks.Add(_vaeEncoder);
@@ -408,7 +432,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     internal int ControllerParameterLength => _controllerParameters.Length;
 
     /// <summary>The stage the next <see cref="Train"/> call runs.</summary>
-    internal WorldModelsTrainingStage CurrentStage => _stage;
+    internal WorldModelsTrainingStage CurrentStage => _cycle.Stage;
 
     /// <summary>A copy of the controller's flattened parameters.</summary>
     internal Vector<T> GetControllerParameters() => _controllerParameters.Clone();
@@ -485,22 +509,23 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
-        if (!_stagePrepared) PrepareStage();
+        // A cycle restored into an agent whose replay buffer holds fewer transitions than it was drawn over (a clone
+        // refilled from scratch) cannot index its epoch order, so that stage's epochs start again over what is stored.
+        if (!_cycle.StagePrepared || !EpochOrderFitsBuffer()) PrepareStage();
 
         T loss;
-        switch (_stage)
+        switch (_cycle.Stage)
         {
             case WorldModelsTrainingStage.Vision:
                 loss = TrainVisionStep(NextBatch(batchSize));
-                if (_epochsCompleted >= _options.VAEEpochs) EnterStage(WorldModelsTrainingStage.Memory);
+                if (_cycle.EpochsCompleted >= _options.VAEEpochs) EnterStage(WorldModelsTrainingStage.Memory);
                 break;
             case WorldModelsTrainingStage.Memory:
                 loss = TrainMemoryStep(NextBatch(batchSize));
-                if (_epochsCompleted >= _options.RNNEpochs) EnterStage(WorldModelsTrainingStage.Controller);
+                if (_cycle.EpochsCompleted >= _options.RNNEpochs) EnterStage(WorldModelsTrainingStage.Controller);
                 break;
             default:
-                loss = EvolveController();
-                EnterStage(WorldModelsTrainingStage.Vision);
+                if (EvolveControllerGeneration(out loss)) EnterStage(WorldModelsTrainingStage.Vision);
                 break;
         }
 
@@ -508,10 +533,19 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         return loss;
     }
 
+    private bool EpochOrderFitsBuffer()
+    {
+        foreach (int slot in _cycle.EpochOrder)
+        {
+            if (slot >= _replayBuffer.Count) return false;
+        }
+        return true;
+    }
+
     private void EnterStage(WorldModelsTrainingStage stage)
     {
-        _stage = stage;
-        _stagePrepared = false;
+        _cycle.Stage = stage;
+        _cycle.StagePrepared = false;
     }
 
     /// <summary>
@@ -520,16 +554,16 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     private void PrepareStage()
     {
-        _epochOrder = _stage switch
+        _cycle.EpochOrder = _cycle.Stage switch
         {
             WorldModelsTrainingStage.Vision => Enumerable.Range(0, _replayBuffer.Count).ToList(),
             WorldModelsTrainingStage.Memory => SequenceWindowStarts(),
             _ => new List<int>(),
         };
-        Shuffle(_epochOrder);
-        _epochCursor = 0;
-        _epochsCompleted = 0;
-        _stagePrepared = true;
+        Shuffle(_cycle.EpochOrder);
+        _cycle.EpochCursor = 0;
+        _cycle.EpochsCompleted = 0;
+        _cycle.StagePrepared = true;
     }
 
     /// <summary>Cuts the stored timeline, oldest first, into windows of at most RNNSequenceLength that end at an
@@ -555,14 +589,14 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private List<int> NextBatch(int batchSize)
     {
         var batch = new List<int>(batchSize);
-        int take = Math.Min(batchSize, _epochOrder.Count - _epochCursor);
-        for (int i = 0; i < take; i++) batch.Add(_epochOrder[_epochCursor + i]);
-        _epochCursor += take;
-        if (_epochCursor >= _epochOrder.Count)
+        int take = Math.Min(batchSize, _cycle.EpochOrder.Count - _cycle.EpochCursor);
+        for (int i = 0; i < take; i++) batch.Add(_cycle.EpochOrder[_cycle.EpochCursor + i]);
+        _cycle.EpochCursor += take;
+        if (_cycle.EpochCursor >= _cycle.EpochOrder.Count)
         {
-            _epochsCompleted++;
-            Shuffle(_epochOrder);
-            _epochCursor = 0;
+            _cycle.EpochsCompleted++;
+            Shuffle(_cycle.EpochOrder);
+            _cycle.EpochCursor = 0;
         }
         return batch;
     }
@@ -792,29 +826,49 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     // ===== Controller evolution in the dream =====
 
     /// <summary>
-    /// Runs CMA-ES (the library's Hansen implementation) for ControllerGenerations generations from the current
-    /// controller, minimising the negated mean dream return, and installs the best controller found.
+    /// Runs one CMA-ES generation (the library's Hansen implementation, through its ask/tell interface) in the dream:
+    /// samples ControllerPopulationSize controllers around the current search distribution, scores each by its mean
+    /// dream return, updates the distribution, and installs the distribution's mean as the controller. The search
+    /// state is kept between calls, so successive Controller-stage calls continue one search; it starts from the
+    /// current controller at the stage's first generation.
     /// </summary>
-    private T EvolveController()
+    /// <returns><c>true</c> once ControllerGenerations generations have run (or the search's step size has
+    /// collapsed), ending the stage.</returns>
+    private bool EvolveControllerGeneration(out T loss)
     {
-        var cmaOptions = new CMAESOptimizerOptions<T, Vector<T>, Vector<T>>
+        var cma = CMAESOptimizer<T, Vector<T>, Vector<T>>.CreateForFunction(
+            new CMAESOptimizerOptions<T, Vector<T>, Vector<T>>
+            {
+                PopulationSize = _options.ControllerPopulationSize,
+                InitialStepSize = _options.ControllerInitialStepSize,
+            });
+
+        var search = _cycle.ControllerSearch ?? cma.CreateSearchState(_controllerParameters);
+        _cycle.ControllerSearch = search;
+
+        var generation = cma.Ask(search, Random);
+        var fitness = new T[generation.Points.Count];
+        T totalReturn = NumOps.Zero;
+        for (int k = 0; k < fitness.Length; k++)
         {
-            PopulationSize = _options.ControllerPopulationSize,
-            InitialStepSize = _options.ControllerInitialStepSize,
-            MaxGenerations = _options.ControllerGenerations,
-            Seed = Random.Next(),
-        };
-        var cma = CMAESOptimizer<T, Vector<T>, Vector<T>>.CreateForFunction(cmaOptions);
+            T dreamReturn = DreamReturn(generation.Points[k]);
+            totalReturn = NumOps.Add(totalReturn, dreamReturn);
+            // CMA-ES minimises; the paper's fitness is the cumulative reward, so its negation is minimised.
+            fitness[k] = NumOps.Negate(dreamReturn);
+        }
+        cma.Tell(search, generation, fitness);
 
-        var best = cma.Minimize(
-            _controllerParameters,
-            candidate => NumOps.Negate(DreamReturn(candidate)),
-            _options.ControllerGenerations,
-            NumOps.FromDouble(cmaOptions.StopTolerance));
+        // The controller is the distribution's mean, the estimate CMA-ES itself recommends under a noisy fitness.
+        var mean = new Vector<T>(search.Dimension);
+        for (int i = 0; i < mean.Length; i++) mean[i] = NumOps.FromDouble(search.Mean[i]);
+        _controllerParameters = mean;
 
-        _controllerParameters = best.Clone();
-        _lastDreamReturn = DreamReturn(_controllerParameters);
-        return NumOps.Negate(_lastDreamReturn);
+        _lastDreamReturn = NumOps.Divide(totalReturn, NumOps.FromDouble(fitness.Length));
+        loss = NumOps.Negate(_lastDreamReturn);
+
+        bool finished = search.Generation >= _options.ControllerGenerations || search.IsDegenerate;
+        if (finished) _cycle.ControllerSearch = null;
+        return finished;
     }
 
     /// <summary>
@@ -897,8 +951,18 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <summary>
     /// Samples latent dimension <paramref name="dimension"/> of z_{t+1} from M's mixture output (the row starting at
     /// <paramref name="offset"/>) at temperature tau: a component k ~ softmax(logits / tau), then
-    /// z = mu_k + sigma_k * sqrt(tau) * eps, as in the authors' reference implementation.
+    /// z = mu_k + sigma_k * sqrt(tau) * eps.
     /// </summary>
+    /// <remarks>
+    /// This is the authors' reference implementation (hardmaru/WorldModelsExperiments). carracing/rnn/rnn.py,
+    /// <c>sample_sequence</c>: <c>logmix2 = np.copy(logmix)/temperature</c>, then
+    /// <c>rand_gaussian = np.random.randn(OUTWIDTH)*np.sqrt(temperature)</c> and
+    /// <c>next_x = chosen_mean+np.exp(chosen_logstd)*rand_gaussian</c>. doomrnn/doomrnn.py, <c>DoomCoverRNNEnv._step</c>,
+    /// does the same (<c>logmix2 = np.copy(logmix)/temperature</c>;
+    /// <c>rand_gaussian = self.np_random.randn(OUTWIDTH)*np.sqrt(temperature)</c>;
+    /// <c>next_z = chosen_mean+np.exp(chosen_logstd)*rand_gaussian</c>) and ends the dream when
+    /// <c>logrestart[0] &gt; 0</c>, i.e. P(done) &gt; 0.5, as <see cref="DreamReturn"/> does.
+    /// </remarks>
     internal T SampleMixtureLatent(Tensor<T> output, int offset, int dimension, double[]? weights = null)
     {
         int mixtures = _options.NumMixtures;
@@ -1044,6 +1108,12 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <summary>M's mixture-density head.</summary>
     internal DenseLayer<T> MixtureHead => _mdnHead;
 
+    /// <summary>M's LSTM layers, bottom first.</summary>
+    internal IReadOnlyList<LSTMLayer<T>> MemoryLayers => _lstmLayers;
+
+    /// <summary>The Controller stage's CMA-ES search, or null outside the stage.</summary>
+    internal CMAESSearchState? ControllerSearch => _cycle.ControllerSearch;
+
     /// <summary>The number of sequence windows M's epochs currently run over.</summary>
     internal int SequenceWindowCount => SequenceWindowStarts().Count;
 
@@ -1054,7 +1124,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             ["updates"] = NumOps.FromDouble(_updateCount),
             ["buffer_size"] = NumOps.FromDouble(_replayBuffer.Count),
-            ["stage"] = NumOps.FromDouble((int)_stage),
+            ["stage"] = NumOps.FromDouble((int)_cycle.Stage),
             ["dream_return"] = _lastDreamReturn
         };
     }

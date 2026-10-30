@@ -280,9 +280,10 @@ public class WorldModelsPaperTests
     // ── The V -> M -> C cycle ─────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Train_RunsVForVAEEpochs_ThenMForRNNEpochs_ThenOneCmaEsRun_ThenRestarts()
+    public void Train_RunsVForVAEEpochs_ThenMForRNNEpochs_ThenOneCmaEsGenerationPerCall_ThenRestarts()
     {
-        var agent = new WorldModelsAgent<double>(Small(vaeEpochs: 2, rnnEpochs: 3, sequenceLength: 4, batchSize: 8));
+        var agent = new WorldModelsAgent<double>(Small(vaeEpochs: 2, rnnEpochs: 3, sequenceLength: 4, batchSize: 8,
+            generations: 2, population: 4));
         Fill(agent, 16, seed: 13);
         agent.DreamReturn(agent.GetControllerParameters()); // materialises every network
         var networks = agent.GetNetworks();
@@ -308,17 +309,28 @@ public class WorldModelsPaperTests
         Assert.True(Differs(memory, networks[2].GetParameters()), "M did not train in the Memory stage.");
         Assert.False(Differs(encoder, networks[0].GetParameters()), "V moved while M was training.");
 
-        Assert.Equal(WorldModelsTrainingStage.Controller, agent.CurrentStage);
+        // Two generations, one per call, each scoring the population of 4 in the dream.
         memory = Snapshot(networks[2].GetParameters());
-        int evaluations = agent.DreamEvaluations;
-        agent.Train();
-        Assert.True(agent.DreamEvaluations > evaluations, "The Controller stage did not evolve C in the dream.");
+        for (int generation = 1; generation <= 2; generation++)
+        {
+            Assert.Equal(WorldModelsTrainingStage.Controller, agent.CurrentStage);
+            int evaluations = agent.DreamEvaluations;
+            agent.Train();
+            Assert.Equal(4, agent.DreamEvaluations - evaluations);
+            if (generation == 1)
+            {
+                var search = agent.ControllerSearch;
+                Assert.NotNull(search);
+                if (search is not null) Assert.Equal(1, search.Generation);
+            }
+        }
         Assert.False(Differs(memory, networks[2].GetParameters()), "M moved while C was evolving.");
         Assert.Equal(WorldModelsTrainingStage.Vision, agent.CurrentStage);
+        Assert.Null(agent.ControllerSearch);
     }
 
     [Fact]
-    public void ControllerStage_SpendsGenerationsTimesPopulationEvaluations_EachOverTheConfiguredRollouts()
+    public void ControllerStage_RunsOneGenerationOfThePopulationPerCall_ForControllerGenerationsCalls()
     {
         const int latent = 2, mixtures = 2;
         var agent = new WorldModelsAgent<double>(Small(latent: latent, mixtures: mixtures, generations: 3, population: 5,
@@ -329,16 +341,109 @@ public class WorldModelsPaperTests
         Assert.Equal(WorldModelsTrainingStage.Controller, agent.CurrentStage);
 
         PinHead(agent, 3 * latent * mixtures, reward: 0.5, doneLogit: -1.0);
-        int evaluations = agent.DreamEvaluations;
-        long steps = agent.DreamStepsSimulated;
-        double loss = agent.Train();
+        for (int generation = 1; generation <= 3; generation++)
+        {
+            Assert.Equal(WorldModelsTrainingStage.Controller, agent.CurrentStage);
+            int evaluations = agent.DreamEvaluations;
+            long steps = agent.DreamStepsSimulated;
+            double loss = agent.Train();
 
-        // CMA-ES scores its start point, then generations x population candidates; the agent rescores the winner.
-        int expectedEvaluations = 1 + 3 * 5 + 1;
-        Assert.Equal(expectedEvaluations, agent.DreamEvaluations - evaluations);
-        Assert.Equal(expectedEvaluations * 2L * 3L, agent.DreamStepsSimulated - steps);
-        // Every dream step pays 0.5 for 3 steps: the return is 1.5, reported as the loss -1.5.
-        Assert.Equal(-1.5, loss, 12);
+            // One generation: the population of 5, each over 2 dream rollouts of 3 steps.
+            Assert.Equal(5, agent.DreamEvaluations - evaluations);
+            Assert.Equal(5L * 2L * 3L, agent.DreamStepsSimulated - steps);
+            // Every dream step pays 0.5 for 3 steps: each candidate returns 1.5, reported as the loss -1.5.
+            Assert.Equal(-1.5, loss, 12);
+        }
+        Assert.Equal(WorldModelsTrainingStage.Vision, agent.CurrentStage);
+    }
+
+    [Fact]
+    public void ControllerSearch_SurvivesCloneMidStage()
+    {
+        var agent = new WorldModelsAgent<double>(Small(generations: 5, population: 4));
+        Fill(agent, 8, seed: 23);
+        agent.Train();
+        agent.Train();
+        agent.Train(); // the first of five generations
+        var search = agent.ControllerSearch;
+        Assert.NotNull(search);
+        if (search is null) return;
+
+        var clone = (WorldModelsAgent<double>)agent.Clone();
+        var cloned = clone.ControllerSearch;
+        Assert.NotNull(cloned);
+        if (cloned is null) return;
+
+        Assert.Equal(WorldModelsTrainingStage.Controller, clone.CurrentStage);
+        Assert.Equal(search.Generation, cloned.Generation);
+        Assert.Equal(search.Sigma, cloned.Sigma);
+        Assert.Equal(search.Mean, cloned.Mean);
+        Assert.Equal(search.PathSigma, cloned.PathSigma);
+        Assert.Equal(search.PathC, cloned.PathC);
+        for (int i = 0; i < search.Covariance.Length; i++) Assert.Equal(search.Covariance[i], cloned.Covariance[i]);
+        Assert.NotSame(search, cloned);
+    }
+
+    /// <summary>
+    /// Pins M to a dream whose reward rises with the first action component: the forget gate is shut, the input and
+    /// output gates are open, the cell candidate is tanh(2 a_0) in every unit, and the reward is the sum of h. The
+    /// controller must learn to push a_0 up whatever z and h are.
+    /// </summary>
+    private static void PinActionRewardedDream(WorldModelsAgent<double> agent, int latent, int mixtures, int hidden)
+    {
+        var lstm = agent.MemoryLayers[0];
+        int input = latent + ActionSize;
+        var parameters = lstm.GetParameters();
+        var values = new double[parameters.Length];
+        // Layout: W_f, W_i, W_c, W_o (each [hidden, input]), U_f, U_i, U_c, U_o ([hidden, hidden]), b_f, b_i, b_c, b_o.
+        int inputBlock = hidden * input, recurrentBlock = hidden * hidden;
+        Assert.Equal(4 * inputBlock + 4 * recurrentBlock + 4 * hidden, values.Length);
+        for (int j = 0; j < hidden; j++) values[2 * inputBlock + j * input + latent] = 2.0;
+        int biases = 4 * inputBlock + 4 * recurrentBlock;
+        for (int j = 0; j < hidden; j++)
+        {
+            values[biases + j] = -20.0;              // forget gate shut
+            values[biases + hidden + j] = 20.0;      // input gate open
+            values[biases + 3 * hidden + j] = 20.0;  // output gate open
+        }
+        lstm.SetParameters(new Vector<double>(values));
+
+        int rewardIndex = 3 * latent * mixtures;
+        var head = agent.MixtureHead;
+        var headParameters = head.GetParameters();
+        var headValues = new double[headParameters.Length];
+        // Dense layout: weights [inputs, outputs] row-major, then biases.
+        int outputs = 3 * latent * mixtures + 2;
+        Assert.Equal(outputs * hidden + outputs, headValues.Length);
+        for (int j = 0; j < hidden; j++) headValues[j * outputs + rewardIndex] = 1.0;
+        headValues[outputs * hidden + rewardIndex + 1] = -10.0; // never done
+        head.SetParameters(new Vector<double>(headValues));
+    }
+
+    [Fact]
+    public void Controller_LearnsInTheDream_ToTakeTheRewardedAction()
+    {
+        const int latent = 2, mixtures = 2, hidden = 3, length = 5, generations = 20;
+        var agent = new WorldModelsAgent<double>(Small(latent: latent, mixtures: mixtures, hidden: hidden,
+            generations: generations, population: 8, evaluationRollouts: 8, rolloutLength: length, batchSize: 8));
+        Fill(agent, 8, seed: 29);
+        agent.Train();
+        agent.Train();
+        Assert.Equal(WorldModelsTrainingStage.Controller, agent.CurrentStage);
+        PinActionRewardedDream(agent, latent, mixtures, hidden);
+
+        // The initial controller is near zero, so a_0 is near zero and so is its reward.
+        var initial = agent.GetControllerParameters();
+        double before = agent.DreamReturn(initial);
+
+        for (int g = 0; g < generations; g++) agent.Train();
+        Assert.Equal(WorldModelsTrainingStage.Vision, agent.CurrentStage);
+
+        var learned = agent.GetControllerParameters();
+        double after = agent.DreamReturn(learned);
+        double best = length * hidden * Math.Tanh(Math.Tanh(2.0));
+        Assert.True(after > before + 0.4 * best,
+            $"CMA-ES did not improve the controller in the dream: return {before} -> {after} (best possible {best}).");
     }
 
     // ── Validation ────────────────────────────────────────────────────────────────────────────────

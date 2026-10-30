@@ -206,7 +206,8 @@ public class WorldModelsOptions<T> : ReinforcementLearningOptions<T>
     /// Gets the number of CMA-ES generations the controller is evolved for in each training cycle.
     /// </summary>
     /// <remarks>
-    /// <para>"After 1800 generations, an agent was able to achieve an average score of 900.46" (appendix, "Evolution Strategies").</para>
+    /// <para>"After 1800 generations, an agent was able to achieve an average score of 900.46" (appendix, "Evolution Strategies").
+    /// Each Controller-stage <c>Train()</c> call runs one generation, so the stage lasts this many calls.</para>
     /// <para><b>For Beginners:</b> How many rounds of "try a population of controllers, keep the best ideas" run.</para>
     /// </remarks>
     /// <value>The generation count; defaults to 1800.</value>
