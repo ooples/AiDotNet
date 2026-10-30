@@ -262,14 +262,16 @@ public class ActivationCacheGuardAnalyzer : DiagnosticAnalyzer
         => name is "ShouldCacheForBackward" or "ShouldCacheActivationsForManualBackward";
 
     /// <summary>
-    /// True when the write sits under an <c>if</c> whose condition is a guard (see
-    /// <see cref="IsGuardCondition"/>).
+    /// True when the write sits in the then-branch of an <c>if</c> whose condition is a guard (see
+    /// <see cref="IsGuardCondition"/>). The else-branch of a guard runs exactly when no backward is
+    /// coming, so a write there is the unguarded case, not the guarded one.
     /// </summary>
     private static bool IsGuarded(SyntaxNode write, SemanticModel model)
     {
-        for (SyntaxNode? node = write; node is not null; node = node.Parent)
+        SyntaxNode child = write;
+        for (SyntaxNode? node = write.Parent; node is not null; child = node, node = node.Parent)
         {
-            if (node is not IfStatementSyntax ifStatement) continue;
+            if (node is not IfStatementSyntax ifStatement || child != ifStatement.Statement) continue;
 
             if (IsGuardCondition(ifStatement.Condition, model, ifStatement, depth: 0)) return true;
         }
