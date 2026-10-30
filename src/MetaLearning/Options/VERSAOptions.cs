@@ -85,9 +85,12 @@ public class VERSAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <summary>Gets or sets the loss function.</summary>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <summary>Gets or sets the outer loop optimizer.</summary>
+    /// <summary>
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
     /// <summary>Gets or sets the inner loop optimizer (unused for VERSA).</summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }

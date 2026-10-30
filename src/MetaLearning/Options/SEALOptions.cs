@@ -58,34 +58,19 @@ public class SEALOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// </summary>
-    /// <value>Default: null (uses model's default loss function if available).</value>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for meta-parameter updates (outer loop).
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
     /// </summary>
-    /// <value>Default: null (uses built-in Adam optimizer with OuterLearningRate).</value>
-    /// <remarks>
-    /// <para>
-    /// The meta-optimizer updates the initial model parameters based on performance
-    /// across all tasks in the meta-batch. Adam is recommended for stable convergence.
-    /// </para>
-    /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner-loop adaptation.
+    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
+    /// A supplied optimizer is only reset along with the learner.
     /// </summary>
-    /// <value>Default: null (uses built-in SGD optimizer with InnerLearningRate).</value>
-    /// <remarks>
-    /// <para>
-    /// The inner optimizer performs task-specific adaptation on the support set.
-    /// SGD is typically used for simplicity and computational efficiency.
-    /// </para>
-    /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 
     /// <summary>
