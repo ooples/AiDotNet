@@ -253,10 +253,38 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return bestAction;
     }
 
-    /// <summary>The root priors with Dirichlet exploration noise mixed in.</summary>
+    /// <summary>
+    /// The prediction head's policy as a distribution PUCT can use: negative outputs clipped to zero and the rest
+    /// renormalized to sum to one, or uniform when no output is positive and finite.
+    /// </summary>
+    /// <remarks>
+    /// The head is linear and regresses toward the one-hot action taken, so its raw outputs estimate probabilities
+    /// but can be negative and need not sum to one.
+    /// </remarks>
+    internal double[] PolicyPriors(Vector<T> policy)
+    {
+        int actions = _options.ActionSize;
+        var priors = new double[actions];
+        double total = 0.0;
+        for (int a = 0; a < actions; a++)
+        {
+            double p = NumOps.ToDouble(policy[a]);
+            priors[a] = p > 0.0 && !double.IsInfinity(p) ? p : 0.0;
+            total += priors[a];
+        }
+
+        for (int a = 0; a < actions; a++)
+        {
+            priors[a] = total > 0.0 ? priors[a] / total : 1.0 / actions;
+        }
+        return priors;
+    }
+
+    /// <summary>The root priors (see <see cref="PolicyPriors"/>) with Dirichlet exploration noise mixed in.</summary>
     internal double[] MixRootNoise(Vector<T> policy)
     {
         int actions = _options.ActionSize;
+        var policyPriors = PolicyPriors(policy);
         double fraction = _options.RootExplorationFraction;
         var gamma = new AiDotNet.Distributions.GammaDistribution<double>(_options.RootDirichletAlpha, 1.0);
         var noise = new double[actions];
@@ -271,7 +299,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int a = 0; a < actions; a++)
         {
             double eta = noiseTotal > 0.0 ? noise[a] / noiseTotal : 1.0 / actions;
-            priors[a] = (1.0 - fraction) * NumOps.ToDouble(policy[a]) + fraction * eta;
+            priors[a] = (1.0 - fraction) * policyPriors[a] + fraction * eta;
         }
         return priors;
     }
@@ -361,7 +389,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         var predictionTensor = Tensor<T>.FromVector(node.HiddenState);
         var predictionOutput = _predictionNetwork.Predict(predictionTensor);
         var prediction = predictionOutput.ToVector();
-        var policy = ExtractPolicy(prediction);
+        var nodePriors = node.Priors ?? PolicyPriors(ExtractPolicy(prediction));
 
         double bestScore = double.NegativeInfinity;
         int bestAction = 0;
@@ -377,7 +405,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             int visitCount = node.VisitCounts.ContainsKey(action) ? node.VisitCounts[action] : 0;
-            double prior = node.Priors is { } priors ? priors[action] : NumOps.ToDouble(policy[action]);
+            double prior = nodePriors[action];
 
             double puctScore = qValue + _options.PUCTConstant * prior * sqrtTotalVisits / (1 + visitCount);
 

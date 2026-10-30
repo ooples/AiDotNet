@@ -53,11 +53,16 @@ public class DeepEMDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
 
     #region Standard Meta-Learning Properties
 
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerLearningRate"/>
+    /// <summary>
+    /// Not used by DeepEMD: its adaptation takes no gradient steps (see <see cref="AdaptationSteps"/>). Default: 0.01.
+    /// </summary>
     public double InnerLearningRate { get; set; } = 0.01;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.OuterLearningRate"/>
     public double OuterLearningRate { get; set; } = 0.001;
-    /// <summary>Number of gradient steps taken on each task's support set. Default: 1.</summary>
+    /// <summary>
+    /// Not used by DeepEMD: it adapts by extracting support features and solving the EMD matching, with no gradient
+    /// steps on the support set. Default: 1.
+    /// </summary>
     public int AdaptationSteps { get; set; } = 1;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaBatchSize"/>
     public int MetaBatchSize { get; set; } = 4;
@@ -85,8 +90,8 @@ public class DeepEMDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
     /// <summary>
-    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
-    /// A supplied optimizer is only reset along with the learner.
+    /// Not used by DeepEMD: its adaptation takes no gradient steps (see <see cref="AdaptationSteps"/>). A supplied
+    /// optimizer is only reset along with the learner.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
     /// <summary>Gets or sets the episodic data loader.</summary>

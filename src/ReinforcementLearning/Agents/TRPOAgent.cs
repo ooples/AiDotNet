@@ -89,6 +89,9 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
     }
 
+    /// <summary>
+    /// Initializes a TRPO agent from <paramref name="options"/>.
+    /// </summary>
     /// <param name="options">The agent's configuration.</param>
     /// <remarks>
     /// TRPO takes no optimizer: its policy step is the natural-gradient step solved by conjugate gradient inside the
@@ -392,7 +395,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         double gNorm = Math.Sqrt(Dot(g, g));
         LastPolicyKL = 0.0;
         LastStepFraction = 0.0;
-        if (gNorm == 0.0 || double.IsNaN(gNorm) || double.IsInfinity(gNorm))
+        if (double.IsNaN(gNorm) || gNorm <= 0.0 || double.IsInfinity(gNorm))
         {
             return NumOps.Zero;
         }
@@ -401,7 +404,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         {
             double vNorm = Math.Sqrt(Dot(v, v));
             var result = new Vector<T>(v.Length);
-            if (vNorm == 0.0) return result;
+            if (vNorm <= 0.0) return result;
 
             // Central difference of the outputs along v gives J·v.
             double thetaNorm = Math.Sqrt(Dot(thetaOld, thetaOld));
@@ -436,7 +439,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         var x = ConjugateGradient(FisherVectorProduct, g, _options.ConjugateGradientIterations);
         double xFx = Dot(x, FisherVectorProduct(x));
         double maxKl = NumOps.ToDouble(_options.MaxKL);
-        if (!(xFx > 0.0) || double.IsInfinity(xFx) || !(maxKl > 0.0))
+        if (double.IsNaN(xFx) || xFx <= 0.0 || double.IsInfinity(xFx) || double.IsNaN(maxKl) || maxKl <= 0.0)
         {
             return NumOps.Zero;
         }
@@ -514,7 +517,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         {
             var ap = multiply(p);
             double pAp = Dot(p, ap);
-            if (!(pAp > 0.0)) break;
+            if (double.IsNaN(pAp) || pAp <= 0.0) break;
             double alpha = rr / pAp;
             x = Axpy(x, alpha, p);
             r = Axpy(r, -alpha, ap);

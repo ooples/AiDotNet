@@ -66,7 +66,9 @@ public class MAMLPlusPlusOptions<T, TInput, TOutput> : ModelOptions, IMetaLearne
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
+    /// Not used by this algorithm yet: its inner steps are built in, at meta-learned per-step rates initialised from
+    /// <see cref="InnerLearningRate"/> when <see cref="UsePerStepLearningRates"/> is on, otherwise at
+    /// <see cref="InnerLearningRate"/> itself.
     /// A supplied optimizer is only reset along with the learner.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }

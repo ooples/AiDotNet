@@ -397,7 +397,8 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
 
          Bumped 0.143.0 to 0.144.2 for AiDotNet.Tensors #1578 (v1 T-1): AVX2-off kernel parity, the #1570 fixes and
          the CPU parity flakes; #2388's seven MoreData tests failed only on the non-AVX2 path. Evolution moves to
-         0.7.0 with it. -->
+         0.7.0 with it. AiDotNet.Native.OpenBLAS stays at 0.139.2 and leaves the lockstep set: it is not published
+         after 0.139.2, and the native OpenBLAS dependency is being dropped (v1 A-4). -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.144.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.139.2" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.144.2" />

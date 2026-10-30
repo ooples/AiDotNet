@@ -109,6 +109,9 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     {
     }
 
+    /// <summary>
+    /// Initializes an A3C agent from <paramref name="options"/>.
+    /// </summary>
     /// <param name="options">The agent's configuration.</param>
     public A3CAgent(A3COptions<T> options)
         : base(options)
@@ -140,15 +143,10 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             prevSize = hiddenSize;
         }
 
-        // Output layer
-        if (_options.IsContinuous)
-        {
-            layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
-        }
-        else
-        {
-            layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new SoftmaxActivation<T>()));
-        }
+        // Output layer: Gaussian mean and log-std when continuous, action logits when discrete. The discrete policy
+        // loss and entropy apply the softmax themselves (PolicyDistributionHelper), so a softmax here would apply it
+        // twice and train on softmax(π) instead of π.
+        layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -158,9 +156,11 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: outputSize,
             layers: layers);
 
+        // The policy trains through TrainWithCustomLoss; its declared loss only labels what GetLastLoss and
+        // ComputeGradients report, so it is MSE rather than the value network's configurable loss.
         return new NeuralNetwork<T>(architecture,
             optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.PolicyLearningRate),
-            lossFunction: _options.ValueLossFunction);
+            lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
@@ -253,11 +253,12 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 return oneHot;
             }
 
-            // Sample from distribution
+            // Sample from π = softmax(logits)
+            var policy = ComputeSoftmax(policyOutput);
             double[] probs = new double[_options.ActionSize];
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                probs[i] = Convert.ToDouble(NumOps.ToDouble(policyOutput[i]));
+                probs[i] = NumOps.ToDouble(policy[i]);
             }
 
             double r = Random.NextDouble();
@@ -769,7 +770,38 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             var policyOutputTensor = _globalPolicyNetwork.Predict(stateTensor);
             policyOutput = policyOutputTensor.ToVector();
         }
-        return policyOutput;
+        // The discrete policy network emits logits; π(·|s) is their softmax.
+        return _options.IsContinuous ? policyOutput : ComputeSoftmax(policyOutput);
+    }
+
+    /// <summary>
+    /// Disposes the global networks and every worker's cached local networks.
+    /// </summary>
+    /// <remarks>
+    /// The worker networks are not registered in <c>Networks</c>, so the base class would not release them.
+    /// </remarks>
+    public override void Dispose()
+    {
+        try
+        {
+            var workers = new List<object?>();
+            lock (_workerNetworks)
+            {
+                foreach (var (policy, value) in _workerNetworks.Values)
+                {
+                    workers.Add(policy);
+                    workers.Add(value);
+                }
+
+                _workerNetworks.Clear();
+            }
+
+            AiDotNet.Helpers.DisposeOnceGuard.DisposeAll(workers, GetType().Name);
+        }
+        finally
+        {
+            base.Dispose();
+        }
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)

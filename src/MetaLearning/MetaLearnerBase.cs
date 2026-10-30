@@ -432,15 +432,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
 
         // Reset optimizer state when the model changes to avoid stale momentum/velocity vectors
         // from the previous model's parameter space
-        if (MetaOptimizer is IResettable resettableMetaOptimizer)
-        {
-            resettableMetaOptimizer.Reset();
-        }
-
-        if (InnerOptimizer is IResettable resettableInnerOptimizer)
-        {
-            resettableInnerOptimizer.Reset();
-        }
+        ResetOptimizers();
     }
 
     /// <inheritdoc/>
@@ -517,15 +509,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
             }
 
             // Reset optimizer state since it's not persisted
-            if (MetaOptimizer is IResettable resettableMetaOptimizer)
-            {
-                resettableMetaOptimizer.Reset();
-            }
-
-            if (InnerOptimizer is IResettable resettableInnerOptimizer)
-            {
-                resettableInnerOptimizer.Reset();
-            }
+            ResetOptimizers();
         }
         else
         {
@@ -540,6 +524,19 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         RandomGenerator = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
             : RandomHelper.CreateSecureRandom();
+
+        // A reset learner starts clean: momentum or moment estimates carried over from earlier training would
+        // otherwise shape its first updates.
+        ResetOptimizers();
+    }
+
+    /// <summary>
+    /// Clears the state of the supplied meta and inner optimizers (moment estimates, step counts, schedules).
+    /// </summary>
+    private void ResetOptimizers()
+    {
+        MetaOptimizer?.Reset();
+        InnerOptimizer?.Reset();
     }
 
     #endregion

@@ -143,31 +143,31 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
         T learningRate, double? maxGradientNorm = null)
     {
         double rate = MathHelper.GetNumericOperations<T>().ToDouble(learningRate);
-        if (!(rate > 0.0) || double.IsInfinity(rate))
+        if (double.IsNaN(rate) || rate <= 0.0 || double.IsInfinity(rate))
         {
             throw new ArgumentOutOfRangeException(nameof(learningRate), rate,
                 "A network learning rate must be positive and finite.");
         }
-        if (maxGradientNorm is double norm && (!(norm > 0.0) || double.IsInfinity(norm)))
+        if (maxGradientNorm is double norm && (double.IsNaN(norm) || norm <= 0.0 || double.IsInfinity(norm)))
         {
             throw new ArgumentOutOfRangeException(nameof(maxGradientNorm), norm,
                 "A gradient-norm bound must be positive and finite.");
         }
 
-        return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            null,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = rate,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
-                UseAdaptiveLearningRate = false,
-                UseAMSGrad = false,
-                EnableGradientClipping = maxGradientNorm.HasValue,
-                GradientClippingMethod = AiDotNet.Models.Options.GradientClippingMethod.ByNorm,
-                MaxGradientNorm = maxGradientNorm ?? 1.0,
-            });
+        var options = new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = rate,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            UseAdaptiveLearningRate = false,
+            UseAMSGrad = false,
+            EnableGradientClipping = maxGradientNorm.HasValue,
+            GradientClippingMethod = AiDotNet.Models.Options.GradientClippingMethod.ByNorm,
+        };
+        // Without a bound, clipping is off and MaxGradientNorm keeps the option's own default.
+        if (maxGradientNorm is double bound) options.MaxGradientNorm = bound;
+        return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, options);
     }
 
     /// <summary>The networks this agent registered, in <see cref="Networks"/> order.</summary>

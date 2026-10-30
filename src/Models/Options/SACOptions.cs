@@ -94,9 +94,17 @@ public class SACOptions<T> : ModelOptions
     /// Target entropy for automatic temperature tuning.
     /// </summary>
     /// <remarks>
-    /// Typical: -ActionSize (for continuous actions).
-    /// If null, uses -ActionSize as default.
+    /// <para>
+    /// Typical: -ActionSize (for continuous actions), the heuristic of Haarnoja et al. 2018b, used when this is
+    /// <c>null</c>.
+    /// </para>
+    /// <para><b>For Beginners:</b> Entropy measures how random the policy's actions are. With automatic
+    /// temperature tuning, the agent raises or lowers its exploration bonus to hold the policy's entropy at this
+    /// target. Lower targets mean less exploration. Leave it unset unless you have a reason to change it.
+    /// </para>
     /// </remarks>
+    /// <value>The target entropy, or <c>null</c> (the default) for <c>-ActionSize</c>. Zero is a real target,
+    /// not "unset": a target of 0.0 is used as given.</value>
     public double? TargetEntropy { get; set; }
 
     /// <summary>

@@ -112,6 +112,9 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     {
     }
 
+    /// <summary>
+    /// Initializes a Rainbow DQN agent from <paramref name="options"/>.
+    /// </summary>
     /// <param name="options">The agent's configuration.</param>
     public RainbowDQNAgent(RainbowDQNOptions<T> options)
         : base(options)
@@ -222,7 +225,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     internal IReadOnlyList<double> NoisyLayerSigmaInits =>
         ((NeuralNetworkBase<T>)_onlineNetwork).Layers
             .OfType<NoisyDenseLayer<T>>()
-            .Select(layer => double.Parse(layer.GetMetadata()["SigmaInit"], System.Globalization.CultureInfo.InvariantCulture))
+            .Select(layer => layer.SigmaInit)
             .ToList();
 
     /// <summary>

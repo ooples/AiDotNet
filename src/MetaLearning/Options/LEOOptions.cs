@@ -62,7 +62,9 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
+    /// Not used by this algorithm yet: LEO adapts its latent code with learned rates initialised from
+    /// <see cref="InnerLearningRate"/>, then fine-tunes with separate learned rates initialised from
+    /// <see cref="FineTuningLearningRate"/>.
     /// A supplied optimizer is only reset along with the learner.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }

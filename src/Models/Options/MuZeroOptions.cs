@@ -145,6 +145,12 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     /// The factory must create a new optimizer instance on each call, so agents built from copies of these
     /// options never share moment buffers or a step counter.
     /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is the rule that turns the training loss's gradients into weight
+    /// changes for all three networks at once. Leave this unset to get Adam at the agent's learning rate; supply a
+    /// factory to choose a different optimizer or its settings. Return a new optimizer from every call.
+    /// </para>
     /// </remarks>
+    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for Adam at the
+    /// agent's learning rate.</value>
     public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

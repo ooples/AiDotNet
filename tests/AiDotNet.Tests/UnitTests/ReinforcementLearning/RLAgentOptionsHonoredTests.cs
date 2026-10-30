@@ -288,6 +288,29 @@ public class RLAgentOptionsHonoredTests
         Assert.True(flat < 0.35, $"Dir(100) noise should be nearly uniform over 4 actions, mean largest share {flat}.");
     }
 
+    // The prediction head is linear, so MixRootNoise receives raw outputs that can be negative and need not sum to
+    // one. PUCT needs a distribution: negatives clip to zero and the rest renormalize.
+    [Fact]
+    public void MuZero_RootPriorsFromRawHeadOutputs_AreADistribution()
+    {
+        var raw = new Vector<double>(new[] { 1.2, -0.5, 0.6, 0.2 });
+
+        var clean = SmallMuZero(0.3, 0.0).MixRootNoise(raw);
+        Assert.Equal(new[] { 0.6, 0.0, 0.3, 0.1 }, clean.Select(p => Math.Round(p, 12)).ToArray());
+
+        var agent = SmallMuZero(0.3, 0.25);
+        for (int draw = 0; draw < 50; draw++)
+        {
+            var mixed = agent.MixRootNoise(raw);
+            Assert.Equal(1.0, mixed.Sum(), 9);
+            Assert.All(mixed, p => Assert.True(p >= 0.0, $"negative prior {p}"));
+        }
+
+        // No positive output at all leaves a uniform prior rather than an all-zero one.
+        var uniform = SmallMuZero(0.3, 0.0).PolicyPriors(new Vector<double>(new[] { -1.0, -2.0, 0.0, double.NaN }));
+        Assert.All(uniform, p => Assert.Equal(0.25, p, 12));
+    }
+
     [Fact]
     public void MuZero_TrainingRewritesReplayPrioritiesFromValueError()
     {
@@ -465,6 +488,49 @@ public class RLAgentOptionsHonoredTests
                 BatchSize = 8,
                 ReplayBufferSize = 64,
                 OptimizerFactory = () => Adam(rate),
+            });
+            return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 59));
+        });
+    }
+
+    // Without a factory the networks train with Adam at LearningRate; before, they fell back to the network's own
+    // default optimizer and LearningRate reached none of them.
+    [Fact]
+    public void Dreamer_WithoutAFactory_TrainsAtTheConfiguredLearningRate()
+    {
+        AssertOptimizerDrivesTraining("Dreamer", rate =>
+        {
+            var agent = new DreamerAgent<double>(new DreamerOptions<double>
+            {
+                ObservationSize = StateSize,
+                ActionSize = 2,
+                LatentSize = 6,
+                HiddenSize = 8,
+                ImaginationHorizon = 2,
+                BatchSize = 8,
+                ReplayBufferSize = 64,
+                LearningRate = rate,
+            });
+            return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 53));
+        });
+    }
+
+    [Fact]
+    public void WorldModels_WithoutAFactory_TrainsAtTheConfiguredLearningRate()
+    {
+        AssertOptimizerDrivesTraining("WorldModels", rate =>
+        {
+            var agent = new WorldModelsAgent<double>(new WorldModelsOptions<double>
+            {
+                ObservationWidth = StateSize,
+                ObservationHeight = 1,
+                ObservationChannels = 1,
+                ActionSize = 2,
+                LatentSize = 4,
+                RNNHiddenSize = 4,
+                BatchSize = 8,
+                ReplayBufferSize = 64,
+                LearningRate = rate,
             });
             return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 59));
         });
@@ -664,5 +730,24 @@ public class RLAgentOptionsHonoredTests
         Assert.Equal(-3.0, Cql(null).ResolvedTargetEntropy);
         Assert.Equal(0.0, Cql(0.0).ResolvedTargetEntropy);
         Assert.Equal(1.5, Cql(1.5).ResolvedTargetEntropy);
+    }
+
+    // The discrete policy loss and entropy apply the softmax themselves, so the policy network must emit logits: a
+    // softmax output layer made the agent train on softmax(π). Predict still reports π(·|s).
+    [Fact]
+    public void A3C_DiscretePolicyNetworkEmitsLogits_AndPredictReportsTheirSoftmax()
+    {
+        var agent = new A3CAgent<double>(new A3COptions<double> { StateSize = StateSize, ActionSize = 3, Seed = 5 });
+        var state = new Vector<double>(new[] { 0.5, -1.0, 2.0, 0.25 });
+
+        var logits = agent.GetNetworks()[0].Predict(Tensor<double>.FromVector(state)).ToVector();
+        var policy = agent.Predict(state);
+
+        Assert.Equal(3, logits.Length);
+        Assert.NotEqual(1.0, logits.Sum(), 6);
+        double max = logits.Max();
+        double norm = logits.Sum(z => Math.Exp(z - max));
+        for (int i = 0; i < logits.Length; i++)
+            Assert.Equal(Math.Exp(logits[i] - max) / norm, policy[i], 12);
     }
 }

@@ -59,7 +59,14 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
     /// optimizer instance on each call. A shared instance would share its step counter, and Adam's bias
     /// correction would then advance on every network's step instead of only on that network's own.
     /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is the rule that turns each network's gradients into weight
+    /// changes. Leave this unset to get Adam at the learning rate above; supply a factory such as
+    /// <c>() =&gt; new AdamOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(null, myOptions)</c> to choose a
+    /// different optimizer or its settings. Return a new optimizer from every call.
+    /// </para>
     /// </remarks>
+    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for Adam at
+    /// <see cref="PolicyLearningRate"/> and <see cref="ValueLearningRate"/>.</value>
     public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 
     public A3COptions()

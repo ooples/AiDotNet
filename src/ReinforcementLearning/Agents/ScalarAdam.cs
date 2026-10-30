@@ -14,13 +14,16 @@ internal sealed class ScalarAdam
     private double _secondMoment;
     private int _step;
 
+    /// <summary>
+    /// Creates the optimizer with zeroed moment estimates.
+    /// </summary>
     /// <param name="learningRate">The step size; must be positive and finite.</param>
     /// <param name="beta1">Decay of the first-moment estimate.</param>
     /// <param name="beta2">Decay of the second-moment estimate.</param>
     /// <param name="epsilon">Denominator offset.</param>
     public ScalarAdam(double learningRate, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8)
     {
-        if (!(learningRate > 0.0) || double.IsInfinity(learningRate))
+        if (double.IsNaN(learningRate) || learningRate <= 0.0 || double.IsInfinity(learningRate))
         {
             throw new ArgumentOutOfRangeException(nameof(learningRate), learningRate, "The learning rate must be positive and finite.");
         }

@@ -114,6 +114,9 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a Dreamer agent from <paramref name="options"/>.
+    /// </summary>
     /// <param name="options">The agent's configuration.</param>
     public DreamerAgent(DreamerOptions<T> options)
         : base(options)
@@ -161,7 +164,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke(), new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate), new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
@@ -181,7 +184,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: _options.LatentSize,
             outputSize: _options.ActionSize);
-        var network = new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke(), new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate), new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
