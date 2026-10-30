@@ -137,25 +137,29 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
         var luminance = Luminance(values, channels, height, width);
         var delta = new double[height, width];
         int tileIndex = 0;
-        // Expected detection z of the mark: sum(a_t * n_t) / sqrt(sum(n_t * (spread_t^2 + a_t^2))), taking the host
-        // coefficients as uncorrelated with the key pattern.
-        double expectedSignal = 0, expectedVariance = 0;
+        // The detection z the marked image will have before clamping, computed exactly from the coefficients and the
+        // pattern: sum(c_k x_k + a) / sqrt(sum((c_k + a x_k)^2)). A host statistic would miss a dominant coefficient
+        // that correlates with the pattern by chance and swamps the mark.
+        double markedDot = 0, markedEnergy = 0;
         foreach (var (y0, x0, h, w) in Tiles(height, width))
         {
             var coefficients = TileCoefficients(Crop(luminance, y0, x0, h, w));
-            double spread = RobustSpread(coefficients);
-            double amplitude = Amplitude(spread, valueScale);
-            expectedSignal += amplitude * coefficients.Length;
-            expectedVariance += coefficients.Length * ((spread * spread) + (amplitude * amplitude));
+            double amplitude = Amplitude(RobustSpread(coefficients), valueScale);
             var pattern = KeyPattern(coefficients.Length, tileIndex++);
             var changes = new double[pattern.Length];
-            for (int k = 0; k < changes.Length; k++) changes[k] = amplitude * pattern[k];
+            for (int k = 0; k < changes.Length; k++)
+            {
+                changes[k] = amplitude * pattern[k];
+                double marked = coefficients[k] + changes[k];
+                markedDot += marked * pattern[k];
+                markedEnergy += marked * marked;
+            }
             var tileDelta = TileDelta(h, w, changes);
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++) delta[y0 + y, x0 + x] = tileDelta[y, x];
         }
 
-        double expectedZ = expectedVariance > 0 ? expectedSignal / Math.Sqrt(expectedVariance) : 0;
+        double expectedZ = markedEnergy > 0 ? markedDot / Math.Sqrt(markedEnergy) : 0;
         if (expectedZ < FullConfidenceZ)
             throw new ArgumentException(
                 $"At strength {WatermarkStrength} the mark on this {height}x{width} image would reach an expected detection " +

@@ -160,6 +160,37 @@ public abstract class KeyedWatermarkTestBase
     }
 
     [Fact(Timeout = 60000)]
+    public async Task DominantFrequencyImage_IsRefusedOrMarkedDetectably()
+    {
+        await Task.Yield();
+        // A single strong in-band frequency (a DCT basis pattern at (10, 12), radius 0.24) dominates the coefficients
+        // the mark is added to. Embedding must either refuse or produce a mark that is detected; it must never hand
+        // back an image whose mark scores 0.
+        var module = CreateModule();
+        int c = ImageChannels, n = ImageSize;
+        var data = new double[c * n * n];
+        for (int ch = 0; ch < c; ch++)
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                    data[(ch * n + y) * n + x] = 0.5 + (0.4 * Math.Cos(Math.PI * ((2 * y) + 1) * 10 / (2.0 * n))
+                        * Math.Cos(Math.PI * ((2 * x) + 1) * 12 / (2.0 * n)));
+        var image = new Tensor<double>(data, new[] { c, n, n });
+
+        Tensor<double> marked;
+        try
+        {
+            marked = module.EmbedWatermark(image);
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+
+        double score = module.DetectWatermark(marked);
+        Assert.True(score >= 0.9, $"{module.ModuleName}: embedding succeeded on a dominant-frequency image but its mark scores {score:F3}.");
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task TooSmallImage_CannotBeMarked_AndScoresZero()
     {
         await Task.Yield();
