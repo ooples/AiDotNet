@@ -206,24 +206,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
-    /// Cached input from the last forward pass, needed for backward computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached output from the last forward pass (before activation), needed for backward computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
-    /// Cached output from the last forward pass (after activation).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Original input shape for restoring higher-rank tensors after processing.
     /// </summary>
     private int[]? _originalInputShape;
@@ -623,8 +605,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        bool cacheBwd = ShouldCacheForBackward; // #1668: gate all backward caches (arena safety)
-        _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;
 
         Tensor<T> batchedInput;
@@ -671,10 +651,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
                 Padding, Padding, Padding,
                 1, 1, 1,  // dilation
                 fusedActivation);
-
-            // Store for backward pass (activated output is also pre-activation for supported activations)
-            _lastPreActivation = cacheBwd ? activated : null;
-            _lastOutput = cacheBwd ? activated : null;
         }
         else
         {
@@ -688,10 +664,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
                 [1, 1, 1]);
 
             var withBias = AddBiases(convOutput);
-            _lastPreActivation = cacheBwd ? withBias : null;
-
             activated = ApplyActivation(withBias);
-            _lastOutput = cacheBwd ? activated : null;
         }
 
         // Restore original tensor rank
@@ -815,9 +788,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastPreActivation = null;
-        _lastOutput = null;
         _kernelsGradient = null;
         _biasesGradient = null;
     }

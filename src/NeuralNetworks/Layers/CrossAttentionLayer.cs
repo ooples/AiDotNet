@@ -91,9 +91,8 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     private bool _isInitialized;
 
-    // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastQuery;
+    // The context of the last forward. Nothing in this layer reads it (training goes through the tape);
+    // it is kept because tests observe it to prove the context actually reached this gate.
     [Scratch]
     private Tensor<T>? _lastContext;
 
@@ -108,8 +107,6 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public AttentionKernelPath LastAttentionKernelPath { get; private set; }
         = AttentionKernelPath.None;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     // Gradient tensors
     [Scratch]
@@ -487,7 +484,6 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
-        _lastQuery = query;
         _lastContext = context;
         // Project Q, K, V
         // query: [B, queryLen, queryDim]
@@ -524,12 +520,6 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 
         // Add bias
         output = AddBias(output, _outputBias);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = output;
-        }
 
         // Restore original shape for any-rank support
         if (_originalQueryShape != null)
@@ -733,9 +723,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastQuery = null;
         _lastContext = null;
-        _lastOutput = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;
