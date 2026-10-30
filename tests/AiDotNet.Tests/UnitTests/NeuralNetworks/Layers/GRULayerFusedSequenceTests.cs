@@ -67,15 +67,18 @@ public class GRULayerFusedSequenceTests
         fused.Forward(input);
         loop.Forward(input);
 
-        var fusedGates = fused.GetTrainableParameters();
-        var loopGates = loop.GetTrainableParameters();
-        Assert.Equal(loopGates.Count, fusedGates.Count);
-        for (int t = 0; t < fusedGates.Count; t++)
-        {
-            double changed = fusedGates[t].GetFlat(0) + 0.75;
-            fusedGates[t].SetFlat(0, changed);
-            loopGates[t].SetFlat(0, changed);
-        }
+        var before = fused.GetParameters().ToArray();
+        var gates = fused.GetTrainableParameters();
+        Assert.NotEmpty(gates);
+        foreach (var gate in gates) gate.SetFlat(0, gate.GetFlat(0) + 0.75);
+        var after = fused.GetParameters();
+        var afterValues = after.ToArray();
+        // The writes reached the weights the layer reports, so a fused output that ignores them is the stale pack.
+        int changed = 0;
+        for (int i = 0; i < afterValues.Length; i++)
+            if (afterValues[i] != before[i]) changed++;
+        Assert.Equal(gates.Count, changed);
+        loop.SetParameters(after);
 
         var expected = loop.Forward(input).ToArray();
         var actual = fused.Forward(input).ToArray();

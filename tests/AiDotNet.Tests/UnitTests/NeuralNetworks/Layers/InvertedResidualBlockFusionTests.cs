@@ -110,20 +110,24 @@ public class InvertedResidualBlockFusionTests
 
         var engine = new CountingEngine { Subtrahend = bias };
         var previousEngine = AiDotNetEngine.Current;
+        double[] fused, unfused;
         try
         {
             AiDotNetEngine.Current = engine;
             Forward(block, x, fold: true);
             Forward(block, x, fold: true);
+            // mean - bias is the same for both predicts: one subtraction, not one per predict.
+            Assert.Equal(1, engine.Subtractions);
+
+            // An in-place write advances only the bias's version (same tensor, same engine); the cached mean - bias
+            // must follow it.
+            bias.SetFlat(0, bias.GetFlat(0) + 0.5);
+            fused = Forward(block, x, fold: true);
+            Assert.Equal(2, engine.Subtractions);
+            unfused = Forward(block, x, fold: false);
         }
         finally { AiDotNetEngine.Current = previousEngine; }
-        // mean - bias is the same for both predicts: one subtraction, not one per predict.
-        Assert.Equal(1, engine.Subtractions);
 
-        // An in-place write advances only the bias's version; the cached mean - bias must follow it.
-        bias.SetFlat(0, bias.GetFlat(0) + 0.5);
-        var fused = Forward(block, x, fold: true);
-        var unfused = Forward(block, x, fold: false);
         Assert.Equal(unfused.Length, fused.Length);
         for (int i = 0; i < fused.Length; i++)
             Assert.True(Math.Abs(unfused[i] - fused[i]) <= 1e-10 + 1e-9 * Math.Abs(unfused[i]),
