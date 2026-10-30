@@ -167,7 +167,11 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            // The warp is a learned per-coordinate gradient scale, which an adaptive inner optimizer such as Adam
+            // divides back out: the warp would stop shaping adaptation and its finite-difference gradient would go to
+            // zero. So the inner steps stay plain SGD; a meta-optimizer still takes the outer step.
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _warpOptions = options;
         _warpLayerParams = new List<Vector<T>>();

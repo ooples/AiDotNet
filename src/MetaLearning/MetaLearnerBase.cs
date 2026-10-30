@@ -100,7 +100,8 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <remarks>
     /// It takes the steps that go through <see cref="ApplyOuterGradients(Vector{T}, Vector{T}, double)"/> and
     /// <see cref="ApplyOuterUpdate"/>. Auxiliary parameters an algorithm updates by SPSA
-    /// (<c>UpdateAuxiliaryParamsSPSA</c>) stay on plain SGD at the outer learning rate.
+    /// (<c>UpdateAuxiliaryParamsSPSA</c>) stay on plain SGD at the outer learning rate, as do the hand-coded updates
+    /// of an algorithm's own meta-parameters (WarpGrad's warp layers, Meta-SGD's per-parameter rates, SImPa's psi).
     /// </remarks>
     protected readonly IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer;
 
@@ -201,6 +202,11 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         if (innerOptimizer is not null && (optimizerUse & MetaLearnerOptimizerUse.Inner) == 0)
             throw new ArgumentException(
                 $"{GetType().Name} has no inner-loop gradient step for an inner optimizer to take; leave InnerOptimizer null.",
+                nameof(innerOptimizer));
+        if (metaOptimizer is not null && ReferenceEquals(metaOptimizer, innerOptimizer))
+            throw new ArgumentException(
+                "MetaOptimizer and InnerOptimizer must be separate instances: every adaptation resets the inner " +
+                "optimizer's state, which would erase the outer optimizer's moments.",
                 nameof(innerOptimizer));
         MetaOptimizer = metaOptimizer;
         InnerOptimizer = innerOptimizer;

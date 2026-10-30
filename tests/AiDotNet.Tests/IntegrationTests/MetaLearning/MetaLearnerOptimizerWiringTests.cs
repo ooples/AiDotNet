@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Options;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -178,5 +180,30 @@ public class MetaLearnerOptimizerWiringTests
         Assert.Throws<ArgumentException>(() => new Probe(null, Adam(0.1)).RequireSgd(true));
         new Probe(null, Adam(0.1)).RequireSgd(false);
         new Probe(null, null).RequireSgd(true);
+    }
+
+    [Fact]
+    public void OneInstanceAsBothOptimizers_IsRejected()
+    {
+        var shared = Adam(0.1);
+
+        // Each adaptation resets the inner optimizer, which would wipe the outer optimizer's moments.
+        Assert.Throws<ArgumentException>(() => new Probe(shared, shared));
+        new Probe(Adam(0.1), Adam(0.1));
+    }
+
+    [Fact]
+    public void LearnedGradientScales_RejectAnInnerOptimizer_ButKeepTheMetaOptimizer()
+    {
+        // WarpGrad's warp and GNN-Meta's context scale each gradient coordinate; Adam would divide that back out.
+        Assert.Throws<ArgumentException>(() => new WarpGradAlgorithm<double, Matrix<double>, Vector<double>>(
+            new WarpGradOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3)) { InnerOptimizer = Adam(0.1) }));
+        Assert.Throws<ArgumentException>(() => new GNNMetaAlgorithm<double, Matrix<double>, Vector<double>>(
+            new GNNMetaOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3)) { InnerOptimizer = Adam(0.1) }));
+
+        new WarpGradAlgorithm<double, Matrix<double>, Vector<double>>(
+            new WarpGradOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3)) { MetaOptimizer = Adam(0.1) });
+        new GNNMetaAlgorithm<double, Matrix<double>, Vector<double>>(
+            new GNNMetaOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3)) { MetaOptimizer = Adam(0.1) });
     }
 }

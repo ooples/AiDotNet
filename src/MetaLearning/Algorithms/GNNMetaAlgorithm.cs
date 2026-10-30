@@ -126,7 +126,10 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            // The task-graph context modulates each gradient coordinate by a learned scale, which an adaptive inner
+            // optimizer divides back out; the inner steps stay plain SGD so the context keeps its effect.
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _gnnOptions = options;
 
