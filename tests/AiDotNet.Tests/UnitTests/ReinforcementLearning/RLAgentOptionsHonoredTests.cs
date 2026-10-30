@@ -264,9 +264,11 @@ public class RLAgentOptionsHonoredTests
     {
         var policy = new Vector<double>(new[] { 0.4, 0.3, 0.2, 0.1 });
 
-        // Fraction 0 leaves the network's priors untouched.
-        var untouched = SmallMuZero(0.3, 0.0).MixRootNoise(policy);
-        for (int a = 0; a < 4; a++) Assert.Equal(policy[a], untouched[a], 12);
+        // Fraction 0 leaves the network's priors, softmax(logits), untouched.
+        var agentWithoutNoise = SmallMuZero(0.3, 0.0);
+        var untouched = agentWithoutNoise.MixRootNoise(policy);
+        var priors = agentWithoutNoise.PolicyPriors(policy);
+        for (int a = 0; a < 4; a++) Assert.Equal(priors[a], untouched[a], 12);
 
         // Fraction 1 is pure Dirichlet noise: a distribution, peaked for a small alpha and nearly flat for a large one.
         double MeanLargestShare(double alpha)
@@ -288,15 +290,16 @@ public class RLAgentOptionsHonoredTests
         Assert.True(flat < 0.35, $"Dir(100) noise should be nearly uniform over 4 actions, mean largest share {flat}.");
     }
 
-    // The prediction head is linear, so MixRootNoise receives raw outputs that can be negative and need not sum to
-    // one. PUCT needs a distribution: negatives clip to zero and the rest renormalize.
+    // The prediction head emits policy logits, which can be negative and need not sum to one. The PUCT priors are
+    // their softmax (Schrittwieser et al. 2020, Appendix B), so the noise mixes into a distribution.
     [Fact]
     public void MuZero_RootPriorsFromRawHeadOutputs_AreADistribution()
     {
         var raw = new Vector<double>(new[] { 1.2, -0.5, 0.6, 0.2 });
 
         var clean = SmallMuZero(0.3, 0.0).MixRootNoise(raw);
-        Assert.Equal(new[] { 0.6, 0.0, 0.3, 0.1 }, clean.Select(p => Math.Round(p, 12)).ToArray());
+        double norm = raw.Sum(z => Math.Exp(z));
+        for (int a = 0; a < 4; a++) Assert.Equal(Math.Exp(raw[a]) / norm, clean[a], 12);
 
         var agent = SmallMuZero(0.3, 0.25);
         for (int draw = 0; draw < 50; draw++)
@@ -306,9 +309,47 @@ public class RLAgentOptionsHonoredTests
             Assert.All(mixed, p => Assert.True(p >= 0.0, $"negative prior {p}"));
         }
 
-        // No positive output at all leaves a uniform prior rather than an all-zero one.
-        var uniform = SmallMuZero(0.3, 0.0).PolicyPriors(new Vector<double>(new[] { -1.0, -2.0, 0.0, double.NaN }));
+        // A non-finite logit gets no mass; with none finite the priors are uniform.
+        var partial = SmallMuZero(0.3, 0.0).PolicyPriors(new Vector<double>(new[] { 0.0, double.NaN, 0.0, double.PositiveInfinity }));
+        Assert.Equal(new[] { 0.5, 0.0, 0.5, 0.0 }, partial);
+        var uniform = SmallMuZero(0.3, 0.0).PolicyPriors(new Vector<double>(new[] { double.NaN, double.NaN, double.NaN, double.NaN }));
         Assert.All(uniform, p => Assert.Equal(0.25, p, 12));
+    }
+
+    // Appendix D: training actions are sampled from N(a)^(1/T) / sum N(b)^(1/T); T = 0 is the most visited action.
+    [Fact]
+    public void MuZero_VisitDistribution_FollowsTheTemperature()
+    {
+        var visits = new[] { 6, 3, 1, 0 };
+
+        Assert.Equal(new[] { 0.6, 0.3, 0.1, 0.0 }, MuZeroAgent<double>.VisitDistribution(visits, 1.0).Select(p => Math.Round(p, 12)));
+        var half = MuZeroAgent<double>.VisitDistribution(visits, 0.5);
+        Assert.Equal(36.0 / 46.0, half[0], 12);
+        Assert.Equal(9.0 / 46.0, half[1], 12);
+        Assert.Equal(new[] { 1.0, 0.0, 0.0, 0.0 }, MuZeroAgent<double>.VisitDistribution(visits, 0.0));
+        Assert.All(MuZeroAgent<double>.VisitDistribution(new int[4], 1.0), p => Assert.Equal(0.25, p, 12));
+    }
+
+    // Appendix G: the policy target is the search's visit distribution. A stored transition the agent chose carries
+    // it; one it did not choose (a demonstration) falls back to its one-hot action. Before, every target was the
+    // one-hot action, so a searched step's target had a single non-zero entry.
+    [Fact]
+    public void MuZero_StoresTheSearchVisitDistributionAsThePolicyTarget()
+    {
+        var agent = SmallMuZero(0.3, 0.25);
+        var state = new Vector<double>(new[] { 0.1, -0.2, 0.3, 0.05 });
+        var next = new Vector<double>(new[] { 0.2, -0.1, 0.25, 0.0 });
+
+        var action = agent.SelectAction(state, training: true);
+        agent.StoreExperience(state, action, 1.0, next, false);
+        var demo = new Vector<double>(new[] { 0.0, 0.0, 1.0, 0.0 });
+        agent.StoreExperience(next, demo, 0.0, state, true);
+
+        var targets = agent.ReplayPolicyTargets;
+        var searched = targets[0] ?? throw new InvalidOperationException("No policy target stored for the searched step.");
+        Assert.Equal(1.0, searched.Sum(), 9);
+        Assert.True(searched.Count(p => p > 0.0) > 1, "A 50-simulation search should spread visits over several actions.");
+        Assert.Equal(new[] { 0.0, 0.0, 1.0, 0.0 }, targets[1]);
     }
 
     [Fact]
