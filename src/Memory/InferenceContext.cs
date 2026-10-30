@@ -49,7 +49,7 @@ public class InferenceContext<T> : IDisposable
     /// <summary>
     /// Gets the underlying tensor pool used by this context.
     /// </summary>
-    public TensorPool<T> Pool => _pool;
+    internal TensorPool<T> Pool => _pool;
 
     /// <summary>
     /// Gets the number of tensors currently rented from this context.
@@ -61,6 +61,25 @@ public class InferenceContext<T> : IDisposable
     /// directly without pool reuse, which can be useful for debugging.
     /// </summary>
     public bool IsPoolingEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InferenceContext{T}"/> class that creates and owns a
+    /// 256 MB tensor pool.
+    /// </summary>
+    public InferenceContext()
+        : this(null, 256)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InferenceContext{T}"/> class that creates and owns a
+    /// tensor pool of the given size.
+    /// </summary>
+    /// <param name="maxPoolSizeMB">The maximum size of the pool this context creates, in MB.</param>
+    public InferenceContext(int maxPoolSizeMB)
+        : this(null, maxPoolSizeMB)
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InferenceContext{T}"/> class.
@@ -75,7 +94,7 @@ public class InferenceContext<T> : IDisposable
     /// When a pool is provided, the context does not own it and will not dispose it.
     /// When no pool is provided, the context creates and owns its own pool.
     /// </remarks>
-    public InferenceContext(TensorPool<T>? pool = null, int maxPoolSizeMB = 256)
+    internal InferenceContext(TensorPool<T>? pool, int maxPoolSizeMB = 256)
     {
         if (pool is not null)
         {

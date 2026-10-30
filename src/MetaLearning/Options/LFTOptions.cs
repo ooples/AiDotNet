@@ -10,6 +10,8 @@ namespace AiDotNet.MetaLearning.Options;
 /// arXiv:2001.08735).
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// <para>
 /// Metric-based few-shot learners "often fail to generalize to unseen domains due to large
@@ -129,13 +131,19 @@ public class LFTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.LossFunction"/>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss. Inner adaptation trains the output head through its own head loss (MbPAHeadLoss), not this one.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaOptimizer"/>
+    /// <summary>
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerOptimizer"/>
+    /// <summary>
+    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
+    /// A supplied optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.DataLoader"/>
+    /// <summary>Episodic data loader that supplies the meta-training tasks; null when tasks are passed to training directly.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
@@ -166,6 +174,7 @@ public class LFTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
         AdaptationSteps > 0 &&
         MetaBatchSize > 0;
 
+    /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new LFTOptions<T, TInput, TOutput>(MetaModel)
     {
         LossFunction = LossFunction, MetaOptimizer = MetaOptimizer, InnerOptimizer = InnerOptimizer,

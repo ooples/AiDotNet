@@ -12,6 +12,10 @@ public sealed record OptionLeg(
     double ExpiryYears,
     int Contracts = 1)
 {
+    /// <summary>
+    /// The contract multiplier: units of the underlying per contract. For an equity option that is 100 shares; for a
+    /// cash-settled index option it is the cash amount per index point (100 currency units per point).
+    /// </summary>
     public const int ContractMultiplier = 100;
 
     /// <summary>Signed share-equivalent exposure sign: long call / short put are bullish (+), etc.</summary>
@@ -21,6 +25,18 @@ public sealed record OptionLeg(
 /// <summary>An optional stock leg (covered strategies pair stock with options).</summary>
 public sealed record StockLeg(OptionTradeAction Action, int Shares)
 {
+    /// <summary>The number of shares, a non-negative magnitude; the direction comes from <see cref="Action"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if the share count is negative.</exception>
+    public int Shares { get => _shares; init => _shares = NonNegative(value); }
+
+    // Validated in the init accessor too, so `leg with { Shares = -5 }` is refused like the constructor is.
+    private readonly int _shares = NonNegative(Shares);
+
+    private static int NonNegative(int shares) => shares >= 0
+        ? shares
+        : throw new ArgumentOutOfRangeException(nameof(Shares), "Shares is a magnitude; use Action for the direction.");
+
+    /// <summary>Share count, positive for a long (bought) leg and negative for a short (sold) one.</summary>
     public int SignedShares => Action == OptionTradeAction.Buy ? Shares : -Shares;
 }
 
@@ -30,21 +46,34 @@ public sealed record StockLeg(OptionTradeAction Action, int Shares)
 /// profile (max loss, max gain, breakevens) computed by sampling the payoff over a spot grid — robust
 /// for ANY leg combination, not just the textbook ones. Net Greeks come from <see cref="BlackScholes{T}"/>.
 ///
-/// <para>The <see cref="RequiredLevel"/> classifier is the gate that lets the platform enforce a broker's
-/// approval tier: a strategy with an unhedged short call is <see cref="OptionsApprovalLevel.Uncovered"/>;
-/// a vertical (short hedged by a long) is <see cref="OptionsApprovalLevel.Level3"/>; long-only is Level 2;
-/// covered-by-stock / cash-secured is Level 1. It errs HIGH when unsure (fail-safe).</para>
+/// <para>The <see cref="Class"/> classifier is the gate that lets the platform enforce a broker's approval tier.
+/// Short calls not covered by stock (100 shares per contract) or by long calls make the strategy
+/// <see cref="OptionStrategyClass.NakedEquity"/> (or <see cref="OptionStrategyClass.NakedIndex"/> on an index).
+/// Short puts not covered by long puts are treated as cash-secured, <see cref="OptionStrategyClass.CoveredOrSecured"/>,
+/// never as naked. A vertical (short hedged by a long) is <see cref="OptionStrategyClass.DefinedRiskSpread"/>,
+/// long-only is <see cref="OptionStrategyClass.LongPremium"/>, and covered-by-stock is
+/// <see cref="OptionStrategyClass.CoveredOrSecured"/>. A <see cref="BrokerOptionsProfile"/> maps each class to the
+/// broker's approval level; a class its map omits requires the highest level, so an incomplete map refuses rather
+/// than permits.</para>
 /// </summary>
 public sealed class OptionStrategy
 {
+    /// <summary>Display name of the strategy (for example "Iron condor").</summary>
     public string Name { get; }
+    /// <summary>The option legs of the strategy.</summary>
     public IReadOnlyList<OptionLeg> Legs { get; }
+    /// <summary>The stock leg of a covered strategy, or null when there is none.</summary>
     public StockLeg? Stock { get; }
 
     /// <summary>True when the underlying is a (cash-settled) index — naked index options are the
     /// highest broker tier, distinct from naked equity options.</summary>
     public bool IsIndexUnderlying { get; }
 
+    /// <summary>Creates a strategy from its legs.</summary>
+    /// <param name="name">Display name of the strategy.</param>
+    /// <param name="legs">The option legs.</param>
+    /// <param name="stock">The stock leg of a covered strategy, or null.</param>
+    /// <param name="isIndexUnderlying">Whether the underlying is a cash-settled index.</param>
     public OptionStrategy(string name, IReadOnlyList<OptionLeg> legs, StockLeg? stock = null, bool isIndexUnderlying = false)
     {
         Name = name;

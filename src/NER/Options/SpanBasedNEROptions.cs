@@ -111,14 +111,6 @@ public class SpanBasedNEROptions
     }
 
     /// <summary>
-    /// Gets or sets the maximum span length (number of tokens in a single entity span).
-    /// </summary>
-    /// <remarks>
-    /// Most named entities are 1-10 tokens long. Setting this value appropriately reduces
-    /// the number of candidate spans that need to be evaluated. A value of 10 covers
-    /// ~99% of entities in most NER datasets.
-    /// </remarks>
-    /// <summary>
     /// Number of layers in each boundary FFNN that produces the span start/end representations.
     /// </summary>
     /// <remarks>
@@ -144,6 +136,16 @@ public class SpanBasedNEROptions
     /// <remarks>The reference configuration uses <c>decay_frequency = 100</c>.</remarks>
     public int DecayFrequency { get; set; } = 100;
 
+    /// <summary>
+    /// Gets or sets the maximum span length (number of tokens in a single entity span): the bound on the candidate
+    /// spans the model enumerates and scores.
+    /// </summary>
+    /// <remarks>
+    /// Most named entities are 1-10 tokens long. Setting this value appropriately reduces
+    /// the number of candidate spans that need to be evaluated. A value of 10 covers
+    /// ~99% of entities in most NER datasets. Default: 10.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if the value is not positive.</exception>
     public int MaxSpanLength
     {
         get => _maxSpanLength;

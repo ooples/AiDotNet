@@ -35,7 +35,7 @@ namespace AiDotNet.Autodiff.Testing;
 /// </code>
 /// </para>
 /// </remarks>
-public class TensorOperationsVerification<T>
+internal class TensorOperationsVerification<T>
 {
     /// <summary>
     /// The numeric operations appropriate for the generic type T.
@@ -635,7 +635,7 @@ public class TensorOperationsVerification<T>
 /// <summary>
 /// Extension methods for TensorOperationsVerification.
 /// </summary>
-public static class TensorOperationsVerificationExtensions
+internal static class TensorOperationsVerificationExtensions
 {
     /// <summary>
     /// Runs verification and prints the summary to console.

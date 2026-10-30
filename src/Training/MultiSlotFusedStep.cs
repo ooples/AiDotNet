@@ -29,7 +29,7 @@ namespace AiDotNet.Training;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">Numeric type (float / double).</typeparam>
-public sealed class MultiSlotFusedStep<T> : IDisposable
+internal sealed class MultiSlotFusedStep<T> : IDisposable
 {
     private readonly FusedTrainingSession<T> _session;
     private bool _disposed;

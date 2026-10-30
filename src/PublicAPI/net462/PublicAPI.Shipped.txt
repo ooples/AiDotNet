@@ -1,0 +1,42 @@
+#nullable enable
+AiDotNet.Deployment.Mobile.Android.INNAPIGraphBuilder.BuildGraph(System.IntPtr modelHandle, byte[]! modelBytes) -> bool
+const System.Runtime.CompilerServices.MethodImplOptionsEx.AggressiveOptimization = (System.Runtime.CompilerServices.MethodImplOptions)512 -> System.Runtime.CompilerServices.MethodImplOptions
+override AiDotNet.Configuration.FusedOptimizerPathEvent.<Clone>$() -> AiDotNet.Configuration.TrainingDiagnosticEvent!
+override AiDotNet.Configuration.GradientNormEvent.<Clone>$() -> AiDotNet.Configuration.TrainingDiagnosticEvent!
+override AiDotNet.Configuration.TrainingLossEvent.<Clone>$() -> AiDotNet.Configuration.TrainingDiagnosticEvent!
+override AiDotNet.Configuration.TrainingMessageEvent.<Clone>$() -> AiDotNet.Configuration.TrainingDiagnosticEvent!
+override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>.<Clone>$() -> AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+static System.Collections.Generic.DictionaryExtensions.GetValueOrDefault<TKey, TValue>(this System.Collections.Generic.Dictionary<TKey, TValue>! dictionary, TKey key) -> TValue?
+static System.Collections.Generic.DictionaryExtensions.GetValueOrDefault<TKey, TValue>(this System.Collections.Generic.Dictionary<TKey, TValue>! dictionary, TKey key, TValue defaultValue) -> TValue
+static System.Collections.Generic.DictionaryExtensions.GetValueOrDefault<TKey, TValue>(this System.Collections.Generic.IDictionary<TKey, TValue>! dictionary, TKey key) -> TValue?
+static System.Collections.Generic.DictionaryExtensions.GetValueOrDefault<TKey, TValue>(this System.Collections.Generic.IDictionary<TKey, TValue>! dictionary, TKey key, TValue defaultValue) -> TValue
+static System.Collections.Generic.EnumerableExtensions.ToHashSet<T>(this System.Collections.Generic.IEnumerable<T>! source) -> System.Collections.Generic.HashSet<T>!
+static System.Collections.Generic.EnumerableExtensions.ToHashSet<T>(this System.Collections.Generic.IEnumerable<T>! source, System.Collections.Generic.IEqualityComparer<T>? comparer) -> System.Collections.Generic.HashSet<T>!
+static System.Collections.Generic.KeyValuePairExtensions.Deconstruct<TKey, TValue>(this System.Collections.Generic.KeyValuePair<TKey, TValue> kvp, out TKey key, out TValue value) -> void
+System.Collections.Generic.DictionaryExtensions
+System.Collections.Generic.EnumerableExtensions
+System.Collections.Generic.KeyValuePairExtensions
+System.Collections.Generic.PriorityQueue<TElement, TPriority>
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.Clear() -> void
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.Count.get -> int
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.Dequeue() -> TElement
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.Enqueue(TElement element, TPriority priority) -> void
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.EnsureCapacity(int capacity) -> void
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.Peek() -> TElement
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.PriorityQueue() -> void
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.PriorityQueue(int initialCapacity) -> void
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.PriorityQueue(int initialCapacity, System.Collections.Generic.IComparer<TPriority>! comparer) -> void
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.PriorityQueue(System.Collections.Generic.IComparer<TPriority>! comparer) -> void
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.TryDequeue(out TElement element, out TPriority priority) -> bool
+System.Collections.Generic.PriorityQueue<TElement, TPriority>.TryPeek(out TElement element, out TPriority priority) -> bool
+System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute
+System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute.MaybeNullWhenAttribute(bool returnValue) -> void
+System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute.ReturnValue.get -> bool
+System.Diagnostics.CodeAnalysis.MemberNotNullAttribute
+System.Diagnostics.CodeAnalysis.MemberNotNullAttribute.MemberNotNullAttribute(params string![]! members) -> void
+System.Diagnostics.CodeAnalysis.MemberNotNullAttribute.MemberNotNullAttribute(string! member) -> void
+System.Diagnostics.CodeAnalysis.MemberNotNullAttribute.Members.get -> string![]!
+System.Diagnostics.CodeAnalysis.NotNullWhenAttribute
+System.Diagnostics.CodeAnalysis.NotNullWhenAttribute.NotNullWhenAttribute(bool returnValue) -> void
+System.Diagnostics.CodeAnalysis.NotNullWhenAttribute.ReturnValue.get -> bool
+System.Runtime.CompilerServices.MethodImplOptionsEx

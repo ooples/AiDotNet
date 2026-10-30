@@ -30,7 +30,7 @@ namespace AiDotNet.Autodiff.Testing;
 /// - Autodiff should also give 6
 /// </para>
 /// </remarks>
-public static class NumericalGradient<T>
+internal static class NumericalGradient<T>
 {
     /// <summary>
     /// The numeric operations appropriate for the generic type T.
