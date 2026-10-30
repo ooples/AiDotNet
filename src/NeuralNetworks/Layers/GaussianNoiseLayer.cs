@@ -93,31 +93,6 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
     private readonly T _standardDeviation;
 
     /// <summary>
-    /// The noise tensor from the last forward pass, saved for potential use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the noise tensor that was generated and used during the last forward pass.
-    /// It is saved in case it's needed for the backward pass, though in simple additive noise,
-    /// the gradient flows through unchanged.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what noise was added in the latest calculation.
-    /// 
-    /// During training:
-    /// - The layer needs to keep track of exactly what noise was added
-    /// - This helps ensure consistent behavior during backpropagation
-    /// - It's like keeping a record of what "challenges" were introduced
-    /// 
-    /// This tensor has the same shape as the input data, with each position
-    /// containing the specific noise value that was added at that position.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastNoise;
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -227,11 +202,10 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         if (IsTrainingMode)
         {
-            _lastNoise = GenerateNoise(input._shape);
-            return Engine.TensorAdd(input, _lastNoise);
+            var noise = GenerateNoise(input._shape);
+            return Engine.TensorAdd(input, noise);
         }
 
         return input; // During inference, no noise is added
@@ -297,8 +271,6 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
-        _lastNoise = null;
-        _lastInput = null;
+        // Nothing to clear: the forward keeps no per-pass state.
     }
 }

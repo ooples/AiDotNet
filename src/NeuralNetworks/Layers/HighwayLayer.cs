@@ -157,40 +157,10 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     private Tensor<T> _gateBias;
 
     /// <summary>
-    /// Stores the input tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the output tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
-    /// Stores the transformed output tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastTransformOutput;
-
-    /// <summary>
     /// Stores the gate output tensor from the last forward pass for use in the backward pass.
     /// </summary>
     [Scratch]
     private Tensor<T>? _lastGateOutput;
-
-    /// <summary>
-    /// Stores the pre-activation transform values from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastTransformPreActivation;
-
-    /// <summary>
-    /// Stores the pre-activation gate values from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastGatePreActivation;
 
     /// <summary>
     /// Stores the gradients for the transform weights calculated during the backward pass.
@@ -516,24 +486,17 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // #1668: gate every backward-only cache (not just _lastInput) so an InferenceMode
-        // arena loop holds no recycled-scratch references. Forward uses locals throughout.
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-
         // Transform path: transform = activation(input @ weights + bias)
         var transformLinear = Engine.TensorMatMul(input, _transformWeights);
         var transformWithBias = Engine.TensorAdd(transformLinear, _transformBias);
-        _lastTransformPreActivation = cacheBwd ? transformWithBias : null; // Store pre-activation for backward pass
         var transformOutput = ApplyActivation(transformWithBias, _transformActivation, _vectorTransformActivation);
-        _lastTransformOutput = cacheBwd ? transformOutput : null;
 
         // Gate path: gate = sigmoid(input @ weights + bias)
         var gateLinear = Engine.TensorMatMul(input, _gateWeights);
         var gateWithBias = Engine.TensorAdd(gateLinear, _gateBias);
-        _lastGatePreActivation = cacheBwd ? gateWithBias : null; // Store pre-activation for backward pass
         var gateOutput = ApplyActivation(gateWithBias, _gateActivation, _vectorGateActivation);
-        _lastGateOutput = cacheBwd ? gateOutput : null;
+        // The gate values feed ComputeAuxiliaryLoss; nothing else outlives the forward.
+        SaveForBackward(ref _lastGateOutput, gateOutput);
 
         // Highway output: output = gate * transform + (1 - gate) * input
         // Rewritten as: output = gate * (transform - input) + input
@@ -541,7 +504,6 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
         var gatedDiff = Engine.TensorMultiply(gateOutput, transformMinusInput);
         var output = Engine.TensorAdd(gatedDiff, input);
 
-        _lastOutput = cacheBwd ? output : null;
         return output;
     }
 
@@ -687,12 +649,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
-        _lastTransformOutput = null;
         _lastGateOutput = null;
-        _lastTransformPreActivation = null;
-        _lastGatePreActivation = null;
         _transformWeightsGradient = null;
         _transformBiasGradient = null;
         _gateWeightsGradient = null;
