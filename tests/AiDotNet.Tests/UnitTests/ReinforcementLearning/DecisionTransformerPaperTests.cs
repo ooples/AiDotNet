@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -30,7 +32,11 @@ public class DecisionTransformerPaperTests
         double returnScale = 1.0,
         bool isContinuous = true,
         int actionSize = ActionSize,
-        Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>? optimizerFactory = null) =>
+        Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>? optimizerFactory = null,
+        int warmupSteps = 0,
+        double maxGradientNorm = 0.25,
+        double weightDecay = 1e-4,
+        bool normalizeStates = true) =>
         new DecisionTransformerOptions<double>
         {
             StateSize = StateSize,
@@ -48,6 +54,10 @@ public class DecisionTransformerPaperTests
             BatchSize = 4,
             LearningRate = 1e-3,
             OptimizerFactory = optimizerFactory,
+            WarmupSteps = warmupSteps,
+            MaxGradientNorm = maxGradientNorm,
+            WeightDecay = weightDecay,
+            NormalizeStates = normalizeStates,
             Seed = 7,
         };
 
@@ -67,6 +77,240 @@ public class DecisionTransformerPaperTests
         double worst = 0.0;
         for (int i = 0; i < a.Length; i++) worst = Math.Max(worst, Math.Abs(a[i] - b[i]));
         return worst;
+    }
+
+    private static List<List<(Vector<double>, Vector<double>, double)>> Dataset() =>
+        new List<List<(Vector<double>, Vector<double>, double)>>
+        {
+            Trajectory(new[] { 1.0, 0.0, 1.0, 0.0 }, V(0.3, -0.3)),
+        };
+
+    /// <summary>Euclidean norm of the weight change made by one default-optimizer update.</summary>
+    private static (double Norm, double DotWithWeights) FirstUpdate(DecisionTransformerOptions<double> options)
+    {
+        using var agent = new DecisionTransformerAgent<double>(options);
+        agent.LoadOfflineData(Dataset());
+        var before = agent.GetParameters();
+        agent.Train();
+        var after = agent.GetParameters();
+
+        double sum = 0.0, dot = 0.0;
+        for (int i = 0; i < before.Length; i++)
+        {
+            double delta = after[i] - before[i];
+            sum += delta * delta;
+            dot += delta * before[i];
+        }
+
+        return (Math.Sqrt(sum), dot);
+    }
+
+    // ── Paper hyperparameters (Appendix A.2.1, Table 9) ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Default options are Table 9's Gym hyperparameters. Fails if any default drifts from the table.
+    /// </summary>
+    [Fact]
+    public void DefaultOptions_AreTheTable9GymHyperparameters()
+    {
+        var options = new DecisionTransformerOptions<double>();
+        Assert.Equal(1e-4, options.LearningRate);
+        Assert.Equal(64, options.BatchSize);
+        Assert.Equal(0.25, options.MaxGradientNorm);
+        Assert.Equal(100000, options.WarmupSteps);
+        Assert.Equal(1e-4, options.WeightDecay);
+        Assert.Equal(3, options.NumLayers);
+        Assert.Equal(1, options.NumHeads);
+        Assert.Equal(128, options.EmbeddingDim);
+        Assert.Equal(20, options.ContextLength);
+        Assert.Equal(0.1, options.DropoutRate);
+        Assert.True(options.NormalizeStates);
+    }
+
+    /// <summary>
+    /// The default optimizer is Table 9's: AdamW with PyTorch's defaults, the configured weight decay, global-norm
+    /// clipping at MaxGradientNorm, and a per-update warmup schedule; the feed-forward nonlinearity is ReLU. Fails
+    /// if the agent falls back to Adam, drops the clip or the schedule, or keeps GELU.
+    /// </summary>
+    [Fact]
+    public void DefaultOptimizer_IsTable9AdamWWithClippingAndWarmup()
+    {
+        using var agent = new DecisionTransformerAgent<double>(Small(warmupSteps: 10, maxGradientNorm: 0.25));
+        var optimizer = Assert.IsType<AdamWOptimizer<double, Tensor<double>, Tensor<double>>>(agent.TransformerOptimizer);
+        var options = Assert.IsType<AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
+
+        Assert.Equal(1e-4, options.WeightDecay);
+        Assert.Equal(0.9, options.Beta1);
+        Assert.Equal(0.999, options.Beta2);
+        Assert.Equal(1e-8, options.Epsilon);
+        Assert.True(options.EnableGradientClipping);
+        Assert.Equal(GradientClippingMethod.ByNorm, options.GradientClippingMethod);
+        Assert.Equal(0.25, options.MaxGradientNorm);
+        Assert.IsType<LinearWarmupScheduler>(options.LearningRateScheduler);
+        Assert.Equal(SchedulerStepMode.StepPerBatch, options.SchedulerStepMode);
+
+        var network = (NeuralNetworkBase<double>)agent.TransformerNetwork;
+        var block = network.Layers.OfType<TransformerEncoderBlock<double>>().First();
+        Assert.IsType<ReLUActivation<double>>(block.FfnUpLayer.ScalarActivation);
+    }
+
+    /// <summary>
+    /// The learning rate follows the reference LambdaLR schedule lr * min((s + 1) / W, 1): the first update uses
+    /// lr / W and update s uses lr * (s + 1) / W until it reaches lr. Fails if the warmup starts at zero, ends one
+    /// step late, or is not stepped once per update.
+    /// </summary>
+    [Fact]
+    public void Warmup_FollowsTheReferenceLinearSchedule()
+    {
+        const int warmup = 4;
+        const double rate = 1e-3;
+        using var agent = new DecisionTransformerAgent<double>(Small(warmupSteps: warmup));
+        agent.LoadOfflineData(Dataset());
+        var optimizer = Assert.IsAssignableFrom<GradientBasedOptimizerBase<double, Tensor<double>, Tensor<double>>>(
+            agent.TransformerOptimizer);
+
+        for (int update = 0; update < 7; update++)
+        {
+            double expected = rate * Math.Min((update + 1.0) / warmup, 1.0);
+            Assert.True(Math.Abs(optimizer.GetCurrentLearningRate() - expected) < 1e-15,
+                $"Update {update} ran at {optimizer.GetCurrentLearningRate():R}, expected {expected:R}.");
+            agent.Train();
+        }
+    }
+
+    /// <summary>
+    /// MaxGradientNorm bounds the global gradient norm of the default optimizer. Clipped to 1e-12, every gradient
+    /// coordinate falls far below Adam's epsilon, so the first update shrinks by orders of magnitude compared with
+    /// the unclipped one. Fails if the bound is not handed to the optimizer.
+    /// </summary>
+    [Fact]
+    public void MaxGradientNorm_ClipsTheDefaultOptimizerStep()
+    {
+        double unclipped = FirstUpdate(Small(maxGradientNorm: 0.0, weightDecay: 0.0)).Norm;
+        double clipped = FirstUpdate(Small(maxGradientNorm: 1e-12, weightDecay: 0.0)).Norm;
+
+        Assert.True(unclipped > 0.0);
+        Assert.True(unclipped > 100.0 * clipped, $"Clipping had no effect: {unclipped:R} vs {clipped:R}.");
+    }
+
+    /// <summary>
+    /// WeightDecay is AdamW's decoupled decay: with the gradient step clipped to nothing, an update with decay 0.5
+    /// pulls the weights towards zero (the change points against the weights) by far more than the update without
+    /// decay. Fails if the decay is not passed to the optimizer or the optimizer is not AdamW.
+    /// </summary>
+    [Fact]
+    public void WeightDecay_ShrinksWeightsTowardZero()
+    {
+        var withDecay = FirstUpdate(Small(maxGradientNorm: 1e-12, weightDecay: 0.5));
+        var withoutDecay = FirstUpdate(Small(maxGradientNorm: 1e-12, weightDecay: 0.0));
+
+        Assert.True(withDecay.Norm > 100.0 * withoutDecay.Norm,
+            $"Weight decay had no effect: {withDecay.Norm:R} vs {withoutDecay.Norm:R}.");
+        Assert.True(withDecay.DotWithWeights < 0.0, "Weight decay did not move the weights towards zero.");
+    }
+
+    /// <summary>
+    /// A supplied OptimizerFactory owns its own settings: the agent's MaxGradientNorm, WeightDecay and WarmupSteps
+    /// are not applied to the optimizer it returns. Fails if the agent wraps or reconfigures the factory's optimizer.
+    /// </summary>
+    [Fact]
+    public void OptimizerFactory_OwnsItsOwnClippingAndSchedule()
+    {
+        var supplied = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = 1e-3,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
+            });
+        using var agent = new DecisionTransformerAgent<double>(
+            Small(optimizerFactory: () => supplied, warmupSteps: 10, maxGradientNorm: 0.25));
+
+        Assert.Same(supplied, agent.TransformerOptimizer);
+        Assert.False(supplied.GetOptions() is GradientBasedOptimizerOptions<double, Tensor<double>, Tensor<double>> o
+            && (o.EnableGradientClipping || o.LearningRateScheduler is not null));
+    }
+
+    // ── State normalisation (reference implementation: (s - mean) / (std + 1e-6)) ───────────────────────
+
+    /// <summary>
+    /// The state statistics are the dataset's per-dimension mean and population standard deviation plus 1e-6, and
+    /// they are refreshed when StoreExperience commits an episode. Fails on a sample (n - 1) deviation, a missing
+    /// epsilon, or statistics that go stale when the buffer changes.
+    /// </summary>
+    [Fact]
+    public void StateStatistics_AreTheBufferMeanAndPopulationStd()
+    {
+        using var agent = new DecisionTransformerAgent<double>(Small());
+        Assert.Equal(new[] { 0.0, 0.0 }, agent.GetStateMean());
+        Assert.Equal(new[] { 1.0, 1.0 }, agent.GetStateStd());
+
+        // States (0, 0), (0.1, -0.2), (0.2, -0.4).
+        agent.LoadOfflineData(new List<List<(Vector<double>, Vector<double>, double)>>
+        {
+            Trajectory(new[] { 1.0, 1.0, 1.0 }, V(0.1, 0.1)),
+        });
+        double std0 = Math.Sqrt(0.02 / 3.0);
+        Assert.True(Math.Abs(agent.GetStateMean()[0] - 0.1) < 1e-15 && Math.Abs(agent.GetStateMean()[1] + 0.2) < 1e-15);
+        Assert.True(Math.Abs(agent.GetStateStd()[0] - (std0 + 1e-6)) < 1e-15);
+        Assert.True(Math.Abs(agent.GetStateStd()[1] - (2.0 * std0 + 1e-6)) < 1e-15);
+
+        // One more episode of a single state (1, 1): four states in all.
+        agent.StoreExperience(V(1.0, 1.0), V(0.1, 0.1), 1.0, V(1.0, 1.0), done: true);
+        Assert.True(Math.Abs(agent.GetStateMean()[0] - 1.3 / 4.0) < 1e-15);
+        Assert.True(Math.Abs(agent.GetStateMean()[1] - 0.4 / 4.0) < 1e-15);
+    }
+
+    /// <summary>
+    /// The state embedding sees (s - mean) / std: with the same weights and target, the normalising agent's action
+    /// for s equals the non-normalising agent's action for the standardised state, and differs from its action for
+    /// the raw state. Fails if normalisation is skipped, inverted, or applied with other statistics.
+    /// </summary>
+    [Fact]
+    public void NormalizeStates_StandardisesStatesBeforeEmbedding()
+    {
+        using var normalising = new DecisionTransformerAgent<double>(Small(targetReturn: 2.0));
+        using var raw = new DecisionTransformerAgent<double>(Small(targetReturn: 2.0, normalizeStates: false));
+        normalising.LoadOfflineData(new List<List<(Vector<double>, Vector<double>, double)>>
+        {
+            Trajectory(new[] { 1.0, 1.0, 1.0 }, V(0.1, 0.1)),
+        });
+        raw.SetParameters(normalising.GetParameters());
+
+        var state = V(0.7, -0.9);
+        var standardised = V(
+            (state[0] - normalising.GetStateMean()[0]) / normalising.GetStateStd()[0],
+            (state[1] - normalising.GetStateMean()[1]) / normalising.GetStateStd()[1]);
+
+        Assert.True(MaxAbsDifference(normalising.Predict(state), raw.Predict(standardised)) < 1e-12);
+        Assert.True(MaxAbsDifference(normalising.Predict(state), raw.Predict(state)) > 1e-9);
+    }
+
+    /// <summary>
+    /// The statistics are model state: a clone normalises with the source's mean and deviation even though the
+    /// trajectory buffer itself is not copied. Fails if the statistics are left out of serialization.
+    /// </summary>
+    [Fact]
+    public void StateStatistics_TravelWithClones()
+    {
+        using var agent = new DecisionTransformerAgent<double>(Small(targetReturn: 2.0));
+        agent.LoadOfflineData(new List<List<(Vector<double>, Vector<double>, double)>>
+        {
+            Trajectory(new[] { 1.0, 1.0, 1.0 }, V(0.1, 0.1)),
+        });
+
+        var clone = Assert.IsType<DecisionTransformerAgent<double>>(agent.Clone());
+        try
+        {
+            Assert.Equal(agent.GetStateMean(), clone.GetStateMean());
+            Assert.Equal(agent.GetStateStd(), clone.GetStateStd());
+            var state = V(0.7, -0.9);
+            Assert.True(MaxAbsDifference(agent.Predict(state), clone.Predict(state)) < 1e-12);
+        }
+        finally
+        {
+            clone.Dispose();
+        }
     }
 
     // ── Returns-to-go (Sec. 3: R̂_t = Σ_{t'≥t} r_t') ───────────────────────────────────────────────────────
@@ -229,6 +473,22 @@ public class DecisionTransformerPaperTests
         Assert.Equal(0.0, withDropout.PredictSpread);
     }
 
+    /// <summary>
+    /// DropoutRate also reaches the attention probabilities of every block (GPT-2's attn_pdrop). Fails if the
+    /// attention layers are built without attention dropout.
+    /// </summary>
+    [Fact]
+    public void DropoutRate_ReachesTheAttentionProbabilities()
+    {
+        using var agent = new DecisionTransformerAgent<double>(Small(dropoutRate: 0.1));
+        var network = (NeuralNetworkBase<double>)agent.TransformerNetwork;
+        foreach (var block in network.Layers.OfType<TransformerEncoderBlock<double>>())
+        {
+            var attention = Assert.IsType<MultiHeadAttentionLayer<double>>(block.AttentionLayer);
+            Assert.Equal(0.1, attention.AttentionDropoutRate);
+        }
+    }
+
     // ── Offline buffer ───────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -288,12 +548,13 @@ public class DecisionTransformerPaperTests
     [Fact]
     public void ReturnConditioning_SelectsTheMatchingBehaviour()
     {
-        using var trained = new DecisionTransformerAgent<double>(Small());
-        trained.LoadOfflineData(new List<List<(Vector<double>, Vector<double>, double)>>
+        var dataset = new List<List<(Vector<double>, Vector<double>, double)>>
         {
             Trajectory(new[] { 1.0, 1.0, 1.0, 1.0 }, V(0.5, 0.5)),
             Trajectory(new[] { 0.0, 0.0, 0.0, 0.0 }, V(-0.5, -0.5)),
-        });
+        };
+        using var trained = new DecisionTransformerAgent<double>(Small());
+        trained.LoadOfflineData(dataset);
 
         double firstLoss = trained.Train();
         double lastLoss = firstLoss;
@@ -302,6 +563,9 @@ public class DecisionTransformerPaperTests
 
         using var high = new DecisionTransformerAgent<double>(Small(targetReturn: 4.0));
         using var low = new DecisionTransformerAgent<double>(Small(targetReturn: 0.0));
+        // The same dataset gives the conditioned copies the same state-normalisation statistics.
+        high.LoadOfflineData(dataset);
+        low.LoadOfflineData(dataset);
         high.SetParameters(trained.GetParameters());
         low.SetParameters(trained.GetParameters());
 
@@ -436,5 +700,8 @@ public class DecisionTransformerPaperTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new DecisionTransformerAgent<double>(Small(dropoutRate: 1.0)));
         Assert.Throws<ArgumentOutOfRangeException>(() => new DecisionTransformerAgent<double>(Small(bufferSize: 0)));
         Assert.Throws<ArgumentOutOfRangeException>(() => new DecisionTransformerAgent<double>(Small(returnScale: 0.0)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DecisionTransformerAgent<double>(Small(maxGradientNorm: -1.0)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DecisionTransformerAgent<double>(Small(weightDecay: -1e-4)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DecisionTransformerAgent<double>(Small(warmupSteps: -1)));
     }
 }

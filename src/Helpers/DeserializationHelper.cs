@@ -4532,6 +4532,12 @@ public static class DeserializationHelper
             attention.UseCausalMask = causalMask.Value;
         }
 
+        double? attentionDropoutRate = TryGetDouble(additionalParams, "AttentionDropoutRate");
+        if (attentionDropoutRate is double rate && rate > 0.0)
+        {
+            attention.ConfigureAttentionDropout(rate);
+        }
+
         string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
         if (string.IsNullOrWhiteSpace(positionalEncoding)
             || !Enum.TryParse<Enums.PositionalEncodingType>(

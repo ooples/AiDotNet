@@ -26,7 +26,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 /// (R̂_1, s_1, a_1, R̂_2, s_2, a_2, ...), where R̂_t = Σ_{t'≥t} r_{t'} is the return-to-go. The last K timesteps
 /// (3K tokens) are embedded by a separate linear map per modality, a learned embedding of the episode timestep is
 /// added to each token, and the result is layer-normalised and passed through a GPT-2 style causal transformer
-/// (pre-LayerNorm blocks of causal multi-head self-attention and a GELU feed-forward network, with dropout). The
+/// (pre-LayerNorm blocks of causal multi-head self-attention and a ReLU feed-forward network, with dropout). The
 /// action a_t is predicted by a linear head (tanh for continuous actions) from the output at the state token s_t,
 /// which by causality has seen R̂_t, s_t and the earlier timesteps but not a_t itself. Training is supervised:
 /// segments of up to K timesteps are sampled from an offline trajectory buffer and the predicted actions are
@@ -42,8 +42,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 /// W_m x + b_m + E[t] for the token's modality m. Segments shorter than K are padded on the RIGHT rather than on the
 /// left as the reference implementation does; under the causal mask no real token can attend to a later padding
 /// token, so this is equivalent to the reference's attention-masked left padding, and padded positions are excluded
-/// from the loss. The library's transformer block applies dropout to sublayer outputs and the embedding; GPT-2's
-/// additional dropout on the attention probabilities is not applied.
+/// from the loss. Dropout is applied as in GPT-2: to the embedding, to the attention probabilities, and to every
+/// sublayer output before its residual addition.
+/// </para>
+/// <para>
+/// Training follows Appendix A.2.1, Table 9: AdamW (PyTorch defaults) at learning rate 1e-4 with weight decay 1e-4,
+/// gradients clipped to a global norm of 0.25, a linear learning-rate warmup over the first 10^5 updates, batches
+/// of 64 segments of K = 20 timesteps. As in the reference implementation, states are standardised by the stored
+/// dataset's per-dimension mean and standard deviation (plus 1e-6) before they are embedded, in training and when
+/// acting.
 /// </para>
 /// <para><b>For Beginners:</b>
 /// Instead of learning "what's the best action", Decision Transformer learns
@@ -118,6 +125,10 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
     private INeuralNetwork<T> _transformerNetwork;
 
+    /// <summary>The optimizer the transformer network was built with; rebuilt with the network, never persisted.</summary>
+    [Scratch]
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _transformerOptimizer;
+
     /// <summary>The offline dataset: whole trajectories, oldest first, holding at most BufferSize transitions.</summary>
     private readonly List<StoredTrajectory> _trajectories = new();
 
@@ -135,6 +146,13 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     private bool _hasEpisodeReturn;
 
     private int _updateCount;
+
+    /// <summary>Per-dimension mean of the stored states (the reference implementation's <c>state_mean</c>).</summary>
+    /// <remarks>Persisted with the model so a clone or a reloaded model normalises states as the original did.</remarks>
+    private Vector<T> _stateMean;
+
+    /// <summary>Per-dimension population standard deviation of the stored states plus 1e-6 (<c>state_std</c>).</summary>
+    private Vector<T> _stateStd;
 
     /// <summary>The evaluation context: the last K states, actions and returns-to-go of the current episode.</summary>
     [Scratch]
@@ -174,6 +192,9 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         _currentReturnToGo = NumOps.Zero;
         _episodeConditioned = false;
         _episodeStep = 0;
+        _stateMean = new Vector<T>(options.StateSize);
+        _stateStd = new Vector<T>(options.StateSize);
+        for (int i = 0; i < options.StateSize; i++) _stateStd[i] = NumOps.One;
 
         _transformerNetwork = CreateTransformerNetwork();
 
@@ -210,6 +231,14 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             throw new ArgumentOutOfRangeException(nameof(options), options.ReturnScale, "ReturnScale must be positive and finite.");
         if (options.TargetReturn is double target && (double.IsNaN(target) || double.IsInfinity(target)))
             throw new ArgumentOutOfRangeException(nameof(options), target, "TargetReturn must be finite when set.");
+        if (double.IsNaN(options.MaxGradientNorm) || options.MaxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.MaxGradientNorm,
+                "MaxGradientNorm must be non-negative (0 or infinity disables clipping).");
+        if (double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay) || options.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.WeightDecay,
+                "WeightDecay must be non-negative and finite.");
+        if (options.WarmupSteps < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.WarmupSteps, "WarmupSteps must be non-negative.");
     }
 
     // Token feature layout (Chen et al. 2021, Sec. 3: one linear embedding per modality plus a learned timestep
@@ -224,6 +253,9 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     /// <summary>The transformer network, exposed to the test assembly for structural checks.</summary>
     internal INeuralNetwork<T> TransformerNetwork => _transformerNetwork;
 
+    /// <summary>The optimizer the transformer trains with, exposed to the test assembly.</summary>
+    internal IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TransformerOptimizer => _transformerOptimizer;
+
     /// <summary>Number of trajectories currently held in the offline buffer.</summary>
     internal int StoredTrajectoryCount => _trajectories.Count;
 
@@ -235,6 +267,12 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
     /// <summary>The returns-to-go of the current evaluation context, oldest first (unscaled).</summary>
     internal IReadOnlyList<T> CurrentContextReturnsToGo => _currentContext.ReturnsToGo;
+
+    /// <summary>A copy of the per-dimension state mean the embedding subtracts.</summary>
+    internal T[] GetStateMean() => _stateMean.ToArray();
+
+    /// <summary>A copy of the per-dimension state standard deviation (plus 1e-6) the embedding divides by.</summary>
+    internal T[] GetStateStd() => _stateStd.ToArray();
 
     private INeuralNetwork<T> CreateTransformerNetwork()
     {
@@ -253,7 +291,9 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         layers.Add(new LayerNormalizationLayer<T>(hidden));
         if (_options.DropoutRate > 0.0) layers.Add(new DropoutLayer<T>(_options.DropoutRate));
 
-        // GPT-2 blocks: pre-LayerNorm, causal multi-head self-attention, 4x GELU MLP, residual dropout.
+        // GPT-2 blocks: pre-LayerNorm, causal multi-head self-attention with attention dropout, a 4x MLP whose
+        // nonlinearity is ReLU (Appendix A.2.1, Table 9; the reference GPT2Model config sets activation 'relu'),
+        // and residual dropout.
         for (int i = 0; i < _options.NumLayers; i++)
         {
             var block = new TransformerEncoderBlock<T>(
@@ -261,13 +301,15 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
                 numHeads: _options.NumHeads,
                 ffnDim: 4 * hidden,
                 dropoutRate: _options.DropoutRate,
-                ffnActivation: new GELUActivation<T>(),
+                ffnActivation: new ReLUActivation<T>(),
                 normPlacement: TransformerNormPlacement.PreNorm);
             if (block.AttentionLayer is not MultiHeadAttentionLayer<T> attention)
                 throw new InvalidOperationException(
                     "TransformerEncoderBlock no longer hosts a MultiHeadAttentionLayer, so the causal mask cannot be set.");
             // A token may attend only to itself and earlier tokens, so the state token s_t never sees a_t.
             attention.UseCausalMask = true;
+            // GPT-2's attn_pdrop: dropout on the softmax attention weights, training only.
+            attention.ConfigureAttentionDropout(_options.DropoutRate);
             layers.Add(block);
         }
 
@@ -287,9 +329,52 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             outputSize: _options.ActionSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture,
-            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate),
-            lossFunction: LossFunction);
+        var optimizer = _options.OptimizerFactory?.Invoke() ?? CreatePaperOptimizer();
+        _transformerOptimizer = optimizer;
+        return new NeuralNetwork<T>(architecture, optimizer: optimizer, lossFunction: LossFunction);
+    }
+
+    /// <summary>
+    /// The paper's optimizer (Chen et al. 2021, Appendix A.2.1, Table 9): AdamW with PyTorch's defaults, decoupled
+    /// weight decay, global gradient-norm clipping and a linear learning-rate warmup.
+    /// </summary>
+    /// <remarks>
+    /// The warmup reproduces the reference implementation's <c>LambdaLR(lambda s: min((s + 1) / W, 1))</c> stepped
+    /// once per update: the first update uses <c>lr / W</c>, update s uses <c>lr * (s + 1) / W</c>, and from update
+    /// W - 1 on the full rate. A <see cref="LinearWarmupScheduler"/> that starts at <c>lr / W</c> and reaches
+    /// <c>lr</c> after W - 1 steps is exactly that sequence.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+    {
+        double rate = NumOps.ToDouble(LearningRate);
+        if (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), rate, "LearningRate must be positive and finite.");
+
+        double clip = _options.MaxGradientNorm;
+        bool clipping = clip > 0.0 && !double.IsPositiveInfinity(clip);
+        var optimizerOptions = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = rate,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            WeightDecay = _options.WeightDecay,
+            UseAMSGrad = false,
+            UseAdaptiveLearningRate = false,
+            EnableGradientClipping = clipping,
+            GradientClippingMethod = GradientClippingMethod.ByNorm,
+        };
+        if (clipping) optimizerOptions.MaxGradientNorm = clip;
+
+        int warmup = _options.WarmupSteps;
+        if (warmup > 1)
+        {
+            optimizerOptions.LearningRateScheduler =
+                new LinearWarmupScheduler(rate, warmup - 1, warmupInitLr: rate / warmup);
+            optimizerOptions.SchedulerStepMode = SchedulerStepMode.StepPerBatch;
+        }
+
+        return new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, optimizerOptions);
     }
 
     /// <summary>
@@ -318,6 +403,8 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
             CommitTrajectory(steps);
         }
+
+        RecomputeStateStatistics();
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -398,6 +485,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         {
             CommitTrajectory(_pendingEpisode);
             _pendingEpisode.Clear();
+            RecomputeStateStatistics();
             ResetEpisode();
         }
     }
@@ -540,7 +628,16 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             NumOps.Divide(returnToGo, NumOps.FromDouble(_options.ReturnScale));
 
         int stateBase = (firstRow + StateToken) * featureCount + StateFeatureOffset;
-        for (int i = 0; i < _options.StateSize; i++) tokens[stateBase + i] = state[i];
+        if (_options.NormalizeStates)
+        {
+            // The reference implementation's (s - state_mean) / state_std, at training and at acting time alike.
+            for (int i = 0; i < _options.StateSize; i++)
+                tokens[stateBase + i] = NumOps.Divide(NumOps.Subtract(state[i], _stateMean[i]), _stateStd[i]);
+        }
+        else
+        {
+            for (int i = 0; i < _options.StateSize; i++) tokens[stateBase + i] = state[i];
+        }
 
         if (action is not null)
         {
@@ -714,6 +811,45 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         }
     }
 
+    /// <summary>
+    /// Recomputes the per-dimension state mean and standard deviation over every state in the buffer.
+    /// </summary>
+    /// <remarks>
+    /// The reference implementation concatenates the dataset's states and takes <c>np.mean(axis=0)</c> and
+    /// <c>np.std(axis=0) + 1e-6</c> (population deviation). Two passes, mean first, keep the deviation exact
+    /// rather than cancelling in E[s^2] - E[s]^2. With an empty buffer the statistics are left as they are: the
+    /// identity transform before any data, or the persisted statistics of a reloaded model.
+    /// </remarks>
+    private void RecomputeStateStatistics()
+    {
+        if (_storedTransitions == 0) return;
+
+        int size = _options.StateSize;
+        T count = NumOps.FromDouble(_storedTransitions);
+        var mean = new Vector<T>(size);
+        foreach (var trajectory in _trajectories)
+            foreach (var state in trajectory.States)
+                for (int i = 0; i < size; i++) mean[i] = NumOps.Add(mean[i], state[i]);
+        for (int i = 0; i < size; i++) mean[i] = NumOps.Divide(mean[i], count);
+
+        var variance = new Vector<T>(size);
+        foreach (var trajectory in _trajectories)
+            foreach (var state in trajectory.States)
+                for (int i = 0; i < size; i++)
+                {
+                    T deviation = NumOps.Subtract(state[i], mean[i]);
+                    variance[i] = NumOps.Add(variance[i], NumOps.Multiply(deviation, deviation));
+                }
+
+        var std = new Vector<T>(size);
+        T epsilon = NumOps.FromDouble(1e-6);
+        for (int i = 0; i < size; i++)
+            std[i] = NumOps.Add(NumOps.Sqrt(NumOps.Divide(variance[i], count)), epsilon);
+
+        _stateMean = mean;
+        _stateStd = std;
+    }
+
     /// <summary>Maps a flat transition index over the buffer to its trajectory and step.</summary>
     private (StoredTrajectory Trajectory, int Step) LocateTransition(int index)
     {
@@ -778,6 +914,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         {
             CommitTrajectory(_pendingEpisode);
             _pendingEpisode.Clear();
+            RecomputeStateStatistics();
         }
 
         _currentContext = new SequenceContext<T>();

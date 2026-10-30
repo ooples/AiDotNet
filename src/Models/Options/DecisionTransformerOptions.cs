@@ -34,12 +34,38 @@ namespace AiDotNet.Models.Options;
 /// Famous for: Berkeley/Meta research showing transformers can replace RL algorithms
 /// </para>
 /// <para>
-/// Defaults follow the paper's OpenAI Gym configuration (Chen et al. 2021, Appendix A, Gym hyperparameter table): 3 layers,
-/// 1 head, embedding dimension 128, context length 20, dropout 0.1.
+/// Defaults follow the paper's OpenAI Gym configuration (Chen et al. 2021, Appendix A.2.1, Table 9): 3 layers,
+/// 1 attention head, embedding dimension 128, ReLU feed-forward nonlinearity, batch size 64, context length 20,
+/// dropout 0.1, learning rate 1e-4, gradient-norm clip 0.25, weight decay 1e-4 and a linear learning-rate warmup over
+/// the first 10^5 training steps, trained with AdamW following PyTorch defaults. States are normalised by the
+/// dataset's per-dimension mean and standard deviation, as the reference implementation does.
 /// </para>
 /// </remarks>
 public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>
+    /// Initializes the options with the paper's OpenAI Gym hyperparameters (Chen et al. 2021, Appendix A.2.1,
+    /// Table 9).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Besides this class's own defaults, the inherited training settings are set to Table 9's values:
+    /// <c>LearningRate</c> 1e-4, <c>BatchSize</c> 64, <c>MaxGradientNorm</c> 0.25 (the table's "grad norm clip")
+    /// and <c>WarmupSteps</c> 100,000 (the table's "linear warmup for first 10^5 training steps"). Any of them can
+    /// still be overridden in an object initializer.
+    /// </para>
+    /// <para><b>For Beginners:</b> Creating the options with no arguments gives you the exact settings the paper
+    /// used for its robot-control (Gym) experiments.</para>
+    /// </remarks>
+    public DecisionTransformerOptions()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        LearningRate = numOps.FromDouble(1e-4);
+        BatchSize = 64;
+        MaxGradientNorm = 0.25;
+        WarmupSteps = 100000;
+    }
+
     /// <summary>
     /// Gets or sets the length of the observation (state) vector.
     /// </summary>
@@ -90,7 +116,7 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// <remarks>
     /// <para>
     /// Every token -- return-to-go, state and action -- is projected to this width before the transformer
-    /// (Chen et al. 2021, Sec. 3). The paper's Gym configuration uses 128 (Appendix A, Gym hyperparameter table).
+    /// (Chen et al. 2021, Sec. 3). The paper's Gym configuration uses 128 (Appendix A.2.1, Table 9).
     /// </para>
     /// <para><b>For Beginners:</b> How many numbers the model uses internally to describe each token.
     /// Bigger is more expressive but slower.</para>
@@ -104,8 +130,9 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// <remarks>
     /// <para>
     /// Each block is a GPT-2 style pre-LayerNorm block: causal self-attention and a position-wise
-    /// feed-forward network, each with a residual connection. The paper's Gym configuration uses 3
-    /// (Appendix A, Gym hyperparameter table).
+    /// feed-forward network (4x width, ReLU as Table 9 specifies), each with a residual connection. The paper's
+    /// Gym configuration uses 3
+    /// (Appendix A.2.1, Table 9).
     /// </para>
     /// <para><b>For Beginners:</b> How many times the model re-reads the sequence to refine its
     /// understanding. More layers can learn more complex behaviour but train more slowly.</para>
@@ -119,7 +146,7 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// <remarks>
     /// <para>
     /// The embedding is split into this many heads that attend independently and are then recombined, as
-    /// in GPT-2. The paper's Gym configuration uses 1 head (Appendix A, Gym hyperparameter table); its Atari configuration
+    /// in GPT-2. The paper's Gym configuration uses 1 head (Appendix A.2.1, Table 9); its Atari configuration
     /// uses 8.
     /// </para>
     /// <para><b>For Beginners:</b> Each head can focus on a different relationship in the history (for
@@ -136,7 +163,7 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// <para>
     /// The transformer sees the last K timesteps, i.e. 3K tokens (Chen et al. 2021, Sec. 3). Training
     /// samples segments of up to K consecutive timesteps. The paper uses K = 20 for HalfCheetah, Hopper and
-    /// Walker (Appendix A, Gym hyperparameter table).
+    /// Walker (Appendix A.2.1, Table 9).
     /// </para>
     /// <para><b>For Beginners:</b> How far back the agent remembers when choosing its next action.</para>
     /// </remarks>
@@ -148,9 +175,9 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// As in GPT-2, dropout is applied to the summed token embeddings and to the output of every attention
-    /// and feed-forward sublayer before its residual addition. It is active only while training; action
-    /// selection is deterministic. The paper uses 0.1 (Appendix A, Gym hyperparameter table).
+    /// As in GPT-2, dropout is applied to the summed token embeddings, to the attention probabilities inside
+    /// every self-attention layer, and to the output of every attention and feed-forward sublayer before its
+    /// residual addition. It is active only while training; action selection is deterministic. The paper uses 0.1 (Appendix A.2.1, Table 9).
     /// </para>
     /// <para><b>For Beginners:</b> During training a random fraction of the model's internal signals is
     /// switched off each step, which stops it from memorising the dataset too closely.</para>
@@ -225,13 +252,59 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     public double ReturnScale { get; init; } = 1.0;
 
     /// <summary>
+    /// Gets or sets whether states are standardised by the stored dataset's per-dimension mean and standard
+    /// deviation before they are embedded.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The reference Gym implementation computes the mean and the (population) standard deviation of every
+    /// state dimension over the whole offline dataset, adds 1e-6 to the deviation, and feeds
+    /// <c>(s - mean) / std</c> to the state embedding both in training and when acting. This agent does the same:
+    /// the statistics are recomputed whenever the trajectory buffer changes (a dataset load, or an episode
+    /// committed through <c>StoreExperience</c> / <c>ResetEpisode</c>), and they are part of the model state, so a
+    /// clone or a saved model normalises exactly as the original did. Before any data is stored the transform is
+    /// the identity.
+    /// </para>
+    /// <para><b>For Beginners:</b> Different sensors report numbers on very different scales (a position in
+    /// metres, a velocity in hundreds). Normalising rescales every input to roughly "zero average, unit spread"
+    /// so no single input dominates. Leave it on unless your states are already normalised.</para>
+    /// </remarks>
+    /// <value><c>true</c> (the default, as the reference implementation does) to normalise states; <c>false</c> to
+    /// embed raw states.</value>
+    public bool NormalizeStates { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets the AdamW decoupled weight-decay coefficient of the default optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The paper trains with AdamW (Loshchilov &amp; Hutter) following PyTorch defaults, with weight decay 1e-4
+    /// (Chen et al. 2021, Appendix A.2.1, Table 9). Each step shrinks every weight by
+    /// <c>learningRate * WeightDecay</c> of itself, separately from the gradient step. Only the default optimizer
+    /// reads this; an <see cref="OptimizerFactory"/> configures its own regularisation.
+    /// </para>
+    /// <para><b>For Beginners:</b> A gentle pull of every weight towards zero on each step, which discourages the
+    /// model from relying on a few very large weights.</para>
+    /// </remarks>
+    /// <value>A non-negative, finite coefficient; 0 disables weight decay. Defaults to 1e-4.</value>
+    public double WeightDecay { get; init; } = 1e-4;
+
+    /// <summary>
     /// Gets or sets a factory for the optimizer the transformer trains with.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// When this is <c>null</c>, the transformer trains with Adam (β1 0.9, β2 0.999, ε 1e-8) at the agent's
-    /// <c>LearningRate</c>. The paper trains with AdamW (learning rate 1e-4, weight decay 1e-4, Appendix A);
-    /// supply that here to reproduce it exactly.
+    /// When this is <c>null</c>, the transformer trains with the paper's optimizer (Chen et al. 2021, Appendix
+    /// A.2.1, Table 9): AdamW with PyTorch's defaults (β1 0.9, β2 0.999, ε 1e-8) at the agent's
+    /// <c>LearningRate</c>, decoupled weight decay <see cref="WeightDecay"/>, every gradient rescaled to a global
+    /// L2 norm of at most <c>MaxGradientNorm</c> (0 or infinity disables clipping), and the learning rate warmed
+    /// up linearly over the first <c>WarmupSteps</c> updates as <c>lr * min((step + 1) / WarmupSteps, 1)</c>, the
+    /// reference implementation's schedule (0 disables warmup).
+    /// </para>
+    /// <para>
+    /// A supplied factory replaces all of that: the optimizer it returns owns its own learning rate, gradient
+    /// clipping, weight decay and schedule, and the agent's <c>LearningRate</c>, <c>MaxGradientNorm</c>,
+    /// <see cref="WeightDecay"/> and <c>WarmupSteps</c> are not applied to it.
     /// </para>
     /// <para>
     /// The agent invokes the factory once for every network it builds, so the factory must create a new
@@ -239,12 +312,12 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// correction would then advance on every network's step instead of only on that network's own.
     /// </para>
     /// <para><b>For Beginners:</b> The optimizer is the rule that turns gradients into weight changes. Leave
-    /// this unset to get Adam at the learning rate above; supply a factory such as
+    /// this unset to get the paper's AdamW setup; supply a factory such as
     /// <c>() =&gt; new AdamOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(null, myOptions)</c> to choose a
     /// different optimizer or its settings. Return a new optimizer from every call.
     /// </para>
     /// </remarks>
-    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for Adam at the
-    /// agent's <c>LearningRate</c>.</value>
+    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for the paper's
+    /// AdamW with clipping and warmup.</value>
     public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }
