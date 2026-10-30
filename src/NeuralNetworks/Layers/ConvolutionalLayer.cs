@@ -403,15 +403,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return true;
     }
 
-    /// <summary>Bit-for-bit equality. A NaN anywhere reports false, which keeps the reference.</summary>
-    private static bool BitwiseEquals(Tensor<T> a, Tensor<T> b)
-    {
-        if (a.Length != b.Length) return false;
-        var comparer = EqualityComparer<T>.Default;
-        for (int i = 0; i < a.Length; i++)
-            if (!comparer.Equals(a[i], b[i])) return false;
-        return true;
-    }
+    /// <summary>
+    /// Element-wise exact equality, compared where the tensors live: a GPU engine returns one scalar instead of
+    /// downloading both candidates (DenseNet-121 b16 downloaded 317 MB on its first predict, two outputs per
+    /// convolution). A NaN anywhere reports false, which keeps the reference.
+    /// </summary>
+    private bool BitwiseEquals(Tensor<T> a, Tensor<T> b)
+        => a.Length == b.Length && Engine.TensorEqual(a, b);
 
     /// <summary>Adds the rank-1 channel bias without retaining a parameter-storage view.</summary>
     private Tensor<T> AddChannelBias(Tensor<T> value)

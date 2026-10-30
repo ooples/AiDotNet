@@ -224,10 +224,20 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             }
             else
             {
+                Console.WriteLine($"[mem] before training: {AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Snapshot()}");
                 training = BenchmarkTraining(model);
                 Console.WriteLine($"[bench] {modelName}: training done in {training.TotalSeconds:F2}s; running inference…");
+                Console.WriteLine($"[mem] after training: {AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Snapshot()}");
             }
             var inference = BenchmarkInference(model);
+            Console.WriteLine($"[mem] after inference: {AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Snapshot()}");
+            if (AiDotNet.Tensors.Engines.DirectGpu.GpuMemoryTracker.Enabled)
+                Console.WriteLine("[mem] live device allocations by site:\n" + AiDotNet.Tensors.Engines.DirectGpu.GpuMemoryTracker.Report(12));
+            if (Environment.GetEnvironmentVariable("AIDOTNET_BENCH_MEM_COLLECT") == "1")
+            {
+                GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+                Console.WriteLine($"[mem] after inference + full GC: {AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Snapshot()}");
+            }
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
             results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", BenchStats.DeviceName, model.ParameterCount, training, inference));
@@ -343,6 +353,9 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             // so both report the same kind of memory number.
             process.Refresh();
             var peakBefore = process.WorkingSet64 / 1024d / 1024d;
+            // Device memory as torch.cuda.max_memory_allocated / max_memory_reserved report it, over the same window
+            // the PyTorch twin resets its peak for (after warm-up).
+            AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.ResetPeakStats();
             var steady = new List<double>(options.InferenceIterations);
 
             // Steady-state latency: a TIGHT loop timing only model.Forward(). Do NOT
@@ -361,7 +374,9 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 steady.Add(timer.Elapsed.TotalSeconds);
             }
             process.Refresh();
-            var peak = Math.Max(peakBefore, process.WorkingSet64 / 1024d / 1024d);
+            var hostPeak = Math.Max(peakBefore, process.WorkingSet64 / 1024d / 1024d);
+            var device = AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Snapshot();
+            var peak = hostPeak;
             var totalSteady = steady.Sum();
             // p95 latency (symmetric with the PyTorch side): robust to the
             // rig-contention noise that swings the mean. The Tensors perf gate is
@@ -377,7 +392,11 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 Math.Round(BenchStats.Quantile(steadySorted, 0.25) * 1000d, 3),
                 Math.Round(BenchStats.Quantile(steadySorted, 0.75) * 1000d, 3),
                 Math.Round(options.InferenceIterations * batchSize / totalSteady, 3),
-                Math.Round(peak, 3)));
+                Math.Round(peak, 3),
+                Math.Round(hostPeak, 3),
+                Math.Round(device.PeakAllocatedBytes / 1024d / 1024d, 3),
+                Math.Round(device.PeakReservedBytes / 1024d / 1024d, 3),
+                Math.Round(device.PeakHostShadowBytes / 1024d / 1024d, 3)));
         }
         return reports;
     }
@@ -1238,7 +1257,8 @@ internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? LastLoss);
 internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample);
 internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95,
-    double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak);
+    double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak,
+    double HostRssMbPeak = 0, double DeviceAllocatedMbPeak = 0, double DeviceReservedMbPeak = 0, double HostShadowMbPeak = 0);
 
 // Device / thread / GC metadata so a run is verifiably same-hardware as the
 // PyTorch baseline (issue #1566 item 3 — "record device/thread-count fields

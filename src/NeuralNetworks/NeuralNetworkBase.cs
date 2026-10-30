@@ -8429,7 +8429,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // forward: no gate, no trace, no overhead, so wrapping any model is always safe. Engagement is
         // computed each call (explicit opt-in for any size, or foundation-scale auto in eval).
         if (!InferenceAccelerationEngaged)
-            return eagerForward();
+        {
+            // On a GPU engine, the forward's dead intermediates go back to the device pool when it returns instead of
+            // waiting for the GC (#2383: DenseNet-121 b16 held a 9.3 GB device peak). What the model still holds
+            // afterwards -- a cache a layer built on its first call, recurrent state -- is kept, even if the forward throws.
+            if (GpuEngine is null) return eagerForward();
+            using var scope = AiDotNet.Tensors.Engines.TensorScope.Begin();
+            try
+            {
+                return scope.Keep(eagerForward());
+            }
+            finally
+            {
+                ReachableTensorKeeper.DetachReachable(this);
+            }
+        }
 
         return _inferenceGate.Run(
             input,

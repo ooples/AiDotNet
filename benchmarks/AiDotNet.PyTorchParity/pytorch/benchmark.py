@@ -78,6 +78,10 @@ class InferenceBatchResult:
     steady_state_latency_ms_p75: float
     throughput_samples_per_second: float
     memory_mb_peak: float
+    host_rss_mb_peak: float = 0.0
+    device_allocated_mb_peak: float = 0.0
+    device_reserved_mb_peak: float = 0.0
+    host_shadow_mb_peak: float = 0.0  # no PyTorch counterpart: it keeps no host copy of device tensors
 
 
 @dataclass
@@ -439,6 +443,7 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             rss_peak = max(rss_peak, process.memory_info().rss / 1024 / 1024)
         total = sum(steady)
         cuda_peak = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else 0.0
+        cuda_reserved_peak = torch.cuda.max_memory_reserved(device) / 1024 / 1024 if device.type == "cuda" else 0.0
         # p95 latency: robust to rig-contention noise that swings the mean.
         steady_sorted = sorted(steady)
         p95_idx = min(len(steady_sorted) - 1, round(0.95 * (len(steady_sorted) - 1)))
@@ -452,6 +457,9 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             steady_state_latency_ms_p75=round(quantile(steady_sorted, 0.75) * 1000, 3),
             throughput_samples_per_second=round((iterations * batch_size) / total, 3),
             memory_mb_peak=round(max(rss_peak, cuda_peak), 3),
+            host_rss_mb_peak=round(rss_peak, 3),
+            device_allocated_mb_peak=round(cuda_peak, 3),
+            device_reserved_mb_peak=round(cuda_reserved_peak, 3),
         ))
     return results
 
