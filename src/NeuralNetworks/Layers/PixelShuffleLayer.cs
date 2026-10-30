@@ -64,12 +64,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _upscaleFactor;
 
     /// <summary>
-    /// Cached input from the last forward pass for backpropagation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Cached original input shape for backward pass with higher-rank tensors.
     /// </summary>
     private int[]? _originalInputShape;
@@ -310,7 +304,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
         // For 4D tensors (batch, channels, height, width), use Engine directly
         if (shape.Length == 4)
         {
-            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
             return Engine.PixelShuffle(input, _upscaleFactor);
         }
 
@@ -318,7 +311,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
         if (shape.Length == 3)
         {
             var input4D = Engine.Reshape(input, [1, shape[0], shape[1], shape[2]]);
-            _lastInput = input4D;
             var output4D = Engine.PixelShuffle(input4D, _upscaleFactor);
             // Remove batch dimension from output
             return Engine.Reshape(output4D, [output4D.Shape[1], output4D.Shape[2], output4D.Shape[3]]);
@@ -339,7 +331,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
             int width = shape[^1];
 
             var input4D = Engine.Reshape(input, [batchSize, channels, height, width]);
-            _lastInput = input4D;
             var output4D = Engine.PixelShuffle(input4D, _upscaleFactor);
 
             // Restore original batch dimensions with new spatial dimensions
@@ -369,7 +360,6 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
         _originalInputShape = null;
     }
 

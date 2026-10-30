@@ -114,23 +114,9 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biases;
 
     /// <summary>
-    /// Stored input from forward pass for backpropagation.
-    /// Shape: [batch, inputFeatures, 8]
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Stored pre-activation output for gradient computation.
-    /// Shape: [batch, outputFeatures, 8]
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Gradient for weights. Shape: [OutputFeatures, InputFeatures, 8]
@@ -254,8 +240,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
 
         // Reshape flat input [batch, inputFeatures*8] → [batch, inputFeatures, 8]
         var input3D = Engine.Reshape(inputTensor, [batchSize, InputFeatures, 8]);
-        _lastInput = input3D;
-
         // Tensor-based octonion matrix multiplication — no Octonion<T> allocation
         var output3D = Engine.OctonionMatMulTensor(input3D, _weights);
 
@@ -263,8 +247,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
         // Indexer mutation writes values into the matmul result but creates no backward op,
         // which made every octonion bias look detached to reverse-mode autodiff.
         output3D = Engine.TensorAdd(output3D, _biases);
-
-        _lastOutput = output3D;
 
         // Flatten back to [batch, outputFeatures*8] for activation and output
         var outputTensor = Engine.Reshape(output3D, [batchSize, OutputFeatures * 8]);
@@ -323,8 +305,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _originalInputShape = null;
         _weightsGradient = null;
         _biasesGradient = null;

@@ -172,12 +172,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _projectionBias;
 
     /// <summary>
-    /// Cached input from the forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
@@ -205,12 +199,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     [Scratch]
     private Tensor<T>? _projectionBiasGradient;
-
-    /// <summary>
-    /// Cached pre-activation tensor from forward pass for use in activation derivative calculation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
 
     // GPU cached tensors for backward pass
     [ExternalState]
@@ -605,7 +593,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
                 new[] { batchSize, _channels, cropHeight, cropWidth });
         }
 
-        _lastInput = processInput;
         int patchDim = _channels * _patchSize * _patchSize;
 
         // Efficient Patchify using Reshape and Transpose (all via Engine).
@@ -644,7 +631,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         var biasBroadcast = Engine.Reshape(_projectionBias, new[] { 1, 1, _embeddingDim });
         var preActivation = Engine.TensorAdd(projected, biasBroadcast);
 
-        _lastPreActivation = preActivation;
         var output = ApplyActivation(preActivation);
 
         // Restore output shape to match original input rank (via Engine).
@@ -705,8 +691,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastPreActivation = null;
         _projectionWeightsGradient = null;
         _projectionBiasGradient = null;
 

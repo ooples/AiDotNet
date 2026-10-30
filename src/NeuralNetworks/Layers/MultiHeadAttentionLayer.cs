@@ -1645,7 +1645,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // per MHA forward; on a 12-layer LayoutLM × 30 training iters
         // that's 360 dead permute/tape entries per Train_ShouldReduceLoss
         // run, each one tracked + walked by the gradient tape backward.
-        if (UseAuxiliaryLoss)
+        // Training only: an inference forward never asks for the auxiliary loss.
+        if (UseAuxiliaryLoss && IsTrainingMode)
         {
             // via Engine so the tape records the transpose
             var permutedForCache = Engine.TensorPermute(context_4D, new[] { 1, 0, 2, 3 }); // [H, B, S, D]
