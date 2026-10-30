@@ -461,7 +461,8 @@ public class RLAgentOptionsHonoredTests
             {
                 ObservationSize = StateSize,
                 ActionSize = 2,
-                LatentSize = 6,
+                DeterministicSize = 6,
+                StochasticSize = 3,
                 HiddenSize = 8,
                 ImaginationHorizon = 2,
                 BatchSize = 8,
@@ -504,7 +505,8 @@ public class RLAgentOptionsHonoredTests
             {
                 ObservationSize = StateSize,
                 ActionSize = 2,
-                LatentSize = 6,
+                DeterministicSize = 6,
+                StochasticSize = 3,
                 HiddenSize = 8,
                 ImaginationHorizon = 2,
                 BatchSize = 8,
@@ -625,7 +627,8 @@ public class RLAgentOptionsHonoredTests
         {
             ObservationSize = StateSize,
             ActionSize = 2,
-            LatentSize = 6,
+            DeterministicSize = 6,
+            StochasticSize = 3,
             HiddenSize = 8,
             OptimizerFactory = factory.Create,
         });
