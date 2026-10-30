@@ -91,7 +91,8 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     // CQL-Lagrange multiplier α' in log space, initialised to log 1 as in the reference implementation.
     private double _logAlphaPrime;
     private readonly ScalarAdam _alphaPrimeOptimizer;
-    private readonly ScalarAdam _alphaOptimizer;
+    // Built on the first temperature update, so a zero AlphaLearningRate is fine while AutoTuneTemperature is off.
+    private ScalarAdam? _alphaOptimizer;
 
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -111,7 +112,6 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _logAlpha = NumOps.Log(_options.InitialTemperature);
         _alpha = _options.InitialTemperature;
         _logAlphaPrime = 0.0;
-        _alphaOptimizer = new ScalarAdam(_numOps.ToDouble(_options.AlphaLearningRate));
         _alphaPrimeOptimizer = new ScalarAdam(_numOps.ToDouble(_options.QLearningRate));
 
         // Initialize networks directly in constructor
@@ -543,9 +543,9 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <summary>
-    /// SAC automatic entropy tuning (Haarnoja et al. 2018b, Eq. 18): descend
-    /// J(α) = E[−α·(log π(a|s) + H̄)] in log α at AlphaLearningRate, where the target entropy H̄ is
-    /// TargetEntropy, or −dim(A) when it is not configured.
+    /// SAC automatic entropy tuning (Haarnoja et al. 2018b, Eq. 18), in the form the reference implementations
+    /// optimise: descend L(log α) = −log α·(log π(a|s) + H̄) at AlphaLearningRate, so the step on log α is
+    /// −(log π + H̄). The target entropy H̄ is TargetEntropy, or −dim(A) when it is not configured.
     /// </summary>
     private void UpdateTemperature(Vector<T> policyOutputs, int n)
     {
@@ -557,6 +557,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         meanLogProb /= n;
 
         double gradient = -(meanLogProb + ResolvedTargetEntropy);
+        _alphaOptimizer ??= new ScalarAdam(_numOps.ToDouble(_options.AlphaLearningRate));
         double logAlpha = _alphaOptimizer.Step(_numOps.ToDouble(_logAlpha), gradient);
         _logAlpha = _numOps.FromDouble(logAlpha);
         _alpha = _numOps.FromDouble(Math.Exp(logAlpha));

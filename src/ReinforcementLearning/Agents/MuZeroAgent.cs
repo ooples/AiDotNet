@@ -616,6 +616,11 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
+        // Normalise the importance weights by the batch maximum (Schaul et al. 2016, section 3.4), so they only
+        // ever scale a loss down: a window drawn at the priority floor would otherwise carry a weight near 1e6.
+        double maxWeight = importanceWeights.Max();
+        for (int s = 0; s < importanceWeights.Count; s++) importanceWeights[s] /= maxWeight;
+
         int perStep = actionDim + 3;
         int perSequence = stateDim + unroll * perStep;
         var data = new Vector<T>(sequences.Count * perSequence + 1);
@@ -634,8 +639,8 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 for (int i = 0; i < actionDim; i++) data[at + i] = i < action.Length ? action[i] : NumOps.Zero;
                 data[at + actionDim] = NStepValueTarget(seq, k, nStep, gamma, bootValueCache);
                 data[at + actionDim + 1] = seq[k].Reward;
-                // The step mask carries the sequence's importance weight 1/(N P(i)), which scales each of its
-                // squared residuals exactly as the paper scales that sample's loss.
+                // The step mask carries the sequence's importance weight 1/(N P(i)), normalised by the batch
+                // maximum, which scales each of its squared residuals as the paper scales that sample's loss.
                 data[at + actionDim + 2] = NumOps.FromDouble(importanceWeights[s]);
                 realElements += 1 + actionDim + 1;
             }
