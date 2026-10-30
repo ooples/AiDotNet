@@ -157,6 +157,12 @@ namespace AiDotNet.Tokenization.Algorithms
             return Encoding.UTF8.GetString(bytes.ToArray());
         }
 
+        /// <summary>The number of UTF-8 bytes token <paramref name="id"/> stands for.</summary>
+        internal int ByteLength(int id) =>
+            id >= 0 && id < _bytesById.Length ? _bytesById[id].Length
+            : _specialById.TryGetValue(id, out var special) ? Encoding.UTF8.GetByteCount(special)
+            : throw new ArgumentOutOfRangeException(nameof(id));
+
         /// <summary>The pre-tokens of ordinary text (special tokens not matched), as the pattern splits it.</summary>
         internal List<string> PreTokens(string text)
         {
