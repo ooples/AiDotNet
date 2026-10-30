@@ -332,15 +332,12 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
 
     /// <summary>The value network's parameters, for tests that check the value regression's settings.</summary>
-    internal Vector<T> ValueNetworkParameters
+    internal Vector<T> GetValueNetworkParameters()
     {
-        get
-        {
-            // Lazily sized layers have no weights until their first forward; materialize so the vector's
-            // length does not change between two reads.
-            if (_valueNetwork is NeuralNetworkBase<T> network) network.MaterializeParameters();
-            return _valueNetwork.GetParameters();
-        }
+        // Lazily sized layers have no weights until their first forward; materialize so the vector's
+        // length does not change between two reads.
+        if (_valueNetwork is NeuralNetworkBase<T> network) network.MaterializeParameters();
+        return _valueNetwork.GetParameters();
     }
 
     /// <summary>

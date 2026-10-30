@@ -115,9 +115,9 @@ public class RLAgentOptionsHonoredTests
         foreach (var (state, action, reward, next, done) in DiscreteData(32, 2, seed: 13))
             agent.StoreExperience(state, action, reward, next, done);
 
-        var before = agent.ValueNetworkParameters;
+        var before = agent.GetValueNetworkParameters();
         agent.Train();
-        var after = agent.ValueNetworkParameters;
+        var after = agent.GetValueNetworkParameters();
         double sum = 0.0;
         for (int i = 0; i < before.Length; i++) sum += (after[i] - before[i]) * (after[i] - before[i]);
         return Math.Sqrt(sum);
