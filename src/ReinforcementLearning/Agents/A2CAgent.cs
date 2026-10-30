@@ -137,7 +137,7 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: outputSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_a2cOptions.PolicyLearningRate));
     }
 
     private NeuralNetwork<T> BuildValueNetwork()
@@ -161,7 +161,9 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _a2cOptions.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_a2cOptions.ValueLearningRate),
+            lossFunction: _a2cOptions.ValueLossFunction);
     }
 
     /// <inheritdoc/>
@@ -344,23 +346,29 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         T policyLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
             Tensor<T> logProbs;
+            Tensor<T> entropy;
             if (_a2cOptions.IsContinuous)
             {
                 int actSize = _a2cOptions.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
-                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
+                // TensorSlice takes (start, length): the log-std half is actSize wide, not the full output width.
+                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize]);
                 logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, (actionsTensor ?? throw new InvalidOperationException("actionsTensor is null where it is required.")));
+                entropy = PolicyDistributionHelper<T>.ComputeGaussianEntropy(Engine, logStds);
             }
             else
             {
                 logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
+                entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(Engine, policyOutput);
             }
 
             // loss = -mean(logProbs * advantages)
+            // Entropy regularisation (Mnih et al. 2016, §4): loss = −mean(log π·A) − β·mean(H(π)).
             var weighted = Engine.TensorMultiply(logProbs, advantagesTensor);
             var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
             var mean = Engine.ReduceMean(weighted, allAxes, keepDims: false);
-            return Engine.TensorNegate(mean);
+            var meanEntropy = Engine.ReduceMean(entropy, Enumerable.Range(0, entropy.Shape.Length).ToArray(), keepDims: false);
+            return Engine.TensorNegate(Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(meanEntropy, _a2cOptions.EntropyCoefficient)));
         });
 
         // Combined loss for monitoring

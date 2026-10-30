@@ -332,7 +332,16 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
 
     /// <summary>The value network's parameters, for tests that check the value regression's settings.</summary>
-    internal Vector<T> ValueNetworkParameters => _valueNetwork.GetParameters();
+    internal Vector<T> ValueNetworkParameters
+    {
+        get
+        {
+            // Lazily sized layers have no weights until their first forward; materialize so the vector's
+            // length does not change between two reads.
+            if (_valueNetwork is NeuralNetworkBase<T> network) network.MaterializeParameters();
+            return _valueNetwork.GetParameters();
+        }
+    }
 
     /// <summary>
     /// Trust Region Policy Optimization step (Schulman et al. 2015, §6 and Appendix C):
@@ -359,17 +368,18 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     private T UpdatePolicyWithinTrustRegion(Tensor<T> batchStates, List<Vector<T>> actions, List<T> advantages)
     {
         int n = actions.Count;
-        var thetaOld = _policyNetwork.GetParameters();
         int outputWidth = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
 
-        // Distribution parameters of the policy that collected the data; constants for this update.
-        var oldOutputs = _policyNetwork.Predict(batchStates);
+        // Distribution parameters of the policy that collected the data; constants for this update. The
+        // forward runs before the parameters are read so lazily sized layers already hold their weights.
+        var oldOutputs = _policyNetwork.Predict(batchStates).ToVector();
+        var thetaOld = _policyNetwork.GetParameters();
         var oldParams = new Vector<T>[n];
         var oldLogProbs = new double[n];
         var advantage = new double[n];
         for (int i = 0; i < n; i++)
         {
-            oldParams[i] = ToDistributionParameters(oldOutputs.ToVector(), i * outputWidth, outputWidth);
+            oldParams[i] = ToDistributionParameters(oldOutputs, i * outputWidth, outputWidth);
             oldLogProbs[i] = LogProbability(oldParams[i], actions[i]);
             advantage[i] = NumOps.ToDouble(advantages[i]);
         }

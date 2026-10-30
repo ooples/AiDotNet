@@ -166,7 +166,9 @@ public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, 
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(LearningRate),
+            lossFunction: _options.LossFunction);
     }
 
     /// <inheritdoc/>

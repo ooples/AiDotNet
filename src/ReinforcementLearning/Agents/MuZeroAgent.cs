@@ -80,6 +80,12 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
 
+    // Prioritized replay (Schrittwieser et al. 2020, Appendix G): one priority per buffer slot, the window
+    // starting there drawn with probability p^PriorityAlpha / sum p^PriorityAlpha. A new transition gets the
+    // largest priority seen so far, so it is replayed at least once before its own error is known.
+    private double[] _priorities = Array.Empty<double>();
+    private double _maxPriority = 1.0;
+
     // #1756: Adam optimizer moment state for the K-step unrolled joint training. The representation,
     // dynamics and prediction networks are unrolled on ONE gradient tape and share a single step
     // counter, but each network's flat Adam moments (m, v over its GetParameters() layout) are kept
@@ -220,6 +226,11 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         var rootPrediction = rootPredictionTensorOutput.ToVector();
         root.Value = ExtractValue(rootPrediction);
 
+        // Root exploration noise (Schrittwieser et al. 2020, Appendix C, after AlphaZero): while acting, the
+        // root's priors are P(s,a) = (1 - RootExplorationFraction) p_a + RootExplorationFraction eta_a with
+        // eta ~ Dir(RootDirichletAlpha). RunMCTS is only reached from training-mode action selection.
+        root.Priors = MixRootNoise(ExtractPolicy(rootPrediction));
+
         // Run simulations
         for (int sim = 0; sim < _options.NumSimulations; sim++)
         {
@@ -240,6 +251,29 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         return bestAction;
+    }
+
+    /// <summary>The root priors with Dirichlet exploration noise mixed in.</summary>
+    internal double[] MixRootNoise(Vector<T> policy)
+    {
+        int actions = _options.ActionSize;
+        double fraction = _options.RootExplorationFraction;
+        var gamma = new AiDotNet.Distributions.GammaDistribution<double>(_options.RootDirichletAlpha, 1.0);
+        var noise = new double[actions];
+        double noiseTotal = 0.0;
+        for (int a = 0; a < actions; a++)
+        {
+            noise[a] = gamma.Sample(Random);
+            noiseTotal += noise[a];
+        }
+
+        var priors = new double[actions];
+        for (int a = 0; a < actions; a++)
+        {
+            double eta = noiseTotal > 0.0 ? noise[a] / noiseTotal : 1.0 / actions;
+            priors[a] = (1.0 - fraction) * NumOps.ToDouble(policy[a]) + fraction * eta;
+        }
+        return priors;
     }
 
     private void SimulateFromNode(MCTSNode<T> node)
@@ -343,7 +377,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             int visitCount = node.VisitCounts.ContainsKey(action) ? node.VisitCounts[action] : 0;
-            double prior = NumOps.ToDouble(policy[action]);
+            double prior = node.Priors is { } priors ? priors[action] : NumOps.ToDouble(policy[action]);
 
             double puctScore = qValue + _options.PUCTConstant * prior * sqrtTotalVisits / (1 + visitCount);
 
@@ -472,7 +506,31 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (action.Length != _options.ActionSize)
             throw new ArgumentException($"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
 
+        if (_priorities.Length != _replayBuffer.Capacity)
+        {
+            _priorities = new double[_replayBuffer.Capacity];
+        }
+        _priorities[_replayBuffer.NextWriteSlot] = _maxPriority;
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
+    }
+
+    /// <summary>The replay priority of every stored transition, in buffer-slot order.</summary>
+    internal IReadOnlyList<double> ReplayPriorities => _priorities.Take(_replayBuffer.Count).ToList();
+
+    /// <summary>
+    /// Draws a buffer slot with probability P(i) = p_i^alpha / sum_k p_k^alpha and returns it with the importance
+    /// weight 1 / (N P(i)) the paper scales that sample's loss by.
+    /// </summary>
+    private (int Slot, double Weight) SamplePrioritizedSlot(double[] cumulative, double[] scaled)
+    {
+        int count = cumulative.Length;
+        double total = cumulative[count - 1];
+        double draw = Random.NextDouble() * total;
+        int index = Array.BinarySearch(cumulative, draw);
+        if (index < 0) index = ~index;
+        if (index >= count) index = count - 1;
+        double probability = scaled[index] / total;
+        return (index, 1.0 / (count * probability));
     }
 
     public override T Train()
@@ -522,11 +580,31 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Value targets bootstrap n-step off the current network, computed detached here.
         int stateDim = -1;
         var sequences = new System.Collections.Generic.List<System.Collections.Generic.List<Experience<T, Vector<T>, Vector<T>>>>(batchSize);
+        var sampledSlots = new System.Collections.Generic.List<int>(batchSize);
+        var importanceWeights = new System.Collections.Generic.List<double>(batchSize);
+        int stored = _replayBuffer.Count;
+        if (_priorities.Length != _replayBuffer.Capacity)
+        {
+            _priorities = new double[_replayBuffer.Capacity];
+            for (int i = 0; i < stored; i++) _priorities[i] = _maxPriority;
+        }
+        var scaledPriorities = new double[stored];
+        var cumulative = new double[stored];
+        double running = 0.0;
+        for (int i = 0; i < stored; i++)
+        {
+            scaledPriorities[i] = Math.Pow(_priorities[i], _options.PriorityAlpha);
+            running += scaledPriorities[i];
+            cumulative[i] = running;
+        }
         for (int b = 0; b < batchSize; b++)
         {
-            var seq = _replayBuffer.SampleSequence(unroll + 1);
+            var (slot, weight) = SamplePrioritizedSlot(cumulative, scaledPriorities);
+            var seq = _replayBuffer.SequenceFromSlot(slot, unroll + 1);
             if (seq.Count < 1) continue;
             sequences.Add(seq);
+            sampledSlots.Add(slot);
+            importanceWeights.Add(weight);
             stateDim = seq[0].State.Length;
         }
         if (sequences.Count == 0)
@@ -552,11 +630,24 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 for (int i = 0; i < actionDim; i++) data[at + i] = i < action.Length ? action[i] : NumOps.Zero;
                 data[at + actionDim] = NStepValueTarget(seq, k, nStep, gamma, bootValueCache);
                 data[at + actionDim + 1] = seq[k].Reward;
-                data[at + actionDim + 2] = NumOps.One;
+                // The step mask carries the sequence's importance weight 1/(N P(i)), which scales each of its
+                // squared residuals exactly as the paper scales that sample's loss.
+                data[at + actionDim + 2] = NumOps.FromDouble(importanceWeights[s]);
                 realElements += 1 + actionDim + 1;
             }
         }
         data[data.Length - 1] = NumOps.FromDouble(1.0 / realElements);
+
+        // New priorities, from the current network before this step: p = |v(o_0) - z_0|, the gap between the
+        // predicted value of the window's first state and its n-step value target.
+        var newPriorities = new double[sequences.Count];
+        for (int s = 0; s < sequences.Count; s++)
+        {
+            int at = s * perSequence + stateDim;
+            var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(sequences[s][0].State)).ToVector();
+            var predicted = ExtractValue(_predictionNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector());
+            newPriorities[s] = Math.Abs(NumOps.ToDouble(predicted) - NumOps.ToDouble(data[at + actionDim])) + PriorityFloor;
+        }
         var packed = Tensor<T>.FromVector(data);
         int sequenceCount = sequences.Count;
 
@@ -611,6 +702,11 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             computeLoss: (loss, _) => loss,
             optimizer: JointOptimizer,
             extraTensors: parameters);
+        for (int s = 0; s < sampledSlots.Count; s++)
+        {
+            _priorities[sampledSlots[s]] = newPriorities[s];
+            _maxPriority = Math.Max(_maxPriority, newPriorities[s]);
+        }
         _updateCount++;
         return lossValue;
 
@@ -622,6 +718,9 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             predNet.SetTrainingMode(false);
         }
     }
+
+    // Keeps a transition whose value is predicted exactly from never being replayed again.
+    private const double PriorityFloor = 1e-6;
 
     // ── K-step unroll helpers (#1756, Schrittwieser et al. 2020) ───────────────────────────────
     private Tensor<T> ScalarTensor(T value) => new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { value }));

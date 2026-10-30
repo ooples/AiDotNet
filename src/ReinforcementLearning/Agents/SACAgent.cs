@@ -175,7 +175,7 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_sacOptions.PolicyLearningRate));
     }
 
     private NeuralNetwork<T> BuildQNetwork()
@@ -203,7 +203,9 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _sacOptions.QLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_sacOptions.QLearningRate),
+            lossFunction: _sacOptions.QLossFunction);
     }
 
     /// <inheritdoc/>
@@ -578,7 +580,13 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
 
         var avgEntropy = NumOps.Divide(totalEntropy, NumOps.FromDouble(batch.Count));
-        var targetEntropy = _sacOptions.TargetEntropy ?? NumOps.FromDouble(-_sacOptions.ActionSize);
+        // TargetEntropy is declared T? on an unconstrained generic, which for float and double is not
+        // Nullable<T>: an unset value reads as zero and `??` never falls back. Zero is therefore treated as
+        // unset, as the base class treats a zero learning rate, giving the -dim(A) heuristic of Haarnoja et al.
+        var configuredEntropy = _sacOptions.TargetEntropy;
+        var targetEntropy = configuredEntropy is null || NumOps.Equals(configuredEntropy, NumOps.Zero)
+            ? NumOps.FromDouble(-_sacOptions.ActionSize)
+            : configuredEntropy;
 
         // Alpha loss: -alpha * (log_prob + target_entropy)
         var alphaLoss = NumOps.Multiply(

@@ -127,6 +127,10 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     /// <paramref name="learningRate"/>, for handing to the network's constructor.
     /// </summary>
     /// <param name="learningRate">The network's step size; must be positive and finite.</param>
+    /// <param name="maxGradientNorm">
+    /// When set, each step's gradient is rescaled to at most this global L2 norm (as PPO's MaxGradNorm
+    /// prescribes); when null the gradient is applied unclipped, as the RL papers' Adam is.
+    /// </param>
     /// <returns>An optimizer that the network's <c>Train</c> and <c>TrainWithCustomLoss</c> step with.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The learning rate is not positive and finite.</exception>
     /// <remarks>
@@ -135,13 +139,19 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     /// Before this existed every deep agent's per-network learning-rate option was stored and never reached
     /// the network it named.
     /// </remarks>
-    protected static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateNetworkOptimizer(T learningRate)
+    protected static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateNetworkOptimizer(
+        T learningRate, double? maxGradientNorm = null)
     {
         double rate = MathHelper.GetNumericOperations<T>().ToDouble(learningRate);
         if (!(rate > 0.0) || double.IsInfinity(rate))
         {
             throw new ArgumentOutOfRangeException(nameof(learningRate), rate,
                 "A network learning rate must be positive and finite.");
+        }
+        if (maxGradientNorm is double norm && (!(norm > 0.0) || double.IsInfinity(norm)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxGradientNorm), norm,
+                "A gradient-norm bound must be positive and finite.");
         }
 
         return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
@@ -154,6 +164,9 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
                 Epsilon = 1e-8,
                 UseAdaptiveLearningRate = false,
                 UseAMSGrad = false,
+                EnableGradientClipping = maxGradientNorm.HasValue,
+                GradientClippingMethod = AiDotNet.Models.Options.GradientClippingMethod.ByNorm,
+                MaxGradientNorm = maxGradientNorm ?? 1.0,
             });
     }
 

@@ -157,7 +157,8 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: finalOutputSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_ppoOptions.PolicyLearningRate, _ppoOptions.MaxGradNorm));
     }
 
     private NeuralNetwork<T> BuildValueNetwork()
@@ -183,7 +184,9 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _ppoOptions.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_ppoOptions.ValueLearningRate, _ppoOptions.MaxGradNorm),
+            lossFunction: _ppoOptions.ValueLossFunction);
     }
 
     /// <inheritdoc/>
@@ -508,16 +511,20 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         {
             // Compute new log-probs using engine ops via PolicyDistributionHelper
             Tensor<T> newLogProbs;
+            Tensor<T> entropy;
             if (_ppoOptions.IsContinuous)
             {
                 int actSize = _ppoOptions.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [batchCount, actSize]);
-                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [batchCount, actSize * 2]);
+                // TensorSlice takes (start, length): the log-std half is actSize wide, not the full output width.
+                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [batchCount, actSize]);
                 newLogProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, (actionsTensor ?? throw new InvalidOperationException("actionsTensor is null where it is required.")));
+                entropy = PolicyDistributionHelper<T>.ComputeGaussianEntropy(Engine, logStds);
             }
             else
             {
                 newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
+                entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(Engine, policyOutput);
             }
 
             // ratio = exp(new_log_prob - old_log_prob) — all engine ops
@@ -539,10 +546,12 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             var negMin = Engine.TensorMax(negSurr1, negSurr2);
             var minSurr = Engine.TensorNegate(negMin);
 
-            // loss = -mean(min(surr1, surr2)) — negative for gradient ascent
+            // loss = -mean(min(surr1, surr2)) - c2·mean(H(π)) — the clipped surrogate plus the entropy bonus of
+            // Schulman et al. 2017, Eq. 9. The value term of that equation is trained on the value network.
             var allAxes = Enumerable.Range(0, minSurr.Shape.Length).ToArray();
             var mean = Engine.ReduceMean(minSurr, allAxes, keepDims: false);
-            return Engine.TensorNegate(mean);
+            var meanEntropy = Engine.ReduceMean(entropy, Enumerable.Range(0, entropy.Shape.Length).ToArray(), keepDims: false);
+            return Engine.TensorNegate(Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(meanEntropy, _ppoOptions.EntropyCoefficient)));
         });
 
         // Combined loss for monitoring

@@ -182,26 +182,31 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         // putting a NoisyDenseLayer between the trunk and the dueling head
         // so the action-conditional projection picks up the exploration
         // noise.
-        const int trunkHidden = 64;
-        IEnumerable<ILayer<T>> layers;
+        // Shared feature trunk: one ReLU dense layer per SharedLayers width. A noisy (or, with noisy nets off,
+        // plain) hidden layer of the trunk's width then feeds the dueling head, so the action-conditional
+        // projection sees the exploration noise.
+        var trunkWidths = _options.SharedLayers is { Count: > 0 } ? _options.SharedLayers : new List<int> { 64 };
+        var layerList = new List<ILayer<T>>();
+        foreach (var width in trunkWidths)
+        {
+            layerList.Add(new DenseLayer<T>(width, new ReLUActivation<T>() as IActivationFunction<T>));
+        }
+
+        int trunkHidden = trunkWidths[trunkWidths.Count - 1];
         if (_options.UseNoisyNetworks)
         {
-            layers = new ILayer<T>[]
-            {
-                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
-                new NoisyDenseLayer<T>(trunkHidden, trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
-                new DuelingCombinationLayer<T>(trunkHidden, duelingActionWidth)
-            };
+            // Factorised Gaussian noise (Fortunato et al. 2018, §3.2): sigma_0 = NoisyNetSigma, initial
+            // sigma = sigma_0 / sqrt(p) for p inputs.
+            layerList.Add(new NoisyDenseLayer<T>(trunkHidden, trunkHidden,
+                new ReLUActivation<T>() as IActivationFunction<T>,
+                sigmaInit: _options.NoisyNetSigma / Math.Sqrt(trunkHidden)));
         }
         else
         {
-            layers = new ILayer<T>[]
-            {
-                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
-                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
-                new DuelingCombinationLayer<T>(trunkHidden, duelingActionWidth)
-            };
+            layerList.Add(new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>));
         }
+        layerList.Add(new DuelingCombinationLayer<T>(trunkHidden, duelingActionWidth));
+        IEnumerable<ILayer<T>> layers = layerList;
 
         var finalArchitecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -212,8 +217,20 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             layers: layers.ToList()
         );
 
-        return new NeuralNetwork<T>(finalArchitecture, lossFunction: LossFunction);
+        return new NeuralNetwork<T>(finalArchitecture,
+            optimizer: CreateNetworkOptimizer(LearningRate),
+            lossFunction: LossFunction);
     }
+
+    /// <summary>
+    /// The initial sigma of every noisy layer in the online network, as each layer recorded it; empty when
+    /// noisy networks are off.
+    /// </summary>
+    internal IReadOnlyList<double> NoisyLayerSigmaInits =>
+        ((NeuralNetworkBase<T>)_onlineNetwork).Layers
+            .OfType<NoisyDenseLayer<T>>()
+            .Select(layer => double.Parse(layer.GetMetadata()["SigmaInit"], System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
 
     /// <summary>
     /// IFullModel.Predict surfaces the raw Q-value vector (one element per

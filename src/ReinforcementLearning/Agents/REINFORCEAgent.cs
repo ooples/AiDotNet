@@ -132,7 +132,7 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
             outputSize: outputSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(LearningRate));
     }
 
     /// <inheritdoc/>

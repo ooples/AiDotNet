@@ -162,7 +162,9 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: outputSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.PolicyLearningRate),
+            lossFunction: _options.ValueLossFunction);
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
@@ -186,7 +188,9 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.ValueLearningRate),
+            lossFunction: _options.ValueLossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -466,22 +470,28 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
             Tensor<T> logProbs;
+            Tensor<T> entropy;
             if (_options.IsContinuous)
             {
                 int actSize = _options.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
-                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
+                // TensorSlice takes (start, length): the log-std half is actSize wide, not the full output width.
+                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize]);
                 logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, (actionsTensor ?? throw new InvalidOperationException("actionsTensor is null where it is required.")));
+                entropy = PolicyDistributionHelper<T>.ComputeGaussianEntropy(Engine, logStds);
             }
             else
             {
                 logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
+                entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(Engine, policyOutput);
             }
 
+            // Entropy regularisation (Mnih et al. 2016, §4): loss = −mean(log π·A) − β·mean(H(π)).
             var weighted = Engine.TensorMultiply(logProbs, advantagesTensor);
             var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
             var mean = Engine.ReduceMean(weighted, allAxes, keepDims: false);
-            return Engine.TensorNegate(mean);
+            var meanEntropy = Engine.ReduceMean(entropy, Enumerable.Range(0, entropy.Shape.Length).ToArray(), keepDims: false);
+            return Engine.TensorNegate(Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(meanEntropy, _options.EntropyCoefficient)));
         });
 
         // Copy local network parameters to global networks (A3C async update)
