@@ -12434,18 +12434,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "USM" && model.TypeParameterCount == 1)
             {
-                // Google USM retains its paper-scale 1,536-wide, 32-layer BEST-RQ encoder and
-                // 32,000-way multilingual CTC head in production. The generated class is already
-                // FP32 with bounded training iterations, but still did not finish in five minutes.
-                // Exercise the same foundation-ASR topology through the public options at CI scale;
-                // production defaults and all user customization points remain unchanged.
+                // Google USM's defaults are the paper's Conformer-2B (32 blocks, 1536 wide) with sixteen 8192-entry
+                // codebooks. The fixture is the same log-mel -> conv subsampling -> chunk-attention Conformer ->
+                // projection + CTC network at width 32, 2 blocks, 32 mel bins and two 64-entry codebooks.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.Multilingual.USMOptions { EncoderDim = 64, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.USMOptions { EncoderDim = 32, " +
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, CodebookSize = 64, NumCodebooks = 2, " +
+                    "VocabSize = 16, MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "OLMoASR" && model.TypeParameterCount == 1)
             {
@@ -17030,7 +17028,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 512 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
             }
-            else if (model.ClassName == "BESTRQ")
+            else if (model.ClassName == "BESTRQ" || model.ClassName == "USM")
             {
                 // BEST-RQ reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");

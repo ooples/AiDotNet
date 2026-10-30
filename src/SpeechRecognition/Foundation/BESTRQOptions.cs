@@ -113,4 +113,15 @@ public class BESTRQOptions : ModelOptions
 
     /// <summary>Language reported for transcriptions.</summary>
     public string Language { get; set; } = "en";
+
+    // The network these options describe: Conformer XL without positional encoding, attending over the whole input,
+    // with one codebook.
+    internal BestRqConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, NumMels = NumMels, WindowLength = WindowLength, HopLength = HopLength,
+        LogMelFloor = LogMelFloor, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
+        NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, ConvKernel = ConvKernel,
+        CodebookSize = CodebookSize, CodeDim = CodeDim, StackedFrames = StackedFrames, MaskProbability = MaskProbability,
+        MaskLength = MaskLength, MaskNoiseStd = MaskNoiseStd, VocabSize = VocabSize,
+    };
 }
