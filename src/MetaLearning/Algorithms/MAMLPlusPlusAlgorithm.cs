@@ -165,6 +165,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             options.InnerOptimizer)
     {
         _mamlOptions = options;
+        RequirePlainSgdInnerSteps(options.UsePerStepLearningRates, "meta-learned per-step inner learning rates");
 
         // Initialize per-step learning rates
         _perStepLearningRates = new Vector<T>(options.AdaptationSteps);

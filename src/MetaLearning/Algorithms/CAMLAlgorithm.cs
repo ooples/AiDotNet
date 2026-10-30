@@ -107,7 +107,8 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         : base(
             options.MetaModel,
             options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _camlOptions = options;
         InitializeContextModule();

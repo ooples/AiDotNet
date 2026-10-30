@@ -159,17 +159,22 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <param name="lossFunction">Loss function for evaluation.</param>
     /// <param name="options">Configuration options with all hyperparameters.</param>
     /// <param name="dataLoader">Optional episodic data loader for sampling tasks.</param>
-    /// <param name="metaOptimizer">Optional optimizer for meta-updates. If null, gradient updates use manual SGD with OuterLearningRate.</param>
-    /// <param name="innerOptimizer">Optional optimizer for inner-loop. If null, gradient updates use manual SGD with InnerLearningRate.</param>
+    /// <param name="metaOptimizer">Optional optimizer for meta-updates, stepping at its own learning rate. If null,
+    /// meta-updates use plain SGD at OuterLearningRate.</param>
+    /// <param name="innerOptimizer">Optional optimizer for task adaptation, stepping at its own learning rate and reset
+    /// for each adaptation. If null, adaptation uses plain SGD at InnerLearningRate.</param>
+    /// <param name="optimizerUse">Which loops of the derived algorithm take their steps through these optimizers.</param>
     /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or options is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
+    /// <exception cref="ArgumentException">Thrown when configuration validation fails, or when an optimizer is
+    /// supplied for a loop the algorithm does not take gradient steps in.</exception>
     protected MetaLearnerBase(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
         IMetaLearnerOptions<T> options,
         IEpisodicDataLoader<T, TInput, TOutput>? dataLoader = null,
         IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer = null,
-        IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null)
+        IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null,
+        MetaLearnerOptimizerUse optimizerUse = MetaLearnerOptimizerUse.InnerAndOuter)
     {
         Guard.NotNull(metaModel);
         MetaModel = metaModel;
@@ -184,6 +189,14 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         }
 
         DataLoader = dataLoader;
+        if (metaOptimizer is not null && (optimizerUse & MetaLearnerOptimizerUse.Outer) == 0)
+            throw new ArgumentException(
+                $"{GetType().Name} has no outer-loop gradient step for a meta-optimizer to take; leave MetaOptimizer null.",
+                nameof(metaOptimizer));
+        if (innerOptimizer is not null && (optimizerUse & MetaLearnerOptimizerUse.Inner) == 0)
+            throw new ArgumentException(
+                $"{GetType().Name} has no inner-loop gradient step for an inner optimizer to take; leave InnerOptimizer null.",
+                nameof(innerOptimizer));
         MetaOptimizer = metaOptimizer;
         InnerOptimizer = innerOptimizer;
 
@@ -803,6 +816,21 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         var lr = NumOps.FromDouble(learningRate);
         var scaledGradients = Engine.Multiply(gradients, lr);
         return Engine.Subtract(parameters, scaledGradients);
+    }
+
+    /// <summary>
+    /// Rejects a supplied <see cref="InnerOptimizer"/> when the configuration's meta-gradient differentiates
+    /// through, or meta-learns, plain SGD inner steps, since another optimizer's steps would make it wrong.
+    /// </summary>
+    /// <param name="required">Whether the active configuration assumes plain SGD inner steps.</param>
+    /// <param name="configuration">The configuration that assumes it, as completes "{algorithm} uses ...".</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="required"/> and an inner optimizer was supplied.</exception>
+    protected void RequirePlainSgdInnerSteps(bool required, string configuration)
+    {
+        if (required && InnerOptimizer is not null)
+            throw new ArgumentException(
+                $"{GetType().Name} uses {configuration}, which assumes plain SGD inner steps; leave InnerOptimizer null.",
+                "options");
     }
 
     /// <summary>

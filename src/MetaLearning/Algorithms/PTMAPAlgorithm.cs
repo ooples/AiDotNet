@@ -109,7 +109,8 @@ public partial class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         : base(
             options.MetaModel,
             options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _ptmapOptions = options;
     }

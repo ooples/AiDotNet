@@ -115,7 +115,8 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            null) // ProtoNets doesn't use inner optimizer (non-parametric adaptation)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _protoNetsOptions = options;
 

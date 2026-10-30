@@ -95,6 +95,9 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options.InnerOptimizer)
     {
         _mamlOptions = options;
+        RequirePlainSgdInnerSteps(
+            !options.UseFirstOrderApproximation && MetaModel is ISecondOrderGradientComputable<T, TInput, TOutput>,
+            "second-order meta-gradients through the inner steps");
     }
 
     /// <summary>

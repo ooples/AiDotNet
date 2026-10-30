@@ -126,7 +126,8 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _cnapOptions = options;
 

@@ -97,7 +97,8 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _relationOptions = options;
 

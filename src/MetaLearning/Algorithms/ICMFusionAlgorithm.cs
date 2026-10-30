@@ -128,7 +128,8 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     public ICMFusionAlgorithm(ICMFusionOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.Inner)
     {
         if (options.LatentDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "LatentDim must be positive.");
@@ -138,6 +139,7 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             throw new ArgumentOutOfRangeException(nameof(options), "AdaptationSteps cannot be negative.");
 
         _algoOptions = options;
+        RequirePlainSgdInnerSteps(!options.UseFirstOrder, "second-order meta-gradients through the inner trajectory");
         _pretrainedParams = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Clone();
         _paramDim = _pretrainedParams.Length;
         if (_paramDim == 0)

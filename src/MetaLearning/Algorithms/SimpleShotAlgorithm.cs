@@ -124,7 +124,8 @@ public partial class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _simpleShotOptions = options;
     }

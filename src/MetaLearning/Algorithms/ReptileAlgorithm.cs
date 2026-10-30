@@ -212,18 +212,12 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         }
 
         // Update meta-parameters using interpolation
-        // theta_new = theta_old + (OuterLearningRate * Interpolation) * average_update
+        // theta_new = theta_old + (OuterLearningRate * Interpolation) * average_update, which is an SGD step on the
+        // "gradient" theta_old - phi. Nichol et al. (2018, section 3) feed that same vector to Adam, so a supplied
+        // meta-optimizer takes it instead.
         var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        var updatedMetaParams = new Vector<T>(currentMetaParams.Length);
-        T stepSize = NumOps.FromDouble(_reptileOptions.OuterLearningRate * _reptileOptions.Interpolation);
-
-        for (int i = 0; i < currentMetaParams.Length; i++)
-        {
-            updatedMetaParams[i] = NumOps.Add(
-                currentMetaParams[i],
-                NumOps.Multiply(stepSize, accumulatedUpdates[i])
-            );
-        }
+        var updatedMetaParams = ApplyOuterGradients(currentMetaParams, Engine.Multiply(accumulatedUpdates, NumOps.FromDouble(-1.0)),
+            _reptileOptions.OuterLearningRate * _reptileOptions.Interpolation);
 
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
 

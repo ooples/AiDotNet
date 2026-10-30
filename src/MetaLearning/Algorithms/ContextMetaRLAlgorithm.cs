@@ -82,7 +82,8 @@ public partial class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     public ContextMetaRLAlgorithm(ContextMetaRLOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         if (options.ContextDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "ContextDim must be positive.");

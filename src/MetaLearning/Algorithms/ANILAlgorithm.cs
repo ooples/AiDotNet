@@ -112,6 +112,7 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options.InnerOptimizer)
     {
         _anilOptions = options;
+        RequirePlainSgdInnerSteps(!options.UseFirstOrder, "second-order meta-gradients through the head's inner steps");
         if (options.NumClasses <= 0)
             throw new ArgumentException("NumClasses must be positive.", nameof(options));
         if (options.FeatureDimension <= 0)

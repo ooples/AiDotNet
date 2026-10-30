@@ -76,7 +76,8 @@ public partial class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     public DiscoRLAlgorithm(DiscoRLOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         if (options.NumSkills <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "NumSkills must be positive.");

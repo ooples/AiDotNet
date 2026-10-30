@@ -138,7 +138,8 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _caviaOptions = options;
 

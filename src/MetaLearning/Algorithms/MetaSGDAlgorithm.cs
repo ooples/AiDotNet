@@ -162,7 +162,8 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.None)
     {
         _metaSGDOptions = options;
 
