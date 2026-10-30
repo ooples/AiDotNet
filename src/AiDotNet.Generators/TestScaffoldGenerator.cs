@@ -12014,14 +12014,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // with a flattened observation whose size equals StateDim and an
                 // ActionSize equal to StateDim so the transition is accepted. The
                 // dense VAE (flattened observation -> DenseLayer stack) imposes no
-                // spatial minimum, so a 4x1x1 observation is legal. BatchSize=1 lets
-                // the single stored transition trigger a real VAE+RNN update, so
-                // Training_ShouldChangeParameters observes moved weights.
+                // spatial minimum, so a 4x1x1 observation is legal. BatchSize=8 lets
+                // the eighth stored transition trigger a real VAE update, so
+                // Training_ShouldChangeParameters observes moved weights. Train()
+                // walks the paper's V -> M -> C cycle (VAEEpochs passes of V,
+                // RNNEpochs passes of M, then one complete CMA-ES run in M's dream);
+                // the cycle is shrunk here (one epoch each, short sequences, a
+                // 2-generation CMA-ES of 4 candidates over 2 dreams of 8 steps) so
+                // the real-loop invariants reach M and C within their step budget
+                // instead of running the paper's 1800 generations x 64 x 16 x 1000.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.WorldModelsOptions<double> {{ " +
                     "ObservationWidth = 4, ObservationHeight = 1, ObservationChannels = 1, " +
-                    "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 1, " +
+                    "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 8, " +
                     "VAEEncoderChannels = new System.Collections.Generic.List<int> { 8 }, " +
-                    "ControllerLayers = new System.Collections.Generic.List<int> { 8 } })";
+                    "ControllerLayers = new System.Collections.Generic.List<int> { 8 }, " +
+                    "VAEEpochs = 1, RNNEpochs = 1, RNNSequenceLength = 16, " +
+                    "ControllerGenerations = 2, ControllerPopulationSize = 4, " +
+                    "ControllerEvaluationRollouts = 2, RolloutLength = 8 })";
             }
             else if ((model.ClassName is "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT")
                      && model.TypeParameterCount == 1
