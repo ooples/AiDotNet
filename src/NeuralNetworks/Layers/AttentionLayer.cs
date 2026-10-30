@@ -445,9 +445,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             input3D = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
-        // #1668: the forward works on locals; only the score cache below is gated on cacheBwd.
-        bool cacheBwd = ShouldCacheForBackward;
-
         int batchSize = input3D.Shape[0];
         int seqLen = input3D.Shape[1];
 
@@ -485,7 +482,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             Tensor<T> output4D;
             // The weights are also the auxiliary attention-entropy loss's input: materialize them when that
             // loss will read them, as MultiHeadAttentionLayer does (scoresNeeded), not only for the manual backward.
-            bool scoresNeeded = cacheBwd || (UseAuxiliaryLoss && IsTrainingMode);
+            bool scoresNeeded = ShouldCacheForBackward || (UseAuxiliaryLoss && IsTrainingMode);
             if (scoresNeeded)
             {
                 output4D = Engine.ScaledDotProductAttention(
