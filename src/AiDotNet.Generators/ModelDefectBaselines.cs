@@ -173,7 +173,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>",
             "AiDotNet.SpeechRecognition.Multilingual.OWSM<T>",
             "AiDotNet.SpeechRecognition.Multilingual.USM<T>",
-            "AiDotNet.SpeechRecognition.Multilingual.XLSR<T>",
             "AiDotNet.SpeechRecognition.NeMo.CanaryFlash<T>",
             "AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>",
             "AiDotNet.SpeechRecognition.NeMo.NeMoMultitask<T>",
