@@ -195,12 +195,7 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
 
-        // Ensure backward layer has independent parameter tensors
-        // (MemberwiseClone shares tensor references — SetParameters creates new ones)
-        if (_backwardLayer.ParameterCount > 0)
-        {
-            _backwardLayer.SetParameters(_backwardLayer.GetParameters().Clone());
-        }
+        // LayerBase.Clone uses the full independent-storage clone contract.
 
         // Register the forward/backward inner layers as children so the gradient-tape parameter
         // collector (TapeTrainingStep.CollectParameters, which walks GetSubLayers) discovers and
@@ -249,12 +244,7 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
 
-        // Ensure backward layer has independent parameter tensors
-        // (MemberwiseClone shares tensor references — SetParameters creates new ones)
-        if (_backwardLayer.ParameterCount > 0)
-        {
-            _backwardLayer.SetParameters(_backwardLayer.GetParameters().Clone());
-        }
+        // LayerBase.Clone uses the full independent-storage clone contract.
 
         // Register the forward/backward inner layers as children so the gradient-tape parameter
         // collector (TapeTrainingStep.CollectParameters, which walks GetSubLayers) discovers and

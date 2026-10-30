@@ -19,6 +19,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.235.0](https://github.com/ooples/AiDotNet/compare/v0.234.0...v0.235.0) (2026-10-29)
+
+
+### Features
+
+* **nn:** the base class owns every network's training step, on one shared fused session ([#1804](https://github.com/ooples/AiDotNet/issues/1804)) ([#2295](https://github.com/ooples/AiDotNet/issues/2295)) ([6786764](https://github.com/ooples/AiDotNet/commit/6786764b2eca9dbf2fd3e32b8a5e87f23f8241fc))
+
+
+### Bug Fixes
+
+* CLAP as LAION-CLAP's network ([#2313](https://github.com/ooples/AiDotNet/issues/2313)), BLIP grounded in the image ([#2297](https://github.com/ooples/AiDotNet/issues/2297)), and net462/netstandard2.0 targets ([#2326](https://github.com/ooples/AiDotNet/issues/2326)) ([#2323](https://github.com/ooples/AiDotNet/issues/2323)) ([8964274](https://github.com/ooples/AiDotNet/commit/8964274287313adcb6e82b1dba72b7f3603cf953))
+* copy a nested options object instead of aliasing it, and test which inference components engage ([#1993](https://github.com/ooples/AiDotNet/issues/1993), [#1632](https://github.com/ooples/AiDotNet/issues/1632)) ([#2317](https://github.com/ooples/AiDotNet/issues/2317)) ([d87617f](https://github.com/ooples/AiDotNet/commit/d87617f05f7890dc6c9a34b5a5e5d9ebe6cc6341))
+* decoder-only block ([#2325](https://github.com/ooples/AiDotNet/issues/2325)), vgg back in the gate ([#1394](https://github.com/ooples/AiDotNet/issues/1394)), heavy-lane defects ([#2087](https://github.com/ooples/AiDotNet/issues/2087)); [#2322](https://github.com/ooples/AiDotNet/issues/2322) diagnosed ([#2331](https://github.com/ooples/AiDotNet/issues/2331)) ([f171c7e](https://github.com/ooples/AiDotNet/commit/f171c7e50f2d1ab5a4d7858d8c6f38dd6adacaa6))
+* **diagnostics:** build against current Tensors; diffusion probe scaling modes (Tensors [#653](https://github.com/ooples/AiDotNet/issues/653)) ([#2336](https://github.com/ooples/AiDotNet/issues/2336)) ([5752a0f](https://github.com/ooples/AiDotNet/commit/5752a0fab78573ac1fe7fe829e205e0159574834))
+* five defects (culture parsing, console exceptions, stable hashes, registry races, httpclient lifetime) ([#2364](https://github.com/ooples/AiDotNet/issues/2364)) ([7186337](https://github.com/ooples/AiDotNet/commit/7186337f76c7e30f728e55d0a870261ea3b76676))
+* five defects on master (random, regex timeouts, swallowed exceptions, null-forgiving initializers, options seed) ([#2357](https://github.com/ooples/AiDotNet/issues/2357)) ([a4511f3](https://github.com/ooples/AiDotNet/commit/a4511f3dcfd8d9ad65f02a5c28975e8f527df373))
+* fused attention training, namesake model coverage, cancellation reporting, clap fidelity and factory architecture ([#2312](https://github.com/ooples/AiDotNet/issues/2312), [#2138](https://github.com/ooples/AiDotNet/issues/2138), [#2131](https://github.com/ooples/AiDotNet/issues/2131), [#2313](https://github.com/ooples/AiDotNet/issues/2313), [#2147](https://github.com/ooples/AiDotNet/issues/2147)) ([#2316](https://github.com/ooples/AiDotNet/issues/2316)) ([1b8c757](https://github.com/ooples/AiDotNet/commit/1b8c757cfb5b3734402df8414d5887c10f78523c))
+* generated test families for every excluded base ([#2139](https://github.com/ooples/AiDotNet/issues/2139)), the bugs they found, and the [#2087](https://github.com/ooples/AiDotNet/issues/2087)/[#2147](https://github.com/ooples/AiDotNet/issues/2147) slices ([#2345](https://github.com/ooples/AiDotNet/issues/2345)) ([6b5c085](https://github.com/ooples/AiDotNet/commit/6b5c085059aff626f1e4ece868bb6d9afbd18126))
+* **nn:** apply options.seed for models that keep their options to themselves ([#2350](https://github.com/ooples/AiDotNet/issues/2350)) ([663459f](https://github.com/ooples/AiDotNet/commit/663459f3ed8e6391d37489bc78a56cc0c9c0a2ec))
+* **nn:** redraw the t5 bias table when the model's seed arrives ([#2367](https://github.com/ooples/AiDotNet/issues/2367)) ([bc71bc1](https://github.com/ooples/AiDotNet/commit/bc71bc13d3333caf346f6abcae66fa103820e3b8))
+* OpenSora nightly fixture, 40x default-inference slowdown, detector mAP overfit test ([#2365](https://github.com/ooples/AiDotNet/issues/2365), [#1632](https://github.com/ooples/AiDotNet/issues/1632), [#2170](https://github.com/ooples/AiDotNet/issues/2170)) ([#2366](https://github.com/ooples/AiDotNet/issues/2366)) ([8987611](https://github.com/ooples/AiDotNet/commit/8987611b14d3e0102fd340b6b1cf1b205361d5b7))
+* **playground:** recover Stripe webhooks and isolate code execution ([#2377](https://github.com/ooples/AiDotNet/issues/2377)) ([2ff2052](https://github.com/ooples/AiDotNet/commit/2ff20527a6effb7e4d26e9ca9f40ea3705387847))
+
+
+### Performance
+
+* **benchmarks:** run the PyTorch parity harness over 11 model families, with fair inputs and loss evidence ([#2381](https://github.com/ooples/AiDotNet/issues/2381)) ([0d2b2bf](https://github.com/ooples/AiDotNet/commit/0d2b2bfcbdc3f42db396ccc17d4102c21dac2056))
+* **diffusion:** reuse a tensorarena for eager inference; fix(generators): stop persisting dispose-assigned state ([#2368](https://github.com/ooples/AiDotNet/issues/2368)) ([701415b](https://github.com/ooples/AiDotNet/commit/701415be29aab10f287822d585cca39f0b84c264))
+* extend fused recurrence and reusable state across model foundations ([#2380](https://github.com/ooples/AiDotNet/issues/2380)) ([d42d6b6](https://github.com/ooples/AiDotNet/commit/d42d6b66e74d656c3dd82ac22d59a0c8b2c96287))
+* **nn:** skip per-layer arena recycling when a forward rented no host scratch ([#2370](https://github.com/ooples/AiDotNet/issues/2370)) ([28ce9d2](https://github.com/ooples/AiDotNet/commit/28ce9d2c9ab805379a9928c413f1665b658bb91a))
+* **timeseries:** fused lstm for deepar, device-side best-epoch checkpoint for all six forecasters ([#2378](https://github.com/ooples/AiDotNet/issues/2378)) ([04e44e8](https://github.com/ooples/AiDotNet/commit/04e44e859446307322f06043a11023f9ebc822d8))
+
+
+### Refactoring
+
+* **gpu:** run gpu inference through forward and delete the forwardgpu overrides ([#2332](https://github.com/ooples/AiDotNet/issues/2332)) ([f836269](https://github.com/ooples/AiDotNet/commit/f8362697ac6d12e3397fbf797cd121a2a82f4f5a))
+* **nn:** let the base own every network's options ([#2351](https://github.com/ooples/AiDotNet/issues/2351)) ([7819f57](https://github.com/ooples/AiDotNet/commit/7819f57c72b1d25a719d2912df037b353943333f))
+
+
+### Documentation
+
+* OOM/timeout playbook and NVIDIA vendor-library dispatch, measured ([#1684](https://github.com/ooples/AiDotNet/issues/1684), [#1159](https://github.com/ooples/AiDotNet/issues/1159)) ([#2374](https://github.com/ooples/AiDotNet/issues/2374)) ([5b62869](https://github.com/ooples/AiDotNet/commit/5b6286987dc1f6689ed31ad3e28fbbf1b58dd402))
+* **website:** replace unsourced speed claims with measured results ([#2309](https://github.com/ooples/AiDotNet/issues/2309)) ([b627f5c](https://github.com/ooples/AiDotNet/commit/b627f5c1f568b21a9acabbf8d67b3522e9f0ea08))
+
 ## [0.234.0](https://github.com/ooples/AiDotNet/compare/v0.233.0...v0.234.0) (2026-10-10)
 
 

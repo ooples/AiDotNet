@@ -139,7 +139,7 @@ public partial class MoCo<T> : SelfSupervisedLearningMethodBase<T>
 
         var projector = new LinearProjector<T>(encoderOutputDim, projectionDim);
         var momentumProjector = new LinearProjector<T>(encoderOutputDim, projectionDim);
-        momentumProjector.SetParameters(projector.GetParameters());
+        ProjectorParameterTransfer<T>.Copy(projector, momentumProjector);
 
         var encoderCopy = createEncoderCopy(encoder);
         var momentumEncoder = new MomentumEncoder<T>(encoderCopy, 0.999);

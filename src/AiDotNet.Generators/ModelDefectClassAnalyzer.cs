@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -177,18 +176,47 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
             end.ReportDiagnostic(Diagnostic.Create(StaleBaseline, Location.None, entry, name));
     }
 
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-
     // One key per paper whatever link form a model cites: arXiv ids (with or without the 10.48550 DOI
-    // prefix and version suffix), then DOIs, then the bare URL.
+    // prefix and version suffix), then DOIs, then the bare URL. Parsed with string scans, not regexes: the
+    // analyzer runs once per cited paper on every build, and a regex's match timeout fired on a starved CI
+    // runner (AD0001 RegexMatchTimeoutException on these linear patterns), failing the whole build.
     internal static string NormalizePaper(string url)
     {
         string u = url.Trim().ToLowerInvariant().TrimEnd('/');
-        var arxiv = Regex.Match(u, @"(?:arxiv\.org/(?:abs|pdf)/|arxiv\.)(\d{4}\.\d{4,5})", RegexOptions.None, RegexTimeout);
-        if (arxiv.Success) return "arxiv:" + arxiv.Groups[1].Value;
-        var doi = Regex.Match(u, @"doi\.org/(.+)$", RegexOptions.None, RegexTimeout);
-        if (doi.Success) return "doi:" + doi.Groups[1].Value;
-        return Regex.Replace(u, @"^https?://(www\.)?", string.Empty, RegexOptions.None, RegexTimeout);
+        // Leftmost "arxiv.org/abs/", "arxiv.org/pdf/" or "arxiv." directly followed by a dddd.dddd(d) id.
+        for (int i = u.IndexOf("arxiv.", StringComparison.Ordinal); i >= 0; i = u.IndexOf("arxiv.", i + 1, StringComparison.Ordinal))
+        {
+            int at = i;
+            foreach (var prefix in ArxivPrefixes.Where(p => string.CompareOrdinal(u, at, p, 0, p.Length) == 0))
+            {
+                string? id = ArxivIdAt(u, i + prefix.Length);
+                if (id is not null) return "arxiv:" + id;
+            }
+        }
+        int doi = u.IndexOf("doi.org/", StringComparison.Ordinal);
+        if (doi >= 0 && doi + "doi.org/".Length < u.Length) return "doi:" + u.Substring(doi + "doi.org/".Length);
+        // The scheme, then "www.", are dropped only from a link that has one (the regex was ^https?://(www\.)?).
+        string bare;
+        if (u.StartsWith("https://", StringComparison.Ordinal)) bare = u.Substring("https://".Length);
+        else if (u.StartsWith("http://", StringComparison.Ordinal)) bare = u.Substring("http://".Length);
+        else return u;
+        return bare.StartsWith("www.", StringComparison.Ordinal) ? bare.Substring("www.".Length) : bare;
+    }
+
+    private static readonly string[] ArxivPrefixes = { "arxiv.org/abs/", "arxiv.org/pdf/", "arxiv." };
+
+    // Four digits, a dot, then four or five digits (five when present), starting at index start.
+    private static string? ArxivIdAt(string s, int start)
+    {
+        int Digits(int from, int max)
+        {
+            int n = 0;
+            while (n < max && from + n < s.Length && s[from + n] >= '0' && s[from + n] <= '9') n++;
+            return n;
+        }
+        if (Digits(start, 4) != 4 || start + 4 >= s.Length || s[start + 4] != '.') return null;
+        int tail = Digits(start + 5, 5);
+        return tail >= 4 ? s.Substring(start, 5 + tail) : null;
     }
 
     /// <summary>

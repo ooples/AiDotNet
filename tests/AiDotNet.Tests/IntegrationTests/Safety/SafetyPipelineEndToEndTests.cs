@@ -338,7 +338,8 @@ public class SafetyPipelineEndToEndTests
             Image = { NSFWDetection = true, ViolenceDetection = true, DeepfakeDetection = true },
             Audio = { DeepfakeDetection = true, ToxicSpeechDetection = true },
             Video = { ContentModeration = true, DeepfakeDetection = true },
-            Watermarking = { TextWatermarking = true, ImageWatermarking = true, AudioWatermarking = true },
+            Watermarking = { TextWatermarking = true, ImageWatermarking = true, AudioWatermarking = true,
+                             ImageWatermarkKey = "pipeline-test-image-watermark-key" },
             Fairness = { DemographicParity = true, EqualizedOdds = true, StereotypeDetection = true },
             Compliance = { EUAIAct = true, GDPR = true, SOC2 = true }
         };

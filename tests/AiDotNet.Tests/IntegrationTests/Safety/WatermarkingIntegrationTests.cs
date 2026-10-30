@@ -102,6 +102,95 @@ public class WatermarkingIntegrationTests
         Assert.NotNull(findings);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_NonFinitePixels_AreNoEvidence()
+    {
+        await Task.Yield();
+        var tensor = CreateRandomImageTensor(3, 32, 32);
+        tensor[5] = double.NaN;
+        var watermarker = new ImageWatermarker<double>(detectionThreshold: 0);
+        Assert.Equal(0.0, watermarker.DetectWatermark(tensor));
+        Assert.Empty(watermarker.EvaluateImage(tensor));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_ReportsFromItsDetectionThreshold()
+    {
+        await Task.Yield();
+        var image = CreateRandomImageTensor(3, 32, 32);
+        var detector = new ImageWatermarker<double>();
+        var fullMark = detector.EmbedWatermark(image);
+
+        // Scale the embedded change so the confidence lies strictly inside (0, 1); both sides of the threshold
+        // are then checked unconditionally. Confidence rises with the scale, so bisection finds one.
+        double low = 0, high = 1, confidence = detector.DetectWatermark(fullMark);
+        Tensor<double> partial = fullMark;
+        for (int step = 0; step < 40 && !(confidence >= 0.3 && confidence <= 0.7); step++)
+        {
+            double scale = 0.5 * (low + high);
+            partial = Blend(image, fullMark, scale);
+            confidence = detector.DetectWatermark(partial);
+            if (confidence > 0.7) high = scale; else low = scale;
+        }
+
+        Assert.True(confidence >= 0.3 && confidence <= 0.7, $"no scale gave a mid-range confidence; last {confidence}");
+
+        var finding = Assert.Single(new ImageWatermarker<double>(detectionThreshold: confidence).EvaluateImage(partial));
+        Assert.Equal(AiDotNet.Enums.SafetyCategory.Watermarked, finding.Category);
+        Assert.Equal(confidence, finding.Confidence);
+        Assert.Empty(new ImageWatermarker<double>(detectionThreshold: confidence + 0.01).EvaluateImage(partial));
+        Assert.Empty(new ImageWatermarker<double>(detectionThreshold: 0.5).EvaluateImage(image));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ImageWatermarker<double>(detectionThreshold: 1.5));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_RejectsOversizedImagesForEmbedding_AndReportsNoEvidenceOnDetection()
+    {
+        await Task.Yield();
+        var watermarker = new SmallLimitWatermarker();
+        var image = CreateRandomImageTensor(1, 40, 40);
+        Assert.Throws<ArgumentException>(() => watermarker.EmbedWatermark(image));
+        // A safety pipeline evaluating a huge image must still complete, so detection reports no evidence.
+        Assert.Equal(0.0, watermarker.DetectWatermark(image));
+        Assert.Empty(watermarker.EvaluateImage(image));
+        var allowed = CreateRandomImageTensor(1, 32, 32);
+        Assert.True(watermarker.DetectWatermark(watermarker.EmbedWatermark(allowed)) >= 0.9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_EmptyOrBlankKey_IsRejected()
+    {
+        await Task.Yield();
+        Assert.Throws<ArgumentException>(() => new ImageWatermarker<double>(key: ""));
+        Assert.Throws<ArgumentException>(() => new ImageWatermarker<double>(key: "   "));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EmbedWatermark_RefusesAStrengthTooLowToBeDetected()
+    {
+        await Task.Yield();
+        // At strength 0.05 a 64 x 64 noise image's mark would reach an expected z near 2, which scores 0.
+        var image = CreateRandomImageTensor(3, 64, 64);
+        var weak = new InvisibleImageWatermarker<double>(watermarkStrength: 0.05);
+        var error = Assert.Throws<ArgumentException>(() => weak.EmbedWatermark(image));
+        Assert.Contains("expected detection z", error.Message);
+        Assert.True(new InvisibleImageWatermarker<double>().DetectWatermark(new InvisibleImageWatermarker<double>().EmbedWatermark(image)) >= 0.9);
+    }
+
+    private sealed class SmallLimitWatermarker : ImageWatermarker<double>
+    {
+        protected override long MaxPixels => 32 * 32;
+    }
+
+    private static Tensor<double> Blend(Tensor<double> image, Tensor<double> marked, double scale)
+    {
+        var a = image.ToArray();
+        var b = marked.ToArray();
+        var data = new double[a.Length];
+        for (int i = 0; i < a.Length; i++) data[i] = a[i] + scale * (b[i] - a[i]);
+        return new Tensor<double>(data, image.Shape.ToArray());
+    }
+
     #endregion
 
     #region FrequencyImageWatermarker Tests
@@ -110,20 +199,6 @@ public class WatermarkingIntegrationTests
     public async Task FrequencyImage_DetectsWatermark()
     {
         var watermarker = new FrequencyImageWatermarker<double>();
-        var tensor = CreateRandomImageTensor(3, 32, 32);
-        var score = watermarker.DetectWatermark(tensor);
-
-        Assert.True(score >= 0 && score <= 1);
-    }
-
-    #endregion
-
-    #region NeuralImageWatermarker Tests
-
-    [Fact(Timeout = 120000)]
-    public async Task NeuralImage_DetectsWatermark()
-    {
-        var watermarker = new NeuralImageWatermarker<double>();
         var tensor = CreateRandomImageTensor(3, 32, 32);
         var score = watermarker.DetectWatermark(tensor);
 
@@ -245,11 +320,9 @@ public class WatermarkingIntegrationTests
         var tensor = CreateRandomImageTensor(3, 32, 32);
 
         var frequency = new FrequencyImageWatermarker<double>().DetectWatermark(tensor);
-        var neural = new NeuralImageWatermarker<double>().DetectWatermark(tensor);
         var invisible = new InvisibleImageWatermarker<double>().DetectWatermark(tensor);
 
         Assert.True(frequency >= 0 && frequency <= 1);
-        Assert.True(neural >= 0 && neural <= 1);
         Assert.True(invisible >= 0 && invisible <= 1);
     }
 

@@ -244,11 +244,14 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private Vector<T> GetPredictionWithParams(Vector<T> parameters, TInput input)
     {
         var paramModel = ParamModel;
-        var savedParams = paramModel.GetParameters();
-        paramModel.SetParameters(parameters);
-        var prediction = ConvertToVector(MetaModel.Predict(input)) ?? new Vector<T>(1);
-        paramModel.SetParameters(savedParams);
-        return prediction;
+        var snapshot = new AiDotNet.Training.ModelParameterCheckpoint<T, TInput, TOutput>(paramModel);
+        snapshot.Capture();
+        try
+        {
+            paramModel.SetParameters(parameters);
+            return ConvertToVector(MetaModel.Predict(input)) ?? new Vector<T>(1);
+        }
+        finally { snapshot.Restore(); }
     }
 
     /// <summary>

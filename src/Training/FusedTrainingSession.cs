@@ -618,30 +618,16 @@ internal sealed class FusedTrainingSession<T>
 
     private static (Tensor<T> Live, Tensor<T> Saved)[] SnapshotTrainedTensors(FusedTrainingStepRequest<T> request)
     {
-        var engine = AiDotNetEngine.Current;
         var trained = request.Selection is not null
             ? request.Selection
             : EnumerateLiveParameters(request).Distinct(TensorReferenceComparer<Tensor<T>>.Instance).ToList();
-        var saved = new List<(Tensor<T>, Tensor<T>)>(trained.Count);
-        foreach (var parameter in trained)
-        {
-            if (parameter is null || parameter.Length == 0 || parameter is SparseTensor<T>) continue;
-            saved.Add((parameter, engine.TensorMultiplyScalar(parameter, NumOps.One)));
-        }
-        return saved.ToArray();
+        var live = trained.Where(p => p is not null && p.Length != 0 && p is not SparseTensor<T>).ToArray();
+        var saved = TensorCheckpoint<T>.Capture(live);
+        return live.Select((tensor, i) => (tensor, saved[i])).ToArray();
     }
 
     private static void RestoreTrainedTensors((Tensor<T> Live, Tensor<T> Saved)[] snapshot)
-    {
-        var engine = AiDotNetEngine.Current;
-        using var noGrad = new NoGradScope<T>();
-        foreach (var (live, saved) in snapshot)
-        {
-            engine.TensorCopy(saved, live);
-            live.IncrementVersion();
-            engine.InvalidatePersistentTensor(live);
-        }
-    }
+        => TensorCheckpoint<T>.Restore(snapshot.Select(p => p.Live).ToArray(), snapshot.Select(p => p.Saved).ToArray());
 
     private static IEnumerable<Tensor<T>> EnumerateLiveParameters(FusedTrainingStepRequest<T> request)
     {
