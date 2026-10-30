@@ -51,18 +51,30 @@ public class KNNEvaluatorTests
     }
 
     [Fact]
-    public void EvaluateMultipleK_ReportsEveryRequestedK()
+    public void EvaluateMultipleK_ScoresEachKOnItsOwnNeighbours()
     {
-        var evaluator = new KNNEvaluator<double>(Encoder(), k: 3);
-        var (train, trainLabels) = Clusters(6, 0.0);
-        var (test, testLabels) = Clusters(3, 0.05);
-        evaluator.Fit(train, trainLabels);
+        // A huge temperature makes the similarity weights equal, so the vote is a plain majority. The training set
+        // is one exact copy of the query, labelled 1, and two copies of another point, labelled 0. Identical
+        // inputs encode identically, so the copy is the nearest neighbour whatever the encoder: k = 1 votes 1 and
+        // is right, while k = 3 takes all three points and the two 0s outvote it.
+        var evaluator = new KNNEvaluator<double>(Encoder(), k: 3, temperature: 1e6);
+        double[] query = { 1.0, 0.5, -0.25, 0.75 };
+        double[] other = { -0.5, 1.0, 0.75, -1.0 };
+        var train = new Tensor<double>(new[] { 3, 4 });
+        var test = new Tensor<double>(new[] { 1, 4 });
+        for (int j = 0; j < 4; j++)
+        {
+            train[0, j] = query[j];
+            train[1, j] = other[j];
+            train[2, j] = other[j];
+            test[0, j] = query[j];
+        }
 
-        var byK = evaluator.EvaluateMultipleK(test, testLabels, new[] { 1, 3, 5 });
+        evaluator.Fit(train, new[] { 1, 0, 0 });
+        var byK = evaluator.EvaluateMultipleK(test, new[] { 1 }, new[] { 1, 3 });
 
-        Assert.Equal(new[] { 1, 3, 5 }, byK.Keys);
-        foreach (var accuracy in byK.Values)
-            Assert.Equal(1.0, accuracy);
+        Assert.Equal(1.0, byK[1]);
+        Assert.Equal(0.0, byK[3]);
     }
 
     [Fact]
