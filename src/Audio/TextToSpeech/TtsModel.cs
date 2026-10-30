@@ -1,4 +1,4 @@
-using AiDotNet.LearningRateSchedulers;
+﻿using AiDotNet.LearningRateSchedulers;
 using System.Diagnostics;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;

@@ -614,36 +614,6 @@ public interface IShapeContract
     /// </remarks>
     IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank);
 
-    // <summary>
-    // One entry per output axis, for an input of the given rank, saying whether that rank INCLUDES a
-    // batch axis.
-    // </summary>
-    // <param name="inputRank">Rank of the incoming shape.</param>
-    // <param name="isBatched">
-    // <c>true</c> when the leading axis is a batch - a real tensor handed to <c>Forward</c>;
-    // <c>false</c> for a PER-SAMPLE shape, which is what chain resolution propagates.
-    // </param>
-    // <returns>The output axes and their relations, or <c>null</c> if this case is not accepted.</returns>
-    // <remarks>
-    // <para>
-    // Defaults to the rank-only form, so every existing contract answers exactly as before and only a
-    // layer that genuinely needs the distinction has to override.
-    // </para>
-    // <para>
-    // WHY RANK ALONE IS NOT ENOUGH. The same rank means different things to different callers.
-    // <c>Forward</c> receives a batched tensor, so a rank-3 <c>[3,8,9]</c> is one batch axis and two
-    // feature axes. Chain resolution propagates PER-SAMPLE shapes, so a rank-3 <c>[32,7,7]</c> is
-    // <c>[Channels, Height, Width]</c> with no batch at all. FlattenLayer collapses everything after
-    // the batch, so it answers <c>[3,72]</c> for the first and <c>[1568]</c> for the second - both
-    // correct, and unreachable through a signature that cannot tell them apart. Whichever reading such
-    // a contract picked, the other caller saw a wrong shape.
-    // </para>
-    // <para>
-    // <b>For Beginners:</b> a "batch" is a stack of samples processed together. Some shapes include
-    // that stacking axis and some describe a single sample, and the numbers alone do not say which -
-    // so the caller has to.
-    // </para>
-    // </remarks>
     // Declared on IBatchAwareShapeContract below, NOT as a default interface method here: this
     // assembly targets net471, where the runtime cannot express one (CS8701). See the remarks on
     // IBatchAwareShapeContract for how a caller reaches it uniformly on every target.
