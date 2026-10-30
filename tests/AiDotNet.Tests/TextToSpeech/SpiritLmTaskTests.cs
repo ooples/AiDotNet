@@ -87,7 +87,7 @@ public class SpiritLmTaskTests
         Assert.Contains(runs, r => !r.IsSpeech);
         // Every word reaches the sequence exactly once, in order, as text or as the speech of its span.
         string text = string.Join(" ", runs.Where(r => !r.IsSpeech).Select(r => r.Content.Trim()));
-        Assert.All(text.Split(' ', StringSplitOptions.RemoveEmptyEntries), w => Assert.Contains(w, words.Select(x => x.Text)));
+        Assert.All(text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries), w => Assert.Contains(w, words.Select(x => x.Text)));
         Assert.True(sequence.StartsWith("[Text]", StringComparison.Ordinal) || sequence.StartsWith("[Speech]", StringComparison.Ordinal));
     }
 
