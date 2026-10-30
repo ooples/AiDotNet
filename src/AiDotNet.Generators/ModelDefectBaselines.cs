@@ -155,7 +155,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTC<T>",
             "AiDotNet.SpeechRecognition.Foundation.BESTRQ<T>",
             "AiDotNet.SpeechRecognition.Foundation.Data2VecASR<T>",
-            "AiDotNet.SpeechRecognition.Foundation.HuBERTASR<T>",
             "AiDotNet.SpeechRecognition.Foundation.SPIRAL<T>",
             "AiDotNet.SpeechRecognition.Foundation.UniSpeech<T>",
             "AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>",
