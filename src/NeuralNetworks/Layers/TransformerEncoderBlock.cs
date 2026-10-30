@@ -355,6 +355,15 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         var ffnActivationType = _ffnActivation.GetType();
         string? qualifiedName = ffnActivationType.AssemblyQualifiedName;
         metadata["FfnActivationType"] = qualifiedName ?? ffnActivationType.FullName ?? string.Empty;
+        // The hosted attention's causal mask, attention dropout and positional encoding are set on it AFTER this
+        // constructor runs (a GPT-style decoder sets UseCausalMask through AttentionLayer), so the constructor
+        // arguments above cannot rebuild them. A replaced attention (LoRA / quantized wrapper) is not rebuilt by the
+        // deserializer either way, so only the hosted MultiHeadAttentionLayer's settings are written.
+        if (_attention is MultiHeadAttentionLayer<T> attention)
+            attention.WriteConfigurationMetadata(metadata, AttentionMetadataPrefix);
         return metadata;
     }
+
+    /// <summary>Key prefix under which <see cref="GetMetadata"/> persists the hosted attention's settings.</summary>
+    internal const string AttentionMetadataPrefix = "Attn.";
 }

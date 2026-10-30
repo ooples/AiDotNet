@@ -2760,7 +2760,11 @@ public static class DeserializationHelper
                     _ => p.HasDefaultValue ? p.DefaultValue : null,
                 };
             }
-            instance = ctorTeb.Invoke(argsTeb);
+            var blockTeb = (NeuralNetworks.Layers.TransformerEncoderBlock<T>)ctorTeb.Invoke(argsTeb);
+            if (blockTeb.AttentionLayer is MultiHeadAttentionLayer<T> attentionTeb)
+                RestoreNestedMultiHeadAttentionConfiguration(attentionTeb, additionalParams,
+                    NeuralNetworks.Layers.TransformerEncoderBlock<T>.AttentionMetadataPrefix);
+            instance = blockTeb;
         }
         else if (genericDef.Name == "TimeSformerBlockLayer`1")
         {
@@ -2847,7 +2851,13 @@ public static class DeserializationHelper
                     _ => p.HasDefaultValue ? p.DefaultValue : null,
                 };
             }
-            instance = ctorTdb.Invoke(argsTdb);
+            var blockTdb = (NeuralNetworks.Layers.TransformerDecoderBlock<T>)ctorTdb.Invoke(argsTdb);
+            if (blockTdb.SelfAttentionLayer is MultiHeadAttentionLayer<T> selfAttentionTdb)
+                RestoreNestedMultiHeadAttentionConfiguration(selfAttentionTdb, additionalParams,
+                    NeuralNetworks.Layers.TransformerDecoderBlock<T>.SelfAttentionMetadataPrefix);
+            RestoreNestedMultiHeadAttentionConfiguration(blockTdb.CrossAttentionLayer, additionalParams,
+                NeuralNetworks.Layers.TransformerDecoderBlock<T>.CrossAttentionMetadataPrefix);
+            instance = blockTdb;
         }
         else if (genericDef.Name == "GroupedQueryAttentionLayer`1" || genericDef.Name == "CachedGroupedQueryAttention`1")
         {
@@ -4514,6 +4524,33 @@ public static class DeserializationHelper
             ?? TryGetInt(additionalParams, "SequenceLength")
             ?? 2048;
         configure.Invoke(layer, new object[] { positionalType, ropeTheta, maxSequenceLength });
+    }
+
+    /// <summary>
+    /// Restores the post-construction settings (causal mask, attention dropout, positional encoding) of an attention
+    /// layer hosted inside a composite block, from the keys the block wrote under <paramref name="prefix"/> through
+    /// <see cref="MultiHeadAttentionLayer{T}.WriteConfigurationMetadata"/>.
+    /// </summary>
+    /// <remarks>
+    /// The block's constructor rebuilds the attention from its own arguments, which never include these settings, so
+    /// without this a causal block deserialized on its own came back bidirectional and without attention dropout.
+    /// Blocks saved before the keys existed carry none of them and keep the constructor defaults, as before.
+    /// </remarks>
+    private static void RestoreNestedMultiHeadAttentionConfiguration<T>(
+        MultiHeadAttentionLayer<T> attention,
+        Dictionary<string, object>? additionalParams,
+        string prefix)
+    {
+        if (additionalParams is null) return;
+        var nested = new Dictionary<string, object>();
+        foreach (var kv in additionalParams)
+        {
+            if (kv.Key.Length > prefix.Length && kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+                nested[kv.Key.Substring(prefix.Length)] = kv.Value;
+        }
+
+        if (nested.Count > 0)
+            RestoreMultiHeadAttentionConfiguration(attention, nested);
     }
 
     private static void RestoreMultiHeadAttentionConfiguration<T>(

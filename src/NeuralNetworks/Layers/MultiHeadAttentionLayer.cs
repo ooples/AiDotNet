@@ -944,14 +944,33 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // deserialization derived embeddingDimension from that placeholder (1) and threw
         // "embeddingDimension 1 is not divisible by headCount N".
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
-        metadata["PositionalEncoding"] = PositionalEncoding.ToString();
-        metadata["UseCausalMask"] = UseCausalMask.ToString();
-        metadata["RopeTheta"] = _ropeTheta.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["PositionalMaxSequenceLength"] =
-            _positionalMaxSequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["AttentionDropoutRate"] =
-            _attentionDropoutRate.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        WriteConfigurationMetadata(metadata, string.Empty);
         return metadata;
+    }
+
+    /// <summary>
+    /// Writes the settings that are configured AFTER construction -- the causal mask, the attention dropout rate and
+    /// the positional encoding -- under <paramref name="prefix"/>.
+    /// </summary>
+    /// <param name="metadata">The metadata dictionary to write into.</param>
+    /// <param name="prefix">Key prefix; empty for this layer's own metadata, or a sublayer name (for example
+    /// <c>"Attn."</c>) when a composite block persists the attention layer it hosts.</param>
+    /// <remarks>
+    /// None of these settings is a constructor argument, so a composite block that rebuilds its attention from its
+    /// own constructor loses them unless it persists them here and restores them through
+    /// <c>DeserializationHelper</c>. A causal decoder block then came back bidirectional, which changes what every
+    /// position attends to without any error.
+    /// </remarks>
+    internal void WriteConfigurationMetadata(Dictionary<string, string> metadata, string prefix)
+    {
+        if (metadata is null) throw new ArgumentNullException(nameof(metadata));
+        if (prefix is null) throw new ArgumentNullException(nameof(prefix));
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata[prefix + "PositionalEncoding"] = PositionalEncoding.ToString();
+        metadata[prefix + "UseCausalMask"] = UseCausalMask.ToString();
+        metadata[prefix + "RopeTheta"] = _ropeTheta.ToString("R", ci);
+        metadata[prefix + "PositionalMaxSequenceLength"] = _positionalMaxSequenceLength.ToString(ci);
+        metadata[prefix + "AttentionDropoutRate"] = _attentionDropoutRate.ToString("R", ci);
     }
 
     /// <summary>

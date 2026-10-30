@@ -51,7 +51,8 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// <para>
     /// Besides this class's own defaults, the inherited training settings are set to Table 9's values:
     /// <c>LearningRate</c> 1e-4, <c>BatchSize</c> 64, <c>MaxGradientNorm</c> 0.25 (the table's "grad norm clip")
-    /// and <c>WarmupSteps</c> 100,000 (the table's "linear warmup for first 10^5 training steps"). Any of them can
+    /// and <c>WarmupSteps</c> 100,000. Table 9's row reads, verbatim, "Learning rate decay | Linear warmup for first
+    /// 10^5 training steps" (the PDF typesets the exponent, so text extraction renders it as "105"). Any of them can
     /// still be overridden in an object initializer.
     /// </para>
     /// <para><b>For Beginners:</b> Creating the options with no arguments gives you the exact settings the paper
