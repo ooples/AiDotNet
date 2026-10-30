@@ -330,13 +330,16 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         return PostprocessOutput(ForwardNative(preprocessed));
     }
 
+    /// <summary>Training sees the input <c>PredictCore</c> sees: the audio front end, applied once.</summary>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessAudio(input);
+
     /// <inheritdoc />
     /// <remarks>The same network as inference, without the EnhancementStrength scaling applied to
     /// what Predict returns.</remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (IsOnnxMode) throw new InvalidOperationException("Cannot train in ONNX inference mode.");
-        return ForwardNative(PreprocessAudio(input));
+        return ForwardNative(input);
     }
 
     /// <summary>

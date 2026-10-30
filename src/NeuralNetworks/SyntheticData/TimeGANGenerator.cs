@@ -338,6 +338,44 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         _materializedNumLayers = numLayers;
     }
 
+    /// <summary>
+    /// Trains on one batch with the joint phase's schedule (Yoon et al. 2019 §3.3): critic step, generator and
+    /// supervisor step, embedder fine-tune, after one reconstruction and one supervised step. Without this a Train call
+    /// differentiated the generator's GRU stack (Layers) against the target directly, which is not TimeGAN's objective.
+    /// </summary>
+    /// <remarks>The input's last axis is the feature width; the axis before it is time ([T, F] is one sequence,
+    /// [B, T, F] is B sequences, [F] is one time step).</remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        int width = input.Shape[input.Shape.Length - 1];
+        int steps = input.Shape.Length >= 2 ? input.Shape[input.Shape.Length - 2] : 1;
+        if (width <= 0 || steps <= 0) return false;
+        if (width != _dataWidth || _recoveryOutput is null)
+        {
+            _dataWidth = width;
+            RebuildAllNetworks();
+        }
+
+        var values = input.ToArray();
+        var sequences = new List<Matrix<T>>();
+        for (int offset = 0; offset + steps * width <= values.Length; offset += steps * width)
+        {
+            var sequence = new Matrix<T>(steps, width);
+            for (int t = 0; t < steps; t++)
+                for (int j = 0; j < width; j++)
+                    sequence[t, j] = values[offset + t * width + j];
+            sequences.Add(sequence);
+        }
+
+        int end = sequences.Count;
+        TrainEmbeddingStepBatched(sequences, 0, end);
+        if (steps >= 2) TrainSupervisedStepBatched(sequences, 0, end);
+        TrainDiscriminatorStepBatched(sequences, 0, end);
+        TrainGeneratorStepBatched(sequences, 0, end);
+        TrainEmbeddingStepBatched(sequences, 0, end);
+        return true;
+    }
+
     #endregion
 
     #region ISyntheticTabularGenerator Implementation

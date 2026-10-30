@@ -557,6 +557,16 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
         return input;
     }
 
+    /// <summary>Training sees the input <see cref="PredictCore"/> sees: the normalized mel spectrogram.</summary>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessAudio(input);
+
+    /// <summary>
+    /// Trains the logits <see cref="PredictCore"/> turns into probabilities: <see cref="Forward"/> over the conv, dense
+    /// and output stages with the batch axis the flatten needs. The base Layers walk skipped that axis, so the head
+    /// emitted one row of logits per channel (64 values for 4 emotions).
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
     /// <inheritdoc/>
     protected override Tensor<T> Forward(Tensor<T> input)
     {

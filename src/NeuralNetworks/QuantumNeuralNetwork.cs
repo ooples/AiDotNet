@@ -239,6 +239,17 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
     protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
         => (ExtractRealPart(PrepareQuantumState(input)), target);
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Ends with the measurement Predict ends with (the Born rule: each amplitude's squared magnitude, the amplitudes
+    /// being real), so the network trains the probabilities it predicts rather than the amplitudes before them.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var amplitudes = base.ForwardForTraining(input);
+        return Engine.TensorMultiply(amplitudes, amplitudes);
+    }
+
     /// <summary>
     /// Retrieves metadata about the quantum neural network model.
     /// </summary>

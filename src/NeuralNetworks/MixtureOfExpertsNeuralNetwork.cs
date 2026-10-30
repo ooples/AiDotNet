@@ -303,19 +303,20 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // Ensure the network is in inference mode
-        IsTrainingMode = false;
-
-        // Validate input shape
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
-            nameof(MixtureOfExpertsNeuralNetwork<T>), "prediction");
-
-        // Perform forward pass
-        var predictions = Accelerate(input, () => Forward(input));
-
-        IsTrainingMode = true;
-
-        return predictions;
+        // Inference mode for this call, then the caller's mode back: it used to be forced to training afterwards, so
+        // a Predict between evaluation calls left the gating in training mode.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
+                nameof(MixtureOfExpertsNeuralNetwork<T>), "prediction");
+            return Accelerate(input, () => Forward(input));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     /// <summary>

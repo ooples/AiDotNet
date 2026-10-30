@@ -764,12 +764,15 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>,
         return _useNativeMode ? RunNativeForward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
+    /// <summary>Training sees the text image <see cref="PredictCore"/> sees (not the document base's page preprocessing).</summary>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessTextImage(input);
+
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         EnsureLayerRandomSeedsWired();
         return _useNativeMode
-            ? RunNativeForward(PreprocessTextImage(input))
+            ? RunNativeForward(input)
             : base.ForwardForTraining(input);
     }
 

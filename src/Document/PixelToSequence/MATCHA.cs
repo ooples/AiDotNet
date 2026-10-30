@@ -715,7 +715,7 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         EnsureNativeInitialized();
-        return base.ForwardForTraining(PreprocessDocument(input));
+        return base.ForwardForTraining(input);   // PrepareInputForTraining applied PreprocessDocument
     }
 
     /// <inheritdoc/>

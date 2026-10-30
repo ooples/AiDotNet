@@ -219,6 +219,12 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
+        /// Trains the pooled, normalized embedding <see cref="PredictCore"/> returns, not the token-level sequence the
+        /// base forward ends on: the nested-dimension objective is defined on the embedding.
+        /// </summary>
+        public override Tensor<T> ForwardForTraining(Tensor<T> input) => PoolBatchOutput(base.ForwardForTraining(input));
+
+        /// <summary>
         /// Retrieves metadata about the Matryoshka configuration.
         /// </summary>
         /// <returns>Metadata containing model type and nested dimension information.</returns>

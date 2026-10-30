@@ -436,7 +436,7 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        var prepared = PreprocessDocument(input);
+        var prepared = input;   // PrepareInputForTraining applied PreprocessDocument
         var (tokens, image) = prepared.Rank <= 2 ? (prepared, (Tensor<T>?)null) : ((Tensor<T>?)null, prepared);
         return RunMultimodal(tokens, image);
     }

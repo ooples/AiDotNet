@@ -293,6 +293,14 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
         return _embeddingExtractor.ForwardForTraining(input);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The MFCC front end the extractor's Predict applies to the audio, so the shared layers train on the features they
+    /// see at verification time. The extractor's, not this model's <see cref="PreprocessAudio"/>: the verifier builds
+    /// no MFCC extractor of its own, so that one passes the raw waveform through.
+    /// </remarks>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => _embeddingExtractor.PrepareFeatures(input);
+
     #endregion
 
     #region ISpeakerVerifier Implementation

@@ -182,28 +182,31 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // Ensure the network is in inference mode
+        // Inference mode for this call; the caller's mode is restored (it used to be forced to training).
+        bool wasTraining = IsTrainingMode;
         IsTrainingMode = false;
-
-        ValidateInputShape(input, "prediction");
-
-        // Fused fast path: a pure stack of dense layers with fused-eligible scalar
-        // activations runs as ONE IEngine.MlpForward call instead of a per-layer
-        // tape/dispatch walk — the kernel the AiDotNet.Tensors MLP micro-benchmarks
-        // beat PyTorch-CPU on. Falls back to the generic Forward for any layer the
-        // kernel can't represent (non-dense, vector activation, unmapped activation,
-        // mixed hidden activations) or if the kernel declines (e.g. active tape).
-        if (TryFusedDensePredict(input, out var fused))
+        try
         {
-            IsTrainingMode = true;
-            return fused;
+            ValidateInputShape(input, "prediction");
+
+            // Fused fast path: a pure stack of dense layers with fused-eligible scalar
+            // activations runs as ONE IEngine.MlpForward call instead of a per-layer
+            // tape/dispatch walk — the kernel the AiDotNet.Tensors MLP micro-benchmarks
+            // beat PyTorch-CPU on. Falls back to the generic Forward for any layer the
+            // kernel can't represent (non-dense, vector activation, unmapped activation,
+            // mixed hidden activations) or if the kernel declines (e.g. active tape).
+            if (TryFusedDensePredict(input, out var fused))
+            {
+                return fused;
+            }
+
+            var predictions = Accelerate(input, () => Forward(input));
+            return predictions;
         }
-
-        var predictions = Accelerate(input, () => Forward(input));
-
-        IsTrainingMode = true;
-
-        return predictions;
+        finally
+        {
+            IsTrainingMode = wasTraining;
+        }
     }
 
     /// <summary>

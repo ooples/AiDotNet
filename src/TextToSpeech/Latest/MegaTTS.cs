@@ -235,9 +235,20 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        return ForwardNative(input);
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try { return ForwardNative(input); }
+        finally { if (wasTraining) SetTrainingMode(true); }
     }
+
+    /// <summary>
+    /// Trains the network <see cref="PredictCore"/> runs: the content, prosody and timbre branches of
+    /// <see cref="ForwardNative"/>, not the flat walk of Layers the base would differentiate.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => ForwardNative(input);
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {

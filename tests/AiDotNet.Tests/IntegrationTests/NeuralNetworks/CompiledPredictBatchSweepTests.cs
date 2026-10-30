@@ -253,7 +253,7 @@ public class CompiledPredictBatchSweepTests
     private static Func<int[], Tensor<T>> ConstantFactory<T>(object fixture, MethodInfo createConstant)
         => s => (Tensor<T>)createConstant.Invoke(fixture, new object[] { s, 0.1 })!;
 
-    private static Type FindNetworkElementType(Type type)
+    internal static Type FindNetworkElementType(Type type)
     {
         for (var t = type; t is not null; t = t.BaseType)
             if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(NeuralNetworkBase<>)) return t.GetGenericArguments()[0];

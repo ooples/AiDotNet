@@ -168,6 +168,10 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
+    /// <summary>Trains what <see cref="PredictCore"/> runs: <see cref="Forward"/>, with its input-conditioned residual on
+    /// the logits, which the base Layers walk left out.</summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
     /// <summary>
     /// Performs one training step.
     /// </summary>

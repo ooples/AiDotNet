@@ -373,36 +373,29 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
-        /// Pools every sequence in a token-level output while preserving the batch axis.
+        /// Pools every sequence in a token-level output while preserving the batch axis, on engine ops so a training
+        /// forward differentiates through it (the same pooling and normalization as <see cref="PoolOutput"/>).
         /// </summary>
         /// <param name="output">A <c>[Seq, Dim]</c> or <c>[Batch, Seq, Dim]</c> tensor.</param>
         /// <returns>A normalized <c>[1, Dim]</c> or <c>[Batch, Dim]</c> tensor.</returns>
         protected Tensor<T> PoolBatchOutput(Tensor<T> output)
         {
             if (output.Shape.Length == 2)
-            {
-                var pooled = PoolOutput(output);
-                return Tensor<T>.FromVector(pooled, [1, pooled.Length]);
-            }
-
-            if (output.Shape.Length != 3)
+                output = Engine.Reshape(output, [1, output.Shape[0], output.Shape[1]]);
+            else if (output.Shape.Length != 3)
                 throw new ArgumentException($"PoolBatchOutput expects Rank 2 [Seq, Dim] or Rank 3 [Batch, Seq, Dim] tensor, but got Rank {output.Shape.Length}.");
 
             int batchSize = output.Shape[0];
-            int sequenceLength = output.Shape[1];
             int dimension = output.Shape[2];
-            int sequenceSize = sequenceLength * dimension;
-            var pooledData = new T[batchSize * dimension];
-
-            for (int batch = 0; batch < batchSize; batch++)
+            Tensor<T> pooled = _poolingStrategy switch
             {
-                var sequenceData = new T[sequenceSize];
-                output.Data.Span.Slice(batch * sequenceSize, sequenceSize).CopyTo(sequenceData);
-                var pooled = PoolOutput(new Tensor<T>(sequenceData, [sequenceLength, dimension]));
-                pooled.AsSpan().CopyTo(pooledData.AsSpan(batch * dimension, dimension));
-            }
-
-            return new Tensor<T>(pooledData, [batchSize, dimension]);
+                EmbeddingPoolingStrategy.ClsToken => Engine.Reshape(Engine.TensorNarrow(output, 1, 0, 1), [batchSize, dimension]),
+                EmbeddingPoolingStrategy.Mean => Engine.ReduceMean(output, [1], keepDims: false),
+                EmbeddingPoolingStrategy.Max => Engine.ReduceMax(output, [1], keepDims: false),
+                _ => new Tensor<T>([batchSize, dimension]),
+            };
+            // Unit length per row; a zero row stays zero (Vector.SafeNormalize).
+            return Engine.TensorNormalize(pooled, 1, NumOps.FromDouble(1e-12));
         }
 
         /// <inheritdoc/>

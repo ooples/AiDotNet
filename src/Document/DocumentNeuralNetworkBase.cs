@@ -409,7 +409,40 @@ public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T
     /// </summary>
     /// <param name="input">Preprocessed input tensor.</param>
     /// <returns>Model output tensor.</returns>
-    protected virtual Tensor<T> Forward(Tensor<T> input)
+    protected virtual Tensor<T> Forward(Tensor<T> input) => ForwardDocumentLayers(input);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Trains the network the inference <see cref="Forward"/> runs. Where the layers need it -- a
+    /// <see cref="TransformerDecoderLayer{T}"/> cross-attending to the encoder output, or the spatial-to-sequence
+    /// flatten after a CNN stem -- the base Layers walk is a different network: it fed each decoder layer only its own
+    /// input and handed the stem's [C, H, W] map to a sequence layer unflattened. Otherwise the two agree and the base
+    /// path (gradient checkpointing, weight streaming) is kept.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (!NeedsDocumentLayerWalk())
+            return base.ForwardForTraining(input);
+        EnsureLayerRandomSeedsWired();
+        return ForwardDocumentLayers(input);
+    }
+
+    /// <summary>Whether <see cref="ForwardDocumentLayers"/> differs from a plain walk of the layers.</summary>
+    private bool NeedsDocumentLayerWalk()
+    {
+        bool passedConv = false, reshaped = false;
+        foreach (var layer in Layers)
+        {
+            if (layer is TransformerDecoderLayer<T>) return true;
+            if (IsSpatialLayer(layer)) passedConv = true;
+            if (layer is PatchEmbeddingLayer<T>) reshaped = true;
+            if (!reshaped && passedConv && !IsSpatialLayer(layer)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>The document layer walk both <see cref="Forward"/> and <see cref="ForwardForTraining"/> run.</summary>
+    private Tensor<T> ForwardDocumentLayers(Tensor<T> input)
     {
         Tensor<T> output = input;
         Tensor<T>? encoderOutput = null;
@@ -427,9 +460,7 @@ public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T
             }
 
             // PatchEmbeddingLayer performs the spatial→sequence flatten itself, and does it
-            // tape-compatibly — so the training path (which replays the Layers through the
-            // autodiff tape and never calls this inference Forward) gets the SAME flatten.
-            // Mark the transition done so the inference-only auto-reshape below never fires
+            // tape-compatibly. Mark the transition done so the auto-reshape below never fires
             // before OR after it; otherwise it would double-flatten the [C,H,W] map (handing
             // PatchEmbeddingLayer a rank-2 tensor it rejects, then re-mangling its output).
             if (layer is PatchEmbeddingLayer<T>)
@@ -449,7 +480,8 @@ public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T
                 int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
                 int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
                 int numPatches = spatialH * spatialW;
-                output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
+                // Tape-tracked, so the training forward differentiates through the flatten.
+                output = Engine.Reshape(output, new[] { numPatches, channels });
                 hasReshapedToSequence = true;
             }
 

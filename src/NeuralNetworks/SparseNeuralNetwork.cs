@@ -189,16 +189,21 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// <returns>The predicted output tensor.</returns>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        // Inference mode for this call; the caller's mode is restored (it used to be forced to training).
+        bool wasTraining = IsTrainingMode;
         IsTrainingMode = false;
+        try
+        {
+            TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
+                nameof(SparseNeuralNetwork<T>), "prediction");
 
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
-            nameof(SparseNeuralNetwork<T>), "prediction");
-
-        var predictions = Accelerate(input, () => Forward(input));
-
-        IsTrainingMode = true;
-
-        return predictions;
+            var predictions = Accelerate(input, () => Forward(input));
+            return predictions;
+        }
+        finally
+        {
+            IsTrainingMode = wasTraining;
+        }
     }
 
     /// <summary>

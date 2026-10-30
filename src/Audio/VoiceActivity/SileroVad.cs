@@ -655,6 +655,9 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
         return output;
     }
 
+    /// <summary>Training sees the input <c>PredictCore</c> sees: the audio front end, applied once.</summary>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessAudio(input);
+
     /// <inheritdoc/>
     /// <remarks>
     /// SileroVad's forward is the conv frontend → axis transpose → LSTM →
@@ -666,11 +669,8 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        // Mirror Predict: normalize + reshape the raw waveform to [1, 1, samples]
-        // before running the conv frontend. Without this the training forward
-        // would feed the un-preprocessed input straight into the first 1-D conv
-        // (channel-count mismatch).
-        return Forward(PreprocessAudio(input));
+        // The input is already the normalized [1, 1, samples] waveform Predict feeds Forward (PrepareInputForTraining).
+        return Forward(input);
     }
 
 

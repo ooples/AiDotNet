@@ -522,8 +522,7 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     /// (<see cref="NeuralNetworkBase{T}.TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}})"/>):
     /// the ERB encoder → GRU → deep-filter/gain stack composed with the SAME tape-aware
     /// <c>IEngine</c> layer ops as inference, so gradients flow to every trainable layer automatically.
-    /// The (fixed, non-trainable) STFT/ERB preprocessing is applied by <see cref="Train"/> before this
-    /// runs, so the tape only spans the learnable graph.
+    /// It takes the waveform, as the native Predict does: the STFT/ERB front end is part of the graph.
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => EnhanceAudio(input);
 

@@ -235,6 +235,15 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     }
 
     /// <summary>
+    /// Trains the network <see cref="PredictCore"/> runs (the last feature map): the Layers list holds the parameters,
+    /// not the forward, so the base Layers walk trained a different network (or, with no layers listed, the identity).
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => PredictCore(input);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => PredictCore(input);
+
+    /// <summary>
     /// Exposes the per-stage hierarchical feature maps as named activations.
     /// </summary>
     /// <remarks>

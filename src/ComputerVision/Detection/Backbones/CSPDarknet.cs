@@ -203,6 +203,15 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     }
 
     /// <summary>
+    /// Trains the network <see cref="PredictCore"/> runs (the last feature map): the Layers list holds the parameters,
+    /// not the forward, so the base Layers walk trained a different network (or, with no layers listed, the identity).
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => PredictCore(input);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => PredictCore(input);
+
+    /// <summary>
     /// Publishes the stem and CSP stages as <c>Layers</c>, in the order <see cref="ExtractFeatures"/>
     /// runs them.
     /// </summary>

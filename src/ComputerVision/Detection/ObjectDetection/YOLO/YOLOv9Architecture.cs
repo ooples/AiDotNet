@@ -293,6 +293,16 @@ public partial class YOLOv9Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbon
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => ExtractFeatures(input)[^1];
 
+    /// <summary>
+    /// Trains the network <see cref="PredictCore"/> runs (the last feature map): the Layers list holds every module's
+    /// parameters, branch modules included, not the forward, so the base Layers walk fed one module's output into a
+    /// module that never consumes it.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => PredictCore(input);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictEager(Tensor<T> input) => PredictCore(input);
+
     /// <inheritdoc/>
     protected override void InitializeLayers() => Layers.AddRange(AllModules());
 

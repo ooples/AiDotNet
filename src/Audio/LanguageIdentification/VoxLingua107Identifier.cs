@@ -438,6 +438,9 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
         return PostprocessOutput(logits);
     }
 
+    /// <summary>Training sees the input <c>PredictCore</c> sees: the audio front end, applied once.</summary>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessAudio(input);
+
     /// <inheritdoc/>
     /// <remarks>
     /// Runs the SAME MFCC front end prediction runs. Without it the training forward fed the raw
@@ -445,7 +448,7 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     /// optimized a different function from the one inference evaluates.
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => ForwardNative(PreprocessAudio(input));
+        => ForwardNative(input);
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.

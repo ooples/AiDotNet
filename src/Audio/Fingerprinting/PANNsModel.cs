@@ -395,18 +395,8 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         }
     }
 
-    /// <summary>
-    /// The training forward MUST run over the same log-mel spectrogram front end as inference
-    /// (<see cref="PredictCore"/>), not the raw waveform. The base <c>ForwardForTraining</c> runs
-    /// the layer stack on its argument directly; without preprocessing, the raw [batch, samples]
-    /// waveform reaches the CNN14 conv stack, whose five 2x2 pooling stages then collapse the tiny
-    /// spatial extent ("Pool size (2x2) cannot exceed ..."), which failed every training-path
-    /// invariant (Training/GradientFlow/MoreData/…). Preprocess first (the tiled log-mel), then
-    /// delegate to the base so gradient checkpointing, seed-wiring and the autodiff tape are all
-    /// preserved — mirroring the other audio models' ForwardForTraining overrides (AudioMAE,
-    /// DeepFilterNet, …). This keeps the training and inference forwards consistent.
-    /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => base.ForwardForTraining(PreprocessAudio(input));
+    /// <summary>Training sees the input <c>PredictCore</c> sees: the audio front end, applied once.</summary>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessAudio(input);
 
     /// <summary>
     /// Classifies audio into AudioSet categories. Returns labels with

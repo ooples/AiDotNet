@@ -599,7 +599,7 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => RunMultimodal(PreprocessDocument(input));
+        => RunMultimodal(input);   // already PreprocessDocument-ed
 
     /// <summary>
     /// Runs the vision tower, then the text decoder over the visual tokens and -- when the caller

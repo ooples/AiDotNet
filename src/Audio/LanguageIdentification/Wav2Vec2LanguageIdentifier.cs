@@ -465,13 +465,16 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         }
     }
 
+    /// <summary>Training sees the input <c>PredictCore</c> sees: the audio front end, applied once.</summary>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessAudio(input);
+
     /// <inheritdoc/>
     /// <remarks>
     /// Runs the same waveform normalization prediction runs, so the objective optimizes the function
     /// inference evaluates.
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => ForwardNative(PreprocessAudio(input));
+        => ForwardNative(input);
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>

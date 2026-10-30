@@ -5483,6 +5483,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Drawing the weights is the last moment a pending options seed can still decide them.
         EnsureParametersReady();
         CompleteOwnOptionsSeedDeferral();
+        // Materialized weights are the ones training starts from (see Predict).
+        EnsureLayerRandomSeedsWired();
         ResolveLazyLayerShapes();
 
         if (Layers is not null)
@@ -5763,6 +5765,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// output is rank &gt;= 2). Shape-only: never allocates weights or consumes RNG.
     /// Returns false only when neither shape resolves the layer.
     /// </summary>
+    /// <summary>
+    /// <paramref name="declared"/> with each unknown (non-positive) axis taken from <paramref name="known"/>, the two
+    /// aligned on their trailing axes; null when an unknown axis has no known counterpart.
+    /// </summary>
+    private static int[]? FillUnknownAxes(int[]? declared, int[] known)
+    {
+        if (declared is null || declared.Length == 0 || declared.Length > known.Length) return null;
+        var filled = new int[declared.Length];
+        int offset = known.Length - declared.Length;
+        for (int k = 0; k < declared.Length; k++)
+        {
+            filled[k] = declared[k] > 0 ? declared[k] : known[offset + k];
+            if (filled[k] <= 0) return null;
+        }
+        return filled;
+    }
+
     private bool TryAdvanceLayerShape(ILayer<T> layer, ref int[] currentShape, ref int[] lastGoodShape)
     {
         var candidates = ReferenceEquals(lastGoodShape, currentShape)
@@ -5794,6 +5813,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // it should have declared [-1, 16].
                     currentShape = outShape;
                     if (outShape.Length >= 2) lastGoodShape = outShape;
+                }
+                else if (FillUnknownAxes(outShape, lastGoodShape) is { } filled)
+                {
+                    // A layer that declares a data-dependent axis (a Conformer block's [-1, features]) still fixed
+                    // the rest. Skipping it left the walk on the shape before the block, and the next layer that
+                    // needs a full shape resolved against a stale one: EfficientConformer's second frame splicing
+                    // took the first's [32, 64] output for its [32, 32] input and reported [16, 128] for [16, 64].
+                    currentShape = filled;
+                    if (filled.Length >= 2) lastGoodShape = filled;
                 }
 
                 // ...but the layer must not keep CLAIMING the spatial dims this walk inferred. They
@@ -6873,6 +6901,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // A model that assembles its layers lazily does so here; the seed must be wired onto those layers.
         EnsureParametersReady();
         CompleteOwnOptionsSeedDeferral();
+        // The weights a prediction reads are the ones training starts from: the training forward wires the layer
+        // seeds, and a layer that drew in its constructor (MambaBlock, RWKV7Block) redoes that draw from its seed, so
+        // a Predict before the first training step read weights the first step then replaced (Jamba, Zamba, Samba).
+        EnsureLayerRandomSeedsWired();
 
         // Inference semantics belong in the NON-VIRTUAL funnel. Keeping this transition inside the
         // default PredictCore meant every model that correctly overrode PredictCore (diffusion,
@@ -6909,7 +6941,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _deferLazyShapeResolutionToForward = true;
             try
             {
-                if (wasTraining) SetTrainingMode(true);
+                // The caller's mode, whichever way the forward left it: a PredictCore that ends by switching training
+                // on (MixtureOfExperts, FeedForward and Sparse networks did) left an evaluating caller training.
+                if (IsTrainingMode != wasTraining) SetTrainingMode(wasTraining);
             }
             finally
             {
@@ -7858,7 +7892,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// Runs <see cref="WireLayerRandomSeeds"/> exactly once, before the first training forward.
+    /// Runs <see cref="WireLayerRandomSeeds"/> exactly once, before the first training forward or prediction.
     /// Subclasses that override <see cref="ForwardForTraining"/> without calling the base
     /// implementation (e.g. finance models that route through their own native forward) MUST call
     /// this first, or their stochastic layers (DropoutLayer) train with order-dependent masks and
@@ -11953,12 +11987,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // preparation as the conformance funnel (ForwardPreparedForTraining). Without it the probe and real
         // training saw different tensors: Document models normalize in Predict via PreprocessDocument but
         // trained on the raw page, and Donut fed a rank-3 page into a patch embedding that indexes NCHW.
-        // A model whose ForwardForTraining or PredictCore owns its input convention gets the input unchanged.
+        // Every model gets PrepareInputForTraining, including one that overrides ForwardForTraining: the hook is the
+        // single place a public input becomes the trainable graph's input (a model whose PredictCore owns its input
+        // convention keeps the base hook's identity).
         var pair = PrepareTrainingPair(input, expected, _trainingPairDraws++);
         input = pair.Input;
         expected = pair.Target ?? throw new InvalidOperationException(
             $"{GetType().Name}.{nameof(PrepareTrainingPair)} returned no target for a training step.");
-        input = ForwardForTrainingOwnsPublicInputPreparation() ? input : PrepareInputForTraining(input);
+        input = PrepareInputForTraining(input);
 
         // An explicit SetBaseTrainOptimizer call wins over the optimizer a model's Train override passes in, which is
         // its constructor default: the contract AdoptConfiguredOptimizer documents. ~616 models call
@@ -19216,33 +19252,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return ownsPreparation;
     }
 
-    private bool? _forwardForTrainingOwnsPublicInputPreparation;
-
-    /// <summary>
-    /// Reports whether the concrete model replaced <see cref="ForwardForTraining"/> and therefore
-    /// owns the conversion from its public input to its trainable graph input.
-    /// </summary>
-    /// <remarks>
-    /// A training-forward override is the model's complete public-input contract. Running the family
-    /// preparation hook before such an override applies deterministic front ends twice: PANNs, for
-    /// example, converted a waveform to log-mel in <c>PrepareInputForTraining</c> and then treated that
-    /// log-mel tensor as another waveform in its override. Models that inherit the base forward keep
-    /// using <see cref="PrepareInputForTraining"/> exactly once.
-    /// </remarks>
-    private bool ForwardForTrainingOwnsPublicInputPreparation()
-    {
-        if (_forwardForTrainingOwnsPublicInputPreparation.HasValue)
-            return _forwardForTrainingOwnsPublicInputPreparation.Value;
-
-        var method = GetType().GetMethod(
-            nameof(ForwardForTraining),
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-        bool ownsPreparation = method is not null
-            && method.DeclaringType != typeof(NeuralNetworkBase<T>);
-        _forwardForTrainingOwnsPublicInputPreparation = ownsPreparation;
-        return ownsPreparation;
-    }
-
     /// <summary>
     /// Enters the training contract, prepares a public input, and evaluates the differentiable
     /// forward path used by the objective.
@@ -19262,9 +19271,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         SetTrainingMode(true);
         if (!pairTransformed)
             input = PrepareTrainingPair(input, null, _trainingPairDraws).Input;
-        var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
-            ? input
-            : PrepareInputForTraining(input);
+        var trainingInput = PrepareInputForTraining(input);
         return ForwardForTraining(trainingInput);
     }
 
@@ -19332,9 +19339,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         using var _ = new NoGradScope<T>();
         var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
         var pairedTarget = pair.Target ?? target;
-        var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
-            ? pair.Input
-            : PrepareInputForTraining(pair.Input);
+        var trainingInput = PrepareInputForTraining(pair.Input);
         var prediction = ForwardForTraining(trainingInput);
         var objective = ComputeObjectiveFromPrediction(pair.Input, prediction, pairedTarget, lossFunction);
         return objective.Length > 0 ? objective[0] : NumOps.Zero;

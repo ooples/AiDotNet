@@ -512,6 +512,18 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
         }
     }
 
+    /// <summary>
+    /// Trains the network <see cref="PredictCore"/> runs: <see cref="Forward"/> from a reset context flow and layer
+    /// state, with the CMS blocks, the context blending and the meta-state the base Layers walk skipped. In training
+    /// mode Forward also updates the meta-state and the associative memory, as the self-modifying design intends.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        _contextFlow.Reset();
+        foreach (var layer in Layers) layer.ResetState();
+        return Forward(input);
+    }
+
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
     /// Trains the network on a single input-output pair (required by NeuralNetworkBase).

@@ -17,9 +17,9 @@ namespace AiDotNet.Generators;
 /// train), or for an <c>IDetectionBackbone</c>, which trains only inside its parent detector;</item>
 /// <item><c>OnTrainingStepStarting</c> calling the model's <c>EnsureNativeInitialized()</c>, so its native layers
 /// exist before a training step reads them;</item>
-/// <item><c>PrepareInputForTraining =&gt; PreprocessImage(input)</c> when the model's own <c>PredictCore</c>
-/// preprocesses its image, so training sees the input inference sees. A model whose prediction skips it keeps the
-/// raw input.</item>
+/// <item><c>PrepareInputForTraining =&gt; PreprocessImage(input)</c> (or <c>PreprocessAudio</c>) when the model's own
+/// native <c>PredictCore</c> preprocesses its input, so training sees the input inference sees. A model whose
+/// prediction skips it, or preprocesses only for its ONNX graph, keeps the raw input.</item>
 /// </list>
 /// A model that declares either member itself keeps its own.
 /// </summary>
@@ -79,7 +79,13 @@ public class TrainingContractGenerator : IIncrementalGenerator
             && DeclaresGradientOptimizerField(type, numeric, ctx.SemanticModel.Compilation);
         bool backbone = !Declares(type, "TrainingUnavailableReason") && FirstImplementsDetectionBackbone(type);
         bool emitReason = !Declares(type, "TrainingUnavailableReason") && (backbone || DeclaresNativeModeField(type));
-        bool emitPreprocess = !Declares(type, "PrepareInputForTraining") && PredictCorePreprocessesImage(type, ct);
+        // The front end PredictCore applies to its public input, which training must apply too: the image one, or the
+        // audio one (mel, MFCC, STFT) where no training-pair transform of the type already applies it.
+        string? preprocess = Declares(type, "PrepareInputForTraining") ? null
+            : PredictCoreCalls(type, "PreprocessImage", ct) ? "PreprocessImage"
+            : !Declares(type, "PrepareTrainingPair") && PredictCoreCalls(type, "PreprocessAudio", ct) ? "PreprocessAudio"
+            : null;
+        bool emitPreprocess = preprocess is not null;
         bool emitDisposedGuard = !Declares(type, "ThrowIfCannotTrain") && DeclaresThrowIfDisposed(type);
         bool emitNativeInit = !Declares(type, "OnTrainingStepStarting") && DeclaresParameterlessVoid(type, "EnsureNativeInitialized");
         if (!emitOptimizer && !emitReason && !emitPreprocess && !emitDisposedGuard && !emitNativeInit) return null;
@@ -159,9 +165,9 @@ public class TrainingContractGenerator : IIncrementalGenerator
 
         if (emitPreprocess)
         {
-            sb.AppendLine($"{indent}    /// <summary>Training sees the image <c>PredictCore</c> sees: the same preprocessing.</summary>");
+            sb.AppendLine($"{indent}    /// <summary>Training sees the input <c>PredictCore</c> sees: the same preprocessing.</summary>");
             sb.AppendLine($"{indent}    {Generated}");
-            sb.AppendLine($"{indent}    protected override {tensor} PrepareInputForTraining({tensor} input) => PreprocessImage(input);");
+            sb.AppendLine($"{indent}    protected override {tensor} PrepareInputForTraining({tensor} input) => {preprocess}(input);");
         }
 
         sb.AppendLine($"{indent}}}");
@@ -215,10 +221,14 @@ public class TrainingContractGenerator : IIncrementalGenerator
             || field.Type.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, expected));
     }
 
-    /// <summary>Whether the type's own PredictCore calls PreprocessImage on its way to the layers.</summary>
-    private static bool PredictCorePreprocessesImage(INamedTypeSymbol type, System.Threading.CancellationToken ct)
+    /// <summary>
+    /// Whether the type's own PredictCore calls <paramref name="name"/> on its native way to the layers. A call only the
+    /// ONNX branch makes does not count: training runs the native forward (DeepFilterNet preprocesses for its ONNX graph
+    /// alone, and its native forward starts from the waveform).
+    /// </summary>
+    private static bool PredictCoreCalls(INamedTypeSymbol type, string name, System.Threading.CancellationToken ct)
     {
-        if (type.GetMembers("PreprocessImage").Length == 0 && !InheritsMember(type, "PreprocessImage")) return false;
+        if (type.GetMembers(name).Length == 0 && !InheritsMember(type, name)) return false;
         foreach (var predict in type.GetMembers("PredictCore").OfType<IMethodSymbol>())
         {
             foreach (var reference in predict.DeclaringSyntaxReferences)
@@ -228,14 +238,48 @@ public class TrainingContractGenerator : IIncrementalGenerator
                 if (body is null) continue;
                 if (body.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call => call.Expression switch
                     {
-                        IdentifierNameSyntax id => id.Identifier.ValueText == "PreprocessImage",
-                        MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText == "PreprocessImage",
+                        IdentifierNameSyntax id => id.Identifier.ValueText == name,
+                        MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText == name,
                         _ => false,
-                    }))
+                    } && !InOnnxOnlyBranch(call, body)))
                 {
                     return true;
                 }
             }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="node"/> runs only in ONNX mode: under <c>if (IsOnnxMode ...)</c> or
+    /// <c>if (!_useNativeMode)</c>, in the else of <c>if (_useNativeMode)</c>, or in the matching arm of a conditional
+    /// expression.
+    /// </summary>
+    private static bool InOnnxOnlyBranch(SyntaxNode node, SyntaxNode body)
+    {
+        for (SyntaxNode? child = node, parent = node.Parent; parent is not null && child != body; child = parent, parent = parent.Parent)
+        {
+            ExpressionSyntax? condition;
+            bool inTrueArm;
+            switch (parent)
+            {
+                case IfStatementSyntax ifStatement when child == ifStatement.Statement || child == ifStatement.Else:
+                    condition = ifStatement.Condition;
+                    inTrueArm = child == ifStatement.Statement;
+                    break;
+                case ConditionalExpressionSyntax conditional when child == conditional.WhenTrue || child == conditional.WhenFalse:
+                    condition = conditional.Condition;
+                    inTrueArm = child == conditional.WhenTrue;
+                    break;
+                default:
+                    continue;
+            }
+
+            string text = condition.ToString();
+            bool onnxWhenTrue = text.Contains("Onnx") || text.Contains("!_useNativeMode");
+            bool nativeWhenTrue = !onnxWhenTrue && text.Contains("_useNativeMode");
+            if (onnxWhenTrue && inTrueArm || nativeWhenTrue && !inTrueArm) return true;
         }
 
         return false;

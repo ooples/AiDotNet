@@ -434,6 +434,9 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
 
     #region AudioNeuralNetworkBase Implementation
 
+    /// <summary>The features this extractor's layers consume (<see cref="PreprocessAudio"/>), for a model sharing them.</summary>
+    internal Tensor<T> PrepareFeatures(Tensor<T> rawAudio) => PreprocessAudio(rawAudio);
+
     /// <summary>
     /// Preprocesses raw audio for model input.
     /// </summary>
@@ -497,14 +500,10 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
         }
         else
         {
-            // Native forward pass
-            var preprocessed = PreprocessAudio(input);
-            Tensor<T> output = preprocessed;
-            foreach (var layer in Layers)
-            {
-                output = layer.Forward(output);
-            }
-            return PostprocessOutput(output);
+            // Native forward pass: the network training runs, frame-level stack, temporal pooling, then the
+            // segment-level layers. A plain walk of Layers skipped the pooling, so the embedding Predict returned
+            // was not the one the model was trained to produce.
+            return PostprocessOutput(ForwardWithTemporalPool(PreprocessAudio(input)));
         }
     }
 

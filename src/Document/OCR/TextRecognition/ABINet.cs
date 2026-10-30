@@ -834,8 +834,10 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
     /// branch, so each branch is supervised (Fang et al. 2021).
     /// </remarks>
     protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
-        => (PreprocessTextImage(input),
-            target is not null && _branched ? Engine.TensorConcatenate(new[] { target, target, target }, axis: 0) : target);
+        => (input, target is not null && _branched ? Engine.TensorConcatenate(new[] { target, target, target }, axis: 0) : target);
+
+    /// <summary>Training sees the text image <see cref="PredictCore"/> sees (not the document base's page preprocessing).</summary>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessTextImage(input);
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 

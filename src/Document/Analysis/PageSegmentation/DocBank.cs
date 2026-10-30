@@ -663,7 +663,7 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     }
 
     /// <summary>Training forward — the same direct backbone pass as inference (tape-aware).</summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunBackbone(PreprocessDocument(input));
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunBackbone(input);   // already PreprocessDocument-ed
 
     /// <summary>
     /// The optimizer the tape-training path (TrainWithTape) actually uses. ResNet training decays the
