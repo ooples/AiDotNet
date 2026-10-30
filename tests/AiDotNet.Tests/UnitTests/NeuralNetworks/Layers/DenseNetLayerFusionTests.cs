@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -62,6 +63,57 @@ public class DenseNetLayerFusionTests
     {
         var layer = Trained(new DenseBlockLayer<double>(growthRate: 12), channels: 16, seed: 3);
         AssertFusedEqualsUnfused(layer, Random(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4), new[] { 2, 16, 8, 8 }, 30.0));
+    }
+
+    /// <summary>Counts the batch-norm inference passes that normalize with one particular gamma.</summary>
+    private sealed class CountingEngine : CpuEngine
+    {
+        internal object? Gamma;
+        internal int Passes;
+
+        // The activation overload delegates here, so this sees every inference normalization, fused or not.
+        public override Tensor<T> BatchNormInference<T>(Tensor<T> x, Tensor<T> gamma, Tensor<T> beta, Tensor<T> mean,
+            Tensor<T> variance, double epsilon)
+        {
+            if (ReferenceEquals(gamma, Gamma)) Passes++;
+            return base.BatchNormInference(x, gamma, beta, mean, variance, epsilon);
+        }
+    }
+
+    private static TField Field<TField>(object owner, string name)
+    {
+        var field = owner.GetType().GetField(name, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException($"{owner.GetType().Name} has no field {name}.");
+        return Assert.IsType<TField>(field.GetValue(owner));
+    }
+
+    [Fact]
+    public void DenseBlockLayer_KeepsTheFusedPreActivation_WhenTheBottleneckFoldDeclines()
+    {
+        var layer = Trained(new DenseBlockLayer<double>(growthRate: 12), channels: 16, seed: 7);
+        var bn1 = Field<BatchNormalizationLayer<double>>(layer, "_bn1");
+        var bn2 = Field<BatchNormalizationLayer<double>>(layer, "_bn2");
+        Assert.True(bn1.TryGetFoldingStatistics(16, out var gamma1, out _, out _, out _, out _));
+        // A batch norm in training mode does not fold, so the 1x1 fold declines while BN1 + ReLU still fuses.
+        bn2.SetTrainingMode(true);
+
+        var engine = new CountingEngine { Gamma = gamma1 };
+        var previousEngine = AiDotNetEngine.Current;
+        bool previous = InferenceFusionSettings.FoldBatchNormIntoConvolution;
+        try
+        {
+            AiDotNetEngine.Current = engine;
+            InferenceFusionSettings.FoldBatchNormIntoConvolution = true;
+            layer.Forward(Random(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(8), new[] { 2, 16, 8, 8 }, 3.0));
+        }
+        finally
+        {
+            AiDotNetEngine.Current = previousEngine;
+            InferenceFusionSettings.FoldBatchNormIntoConvolution = previous;
+        }
+
+        // One BN1 pass: the fused one. Discarding it when the fold declined ran BN1 a second time, unfused.
+        Assert.Equal(1, engine.Passes);
     }
 
     [Fact]
