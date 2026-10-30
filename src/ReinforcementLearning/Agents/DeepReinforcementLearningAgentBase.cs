@@ -171,6 +171,21 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     }
 
     /// <summary>
+    /// The weights of every network in <see cref="Networks"/>, concatenated in list order. Unlike
+    /// <c>GetParameters</c>, this leaves out state an agent keeps outside its networks.
+    /// </summary>
+    internal Vector<T> GetNetworkParameters()
+    {
+        var values = new List<T>();
+        foreach (var network in Networks)
+        {
+            var parameters = network.GetParameters();
+            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
+        }
+        return new Vector<T>(values.ToArray());
+    }
+
+    /// <summary>
     /// Disposes of resources used by the agent, including every network registered in <see cref="Networks"/>.
     /// </summary>
     /// <remarks>

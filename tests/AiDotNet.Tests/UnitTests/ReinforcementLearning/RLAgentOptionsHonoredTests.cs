@@ -2,11 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
+using AiDotNet.ReinforcementLearning.Agents;
 using AiDotNet.ReinforcementLearning.Agents.A2C;
+using AiDotNet.ReinforcementLearning.Agents.A3C;
 using AiDotNet.ReinforcementLearning.Agents.CQL;
+using AiDotNet.ReinforcementLearning.Agents.Dreamer;
 using AiDotNet.ReinforcementLearning.Agents.MuZero;
 using AiDotNet.ReinforcementLearning.Agents.Rainbow;
+using AiDotNet.ReinforcementLearning.Agents.SAC;
 using AiDotNet.ReinforcementLearning.Agents.TRPO;
+using AiDotNet.ReinforcementLearning.Agents.WorldModels;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -231,9 +237,11 @@ public class RLAgentOptionsHonoredTests
         Assert.All(smallSigma, s => Assert.Equal(0.1 / Math.Sqrt(32), s, 12));
     }
 
-    private static MuZeroAgent<double> SmallMuZero(double dirichletAlpha, double fraction) =>
+    private static MuZeroAgent<double> SmallMuZero(
+        double dirichletAlpha, double fraction, AdamOptimizer<double, Tensor<double>, Tensor<double>>? optimizer = null) =>
         new MuZeroAgent<double>(new MuZeroOptions<double>
         {
+            Optimizer = optimizer,
             ObservationSize = StateSize,
             ActionSize = 4,
             LatentStateSize = 6,
@@ -325,5 +333,197 @@ public class RLAgentOptionsHonoredTests
         double fast = A2CDisplacement(1e-2);
         double slow = A2CDisplacement(1e-5);
         Assert.True(fast > 100 * slow, $"ValueLearningRate ignored: displacement {fast} at 1e-2 vs {slow} at 1e-5.");
+    }
+
+    // ── Options.Optimizer reaches every network ──────────────────────────────────────────────────────────
+
+    private const double FastRate = 1e-3;
+    private const double SlowRate = 1e-9;
+
+    private static AdamOptimizer<double, Tensor<double>, Tensor<double>> Adam(double learningRate) =>
+        new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+        {
+            InitialLearningRate = learningRate,
+            UseAdaptiveLearningRate = false,
+        });
+
+    /// <summary>
+    /// How far one update moves the agent's network weights. The first update sizes any lazily built layers, so
+    /// the measured update is the second.
+    /// </summary>
+    private static double SecondUpdateDisplacement(DeepReinforcementLearningAgentBase<double> agent, Action feed)
+    {
+        feed();
+        agent.Train();
+        var before = agent.GetNetworkParameters();
+        feed();
+        agent.Train();
+        var after = agent.GetNetworkParameters();
+
+        Assert.Equal(before.Length, after.Length);
+        double sum = 0.0;
+        for (int i = 0; i < before.Length; i++) sum += (after[i] - before[i]) * (after[i] - before[i]);
+        return Math.Sqrt(sum);
+    }
+
+    /// <summary>
+    /// An Adam step moves each weight by about its learning rate, so a supplied optimizer six orders of magnitude
+    /// faster must move the networks about that much further. An agent that ignores the option trains both runs
+    /// with the same default and moves them about equally.
+    /// </summary>
+    private static void AssertOptimizerDrivesTraining(string agent, Func<double, double> displacementAtRate)
+    {
+        double fast = displacementAtRate(FastRate);
+        double slow = displacementAtRate(SlowRate);
+        Assert.True(fast > 0.0 && !double.IsNaN(fast), $"{agent}: the update did not move the networks ({fast}).");
+        Assert.True(fast > 1e3 * slow,
+            $"{agent}: Options.Optimizer ignored: displacement {fast} at {FastRate} vs {slow} at {SlowRate}.");
+    }
+
+    private static Action Feed(DeepReinforcementLearningAgentBase<double> agent, int count, int actionSize, int seed) => () =>
+    {
+        foreach (var (state, action, reward, next, done) in DiscreteData(count, actionSize, seed))
+            agent.StoreExperience(state, action, reward, next, done);
+    };
+
+    [Fact]
+    public void A3C_TrainsWithTheConfiguredOptimizer()
+    {
+        AssertOptimizerDrivesTraining("A3C", rate =>
+        {
+            var agent = new A3CAgent<double>(new A3COptions<double>
+            {
+                StateSize = StateSize,
+                ActionSize = 2,
+                PolicyHiddenLayers = new List<int> { 8 },
+                ValueHiddenLayers = new List<int> { 8 },
+                Optimizer = Adam(rate),
+            });
+            return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 43));
+        });
+    }
+
+    [Fact]
+    public void Rainbow_TrainsWithTheConfiguredOptimizer()
+    {
+        AssertOptimizerDrivesTraining("Rainbow", rate =>
+        {
+            var agent = new RainbowDQNAgent<double>(new RainbowDQNOptions<double>
+            {
+                StateSize = StateSize,
+                ActionSize = 2,
+                SharedLayers = new List<int> { 8 },
+                NumAtoms = 5,
+                NSteps = 1,
+                UseNoisyNetworks = false,
+                BatchSize = 8,
+                ReplayBufferSize = 64,
+                WarmupSteps = 0,
+                TargetUpdateFrequency = 10_000,
+                Optimizer = Adam(rate),
+            });
+            return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 47));
+        });
+    }
+
+    [Fact]
+    public void Dreamer_TrainsWithTheConfiguredOptimizer()
+    {
+        AssertOptimizerDrivesTraining("Dreamer", rate =>
+        {
+            var agent = new DreamerAgent<double>(new DreamerOptions<double>
+            {
+                ObservationSize = StateSize,
+                ActionSize = 2,
+                LatentSize = 6,
+                HiddenSize = 8,
+                ImaginationHorizon = 2,
+                BatchSize = 8,
+                ReplayBufferSize = 64,
+                Optimizer = Adam(rate),
+            });
+            return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 53));
+        });
+    }
+
+    [Fact]
+    public void WorldModels_TrainsWithTheConfiguredOptimizer()
+    {
+        AssertOptimizerDrivesTraining("WorldModels", rate =>
+        {
+            var agent = new WorldModelsAgent<double>(new WorldModelsOptions<double>
+            {
+                ObservationWidth = StateSize,
+                ObservationHeight = 1,
+                ObservationChannels = 1,
+                ActionSize = 2,
+                LatentSize = 4,
+                RNNHiddenSize = 4,
+                BatchSize = 8,
+                ReplayBufferSize = 64,
+                Optimizer = Adam(rate),
+            });
+            return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 59));
+        });
+    }
+
+    [Fact]
+    public void MuZero_TrainsWithTheConfiguredOptimizer()
+    {
+        AssertOptimizerDrivesTraining("MuZero", rate =>
+        {
+            var agent = SmallMuZero(0.3, 0.25, Adam(rate));
+            return SecondUpdateDisplacement(agent, Feed(agent, 16, 4, seed: 61));
+        });
+    }
+
+    // ── Options with no effect are not offered ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void TRPO_OffersNoOptimizer_BecauseItsPolicyStepIsTheNaturalGradient()
+    {
+        Assert.Null(typeof(TRPOOptions<double>).GetProperty("Optimizer"));
+        Assert.All(typeof(TRPOAgent<double>).GetConstructors(),
+            constructor => Assert.DoesNotContain(constructor.GetParameters(), p => p.Name == "optimizer"));
+    }
+
+    [Fact]
+    public void ActorCriticOptions_OfferNoValueLossCoefficient_BecausePolicyAndValueTrainSeparately()
+    {
+        Assert.Null(typeof(A2COptions<double>).GetProperty("ValueLossCoefficient"));
+        Assert.Null(typeof(A3COptions<double>).GetProperty("ValueLossCoefficient"));
+        Assert.Null(typeof(PPOOptions<double>).GetProperty("ValueLossCoefficient"));
+    }
+
+    // ── TargetEntropy: null is -dim(A), and zero is a target like any other ──────────────────────────────
+
+    [Fact]
+    public void TargetEntropy_NullMeansMinusActionDimension_AndZeroIsHonoured()
+    {
+        SACAgent<double> Sac(double? target) => new SACAgent<double>(new SACOptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = 3,
+            ReplayBufferSize = 64,
+            PolicyHiddenLayers = new List<int> { 8 },
+            QHiddenLayers = new List<int> { 8 },
+            TargetEntropy = target,
+        });
+        CQLAgent<double> Cql(double? target) => new CQLAgent<double>(new CQLOptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = 3,
+            BufferSize = 64,
+            PolicyHiddenLayers = new List<int> { 8 },
+            QHiddenLayers = new List<int> { 8 },
+            TargetEntropy = target,
+        });
+
+        Assert.Equal(-3.0, Sac(null).ResolvedTargetEntropy);
+        Assert.Equal(0.0, Sac(0.0).ResolvedTargetEntropy);
+        Assert.Equal(1.5, Sac(1.5).ResolvedTargetEntropy);
+        Assert.Equal(-3.0, Cql(null).ResolvedTargetEntropy);
+        Assert.Equal(0.0, Cql(0.0).ResolvedTargetEntropy);
+        Assert.Equal(1.5, Cql(1.5).ResolvedTargetEntropy);
     }
 }
