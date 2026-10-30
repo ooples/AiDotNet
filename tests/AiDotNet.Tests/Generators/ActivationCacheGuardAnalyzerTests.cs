@@ -155,6 +155,19 @@ public sealed class Subject : LayerBase
         Assert.Empty(Unguarded(await RunAsync(Layer("    private Tensor<double> _lastInput;", body))));
     }
 
+    // The else-branch of a guard runs exactly when no backward is coming. Mutation: drop the
+    // "child != ifStatement.Statement" test in IsGuarded, so any enclosing guard if counts.
+    [Fact]
+    public async Task WriteInElseBranchOfGuard_IsReported()
+    {
+        var diagnostics = await RunAsync(Layer(
+            "    private Tensor<double> _lastInput;",
+            "        if (ShouldCacheForBackward) { _lastInput = input; }
+        else { _lastInput = weights; }"));
+
+        Assert.Single(Unguarded(diagnostics));
+    }
+
     // Mutation: delete the IsGuardedValue check in AnalyzeMethod.
     [Fact]
     public async Task ShouldCacheForBackwardTernary_IsNotReported()
@@ -262,7 +275,9 @@ public sealed class Subject : LayerBase
     }
 
     // The ratchet: a baselined field that no longer violates fails the build until its line is removed.
-    // Mutation: delete the compilation-end action, or record the key only after the baseline skip.
+    // Mutation: delete the compilation-end action. (BaselinedField_IsNotReported_ButANewFieldIs catches the
+    // converse, an over-eager ratchet: recording the key only after the baseline skip, or dropping the
+    // "!violating.ContainsKey(e)" filter, makes a baselined violation look stale.)
     [Fact]
     public async Task StaleBaselineEntry_IsReported()
     {
