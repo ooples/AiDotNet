@@ -150,16 +150,6 @@ public partial class ReshapeLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     private int[] _outputShape;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached input is needed during the backward pass to compute the appropriate gradients.
-    /// The tensor is null before the first forward pass or after a reset.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -290,7 +280,6 @@ public partial class ReshapeLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         int batchSize = input.Shape[0];
         int[] targetShape = new int[_outputShape.Length + 1];
         targetShape[0] = batchSize;
@@ -325,7 +314,6 @@ public partial class ReshapeLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward pass
-        _lastInput = null;
     }
 
 }
