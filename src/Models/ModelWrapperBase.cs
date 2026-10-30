@@ -198,6 +198,37 @@ public abstract partial class ModelWrapperBase<T, TInput, TOutput> : IFullModel<
         }
     }
 
+    /// <summary>Preserves streaming parameters through transparent wrappers.</summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+#if !AIDN_LEGACY_TFM
+        if (GetType().GetMethod(nameof(GetParameters), Type.EmptyTypes)?.DeclaringType == typeof(ModelWrapperBase<T, TInput, TOutput>)
+            && Components.Count == 0 && InterfaceGuard.TryParameterizable(BaseModel) is { } child)
+            return child.GetParameterChunks();
+#endif
+        _ = Components;
+        return AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(
+            this, typeof(ModelWrapperBase<T, TInput, TOutput>), _parameterRegistry, GetParameters).Select(chunk => chunk.Tensor);
+    }
+
+    /// <summary>Restores through the child contract or the wrapper's custom setter.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+#if !AIDN_LEGACY_TFM
+        if (GetType().GetMethod(nameof(SetParameters), new[] { typeof(Vector<T>) })?.DeclaringType == typeof(ModelWrapperBase<T, TInput, TOutput>)
+            && GetType().GetMethod(nameof(GetParameters), Type.EmptyTypes)?.DeclaringType == typeof(ModelWrapperBase<T, TInput, TOutput>)
+            && Components.Count == 0 && InterfaceGuard.TryParameterizable(BaseModel) is { } child)
+        {
+            child.SetParameterChunks(chunks);
+            return;
+        }
+#endif
+        _ = Components;
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(ModelWrapperBase<T, TInput, TOutput>), chunks, _parameterRegistry, SetParameters, OnParametersRestored);
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// Registered components first; a wrapper that registers none forwards to the model it wraps,

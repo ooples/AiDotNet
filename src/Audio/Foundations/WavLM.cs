@@ -80,6 +80,9 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private WavLmNetwork<T>? _network;
+    private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
     #endregion
 
@@ -173,6 +176,8 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
         int targetLayer = layerIndex < 0 ? _options.NumLayers + layerIndex : layerIndex;
         if (targetLayer < 0 || targetLayer >= _options.NumLayers)
             throw new ArgumentOutOfRangeException(nameof(layerIndex), $"Layer index must be between -{_options.NumLayers} and {_options.NumLayers - 1}.");
+        // transformers' hidden_states: entry i + 1 follows layer i (with the stable layout, the last is normalized).
+        if (_network is not null) return States(audio, null, targetLayer + 1);
         var c = audio; int currentLayer = 0;
         foreach (var l in Layers)
         {
@@ -189,7 +194,10 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
         if (IsOnnxMode) return ExtractEmbeddings(audio);
         var layerOutputs = new List<Tensor<T>>();
         var c = audio;
-        foreach (var l in Layers) { c = l.Forward(c); if (l is TransformerEncoderBlock<T>) layerOutputs.Add(c); }
+        if (_network is not null)
+            for (int i = 1; i <= _options.NumLayers; i++) layerOutputs.Add(States(audio, null, i));
+        else
+            foreach (var l in Layers) { c = l.Forward(c); if (l is TransformerEncoderBlock<T>) layerOutputs.Add(c); }
         if (layerOutputs.Count == 0) return c;
         var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         int count = layerOutputs.Count;
@@ -220,19 +228,53 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultFoundationModelLayers(
-            featureEncoderDim: _options.FeatureEncoderDim, hiddenDim: _options.HiddenDim,
-            numLayers: _options.NumLayers, numAttentionHeads: _options.NumAttentionHeads,
-            feedForwardDim: _options.FeedForwardDim, dropoutRate: _options.DropoutRate));
+        _network = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        if (!_options.UseGatedRelativePositionBias)
+            throw new ArgumentException("WavLM's network is defined by its gated relative position bias; UseGatedRelativePositionBias must stay true.");
+        // The paper network: wav2vec 2.0's convolutional feature encoder over the raw waveform and Transformer, with the
+        // gated relative position bias in every attention layer (Chen et al. 2022). It used to be a generic template with
+        // the feature encoder approximated and no relative position bias (#2321).
+        var layers = new List<LayerBase<T>>();
+        _network = new WavLmNetwork<T>(Engine, layers, _options.ToConfiguration());
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        _network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42));
+        Layers.AddRange(layers);
+    }
+
+    /// <summary>Loads a transformers <c>WavLMModel</c> state dict (its unprefixed names).</summary>
+    /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
+    /// <param name="has">Whether the state dict holds the named tensor.</param>
+    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has)
+    {
+        if (_network is null) throw new InvalidOperationException("Weights load into the native WavLM network.");
+        _network.LoadTorchWeights(read, has);
+    }
+
+    // Hidden-state entry `index` per utterance: [frames, hidden] for [samples], [batch, frames, hidden] for [batch, samples].
+    private Tensor<T> States(Tensor<T> audio, WavLmRegularization? regularization, int index)
+    {
+        if (_network is null) throw new InvalidOperationException("The native network is not initialized.");
+        if (audio.Rank == 1) return _network.HiddenStates(audio, regularization)[index];
+        int rows = audio.Shape[0], samples = audio.Length / rows;
+        var flat = Engine.Reshape(audio, new[] { rows, samples });
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+            outputs[r] = _network.HiddenStates(Engine.Reshape(Engine.TensorSlice(flat, new[] { r, 0 }, new[] { 1, samples }), new[] { samples }),
+                regularization)[index];
+        return Engine.TensorStack(outputs, 0);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_network is not null) return States(input, null, _options.NumLayers);
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _network is null ? base.ForwardForTraining(input) : States(input, _options.ToRegularization(_random), _options.NumLayers);
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

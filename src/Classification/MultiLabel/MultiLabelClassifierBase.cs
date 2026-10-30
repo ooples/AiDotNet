@@ -20,8 +20,23 @@ namespace AiDotNet.Classification.MultiLabel;
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>, IModelShape,
-    IParameterManifestProvider
+    IParameterManifestProvider, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
+    /// <summary>Enumerates canonical persistent state without flattening tensor-backed components.</summary>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+        => AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(this, typeof(MultiLabelClassifierBase<T>), Registry, GetParameters);
+
+    /// <summary>Streams state in the same order as the parameter manifest.</summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+        => GetParameterStateChunks().Select(chunk => chunk.Tensor);
+
+    /// <summary>Restores tensor-backed chunks on their device and retains custom-setter semantics.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(MultiLabelClassifierBase<T>), chunks, Registry, SetParameters, OnParametersRestored);
+    }
+
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
     // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.

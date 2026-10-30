@@ -478,7 +478,8 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         lock (_parameterSamplingLock)
         {
-            var originalParameters = InterfaceGuard.Parameterizable(EnsureModel).GetParameters().Clone();
+            var originalParameters = new AiDotNet.Training.ModelParameterCheckpoint<T, TInput, TOutput>(InterfaceGuard.Parameterizable(EnsureModel));
+            originalParameters.Capture();
             try
             {
                 for (int s = 0; s < effectiveSamples; s++)
@@ -499,7 +500,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             }
             finally
             {
-                InterfaceGuard.Parameterizable(EnsureModel).SetParameters(originalParameters);
+                originalParameters.Restore();
             }
         }
 

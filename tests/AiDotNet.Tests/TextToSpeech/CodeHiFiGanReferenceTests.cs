@@ -81,6 +81,50 @@ public class CodeHiFiGanReferenceTests
         Check(vocoder, f, 1e-9);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task MultiSpeakerGenerator_MatchesSpeechResynthesis()
+    {
+        await Task.Yield();
+        var f = Fixture("code_hifigan_multispeaker_reference.json");
+        var c = f["config"]!;
+        int[] Ints(JToken t) => t.Select(v => (int)v).ToArray();
+        var configuration = new CodeHiFiGanConfiguration
+        {
+            Units = (int)c["num_embeddings"]!, EmbeddingDim = (int)c["embedding_dim"]!, InitialChannels = (int)c["upsample_initial_channel"]!,
+            UpsampleRates = Ints(c["upsample_rates"]!), UpsampleKernels = Ints(c["upsample_kernel_sizes"]!), ResblockKernels = Ints(c["resblock_kernel_sizes"]!),
+            ResblockDilations = c["resblock_dilation_sizes"]!.Select(Ints).ToArray(), DurationHidden = 8, DurationKernel = 3, DurationDropout = 0.0,
+            Speakers = (int)c["num_speakers"]!,
+        };
+        var vocoder = new CodeHiFiGan<double>(AiDotNetEngine.Current, new List<LayerBase<double>>(), configuration, new Random(0));
+        string path = Path.Combine(Path.GetTempPath(), $"code_hifigan_ms_{Guid.NewGuid():N}.safetensors");
+        File.WriteAllBytes(path, Convert.FromBase64String((string)f["safetensors_base64"]!));
+        try
+        {
+            var weights = new WeightLoader().LoadWeights(path);
+            var used = new HashSet<string>();
+            vocoder.LoadTorchWeights(name =>
+            {
+                if (!weights.TryGetValue(name, out var t)) return null;
+                used.Add(name);
+                return t.ToVector().Select(v => (double)v).ToArray();
+            });
+            Assert.All(weights.Keys, k => Assert.Contains(k, used));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+        using var _ = new NoGradScope<double>();
+        var (wave, loss) = vocoder.TrainingForward(Ints(f["codes"]!), 7, new Random(0));
+        Close(f["training_wave"]!, wave, "training waveform", 1e-9);
+        Assert.True(Math.Abs((double)f["training_loss"]! - loss![0]) <= 1e-9, $"duration loss {(double)f["training_loss"]!:R} vs {loss[0]:R}");
+        var (twoWave, twoLoss) = vocoder.TrainingForward(Ints(f["two_runs"]!), 2, new Random(0));
+        Close(f["two_runs_wave"]!, twoWave, "two-run waveform", 1e-9);
+        Assert.True(Math.Abs((double)f["two_runs_loss"]! - twoLoss![0]) <= 1e-9, "two-run duration loss");
+        foreach (int speaker in new[] { 0, 7 })
+            Close(f[$"inferred_{speaker}"]!, vocoder.Forward(Ints(f["units"]!), true, speaker), $"speaker {speaker}", 1e-9);
+    }
+
     [Fact(Timeout = 600000)]
     public async Task ReleasedVocoder_MatchesFairseq()
     {

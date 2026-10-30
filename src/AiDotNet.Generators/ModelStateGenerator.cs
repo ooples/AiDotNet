@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Immutable;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -59,15 +61,81 @@ public class ModelStateGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    /// <summary>
+    /// A field the type's own Dispose assigns, declared as state that IS persisted. The two statements contradict
+    /// each other and inference cannot choose between them, so it is reported rather than guessed at.
+    /// </summary>
+    /// <remarks>
+    /// The unannotated case needs no diagnostic: GetDisposeAssignedMembers already keeps those out of the payload,
+    /// which is why this rule can be an error without failing the 655 files that declare a disposed flag and say
+    /// nothing about it. What it catches is the one shape that inference must not override -- somebody stating that
+    /// dispose-lifetime state is model state.
+    /// </remarks>
+    private static readonly DiagnosticDescriptor DisposeStateDeclaredAsPersisted = new(
+        "ADN0067",
+        "Dispose-assigned state is declared as persisted state",
+        "'{0}.{1}' is assigned by this type's Dispose, so it describes the instance being torn down, but it is "
+            + "declared {2} and would travel in a checkpoint. Restored into a fresh instance it can only "
+            + "misdescribe it. Mark it [Scratch], or stop assigning it in Dispose if it really is model state",
+        "AiDotNet.Serialization",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var candidates = context.SyntaxProvider.CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax { BaseList: not null },
-                transform: static (ctx, ct) => OwningDeclaration(ctx, ct))
-            .Where(static symbol => symbol is not null);
+                transform: static (ctx, ct) => OwningTarget(ctx, ct))
+            .Where(static target => target is not null);
 
-        context.RegisterSourceOutput(candidates, static (spc, symbol) => Emit(spc, symbol));
+        context.RegisterSourceOutput(candidates, static (spc, target) => Emit(spc, target!.Symbol, target.DisposeAssigned));
+    }
+
+    /// <summary>
+    /// A type to emit state for, together with the members its own Dispose assigns. The dispose scan needs a
+    /// semantic model and <see cref="Emit"/> is handed only a symbol, so it runs HERE, in the transform, where
+    /// <see cref="GeneratorSyntaxContext.SemanticModel"/> is in hand -- and reaches the other declaring trees of a
+    /// partial type through that model's Compilation. Combining the pipeline with
+    /// <c>context.CompilationProvider</c> would have done it too, and was rejected: it would make every candidate
+    /// depend on the whole compilation.
+    /// </summary>
+    /// <remarks>
+    /// Equality is the symbol's plus the set's, so this caches no worse than returning the bare symbol did.
+    /// </remarks>
+    private sealed class StateTarget : IEquatable<StateTarget>
+    {
+        internal StateTarget(INamedTypeSymbol symbol, System.Collections.Immutable.ImmutableArray<string> disposeAssigned)
+        {
+            Symbol = symbol;
+            DisposeAssigned = disposeAssigned;
+        }
+
+        internal INamedTypeSymbol Symbol { get; }
+
+        internal System.Collections.Immutable.ImmutableArray<string> DisposeAssigned { get; }
+
+        public bool Equals(StateTarget? other)
+            => other is not null
+                && SymbolEqualityComparer.Default.Equals(Symbol, other.Symbol)
+                && DisposeAssigned.AsSpan().SequenceEqual(other.DisposeAssigned.AsSpan());
+
+        public override bool Equals(object? obj) => Equals(obj as StateTarget);
+
+        public override int GetHashCode()
+            => SymbolEqualityComparer.Default.GetHashCode(Symbol) ^ DisposeAssigned.Length;
+    }
+
+    private static StateTarget? OwningTarget(GeneratorSyntaxContext ctx, System.Threading.CancellationToken ct)
+    {
+        if (OwningDeclaration(ctx, ct) is not INamedTypeSymbol symbol) return null;
+
+        // Ordered, so the set's sequence equality above is stable between runs.
+        var disposeAssigned = ParameterMemberSemanticModel
+            .GetDisposeAssignedMembers(symbol, ctx.SemanticModel.Compilation)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToImmutableArray();
+        return new StateTarget(symbol, disposeAssigned);
     }
 
     /// <summary>
@@ -90,7 +158,10 @@ public class ModelStateGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static void Emit(SourceProductionContext spc, INamedTypeSymbol? type)
+    private static void Emit(
+        SourceProductionContext spc,
+        INamedTypeSymbol? type,
+        System.Collections.Immutable.ImmutableArray<string> disposeAssignedMembers)
     {
         // A semantic model can legitimately return no declared symbol while the user's
         // compilation is incomplete. Treat that as no candidate; never assert it away with !.
@@ -128,6 +199,10 @@ public class ModelStateGenerator : IIncrementalGenerator
         bool hasExplicitState = false;
         bool hasScratchState = false;
         var registrations = ParameterMemberSemanticModel.GetRegistrationClassifications(type);
+        // Members this type's own Dispose assigns are object lifetime, not model state; see
+        // GetDisposeAssignedMembers for why a checkpoint must not carry them. Resolved in the transform, which
+        // has the semantic model this binding needs.
+        var disposeAssigned = new HashSet<string>(disposeAssignedMembers, StringComparer.Ordinal);
 
         foreach (var member in type.GetMembers())
         {
@@ -194,6 +269,23 @@ public class ModelStateGenerator : IIncrementalGenerator
             var classification = ParameterMemberSemanticModel.ClassifyWithRegistrations(
                 member, registrations);
             hasScratchState |= classification.Kind == ParameterMemberSemanticModel.Kind.Scratch;
+
+            // Reported rather than resolved: inference keeps an UNCLASSIFIED dispose-assigned member out of the
+            // payload, but it must not override a declaration. "This is torn down with the instance" and "this is
+            // model state" cannot both hold, and only the author knows which they meant.
+            if (disposeAssigned.Contains(member.Name)
+                && classification.Kind is ParameterMemberSemanticModel.Kind.Trainable
+                    or ParameterMemberSemanticModel.Kind.Fitted
+                    or ParameterMemberSemanticModel.Kind.Frozen
+                    or ParameterMemberSemanticModel.Kind.Buffer)
+            {
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    DisposeStateDeclaredAsPersisted,
+                    member.Locations.FirstOrDefault(),
+                    type.Name,
+                    member.Name,
+                    classification.Kind.ToString()));
+            }
             if (member is IFieldSymbol { IsReadOnly: true }
                 && !IsModelOptions(memberType)
                 && !IsSerializableModel(memberType)
@@ -267,7 +359,12 @@ public class ModelStateGenerator : IIncrementalGenerator
                 || classification.Kind is ParameterMemberSemanticModel.Kind.Scratch
                 or ParameterMemberSemanticModel.Kind.Alias
                 or ParameterMemberSemanticModel.Kind.External
-                or ParameterMemberSemanticModel.Kind.Conflicting)
+                or ParameterMemberSemanticModel.Kind.Conflicting
+                // Dispose state, unless the author declared it as something persisted -- an explicit declaration
+                // still wins, so this only decides the members nobody has classified. A declaration that says
+                // PERSISTED is a contradiction and is reported below rather than silently overridden.
+                || (classification.Kind == ParameterMemberSemanticModel.Kind.Unclassified
+                    && disposeAssigned.Contains(member.Name)))
             {
                 continue;
             }

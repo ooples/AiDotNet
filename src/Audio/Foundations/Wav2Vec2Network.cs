@@ -27,8 +27,20 @@ internal sealed record Wav2Vec2Configuration
     public int PositionalConvKernel { get; init; } = 128;
     public int PositionalConvGroups { get; init; } = 16;
 
+    /// <summary>
+    /// 0: wav2vec 2.0's positional embedding, one weight-normed grouped convolution followed by GELU. Above 0:
+    /// data2vec-audio's, this many plain grouped convolutions each followed by a parameter-free layer norm and GELU.
+    /// </summary>
+    public int PositionalConvLayers { get; init; }
+
     /// <summary>Pre-norm encoder layers with a final norm (LARGE-LV60) instead of post-norm layers (BASE).</summary>
     public bool StableLayerNorm { get; init; }
+
+    /// <summary>
+    /// Width of the attention adapter each stable-layer-norm encoder layer adds after its feed-forward block
+    /// (transformers' <c>adapter_attn_dim</c>, MMS's per-language adapters); 0 adds none.
+    /// </summary>
+    public int AdapterAttentionDim { get; init; }
 
     public double LayerNormEpsilon { get; init; } = 1e-5;
     public double FeatureProjectionDropout { get; init; }
@@ -68,6 +80,9 @@ internal sealed class Wav2Vec2Network<T>
         if (c.ConvDims.Length == 0 || c.ConvDims.Length != c.ConvKernels.Length || c.ConvDims.Length != c.ConvStrides.Length)
             throw new ArgumentException("The feature encoder needs matching conv dims, kernels and strides.");
         if (c.HiddenSize % c.Heads != 0) throw new ArgumentException($"The width {c.HiddenSize} must divide into {c.Heads} heads.");
+        // transformers adds the adapter only to Wav2Vec2EncoderLayerStableLayerNorm.
+        if (c.AdapterAttentionDim < 0 || (c.AdapterAttentionDim > 0 && !c.StableLayerNorm))
+            throw new ArgumentException("An attention adapter needs a positive width and the stable-layer-norm encoder.");
         TLayer Own<TLayer>(TLayer layer) where TLayer : LayerBase<T>
         {
             layers.Add(layer);
@@ -88,11 +103,20 @@ internal sealed class Wav2Vec2Network<T>
         ProjectionNorm = Norm(c.ConvDims[^1]);
         Projection = Linear(c.HiddenSize);
         MaskEmbedding = Own(new BiasFreeLinearLayer<T>(1, c.HiddenSize));
-        PositionalConv = Own(new Wav2Vec2PositionalConvLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups));
+        if (c.PositionalConvLayers > 0)
+            for (int i = 0; i < c.PositionalConvLayers; i++)
+                PositionalConvStack.Add(Own(new GroupedConv1DLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups)));
+        else
+            PositionalConv = Own(new Wav2Vec2PositionalConvLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups));
         EncoderNorm = Norm(c.HiddenSize);
         for (int i = 0; i < c.Layers; i++)
-            EncoderLayers.Add(new EncoderLayer(Linear(c.HiddenSize), Linear(c.HiddenSize), Linear(c.HiddenSize), Linear(c.HiddenSize),
-                Norm(c.HiddenSize), Linear(c.IntermediateSize), Linear(c.HiddenSize), Norm(c.HiddenSize)));
+        {
+            var layer = new EncoderLayer(Linear(c.HiddenSize), Linear(c.HiddenSize), Linear(c.HiddenSize), Linear(c.HiddenSize),
+                Norm(c.HiddenSize), Linear(c.IntermediateSize), Linear(c.HiddenSize), Norm(c.HiddenSize));
+            if (c.AdapterAttentionDim > 0)
+                layer = layer with { Adapter = new AdapterLayer(Norm(c.HiddenSize), Linear(c.AdapterAttentionDim), Linear(c.HiddenSize)) };
+            EncoderLayers.Add(layer);
+        }
     }
 
     /// <summary>A feature-encoder layer: the convolution (a linear map of the unfolded kernel window) and its norm.</summary>
@@ -100,7 +124,13 @@ internal sealed class Wav2Vec2Network<T>
 
     /// <summary>An encoder layer: attention projections, its norm, the feed-forward and the final norm.</summary>
     internal sealed record EncoderLayer(DenseLayer<T> Query, DenseLayer<T> Key, DenseLayer<T> Value, DenseLayer<T> Output,
-        LayerNormalizationLayer<T> AttentionNorm, DenseLayer<T> Intermediate, DenseLayer<T> FeedForwardOutput, LayerNormalizationLayer<T> FinalNorm);
+        LayerNormalizationLayer<T> AttentionNorm, DenseLayer<T> Intermediate, DenseLayer<T> FeedForwardOutput, LayerNormalizationLayer<T> FinalNorm)
+    {
+        public AdapterLayer? Adapter { get; init; }
+    }
+
+    // Wav2Vec2AttnAdapterLayer: norm -> linear_1 (to the adapter width) -> ReLU -> linear_2 (back), added residually.
+    internal sealed record AdapterLayer(LayerNormalizationLayer<T> Norm, DenseLayer<T> Down, DenseLayer<T> Up);
 
     public Wav2Vec2Configuration Configuration { get; }
     public List<ConvLayer> ConvLayers { get; } = new();
@@ -110,7 +140,10 @@ internal sealed class Wav2Vec2Network<T>
     /// <summary>The learned embedding that replaces masked frames (a [1 → H] map of a constant one).</summary>
     public BiasFreeLinearLayer<T> MaskEmbedding { get; }
 
-    public Wav2Vec2PositionalConvLayer<T> PositionalConv { get; }
+    public Wav2Vec2PositionalConvLayer<T>? PositionalConv { get; }
+
+    // data2vec-audio's positional convolutions (empty for wav2vec 2.0).
+    public List<GroupedConv1DLayer<T>> PositionalConvStack { get; } = new();
     public LayerNormalizationLayer<T> EncoderNorm { get; }
     public List<EncoderLayer> EncoderLayers { get; } = new();
 
@@ -170,7 +203,7 @@ internal sealed class Wav2Vec2Network<T>
         if (applied is not null) hidden = ApplyMask(hidden, applied);
 
         var states = new List<Tensor<T>>();
-        hidden = _engine.TensorAdd(hidden, ActivationHelper.ExactGelu(PositionalConv.Forward(hidden), _engine));
+        hidden = _engine.TensorAdd(hidden, PositionalEmbedding(hidden));
         if (!c.StableLayerNorm) hidden = EncoderNorm.Forward(hidden);
         hidden = Drop(hidden, c.HiddenDropout, training, random);
         states.Add(hidden);
@@ -247,6 +280,27 @@ internal sealed class Wav2Vec2Network<T>
         return Dense(l.Output, merged);
     }
 
+    private Tensor<T> PositionalEmbedding(Tensor<T> hidden)
+    {
+        if (PositionalConv is not null) return ActivationHelper.ExactGelu(PositionalConv.Forward(hidden), _engine);
+        // Data2VecAudioPositionalConvEmbedding: conv -> layer norm without affine parameters -> GELU, per layer.
+        var x = hidden;
+        foreach (var conv in PositionalConvStack) x = ActivationHelper.ExactGelu(NormalizeLastAxis(conv.Forward(x)), _engine);
+        return x;
+    }
+
+    // (x - mean) / sqrt(var + eps) over the last axis, the population variance, as nn.LayerNorm(elementwise_affine=False).
+    private Tensor<T> NormalizeLastAxis(Tensor<T> x)
+    {
+        int last = x.Rank - 1, width = x.Shape[last];
+        var inverseWidth = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1.0 / width) }));
+        var mean = _engine.TensorMultiply(_engine.ReduceSum(x, new[] { last }, keepDims: true), inverseWidth);
+        var centred = _engine.TensorSubtract(x, mean);
+        var variance = _engine.TensorMultiply(_engine.ReduceSum(_engine.TensorMultiply(centred, centred), new[] { last }, keepDims: true), inverseWidth);
+        var epsilon = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(Configuration.LayerNormEpsilon) }));
+        return _engine.TensorDivide(centred, _engine.TensorSqrt(_engine.TensorAdd(variance, epsilon)));
+    }
+
     private Tensor<T> FeedForward(EncoderLayer l, Tensor<T> x, bool training, Random random)
     {
         var c = Configuration;
@@ -260,7 +314,10 @@ internal sealed class Wav2Vec2Network<T>
         if (c.StableLayerNorm)
         {
             x = _engine.TensorAdd(x, Drop(Attention(l, l.AttentionNorm.Forward(x), training, random), c.HiddenDropout, training, random));
-            return _engine.TensorAdd(x, FeedForward(l, l.FinalNorm.Forward(x), training, random));
+            x = _engine.TensorAdd(x, FeedForward(l, l.FinalNorm.Forward(x), training, random));
+            if (l.Adapter is { } a)
+                x = _engine.TensorAdd(x, Dense(a.Up, _engine.ReLU(Dense(a.Down, a.Norm.Forward(x)))));
+            return x;
         }
         x = l.AttentionNorm.Forward(_engine.TensorAdd(x, Drop(Attention(l, x, training, random), c.HiddenDropout, training, random)));
         return l.FinalNorm.Forward(_engine.TensorAdd(x, FeedForward(l, x, training, random)));
@@ -351,9 +408,16 @@ internal sealed class Wav2Vec2Network<T>
         for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble();
         TorchParameters.Linear(MaskEmbedding, 1, c.HiddenSize, mask);
         int perGroup = c.HiddenSize / c.PositionalConvGroups;
-        // Wav2Vec2PositionalConvEmbedding: N(0, 2·√(1/(k·C_in))) on the weight, then weight_norm's g = ‖v‖ per tap.
-        var direction = Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, 2 * Math.Sqrt(1.0 / ((double)c.PositionalConvKernel * c.HiddenSize)));
-        LoadPositional(direction, null, new double[c.HiddenSize]);
+        if (PositionalConv is not null)
+        {
+            // Wav2Vec2PositionalConvEmbedding: N(0, 2·√(1/(k·C_in))) on the weight, then weight_norm's g = ‖v‖ per tap.
+            var direction = Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, 2 * Math.Sqrt(1.0 / ((double)c.PositionalConvKernel * c.HiddenSize)));
+            LoadPositional(direction, null, new double[c.HiddenSize]);
+        }
+        // Data2VecAudioPositionalConvLayer: Kaiming-normal weight (fan-in (C/G)·K), zero bias.
+        foreach (var conv in PositionalConvStack)
+            LoadGroupedConv(conv, Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, Math.Sqrt(2.0 / (perGroup * c.PositionalConvKernel))),
+                new double[c.HiddenSize]);
         foreach (var l in EncoderLayers)
         {
             Linear(l.Query, c.HiddenSize, c.HiddenSize);
@@ -362,7 +426,21 @@ internal sealed class Wav2Vec2Network<T>
             Linear(l.Output, c.HiddenSize, c.HiddenSize);
             Linear(l.Intermediate, c.HiddenSize, c.IntermediateSize);
             Linear(l.FeedForwardOutput, c.IntermediateSize, c.HiddenSize);
+            if (l.Adapter is { } a)
+            {
+                Linear(a.Down, c.HiddenSize, c.AdapterAttentionDim);
+                Linear(a.Up, c.AdapterAttentionDim, c.HiddenSize);
+            }
         }
+    }
+
+    private void LoadGroupedConv(GroupedConv1DLayer<T> conv, double[] weight, double[] bias)
+    {
+        var (w, b) = conv.ConvParameters;
+        for (int i = 0; i < weight.Length; i++) w[i] = NumOps.FromDouble(weight[i]);
+        for (int i = 0; i < bias.Length; i++) b[i] = NumOps.FromDouble(bias[i]);
+        _engine.InvalidatePersistentTensor(w);
+        _engine.InvalidatePersistentTensor(b);
     }
 
     // v [C, C/G, K] and g [K] (null: g = ‖v‖ per tap, as weight_norm initializes it) and the bias.
@@ -370,7 +448,7 @@ internal sealed class Wav2Vec2Network<T>
     {
         var c = Configuration;
         int perGroup = c.HiddenSize / c.PositionalConvGroups, k = c.PositionalConvKernel;
-        var (v, g, b) = PositionalConv.WeightNormParameters;
+        var (v, g, b) = (PositionalConv ?? throw new InvalidOperationException("This network has no weight-normed positional convolution.")).WeightNormParameters;
         for (int i = 0; i < direction.Length; i++) v[i] = NumOps.FromDouble(direction[i]);
         for (int t = 0; t < k; t++)
         {
@@ -438,9 +516,13 @@ internal sealed class Wav2Vec2Network<T>
         Lin(Projection, "feature_projection.projection", c.ConvDims[^1], h);
         TorchParameters.Linear(MaskEmbedding, 1, h, read("masked_spec_embed", new[] { h }));
         int perGroup = h / c.PositionalConvGroups;
-        LoadPositional(read("encoder.pos_conv_embed.conv.parametrizations.weight.original1", new[] { h, perGroup, c.PositionalConvKernel }),
-            read("encoder.pos_conv_embed.conv.parametrizations.weight.original0", new[] { 1, 1, c.PositionalConvKernel }),
-            read("encoder.pos_conv_embed.conv.bias", new[] { h }));
+        if (PositionalConv is not null)
+            LoadPositional(read("encoder.pos_conv_embed.conv.parametrizations.weight.original1", new[] { h, perGroup, c.PositionalConvKernel }),
+                read("encoder.pos_conv_embed.conv.parametrizations.weight.original0", new[] { 1, 1, c.PositionalConvKernel }),
+                read("encoder.pos_conv_embed.conv.bias", new[] { h }));
+        for (int i = 0; i < PositionalConvStack.Count; i++)
+            LoadGroupedConv(PositionalConvStack[i], read($"encoder.pos_conv_embed.layers.{i}.conv.weight", new[] { h, perGroup, c.PositionalConvKernel }),
+                read($"encoder.pos_conv_embed.layers.{i}.conv.bias", new[] { h }));
         Norm(EncoderNorm, "encoder.layer_norm", h);
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
@@ -454,6 +536,12 @@ internal sealed class Wav2Vec2Network<T>
             Lin(l.Intermediate, $"{p}.feed_forward.intermediate_dense", h, c.IntermediateSize);
             Lin(l.FeedForwardOutput, $"{p}.feed_forward.output_dense", c.IntermediateSize, h);
             Norm(l.FinalNorm, $"{p}.final_layer_norm", h);
+            if (l.Adapter is { } a)
+            {
+                Norm(a.Norm, $"{p}.adapter_layer.norm", h);
+                Lin(a.Down, $"{p}.adapter_layer.linear_1", h, c.AdapterAttentionDim);
+                Lin(a.Up, $"{p}.adapter_layer.linear_2", c.AdapterAttentionDim, h);
+            }
         }
     }
 }

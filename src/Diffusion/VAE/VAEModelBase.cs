@@ -29,8 +29,16 @@ namespace AiDotNet.Diffusion.VAE;
 /// </remarks>
 public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     AiDotNet.Models.Parameters.IParameterManifestProvider,
-    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
+    AiDotNet.Models.Parameters.IParameterSurfaceLifecycle, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
+    /// <summary>Exposes canonical registered state for device-side checkpoints.</summary>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        EnsureComponentsRegistered();
+        return AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(
+            this, typeof(VAEModelBase<T>), _parameterRegistry, GetParameters);
+    }
+
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
     // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
@@ -328,7 +336,7 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
     {
         EnsureComponentsRegistered();
-        foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
+        foreach (var chunk in GetParameterStateChunks())
             yield return chunk.Tensor;
     }
 
@@ -343,10 +351,10 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// </summary>
     public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
     {
-        // Buffer the chunk stream into one flat vector and delegate to SetParameters. Shared with
-        // DiffusionModelBase, NoisePredictorBase's legacy fallback, and the composite latent-diffusion
-        // models via DiffusionParameterChunkHelper (single source of truth for the framing/validation).
-        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+        EnsureComponentsRegistered();
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(VAEModelBase<T>), chunks, _parameterRegistry, SetParameters, OnParametersRestored);
     }
 
     /// <inheritdoc/>

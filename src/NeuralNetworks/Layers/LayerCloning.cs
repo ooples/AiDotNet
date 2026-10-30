@@ -418,6 +418,11 @@ public static class LayerCloning
     /// </summary>
     private static void CopyTensorContents<T>(Tensor<T> source, Tensor<T> destination)
     {
+        if (source is not SparseTensor<T> && destination is not SparseTensor<T> && destination.IsContiguous)
+        {
+            AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, destination);
+            return;
+        }
         try
         {
             var src = source.GetReadOnlyDataArray();
@@ -553,8 +558,8 @@ public static class LayerCloning
         }
 
         return mode == CloneMode.CopyOnWrite
-            ? (Tensor<T>)tensor.CloneShared()
-            : tensor.Clone();
+            ? AiDotNet.Helpers.CopyOnWriteCloneHelper.ShareTensor(tensor)
+            : AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { tensor })[0];
     }
 
     /// <summary>Copies each registered sub-layer's parameters into the matching sub-layer.</summary>

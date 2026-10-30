@@ -34,8 +34,20 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// </para>
 /// </remarks>
 public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
-    AiDotNet.Models.Parameters.IParameterManifestProvider
+    AiDotNet.Models.Parameters.IParameterManifestProvider, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
+    /// <summary>Streams state in manifest order without flattening tensor-backed components.</summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+        => GetParameterStateChunks().Select(chunk => chunk.Tensor);
+
+    /// <summary>Restores canonical tensor chunks on their device, preserving custom setters and hooks.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        _ = Components;
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(ReinforcementLearningAgentBase<T>), chunks, _parameterRegistry, SetParameters, OnParametersRestored, OnParametersRestoring);
+    }
+
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
     // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
@@ -635,7 +647,8 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
     public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
     {
         _ = Components;
-        return _parameterRegistry.GetParameterStateChunks();
+        return AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(
+            this, typeof(ReinforcementLearningAgentBase<T>), _parameterRegistry, GetParameters);
     }
 
     /// <summary>
