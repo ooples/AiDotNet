@@ -54,6 +54,10 @@ internal sealed record LlamaConfiguration
     /// <summary>Qwen3's RMSNorm on each query and key head (<c>q_norm</c>, <c>k_norm</c>) before the rotary embedding.</summary>
     public bool QueryKeyNorm { get; init; }
 
+    /// <summary>Whether the decoder ends in its RMSNorm (<c>model.norm</c>); false for a stack of bare
+    /// <c>LlamaDecoderLayer</c>s, as LLaMA-Omni's CTC speech decoder is.</summary>
+    public bool IncludeFinalNorm { get; init; } = true;
+
     /// <summary>Llama 3's rotary frequency scaling (<c>rope_type = "llama3"</c>): the factor, 0 for none.</summary>
     public double RopeScalingFactor { get; init; }
 
@@ -162,7 +166,7 @@ internal sealed class LlamaNetwork<T>
                 QueryBias = queryBias, KeyBias = keyBias, ValueBias = valueBias, QueryNorm = queryNorm, KeyNorm = keyNorm,
             });
         }
-        FinalNorm = Values(c.Hidden);
+        FinalNorm = c.IncludeFinalNorm ? Values(c.Hidden) : null;
         LmHead = c.VocabSize > 0 && c.IncludeHead && !c.TieWordEmbeddings ? Linear(c.Hidden, c.VocabSize) : null;
     }
 
@@ -188,7 +192,8 @@ internal sealed class LlamaNetwork<T>
 
     public List<Layer> Layers { get; } = new();
 
-    public BiasFreeLinearLayer<T> FinalNorm { get; }
+    /// <summary>The final RMSNorm; null without <see cref="LlamaConfiguration.IncludeFinalNorm"/>.</summary>
+    public BiasFreeLinearLayer<T>? FinalNorm { get; }
 
     /// <summary>The language-model head's own weights; null for a bare decoder or a head tied to the token table.</summary>
     public BiasFreeLinearLayer<T>? LmHead { get; }
@@ -314,7 +319,7 @@ internal sealed class LlamaNetwork<T>
         var x = embeddings;
         for (int i = 0; i < Layers.Count; i++) x = Run(Layers[i], x, cos, sin, bias, cache, i);
         if (cache is not null) cache.Length = total;
-        var hidden = RmsNorm(FinalNorm, x);
+        var hidden = FinalNorm is null ? x : RmsNorm(FinalNorm, x);
         var read = lastLogitsOnly ? _engine.TensorSlice(hidden, new[] { 0, l - 1, 0 }, new[] { b, 1, c.Hidden }) : hidden;
         return (hidden, Head(read));
     }
@@ -475,7 +480,7 @@ internal sealed class LlamaNetwork<T>
                 Linear(layer.ValueLora.B, $"{n}.self_attn.v_proj.lora_B.weight", c.LoraRank, kv);
             }
         }
-        Vector(FinalNorm, $"{prefix}norm.weight", new[] { h });
+        if (FinalNorm is not null) Vector(FinalNorm, $"{prefix}norm.weight", new[] { h });
         if (LmHead is not null) Linear(LmHead, headName, h, c.VocabSize);
     }
 
