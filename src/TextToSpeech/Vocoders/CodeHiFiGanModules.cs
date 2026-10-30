@@ -30,6 +30,27 @@ internal sealed record CodeHiFiGanConfiguration
     /// vocoder.</summary>
     public int Speakers { get; init; }
 
+    /// <summary>Utterance style embeddings (expresso's <c>multistyle</c>: SpiritLM Base's vocoder has 34, its
+    /// <c>styles.txt</c>); 0 for none.</summary>
+    public int Styles { get; init; }
+
+    /// <summary>Pitch-token embeddings (<c>num_f0_tokens</c>: SpiritLM Expressive's 64 F0 VQ-VAE codes), concatenated per
+    /// frame; 0 for none.</summary>
+    public int PitchTokens { get; init; }
+
+    /// <summary>Style-token embeddings (<c>num_style_tokens</c>: SpiritLM Expressive's 100), concatenated per frame; 0 for
+    /// none.</summary>
+    public int StyleTokens { get; init; }
+
+    /// <summary>Unit frames per pitch token (<c>round(f0_hop_size / code_hop_size)</c>: 1280 / 640 = 2).</summary>
+    public int PitchRatio { get; init; } = 2;
+
+    /// <summary>Unit frames per style token (<c>round(style_hop_size / code_hop_size)</c>: 16000 / 640 = 25).</summary>
+    public int StyleRatio { get; init; } = 25;
+
+    /// <summary>The generator's input width: the unit embedding and each conditioning embedding concatenated.</summary>
+    public int InputDim => EmbeddingDim * (1 + (PitchTokens > 0 ? 1 : 0) + (StyleTokens > 0 ? 1 : 0) + (Speakers > 0 ? 1 : 0) + (Styles > 0 ? 1 : 0));
+
     /// <summary>Samples per unit frame: the upsampling rates' product (320).</summary>
     public int HopSize => UpsampleRates.Aggregate(1, (a, b) => a * b);
 }
@@ -47,6 +68,11 @@ internal sealed record CodeHiFiGanConfiguration
 /// <para>Multi-speaker (<see cref="CodeHiFiGanConfiguration.Speakers"/>; speech-resynthesis'
 /// <c>DurationCodeGenerator</c>): a speaker's embedding, repeated over the frames, is concatenated to the unit embeddings
 /// before the generator.</para>
+/// <para>Expresso's and SpiritLM's <c>CodeGenerator</c> adds per-frame pitch and style tokens
+/// (<see cref="CodeHiFiGanConfiguration.PitchTokens"/>, <see cref="CodeHiFiGanConfiguration.StyleTokens"/>), each embedded and
+/// repeated with its unit, and a per-utterance style (<see cref="CodeHiFiGanConfiguration.Styles"/>), repeated over the frames
+/// like the speaker. The generator reads the unit, pitch-token, style-token, speaker and style embeddings concatenated in that
+/// order.</para>
 /// <para>Training (<see cref="TrainingForward"/>) reads frame-level codes; the duration predictor learns the log
 /// (duration + 1) of each run of a code (<c>process_duration</c>: the first and last runs, cut by the segment, left out)
 /// by mean squared error.</para>
@@ -79,12 +105,18 @@ internal sealed class CodeHiFiGan<T>
             DurationProjection = Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
             TorchParameters.Linear(engine, DurationProjection, h, 1, Enumerable.Range(0, h).Select(_ => Uniform(h)).ToArray(), new[] { Uniform(h) });
         }
-        if (c.Speakers > 0)
+        TiedEmbeddingLayer<T>? Table(int rows)
         {
-            SpeakerEmbedding = Add(new TiedEmbeddingLayer<T>(c.Speakers, c.EmbeddingDim));
-            SpeakerEmbedding.Reinitialize(Normal);
+            if (rows <= 0) return null;
+            var table = Add(new TiedEmbeddingLayer<T>(rows, c.EmbeddingDim));
+            table.Reinitialize(Normal);
+            return table;
         }
-        Generator = new HiFiGanGenerator<T>(engine, c.EmbeddingDim * (c.Speakers > 0 ? 2 : 1), c.InitialChannels, c.UpsampleRates, c.UpsampleKernels, c.ResblockKernels,
+        PitchEmbedding = Table(c.PitchTokens);
+        StyleTokenEmbedding = Table(c.StyleTokens);
+        SpeakerEmbedding = Table(c.Speakers);
+        StyleEmbedding = Table(c.Styles);
+        Generator = new HiFiGanGenerator<T>(engine, c.InputDim, c.InitialChannels, c.UpsampleRates, c.UpsampleKernels, c.ResblockKernels,
             c.ResblockDilations, resblockType1: true, initialization: initialization);
         layers.AddRange(Generator.Layers);
     }
@@ -99,17 +131,43 @@ internal sealed class CodeHiFiGan<T>
 
     /// <summary>The speaker table; null for a single-speaker vocoder.</summary>
     public TiedEmbeddingLayer<T>? SpeakerEmbedding { get; }
+
+    /// <summary>The per-frame pitch-token table; null when the vocoder reads none.</summary>
+    public TiedEmbeddingLayer<T>? PitchEmbedding { get; }
+
+    /// <summary>The per-frame style-token table; null when the vocoder reads none.</summary>
+    public TiedEmbeddingLayer<T>? StyleTokenEmbedding { get; }
+
+    /// <summary>The per-utterance style table; null when the vocoder reads none.</summary>
+    public TiedEmbeddingLayer<T>? StyleEmbedding { get; }
+
     public HiFiGanGenerator<T> Generator { get; }
 
-    private Tensor<T> Embed(IReadOnlyList<int> units)
+    private Tensor<T> Embed(IReadOnlyList<int> units) => Lookup(Embedding, units, Configuration.Units, nameof(units));
+
+    private static Tensor<T> Lookup(TiedEmbeddingLayer<T> table, IReadOnlyList<int> ids, int count, string name)
     {
-        var ids = new Tensor<T>(new[] { units.Count });
-        for (int i = 0; i < units.Count; i++)
+        var tensor = new Tensor<T>(new[] { ids.Count });
+        for (int i = 0; i < ids.Count; i++)
         {
-            if (units[i] < 0 || units[i] >= Configuration.Units) throw new ArgumentOutOfRangeException(nameof(units), $"Units lie in [0, {Configuration.Units}).");
-            ids[i] = NumOps.FromDouble(units[i]);
+            if (ids[i] < 0 || ids[i] >= count) throw new ArgumentOutOfRangeException(name, $"Ids lie in [0, {count}).");
+            tensor[i] = NumOps.FromDouble(ids[i]);
         }
-        return Embedding.Forward(ids);                                                                            // [L, E]
+        return table.Forward(tensor);                                                                             // [L, E]
+    }
+
+    /// <summary>
+    /// Tokens at a lower rate brought to <paramref name="frames"/> unit frames (<c>CodeHiFiGANVocoderModel.upsample</c>):
+    /// each repeated <paramref name="ratio"/> times, the last repeated or the tail cut to fit; the counts must agree to
+    /// within one token.
+    /// </summary>
+    public static int[] Upsample(IReadOnlyList<int> tokens, int frames, int ratio)
+    {
+        if (tokens.Count == 0 || Math.Abs((double)tokens.Count * ratio - frames) / ratio > 1)
+            throw new ArgumentException($"{tokens.Count} tokens at {ratio} frames each do not cover {frames} frames.", nameof(tokens));
+        var result = new int[frames];
+        for (int f = 0; f < frames; f++) result[f] = tokens[Math.Min(f / ratio, tokens.Count - 1)];
+        return result;
     }
 
     /// <summary>The predicted log durations <c>[L]</c> of units (<c>VariancePredictor</c>; its dropout when
@@ -129,18 +187,38 @@ internal sealed class CodeHiFiGan<T>
         return _engine.Reshape(DurationProjection.Forward(h), new[] { length });
     }
 
-    // The unit embeddings [L, E] of rows, a speaker's embedding concatenated to each, as [1, channels, L].
-    private Tensor<T> GeneratorInput(Tensor<T> rows, int? speaker)
+    // The frame rows [L, E] with the per-frame pitch- and style-token rows [L, E] and the speaker's and style's embeddings
+    // concatenated to each, as [1, channels, L].
+    private Tensor<T> GeneratorInput(Tensor<T> rows, Tensor<T>? pitchRows, Tensor<T>? styleTokenRows, int? speaker, int? style)
     {
-        int frames = rows.Shape[0];
-        if (SpeakerEmbedding is not null)
+        int frames = rows.Shape[0], e = Configuration.EmbeddingDim;
+        var parts = new List<Tensor<T>> { rows };
+        if (pitchRows is not null) parts.Add(pitchRows);
+        if (styleTokenRows is not null) parts.Add(styleTokenRows);
+        Tensor<T> Utterance(TiedEmbeddingLayer<T> table, int? id, int count, string name)
         {
-            if (speaker is null || speaker < 0 || speaker >= Configuration.Speakers)
-                throw new ArgumentOutOfRangeException(nameof(speaker), $"This vocoder voices speakers 0 … {Configuration.Speakers - 1}.");
-            var embedding = SpeakerEmbedding.Forward(new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(speaker.Value) })));
-            rows = _engine.TensorConcatenate(new[] { rows, _engine.TensorBroadcastTo(_engine.Reshape(embedding, new[] { 1, Configuration.EmbeddingDim }), new[] { frames, Configuration.EmbeddingDim }) }, 1);
+            if (id is null || id < 0 || id >= count) throw new ArgumentOutOfRangeException(name, $"This vocoder reads {name} 0 … {count - 1}.");
+            var embedding = table.Forward(new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(id.Value) })));
+            return _engine.TensorBroadcastTo(_engine.Reshape(embedding, new[] { 1, e }), new[] { frames, e });
         }
+        if (SpeakerEmbedding is not null) parts.Add(Utterance(SpeakerEmbedding, speaker, Configuration.Speakers, nameof(speaker)));
+        if (StyleEmbedding is not null) parts.Add(Utterance(StyleEmbedding, style, Configuration.Styles, nameof(style)));
+        if (parts.Count > 1) rows = _engine.TensorConcatenate(parts.ToArray(), 1);
         return _engine.Reshape(_engine.TensorTranspose(rows), new[] { 1, rows.Shape[1], frames });
+    }
+
+    // The embedded per-frame pitch and style tokens [L, E] (null for a table the vocoder lacks).
+    private (Tensor<T>? Pitch, Tensor<T>? StyleTokens) ConditionRows(IReadOnlyList<int>? pitch, IReadOnlyList<int>? styleTokens, int frames)
+    {
+        Tensor<T>? Rows(TiedEmbeddingLayer<T>? table, IReadOnlyList<int>? ids, int count, string name)
+        {
+            if (table is null) return null;
+            if (ids is null) throw new ArgumentNullException(name, $"This vocoder reads {name}.");
+            if (ids.Count != frames) throw new ArgumentException($"{ids.Count} {name} for {frames} frames.", name);
+            return Lookup(table, ids, count, name);
+        }
+        return (Rows(PitchEmbedding, pitch, Configuration.PitchTokens, nameof(pitch)),
+            Rows(StyleTokenEmbedding, styleTokens, Configuration.StyleTokens, nameof(styleTokens)));
     }
 
     /// <summary>
@@ -149,7 +227,9 @@ internal sealed class CodeHiFiGan<T>
     /// against log(run length + 1) over each run of a code (the first and last runs left out when there are more than
     /// two, since a segment cuts them).
     /// </summary>
-    public (Tensor<T> Waveform, Tensor<T>? DurationLoss) TrainingForward(IReadOnlyList<int> codes, int? speaker, Random random)
+    /// <remarks>Pitch and style tokens, when the vocoder reads them, are given per code frame (see <see cref="Upsample"/>).</remarks>
+    public (Tensor<T> Waveform, Tensor<T>? DurationLoss) TrainingForward(IReadOnlyList<int> codes, int? speaker, Random random,
+        int? style = null, IReadOnlyList<int>? pitch = null, IReadOnlyList<int>? styleTokens = null)
     {
         if (codes is null || codes.Count == 0) throw new ArgumentException("There are no codes.", nameof(codes));
         Tensor<T>? durationLoss = null;
@@ -168,7 +248,8 @@ internal sealed class CodeHiFiGan<T>
             durationLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null, false),
                 NumOps.FromDouble(1.0 / kept.Count));
         }
-        var wave = Generator.Forward(GeneratorInput(Embed(codes), speaker));
+        var (pitchRows, styleRows) = ConditionRows(pitch, styleTokens, codes.Count);
+        var wave = Generator.Forward(GeneratorInput(Embed(codes), pitchRows, styleRows, speaker, style));
         return (_engine.Reshape(wave, new[] { wave.Length }), durationLoss);
     }
 
@@ -185,10 +266,19 @@ internal sealed class CodeHiFiGan<T>
     /// The waveform <c>[frames · hop]</c> of discrete units (<c>CodeHiFiGANVocoder.forward</c>): the embeddings, each
     /// repeated by its predicted duration when <paramref name="durationPrediction"/>, through the generator.
     /// </summary>
-    public Tensor<T> Forward(IReadOnlyList<int> units, bool durationPrediction = true, int? speaker = null)
+    /// <remarks>Pitch and style tokens, when the vocoder reads them: with duration prediction one per unit, repeated with
+    /// it; without, at their own rates, brought to the units' frames by <see cref="Upsample"/> (as the release does).</remarks>
+    public Tensor<T> Forward(IReadOnlyList<int> units, bool durationPrediction = true, int? speaker = null, int? style = null,
+        IReadOnlyList<int>? pitch = null, IReadOnlyList<int>? styleTokens = null)
     {
         if (units is null || units.Count == 0) throw new ArgumentException("There are no units.", nameof(units));
+        if (!durationPrediction)
+        {
+            if (PitchEmbedding is not null && pitch is not null) pitch = Upsample(pitch, units.Count, Configuration.PitchRatio);
+            if (StyleTokenEmbedding is not null && styleTokens is not null) styleTokens = Upsample(styleTokens, units.Count, Configuration.StyleRatio);
+        }
         var rows = Embed(units);
+        var (pitchRows, styleRows) = ConditionRows(pitch, styleTokens, units.Count);
         if (durationPrediction)
         {
             var durations = Durations(units);
@@ -197,8 +287,10 @@ internal sealed class CodeHiFiGan<T>
             for (int i = 0; i < durations.Length; i++)
                 for (int r = 0; r < durations[i]; r++) index[at++] = i;
             rows = _engine.TensorIndexSelect(rows, index, 0);
+            if (pitchRows is not null) pitchRows = _engine.TensorIndexSelect(pitchRows, index, 0);
+            if (styleRows is not null) styleRows = _engine.TensorIndexSelect(styleRows, index, 0);
         }
-        var wave = Generator.Forward(GeneratorInput(rows, speaker));
+        var wave = Generator.Forward(GeneratorInput(rows, pitchRows, styleRows, speaker, style));
         return _engine.Reshape(wave, new[] { wave.Length });
     }
 
@@ -211,6 +303,9 @@ internal sealed class CodeHiFiGan<T>
         double[] Need(string name) => read(prefix + name) ?? throw new InvalidDataException($"The vocoder checkpoint has no tensor '{prefix}{name}'.");
         Embedding.LoadTable(Need("dict.weight"));
         if (SpeakerEmbedding is not null) SpeakerEmbedding.LoadTable(Need("spkr.weight"));
+        if (StyleEmbedding is not null) StyleEmbedding.LoadTable(Need("style.weight"));
+        if (PitchEmbedding is not null) PitchEmbedding.LoadTable(Need("f0_dict.weight"));
+        if (StyleTokenEmbedding is not null) StyleTokenEmbedding.LoadTable(Need("style_dict.weight"));
         if (DurationConv1 is not null && DurationNorm1 is not null && DurationConv2 is not null && DurationNorm2 is not null && DurationProjection is not null)
         {
             DurationConv1.LoadTorchWeights(Need("dur_predictor.conv1.0.weight"), null, Need("dur_predictor.conv1.0.bias"));
