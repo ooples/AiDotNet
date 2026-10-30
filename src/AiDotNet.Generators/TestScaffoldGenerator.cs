@@ -5897,10 +5897,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxTextLength = 8, DropoutRate = 0.0, ActivationDropout = 0.0, FeatureProjectionDropout = 0.0, " +
                     "FinalDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0 })";
             }
+            else if (model.ClassName is "WavLMASR" or "WavLMRobust" && model.TypeParameterCount == 1)
+            {
+                // WavLM-ASR and WavLM-Robust now build WavLM (#2321): raw-waveform feature encoder, gated relative position
+                // bias, CTC head, at test width with the regularizers off so the invariants see a deterministic objective.
+                string optionsType = model.ClassName == "WavLMASR"
+                    ? "AiDotNet.SpeechRecognition.Foundation.WavLMASROptions"
+                    : "AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    $"new {optionsType} {{ MaxAudioLengthSeconds = 2, EncoderDim = 64, NumEncoderLayers = 2, " +
+                    "NumAttentionHeads = 4, FeedForwardDim = 128, VocabSize = 16, MaxTextLength = 8, DropoutRate = 0.0, " +
+                    "ActivationDropout = 0.0, FeatureProjectionDropout = 0.0, FinalDropout = 0.0, LayerDrop = 0.0, " +
+                    "MaskTimeProbability = 0.0 })";
+            }
             else if (model.ClassName is "FunASRNano" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
-                    or "WavLMASR" or "WavLMRobust"
                 && model.TypeParameterCount == 1)
             {
                 // These ASR encoders have already exhausted the first two timeout rungs:
@@ -5918,9 +5933,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "SPIRAL" => "AiDotNet.SpeechRecognition.Foundation.SPIRALOptions",
                     "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
                     "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
-                    "TDTDecoder" => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions",
-                    "WavLMASR" => "AiDotNet.SpeechRecognition.Foundation.WavLMASROptions",
-                    _ => "AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions"
+                    _ => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions"
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
