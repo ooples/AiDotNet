@@ -1679,6 +1679,9 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LayerTestBaseHarnessRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LossCompatibleTargetProjectionTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Diffusion.MGIETests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.AdaptedMetaModelTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.MbPAAdaptedModelTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.NeuralProcessModelTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.ActivationLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerWithReLUInvariantTests.|
