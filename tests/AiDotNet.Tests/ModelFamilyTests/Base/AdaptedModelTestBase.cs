@@ -99,6 +99,16 @@ public abstract class AdaptedModelTestBase<TOutput>
         AssertSame(before, Values(adapted.WithParameters(parameters).Predict(query)), "WithParameters(GetParameters())");
         adapted.SetParameters(parameters);
         AssertSame(before, Values(adapted.Predict(query)), "SetParameters(GetParameters())");
+
+        // A no-op setter would pass the identity round trip above, so apply different values and read them back.
+        var perturbed = Perturbed(parameters);
+        var viaWith = Values(adapted.WithParameters(perturbed).Predict(query));
+        adapted.SetParameters(perturbed);
+        AssertSame(perturbed.ToArray(), adapted.GetParameters().ToArray(), "GetParameters after SetParameters(perturbed)");
+        var viaSet = Values(adapted.Predict(query));
+        Assert.True(Distance(before, viaSet) > 1e-9,
+            $"{ExpectedType.Name}: SetParameters with every value changed left the predictions as they were.");
+        AssertSame(viaWith, viaSet, "SetParameters(p) against WithParameters(p)");
     }
 
     [Fact(Timeout = 120000)]
