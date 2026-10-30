@@ -9,8 +9,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// For inference-only derivations. The value is built outside any tensor arena, so an arena reset between predicts
-/// cannot reclaim it, and under a no-grad scope, so it holds no tape history. A differentiable forward must compute its
+/// For inference-only derivations. The value is built outside any tensor arena and any <see cref="TensorScope"/>, so
+/// neither an arena reset nor the end of a Predict's scope can reclaim it, and under a no-grad scope, so it holds no
+/// tape history. A differentiable forward must compute its
 /// derivation inline instead, connected to the tape.
 /// </para>
 /// <para>
@@ -51,6 +52,7 @@ internal sealed class DerivedTensorCache<T>
 
         Tensor<T> value;
         using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        using (TensorScope.Suspend())
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             value = build(engine, sources);
 
