@@ -6895,6 +6895,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             var output = PredictInInferenceMode(input);
             RequireArchitectureAgreesWithOutput(output);
+            // The default PredictCore records the first forward and retries weight-streaming detection; an override that
+            // answers from its own path (FeedForwardNeuralNetwork's fused dense predict) never did, so detection never
+            // finalized and every Predict ran it again: both SetTrainingMode transitions built and SHA-256 hashed the
+            // parameter layout, about a sixth of a GPU MLP's batch-32 inference. Recorded here for every model.
+            if (!_firstForwardCompleted)
+            {
+                _firstForwardCompleted = true;
+                TryAutoEnableWeightStreaming();
+            }
             return output;
         }
         finally

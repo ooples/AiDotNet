@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -83,6 +83,60 @@ public class AutoDetectWeightStreamingTests
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
     }
 
+    /// <summary>
+    /// A model whose PredictCore answers from its own path without the default PredictCore (as
+    /// FeedForwardNeuralNetwork's fused dense predict does), so only the Predict funnel can record its first
+    /// forward.
+    /// </summary>
+    private sealed class OwnPredictPathNetwork : VectorModelLayoutBase<float>
+    {
+        private readonly long _fixedCount;
+        private long _parameterCountReads;
+
+        public OwnPredictPathNetwork(long fixedCount)
+            : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
+        {
+            _fixedCount = fixedCount;
+            Layers.Add(new DenseLayer<float>(outputSize: 1));
+        }
+
+        public override long ParameterCount
+        {
+            get
+            {
+                Interlocked.Increment(ref _parameterCountReads);
+                return _fixedCount;
+            }
+        }
+
+        public long ParameterCountReadCount => Interlocked.Read(ref _parameterCountReads);
+
+        public void SetThresholdForTest(long thresholdParams) => ApplyAutoDetectThresholdOverride(thresholdParams);
+
+        protected override Tensor<float> PredictCore(Tensor<float> input) => input;
+        protected override void InitializeLayers() { /* layer added in ctor */ }
+        public override void UpdateParameters(Vector<float> parameters) { /* not exercised */ }
+        public override ModelMetadata<float> GetModelMetadata() => new() { Name = "OwnPredictPathNetwork" };
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+    }
+
+    [Fact]
+    public void BelowThreshold_OwnPredictPath_FinalizesAfterFirstPredict()
+    {
+        // Detection below the threshold finalizes only after a first forward. A model answering from its own
+        // PredictCore never recorded one, so every Predict re-ran detection: both of its SetTrainingMode transitions
+        // walked the parameter count and built (and hashed) the parameter layout again.
+        var net = new OwnPredictPathNetwork(fixedCount: 1_000_000_000L);
+        net.SetThresholdForTest(10_000_000_000L);
+        var input = new Tensor<float>(new[] { 1, 1 });
+        net.Predict(input);
+        long readsAfterFirst = net.ParameterCountReadCount;
+        net.Predict(input);
+        net.Predict(input);
+        Assert.Equal(readsAfterFirst, net.ParameterCountReadCount);
+        Assert.False(net.IsWeightStreamingActive, "A below-threshold model must stay eager.");
+    }
     [Fact]
     public void BelowThreshold_AutoStreaming_DoesNotEngage()
     {
