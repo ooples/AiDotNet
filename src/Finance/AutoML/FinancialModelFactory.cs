@@ -29,6 +29,14 @@ internal sealed class FinancialModelFactory<T>
 {
     private readonly NeuralNetworkArchitecture<T> _architecture;
 
+    // What every forecasting candidate is built from: the given architecture when it states a time x features
+    // grid, otherwise a grid of InputSize time steps by one feature. The candidates read a flat InputSize two ways
+    // (PatchTST, iTransformer and N-BEATS as the window, DeepAR and TFT as the feature count), and one search
+    // feeds them all the same tensors, so they must all see the same [batch, time steps, features] layout.
+    private readonly NeuralNetworkArchitecture<T> _sequenceArchitecture;
+    private readonly int _sequenceLength;
+    private readonly int _sequenceFeatures;
+
     /// <summary>
     /// Initializes the factory with a user-provided architecture.
     /// </summary>
@@ -43,6 +51,24 @@ internal sealed class FinancialModelFactory<T>
     {
         Guard.NotNull(architecture);
         _architecture = architecture;
+
+        int height = architecture.InputHeight, width = architecture.InputWidth;
+        if (height > 1 && width > 0 && height != width)
+        {
+            _sequenceArchitecture = architecture;
+            _sequenceLength = height;
+            _sequenceFeatures = width;
+        }
+        else
+        {
+            _sequenceLength = architecture.InputSize;
+            _sequenceFeatures = 1;
+            _sequenceArchitecture = _sequenceLength > 1
+                ? new NeuralNetworkArchitecture<T>(InputType.TwoDimensional, architecture.TaskType,
+                    architecture.Complexity, inputHeight: _sequenceLength, inputWidth: 1,
+                    outputSize: architecture.OutputSize)
+                : architecture;
+        }
     }
 
     /// <summary>
@@ -62,15 +88,15 @@ internal sealed class FinancialModelFactory<T>
         var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
 
         if (lookupType == typeof(PatchTST<>)) return CreateWithOptions(
-            (PatchTSTOptions<T> options) => new PatchTST<T>(_architecture, options: options), new PatchTSTOptions<T>(), parameters);
+            (PatchTSTOptions<T> options) => new PatchTST<T>(_sequenceArchitecture, options: options), new PatchTSTOptions<T>(), parameters);
         if (lookupType == typeof(ITransformer<>)) return CreateWithOptions(
-            (ITransformerOptions<T> options) => new ITransformer<T>(_architecture, options: options), new ITransformerOptions<T>(), parameters);
+            (ITransformerOptions<T> options) => new ITransformer<T>(_sequenceArchitecture, options: options), new ITransformerOptions<T>(), parameters);
         if (lookupType == typeof(DeepAR<>)) return CreateWithOptions(
-            (DeepAROptions<T> options) => new DeepAR<T>(_architecture, options), new DeepAROptions<T>(), parameters);
+            (DeepAROptions<T> options) => new DeepAR<T>(_sequenceArchitecture, options), new DeepAROptions<T>(), parameters);
         if (lookupType == typeof(NBEATSFinance<>)) return CreateWithOptions(
-            (NBEATSModelOptions<T> options) => new NBEATSFinance<T>(_architecture, options), new NBEATSModelOptions<T>(), parameters);
+            (NBEATSModelOptions<T> options) => new NBEATSFinance<T>(_sequenceArchitecture, options), new NBEATSModelOptions<T>(), parameters);
         if (lookupType == typeof(TFT<>)) return CreateWithOptions(
-            (TemporalFusionTransformerOptions<T> options) => new TFT<T>(_architecture, options), new TemporalFusionTransformerOptions<T>(), parameters);
+            (TemporalFusionTransformerOptions<T> options) => new TFT<T>(_sequenceArchitecture, options), new TemporalFusionTransformerOptions<T>(), parameters);
         if (lookupType == typeof(NeuralVaR<>)) return CreateWithOptions(
             (NeuralVaROptions<T> options) => new NeuralVaR<T>(_architecture, options), new NeuralVaROptions<T>(), parameters);
         if (lookupType == typeof(TabNet<>)) return CreateWithOptions(
@@ -91,7 +117,7 @@ internal sealed class FinancialModelFactory<T>
     /// applies them to the options object, and then constructs the model.
     /// </para>
     /// </remarks>
-    private static TModel CreateWithOptions<TOptions, TModel>(
+    private TModel CreateWithOptions<TOptions, TModel>(
         Func<TOptions, TModel> factory,
         TOptions options,
         IReadOnlyDictionary<string, object> parameters)
@@ -101,7 +127,64 @@ internal sealed class FinancialModelFactory<T>
         if (options is null)
             throw new ArgumentNullException(nameof(options));
 
+        SeedShapeFromArchitecture(options);
         AutoMLHyperparameterApplicator.ApplyToOptions(options, parameters);
+        FitSampledSizesToShape(options);
         return factory(options);
+    }
+
+    /// <summary>
+    /// Sizes the options from the architecture the search was given. Every candidate validates that its options
+    /// agree with the architecture, and the options' own defaults (10 risk features, a 96 x 7 forecasting window)
+    /// never matched the architecture, so every trial used to fail before training.
+    /// </summary>
+    /// <remarks>
+    /// Forecasting candidates take the window from the time x features grid (see the sequence-architecture field);
+    /// a flat one-dimensional input is a univariate window of InputSize past values, forecasting OutputSize steps.
+    /// </remarks>
+    private void SeedShapeFromArchitecture(object options)
+    {
+        int output = Math.Max(1, _architecture.OutputSize);
+        switch (options)
+        {
+            case RiskModelOptions<T> risk when _architecture.InputSize > 0:
+                risk.NumFeatures = _architecture.InputSize;
+                break;
+            case PatchTSTOptions<T> patchTst when _sequenceLength > 0:
+                patchTst.SequenceLength = _sequenceLength;
+                patchTst.NumFeatures = _sequenceFeatures;
+                patchTst.PredictionHorizon = output;
+                break;
+            case ITransformerOptions<T> iTransformer when _sequenceLength > 0:
+                iTransformer.SequenceLength = _sequenceLength;
+                iTransformer.NumFeatures = _sequenceFeatures;
+                iTransformer.PredictionHorizon = output;
+                break;
+            case NBEATSModelOptions<T> nbeats when _sequenceLength > 0:
+                nbeats.LookbackWindow = _sequenceLength;
+                nbeats.ForecastHorizon = output;
+                break;
+            case DeepAROptions<T> deepAr when _sequenceLength > 0:
+                deepAr.LookbackWindow = _sequenceLength;
+                deepAr.ForecastHorizon = output;
+                break;
+            case TemporalFusionTransformerOptions<T> tft when _sequenceLength > 0:
+                tft.LookbackWindow = _sequenceLength;
+                tft.ForecastHorizon = output;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Keeps a sampled size inside the data's shape where the search space cannot know it: a PatchTST patch
+    /// (and its stride) cannot be longer than the lookback window.
+    /// </summary>
+    private static void FitSampledSizesToShape(object options)
+    {
+        if (options is PatchTSTOptions<T> patchTst)
+        {
+            patchTst.PatchSize = Math.Min(patchTst.PatchSize, patchTst.SequenceLength);
+            patchTst.Stride = Math.Max(1, Math.Min(patchTst.Stride, patchTst.PatchSize));
+        }
     }
 }

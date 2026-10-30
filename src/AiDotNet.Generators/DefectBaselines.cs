@@ -24,7 +24,6 @@ internal static class DefectBaselines
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
             "global::AiDotNet.AutoML.DiffusionAutoML<T>",
-            "global::AiDotNet.Finance.AutoML.FinancialAutoML<T>",
             "global::AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>",
             "global::AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>",
             "global::AiDotNet.MetaLearning.Algorithms.NeuralProcessModel<T, TInput, TOutput>",
