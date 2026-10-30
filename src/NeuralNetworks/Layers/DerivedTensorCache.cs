@@ -39,9 +39,7 @@ internal sealed class DerivedTensorCache<T>
         Tensor<T> source0, Tensor<T>? source1 = null, Tensor<T>? source2 = null, Tensor<T>? source3 = null)
     {
         int count = source1 is null ? 1 : source2 is null ? 2 : source3 is null ? 3 : 4;
-        if (_value is { } cached && ReferenceEquals(_engine, engine) && _sourceCount == count
-            && Matches(0, source0) && (count < 2 || Matches(1, source1)) && (count < 3 || Matches(2, source2))
-            && (count < 4 || Matches(3, source3)))
+        if (_value is { } cached && ReferenceEquals(_engine, engine) && SourcesMatch(count, source0, source1, source2, source3))
             return cached;
 
         var sources = new Tensor<T>[count];
@@ -78,6 +76,15 @@ internal sealed class DerivedTensorCache<T>
         Array.Clear(_sources, 0, MaxSources);
     }
 
+    /// <summary>Whether the cache was built from exactly these <paramref name="count"/> sources at their current versions.</summary>
+    private bool SourcesMatch(int count, Tensor<T> source0, Tensor<T>? source1, Tensor<T>? source2, Tensor<T>? source3)
+    {
+        if (_sourceCount != count || !Matches(0, source0)) return false;
+        if (count > 1 && !Matches(1, source1)) return false;
+        if (count > 2 && !Matches(2, source2)) return false;
+        return count < 4 || Matches(3, source3);
+    }
+
     private bool Matches(int index, Tensor<T>? source)
-        => source is not null && ReferenceEquals(_sources[index], source) && _versions[index] == source.Version;
+        => source is not null && ReferenceEquals((object?)_sources[index], (object)source) && _versions[index] == source.Version;
 }

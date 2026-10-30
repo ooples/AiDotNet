@@ -3525,10 +3525,9 @@ public static partial class LayerHelper<T>
             throw new InvalidOperationException("Output size must be greater than zero.");
         }
 
-        if (hiddenLayerSizes is not null)
+        if (hiddenLayerSizes is not null && (hiddenLayerSizes.Count == 0 || hiddenLayerSizes.Any(width => width < 1)))
         {
-            if (hiddenLayerSizes.Count == 0 || hiddenLayerSizes.Any(width => width < 1))
-                throw new ArgumentException("Every hidden layer width must be positive, and there must be at least one.", nameof(hiddenLayerSizes));
+            throw new ArgumentException("Every hidden layer width must be positive, and there must be at least one.", nameof(hiddenLayerSizes));
         }
 
         // Determine hidden layer sizes based on network complexity, unless the caller gave them.
