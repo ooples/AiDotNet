@@ -56,6 +56,34 @@ public class GRULayerFusedSequenceTests
             Assert.True(Math.Abs(expected[i] - actual[i]) <= 1e-12, $"output {i}: loop {expected[i]}, fused {actual[i]}.");
     }
 
+    [Fact]
+    public void Inference_AfterAnInPlaceGateWrite_UsesTheNewWeights()
+    {
+        // The fused inference path packs the gate weights once and reuses the pack. A write through the element setter
+        // changes only the tensor's version, not its identity, so a pack keyed on identity alone would keep serving
+        // the old weights here and drift from the loop, which reads the gates directly.
+        var (fused, loop) = Pair(returnSequences: true);
+        var input = Input(3);
+        fused.Forward(input);
+        loop.Forward(input);
+
+        var fusedGates = fused.GetTrainableParameters();
+        var loopGates = loop.GetTrainableParameters();
+        Assert.Equal(loopGates.Count, fusedGates.Count);
+        for (int t = 0; t < fusedGates.Count; t++)
+        {
+            double changed = fusedGates[t].GetFlat(0) + 0.75;
+            fusedGates[t].SetFlat(0, changed);
+            loopGates[t].SetFlat(0, changed);
+        }
+
+        var expected = loop.Forward(input).ToArray();
+        var actual = fused.Forward(input).ToArray();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.True(Math.Abs(expected[i] - actual[i]) <= 1e-12, $"output {i}: loop {expected[i]}, fused {actual[i]}.");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

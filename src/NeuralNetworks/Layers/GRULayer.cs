@@ -485,6 +485,12 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     private IGpuBuffer? _gpuStackedBiasIh;
     private IGpuBuffer? _gpuStackedBiasHh;
 
+    // Gate tensors stacked in r, z, n order for the fused sequence op in inference, rebuilt when a gate tensor is
+    // replaced or written in place.
+    private readonly DerivedTensorCache<T> _stackedWeightsIhCache = new();
+    private readonly DerivedTensorCache<T> _stackedWeightsHhCache = new();
+    private readonly DerivedTensorCache<T> _stackedBiasCache = new();
+
     #endregion
 
     /// <summary>
@@ -998,12 +1004,26 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         // per step instead of a dozen ops) when the layer uses the activations the op computes: sigmoid gates and a tanh
         // candidate, the paper-standard defaults. This layer applies the reset gate to the hidden state before the
         // recurrent product (Cho et al. 2014), the op's resetAfter: false form, so the values match the per-step loop
-        // below. The stacked weights are tape-connected concatenations, so gradients reach each gate's own weights.
+        // below. Under a tape or a graph capture the stacked weights are tape-connected concatenations, so gradients reach
+        // each gate's own weights; in plain inference they are packed once and reused until a gate tensor changes.
         if (sequenceLength > 0 && UsesStandardGruActivations())
         {
-            var stackedWih = Engine.TensorConcatenate(new[] { _Wr, _Wz, _Wh }, axis: 0);
-            var stackedWhh = Engine.TensorConcatenate(new[] { _Ur, _Uz, _Uh }, axis: 0);
-            var stackedBias = Engine.TensorConcatenate(new[] { _br, _bz, _bh }, axis: 0);
+            Tensor<T> stackedWih, stackedWhh, stackedBias;
+            var engine = Engine;
+            if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+                || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            {
+                stackedWih = engine.TensorConcatenate(new[] { _Wr, _Wz, _Wh }, axis: 0);
+                stackedWhh = engine.TensorConcatenate(new[] { _Ur, _Uz, _Uh }, axis: 0);
+                stackedBias = engine.TensorConcatenate(new[] { _br, _bz, _bh }, axis: 0);
+            }
+            else
+            {
+                stackedWih = _stackedWeightsIhCache.GetOrBuild(engine, ConcatGates, _Wr, _Wz, _Wh);
+                stackedWhh = _stackedWeightsHhCache.GetOrBuild(engine, ConcatGates, _Ur, _Uz, _Uh);
+                stackedBias = _stackedBiasCache.GetOrBuild(engine, ConcatGates, _br, _bz, _bh);
+            }
+
             var fused = Engine.GruSequenceForward(input3D, _lastHiddenState, stackedWih, stackedWhh, stackedBias, null,
                 out var finalHidden, _returnSequences, resetAfter: false);
             if (IsTrainingMode)
@@ -1722,7 +1742,31 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         _gpuStackedBiasIh = null;
         _gpuStackedBiasHh?.Dispose();
         _gpuStackedBiasHh = null;
+        // The host stacks key on each gate tensor's identity and version, which these writers also change; dropping
+        // them here covers a writer that does not.
+        _stackedWeightsIhCache.Invalidate();
+        _stackedWeightsHhCache.Invalidate();
+        _stackedBiasCache.Invalidate();
     }
+
+    /// <summary>
+    /// Drops the stacked inference weights on a training-mode transition, as <see cref="LSTMLayer{T}"/> does: training
+    /// may have written the gate tensors through a path that did not advance their versions.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        if (isTraining != IsTrainingMode)
+        {
+            _stackedWeightsIhCache.Invalidate();
+            _stackedWeightsHhCache.Invalidate();
+            _stackedBiasCache.Invalidate();
+        }
+
+        base.SetTrainingMode(isTraining);
+    }
+
+    // Stacks per-gate tensors in r, z, n order along the gate axis.
+    private static Tensor<T> ConcatGates(IEngine engine, Tensor<T>[] gates) => engine.TensorConcatenate(gates, axis: 0);
 
     /// <summary>
     /// Extracts per-gate gradients from stacked gradient buffers after fused backward kernel.
