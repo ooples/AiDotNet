@@ -110,12 +110,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _sVectorsGrad;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _inputCache;     // Shape: [batchSize * numMembers, inputDim]
-    [Scratch]
-    private Tensor<T>? _scaledInputCache;  // Input after r-vector scaling
-
     /// <summary>
     /// Gets the input dimension.
     /// </summary>
@@ -283,9 +277,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
         // scaledInput = expandedInput * rVecsFlat (elementwise, vectorized)
         var scaledInput = Engine.TensorMultiply(expandedInput, rVecsFlat);
 
-        _inputCache = expandedInput;
-        _scaledInputCache = scaledInput;
-
         // Compute output via batched matmul: [B*M, inputDim] @ [inputDim, outputDim]
         // = [B*M, outputDim]. Replaces the O(B*M*outputDim*inputDim) scalar
         // accumulation chain with one Engine.TensorMatMul.
@@ -339,9 +330,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
         var rVecsTiled = Engine.TensorTile(rVecs3D, [batchSize, 1, 1]);
         var rVecsFlat = Engine.Reshape(rVecsTiled, [expandedBatchSize, _inputDim]);
         var scaledInput = Engine.TensorMultiply(expandedInput, rVecsFlat);
-
-        _inputCache = expandedInput;
-        _scaledInputCache = scaledInput;
 
         var weights2D = Engine.Reshape(_weights, [_inputDim, _outputDim]);
         var matmul = Engine.TensorMatMul(scaledInput, weights2D);
@@ -438,8 +426,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _inputCache = null;
-        _scaledInputCache = null;
         _weightsGrad = null;
         _biasGrad = null;
         _rVectorsGrad = null;

@@ -36,17 +36,6 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Identity;
 
     /// <summary>
-    /// Stores the input from the most recent forward pass for use in the backward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field caches the input tensor from the most recent call to Forward(). During backpropagation,
-    /// this cached input is used to calculate the gradient of the activation function. The field is nullable
-    /// and will be null until Forward() is called at least once.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Indicates whether this layer uses a vector activation function instead of a scalar one.
     /// </summary>
     /// <remarks>
@@ -238,7 +227,6 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         return _useVectorActivation ? ApplyVectorActivation(input) : ApplyScalarActivation(input);
     }
 
@@ -316,7 +304,7 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastInput = null;
+        // No per-pass state is retained between forwards, so there is nothing to clear.
     }
 
     /// <summary>
