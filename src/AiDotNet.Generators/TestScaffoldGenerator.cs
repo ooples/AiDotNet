@@ -1541,8 +1541,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Qwen3ASR",           // Alibaba LLM-integrated ASR — foundation-scale lazy weights OOM the 16 GB
         "Qwen3ASRSmall",      // 512-wide/12-layer sibling — generated training exceeds the CPU gate at <double>.
                               // <float> halves the footprint first; both use an architecture-equivalent CI fixture.
-        "SpiritLM",           // Interleaved speech/text codec LM — paper-scale clone/training OOM and timeout.
-                              // Explicit audio membership also activates bounded repeated-training probes.
         "SpikingFullSubNet",  // spiking speech enhancement — Clone / DifferentInputs timeout
         "Qwen3VL",            // instruction-tuned VLM — TrainingError / GradientFlow timeout
         "SimMTM",             // masked time-series foundation model — DifferentInputs / Predict timeout
@@ -10439,18 +10437,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "SpiritLM" && model.TypeParameterCount == 1)
             {
-                // Spirit-LM's production defaults remain the paper-scale 1024-wide,
-                // 12-layer interleaved codec LM. Its FP32 generated fixture still timed
-                // out and OOMed clone paths, so exercise the identical embedding -> text
-                // encoder -> codec-LM -> acoustic-token head through public options at
-                // bounded scale. All production defaults remain user-customizable.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions { TextEncoderDim = 32, LLMDim = 32, VocabSize = 64, " +
-                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 1, " +
-                    "CodebookSize = 16, DropoutRate = 0.0 })";
+                // SpiritLM is LLaMA over text, modality markers and speech tokens, the 25 Hz mHuBERT with its CTC linear
+                // quantizer and the unit HiFi-GAN. The fixture builds them tiny over a SentencePiece model whose
+                // user-defined pieces are the markers and 12 unit tokens, laid out as the release's.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.SpiritLmFixture.Tts<double>()";
             }
             else if ((model.ClassName == "RegionCLIP" || model.ClassName == "RemoteCLIP" || model.ClassName == "SigLIP") && model.TypeParameterCount == 1)
             {
@@ -22141,7 +22131,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "SeedTTS" or "SeedTTSClone"
-            or "SpiritLM"
             or "WhisperSpeech"
             // SparkTTS exposes the same discrete codec-token contract.
             or "SparkTTS"
@@ -22161,7 +22150,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VALLEXClone" => 16,
             "SeedTTS" => 16,
             "SeedTTSClone" => 16,
-            "SpiritLM" => 16,
             "Bark" or "BarkModel" => 32,
             "CosyVoice3" => 16,
             "CosyVoiceClone" => 16,
@@ -22192,7 +22180,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return IsValleCodecLMModel(className)
             || className is "Bark" or "BarkModel"
             || className is "SeedTTS" or "SeedTTSClone"
-                or "SpiritLM"
                 ? 64 : 256;
     }
 

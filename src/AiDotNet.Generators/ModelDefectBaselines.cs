@@ -240,7 +240,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>",
             "AiDotNet.TextToSpeech.MultiModal.MinMo<T>",
             "AiDotNet.TextToSpeech.MultiModal.Moshi<T>",
-            "AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>",
             "AiDotNet.TextToSpeech.MultiModal.StepAudio<T>",
             "AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>",
