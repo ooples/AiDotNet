@@ -25,7 +25,6 @@ internal static class DefectBaselines
         {
             "global::AiDotNet.AutoML.AutoMLEnsembleModel<T>",
             "global::AiDotNet.AutoML.DiffusionAutoML<T>",
-            "global::AiDotNet.DistributedTraining.TensorParallelPagedModel<T>",
             "global::AiDotNet.Finance.AutoML.FinancialAutoML<T>",
             "global::AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>",
             "global::AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>",
