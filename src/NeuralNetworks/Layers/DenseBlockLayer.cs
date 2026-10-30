@@ -74,13 +74,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
     [Scratch]
     private Tensor<T>? _lastInput;
-    private Tensor<T>? _bn1Out;
-    private Tensor<T>? _relu1Out;
-    private Tensor<T>? _conv1Out;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _bn2Out;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _relu2Out;
 
     public override bool SupportsTraining => true;
 
@@ -203,17 +196,19 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         var x = input.Shape.Length == 3 ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;
 
         // BN-ReLU-Conv1x1 (DenseNet paper: pre-activation bottleneck)
-        _bn1Out = _bn1.Forward(x);
+        // The intermediates are locals: the tape keeps what backward needs, and a field would hold
+        // every dense layer's activations after the forward, in inference too (DenseNet-121 b16).
+        var bn1Out = _bn1.Forward(x);
         // Scalar activation objects operate eagerly and therefore detach the value from the
         // active GradientTape. Keep the DenseNet pre-activation on the engine graph so gradients
         // reach BN1 and every layer before this block.
-        _relu1Out = Engine.ReLU(_bn1Out);
-        _conv1Out = _conv1x1.Forward(_relu1Out);
+        var relu1Out = Engine.ReLU(bn1Out);
+        var conv1Out = _conv1x1.Forward(relu1Out);
 
         // BN-ReLU-Conv3x3
-        _bn2Out = _bn2.Forward(_conv1Out);
-        _relu2Out = Engine.ReLU(_bn2Out);
-        var output = _conv3x3.Forward(_relu2Out);
+        var bn2Out = _bn2.Forward(conv1Out);
+        var relu2Out = Engine.ReLU(bn2Out);
+        var output = _conv3x3.Forward(relu2Out);
 
         // Remove batch dim if we added it
         if (input.Shape.Length == 3 && output.Shape.Length == 4 && output.Shape[0] == 1)
@@ -269,11 +264,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     public override void ResetState()
     {
         _lastInput = null;
-        _bn1Out = null;
-        _relu1Out = null;
-        _conv1Out = null;
-        _bn2Out = null;
-        _relu2Out = null;
 
         _bn1.ResetState();
         _conv1x1.ResetState();
