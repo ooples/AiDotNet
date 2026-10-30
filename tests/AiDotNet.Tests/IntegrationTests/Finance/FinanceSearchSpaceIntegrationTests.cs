@@ -72,7 +72,8 @@ public class FinanceSearchSpaceIntegrationTests
         var likelihoodRange = searchSpace["LikelihoodType"];
         Assert.Equal(ParameterType.Categorical, likelihoodRange.Type);
         Assert.Contains("Gaussian", (likelihoodRange.CategoricalValues ?? throw new InvalidOperationException("likelihoodRange.CategoricalValues is null where it is required.")).Cast<string>());
-        Assert.Contains("StudentT", likelihoodRange.CategoricalValues.Cast<string>());
+        // StudentT is not offered: DeepAR's native path rejects it at validation, so every such trial failed.
+        Assert.DoesNotContain("StudentT", likelihoodRange.CategoricalValues.Cast<string>());
     }
 
     [Fact(Timeout = 120000)]
@@ -258,15 +259,16 @@ public class FinanceSearchSpaceIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SearchSpace_DeepAR_LikelihoodType_HasNegativeBinomial()
+    public async Task SearchSpace_DeepAR_LikelihoodType_OffersOnlyWhatDeepARImplements()
     {
+        // DeepAR's options validation rejects StudentT and NegativeBinomial in native mode ("not yet
+        // implemented"), so offering them only produced trials that failed before training.
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>));
 
         var likelihoodRange = searchSpace["LikelihoodType"];
         var values = (likelihoodRange.CategoricalValues ?? throw new InvalidOperationException("likelihoodRange.CategoricalValues is null where it is required.")).Cast<string>().ToList();
-        Assert.Contains("NegativeBinomial", values);
-        Assert.Equal(3, values.Count);
+        Assert.Equal(new[] { "Gaussian" }, values);
         Assert.Equal("Gaussian", (string)(likelihoodRange.DefaultValue ?? throw new InvalidOperationException("(string)likelihoodRange.DefaultValue is null where it is required.")));
     }
 

@@ -54,79 +54,17 @@ public sealed class FinancialSearchSpace
     {
         var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
 
-        if (lookupType == typeof(Forecasting.Transformers.PatchTST<>)) return ForModel(lookupType, GetPatchTSTSearchSpace());
-        if (lookupType == typeof(Forecasting.Transformers.ITransformer<>)) return ForModel(lookupType, GetITransformerSearchSpace());
-        if (lookupType == typeof(Forecasting.Neural.DeepAR<>)) return ForModel(lookupType, GetDeepARSearchSpace());
-        if (lookupType == typeof(Forecasting.Neural.NBEATSFinance<>)) return ForModel(lookupType, GetNBEATSSearchSpace());
-        if (lookupType == typeof(Forecasting.Transformers.TFT<>)) return ForModel(lookupType, GetTFTSearchSpace());
-        if (lookupType == typeof(Risk.NeuralVaR<>)) return ForModel(lookupType, GetNeuralVaRSearchSpace());
-        if (lookupType == typeof(Risk.TabNet<>)) return ForModel(lookupType, GetTabNetSearchSpace());
-        if (lookupType == typeof(Risk.TabTransformer<>)) return ForModel(lookupType, GetTabTransformerSearchSpace());
+        if (lookupType == typeof(Forecasting.Transformers.PatchTST<>)) return GetPatchTSTSearchSpace();
+        if (lookupType == typeof(Forecasting.Transformers.ITransformer<>)) return GetITransformerSearchSpace();
+        if (lookupType == typeof(Forecasting.Neural.DeepAR<>)) return GetDeepARSearchSpace();
+        if (lookupType == typeof(Forecasting.Neural.NBEATSFinance<>)) return GetNBEATSSearchSpace();
+        if (lookupType == typeof(Forecasting.Transformers.TFT<>)) return GetTFTSearchSpace();
+        if (lookupType == typeof(Risk.NeuralVaR<>)) return GetNeuralVaRSearchSpace();
+        if (lookupType == typeof(Risk.TabNet<>)) return GetTabNetSearchSpace();
+        if (lookupType == typeof(Risk.TabTransformer<>)) return GetTabTransformerSearchSpace();
 
         return GetDomainAwareDefaultSearchSpace();
     }
-
-    // The shared search spaces use generic names (HiddenSize, DropoutRate, ...), but the applicator sets an
-    // option only when a property has exactly that name and skips the rest silently, so most sampled values
-    // never reached the model. Each entry renames a key to the model's real option, or drops it (null) when
-    // the model has no such option (training-loop settings like Epochs live outside these options).
-    private static readonly Dictionary<Type, Dictionary<string, string?>> OptionNames = new()
-    {
-        [typeof(Forecasting.Transformers.PatchTST<>)] = new(StringComparer.Ordinal)
-        {
-            ["HiddenSize"] = "ModelDimension", ["DropoutRate"] = "Dropout", ["PatchLength"] = "PatchSize",
-            ["NumAttentionHeads"] = "NumHeads", ["Epochs"] = null, ["BatchSize"] = null,
-        },
-        [typeof(Forecasting.Transformers.ITransformer<>)] = new(StringComparer.Ordinal)
-        {
-            ["HiddenSize"] = "ModelDimension", ["DropoutRate"] = "Dropout", ["NumAttentionHeads"] = "NumHeads",
-            ["FeedForwardDim"] = "FeedForwardDimension", ["Epochs"] = null, ["BatchSize"] = null,
-        },
-        [typeof(Forecasting.Neural.NBEATSFinance<>)] = new(StringComparer.Ordinal)
-        {
-            ["HiddenSize"] = "HiddenLayerSize", ["NumLayers"] = "NumHiddenLayers", ["DropoutRate"] = null,
-        },
-        [typeof(Risk.NeuralVaR<>)] = new(StringComparer.Ordinal)
-        {
-            ["HiddenSize"] = "HiddenDimension", ["NumLayers"] = "HiddenLayers", ["LearningRate"] = null,
-            ["DropoutRate"] = null, ["Epochs"] = null, ["BatchSize"] = null,
-        },
-        [typeof(Risk.TabNet<>)] = new(StringComparer.Ordinal)
-        {
-            ["HiddenSize"] = "FeatureDimension", ["NumLayers"] = "NumSharedLayers", ["Epochs"] = null, ["BatchSize"] = null,
-        },
-        [typeof(Risk.TabTransformer<>)] = new(StringComparer.Ordinal)
-        {
-            ["HiddenSize"] = "HiddenDimension", ["EmbeddingDim"] = "EmbeddingDimension", ["NumAttentionHeads"] = null,
-            ["Epochs"] = null, ["BatchSize"] = null,
-        },
-    };
-
-    private static Dictionary<string, ParameterRange> ForModel(Type modelType, Dictionary<string, ParameterRange> space)
-    {
-        if (!OptionNames.TryGetValue(modelType, out var names))
-            return space;
-
-        var renamed = new Dictionary<string, ParameterRange>(StringComparer.Ordinal);
-        foreach (var (key, range) in space)
-        {
-            if (!names.TryGetValue(key, out var name))
-                renamed[key] = range;
-            else if (name is not null)
-                renamed[name] = range;
-        }
-
-        return renamed;
-    }
-
-    // Attention widths are sampled as powers of two and head counts as divisors of every one of them, so any
-    // pair the search draws splits evenly across the heads (an integer range drew 128 with 3 heads).
-    private static ParameterRange AttentionHeads() => new()
-    {
-        Type = ParameterType.Categorical,
-        CategoricalValues = new List<object> { 1, 2, 4, 8 },
-        DefaultValue = 4
-    };
 
     /// <summary>
     /// Gets a domain-aware default search space when no specific model is requested.
@@ -170,7 +108,13 @@ public sealed class FinancialSearchSpace
             MaxValue = 32,
             DefaultValue = 16
         };
-        searchSpace["NumAttentionHeads"] = AttentionHeads();
+        searchSpace["NumAttentionHeads"] = new ParameterRange
+        {
+            Type = ParameterType.Integer,
+            MinValue = 1,
+            MaxValue = 8,
+            DefaultValue = 4
+        };
         return searchSpace;
     }
 
@@ -188,7 +132,13 @@ public sealed class FinancialSearchSpace
     private Dictionary<string, ParameterRange> GetITransformerSearchSpace()
     {
         var searchSpace = GetCommonForecastingSearchSpace();
-        searchSpace["NumAttentionHeads"] = AttentionHeads();
+        searchSpace["NumAttentionHeads"] = new ParameterRange
+        {
+            Type = ParameterType.Integer,
+            MinValue = 1,
+            MaxValue = 8,
+            DefaultValue = 4
+        };
         searchSpace["FeedForwardDim"] = new ParameterRange
         {
             Type = ParameterType.Integer,
@@ -281,7 +231,13 @@ public sealed class FinancialSearchSpace
     private Dictionary<string, ParameterRange> GetTFTSearchSpace()
     {
         var searchSpace = GetCommonForecastingSearchSpace();
-        searchSpace["NumAttentionHeads"] = AttentionHeads();
+        searchSpace["NumAttentionHeads"] = new ParameterRange
+        {
+            Type = ParameterType.Integer,
+            MinValue = 1,
+            MaxValue = 8,
+            DefaultValue = 4
+        };
         searchSpace["UseVariableSelection"] = new ParameterRange
         {
             Type = ParameterType.Boolean,
@@ -359,7 +315,13 @@ public sealed class FinancialSearchSpace
     private Dictionary<string, ParameterRange> GetTabTransformerSearchSpace()
     {
         var searchSpace = GetCommonTabularSearchSpace();
-        searchSpace["NumAttentionHeads"] = AttentionHeads();
+        searchSpace["NumAttentionHeads"] = new ParameterRange
+        {
+            Type = ParameterType.Integer,
+            MinValue = 1,
+            MaxValue = 8,
+            DefaultValue = 4
+        };
         searchSpace["EmbeddingDim"] = new ParameterRange
         {
             Type = ParameterType.Integer,
@@ -394,8 +356,9 @@ public sealed class FinancialSearchSpace
             },
             ["HiddenSize"] = new ParameterRange
             {
-                Type = ParameterType.Categorical,
-                CategoricalValues = new List<object> { 16, 32, 64, 128, 256, 512 },
+                Type = ParameterType.Integer,
+                MinValue = 16,
+                MaxValue = 512,
                 DefaultValue = 128
             },
             ["NumLayers"] = new ParameterRange
@@ -453,8 +416,9 @@ public sealed class FinancialSearchSpace
             },
             ["HiddenSize"] = new ParameterRange
             {
-                Type = ParameterType.Categorical,
-                CategoricalValues = new List<object> { 16, 32, 64, 128, 256 },
+                Type = ParameterType.Integer,
+                MinValue = 16,
+                MaxValue = 256,
                 DefaultValue = 64
             },
             ["NumLayers"] = new ParameterRange

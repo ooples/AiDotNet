@@ -86,7 +86,8 @@ public class FinancialAutoMLTests
     }
 
     // The applicator sets an option only when a property has the key's exact name and skips the rest silently,
-    // so a key that names no option is a hyperparameter the search claims to tune and never does.
+    // so a key the factory does not map to a real option is a hyperparameter the search claims to tune and never
+    // does. A key the factory drops on purpose (a training-loop setting the model has no option for) maps to null.
     [Theory]
     [InlineData(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>), typeof(PatchTSTOptions<double>), FinancialDomain.Forecasting)]
     [InlineData(typeof(AiDotNet.Finance.Forecasting.Transformers.ITransformer<>), typeof(ITransformerOptions<double>), FinancialDomain.Forecasting)]
@@ -100,8 +101,10 @@ public class FinancialAutoMLTests
     {
         foreach (var key in new FinancialSearchSpace(domain).GetSearchSpace(candidate).Keys)
         {
-            var property = optionsType.GetProperty(key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-            Assert.True(property is { CanWrite: true }, $"{candidate.Name} search key '{key}' sets no option.");
+            if (FinancialModelFactory<double>.OptionName(candidate, key) is not { } name)
+                continue;
+            var property = optionsType.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            Assert.True(property is { CanWrite: true }, $"{candidate.Name} search key '{key}' (option '{name}') sets nothing.");
         }
     }
 }

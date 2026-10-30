@@ -128,9 +128,70 @@ internal sealed class FinancialModelFactory<T>
             throw new ArgumentNullException(nameof(options));
 
         SeedShapeFromArchitecture(options);
-        AutoMLHyperparameterApplicator.ApplyToOptions(options, parameters);
+        AutoMLHyperparameterApplicator.ApplyToOptions(options, ToOptionNames(typeof(TModel), parameters));
         FitSampledSizesToShape(options);
         return factory(options);
+    }
+
+    // The search spaces use one vocabulary for every model (HiddenSize, DropoutRate, NumAttentionHeads, ...), but
+    // the applicator sets an option only when a property has exactly that name and skips the rest silently, so most
+    // sampled values never reached the model. Each entry renames a search key to the model's own option, or drops
+    // it (null) where the model has no such option (training-loop settings like Epochs live outside these options).
+    private static readonly Dictionary<Type, Dictionary<string, string?>> OptionNames = new()
+    {
+        [typeof(PatchTST<>)] = new(StringComparer.Ordinal)
+        {
+            ["HiddenSize"] = "ModelDimension", ["DropoutRate"] = "Dropout", ["PatchLength"] = "PatchSize",
+            ["NumAttentionHeads"] = "NumHeads", ["Epochs"] = null, ["BatchSize"] = null,
+        },
+        [typeof(ITransformer<>)] = new(StringComparer.Ordinal)
+        {
+            ["HiddenSize"] = "ModelDimension", ["DropoutRate"] = "Dropout", ["NumAttentionHeads"] = "NumHeads",
+            ["FeedForwardDim"] = "FeedForwardDimension", ["Epochs"] = null, ["BatchSize"] = null,
+        },
+        [typeof(NBEATSFinance<>)] = new(StringComparer.Ordinal)
+        {
+            ["HiddenSize"] = "HiddenLayerSize", ["NumLayers"] = "NumHiddenLayers", ["DropoutRate"] = null,
+        },
+        [typeof(NeuralVaR<>)] = new(StringComparer.Ordinal)
+        {
+            ["HiddenSize"] = "HiddenDimension", ["NumLayers"] = "HiddenLayers", ["LearningRate"] = null,
+            ["DropoutRate"] = null, ["Epochs"] = null, ["BatchSize"] = null,
+        },
+        [typeof(TabNet<>)] = new(StringComparer.Ordinal)
+        {
+            ["HiddenSize"] = "FeatureDimension", ["NumLayers"] = "NumSharedLayers", ["Epochs"] = null, ["BatchSize"] = null,
+        },
+        [typeof(TabTransformer<>)] = new(StringComparer.Ordinal)
+        {
+            ["HiddenSize"] = "HiddenDimension", ["EmbeddingDim"] = "EmbeddingDimension", ["NumAttentionHeads"] = "NumHeads",
+            ["Epochs"] = null, ["BatchSize"] = null,
+        },
+    };
+
+    /// <summary>The option a search key sets on a model, or null when the model has no such option.</summary>
+    internal static string? OptionName(Type modelType, string key)
+    {
+        var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+        return OptionNames.TryGetValue(lookupType, out var names) && names.TryGetValue(key, out var name) ? name : key;
+    }
+
+    private static IReadOnlyDictionary<string, object> ToOptionNames(Type modelType, IReadOnlyDictionary<string, object> parameters)
+    {
+        var renamed = new Dictionary<string, object>(StringComparer.Ordinal);
+        foreach (var (key, value) in parameters)
+        {
+            if (string.Equals(key, "ModelType", StringComparison.Ordinal))
+            {
+                renamed[key] = value;
+                continue;
+            }
+
+            if (OptionName(modelType, key) is { } name)
+                renamed[name] = value;
+        }
+
+        return renamed;
     }
 
     /// <summary>
@@ -181,10 +242,28 @@ internal sealed class FinancialModelFactory<T>
     /// </summary>
     private static void FitSampledSizesToShape(object options)
     {
-        if (options is PatchTSTOptions<T> patchTst)
+        switch (options)
         {
-            patchTst.PatchSize = Math.Min(patchTst.PatchSize, patchTst.SequenceLength);
-            patchTst.Stride = Math.Max(1, Math.Min(patchTst.Stride, patchTst.PatchSize));
+            case PatchTSTOptions<T> patchTst:
+                patchTst.PatchSize = Math.Min(patchTst.PatchSize, patchTst.SequenceLength);
+                patchTst.Stride = Math.Max(1, Math.Min(patchTst.Stride, patchTst.PatchSize));
+                patchTst.ModelDimension = SplitEvenly(patchTst.ModelDimension, patchTst.NumHeads);
+                break;
+            case ITransformerOptions<T> iTransformer:
+                iTransformer.ModelDimension = SplitEvenly(iTransformer.ModelDimension, iTransformer.NumHeads);
+                break;
+            case TemporalFusionTransformerOptions<T> tft:
+                tft.HiddenSize = SplitEvenly(tft.HiddenSize, tft.NumAttentionHeads);
+                break;
+            case TabTransformerOptions<T> tabTransformer:
+                tabTransformer.HiddenDimension = SplitEvenly(tabTransformer.HiddenDimension, tabTransformer.NumHeads);
+                tabTransformer.EmbeddingDimension = SplitEvenly(tabTransformer.EmbeddingDimension, tabTransformer.NumHeads);
+                break;
         }
     }
+
+    // Width and head count are sampled independently (an integer range drew 73 with 8 heads), and attention splits
+    // the width evenly across the heads, so the sampled width is rounded up to the next multiple of the heads.
+    private static int SplitEvenly(int width, int heads) =>
+        heads <= 0 || width % heads == 0 ? width : (width / heads + 1) * heads;
 }
