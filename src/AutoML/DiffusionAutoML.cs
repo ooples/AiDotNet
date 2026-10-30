@@ -128,7 +128,7 @@ namespace AiDotNet.AutoML
         /// </summary>
         public Dictionary<string, object> ToDictionary()
         {
-            return new Dictionary<string, object>
+            var parameters = new Dictionary<string, object>
             {
                 ["NoisePredictorType"] = NoisePredictorType.ToString(),
                 ["SchedulerType"] = SchedulerType.ToString(),
@@ -145,8 +145,13 @@ namespace AiDotNet.AutoML
                 ["NumHeads"] = NumHeads,
                 ["TransformerDepth"] = TransformerDepth,
                 ["ConditioningDropoutProbability"] = ConditioningDropoutProbability,
-                ["Seed"] = Seed ?? 0
             };
+
+            // An unseeded config leaves the key out. Writing 0 for "no seed" made a real seed of 0 read back as
+            // unseeded, so a trial asked to be reproducible with seed 0 was not.
+            if (Seed.HasValue)
+                parameters["Seed"] = Seed.Value;
+            return parameters;
         }
 
         /// <summary>
@@ -209,8 +214,7 @@ namespace AiDotNet.AutoML
 
             if (parameters.TryGetValue("Seed", out var seed))
             {
-                int seedVal = Convert.ToInt32(seed);
-                config.Seed = seedVal != 0 ? seedVal : null;
+                config.Seed = Convert.ToInt32(seed);
             }
 
             return config;
