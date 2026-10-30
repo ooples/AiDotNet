@@ -139,7 +139,7 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             options.DataLoader,
             options.MetaOptimizer,
             options.InnerOptimizer,
-            optimizerUse: MetaLearnerOptimizerUse.Outer)
+            optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         _caviaOptions = options;
 
@@ -386,9 +386,8 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 }
             }
 
-            // Update context: psi = psi - alpha * grad
-            T lr = NumOps.FromDouble(_caviaOptions.InnerLearningRate);
-            context = Engine.Subtract(context, Engine.Multiply(contextGradients, lr));
+            // Update context: psi = psi - alpha * grad (or the supplied inner optimizer's step)
+            context = ApplyInnerGradients(context, contextGradients, _caviaOptions.InnerLearningRate, step == 0);
         }
 
         return context;

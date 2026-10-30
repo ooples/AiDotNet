@@ -68,7 +68,7 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
-               optimizerUse: MetaLearnerOptimizerUse.Outer)
+               optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
@@ -109,13 +109,14 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Frequency-aware regularization
+                var stepGradient = new Vector<T>(_paramDim);
                 for (int d = 0; d < _paramDim; d++)
                 {
                     double diff = NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
                     double reg = _freqRegWeights[d] * diff;
-                    double combined = NumOps.ToDouble(taskGrad[d]) + reg;
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * combined));
+                    stepGradient[d] = NumOps.FromDouble(NumOps.ToDouble(taskGrad[d]) + reg);
                 }
+                adaptedParams = ApplyInnerGradients(adaptedParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -149,13 +150,14 @@ public partial class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             ParamModel.SetParameters(adaptedParams);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
+            var stepGradient = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
             {
                 double diff = NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
                 double reg = _freqRegWeights[d] * diff;
-                double combined = NumOps.ToDouble(taskGrad[d]) + reg;
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * combined));
+                stepGradient[d] = NumOps.FromDouble(NumOps.ToDouble(taskGrad[d]) + reg);
             }
+            adaptedParams = ApplyInnerGradients(adaptedParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);

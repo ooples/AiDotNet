@@ -73,7 +73,7 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
-               optimizerUse: MetaLearnerOptimizerUse.Outer)
+               optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         if (options.DistillationTemperature <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "DistillationTemperature must be positive.");
@@ -121,11 +121,13 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 var distillGrad = ComputeDistillationGradient(studentParams, teacherSupportPred, task.SupportInput);
 
                 // Combined gradient
+                var stepGradient = new Vector<T>(_paramDim);
                 for (int d = 0; d < _paramDim; d++)
                 {
                     double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.DistillationWeight * NumOps.ToDouble(distillGrad[d]);
-                    studentParams[d] = NumOps.Subtract(studentParams[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * combined));
+                    stepGradient[d] = NumOps.FromDouble(combined);
                 }
+                studentParams = ApplyInnerGradients(studentParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Evaluate on query set
@@ -189,11 +191,13 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             var distillGrad = ComputeDistillationGradient(studentParams, teacherPred, task.SupportInput);
 
+            var stepGradient = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
             {
                 double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.DistillationWeight * NumOps.ToDouble(distillGrad[d]);
-                studentParams[d] = NumOps.Subtract(studentParams[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * combined));
+                stepGradient[d] = NumOps.FromDouble(combined);
             }
+            studentParams = ApplyInnerGradients(studentParams, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
 
         paramModel.SetParameters(initParams);
