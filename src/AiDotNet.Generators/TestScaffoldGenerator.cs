@@ -5884,7 +5884,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "options: new AiDotNet.NeuralNetworks.Options.FastTextOptions { VocabSize = 128, " +
                     "BucketSize = 1024, EmbeddingDimension = 16, MaxSequenceLength = 32 })";
             }
-            else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
+            else if (model.ClassName == "HuBERTASR" && model.TypeParameterCount == 1)
+            {
+                // HuBERT now builds its paper network (the wav2vec 2.0 encoder over the raw waveform, #2321): the same
+                // shape as Wav2Vec2Model's fixture, with the regularizers off so the invariants see a deterministic objective.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "new AiDotNet.SpeechRecognition.Foundation.HuBERTASROptions { MaxAudioLengthSeconds = 2, " +
+                    "EncoderDim = 64, NumEncoderLayers = 2, NumAttentionHeads = 4, FeedForwardDim = 128, VocabSize = 16, " +
+                    "MaxTextLength = 8, DropoutRate = 0.0, ActivationDropout = 0.0, FeatureProjectionDropout = 0.0, " +
+                    "FinalDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0 })";
+            }
+            else if (model.ClassName is "FunASRNano" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                     or "WavLMASR" or "WavLMRobust"
@@ -5898,7 +5911,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string optionsType = model.ClassName switch
                 {
                     "FunASRNano" => "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions",
-                    "HuBERTASR" => "AiDotNet.SpeechRecognition.Foundation.HuBERTASROptions",
                     "InterCTC" => "AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions",
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
