@@ -50,9 +50,10 @@ public class WeightLoader
             ".npz" => LoadNumPyArchive(filePath),
             // Hugging Face's pytorch_model.bin is a torch.save zip archive; other .bin files use the custom binary layout.
             ".bin" => IsZipArchive(filePath) ? LoadPyTorchWeights(filePath) : LoadBinaryWeights(filePath),
-            // torch.save writes the same zip archive under any name (Amphion's Vevo saves its content tokenizer as .pkl).
-            ".pkl" when IsZipArchive(filePath) => LoadPyTorchWeights(filePath),
-            _ => throw new NotSupportedException($"Unsupported weight file format: {extension}")
+            // torch.save writes the same zip archive under any name: Amphion's Vevo saves its content tokenizer as .pkl,
+            // fairseq's speech-resynthesis vocoders as g_00500000.
+            _ when IsZipArchive(filePath) => LoadPyTorchWeights(filePath),
+            _ => throw new NotSupportedException($"Unsupported weight file format: {(extension.Length == 0 ? "a file with no extension that is not a torch.save archive" : extension)}")
         };
     }
 
