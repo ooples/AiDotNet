@@ -286,7 +286,7 @@ public partial class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             ParamModel.SetParameters(current);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            current = ApplyInnerGradients(current, grad, _algoOptions.InnerLearningRate);
+            current = ApplyInnerGradients(current, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         var delta = new Vector<T>(_compressedDim);

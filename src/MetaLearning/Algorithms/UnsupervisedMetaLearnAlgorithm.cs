@@ -134,7 +134,7 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -202,7 +202,7 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);

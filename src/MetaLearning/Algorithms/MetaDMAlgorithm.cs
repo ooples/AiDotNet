@@ -147,7 +147,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
                 // Modulate gradient with augmentation signal (mix real and synthetic influence)
                 var augGrad = ModulateWithSynthetic(realGrad, syntheticFeatures, prototype);
-                adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Evaluate on query set
@@ -192,7 +192,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             ParamModel.SetParameters(adaptedParams);
             var realGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var augGrad = ModulateWithSynthetic(realGrad, syntheticFeatures, prototype);
-            adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(baseParams);
@@ -406,7 +406,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 var augGrad = ModulateWithSynthetic(grad, synth, proto);
-                adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, augGrad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             ParamModel.SetParameters(adaptedParams);

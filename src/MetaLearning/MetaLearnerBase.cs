@@ -97,6 +97,11 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <summary>
     /// Optimizer for meta-parameter updates (outer loop).
     /// </summary>
+    /// <remarks>
+    /// It takes the steps that go through <see cref="ApplyOuterGradients(Vector{T}, Vector{T}, double)"/> and
+    /// <see cref="ApplyOuterUpdate"/>. Auxiliary parameters an algorithm updates by SPSA
+    /// (<c>UpdateAuxiliaryParamsSPSA</c>) stay on plain SGD at the outer learning rate.
+    /// </remarks>
     protected readonly IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer;
 
     /// <summary>
@@ -1702,7 +1707,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyInnerGradients(adaptedParams, grad, innerLR);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, innerLR, step == 0);
         }
         return adaptedParams;
     }

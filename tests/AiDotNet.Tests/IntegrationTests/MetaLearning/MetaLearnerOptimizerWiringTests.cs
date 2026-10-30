@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -43,6 +43,14 @@ public class MetaLearnerOptimizerWiringTests
             ApplyOuterGradients(lr, groups);
 
         public Vector<double> Inner(Vector<double> p, Vector<double> g, double lr) => ApplyInnerGradients(p, g, lr);
+
+        public Vector<double> Inner(Vector<double> p, Vector<double> g, double lr, bool firstStep) =>
+            ApplyInnerGradients(p, g, lr, firstStep);
+
+        public Vector<double>[] Inner(double lr, params (Vector<double>, Vector<double>)[] groups) =>
+            ApplyInnerGradients(lr, groups);
+
+        public void RequireSgd(bool required) => RequirePlainSgdInnerSteps(required, "a test configuration");
     }
 
     private static AdamOptimizer<double, Matrix<double>, Vector<double>> Adam(double lr) =>
@@ -130,5 +138,45 @@ public class MetaLearnerOptimizerWiringTests
         Assert.Throws<ArgumentException>(() => new Probe(Adam(0.1), null, MetaLearnerOptimizerUse.Inner));
         Assert.Throws<ArgumentException>(() => new Probe(Adam(0.1), null, MetaLearnerOptimizerUse.None));
         _ = new Probe(Adam(0.1), null, MetaLearnerOptimizerUse.Outer);
+    }
+
+    [Fact]
+    public void GroupedInnerStep_ResetsOnlyWhenANewAdaptationStarts()
+    {
+        var probe = new Probe(null, Adam(0.1));
+        var weights = V(0.0);
+        var bias = V(0.0);
+
+        // Adaptation 1, two steps on large gradients, continuing from the returned vectors.
+        var a1 = probe.Inner(0.5, (weights, V(1.0)), (bias, V(1.0)));
+        var a2 = probe.Inner(0.5, (a1[0], V(0.01)), (a1[1], V(0.01)));
+        // Adaptation 2 starts again from the meta-parameters: a fresh Adam step of exactly 0.1.
+        var b1 = probe.Inner(0.5, (weights, V(0.01)), (bias, V(0.01)));
+
+        Assert.InRange(a1[0][0] - a2[0][0], 0.05, 0.09);
+        Assert.Equal(-0.1, b1[0][0], 6);
+        Assert.Equal(-0.1, b1[1][0], 6);
+    }
+
+    [Fact]
+    public void ExplicitFirstStep_ResetsOnlyOnTheFirstStep()
+    {
+        var probe = new Probe(null, Adam(0.1));
+
+        // Steps on copies (as a slice-stepping loop does) keep the state unless they are marked first.
+        var a1 = probe.Inner(V(0.0), V(1.0), 0.5, firstStep: true);
+        var a2 = probe.Inner(V(a1[0]), V(0.01), 0.5, firstStep: false);
+        var b1 = probe.Inner(V(0.0), V(0.01), 0.5, firstStep: true);
+
+        Assert.InRange(a1[0] - a2[0], 0.05, 0.09);
+        Assert.Equal(-0.1, b1[0], 6);
+    }
+
+    [Fact]
+    public void PlainSgdConfiguration_RejectsOnlyASuppliedInnerOptimizer()
+    {
+        Assert.Throws<ArgumentException>(() => new Probe(null, Adam(0.1)).RequireSgd(true));
+        new Probe(null, Adam(0.1)).RequireSgd(false);
+        new Probe(null, null).RequireSgd(true);
     }
 }

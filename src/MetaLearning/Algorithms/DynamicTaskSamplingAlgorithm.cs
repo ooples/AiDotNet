@@ -118,7 +118,7 @@ public partial class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLear
                 {
                     ParamModel.SetParameters(adaptedParams);
                     var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
                 }
 
                 ParamModel.SetParameters(adaptedParams);
@@ -187,7 +187,7 @@ public partial class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLear
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);

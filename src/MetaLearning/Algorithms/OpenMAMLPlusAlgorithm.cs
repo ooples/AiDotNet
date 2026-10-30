@@ -90,6 +90,7 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
+        RequirePlainSgdInnerSteps(options.LearnPerParamLR, "learned per-parameter inner learning rates");
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
 
         // Initialize per-parameter learning rates
@@ -137,7 +138,7 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                 }
                 else
                 {
-                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
                 }
 
                 // Multi-step loss: evaluate at each intermediate step
@@ -207,7 +208,7 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             }
             else
             {
-                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
         }
 
@@ -269,7 +270,7 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                 }
                 else
                 {
-                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
                 }
             }
 

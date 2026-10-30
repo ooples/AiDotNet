@@ -116,7 +116,7 @@ public partial class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             for (int step = 0; step < _openMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var adapted = ApplyInnerGradients(ParamModel.GetParameters(), innerGrad, _openMAMLOptions.InnerLearningRate);
+                var adapted = ApplyInnerGradients(ParamModel.GetParameters(), innerGrad, _openMAMLOptions.InnerLearningRate, step == 0);
                 ParamModel.SetParameters(adapted);
             }
 
@@ -171,7 +171,7 @@ public partial class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         for (int step = 0; step < _openMAMLOptions.AdaptationSteps; step++)
         {
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            adaptedParams = ApplyInnerGradients(ParamModel.GetParameters(), grad, _openMAMLOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(ParamModel.GetParameters(), grad, _openMAMLOptions.InnerLearningRate, step == 0);
             ParamModel.SetParameters(adaptedParams);
         }
 

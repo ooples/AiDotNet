@@ -118,7 +118,7 @@ public partial class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
                     }
                 }
 
-                adaptedParams = ApplyInnerGradients(adaptedParams, taskGrad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, taskGrad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -160,7 +160,7 @@ public partial class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(currentParams);

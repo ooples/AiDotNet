@@ -139,7 +139,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Compute adapter delta: Δθ = adaptedParams - baseParams
@@ -203,7 +203,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
             ParamModel.SetParameters(baseParams);
             return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);

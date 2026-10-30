@@ -236,7 +236,7 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             ParamModel.SetParameters(currentParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            currentParams = ApplyInnerGradients(currentParams, grad, _algoOptions.InnerLearningRate);
+            currentParams = ApplyInnerGradients(currentParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         var delta = new Vector<T>(_compressedDim);

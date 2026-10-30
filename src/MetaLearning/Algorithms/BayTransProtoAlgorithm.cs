@@ -95,7 +95,7 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             {
                 ParamModel.SetParameters(adaptedMean);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedMean = ApplyInnerGradients(adaptedMean, grad, _algoOptions.InnerLearningRate);
+                adaptedMean = ApplyInnerGradients(adaptedMean, grad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Phase 2: Transductive refinement using query gradients
@@ -154,7 +154,7 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         {
             ParamModel.SetParameters(adaptedMean);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedMean = ApplyInnerGradients(adaptedMean, grad, _algoOptions.InnerLearningRate);
+            adaptedMean = ApplyInnerGradients(adaptedMean, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);
@@ -184,7 +184,7 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             {
                 ParamModel.SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                ap = ApplyInnerGradients(ap, g, _algoOptions.InnerLearningRate);
+                ap = ApplyInnerGradients(ap, g, _algoOptions.InnerLearningRate, step == 0);
             }
             ParamModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));

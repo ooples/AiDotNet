@@ -75,6 +75,7 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
+        RequirePlainSgdInnerSteps(options.TransductiveIterations > 0, "transductive steps scaled by its learned transform");
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters. ETPN requires a model with at least one parameter.");
@@ -141,7 +142,7 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == transSteps);
             }
 
             ParamModel.SetParameters(adaptedParams);

@@ -270,7 +270,7 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 var warpedGradients = ApplyWarpLayers(rawGradients);
                 warpedGradients = ClipGradients(warpedGradients);
 
-                taskParams = ApplyInnerGradients(taskParams, warpedGradients, _warpOptions.InnerLearningRate);
+                taskParams = ApplyInnerGradients(taskParams, warpedGradients, _warpOptions.InnerLearningRate, step == 0);
                 ParamModel.SetParameters(taskParams);
             }
 
@@ -355,7 +355,7 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             var warpedGradients = ApplyWarpLayers(rawGradients);
             warpedGradients = ClipGradients(warpedGradients);
 
-            adaptedParams = ApplyInnerGradients(adaptedParams, warpedGradients, _warpOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, warpedGradients, _warpOptions.InnerLearningRate, step == 0);
             taskParameters.SetParameters(adaptedParams);
         }
 
@@ -495,7 +495,7 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             var rawGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             var warpedGrad = ApplyWarpLayers(rawGrad);
-            taskParams = ApplyInnerGradients(taskParams, warpedGrad, _warpOptions.InnerLearningRate);
+            taskParams = ApplyInnerGradients(taskParams, warpedGrad, _warpOptions.InnerLearningRate, step == 0);
             ParamModel.SetParameters(taskParams);
         }
 

@@ -274,7 +274,7 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
             // Apply gradients with inner learning rate
-            parameters = ApplyInnerGradients(parameters, gradients, _mamlOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, gradients, _mamlOptions.InnerLearningRate, step == 0);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 

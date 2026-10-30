@@ -63,6 +63,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
+        RequirePlainSgdInnerSteps(true, "a two-phase inner learning-rate schedule");
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
     }
 
@@ -87,7 +88,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyInnerGradients(adaptedParams, grad, phase1LR);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, phase1LR, step == 0);
             }
 
             // Save Phase 1 result as anchor for Phase 2 regularization
@@ -137,7 +138,7 @@ public partial class JMPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyInnerGradients(adaptedParams, grad, phase1LR);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, phase1LR, step == 0);
         }
 
         var phase1Params = new Vector<T>(_paramDim);
