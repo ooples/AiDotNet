@@ -2,7 +2,8 @@ namespace AiDotNet.Generators;
 
 /// <summary>
 /// Existing violations of the <see cref="ModelDefectClassAnalyzer"/> rules when they became errors
-/// (2026-09-28). Each set may only shrink: an entry that stops violating is an ADNDEF004 error.
+/// (2026-09-28), and of the <see cref="ActivationCacheGuardAnalyzer"/> rule ADN0065 when it became one
+/// (2026-10-30). Each set may only shrink: an entry that stops violating is an ADNDEF004 error.
 /// </summary>
 internal static class ModelDefectBaselines
 {
@@ -596,5 +597,11 @@ internal static class ModelDefectBaselines
             "AiDotNet.VisionLanguage.VideoLanguage.SlowFastLLaVA<T>",
             "AiDotNet.VisionLanguage.VideoLanguage.VideoLLaMA3<T>",
             "AiDotNet.VisionLanguage.VideoLanguage.VideoLLaVA<T>",
+        };
+
+    /// <summary>ADN0065: fields written unguarded in a forward when the rule became an error, 0 fields; keyed Containing.Type.field.</summary>
+    internal static readonly System.Collections.Generic.HashSet<string> UnguardedActivationCaches =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
         };
 }
