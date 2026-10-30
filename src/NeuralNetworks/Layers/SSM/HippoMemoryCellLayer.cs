@@ -84,6 +84,8 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
     private readonly Tensor<T>? _ltiInput;
     [Scratch]
     private readonly Dictionary<int, (Tensor<T> A, Tensor<T> B)> _legsZohCache = new();
+    // ((I - scale*A)^-1)^T per step size, for the bilinear and backward LegS solves.
+    private readonly Dictionary<double, Tensor<T>> _legsSolveCache = new();
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -472,66 +474,21 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Solves x(I-scale*A)^T=rhs for the lower-triangular LegS operator and records a
-    /// unary backward that solves the transposed system. Only the right-hand side is
-    /// differentiable because the paper fixes A.
+    /// Solves x(I-scale*A)^T=rhs for the lower-triangular LegS operator as x = rhs * ((I-scale*A)^-1)^T. A is fixed by
+    /// the paper, so that matrix is a constant per step size and the solve is one traced matmul: the graph and a
+    /// compiled plan see it, and its backward (the transposed solve) is the matmul's. Solving on the host instead read
+    /// the traced right-hand side outside the graph, so a compiled forward replayed the trace-time solve.
     /// </summary>
     private Tensor<T> SolveLegSLower(Tensor<T> rhs, double scale)
     {
-        var result = SolveLegSLowerCore(rhs, scale, transpose: false);
-        DifferentiableOps.RecordUnary(
-            "HippoFixedLowerSolve",
-            result,
-            rhs,
-            (gradOutput, inputs, _, _, engine, grads) =>
-            {
-                var gradInput = SolveLegSLowerCore(gradOutput, scale, transpose: true);
-                DifferentiableOps.AccumulateGrad(grads, inputs[0], gradInput, engine);
-            });
-        return result;
-    }
-
-    private Tensor<T> SolveLegSLowerCore(Tensor<T> rhs, double scale, bool transpose)
-    {
         if (rhs.Rank != 2 || rhs.Shape[1] != _memoryOrder)
             throw new ArgumentException("HiPPO solve expects [batch*memory, memoryOrder].", nameof(rhs));
-
-        int rows = rhs.Shape[0];
-        int n = _memoryOrder;
-        T[] rhsData = rhs.IsContiguous && rhs._storageOffset == 0
-            ? rhs.DataVector.GetDataArray()
-            : rhs.GetFlattenedData();
-        T[] aData = _a.DataVector.GetDataArray();
-        var output = new Tensor<T>(new[] { rows, n });
-        T[] outputData = output.DataVector.GetDataArray();
-
-        for (int row = 0; row < rows; row++)
+        if (!_legsSolveCache.TryGetValue(scale, out var solve))
         {
-            if (!transpose)
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    double value = NumOps.ToDouble(rhsData[row * n + i]);
-                    for (int j = 0; j < i; j++)
-                        value += scale * NumOps.ToDouble(aData[i * n + j]) * NumOps.ToDouble(outputData[row * n + j]);
-                    double diagonal = 1.0 - scale * NumOps.ToDouble(aData[i * n + i]);
-                    outputData[row * n + i] = NumOps.FromDouble(value / diagonal);
-                }
-            }
-            else
-            {
-                for (int i = n - 1; i >= 0; i--)
-                {
-                    double value = NumOps.ToDouble(rhsData[row * n + i]);
-                    for (int j = i + 1; j < n; j++)
-                        value += scale * NumOps.ToDouble(aData[j * n + i]) * NumOps.ToDouble(outputData[row * n + j]);
-                    double diagonal = 1.0 - scale * NumOps.ToDouble(aData[i * n + i]);
-                    outputData[row * n + i] = NumOps.FromDouble(value / diagonal);
-                }
-            }
+            solve = ToTensor(Transpose(Invert(Subtract(Identity(_memoryOrder), Scale(ToDoubleMatrix(_a), scale)))));
+            _legsSolveCache[scale] = solve;
         }
-
-        return output;
+        return Engine.TensorMatMul(rhs, solve);
     }
 
     private double ClampStep(double value) => Math.Max(_timescaleMin, Math.Min(_timescaleMax, value));

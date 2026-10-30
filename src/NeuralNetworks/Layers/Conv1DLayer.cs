@@ -241,13 +241,7 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     protected override void OnFirstForward(Tensor<T> input)
     {
-        int rank = input.Shape.Length;
-        if (rank != 3)
-        {
-            throw new ArgumentException(
-                $"Conv1DLayer requires rank-3 [B, C, T] input; got rank {rank}.",
-                nameof(input));
-        }
+        RequireRank3(input);
 
         int cIn = input.Shape[1];
         int tIn = input.Shape[2];
@@ -300,9 +294,22 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         ResolveShapes(new[] { cIn, tIn }, new[] { _outputChannels, LayerShape.Dynamic });
     }
 
+    // Every call, not only the first: an initialized layer handed another rank indexed past its shape.
+    private static void RequireRank3(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank != 3)
+        {
+            throw new ArgumentException(
+                $"Conv1DLayer requires rank-3 [B, C, T] input; got rank {rank}.",
+                nameof(input));
+        }
+    }
+
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        RequireRank3(input);
         EnsureInitializedFromInput(input);
         _originalInputShape = input._shape;
 
