@@ -76,9 +76,19 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
     public List<int> CriticHiddenLayers { get; init; } = new List<int> { 128, 128 };
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// Gets or sets a factory for the optimizer each of this agent's networks trains with.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    /// <remarks>
+    /// <para>
+    /// When this is <c>null</c>, every actor and critic trains with the network's default optimizer.
+    /// </para>
+    /// <para>
+    /// The agent invokes the factory once for every network it builds, so the factory must create a new
+    /// optimizer instance on each call. A shared instance would share its step counter, and Adam's bias
+    /// correction would then advance on every network's step instead of only on that network's own.
+    /// </para>
+    /// </remarks>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 
     /// <summary>
     /// Initializes a new instance with default values.
@@ -144,7 +154,7 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
                 $"{nameof(other.CriticHiddenLayers)} must not be null.", nameof(other));
         }
         CriticHiddenLayers = new List<int>(other.CriticHiddenLayers);
-        Optimizer = other.Optimizer;
+        OptimizerFactory = other.OptimizerFactory;
     }
 
     /// <summary>

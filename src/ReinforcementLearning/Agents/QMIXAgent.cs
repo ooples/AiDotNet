@@ -77,8 +77,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
     private QMIXOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
-
     // Per-agent Q-networks
     private List<INeuralNetwork<T>> _agentNetworks;
     [Buffer]
@@ -101,19 +99,12 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
     }
 
-    public QMIXAgent(QMIXOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    public QMIXAgent(QMIXOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
         _epsilon = options.EpsilonStart;
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _stepCount = 0;
@@ -419,7 +410,8 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
 
     private Training.TapeTrainingStepper<T>? _jointStepper;
-    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _jointSgd;
+    // The joint step's optimizer, built on first use: Options.OptimizerFactory's when set, else plain SGD.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _jointOptimizer;
 
     /// <summary>One plain-SGD step on the TD loss over the agent and mixing networks, from a packed step.</summary>
     private void TrainJointStep(Tensor<T> packed, int globalStateLength)
@@ -453,7 +445,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             return Engine.ReduceMean(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
         }
 
-        _jointSgd ??= new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
+        _jointOptimizer ??= _options.OptimizerFactory?.Invoke() ?? new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
             new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = Convert.ToDouble(LearningRate),
@@ -467,7 +459,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             Target = packed,
             Forward = TdLoss,
             ComputeLoss = (loss, _) => loss,
-            Optimizer = _jointSgd,
+            Optimizer = _jointOptimizer,
             ExtraParameters = parameters,
         });
     }

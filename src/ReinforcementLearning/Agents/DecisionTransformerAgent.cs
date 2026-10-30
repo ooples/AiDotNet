@@ -81,8 +81,6 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     }
     private DecisionTransformerOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
-
     private INeuralNetwork<T> _transformerNetwork;
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, Vector<T> previousAction)> _trajectoryBuffer;
     private int _updateCount;
@@ -91,19 +89,12 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
     public DecisionTransformerAgent() : this(new DecisionTransformerOptions<T>()) { }
 
-    public DecisionTransformerAgent(DecisionTransformerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    public DecisionTransformerAgent(DecisionTransformerOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T, Vector<T>)>();
         _currentContext = new SequenceContext<T>();
@@ -149,7 +140,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             outputSize: _options.ActionSize,
             layers: layers
         );
-        _transformerNetwork = new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
+        _transformerNetwork = new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke(), _options.LossFunction);
 
         // Register network with base class
         Networks.Add(_transformerNetwork);

@@ -43,7 +43,18 @@ public class QMIXOptions<T> : ReinforcementLearningOptions<T>
     public List<int> MixingHiddenLayers { get; init; } = new List<int> { 32 };
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// Gets or sets a factory for the optimizer of the agent's joint training step.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    /// <remarks>
+    /// <para>
+    /// QMIX trains every agent network and the mixing network on one TD loss in one step (Rashid et al. 2018),
+    /// so the agent invokes the factory once and steps all of them with that optimizer. When this is
+    /// <c>null</c>, the step uses plain SGD at the agent's learning rate.
+    /// </para>
+    /// <para>
+    /// The factory must create a new optimizer instance on each call, so agents built from copies of these
+    /// options never share moment buffers or a step counter.
+    /// </para>
+    /// </remarks>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

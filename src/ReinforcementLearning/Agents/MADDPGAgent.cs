@@ -81,8 +81,6 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
     private MADDPGOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
-
     // Networks for each agent
     private List<INeuralNetwork<T>> _actorNetworks;
     [Buffer]
@@ -106,22 +104,13 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public MADDPGAgent() : this(new MADDPGOptions<T>()) { }
 
-    public MADDPGAgent(MADDPGOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    public MADDPGAgent(MADDPGOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
         _options.Validate();
-        // Issue #3 fix: Use configured actor learning rate for default optimizer
-        _optimizer = optimizer ?? options.Optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-            {
-                InitialLearningRate = NumOps.ToDouble(_options.ActorLearningRate),
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8
-            }));
         _stepCount = 0;
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _perAgentRewards = new Dictionary<int, List<T>>();
@@ -184,7 +173,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: _options.ActionSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke(), _options.LossFunction);
     }
 
     private INeuralNetwork<T> CreateCriticNetwork()
@@ -215,7 +204,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke(), _options.LossFunction);
     }
 
     private void InitializeReplayBuffer()

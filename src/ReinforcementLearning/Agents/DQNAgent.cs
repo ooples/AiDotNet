@@ -181,7 +181,7 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
         );
 
         return new NeuralNetwork<T>(architecture,
-            optimizer: _dqnOptions.Optimizer,
+            optimizer: _dqnOptions.OptimizerFactory?.Invoke(),
             lossFunction: _dqnOptions.LossFunction);
     }
 
