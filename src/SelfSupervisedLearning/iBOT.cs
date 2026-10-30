@@ -242,7 +242,7 @@ public class iBOT<T> : TeacherStudentSSL<T>
         var teacherProjector = new MLPProjector<T>(
             encoderOutputDim, hiddenDim, outputDim, useBatchNormOnOutput: true);
 
-        teacherProjector.SetParameters(studentProjector.GetParameters());
+        ProjectorParameterTransfer<T>.Copy(studentProjector, teacherProjector);
 
         var encoderCopy = createEncoderCopy(encoder);
         var teacherEncoder = new MomentumEncoder<T>(encoderCopy, 0.996);

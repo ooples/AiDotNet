@@ -127,7 +127,7 @@ public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
 
         var projector = new MLPProjector<T>(encoderOutputDim, hiddenDim, projectionDim);
         var momentumProjector = new MLPProjector<T>(encoderOutputDim, hiddenDim, projectionDim);
-        momentumProjector.SetParameters(projector.GetParameters());
+        ProjectorParameterTransfer<T>.Copy(projector, momentumProjector);
 
         var predictor = new MLPProjector<T>(projectionDim, hiddenDim / 4, projectionDim);
 
@@ -197,14 +197,7 @@ public partial class MoCoV3<T> : SelfSupervisedLearningMethodBase<T>
     {
         _momentumEncoder.UpdateFromMainEncoder(_encoder);
         if (_projector is null || _momentumProjector is null) return;
-        double m = _momentumEncoder.Momentum;
-        var online = _projector.GetParameters();
-        var target = _momentumProjector.GetParameters();
-        var updated = new Vector<T>(target.Length);
-        for (int i = 0; i < target.Length; i++)
-            updated[i] = NumOps.Add(NumOps.Multiply(target[i], NumOps.FromDouble(m)),
-                NumOps.Multiply(online[i], NumOps.FromDouble(1.0 - m)));
-        _momentumProjector.SetParameters(updated);
+        ProjectorParameterTransfer<T>.Update(_projector, _momentumProjector, _momentumEncoder.Momentum);
     }
 
     /// <inheritdoc />

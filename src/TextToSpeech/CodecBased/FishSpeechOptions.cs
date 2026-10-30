@@ -1,49 +1,23 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
 
-/// <summary>Options for FishSpeech (Fish Audio, 2024) dual-AR architecture with GFSQ.</summary>
+/// <summary>Options for <see cref="FishSpeech{T}"/> (Fish Speech 1.4).</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the FishSpeech model. Default values follow the original paper settings.</para>
+/// <para>The defaults are Fish Speech 1.4's (<c>fishaudio/fish-speech-1.4</c>): the same Dual-AR sizes as 1.5 over a
+/// 32,000-token byte-level BPE vocabulary with one <c>&lt;|semantic|&gt;</c> token, a 4,096-token context and dropout 0.1;
+/// the same Firefly-GAN. Text goes through the Chinese number normalizer as the 1.4 API does by default. Training follows
+/// the release's fine-tuning recipe (<see cref="FishSpeechRecipe.ReleaseFineTune"/>).</para>
+/// <para><b>For Beginners:</b> These settings size Fish Speech 1.4 and control how it speaks and trains; the defaults
+/// reproduce the released model.</para>
 /// </remarks>
-public class FishSpeechOptions : CodecTtsOptions
+public class FishSpeechOptions : FishSpeechFamilyOptions
 {
-    /// <summary>Initializes a new instance by copying from another instance.</summary>
-    /// <param name="other">The options instance to copy from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public FishSpeechOptions(FishSpeechOptions other)
-    {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
-        NumGroups = other.NumGroups;
-        Temperature = other.Temperature;
-        TopP = other.TopP;
-        RepetitionPenalty = other.RepetitionPenalty;
-        MinReferenceSeconds = other.MinReferenceSeconds;
-    }
-
+    /// <summary>Creates the released Fish Speech 1.4 configuration.</summary>
     public FishSpeechOptions()
     {
-        SampleRate = 44100;
-        NumCodebooks = 8;
-        CodebookSize = 1024;
-        CodecFrameRate = 42;
-        LLMDim = 1024;
-        NumLLMLayers = 24;
-        LanguageModelName = "LLaMA";
+        VocabSize = 32000;
+        MaxSequenceLength = 4096;
+        DropoutRate = 0.1;
+        NormalizeChineseText = true;
+        ApplyRecipe(FishSpeechRecipe.ReleaseFineTune);
     }
-
-    /// <summary>Gets or sets the number of GFSQ groups for grouped finite scalar quantization.</summary>
-    public int NumGroups { get; set; } = 8;
-
-    /// <summary>Gets or sets the sampling temperature for generation.</summary>
-    public double Temperature { get; set; } = 0.7;
-
-    /// <summary>Gets or sets the top-p (nucleus) sampling parameter.</summary>
-    public double TopP { get; set; } = 0.8;
-
-    /// <summary>Gets or sets the repetition penalty factor.</summary>
-    public double RepetitionPenalty { get; set; } = 1.2;
-
-    /// <summary>Gets or sets the minimum reference audio duration in seconds for voice cloning.</summary>
-    public double MinReferenceSeconds { get; set; } = 3.0;
 }

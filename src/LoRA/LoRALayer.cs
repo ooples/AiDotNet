@@ -183,18 +183,6 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _loraBGradient;
 
     /// <summary>
-    /// Stored input from the forward pass, needed for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stored pre-activation output from the forward pass, needed for activation derivative computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
     /// Gets whether this layer supports training (always true for LoRA).
     /// </summary>
     public override bool SupportsTraining => true;
@@ -296,9 +284,11 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
-    {
-        _lastInput = input.Clone();
+        => ForwardWithFactors(input, _loraA, _loraB);
 
+    /// <summary>Runs the same LoRA computation with tape-connected effective factors.</summary>
+    internal Tensor<T> ForwardWithFactors(Tensor<T> input, Tensor<T> aTensor, Tensor<T> bTensor)
+    {
         // Features live on the LAST axis; every leading axis is batch-like.
         // Rank-2 [batch, features] is the classic dense case; rank-3
         // [batch, seq, features] is the sequence case (LoRA wrapping
@@ -326,8 +316,6 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
         // used to be Matrix<T> mirrored into cached Tensor wrappers that had to be
         // invalidated whenever the weights changed; holding ONE representation drops
         // both the copy and the chance of the mirror going stale.
-        Tensor<T> aTensor = _loraA;
-        Tensor<T> bTensor = _loraB;
 
         // (input @ A) @ B * scaling — chained matmuls dispatched through the
         // Engine. For T=float with a base-output tensor available, the
@@ -341,11 +329,6 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> intermediate = Engine.TensorMatMul(input2D, aTensor);
         Tensor<T> deltaOutput = Engine.TensorMatMul(intermediate, bTensor);
         deltaOutput = Engine.TensorMultiplyScalar(deltaOutput, _scaling);
-
-        // Store pre-activation for gradient computation. Reshape preserves
-        // tensor identity; the [.., outputSize] -> [batch, outputSize]
-        // assertion lets downstream consumers see a stable rank-2 surface.
-        _lastPreActivation = deltaOutput.Clone();
 
         // Apply activation if specified
         Tensor<T> result = ScalarActivation != null ? ApplyActivation(deltaOutput) : deltaOutput;
@@ -486,7 +469,7 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     /// <remarks>
     /// <para>
-    /// For LoRA layers, this clears the stored input from the last forward pass.
+    /// For LoRA layers, this clears the cached parameter gradients.
     /// </para>
     /// <para><b>For Beginners:</b> This clears the layer's memory of the last input it processed.
     /// It's like hitting a reset button before processing a new, unrelated batch of data.
@@ -494,8 +477,6 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastPreActivation = null;
         _loraAGradient = null;
         _loraBGradient = null;
     }

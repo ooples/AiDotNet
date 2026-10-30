@@ -817,6 +817,36 @@ namespace AiDotNet.AutoML
 
     #region IParameterizable Implementation
 
+    /// <summary>Streams the selected model's parameters without flattening a neural model.</summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+#if !AIDN_LEGACY_TFM
+        if (GetType().GetMethod(nameof(GetParameters), Type.EmptyTypes)?.DeclaringType == typeof(AutoMLModelBase<T, TInput, TOutput>))
+        {
+            if (BestModel is null) throw new InvalidOperationException("No best model found.");
+            return InterfaceGuard.Parameterizable(BestModel).GetParameterChunks();
+        }
+#endif
+        var flat = GetParameters();
+        return flat.Length == 0 ? Array.Empty<Tensor<T>>() : new[] { new Tensor<T>(new[] { flat.Length }, flat) };
+    }
+
+    /// <summary>Restores through the selected model while retaining derived setter contracts.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+#if !AIDN_LEGACY_TFM
+        if (GetType().GetMethod(nameof(SetParameters), new[] { typeof(Vector<T>) })?.DeclaringType == typeof(AutoMLModelBase<T, TInput, TOutput>)
+            && GetType().GetMethod(nameof(GetParameters), Type.EmptyTypes)?.DeclaringType == typeof(AutoMLModelBase<T, TInput, TOutput>))
+        {
+            if (BestModel is null) throw new InvalidOperationException("No best model found.");
+            InterfaceGuard.Parameterizable(BestModel).SetParameterChunks(chunks);
+            return;
+        }
+#endif
+        SetParameters(AiDotNet.Models.Parameters.ParameterChunkBuffer.ToVector(chunks));
+    }
+
     /// <summary>
     /// Gets the model parameters
     /// </summary>

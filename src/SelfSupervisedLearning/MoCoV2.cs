@@ -95,7 +95,7 @@ public class MoCoV2<T> : MoCo<T>
         var momentumProjector = new MLPProjector<T>(encoderOutputDim, hiddenDim, projectionDim);
 
         // Copy projector parameters
-        momentumProjector.SetParameters(projector.GetParameters());
+        ProjectorParameterTransfer<T>.Copy(projector, momentumProjector);
 
         // Create momentum encoder
         var encoderCopy = createEncoderCopy(encoder);

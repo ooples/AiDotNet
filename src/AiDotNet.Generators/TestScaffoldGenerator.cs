@@ -1815,12 +1815,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // cap for the training invariants. (Its input-projection dim bug is fixed separately in
         // CreateDefaultQwen2AudioLayers.)
         "Qwen2Audio",
-        // FishSpeech (Liao et al., 2024 — arXiv:2411.01156): codec-based LLM-TTS, foundation-scale
-        // (LLMDim 1024, 24 LLM layers, 8×1024 codebook). Training probes 180s-timeout + OOM the 16 GB
-        // runner at <double>. Float FIRST + a CI-smoke constructorExpr (below) build the same
-        // architecture at reduced width/depth. (The failing ModelFamily model is the
-        // TextToSpeech.CodecBased.FishSpeech.)
-        "FishSpeech", "FishSpeechV15",
         // Bark's production defaults are three 24-layer, 1024-wide transformers plus EnCodec.
         // The generated fixtures use TinyForTests: the same semantic/coarse/fine/codec topology
         // with checkpoint-test widths, so CI measures the real contracts without timing out.
@@ -7339,23 +7333,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxSequenceLength = 12, VocabularySize = 64, HiddenDimension = 12, NumAttentionHeads = 1, " +
                     "IntermediateDimension = 24, NumLayers = 1, NumClasses = 3, DropoutRate = 0.0, TaskType = \"classification\" })";
             }
-            else if (model.ClassName == "FishSpeech" && model.TypeParameterCount == 1
-                     && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
-            {
-                // The OTHER FishSpeech<T> (TtsModelBase, codec TTS) with its OWN FishSpeechOptions.
-                // Without this it fell through to the architecture-only path and was constructed at
-                // PAPER scale -- CodecTtsOptions defaults are LLMDim 1024, NumLLMLayers 12,
-                // TextEncoderDim 512, CodebookSize 1024, MaxCodecFrames 3000. Exercise the identical
-                // codec-LM topology at CI-smoke width/depth; production defaults stay paper-faithful
-                // and every dimension remains configurable through the options object.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
-                    "inputSize: 16, outputSize: 8), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.FishSpeechOptions { " +
-                    "NumCodebooks = 2, CodebookSize = 16, LLMDim = 32, NumLLMLayers = 1, " +
-                    "TextEncoderDim = 32, SpeakerEmbeddingDim = 16, MaxCodecFrames = 16, NumGroups = 1 })";
-            }
             else if (model.ClassName == "FastSAM" && model.TypeParameterCount == 1)
             {
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
@@ -11089,40 +11066,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "FishSpeech" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
+            else if (model.ClassName is "FishSpeech" or "FishSpeechV15" && model.TypeParameterCount == 1)
             {
-                // FishSpeech (Liao et al., 2024 — arXiv:2411.01156) codec-based LLM-TTS defaults to a
-                // foundation-scale codec-LM: LLMDim 1024, 24 LLM layers, 8×1024 codebook. Its training
-                // probes 180 s-timeout + OOM the 16 GB runner at <double>, and float alone is insufficient
-                // at that depth. Build the SAME architecture (semantic LLM -> codec heads) at CI-smoke
-                // width/depth via a small FishSpeechOptions; only the scale shrinks (InitializeLayers reads
-                // these dims). Floatified to <float> by the generator since FishSpeech is in
-                // Fp32TestClassNames. (Gated on CodecBased so it targets the failing FishSpeech, not the
-                // Audio.Generation namesake.)
-                pinInitSeed = true;
+                // Fish Speech is a 24-layer, 1024-wide Dual-AR transformer over eight 1,024-code books and a 44.1 kHz
+                // Firefly-GAN; keep both at width 8-16 with one layer or block each: an 8 kHz codec of 64-point frames hopping
+                // 16 samples, downsampled four times (one code frame per 64 samples), two codebooks of 16 codes from one FSQ
+                // dimension of 15 levels (room for 1.4's codes stored plus one), and the byte-level vocabulary (no tokenizer
+                // file). Training reads the harness's codec tokens, as the release trains on extracted codes (an untrained
+                // Firefly-GAN saturates every frame to one code, measured). Decoding keeps to speech, stops after eight frames
+                // and samples at temperature 0.1 (an untrained model's logits are nearly uniform, so at the release's 0.7 the
+                // same seeded draws pick the same codes for any text); the warm-up is one step and the rate 1e-3 so fifteen
+                // steps descend.
+                bool v15 = model.ClassName == "FishSpeechV15";
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.FishSpeechOptions { LLMDim = 32, " +
-                    "NumLLMLayers = 1, NumCodebooks = 2, CodebookSize = 16, NumGroups = 1 })";
-            }
-            else if (model.ClassName == "FishSpeechV15" && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
-            {
-                // The exact CI failure was a 120-second Training_ShouldReduceLoss
-                // timeout even after the resource-bound shard selected float.
-                // Keep production defaults intact and exercise the same codec-LM
-                // stack at reduced width/depth through its public options.
-                pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.FishSpeechV15Options { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
-                    "NumCodebooks = 2, CodebookSize = 16, DropoutRate = 0.0 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    $"new AiDotNet.TextToSpeech.CodecBased.{model.ClassName}Options {{ " +
+                    $"VocabSize = {(v15 ? 284 : 265)}, HiddenDim = 16, NumHeads = 2, KeyValueHeads = 1, IntermediateSize = 32, NumDecoderLayers = 1, " +
+                    "FastLayers = 1, NumCodebooks = 2, CodebookSize = 16, MaxSequenceLength = 160, " +
+                    "SampleRate = 8000, FftSize = 64, HopSize = 16, MelChannels = 12, CodecEncoderDepths = new[] { 1, 1, 1, 1 }, " +
+                    "CodecEncoderDims = new[] { 8, 8, 8, 16 }, CodecQuantizerDim = 16, CodecLevels = new[] { 15 }, " +
+                    "CodecDownsampleFactors = new[] { 2, 2 }, CodecUpsampleRates = new[] { 2, 2, 2, 2 }, CodecUpsampleKernels = new[] { 4, 4, 4, 4 }, " +
+                    "CodecResBlockKernels = new[] { 3, 7 }, CodecResBlockDilations = new[] { new[] { 1, 3, 5 }, new[] { 1, 3, 5 } }, " +
+                    "CodecChannels = 16, MaxNewTokens = 8, ConstrainToSemanticTokens = true, Temperature = 0.1, WarmupSteps = 1, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "UniAudio" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -14771,6 +14738,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 128, 128 };");
             sb.AppendLine("    protected override double TrainingErrorMultiplier => 10.0;");
         }
+        else if (model.ClassName == "SegNeXt")
+        {
+            // Same allowance as its FastSAM and EfficientSAM siblings, for the same reason: a dense per-pixel head
+            // over one training input drives both losses down so far that which of them lands lower is a coin toss.
+            // MEASURED on a CI runner: training took the train loss 5.008370 -> 0.308932 (-94%) while the unseen
+            // input went 5.006990 -> 0.091158 (-98%), so the model fit what it trained on and generalised even
+            // better. The 3x default then failed it by 0.035 (0.308932 against an allowance of 0.273474), and the
+            // "training helped" escape hatch could not rescue it because the train-minus-test GAP widened -- which
+            // here only means the test loss fell faster. Nothing about the training step is wrong, so the bound is
+            // what moves; the gap conjunct stays, because without it a model that barely learns would pass.
+            sb.AppendLine("    protected override double TrainingErrorMultiplier => 10.0;");
+        }
         else if (model.ClassName == "EDVR")
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
@@ -16055,7 +16034,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine();
                 }
                 bool useCodecSmokeIterations =
-                    model.ClassName is "Bark" or "BarkModel" or "FishSpeech"
+                    model.ClassName is "Bark" or "BarkModel"
                         or "XTTSv2Clone"
                         or "SeedTTS";
                 sb.AppendLine(useCodecSmokeIterations
@@ -16486,6 +16465,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName is "FishSpeech" or "FishSpeechV15")
+                {
+                    // Fish Speech reads a text's token ids and trains on a recording at the codec's rate: eight ids, and 1024
+                    // samples (16 code frames at the fixture's rates). Generation samples its frames, so the probes compare the
+                    // training objective, which reads the text.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 1024 };");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "IndexTTS")
                 {
                     // IndexTTS reads a text's token ids and trains on a 24 kHz recording: eight ids, and 1024 samples (32 of the
@@ -16738,7 +16732,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "Vevo" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
@@ -22160,7 +22154,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className is "GPTSoVITS" or "Bark" or "BarkModel"
-            or "FireRedTTS" or "FishSpeech" or "FishSpeechV15"
+            or "FireRedTTS"
             or "UniAudio" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
@@ -22195,7 +22189,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // SparkTTS: the CI-smoke fixture pins NumCodebooks = 1, CodebookSize = 16, so its codec
             // head is 1 x 16 wide (production stays 1 x 4096).
             "SparkTTS" => 16,
-            "FishSpeech" or "FishSpeechV15" => 32,
             "UniAudio" => 32,
             "XTTSv2" => 16,
             "XTTSv2Clone" => 1024,

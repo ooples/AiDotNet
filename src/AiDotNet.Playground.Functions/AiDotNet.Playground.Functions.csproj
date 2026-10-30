@@ -15,21 +15,11 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" PrivateAssets="all" />
-    <!-- Roslyn for runtime compilation - pinned for .NET 10 / C# 14 compat -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.14.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Common" VersionOverride="4.14.0" />
-    <PackageReference Include="Basic.Reference.Assemblies.Net100" />
     <PackageReference Include="Stripe.net" />
   </ItemGroup>
 
-  <!-- AiDotNet for runtime code execution. A project reference, like every other in-repo consumer
-       (Serving, Dashboard, the Storage satellites, the tests and tools), so the playground compiles
-       and runs the library at this commit. It used to be a PackageReference pinned in
-       Directory.Packages.props; that pin stayed at 0.113.0 while the library moved on, so the
-       playground served an old API and its AiDotNet.Tensors dependency collided with the in-repo
-       Tensors assembly when CodeQL extracted the repository. -->
   <ItemGroup>
-    <ProjectReference Include="..\AiDotNet.csproj" />
+    <None Update="host.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

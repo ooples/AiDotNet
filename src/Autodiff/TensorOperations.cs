@@ -7420,47 +7420,57 @@ public static class TensorOperations<T>
         ComputationNode<T> weightHH,
         ComputationNode<T> bias)
     {
-        // Compute gates: input @ W_ih + hidden @ W_hh + bias
-        var inputTransform = MatrixMultiply(input, weightIH);
-        var hiddenTransform = MatrixMultiply(hiddenState, weightHH);
-        var gates = Add(Add(inputTransform, hiddenTransform), bias);
-
-        // Get hidden dimension from hidden state shape
-        var hiddenDim = hiddenState.Value.Shape[hiddenState.Value.Shape.Length - 1];
-        var lastAxis = gates.Value.Shape.Length - 1;
-
-        // Validate gates shape: should be [batch, 4*hidden_dim]
-        var gatesLastDim = gates.Value.Shape[lastAxis];
-        if (gatesLastDim != 4 * hiddenDim)
+        var engine = AiDotNetEngine.Current;
+        var parents = new[] { input, hiddenState, cellState, weightIH, weightHH, bias };
+        Tensor<T> Run()
         {
-            throw new ArgumentException(
-                $"Gates dimension {gatesLastDim} does not match expected 4*hidden_dim ({4 * hiddenDim}). " +
-                $"Ensure weightIH and weightHH have shape [*, 4*hidden_dim].");
+            var (h, c) = engine.TensorLstmCell(input.Value, hiddenState.Value, cellState.Value,
+                engine.TensorTranspose(weightIH.Value), engine.TensorTranspose(weightHH.Value),
+                bias.Value);
+            return engine.TensorConcatenate(new[] { h, c }, h.Rank - 1);
         }
-
-        // Split gates into 4 segments along the last axis: [i, f, g, o]
-        // Each gate has shape [batch, hidden_dim]
-        var inputGateRaw = Slice(gates, 0, hiddenDim, 1, lastAxis);           // i_t
-        var forgetGateRaw = Slice(gates, hiddenDim, hiddenDim, 1, lastAxis);  // f_t
-        var cellGateRaw = Slice(gates, 2 * hiddenDim, hiddenDim, 1, lastAxis); // g_t
-        var outputGateRaw = Slice(gates, 3 * hiddenDim, hiddenDim, 1, lastAxis); // o_t
-
-        // Apply activations: sigmoid for gates, tanh for candidate
-        var inputGate = Sigmoid(inputGateRaw);      // i_t = sigmoid(...)
-        var forgetGate = Sigmoid(forgetGateRaw);    // f_t = sigmoid(...)
-        var candidateCell = Tanh(cellGateRaw);      // g_t = tanh(...)
-        var outputGate = Sigmoid(outputGateRaw);    // o_t = sigmoid(...)
-
-        // New cell state: c_t = f_t * c_{t-1} + i_t * g_t
-        var forgetPart = ElementwiseMultiply(forgetGate, cellState);
-        var inputPart = ElementwiseMultiply(inputGate, candidateCell);
-        var newCellState = Add(forgetPart, inputPart);
-
-        // New hidden state: h_t = o_t * tanh(c_t)
-        var newCellTanh = Tanh(newCellState);
-        var newHiddenState = ElementwiseMultiply(outputGate, newCellTanh);
-
-        return (newHiddenState, newCellState);
+        var packet = Run();
+        void Backward(Tensor<T> seed)
+        {
+            // Both state adjoints meet at this packet before one fused BPTT invocation.
+            // Recompute from the node inputs so repeated legacy backward calls do not reuse a consumed tape.
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+            var values = parents.Select(p => p.Value).ToArray();
+            var loss = engine.ReduceSum(engine.TensorMultiply(Run(), seed), null);
+            var gradients = tape.ComputeGradients(loss, values);
+            foreach (var parent in parents.Distinct())
+                if (parent.RequiresGradient && gradients.TryGetValue(parent.Value, out var gradient))
+                    parent.Gradient = parent.Gradient is null ? gradient : engine.TensorAdd(parent.Gradient, gradient);
+        }
+        var node = new ComputationNode<T>(packet, parents.Any(p => p.RequiresGradient),
+            parents.ToList(), Backward, "lstm_cell_states")
+        {
+            OperationType = OperationType.LSTMCell,
+            OperationParams = new Dictionary<string, object>
+            {
+                { "gateOrder", "ifgo" }, { "weightLayout", "input_by_gates" },
+                { "stateLayout", "hidden_then_cell" }, { "hiddenSize", hiddenState.Value.Shape[1] }
+            }
+        };
+        int width = hiddenState.Value.Shape[1];
+        ComputationNode<T> State(int start)
+        {
+            var value = engine.TensorNarrow(packet, 1, start, width);
+            void StateBackward(Tensor<T> gradient)
+            {
+                if (!node.RequiresGradient) return;
+                var zero = engine.TensorMultiplyScalar(gradient, MathHelper.GetNumericOperations<T>().Zero);
+                var combined = engine.TensorConcatenate(start == 0 ? new[] { gradient, zero } : new[] { zero, gradient }, 1);
+                node.Gradient = node.Gradient is null ? combined : engine.TensorAdd(node.Gradient, combined);
+            }
+            return new ComputationNode<T>(value, node.RequiresGradient, new List<ComputationNode<T>> { node }, StateBackward)
+            {
+                OperationType = OperationType.Slice,
+                OperationParams = new Dictionary<string, object>
+                { { "Start", start }, { "Length", width }, { "Step", 1 }, { "Axis", 1 } }
+            };
+        }
+        return (State(0), State(width));
     }
 
     /// <summary>

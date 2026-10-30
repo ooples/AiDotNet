@@ -171,7 +171,7 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
                         "This indicates the optimizer was unable to find a valid solution.");
                 }
 
-                InterfaceGuard.Parameterizable(bestModel).SetParameters(InterfaceGuard.Parameterizable(optimizationResult.BestSolution).GetParameters());
+                AiDotNet.Models.Parameters.ParameterTransfer.Copy(InterfaceGuard.Parameterizable(optimizationResult.BestSolution), InterfaceGuard.Parameterizable(bestModel));
             }
 
             var validationIndices = outerFoldResult.ValidationIndices ?? throw new InvalidOperationException(

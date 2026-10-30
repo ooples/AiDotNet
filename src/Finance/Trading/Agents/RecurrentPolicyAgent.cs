@@ -210,17 +210,9 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
     private Tensor<T> ReplayMeans(Tensor<T> states)
     {
         int n = states.Shape[1];
-        var h = new Tensor<T>(new[] { _hidden, 1 });
-        var c = new Tensor<T>(new[] { _hidden, 1 });
-        var means = new Tensor<T>[n];
-        for (int t = 0; t < n; t++)
-        {
-            var (hNew, cNew) = _cell.Step(Engine.TensorNarrow(states, 1, t, 1), h, c);
-            h = hNew;
-            c = cNew;
-            means[t] = Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB)); // [A,1]
-        }
-        return n == 1 ? means[0] : Engine.TensorConcatenate(means, axis: 1);
+        var sequence = Engine.Reshape(Engine.TensorTranspose(states), new[] { 1, n, _stateDim });
+        var hidden = Engine.TensorTranspose(Engine.Reshape(_cell.Sequence(sequence), new[] { n, _hidden }));
+        return Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, hidden), _meanB));
     }
 
     public void ResetEpisode()

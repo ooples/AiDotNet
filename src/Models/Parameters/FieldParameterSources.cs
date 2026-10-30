@@ -29,8 +29,23 @@ namespace AiDotNet.Models.Parameters;
 
 /// <summary>A <see cref="Tensor{T}"/> field exposed as a parameter surface, written through.</summary>
 /// <typeparam name="T">The numeric type of the values.</typeparam>
-public sealed class TensorFieldParameterSource<T> : IParameterSource<T>, IParameterLayoutSource
+public sealed class TensorFieldParameterSource<T> : IParameterSource<T>, IParameterLayoutSource, IParameterChunkSource<T>
 {
+    /// <summary>Exposes dense tensor fields directly so registry checkpoints do not download their values.</summary>
+    public IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
+    {
+        var tensor = _get();
+        if (tensor is null || tensor.Length == 0) yield break;
+        if (tensor is SparseTensor<T>)
+        {
+            // This field source's flat contract is dense, unlike LayerBase's nnz slot contract.
+            var flat = GetParameters();
+            yield return new ParameterChunk<T>("$", ParameterSlotRole.Trainable,
+                new Tensor<T>(new[] { flat.Length }, flat), tensor, writableInPlace: false);
+        }
+        else yield return new ParameterChunk<T>("$", ParameterSlotRole.Trainable, tensor);
+    }
+
     private readonly Func<Tensor<T>?> _get;
 
     /// <summary>Creates a source over whatever tensor <paramref name="accessor"/> currently returns.</summary>
@@ -95,8 +110,23 @@ public sealed class TensorFieldParameterSource<T> : IParameterSource<T>, IParame
 /// later restore is validated exactly like <see cref="TensorFieldParameterSource{T}"/>.
 /// </remarks>
 public sealed class ResizableTensorFieldParameterSource<T> :
-    IVariableLengthParameterSource<T>, IParameterLayoutSource
+    IVariableLengthParameterSource<T>, IParameterLayoutSource, IParameterChunkSource<T>
 {
+    /// <summary>Exposes dense tensor fields directly so registry checkpoints do not download their values.</summary>
+    public IEnumerable<ParameterChunk<T>> GetParameterStateChunks()
+    {
+        var tensor = _get();
+        if (tensor is null || tensor.Length == 0) yield break;
+        if (tensor is SparseTensor<T>)
+        {
+            // This field source's flat contract is dense, unlike LayerBase's nnz slot contract.
+            var flat = GetParameters();
+            yield return new ParameterChunk<T>("$", ParameterSlotRole.Trainable,
+                new Tensor<T>(new[] { flat.Length }, flat), tensor, writableInPlace: false);
+        }
+        else yield return new ParameterChunk<T>("$", ParameterSlotRole.Trainable, tensor);
+    }
+
     private readonly Func<Tensor<T>?> _get;
     private readonly Action<Tensor<T>> _set;
 

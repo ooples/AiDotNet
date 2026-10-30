@@ -10,7 +10,7 @@ AiDotNet side runs its own compiled/fused path; pitting it against a separately
 torch.compile'd PyTorch would compare two different compilation stacks rather
 than the kernels. Pin both sides to the same CPU thread count:
     python benchmark.py --threads 8 ...
-    dotnet run ... (set AIDOTNET_BLAS_THREADS=8)
+    dotnet run ... (set AIDOTNET_CPU_THREADS=8)
 
 Usage:
     pip install -r requirements.txt
@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import os
 import platform
 import random
@@ -59,6 +61,10 @@ class TrainingResult:
     gradient_seconds_avg: float
     data_loading_seconds_avg: float
     resources: ResourceSummary
+    # Loss after the first and the last timed step: proof the step trains, read off the device only after timing.
+    # A non-finite loss is the string "NaN", "Infinity" or "-Infinity", as in the C# report: bare NaN tokens are not JSON.
+    first_loss: float | str | None = None
+    last_loss: float | str | None = None
 
 
 @dataclass
@@ -81,6 +87,8 @@ class ModelResult:
     parameters: int
     training: TrainingResult
     inference: list[InferenceBatchResult]
+    # Set when the two rows compute different functions despite matching sizes, so the timing is not a parity result.
+    note: str = ""
 
 
 class ResourceMonitor:
@@ -208,7 +216,83 @@ class TransformerClassifier(nn.Module):
         return self.head(encoded.mean(dim=1))
 
 
+# nn.GRU applies the reset gate after the recurrent product (n = tanh(W_in x + b_in + r * (W_hn h + b_hn))); AiDotNet's
+# GRULayer applies it before (n = tanh(W_in x + b_in + W_hn (r * h) + b_hn), Cho et al. / Keras reset_after=False).
+GRU_NOTE = ("Different recurrence: nn.GRU applies the reset gate after the recurrent product, AiDotNet's GRULayer "
+            "before it (Keras reset_after=False). Same sizes and parameter shapes; a timing comparison, not parity.")
+MODEL_NOTES = {"gru": GRU_NOTE}
+
+
+class GRUClassifier(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.gru = nn.GRU(input_size=32, hidden_size=64, batch_first=True)
+        self.head = nn.Linear(64, 10)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out, _ = self.gru(x)
+        return self.head(out[:, -1, :])
+
+
+class TinyViT(nn.Module):
+    """ViT at 32x32, patch 4 (64 tokens + CLS), d=192, 6 pre-LN layers, 3 heads, MLP 768: the C# row's
+    VisionTransformerOptions. Classification reads the CLS token, as AiDotNet's VisionTransformer does."""
+
+    def __init__(self, image: int = 32, patch: int = 4, dim: int = 192, depth: int = 6, heads: int = 3,
+                 mlp: int = 768, classes: int = 10) -> None:
+        super().__init__()
+        tokens = (image // patch) ** 2
+        self.patch = nn.Conv2d(3, dim, patch, stride=patch)
+        self.cls = nn.Parameter(torch.zeros(1, 1, dim))
+        self.pos = nn.Parameter(torch.zeros(1, tokens + 1, dim))
+        layer = nn.TransformerEncoderLayer(d_model=dim, nhead=heads, dim_feedforward=mlp, dropout=0.0,
+                                           activation="gelu", batch_first=True, norm_first=True)
+        self.encoder = nn.TransformerEncoder(layer, num_layers=depth, enable_nested_tensor=False)
+        self.norm = nn.LayerNorm(dim)
+        self.head = nn.Linear(dim, classes)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        tokens = self.patch(x).flatten(2).transpose(1, 2)
+        tokens = torch.cat([self.cls.expand(tokens.shape[0], -1, -1), tokens], dim=1) + self.pos
+        return self.head(self.norm(self.encoder(tokens))[:, 0])
+
+
+def make_vision_model(name: str) -> nn.Module:
+    """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
+    32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
+    (no 7x7 adaptive pool), and DenseNet uses the CIFAR stem (3x3 stride 1, no max pool)."""
+    import torchvision.models as tvm
+
+    if name == "resnet18":
+        return tvm.resnet18(num_classes=10)
+    if name == "resnet50":
+        return tvm.resnet50(num_classes=10)
+    if name == "vgg11":
+        model = tvm.vgg11(num_classes=10)
+        model.avgpool = nn.Identity()
+        model.classifier = nn.Sequential(nn.Linear(512, 4096), nn.ReLU(True), nn.Linear(4096, 4096), nn.ReLU(True),
+                                         nn.Linear(4096, 10))
+        return model
+    if name == "mobilenetv2":
+        return tvm.mobilenet_v2(num_classes=10, dropout=0.0)
+    if name == "densenet121":
+        model = tvm.densenet121(num_classes=10)
+        model.features.conv0 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        model.features.pool0 = nn.Identity()
+        return model
+    if name == "vit":
+        return TinyViT()
+    raise ValueError(f"Unknown vision model: {name}")
+
+
+VISION_MODELS = ("resnet18", "resnet50", "vgg11", "mobilenetv2", "densenet121", "vit")
+
+
 def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
+    if name == "gru":
+        return GRUClassifier(), (32, 32)
+    if name in VISION_MODELS:
+        return make_vision_model(name), (3, 32, 32)
     if name == "mlp":
         return MLP(), (1, 28, 28)
     if name == "cnn":
@@ -263,6 +347,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
         data_seconds.append(time.perf_counter() - start_data)
 
     start_total = time.perf_counter()
+    first_loss: torch.Tensor | None = None
     with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
@@ -276,6 +361,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(x)
                 loss = criterion(logits, y)
+                if first_loss is None:
+                    first_loss = loss.detach()
                 # Per-step device syncs inflate the step on GPU; they run only under --breakdown,
                 # which attributes time to the backward. Default timing matches AiDotNet's loop.
                 if breakdown:
@@ -293,6 +380,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
             if profile_epoch:
                 torch.cuda.profiler.stop()
     total = time.perf_counter() - start_total
+    first_loss_value = json_loss(float(first_loss.item())) if first_loss is not None else None
+    last_loss_value = json_loss(float(loss.item())) if first_loss is not None else None
     # Steady state excludes epoch 0 (warmup), exactly as the AiDotNet twin does.
     steady_epochs = epoch_seconds[1:] if len(epoch_seconds) > 1 else epoch_seconds
     steady_sorted = sorted(steady_epochs)
@@ -307,16 +396,30 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
         gradient_seconds_avg=round(statistics.fmean(gradient_seconds), 6) if gradient_seconds else 0.0,
         data_loading_seconds_avg=round(statistics.fmean(data_seconds), 6),
         resources=monitor.summary(),
+        first_loss=first_loss_value,
+        last_loss=last_loss_value,
     )
 
 
+def json_loss(value: float) -> float | str:
+    """Encode a non-finite loss as the JSON string the C# report and compare.py use."""
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    return value
+
+
 @torch.inference_mode()
-def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.device, iterations: int, warmup: int) -> list[InferenceBatchResult]:
+def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.device, iterations: int, warmup: int,
+                        batch_sizes: list[int], warmup_min_ms: float = 0.0) -> list[InferenceBatchResult]:
     results: list[InferenceBatchResult] = []
-    for batch_size in BATCH_SIZES:
+    for batch_size in batch_sizes:
         x, _ = synthetic_batch(batch_size, shape, device)
         warmup_times: list[float] = []
-        for _ in range(warmup):
+        # Same rule as the C# twin: at least warmup calls and at least warmup_min_ms of warm-up per batch size.
+        warmup_start = time.perf_counter()
+        while len(warmup_times) < warmup or (time.perf_counter() - warmup_start) * 1000.0 < warmup_min_ms:
             start = time.perf_counter()
             model(x)
             synchronize(device)
@@ -353,18 +456,42 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
     return results
 
 
+_CSHARP_INT = re.compile(r"[+-]?[0-9]+")
+_INT32_MAX = 2**31 - 1
+
+
+def parse_inference_batches(text: str) -> list[int]:
+    """Comma-separated positive batch sizes; the C# harness takes the same flag with the same contract."""
+    items = [item.strip() for item in text.split(",")]
+    if not items or any(not item for item in items):
+        raise ValueError(f"--inference-batches must be comma-separated positive integers, got {text!r}")
+    # The C# side parses with NumberStyles.Integer: optional sign, ASCII digits, Int32 range. Python's int() also takes
+    # "1_0", non-ASCII digits and arbitrary size, so a value C# rejects could pass here and fail only after training.
+    if any(_CSHARP_INT.fullmatch(item) is None for item in items):
+        raise ValueError(f"--inference-batches must be comma-separated positive integers, got {text!r}")
+    batches = [int(item) for item in items]
+    if any(batch > _INT32_MAX for batch in batches):
+        raise ValueError(f"--inference-batches values must fit a 32-bit integer, got {text!r}")
+    if any(batch <= 0 for batch in batches):
+        raise ValueError(f"--inference-batches must be positive, got {text!r}")
+    return batches
+
+
 def run(args: argparse.Namespace) -> dict[str, object]:
     seed = args.seed
     random.seed(seed)
     torch.manual_seed(seed)
     # Pin CPU threads for a fair head-to-head — match the AiDotNet side's
-    # AIDOTNET_BLAS_THREADS so the numbers reflect the kernels, not the scheduler.
+    # AIDOTNET_CPU_THREADS so the numbers reflect the kernels, not the scheduler.
     if args.threads and args.threads > 0:
         torch.set_num_threads(args.threads)
     if args.device == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(args.device)
+
+    # Validated before any model trains: a bad entry used to surface only after the first model's training run.
+    inference_batches = parse_inference_batches(args.inference_batches)
 
     model_results: list[ModelResult] = []
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
@@ -377,8 +504,9 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             model = torch.compile(model)
         training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown)
         model.eval()
-        inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations)
-        model_results.append(ModelResult(name, str(device), parameters, training, inference))
+        inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
+                                        inference_batches, args.warmup_min_ms)
+        model_results.append(ModelResult(name, str(device), parameters, training, inference, MODEL_NOTES.get(name, "")))
 
     return {
         "framework": "PyTorch",
@@ -400,12 +528,16 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--inference-iterations", type=int, default=100)
     parser.add_argument("--warmup-iterations", type=int, default=10)
+    parser.add_argument("--warmup-min-ms", type=float, default=1000.0,
+                        help="Also warm each batch size for at least this long (the C# side needs it for JIT tier-up).")
+    parser.add_argument("--inference-batches", default=",".join(str(b) for b in BATCH_SIZES),
+                        help="Comma-separated inference batch sizes (the C# side takes the same flag).")
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--breakdown", action="store_true",
                         help="sync per step to attribute time to the backward (slows GPU steps)")
     parser.add_argument("--threads", type=int, default=0,
                         help="Pin CPU thread count (0 = PyTorch default = all cores). "
-                             "Match the AiDotNet side's AIDOTNET_BLAS_THREADS for a fair comparison.")
+                             "Match the AiDotNet side's AIDOTNET_CPU_THREADS for a fair comparison.")
     parser.add_argument("--compile", action="store_true",
                         help="Wrap each model in torch.compile (TorchInductor) — the 'PyTorch compiled' head-to-head.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))

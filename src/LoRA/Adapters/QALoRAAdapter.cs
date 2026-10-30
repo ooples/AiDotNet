@@ -270,18 +270,17 @@ public partial class QALoRAAdapter<T> : LoRAAdapterBase<T>
 
         if (_quantizationEnabled)
         {
-            // Simulate quantization on LoRA parameters
-            Vector<T> originalParams = _loraLayer.GetParameters();
-            Vector<T> quantizedParams = QuantizeAndDequantize(originalParams);
-
-            // Temporarily set quantized parameters
-            _loraLayer.SetParameters(quantizedParams);
-
-            // Forward with quantized parameters
-            loraOutput = _loraLayer.Forward(input);
-
-            // Restore original parameters (important for gradient computation)
-            _loraLayer.SetParameters(originalParams);
+            var factors = _loraLayer.GetTrainableParameters();
+            Tensor<T>[] corrections;
+            using (var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                var quantized = QuantizeFactors(factors);
+                corrections = quantized.Select((value, i) => Engine.StopGradient(Engine.TensorSubtract(value, factors[i]))).ToArray();
+            }
+            // Explicit straight-through estimator: quantized forward values, identity derivative
+            // to each full-precision factor. Live weights are never temporarily overwritten.
+            loraOutput = _loraLayer.ForwardWithFactors(input,
+                Engine.TensorAdd(factors[0], corrections[0]), Engine.TensorAdd(factors[1], corrections[1]));
         }
         else
         {
@@ -295,107 +294,34 @@ public partial class QALoRAAdapter<T> : LoRAAdapterBase<T>
         return result;
     }
 
-    /// <summary>
-    /// Simulates quantization and dequantization using group-wise scaling.
-    /// </summary>
-    /// <param name="parameters">Full-precision parameters to quantize.</param>
-    /// <returns>Parameters after quantize→dequantize cycle (simulating quantization noise).</returns>
-    /// <remarks>
-    /// <para>
-    /// Group-wise quantization process:
-    /// 1. Divide parameters into groups of size GroupSize
-    /// 2. For each group:
-    ///    a. Find the maximum absolute value in the group
-    ///    b. Compute scale = max_abs / (2^bits - 1)
-    ///    c. Quantize: int_value = round(parameter / scale)
-    ///    d. Clamp to range [0, 2^bits - 1]
-    ///    e. Dequantize: parameter = int_value * scale
-    /// 3. Concatenate all groups back together
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the core of quantization simulation!
-    ///
-    /// Step-by-step example with 4-bit quantization, group size 4:
-    ///
-    /// Input: [0.8, 0.6, -0.4, 0.2, 0.9, -0.7, 0.3, -0.5]
-    ///
-    /// Group 1: [0.8, 0.6, -0.4, 0.2]
-    ///   - Max absolute value: 0.8
-    ///   - Range for 4-bit: 0 to 15 (2^4 - 1 = 15)
-    ///   - Scale: 0.8 / 15 = 0.0533
-    ///   - Quantize: [15, 11, -8, 4] (divided by scale, rounded)
-    ///   - Clamp to [0, 15]: [15, 11, 0, 4] (negative values clamped)
-    ///   - Dequantize: [0.8, 0.5867, 0.0, 0.2133] (multiply by scale)
-    ///   - Information lost: -0.4 became 0.0, 0.6 became 0.5867
-    ///
-    /// Group 2: [0.9, -0.7, 0.3, -0.5]
-    ///   - Max absolute value: 0.9
-    ///   - Scale: 0.9 / 15 = 0.06
-    ///   - Similar process...
-    ///
-    /// The network learns to work with these quantized values during training,
-    /// so when we actually deploy with 4-bit weights, accuracy is maintained!
-    /// </para>
-    /// </remarks>
-    private Vector<T> QuantizeAndDequantize(Vector<T> parameters)
+    /// <summary>Quantizes the canonical factor stream in groups, preserving groups across tensor boundaries.</summary>
+    private Tensor<T>[] QuantizeFactors(IReadOnlyList<Tensor<T>> factors)
     {
-        int numParams = parameters.Length;
-        Vector<T> quantized = new Vector<T>(numParams);
-
-        // Calculate number of groups
-        int numGroups = (numParams + _groupSize - 1) / _groupSize; // Ceiling division
-
-        // Use signed quantization for asymmetric range (one more negative value)
-        // For n-bit signed: range is -2^(n-1) to 2^(n-1)-1
-        // e.g., 4-bit signed: -8 to 7, 8-bit signed: -128 to 127
-        double maxQuantizedValue = Math.Pow(2.0, _quantizationBits - 1) - 1.0;
-        double minQuantizedValue = -Math.Pow(2.0, _quantizationBits - 1);
-
-        // Process each group
-        for (int g = 0; g < numGroups; g++)
+        var flat = Engine.TensorConcatenate(factors.Select(t => Engine.Reshape(t, new[] { t.Length })).ToArray(), 0);
+        int count = flat.Length;
+        int groups = (count + _groupSize - 1) / _groupSize;
+        int paddedCount = checked(groups * _groupSize);
+        if (paddedCount != count)
+            flat = Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { paddedCount - count }) }, 0);
+        var grouped = Engine.Reshape(flat, new[] { groups, _groupSize });
+        var maxAbs = Engine.ReduceMax(Engine.TensorAbs(grouped), new[] { 1 }, keepDims: true);
+        maxAbs = Engine.TensorWhere(Engine.TensorEquals(maxAbs, NumOps.Zero),
+            Tensor<T>.CreateDefault(maxAbs.Shape.ToArray(), NumOps.FromDouble(1e-8)), maxAbs);
+        double maxValue = Math.Pow(2, _quantizationBits - 1) - 1;
+        double minValue = -Math.Pow(2, _quantizationBits - 1);
+        // The advertised one-bit signed format has levels {-1, 0}; its scale divisor must be nonzero.
+        var scale = Engine.TensorMultiplyScalar(maxAbs, NumOps.FromDouble(1 / Math.Max(1, maxValue)));
+        var quantized = Engine.TensorMultiply(Engine.TensorClamp(
+            Engine.TensorRound(Engine.TensorDivide(grouped, scale)), NumOps.FromDouble(minValue), NumOps.FromDouble(maxValue)), scale);
+        var packed = Engine.Reshape(quantized, new[] { paddedCount });
+        var result = new Tensor<T>[factors.Count];
+        int offset = 0;
+        for (int i = 0; i < factors.Count; i++)
         {
-            int groupStart = g * _groupSize;
-            int groupEnd = Math.Min(groupStart + _groupSize, numParams);
-            int groupActualSize = groupEnd - groupStart;
-
-            // Find maximum absolute value in this group
-            T maxAbs = NumOps.Zero;
-            for (int i = groupStart; i < groupEnd; i++)
-            {
-                T absValue = NumOps.Abs(parameters[i]);
-                if (NumOps.GreaterThan(absValue, maxAbs))
-                {
-                    maxAbs = absValue;
-                }
-            }
-
-            // Compute scale factor for this group
-            // scale = max_abs / (2^bits - 1)
-            // If max_abs is zero, use a small epsilon to avoid division by zero
-            if (NumOps.Equals(maxAbs, NumOps.Zero))
-            {
-                maxAbs = NumOps.FromDouble(1e-8);
-            }
-
-            T scale = NumOps.Divide(maxAbs, NumOps.FromDouble(maxQuantizedValue));
-
-            // Quantize and dequantize each parameter in the group
-            for (int i = groupStart; i < groupEnd; i++)
-            {
-                // Quantize: int_value = round(param / scale)
-                T normalized = NumOps.Divide(parameters[i], scale);
-                double normalizedDouble = Convert.ToDouble(normalized);
-                double quantizedDouble = Math.Round(normalizedDouble);
-
-                // Clamp to valid signed range [-maxQuantizedValue, maxQuantizedValue]
-                quantizedDouble = Math.Max(minQuantizedValue, Math.Min(maxQuantizedValue, quantizedDouble));
-
-                // Dequantize: param = int_value * scale
-                T dequantized = NumOps.Multiply(NumOps.FromDouble(quantizedDouble), scale);
-                quantized[i] = dequantized;
-            }
+            result[i] = Engine.Reshape(Engine.TensorNarrow(packed, 0, offset, factors[i].Length), factors[i].Shape.ToArray());
+            offset += factors[i].Length;
         }
-
-        return quantized;
+        return result;
     }
 
     /// <summary>
@@ -440,51 +366,17 @@ public partial class QALoRAAdapter<T> : LoRAAdapterBase<T>
             throw new InvalidOperationException("QALoRAAdapter currently only supports DenseLayer or FullyConnectedLayer base layers");
         }
 
-        // Get the LoRA weight contribution
-        Matrix<T> loraWeights = _loraLayer.MergeWeights();
-
-        // Get base layer parameters
-        Vector<T> baseParams = _baseLayer.GetParameters();
-
-        // Calculate dimensions
-        int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-        int weightCount = inputSize * outputSize;
-
-        // Create merged parameters (base + LoRA)
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
-
-        // Apply quantization to the merged weights (actual quantization for deployment)
-        Vector<T> mergedWeights = new Vector<T>(weightCount);
-        for (int i = 0; i < weightCount; i++)
-        {
-            mergedWeights[i] = mergedParams[i];
-        }
-
-        Vector<T> quantizedWeights = QuantizeAndDequantize(mergedWeights);
-
-        // Put quantized weights back into parameter vector
-        for (int i = 0; i < weightCount; i++)
-        {
-            mergedParams[i] = quantizedWeights[i];
-        }
-
-        // Use helper method to clone base layer and preserve activation function
-        return CreateMergedLayerWithClone(mergedParams);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var factors = _loraLayer.GetTrainableParameters();
+        var delta = Engine.TensorMultiplyScalar(Engine.TensorMatMul(factors[0], factors[1]), _loraLayer.Scaling);
+        // Dense uses [input, output]; FullyConnected uses [output, input].
+        if (fcBase is not null) delta = Engine.TensorTranspose(delta);
+        var source = (LayerBase<T>)_baseLayer;
+        var weights = source.GetTrainableParameters()[0];
+        var quantized = QuantizeFactors(new[] { Engine.TensorAdd(weights, delta) })[0];
+        var merged = source.Clone();
+        AiDotNet.Training.TensorCheckpoint<T>.CopyValues(quantized, merged.GetTrainableParameters()[0]);
+        return merged;
     }
 
     /// <summary>
@@ -513,22 +405,13 @@ public partial class QALoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     public (double averageError, double maxError, int numGroups) GetQuantizationStats()
     {
-        Vector<T> originalParams = _loraLayer.GetParameters();
-        Vector<T> quantizedParams = QuantizeAndDequantize(originalParams);
-
-        double sumError = 0.0;
-        double maxError = 0.0;
-
-        for (int i = 0; i < originalParams.Length; i++)
-        {
-            double error = Math.Abs(Convert.ToDouble(NumOps.Subtract(originalParams[i], quantizedParams[i])));
-            sumError += error;
-            maxError = Math.Max(maxError, error);
-        }
-
-        double avgError = sumError / originalParams.Length;
-        int numGroups = (originalParams.Length + _groupSize - 1) / _groupSize;
-
-        return (avgError, maxError, numGroups);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var factors = _loraLayer.GetTrainableParameters();
+        var quantized = QuantizeFactors(factors);
+        var errors = Engine.TensorConcatenate(factors.Select((factor, i) => Engine.Reshape(
+            Engine.TensorAbs(Engine.TensorSubtract(factor, quantized[i])), new[] { factor.Length })).ToArray(), 0);
+        double sum = Convert.ToDouble(Engine.ReduceSum(errors, null)[0]);
+        double max = Convert.ToDouble(Engine.ReduceMax(errors, new[] { 0 }, false)[0]);
+        return (sum / errors.Length, max, (errors.Length + _groupSize - 1) / _groupSize);
     }
 }

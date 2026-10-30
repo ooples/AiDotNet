@@ -1522,20 +1522,8 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// </remarks>
     private Tensor<T> ApplyControllerCell(Tensor<T> gates)
     {
-        int width = _controllerSize;
-        Tensor<T> Gate(int index) => Engine.TensorNarrow(gates, dim: 1, start: index * width, length: width);
-
-        Tensor<T> inputGate = Engine.Sigmoid(Gate(0));
-        Tensor<T> forgetGate = Engine.Sigmoid(Gate(1));
-        Tensor<T> candidate = Engine.Tanh(Gate(2));
-        Tensor<T> outputGate = Engine.Sigmoid(Gate(3));
-
         Tensor<T> previousCell = Engine.StopGradient(_controllerCell ?? ZeroControllerState());
-
-        Tensor<T> cell = Engine.TensorAdd(
-            Engine.TensorMultiply(forgetGate, previousCell),
-            Engine.TensorMultiply(inputGate, candidate));
-        Tensor<T> hidden = Engine.TensorMultiply(outputGate, Engine.Tanh(cell));
+        Tensor<T> hidden = LstmGateDispatch<T>.Forward(Engine, gates, previousCell, out var cell);
 
         _controllerCell = cell;
         _controllerHidden = hidden;

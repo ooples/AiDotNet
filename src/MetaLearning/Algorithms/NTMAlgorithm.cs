@@ -1494,45 +1494,8 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
                 nameof(input));
         }
 
-        // LSTM forward pass: compute all four gates
-        // gates = W_input * x + W_hidden * h + b
-        var gates = new Tensor<T>(new int[] { 4 * _hiddenSize });
-
-        // gates = W_input @ fullInput + W_hidden @ hiddenState + bias — vectorized
-        int gateSize = 4 * _hiddenSize;
-        var inputCol = fullInput.Reshape(inputLength, 1);
-        var inputContrib = Engine.TensorMatMul(_weightsInput, inputCol).Reshape(gateSize);
-        var hiddenCol = _hiddenState.Reshape(_hiddenSize, 1);
-        var hiddenContrib = Engine.TensorMatMul(_weightsHidden, hiddenCol).Reshape(gateSize);
-        gates = Engine.TensorAdd(Engine.TensorAdd(inputContrib, hiddenContrib), _biases);
-
-        // Apply activations: i, f gates use sigmoid; c uses tanh; o uses sigmoid
-        var inputGate = new Tensor<T>(new int[] { _hiddenSize });
-        var forgetGate = new Tensor<T>(new int[] { _hiddenSize });
-        var cellGate = new Tensor<T>(new int[] { _hiddenSize });
-        var outputGate = new Tensor<T>(new int[] { _hiddenSize });
-
-        for (int i = 0; i < _hiddenSize; i++)
-        {
-            inputGate[i] = Sigmoid(gates[i]);
-            forgetGate[i] = Sigmoid(gates[_hiddenSize + i]);
-            cellGate[i] = Tanh(gates[2 * _hiddenSize + i]);
-            outputGate[i] = Sigmoid(gates[3 * _hiddenSize + i]);
-        }
-
-        // Update cell state: c = f * c_prev + i * g
-        for (int i = 0; i < _hiddenSize; i++)
-        {
-            _cellState[i] = NumOps.Add(
-                NumOps.Multiply(forgetGate[i], _cellState[i]),
-                NumOps.Multiply(inputGate[i], cellGate[i]));
-        }
-
-        // Update hidden state: h = o * tanh(c)
-        for (int i = 0; i < _hiddenSize; i++)
-        {
-            _hiddenState[i] = NumOps.Multiply(outputGate[i], Tanh(_cellState[i]));
-        }
+        (_hiddenState, _cellState) = Engine.TensorLstmCell(
+            Engine.Reshape(fullInput, new[] { inputLength }), _hiddenState, _cellState, _weightsInput, _weightsHidden, _biases);
 
         return _hiddenState;
     }

@@ -236,14 +236,9 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     private void NormalizeVector(ref Tensor<T> vector)
     {
-        // === Vectorized L2 normalization using IEngine (Phase B: US-GPU-015) ===
         var squared = Engine.TensorMultiply(vector, vector);
-        T sumSquared = Engine.TensorSum(squared);
-        T norm = NumOps.Sqrt(sumSquared);
-        T normPlusEps = NumOps.Add(norm, _epsilon);
-
-        // Vectorized division by scalar
-        vector = Engine.TensorDivideScalar(vector, normPlusEps);
+        var norm = Engine.TensorSqrt(Engine.ReduceSum(squared, null));
+        vector = Engine.TensorDivide(vector, Engine.TensorAddScalar(norm, _epsilon));
     }
 
     /// <summary>
@@ -458,7 +453,8 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         if (u is null || v is null) return;
 
         // Values only: a detached copy, so nothing here reaches the tape.
-        var detached = Tensor<T>.FromVector(matrix.ToVector()).Reshape(rows, cols);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var detached = Engine.StopGradient(matrix);
         var transposed = Engine.TensorTranspose(detached);
 
         for (int iteration = 0; iteration < _powerIterations; iteration++)

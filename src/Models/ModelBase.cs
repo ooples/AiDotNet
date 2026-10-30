@@ -32,6 +32,15 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>,
     IParameterManifestProvider, IParameterChunkSource<T>
 {
+    /// <summary>Restores tensor-backed chunks on their device and retains custom-setter semantics.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        _ = Components;
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(ModelBase<T, TInput, TOutput>), chunks, _parameterRegistry, SetParameters, OnParametersRestored, GuardParameterMutation);
+    }
+
+
     /// <summary>
     /// Gets the hardware-accelerated computation engine for vectorized operations.
     /// </summary>
@@ -344,7 +353,7 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         // chunk-based optimizer enumerates chunks first. Not an iterator on purpose: registration
         // must happen at the call, not whenever the sequence is first enumerated.
         _ = Components;
-        return _parameterRegistry.GetParameterStateChunks();
+        return ParameterChunkRestore<T>.Read(this, typeof(ModelBase<T, TInput, TOutput>), _parameterRegistry, GetParameters);
     }
 
     /// <inheritdoc/>

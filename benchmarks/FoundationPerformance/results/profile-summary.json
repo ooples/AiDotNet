@@ -1,0 +1,337 @@
+{
+  "collection": "dotnet-trace dotnet-sampled-thread-time; PerfView NetperfToSpeedScope analysis; main thread within Measure only",
+  "timing_note": "Sampled thread time includes unmanaged waits. GPU result synchronization is a timing boundary, not an internal fallback.",
+  "profiles": [
+    {
+      "case": "double",
+      "source": "foundation-double-before.nettrace",
+      "sampled_workload_ms": 20033.21,
+      "top_exclusive_frames": [
+        {
+          "frame": "System.Private.CoreLib.il!System.Buffer.ZeroMemoryInternal(unsigned int8&,unsigned int)",
+          "milliseconds": 4759.3,
+          "percent": 23.76
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.LstmTrainForwardCoreDouble(float64[],float64[],float64[],float64[],float64[],float64[],float64[],int32,int32,int32,int32,bool,float64[],float64[],float64[],value class System.Span`1<float64>)",
+          "milliseconds": 4650.51,
+          "percent": 23.21
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.BlasManaged.Avx2Streaming.RunFp64(value class System.ReadOnlySpan`1<float64>,int32,bool,value class System.ReadOnlySpan`1<float64>,int32,bool,value class System.Span`1<float64>,int32,int32,int32,int32)",
+          "milliseconds": 2656.74,
+          "percent": 13.26
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Simd.SimdGemm.DgemmTransBBlock(float64*,float64*,float64*,int32,int32,int32,int32)",
+          "milliseconds": 2483.56,
+          "percent": 12.4
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.SigmoidExactInPlaceD(float64[],int32,int32)",
+          "milliseconds": 2464.87,
+          "percent": 12.3
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.TanhExactInPlaceD(float64[],int32,int32)",
+          "milliseconds": 2152.24,
+          "percent": 10.74
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Object.MemberwiseClone()",
+          "milliseconds": 694.88,
+          "percent": 3.47
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.SpanHelpers.Memmove(unsigned int8&,unsigned int8&,unsigned int)",
+          "milliseconds": 62.48,
+          "percent": 0.31
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.LstmSequenceForwardDoubleTrain(class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>,int32,int32,int32,int32,int32,bool,bool,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>&,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float64>&)",
+          "milliseconds": 38.28,
+          "percent": 0.19
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.BlasManaged.BlasManaged.GemmCore(value class System.ReadOnlySpan`1<!!0>,int32,bool,value class System.ReadOnlySpan`1<!!0>,int32,bool,value class System.Span`1<!!0>,int32,int32,int32,int32,value class AiDotNet.Tensors.Engines.BlasManaged.BlasOptions`1<!!0>&)",
+          "milliseconds": 27.14,
+          "percent": 0.14
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Array.Copy(class System.Array,int32,class System.Array,int32,int32)",
+          "milliseconds": 11.84,
+          "percent": 0.06
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Threading.Monitor.Enter_Slowpath(class System.Object)",
+          "milliseconds": 8.05,
+          "percent": 0.04
+        }
+      ]
+    },
+    {
+      "case": "cpu-training",
+      "source": "foundation-cpu-training-before.nettrace",
+      "sampled_workload_ms": 20217.77,
+      "top_exclusive_frames": [
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Simd.SimdGemm+<>c__DisplayClass97_0.<TransposeInto>g__Tile|0(int32)",
+          "milliseconds": 6775.46,
+          "percent": 33.51
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Simd.SimdGemm.SgemmDirect(value class System.ReadOnlySpan`1<float32>,int32,value class System.ReadOnlySpan`1<float32>,int32,value class System.Span`1<float32>,int32,int32,int32,bool)",
+          "milliseconds": 4905.35,
+          "percent": 24.26
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Simd.SimdGemm.DirectPanel(float32*,int32,float32*,int32,float32*,int32,int32,int32,int32,bool)",
+          "milliseconds": 1885.27,
+          "percent": 9.32
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Object.MemberwiseClone()",
+          "milliseconds": 1272.99,
+          "percent": 6.3
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Threading.Monitor.Enter_Slowpath(class System.Object)",
+          "milliseconds": 707.33,
+          "percent": 3.5
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.SpanHelpers.Memmove(unsigned int8&,unsigned int8&,unsigned int)",
+          "milliseconds": 659.98,
+          "percent": 3.26
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.SigmoidExactInPlace(float32[],int32,int32)",
+          "milliseconds": 638.82,
+          "percent": 3.16
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Buffer.ZeroMemoryInternal(unsigned int8&,unsigned int)",
+          "milliseconds": 486.19,
+          "percent": 2.4
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.BpttCellRow(float32[],int32,float32[],int32,float32[],int32,float32[],float32[],int32,float32[],int32,float32[],int32,float32[],int32,int32)",
+          "milliseconds": 410.59,
+          "percent": 2.03
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Buffer.MemmoveInternal(unsigned int8&,unsigned int8&,unsigned int)",
+          "milliseconds": 375.26,
+          "percent": 1.86
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Runtime.CompilerServices.RuntimeHelpers.<GetHashCode>g__GetHashCodeWorker|15_0(class System.Object)",
+          "milliseconds": 315.11,
+          "percent": 1.56
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.TanhExactInPlace(float32[],int32,int32)",
+          "milliseconds": 299.85,
+          "percent": 1.48
+        }
+      ]
+    },
+    {
+      "case": "gpu-training",
+      "source": "foundation-gpu-training-before.nettrace",
+      "sampled_workload_ms": 20597.13,
+      "top_exclusive_frames": [
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DirectOpenClHostTransfer.WaitAndRelease(int,class System.String)",
+          "milliseconds": 20193.89,
+          "percent": 98.04
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DirectOpenClBuffer..ctor(class AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DirectOpenClContext,float32[])",
+          "milliseconds": 59.31,
+          "percent": 0.29
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Threading.Thread.<PollGC>g__PollGCWorker|70_0()",
+          "milliseconds": 42.62,
+          "percent": 0.21
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DirectOpenClKernel.EnqueueKernel(int,unsigned int32,unsigned int[],unsigned int[],int)",
+          "milliseconds": 33.23,
+          "percent": 0.16
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Threading.Monitor.Enter_Slowpath(class System.Object)",
+          "milliseconds": 30.85,
+          "percent": 0.15
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DirectOpenClBuffer..ctor(class AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DirectOpenClContext,int32)",
+          "milliseconds": 16.66,
+          "percent": 0.08
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Autodiff.GradientTape`1[System.Single].ComputeGradients(class AiDotNet.Tensors.LinearAlgebra.Tensor`1<!0>,class System.Collections.Generic.IReadOnlyList`1<class AiDotNet.Tensors.LinearAlgebra.Tensor`1<!0>>,bool,class System.Collections.Generic.IReadOnlyList`1<value class System.Collections.Generic.KeyValuePair`2<class AiDotNet.Tensors.LinearAlgebra.Tensor`1<!0>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<!0>>>)",
+          "milliseconds": 16.0,
+          "percent": 0.08
+        },
+        {
+          "frame": "FoundationPerformance!Program+<>c__DisplayClass0_1.<<Main>$>g__Train|7()",
+          "milliseconds": 12.0,
+          "percent": 0.06
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Autodiff.GradientTape`1[System.Single].ComputeGradientsViaGraphCore(class AiDotNet.Tensors.LinearAlgebra.Tensor`1<!0>,class System.Collections.Generic.IReadOnlyList`1<class AiDotNet.Tensors.LinearAlgebra.Tensor`1<!0>>)",
+          "milliseconds": 12.0,
+          "percent": 0.06
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Runtime.InteropServices.Marshal.AllocHGlobal(int)",
+          "milliseconds": 11.92,
+          "percent": 0.06
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.EnqueueTrackedCopy(int,class AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DirectOpenClBuffer,class AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DirectOpenClBuffer,int,int,unsigned int,unsigned int,unsigned int)",
+          "milliseconds": 10.52,
+          "percent": 0.05
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Autodiff.GradientTape`1[System.Single].ComputeGradientsViaGraph(class AiDotNet.Tensors.LinearAlgebra.Tensor`1<!0>,class System.Collections.Generic.IReadOnlyList`1<class AiDotNet.Tensors.LinearAlgebra.Tensor`1<!0>>)",
+          "milliseconds": 10.01,
+          "percent": 0.05
+        }
+      ]
+    },
+    {
+      "case": "cpu-gates",
+      "source": "foundation-cpu-gates-before.nettrace",
+      "sampled_workload_ms": 15197.78,
+      "top_exclusive_frames": [
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.LstmGateBackwardFloat(class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>)",
+          "milliseconds": 4260.54,
+          "percent": 28.03
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Object.MemberwiseClone()",
+          "milliseconds": 2662.55,
+          "percent": 17.52
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.ActivateLstmGatesFloat(class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,int32)",
+          "milliseconds": 2265.32,
+          "percent": 14.91
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Threading.Monitor.Enter_Slowpath(class System.Object)",
+          "milliseconds": 1333.6,
+          "percent": 8.77
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Runtime.CompilerServices.RuntimeHelpers.<GetHashCode>g__GetHashCodeWorker|15_0(class System.Object)",
+          "milliseconds": 1044.1,
+          "percent": 6.87
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.SpanHelpers.Memmove(unsigned int8&,unsigned int8&,unsigned int)",
+          "milliseconds": 961.79,
+          "percent": 6.33
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.RunLstmGatePacketFloat(class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>)",
+          "milliseconds": 918.47,
+          "percent": 6.04
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Buffer.MemmoveInternal(unsigned int8&,unsigned int8&,unsigned int)",
+          "milliseconds": 850.54,
+          "percent": 5.6
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Threading.Thread.<PollGC>g__PollGCWorker|70_0()",
+          "milliseconds": 264.37,
+          "percent": 1.74
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.LinearAlgebra.VectorBase`1[System.Single]..ctor(int32,bool)",
+          "milliseconds": 215.61,
+          "percent": 1.42
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.SpanHelpers.Fill(!!0&,unsigned int,!!0)",
+          "milliseconds": 81.34,
+          "percent": 0.54
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Environment.GetEnvironmentVariableCore(class System.String)",
+          "milliseconds": 45.39,
+          "percent": 0.3
+        }
+      ]
+    },
+    {
+      "case": "wide-float-forward",
+      "source": "foundation-wide-cpu.nettrace",
+      "shape": [
+        8,
+        16,
+        64,
+        128
+      ],
+      "sampled_workload_ms": 20009.34,
+      "top_exclusive_frames": [
+        {
+          "frame": "System.Private.CoreLib.il!System.Buffer.ZeroMemoryInternal(unsigned int8&,unsigned int)",
+          "milliseconds": 6039.51,
+          "percent": 30.18
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.LstmSequenceForwardFloat(class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>,int32,int32,int32,int32,int32,bool,bool,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>&,class AiDotNet.Tensors.LinearAlgebra.Tensor`1<float32>&)",
+          "milliseconds": 4233.85,
+          "percent": 21.16
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Simd.SimdGemm.SgemmDirect(value class System.ReadOnlySpan`1<float32>,int32,value class System.ReadOnlySpan`1<float32>,int32,value class System.Span`1<float32>,int32,int32,int32,bool)",
+          "milliseconds": 4229.96,
+          "percent": 21.14
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Simd.SimdGemm+<>c__DisplayClass166_0.<TrySgemmDirectParallel2D>b__0(int32)",
+          "milliseconds": 2934.52,
+          "percent": 14.67
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Simd.SimdGemm+<>c__DisplayClass97_0.<TransposeInto>g__Tile|0(int32)",
+          "milliseconds": 1456.04,
+          "percent": 7.28
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Threading.Thread.<PollGC>g__PollGCWorker|70_0()",
+          "milliseconds": 956.68,
+          "percent": 4.78
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.CpuEngine.RunLstmRecurrenceRange(float32[],int32,float32[],float32[],float32[],float32[],float32[],float32[],float32[],float32[],float32[],float32[],bool,float32[],float32[],int32,int32,int32,int32,int32)",
+          "milliseconds": 66.77,
+          "percent": 0.33
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.Threading.Monitor.Enter_Slowpath(class System.Object)",
+          "milliseconds": 21.6,
+          "percent": 0.11
+        },
+        {
+          "frame": "System.Private.CoreLib.il!System.GC.<AllocateUninitializedArray>g__AllocateNewArrayWorker|77_0(int32,bool)",
+          "milliseconds": 15.63,
+          "percent": 0.08
+        },
+        {
+          "frame": "AiDotNet.Tensors!AiDotNet.Tensors.Engines.Simd.SimdGemm.SgemmAddInternal(value class System.ReadOnlySpan`1<float32>,int32,bool,value class System.ReadOnlySpan`1<float32>,int32,bool,value class System.Span`1<float32>,int32,int32,int32,bool,bool)",
+          "milliseconds": 11.78,
+          "percent": 0.06
+        }
+      ]
+    }
+  ]
+}
