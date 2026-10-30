@@ -121,10 +121,39 @@ internal sealed class HubertUnitExtractor<T>
     /// <summary>The k-means centroids <c>[clusters, hidden]</c>.</summary>
     public double[,] Centroids { get; set; }
 
+    /// <summary>A CTC-trained linear quantizer that labels the frames instead of the k-means (SpiritLM's).</summary>
+    public HubertLinearQuantizer<T>? Quantizer { get; set; }
+
+    /// <summary>Chunks shorter than this many samples are skipped (SpiritLM skips those under 1280; fairseq's reader none).</summary>
+    public int MinChunk { get; init; }
+
+    /// <summary>Declares the centroids as model state under <paramref name="name"/>: they are fitted, not trained, so
+    /// no parameter vector carries them through a clone or a saved model.</summary>
+    public void DeclareCentroids(AiDotNet.Models.ModelStateRegistry<T> state, string name) =>
+        state.DeclareDoubleVector(name, () =>
+        {
+            int clusters = Centroids.GetLength(0), width = Centroids.GetLength(1);
+            var flat = new Vector<double>(clusters * width);
+            for (int k = 0; k < clusters; k++)
+                for (int i = 0; i < width; i++) flat[k * width + i] = Centroids[k, i];
+            return flat;
+        }, flat =>
+        {
+            if (flat is null) return;
+            int clusters = Centroids.GetLength(0), width = Centroids.GetLength(1);
+            if (flat.Length != clusters * width)
+                throw new System.IO.InvalidDataException($"State '{name}' holds {flat.Length} values; the extractor has {clusters} x {width} centroids.");
+            var centroids = new double[clusters, width];
+            for (int k = 0; k < clusters; k++)
+                for (int i = 0; i < width; i++) centroids[k, i] = flat[k * width + i];
+            Centroids = centroids;
+        });
+
     /// <summary>The units of 16 kHz audio, consecutive repeats merged when <paramref name="deduplicate"/>.</summary>
     public int[] Units(IReadOnlyList<double> audio, bool deduplicate)
     {
         if (audio.Count == 0) throw new ArgumentException("The audio is empty.", nameof(audio));
+        if (Quantizer is not null) return QuantizedUnits(audio, deduplicate);
         int clusters = Centroids.GetLength(0), width = Centroids.GetLength(1);
         var norms = new double[clusters];
         for (int k = 0; k < clusters; k++)
@@ -155,6 +184,22 @@ internal sealed class HubertUnitExtractor<T>
         return units.ToArray();
     }
 
+    private int[] QuantizedUnits(IReadOnlyList<double> audio, bool deduplicate)
+    {
+        var units = new List<int>();
+        using var _ = new NoGradScope<T>();
+        for (int start = 0; start < audio.Count; start += MaxChunk)
+        {
+            int count = Math.Min(MaxChunk, audio.Count - start);
+            if (count < MinChunk) continue;
+            var chunk = new Tensor<T>(new[] { count });
+            for (int i = 0; i < count; i++) chunk[i] = NumOps.FromDouble(audio[start + i]);
+            foreach (int code in Quantizer!.Codes(Network.Forward(chunk, Layer)[Layer]))
+                if (!deduplicate || units.Count == 0 || units[units.Count - 1] != code) units.Add(code);
+        }
+        return units.ToArray();
+    }
+
     /// <summary>
     /// Loads a fairseq HuBERT checkpoint's <c>model</c> state (<c>feature_extractor.conv_layers.{i}.0</c>,
     /// <c>post_extract_proj</c>, <c>encoder.pos_conv.0</c>, <c>encoder.layers.{i}.self_attn</c>/<c>fc1</c>/<c>fc2</c>, …)
@@ -171,7 +216,12 @@ internal sealed class HubertUnitExtractor<T>
             if (m.Success) return $"feature_extractor.conv_layers.{m.Groups[1].Value}.2.{m.Groups[2].Value}";
             if (name.StartsWith("feature_projection.layer_norm.", StringComparison.Ordinal)) return "layer_norm." + name.Substring("feature_projection.layer_norm.".Length);
             if (name.StartsWith("feature_projection.projection.", StringComparison.Ordinal)) return "post_extract_proj." + name.Substring("feature_projection.projection.".Length);
-            if (name.StartsWith("encoder.pos_conv_embed.conv.", StringComparison.Ordinal)) return "encoder.pos_conv.0." + name.Substring("encoder.pos_conv_embed.conv.".Length);
+            // With batch norm the position embedding is Sequential(norm, conv, …); without, Sequential(conv, …).
+            bool batchNorm = Network.Configuration.PositionalConvBatchNorm;
+            if (name.StartsWith("encoder.pos_conv_embed.conv.", StringComparison.Ordinal))
+                return (batchNorm ? "encoder.pos_conv.1." : "encoder.pos_conv.0.") + name.Substring("encoder.pos_conv_embed.conv.".Length);
+            if (name.StartsWith("encoder.pos_conv_embed.batch_norm.", StringComparison.Ordinal))
+                return "encoder.pos_conv.0." + name.Substring("encoder.pos_conv_embed.batch_norm.".Length);
             m = System.Text.RegularExpressions.Regex.Match(name, @"^encoder\.layers\.(\d+)\.(.+)$");
             if (!m.Success) return name;
             string rest = m.Groups[2].Value;

@@ -31,6 +31,10 @@ internal sealed record HubertConfiguration
     public bool LayerNormFirst { get; init; } = true;
 
     public double LayerNormEpsilon { get; init; } = 1e-5;
+
+    /// <summary>Batch norm (with its running statistics) before the position convolution, which then has no weight norm
+    /// (fairseq's <c>conv_pos_batch_norm</c>, as SpiritLM's 25 Hz mHuBERT has it).</summary>
+    public bool PositionalConvBatchNorm { get; init; }
 }
 
 /// <summary>
@@ -78,6 +82,7 @@ internal sealed class HubertNetwork<T>
         }
         ProjectionNorm = Norm(c.ConvDims[^1]);
         Projection = Linear(c.HiddenSize);
+        if (c.PositionalConvBatchNorm) PositionalNorm = Own(new FrozenBatchNormLayer<T>(c.HiddenSize, 1e-5));
         PositionalConv = Own(new Wav2Vec2PositionalConvLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups));
         EncoderNorm = Norm(c.HiddenSize);
         for (int i = 0; i < c.Layers; i++)
@@ -90,6 +95,9 @@ internal sealed class HubertNetwork<T>
     public LayerNormalizationLayer<T> ProjectionNorm { get; }
     public DenseLayer<T> Projection { get; }
     public Wav2Vec2PositionalConvLayer<T> PositionalConv { get; }
+
+    /// <summary>The batch norm before the position convolution (<see cref="HubertConfiguration.PositionalConvBatchNorm"/>).</summary>
+    public FrozenBatchNormLayer<T>? PositionalNorm { get; }
     public LayerNormalizationLayer<T> EncoderNorm { get; }
     public List<EncoderLayer> EncoderLayers { get; } = new();
 
@@ -127,9 +135,14 @@ internal sealed class HubertNetwork<T>
         return states;
     }
 
-    // The position convolution reads [B, L, H].
-    private Tensor<T> Positional(Tensor<T> x) =>
-        _engine.Reshape(PositionalConv.Forward(_engine.Reshape(x, new[] { 1, x.Shape[0], x.Shape[1] })), x.Shape.ToArray());
+    // The position convolution reads [B, L, H]; the batch norm before it [B, H, L].
+    private Tensor<T> Positional(Tensor<T> x)
+    {
+        if (PositionalNorm is not null)
+            x = _engine.TensorTranspose(_engine.Reshape(PositionalNorm.Forward(_engine.Reshape(_engine.TensorTranspose(x), new[] { 1, x.Shape[1], x.Shape[0] })),
+                new[] { x.Shape[1], x.Shape[0] }));
+        return _engine.Reshape(PositionalConv.Forward(_engine.Reshape(x, new[] { 1, x.Shape[0], x.Shape[1] })), x.Shape.ToArray());
+    }
 
     // A feature-encoder layer on [L, Cin]: the strided kernel windows through the conv's linear map, its norm and GELU.
     private Tensor<T> ConvBlock(ConvLayer layer, Tensor<T> x, int kernel, int stride)
@@ -222,6 +235,13 @@ internal sealed class HubertNetwork<T>
         }
     }
 
+    private void Fill(Tensor<T> tensor, double[] values)
+    {
+        if (values.Length != tensor.Length) throw new InvalidDataException($"Expected {tensor.Length} values, got {values.Length}.");
+        for (int i = 0; i < values.Length; i++) tensor[i] = NumOps.FromDouble(values[i]);
+        _engine.InvalidatePersistentTensor(tensor);
+    }
+
     // v [C, C/G, K] and g [K] (null: g = ‖v‖ per tap) and the bias.
     private void LoadPositional(double[] direction, double[]? magnitude, double[] bias)
     {
@@ -254,8 +274,10 @@ internal sealed class HubertNetwork<T>
 
     /// <summary>
     /// Loads transformers' <c>HubertModel</c> names (also under <c>hubert.</c>), the position convolution's weight norm as
-    /// <c>weight_g</c>/<c>weight_v</c> or as parametrizations. <paramref name="take"/> returns null for a missing tensor;
-    /// the masked-frame embedding and the layers past <see cref="HubertConfiguration.Layers"/> are not read.
+    /// <c>weight_g</c>/<c>weight_v</c> or as parametrizations (with <see cref="HubertConfiguration.PositionalConvBatchNorm"/>,
+    /// its plain <c>weight</c> and the batch norm as <c>encoder.pos_conv_embed.batch_norm</c>). <paramref name="take"/>
+    /// returns null for a missing tensor; the masked-frame embedding and the layers past
+    /// <see cref="HubertConfiguration.Layers"/> are not read.
     /// </summary>
     public void LoadTorchWeights(Func<string, double[]?> take)
     {
@@ -298,9 +320,21 @@ internal sealed class HubertNetwork<T>
         }
         Norm(ProjectionNorm, "feature_projection.layer_norm");
         Lin(Projection, "feature_projection.projection", c.ConvDims[^1], h);
-        LoadPositional(ReadEither("encoder.pos_conv_embed.conv.parametrizations.weight.original1", "encoder.pos_conv_embed.conv.weight_v"),
-            ReadEither("encoder.pos_conv_embed.conv.parametrizations.weight.original0", "encoder.pos_conv_embed.conv.weight_g"),
-            Read("encoder.pos_conv_embed.conv.bias"));
+        if (PositionalNorm is not null)
+        {
+            // A plain weight: weight norm at g = ‖v‖ per tap reproduces it.
+            LoadPositional(Read("encoder.pos_conv_embed.conv.weight"), null, Read("encoder.pos_conv_embed.conv.bias"));
+            Fill(PositionalNorm.Scale, Read("encoder.pos_conv_embed.batch_norm.weight"));
+            Fill(PositionalNorm.Shift, Read("encoder.pos_conv_embed.batch_norm.bias"));
+            Fill(PositionalNorm.RunningMean, Read("encoder.pos_conv_embed.batch_norm.running_mean"));
+            Fill(PositionalNorm.RunningVariance, Read("encoder.pos_conv_embed.batch_norm.running_var"));
+        }
+        else
+        {
+            LoadPositional(ReadEither("encoder.pos_conv_embed.conv.parametrizations.weight.original1", "encoder.pos_conv_embed.conv.weight_v"),
+                ReadEither("encoder.pos_conv_embed.conv.parametrizations.weight.original0", "encoder.pos_conv_embed.conv.weight_g"),
+                Read("encoder.pos_conv_embed.conv.bias"));
+        }
         Norm(EncoderNorm, "encoder.layer_norm");
         for (int i = 0; i < EncoderLayers.Count; i++)
         {

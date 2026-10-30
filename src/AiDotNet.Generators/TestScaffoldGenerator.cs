@@ -409,6 +409,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             // The pin's own comment named this one explicitly, then relied on ordering to get it.
             { "AudioPaLM", "AiDotNet.TextToSpeech.MultiModal." },
+            // SpeechGPT's speech recognizer (SpeechRecognition.LLMIntegrated) is the TTS model's task variant.
+            { "SpeechGPT", "AiDotNet.TextToSpeech.MultiModal." },
             // Three-way: also VisionLanguage.Encoders.SAM, and a Bioinformatics SAM (Significance
             // Analysis of Microarrays) that shares only the acronym.
             { "SAM", "AiDotNet.ComputerVision.Segmentation.Foundation." },
@@ -1539,7 +1541,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Qwen3ASR",           // Alibaba LLM-integrated ASR — foundation-scale lazy weights OOM the 16 GB
         "Qwen3ASRSmall",      // 512-wide/12-layer sibling — generated training exceeds the CPU gate at <double>.
                               // <float> halves the footprint first; both use an architecture-equivalent CI fixture.
-        "SpeechGPTASR",       // Speech-token LLM ASR — paper-scale ordinary training timed out at ~10 GB.
         "SpiritLM",           // Interleaved speech/text codec LM — paper-scale clone/training OOM and timeout.
                               // Explicit audio membership also activates bounded repeated-training probes.
         "SpikingFullSubNet",  // spiking speech enhancement — Clone / DifferentInputs timeout
@@ -1957,7 +1958,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // untouched and apply the required precision-first mitigation to the generated fixtures.
         // Audio-family entries automatically receive the existing smoke-iteration overrides;
         // the other families retain their current invariant counts until float is measured in CI.
-        "Chirp2", "FlowDiffuser", "FLIP", "Gemma3", "MemFlow", "MiniGPT4", "SpeechGPT",
+        "Chirp2", "FlowDiffuser", "FLIP", "Gemma3", "MemFlow", "MiniGPT4",
         // Generated T-Z ended in a runner-level OOM without an xUnit failure record. These are the
         // remaining demonstrably paper-scale fixtures in that shard: YuE builds 24x2048 semantic plus
         // 12x1024 acoustic transformer stacks; the codec TTS family builds a 12x1024 codec LM; and
@@ -10161,21 +10162,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.MultiModal.StepAudioOptions { TextEncoderDim = 32, LLMDim = 32, " +
                     "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
             }
-            else if (model.ClassName == "SpeechGPT" && model.TypeParameterCount == 1)
+            else if (model.ClassName == "SpeechGPT" && model.TypeParameterCount == 1 &&
+                     model.FullyQualifiedName.IndexOf("AiDotNet.TextToSpeech.MultiModal.", System.StringComparison.Ordinal) >= 0)
             {
-                // SpeechGPT retains its paper-scale codec LM defaults in production (1024-wide,
-                // 6 text + 12 LLM layers, 8x1024 acoustic vocabulary). Float was measured first on
-                // PR #1789: a cheap forward fell to 4 s, but the complete fixture still did not
-                // finish in six minutes. Preserve the text encoder -> codec-LM transformer ->
-                // acoustic-token head at CI-smoke width/depth/vocabulary only in generated tests.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.MultiModal.SpeechGPTOptions { TextEncoderDim = 32, VocabSize = 64, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
-                    "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 16, " +
-                    "DropoutRate = 0.0 })";
+                // SpeechGPT is LLaMA over text, mHuBERT unit and special tokens, the mHuBERT unit extractor and the
+                // multi-speaker unit HiFi-GAN. The fixture builds them tiny over SpeechT5's character SentencePiece model
+                // with 12 unit tokens and the release's special tokens.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.SpeechGptFixture.Tts<double>()";
+            }
+            else if (model.ClassName == "SpeechGPT" && model.TypeParameterCount == 1 &&
+                     model.FullyQualifiedName.IndexOf("AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal) >= 0)
+            {
+                // SpeechGPT's speech recognizer: the same tiny LLaMA and unit extractor, without the vocoder.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.SpeechGptFixture.Asr<double>()";
             }
             else if (model.ClassName == "SoundStorm" && model.TypeParameterCount == 1)
             {
@@ -10754,23 +10753,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // width/depth reduction above is; the production default (1e-4) is unchanged and
                     // no assertion, threshold or iteration count is relaxed.
                     "DropoutRate = 0.0, Language = \"en\", LearningRate = 2e-5, WeightDecay = 0.01 })";
-            }
-            else if (model.ClassName == "SpeechGPTASR" && model.TypeParameterCount == 1)
-            {
-                // SpeechGPT-ASR retains its paper-scale 768-wide, 12-layer encoder and
-                // 32,000-entry speech-token vocabulary in production. The generated FP32
-                // fixture still consumed about 10 GB and timed out in the ordinary TrainingError
-                // invariant, so iteration caps alone cannot address it. Exercise the same mel
-                // encoder -> speech-token LLM -> vocabulary head through public options at
-                // CI-smoke scale; production defaults and full customization remain unchanged.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPTASROptions { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
-                    "DropoutRate = 0.0, Language = \"en\" })";
             }
             else if ((model.ClassName == "Qwen3ASR" || model.ClassName == "Qwen3ASRSmall")
                      && model.TypeParameterCount == 1)
@@ -22159,7 +22141,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "SeedTTS" or "SeedTTSClone"
-            or "SpeechGPT" or "SpiritLM"
+            or "SpiritLM"
             or "WhisperSpeech"
             // SparkTTS exposes the same discrete codec-token contract.
             or "SparkTTS"
@@ -22179,7 +22161,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VALLEXClone" => 16,
             "SeedTTS" => 16,
             "SeedTTSClone" => 16,
-            "SpeechGPT" => 16,
             "SpiritLM" => 16,
             "Bark" or "BarkModel" => 32,
             "CosyVoice3" => 16,
@@ -22211,7 +22192,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return IsValleCodecLMModel(className)
             || className is "Bark" or "BarkModel"
             || className is "SeedTTS" or "SeedTTSClone"
-                or "SpeechGPT" or "SpiritLM"
+                or "SpiritLM"
                 ? 64 : 256;
     }
 

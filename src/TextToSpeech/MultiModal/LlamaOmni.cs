@@ -549,6 +549,14 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
     // ---------------------------------------------------------------- housekeeping
 
     /// <inheritdoc />
+    /// <remarks>The unit extractor's k-means centroids are fitted, not trained.</remarks>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+        _units?.DeclareCentroids(state, "UnitCentroids");
+    }
+
+    /// <inheritdoc />
     protected override bool SupportsParameterMutation => _useNativeMode;
 
     /// <inheritdoc />

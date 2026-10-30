@@ -7,12 +7,25 @@ internal static class NucleusSampling
     /// Transformers' sampling: logits ÷ temperature, then top-p (the smallest set of the most likely tokens whose
     /// probability reaches p, at least one), then a draw; <paramref name="allowed"/> keeps only those ids.
     /// </summary>
-    public static int Sample(double[] logits, double temperature, double topP, Func<int, bool>? allowed, Random random)
+    public static int Sample(double[] logits, double temperature, double topP, Func<int, bool>? allowed, Random random) =>
+        Sample(logits, temperature, 0, topP, allowed, random);
+
+    /// <summary>
+    /// Transformers' sampling with top-k too, in the warpers' order: temperature, top-k (the <paramref name="topK"/> most
+    /// likely, ties at the k-th kept; 0 for all), top-p, a draw.
+    /// </summary>
+    public static int Sample(double[] logits, double temperature, int topK, double topP, Func<int, bool>? allowed, Random random)
     {
         var candidates = new List<(int Id, double Logit)>();
         for (int i = 0; i < logits.Length; i++)
             if (allowed is null || allowed(i)) candidates.Add((i, logits[i] / temperature));
         if (candidates.Count == 0) throw new InvalidOperationException("No token may be sampled.");
+        if (topK > 0 && topK < candidates.Count)
+        {
+            // TopKLogitsWarper: scores below the k-th largest are removed.
+            double kth = candidates.Select(c => c.Logit).OrderByDescending(v => v).ElementAt(topK - 1);
+            candidates = candidates.Where(c => c.Logit >= kth).ToList();
+        }
         double max = candidates.Max(c => c.Logit);
         var sorted = candidates.Select(c => (c.Id, P: Math.Exp(c.Logit - max))).OrderBy(c => c.P).ToList();
         double total = sorted.Sum(c => c.P);
