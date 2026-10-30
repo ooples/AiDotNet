@@ -971,9 +971,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // CI-smoke fixture would have to shrink the architecture past recognizability; deferred to the nightly
         // HeavyTimeout lane where they run full-scale. Families: CLIP dual-encoders (MetaCLIP, LLM2CLIP,
         // MedCLIP), SAM segmentation (MedSAM, MedSAM2, MaskAdapter), forecasting foundations (MOIRAI), speech
-        // /audio LMs (MMS, KyutaiMoshi, MARS5TTS, LlamaOmni, MinMo), state-space LM (Mamba2), and the
+        // /audio LMs (MMS, KyutaiMoshi, MARS5TTS, MinMo), state-space LM (Mamba2), and the
         // mixture-of-Gaussians generative net (MoG). Paper defaults intact + customizable.
-        "MARS5TTS", "LlamaOmni", "MinMo",
+        "MARS5TTS", "MinMo",
         // #1789 J-M mid-tier classes that still OOM or time out on the forward/training even at <float>
         // (verified locally): Mask2Former (segmentation foundation), LLMTime (LLM-forecasting),
         // MedicalASR / MedSegDiffV2 (medical ASR / seg-diffusion), MemFlow (optical flow — its
@@ -1423,13 +1423,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // accumulates across classes. <float> halves the footprint; paper defaults unchanged and fully
         // user-customizable. AudioNNModelTestBase<T> is generic so these compile as <float>.
         "MoonshineBase", "MusicTaggingTransformer",
-        // #1789 additional J-M moderate heavies floated defensively (same cumulative-memory rationale):
-        // LlamaOmni (LLaMA-Omni speech-language model, TtsModelBase) and LegalBERTNER (Legal-BERT token
-        // classifier, TransformerNERBase) — both on generic <T> bases, so <float> halves their footprint and
-        // keeps them out of the serial shard's cumulative-OOM window. If LlamaOmni's LLaMA-scale weights still
-        // exceed 16 GB at fp32 the live run will show it and it moves to the nightly HeavyTimeout lane; float
-        // is tried first. Paper defaults unchanged and fully user-customizable.
-        "LlamaOmni", "LegalBERTNER",
+        // #1789 additional J-M moderate heavy floated defensively (same cumulative-memory rationale):
+        // LegalBERTNER (Legal-BERT token classifier, TransformerNERBase), on a generic <T> base, so <float> halves
+        // its footprint and keeps it out of the serial shard's cumulative-OOM window. Paper defaults unchanged and
+        // fully user-customizable.
+        "LegalBERTNER",
         // #1789 J-M VLM foundations floated proactively (VisionLanguageModelBase<T>, generic): LiT
         // (Locked-image Tuning contrastive VLM, Zhai et al. 2022) and MGIE (MLLM-Guided Image Editing,
         // Fu et al. 2024). Both are paper-scale multimodal encoders that risk the serial shard's cumulative
@@ -7888,7 +7886,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DropoutRate = 0.0 })";
             }
             else if ((model.ClassName == "MARS5TTS"
-                      || model.ClassName == "MinMo" || model.ClassName == "LlamaOmni"
+                      || model.ClassName == "MinMo"
                       || model.ClassName == "Voicebox"
                       || model.ClassName == "WhisperSpeech")
                      && model.TypeParameterCount == 1
@@ -7921,7 +7919,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string codecOptionsType = model.ClassName switch
                 {
                     "MARS5TTS" => "AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions",
-                    "LlamaOmni" => "AiDotNet.TextToSpeech.MultiModal.LlamaOmniOptions",
                     "Voicebox" => "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions",
                     "WhisperSpeech" => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
                     _ => "AiDotNet.TextToSpeech.MultiModal.MinMoOptions",
@@ -8708,6 +8705,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"VisionEmbeddingDim = {clipEmbeddingDim}, NumVisionLayers = {clipLayers}, NumVisionHeads = {clipHeads}, VisionFfnMultiplier = 2, " +
                     $"TextEmbeddingDim = {clipEmbeddingDim}, MaxSequenceLength = {clipMaxSequenceLength}, VocabSize = {clipVocabSize}, NumTextLayers = {clipLayers}, " +
                     $"NumTextHeads = {clipHeads}, ProjectionDim = {clipProjectionDim}, DropoutRate = 0.0, {modelSpecificOptions} }})";
+            }
+            else if (model.ClassName == "LlamaOmni" && model.TypeParameterCount == 1)
+            {
+                // LLaMA-Omni is a Whisper encoder and adaptor, a Llama language model, a CTC speech decoder, a unit
+                // HiFi-GAN and an mHuBERT unit extractor. The fixture builds all of them tiny over a 256-byte BPE vocabulary
+                // with Llama 3's header tokens, and spreads the k-means centroids over the extractor's features.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.LlamaOmniFixture.Tts<double>()";
             }
             else if (model.ClassName == "GLM4Voice" && model.TypeParameterCount == 1)
             {

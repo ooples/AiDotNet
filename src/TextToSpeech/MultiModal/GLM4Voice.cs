@@ -349,35 +349,9 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
     // Each call samples from a generator seeded afresh, so a call's output depends on its input and the seed only.
     private Random SamplingRandom => _samplingRandom ?? throw new InvalidOperationException("Sampling happens inside an inference call.");
 
-    /// <summary>
-    /// Transformers' sampling: logits ÷ temperature, then top-p (the smallest set of the most likely tokens whose
-    /// probability reaches p, at least one), then a draw; <paramref name="allowed"/> keeps only those ids.
-    /// </summary>
-    internal static int Sample(double[] logits, double temperature, double topP, Func<int, bool>? allowed, Random random)
-    {
-        var candidates = new List<(int Id, double Logit)>();
-        for (int i = 0; i < logits.Length; i++)
-            if (allowed is null || allowed(i)) candidates.Add((i, logits[i] / temperature));
-        if (candidates.Count == 0) throw new InvalidOperationException("No token may be sampled.");
-        double max = candidates.Max(c => c.Logit);
-        var sorted = candidates.Select(c => (c.Id, P: Math.Exp(c.Logit - max))).OrderBy(c => c.P).ToList();
-        double total = sorted.Sum(c => c.P);
-        // TopPLogitsWarper: sorted ascending, drop the tokens whose cumulative probability is at most 1 − p; keep the last.
-        double cumulative = 0;
-        var kept = new List<(int Id, double P)>();
-        for (int i = 0; i < sorted.Count; i++)
-        {
-            cumulative += sorted[i].P / total;
-            if (cumulative > 1 - topP || i == sorted.Count - 1) kept.Add(sorted[i]);
-        }
-        double mass = kept.Sum(c => c.P), target = random.NextDouble() * mass;
-        foreach (var (id, p) in kept)
-        {
-            target -= p;
-            if (target < 0) return id;
-        }
-        return kept[kept.Count - 1].Id;
-    }
+    /// <summary>Transformers' sampling (<see cref="NucleusSampling.Sample"/>).</summary>
+    internal static int Sample(double[] logits, double temperature, double topP, Func<int, bool>? allowed, Random random) =>
+        NucleusSampling.Sample(logits, temperature, topP, allowed, random);
 
     private sealed class Session
     {
