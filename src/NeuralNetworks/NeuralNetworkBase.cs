@@ -7076,7 +7076,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // a device sync the caller may never need. Same rule as DetachAndRecycleBetweenLayers. Still detach when the
         // output IS (or views) the caller's input, e.g. a forward through only an InputLayer: the caller would get its
         // own tensor back, and the streaming PredictInBatches path disposes each result after its callback.
-        if (arena.PeakBackingBytes == 0 && !output.SharesStorageWith(input)) return output;
+        // Only a result still on the device skips the copy. A host result that rented nothing can be a layer's own
+        // resident buffer (DenseLayer's and FeedForwardLayer's FusedLinearInto scratch, reused every call): handed
+        // out uncopied, the caller's result would change under it on the next Predict. Copying it costs no device sync.
+        if (arena.PeakBackingBytes == 0 && output.HasPendingGpuData && !output.SharesStorageWith(input)) return output;
         return DetachFromArena(output);
     }
 
