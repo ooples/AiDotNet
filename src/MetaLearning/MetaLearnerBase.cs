@@ -551,6 +551,10 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         RandomGenerator = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
             : RandomHelper.CreateSecureRandom();
+
+        // A reset learner starts clean: momentum or moment estimates carried over from earlier training would
+        // otherwise shape its first updates.
+        ResetOptimizerState();
     }
 
     #endregion

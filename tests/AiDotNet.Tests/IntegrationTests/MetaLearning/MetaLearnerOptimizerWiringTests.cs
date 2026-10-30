@@ -134,6 +134,21 @@ public class MetaLearnerOptimizerWiringTests
     }
 
     [Fact]
+    public void Reset_ClearsTheMetaOptimizersState()
+    {
+        var probe = new Probe(Adam(0.1), null);
+        var p1 = probe.Outer(V(0.0), V(1.0), 0.5);
+        probe.Outer(p1, V(1.0), 0.5);
+
+        probe.Reset();
+
+        // After a reset the next outer step is Adam's first step again, 0.1; the moments of the two large-gradient
+        // steps would shrink it to about 0.068.
+        var fresh = probe.Outer(V(0.0), V(0.01), 0.5);
+        Assert.Equal(-0.1, fresh[0], 6);
+    }
+
+    [Fact]
     public void AnOptimizerForALoopTheAlgorithmDoesNotRun_IsRejected()
     {
         Assert.Throws<ArgumentException>(() => new Probe(null, Adam(0.1), MetaLearnerOptimizerUse.Outer));
