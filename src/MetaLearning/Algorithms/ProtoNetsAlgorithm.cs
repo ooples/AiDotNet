@@ -115,7 +115,7 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer,
+            null,
             optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _protoNetsOptions = options;

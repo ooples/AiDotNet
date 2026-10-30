@@ -148,7 +148,7 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer,
+            null,
             optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _mannOptions = options;

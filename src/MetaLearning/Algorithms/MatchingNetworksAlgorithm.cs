@@ -114,7 +114,7 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer,
+            null,
             optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _matchingOptions = options;
