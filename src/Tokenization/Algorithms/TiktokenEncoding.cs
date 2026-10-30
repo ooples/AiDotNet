@@ -22,6 +22,10 @@ namespace AiDotNet.Tokenization.Algorithms
         /// \p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(\?!\S)|\s+</c>: punctuation and digits one at a time, and the release's
         /// <c>(\?!\S)</c>, a literal "?!" rather than a lookahead.</summary>
         Fish,
+
+        /// <summary>FireRedTTS's (<c>whisper_tokenizer.get_encoding</c>): GPT-2's with <c>\[[A-Z]+\]|\[[a-z]+\]|[\x{4e00}-\x{9df5}]</c>
+        /// after the contractions, so a bracketed tag is one piece and a CJK character starting a piece stands alone.</summary>
+        FireRed,
     }
 
     /// <summary>
@@ -153,6 +157,12 @@ namespace AiDotNet.Tokenization.Algorithms
             return Encoding.UTF8.GetString(bytes.ToArray());
         }
 
+        /// <summary>The number of UTF-8 bytes token <paramref name="id"/> stands for.</summary>
+        internal int ByteLength(int id) =>
+            id >= 0 && id < _bytesById.Length ? _bytesById[id].Length
+            : _specialById.TryGetValue(id, out var special) ? Encoding.UTF8.GetByteCount(special)
+            : throw new ArgumentOutOfRangeException(nameof(id));
+
         /// <summary>The pre-tokens of ordinary text (special tokens not matched), as the pattern splits it.</summary>
         internal List<string> PreTokens(string text)
         {
@@ -160,7 +170,8 @@ namespace AiDotNet.Tokenization.Algorithms
             for (int position = 0; position < text.Length;)
             {
                 int length = _pattern == TiktokenPattern.Cl100k ? Cl100kTokenLength(text, position, text.Length)
-                    : _pattern == TiktokenPattern.Fish ? FishTokenLength(text, position, text.Length) : PreTokenLength(text, position, text.Length);
+                    : _pattern == TiktokenPattern.Fish ? FishTokenLength(text, position, text.Length)
+                    : PreTokenLength(text, position, text.Length, _pattern == TiktokenPattern.FireRed);
                 pieces.Add(text.Substring(position, length));
                 position += length;
             }
@@ -173,7 +184,8 @@ namespace AiDotNet.Tokenization.Algorithms
             while (position < end)
             {
                 int length = _pattern == TiktokenPattern.Cl100k ? Cl100kTokenLength(text, position, end)
-                    : _pattern == TiktokenPattern.Fish ? FishTokenLength(text, position, end) : PreTokenLength(text, position, end);
+                    : _pattern == TiktokenPattern.Fish ? FishTokenLength(text, position, end)
+                    : PreTokenLength(text, position, end, _pattern == TiktokenPattern.FireRed);
                 var utf8 = Encoding.UTF8.GetBytes(text.Substring(position, length));
                 string piece = ToKey(utf8, 0, utf8.Length);
                 if (_ranks.TryGetValue(piece, out int whole)) ids.Add(whole);
@@ -261,7 +273,7 @@ namespace AiDotNet.Tokenization.Algorithms
         }
 
         /// <summary>The length of the pattern's match at <paramref name="position"/>, the alternatives tried in order.</summary>
-        private static int PreTokenLength(string text, int position, int end)
+        private static int PreTokenLength(string text, int position, int end, bool fireRed = false)
         {
             // 's|'t|'re|'ve|'m|'ll|'d
             if (text[position] == '\'' && position + 1 < end)
@@ -273,6 +285,22 @@ namespace AiDotNet.Tokenization.Algorithms
                     char b = text[position + 2];
                     if ((a == 'r' && b == 'e') || (a == 'v' && b == 'e') || (a == 'l' && b == 'l')) return 3;
                 }
+            }
+            if (fireRed)
+            {
+                // \[[A-Z]+\] | \[[a-z]+\]
+                if (text[position] == '[' && position + 2 < end)
+                {
+                    bool upper = text[position + 1] is >= 'A' and <= 'Z', lower = text[position + 1] is >= 'a' and <= 'z';
+                    if (upper || lower)
+                    {
+                        int index = position + 1;
+                        while (index < end && (upper ? text[index] is >= 'A' and <= 'Z' : text[index] is >= 'a' and <= 'z')) index++;
+                        if (index < end && text[index] == ']') return index + 1 - position;
+                    }
+                }
+                // [\x{4e00}-\x{9df5}]
+                if (text[position] is >= (char)0x4E00 and <= (char)0x9DF5) return 1;
             }
             //  ?\p{L}+ |  ?\p{N}+ |  ?[^\s\p{L}\p{N}]+
             foreach (var kind in new[] { Kind.Letter, Kind.Number, Kind.Other })

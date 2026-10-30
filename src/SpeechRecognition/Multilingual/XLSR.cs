@@ -45,6 +45,9 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("XLS-R: Self-supervised Cross-lingual Speech Representation Learning at Scale", "https://arxiv.org/abs/2111.09296", Year = 2022, Authors = "Babu et al.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2006.11477",
+    "XLS-R pre-trains the wav2vec 2.0 model (Babu et al. 2022, section 2) at 0.3B to 2B parameters in its "
+    + "stable-layer-norm LARGE form; the data and scale differ, not the network, so it runs on the wav2vec 2.0 network.")]
 [PaperOptimizer(OptimizerKind.Adam, WarmupSteps = 32000, MinLearningRate = 0,
                 DecayRate = 1.0, Schedule = LearningRateSchedulerType.Polynomial,
                 Phase = TrainingPhase.PreTraining,
@@ -65,13 +68,16 @@ public partial class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly XLSROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    // The paper network (wav2vec 2.0 LARGE + CTC head) on the native path; null in ONNX mode or with custom layers.
+    private Audio.Foundations.Wav2Vec2CtcStack<T>? _stack;
+    private readonly Random _random;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public XLSR(NeuralNetworkArchitecture<T> architecture, string modelPath, XLSROptions? options = null) : base(architecture) { _options = options ?? new XLSROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayersCore(); }
+    public XLSR(NeuralNetworkArchitecture<T> architecture, string modelPath, XLSROptions? options = null) : base(architecture) { _options = options ?? new XLSROptions(); Options = _options; _useNativeMode = false; _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1); base.SampleRate = _options.SampleRate; base.NumMels = 0; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayersCore(); }
     public XLSR(NeuralNetworkArchitecture<T> architecture, XLSROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new XLSROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayersCore(); }
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)); _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1); base.SampleRate = _options.SampleRate; base.NumMels = 0; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayersCore(); }
 
     /// <summary>
     /// Transcribes audio using XLS-R's cross-lingual SSL encoder with CTC.
@@ -84,15 +90,7 @@ public partial class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var features = PreprocessAudio(audio);
         Tensor<T> logits;
 
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            logits = OnnxEncoder.Run(features);
-        }
-        else
-        {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
-        }
+        logits = Logits(features, training: false);
 
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
@@ -109,22 +107,67 @@ public partial class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("XLSR does not support streaming.");
 
     protected override void InitializeLayers() => InitializeLayersCore();
 
     // Constructors initialize this model's layers without dispatching into an unfinished derived instance.
-    private void InitializeLayersCore() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFoundationASRLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, featureDim: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    private void InitializeLayersCore()
+    {
+        if (!_useNativeMode) return;
+        _stack = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network: wav2vec 2.0 LARGE (layer-norm feature encoder, stable pre-norm Transformer) with a CTC
+        // head, as transformers' Wav2Vec2ForCTC builds facebook/wav2vec2-xls-r-*. It used to be a generic encoder
+        // over mel features with the 7-layer convolutional feature encoder "approximated with dense" (#2321).
+        _stack = new Audio.Foundations.Wav2Vec2CtcStack<T>(Engine, _options.ToConfiguration(), _options.VocabSize, _options.Seed ?? 42);
+        Layers.AddRange(_stack.Layers);
+    }
+
+    /// <summary>Loads a transformers <c>Wav2Vec2ForCTC</c> state dict (<c>wav2vec2.*</c> and <c>lm_head.*</c>).</summary>
+    /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
+    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        if (_stack is null) throw new InvalidOperationException("Weights load into the native XLS-R network.");
+        _stack.LoadTorchWeights(read, "wav2vec2.");
+    }
+
+    // XLS-R reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_stack is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_stack is not null)
+            return _stack.Run(input, training, _random, freezeFeatureEncoder: training && _options.FreezeFeatureEncoder, _options.FinalDropout);
+        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _stack is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
+        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
+            && _stack is not null && _stack.IsFeatureEncoderLayer(Layers[layerIndex])
+            ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
+            : declared;
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "XLSR-Native" : "XLSR-ONNX", Description = "XLS-R: cross-lingual SSL at scale + CTC (Meta, 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "XLSR-Native" : "XLSR-ONNX", Description = "XLS-R: cross-lingual SSL at scale + CTC (Meta, 2022)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
 

@@ -45,6 +45,8 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("data2vec: A General Framework for Self-Supervised Learning in Speech, Vision and Language", "https://arxiv.org/abs/2202.03555", Year = 2022, Authors = "Baevski et al.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2006.11477",
+    "data2vec's audio model is the wav2vec 2.0 network (Baevski et al. 2022, section 3) with a deeper convolutional positional embedding and a different pre-training target, so it runs on the wav2vec 2.0 network with that embedding.")]
 [PaperOptimizer(OptimizerKind.Adam, WarmupFraction = 0.03, HoldFraction = 0.9,
                 MinLearningRate = 0, Schedule = LearningRateSchedulerType.TriStage,
                 Source = "Baevski et al. 2022, Sec. 4: speech pre-training uses a tri-stage scheduler "
@@ -57,15 +59,19 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 public partial class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Data2VecASROptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode;
+    private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private Audio.Foundations.Wav2Vec2CtcStack<T>? _stack;
+    private readonly Random _random;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public Data2VecASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Data2VecASROptions? options = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public Data2VecASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Data2VecASROptions? options = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1); base.NumMels = 0; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
     public Data2VecASR(NeuralNetworkArchitecture<T> architecture, Data2VecASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Data2VecASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1); base.NumMels = 0; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using data2vec's continuous SSL encoder with CTC decoding.
@@ -78,15 +84,7 @@ public partial class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         var features = PreprocessAudio(audio);
         Tensor<T> logits;
 
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            logits = OnnxEncoder.Run(features);
-        }
-        else
-        {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
-        }
+        logits = Logits(features, training: false);
 
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
@@ -103,7 +101,7 @@ public partial class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
         var detected = DetectLanguage(audio);
@@ -114,15 +112,58 @@ public partial class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Data2VecASR does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFoundationASRLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, featureDim: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        _stack = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network: data2vec's audio encoder (layer-norm convolutional feature encoder over the raw waveform, five-layer convolutional positional embedding, post-norm Transformer) with a CTC head, as transformers' Data2VecAudioForCTC builds it. It used to be a generic encoder over mel features with the feature encoder approximated with dense (#2321).
+        _stack = new Audio.Foundations.Wav2Vec2CtcStack<T>(Engine, _options.ToConfiguration(), _options.VocabSize, _options.Seed ?? 42);
+        Layers.AddRange(_stack.Layers);
+    }
+
+    /// <summary>Loads a transformers <c>*ForCTC</c> state dict (<c>data2vec_audio.*</c> and <c>lm_head.*</c>).</summary>
+    /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
+    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        if (_stack is null) throw new InvalidOperationException("Weights load into the native network.");
+        _stack.LoadTorchWeights(read, "data2vec_audio.");
+    }
+
+    // The network reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_stack is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_stack is not null)
+            return _stack.Run(input, training, _random, freezeFeatureEncoder: training && _options.FreezeFeatureEncoder, _options.FinalDropout);
+        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _stack is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
+        => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
+            && _stack is not null && _stack.IsFeatureEncoderLayer(Layers[layerIndex])
+            ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
+            : declared;
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Data2VecASR-Native" : "Data2VecASR-ONNX", Description = "data2vec: general SSL framework + CTC (Meta, 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Data2VecASR-Native" : "Data2VecASR-ONNX", Description = "data2vec: general SSL framework + CTC (Meta, 2022)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
 

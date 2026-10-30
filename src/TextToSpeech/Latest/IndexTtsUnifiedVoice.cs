@@ -75,7 +75,9 @@ internal sealed class IndexTtsGpt2<T>
     /// The hidden states <c>[B, L, d]</c> (after <c>ln_f</c>) of input embeddings <c>[B, L, d]</c>, attending causally
     /// over <paramref name="cache"/>'s rows and the new ones, which are appended to it.
     /// </summary>
-    public Tensor<T> Forward(Tensor<T> x, IndexTtsGpt2Cache<T>? cache, bool training = false, Random? random = null)
+    /// <param name="maskedKeys">Key positions no query attends to (Hugging Face's <c>attention_mask</c> zeros, which add
+    /// the dtype's minimum to their scores); null for none.</param>
+    public Tensor<T> Forward(Tensor<T> x, IndexTtsGpt2Cache<T>? cache, bool training = false, Random? random = null, bool[]? maskedKeys = null)
     {
         int batch = x.Shape[0], length = x.Shape[1], d = Dim, heads = Heads, dk = d / heads;
         int past = cache?.Length ?? 0, total = past + length;
@@ -83,7 +85,14 @@ internal sealed class IndexTtsGpt2<T>
         var blocked = NumOps.FromDouble(double.MinValue);
         for (int i = 0; i < length; i++)
             for (int j = past + i + 1; j < total; j++) mask[i, j] = blocked;
-        bool masked = length > 1;
+        if (maskedKeys is not null)
+        {
+            if (maskedKeys.Length != total) throw new ArgumentException($"One flag per key ({total}).", nameof(maskedKeys));
+            for (int j = 0; j < total; j++)
+                if (maskedKeys[j])
+                    for (int i = 0; i < length; i++) mask[i, j] = NumOps.FromDouble(NumOps.ToDouble(mask[i, j]) + double.MinValue);
+        }
+        bool masked = length > 1 || maskedKeys is not null;
 
         Tensor<T> Split(Tensor<T> t) => _engine.Reshape(_engine.TensorPermute(_engine.Reshape(t, new[] { batch, length, heads, dk }),
             new[] { 0, 2, 1, 3 }), new[] { batch * heads, length, dk });

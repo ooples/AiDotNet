@@ -1,0 +1,1714 @@
+{
+ "cases": [
+  {
+   "text": "小红书，是中国大陆的网络购物和社交平台，成立于二零一三年六月。",
+   "preprocessed": "小红书，是中国大陆的网络购物和社交平台，成立于二零一三年六月。",
+   "rettt": "小红书，是中国大陆的网络购物和社交平台，成立于二零一三年六月。",
+   "detected": "zh",
+   "normalized": "小红书,是中国大陆的网络购物和社交平台,成立于二零一三年六月.",
+   "language": "zh",
+   "ids": [
+    57236,
+    7322,
+    54572,
+    50304,
+    11,
+    1541,
+    5975,
+    16086,
+    3582,
+    56580,
+    1546,
+    54714,
+    54624,
+    55828,
+    23516,
+    12565,
+    27658,
+    28455,
+    16716,
+    15433,
+    11,
+    11336,
+    24409,
+    37732,
+    11217,
+    56642,
+    2257,
+    10960,
+    5157,
+    30566,
+    6939,
+    13
+   ],
+   "split": [
+    "小红书，是中国大陆的网络购物和社交平台，成立于二零一三年六月,"
+   ]
+  },
+  {
+   "text": "今天是2024年10月17日，气温25.5℃，我花了￥128.50买了3本书。",
+   "preprocessed": "今天是2024年10月17日，气温25.5，我花了￥128.50买了3本书。",
+   "rettt": "今天是2024年10月17日，气温25.5，我花了￥128.50买了3本书。",
+   "detected": "zh",
+   "normalized": "今天是二零二四年十月十七日,气温二十五点五,我花了一百二十八点五零元买了三本书.",
+   "language": "zh",
+   "ids": [
+    57236,
+    6480,
+    6135,
+    1541,
+    11217,
+    56642,
+    11217,
+    19425,
+    5157,
+    20145,
+    6939,
+    20145,
+    29920,
+    6890,
+    11,
+    42204,
+    53330,
+    11217,
+    20145,
+    21001,
+    12579,
+    21001,
+    11,
+    1654,
+    20127,
+    2289,
+    2257,
+    31906,
+    11217,
+    20145,
+    33453,
+    12579,
+    21001,
+    56642,
+    14812,
+    50307,
+    2289,
+    10960,
+    8802,
+    50304,
+    13
+   ],
+   "split": [
+    "今天是2024年10月17日，气温25.5℃，我花了￥128.50买了3本书,"
+   ]
+  },
+  {
+   "text": "我、真是hello USA啊？谢谢你world！",
+   "preprocessed": "我、真是hello USA啊?谢谢你world",
+   "rettt": "我、真是hello USA啊?谢谢你world",
+   "detected": "zh",
+   "normalized": "我、真是hello  u s a ?谢谢你world.",
+   "language": "zh",
+   "ids": [
+    57236,
+    1654,
+    1231,
+    6303,
+    1541,
+    675,
+    1913,
+    220,
+    344,
+    262,
+    257,
+    2506,
+    11340,
+    11340,
+    2166,
+    13217,
+    13
+   ],
+   "split": [
+    "我、真是hello USA啊？谢谢你world！"
+   ]
+  },
+  {
+   "text": "Hello world, this is FireRedTTS speaking.",
+   "preprocessed": "Hello world, this is FireRedTTS speaking.",
+   "rettt": "Hello world, this is FireRedTTS speaking.",
+   "detected": "en",
+   "normalized": "hello world, this is firered t t s  speaking.",
+   "language": "en",
+   "ids": [
+    57235,
+    675,
+    1913,
+    1002,
+    11,
+    341,
+    307,
+    12159,
+    4073,
+    256,
+    256,
+    262,
+    220,
+    4124,
+    13
+   ],
+   "split": [
+    "Hello world, this is FireRedTTS speaking."
+   ]
+  },
+  {
+   "text": "Dr. Smith met Mr. Brown at 10:30 a.m. on Jan. 5th, 2023, i.e. yesterday.",
+   "preprocessed": "Dr. Smith met Mr. Brown at 10:30 a.m. on Jan. 5th, 2023, i.e. yesterday.",
+   "rettt": "Dr. Smith met mister Brown at 10:30 A_M on january 5th, 2023, that is yesterday.",
+   "detected": "en",
+   "normalized": "doctor smith met mister brown at ten thirty a m on the fifth of january , twenty twenty three, that is yesterday.",
+   "language": "en",
+   "ids": [
+    57235,
+    2595,
+    1672,
+    899,
+    355,
+    1131,
+    26562,
+    6292,
+    412,
+    2064,
+    11790,
+    257,
+    275,
+    322,
+    264,
+    9266,
+    295,
+    25442,
+    6164,
+    3182,
+    7699,
+    7699,
+    1045,
+    11,
+    300,
+    307,
+    5186,
+    13
+   ],
+   "split": [
+    "Dr. Smith met Mr. Brown at 10:30 a.m. on Jan. 5th, 2023, i.e. yesterday."
+   ]
+  },
+  {
+   "text": "The NASA and FBI teams spent $1,250 on 42 GPUs in the U.S. btw.",
+   "preprocessed": "The NASA and FBI teams spent $1,250 on 42 GPUs in the U.S. btw.",
+   "rettt": "The NASA and FBI teams spent $1,250 on 42 GPUs in the U.S. by the way",
+   "detected": "en",
+   "normalized": "the  n a s a  and  f b i  teams spent thousand two hundred and fifty on forty two  g p u 's in the  u s  by the way.",
+   "language": "en",
+   "ids": [
+    57235,
+    3322,
+    220,
+    297,
+    257,
+    262,
+    257,
+    220,
+    293,
+    220,
+    283,
+    272,
+    741,
+    220,
+    5491,
+    4418,
+    4714,
+    732,
+    3262,
+    293,
+    13442,
+    322,
+    15815,
+    732,
+    220,
+    290,
+    280,
+    344,
+    922,
+    82,
+    294,
+    264,
+    220,
+    344,
+    262,
+    220,
+    538,
+    264,
+    636,
+    13
+   ],
+   "split": [
+    "The NASA and FBI teams spent $1,250 on 42 GPUs in the U.S. btw."
+   ]
+  },
+  {
+   "text": "I have 3 apples and 17 oranges @ home.",
+   "preprocessed": "I have 3 apples and 17 oranges @ home.",
+   "rettt": "I have 3 apples and 17 oranges  at  home.",
+   "detected": "en",
+   "normalized": "i have three apples and seventeen oranges at home.",
+   "language": "en",
+   "ids": [
+    57235,
+    72,
+    362,
+    1045,
+    16814,
+    293,
+    39532,
+    35474,
+    412,
+    1280,
+    13
+   ],
+   "split": [
+    "I have 3 apples and 17 oranges @ home."
+   ]
+  },
+  {
+   "text": "  Ｆｕｌｌｗｉｄｔｈ　ｔｅｘｔ！ＡＢＣ　１２３  ",
+   "preprocessed": "Fullwidth textABC 123",
+   "rettt": "Fullwidth textABC 123",
+   "detected": "en",
+   "normalized": "fullwidth text a b c  one hundred and twenty three.",
+   "language": "en",
+   "ids": [
+    57235,
+    32818,
+    21271,
+    2487,
+    257,
+    272,
+    269,
+    220,
+    472,
+    3262,
+    293,
+    7699,
+    1045,
+    13
+   ],
+   "split": [
+    "Ｆｕｌｌｗｉｄｔｈ　ｔｅｘｔ！ＡＢＣ　１２３"
+   ]
+  },
+  {
+   "text": "Café naïve résumé — façade “quoted” ‘single’ «guillemets».",
+   "preprocessed": "Cafe naive resume - facade quoted ‘single’ guillemets.",
+   "rettt": "Cafe naive resume - facade quoted ‘single’ guillemets.",
+   "detected": "en",
+   "normalized": "cafe naive resume - facade quoted single guillemets.",
+   "language": "en",
+   "ids": [
+    57235,
+    496,
+    2106,
+    29052,
+    15358,
+    359,
+    46261,
+    30047,
+    2167,
+    695,
+    373,
+    443,
+    1385,
+    13
+   ],
+   "split": [
+    "Café naïve résumé — façade “quoted” ‘single’ «guillemets»."
+   ]
+  },
+  {
+   "text": "他说：“你好……我很好。。。”然后走了~~~",
+   "preprocessed": "他说：你好…我很好…然后走了~~~",
+   "rettt": "他说：你好…我很好…然后走了~~~",
+   "detected": "zh",
+   "normalized": "他说,你好,我很好,然后走了.",
+   "language": "zh",
+   "ids": [
+    57236,
+    5000,
+    8090,
+    11,
+    2166,
+    2131,
+    11,
+    1654,
+    4563,
+    2131,
+    11,
+    5823,
+    13547,
+    9575,
+    2289,
+    13
+   ],
+   "split": [
+    "他说：“你好……我很好,,,”然后走了~~~"
+   ]
+  },
+  {
+   "text": "表情(＾▽＾)真开心o(*￣▽￣*)ブ哈哈",
+   "preprocessed": "表情，真开心 哈哈",
+   "rettt": "表情，真开心 哈哈",
+   "detected": "zh",
+   "normalized": "表情,真开心 哈哈.",
+   "language": "zh",
+   "ids": [
+    57236,
+    17571,
+    10570,
+    11,
+    6303,
+    18937,
+    7945,
+    220,
+    15964,
+    13
+   ],
+   "split": [
+    "表情(＾▽＾)真开心o(*￣▽￣*)ブ哈哈"
+   ]
+  },
+  {
+   "text": "Line one\nline two\tTabbed\r\nwindows.",
+   "preprocessed": "Line one，line two，Tabbed，，windows.",
+   "rettt": "Line one，line two，Tabbed，，windows.",
+   "detected": "en",
+   "normalized": "line oneline twotabbedwindows.",
+   "language": "en",
+   "ids": [
+    57235,
+    1889,
+    322,
+    5440,
+    683,
+    310,
+    455,
+    2883,
+    12199,
+    1509,
+    13
+   ],
+   "split": [
+    "Line one\nline two\tTabbed\r\nwindows."
+   ]
+  },
+  {
+   "text": "【重要】《三体》是刘慈欣的作品｛科幻｝",
+   "preprocessed": "(重要)(三体)是刘慈欣的作品(科幻)",
+   "rettt": "(重要)(三体)是刘慈欣的作品(科幻)",
+   "detected": "zh",
+   "normalized": "(重要)(三体)是刘慈欣的作品(科幻).",
+   "language": "zh",
+   "ids": [
+    57236,
+    7,
+    12624,
+    4275,
+    29422,
+    10960,
+    29485,
+    8,
+    1541,
+    50658,
+    52127,
+    52993,
+    1546,
+    11914,
+    30246,
+    7,
+    42091,
+    51856,
+    3050
+   ],
+   "split": [
+    "【重要】《三体》是刘慈欣的作品｛科幻｝"
+   ]
+  },
+  {
+   "text": "αβγ δεζ Greek letters ΑΒΓ.",
+   "preprocessed": "αβγ δεζ Greek letters ΑΒΓ.",
+   "rettt": "αβγ δεζ Greek letters ΑΒΓ.",
+   "detected": "en",
+   "normalized": "greek letters.",
+   "language": "en",
+   "ids": [
+    57235,
+    70,
+    15500,
+    7825,
+    13
+   ],
+   "split": [
+    "αβγ δεζ Greek letters ΑΒΓ."
+   ]
+  },
+  {
+   "text": "〇一二三〇 and 々 marks",
+   "preprocessed": "〇一二三〇 and 々 marks",
+   "rettt": "〇一二三〇 and 々 marks",
+   "detected": "zh",
+   "normalized": "〇一二三〇 and 々 marks.",
+   "language": "zh",
+   "ids": [
+    57236,
+    756,
+    229,
+    2257,
+    11217,
+    10960,
+    756,
+    229,
+    293,
+    220,
+    45032,
+    10640,
+    13
+   ],
+   "split": [
+    "〇一二三〇 and 々 marks"
+   ]
+  },
+  {
+   "text": "ALL CAPS SENTENCE WITH NUMBERS 123.",
+   "preprocessed": "ALL CAPS SENTENCE WITH NUMBERS 123.",
+   "rettt": "ALL CAPS SENTENCE WITH NUMBERS 123.",
+   "detected": "en",
+   "normalized": "a l l   c a p s   s e n t  e n c e   w i t h   n u m b  e r s  幺二三.",
+   "language": "en",
+   "ids": [
+    57235,
+    64,
+    287,
+    287,
+    220,
+    220,
+    269,
+    257,
+    280,
+    262,
+    220,
+    220,
+    262,
+    308,
+    297,
+    256,
+    220,
+    308,
+    297,
+    269,
+    308,
+    220,
+    220,
+    261,
+    741,
+    256,
+    276,
+    220,
+    220,
+    297,
+    344,
+    275,
+    272,
+    220,
+    308,
+    367,
+    262,
+    220,
+    220,
+    51855,
+    11217,
+    10960,
+    13
+   ],
+   "split": [
+    "ALL CAPS SENTENCE WITH NUMBERS 123."
+   ]
+  },
+  {
+   "text": "WHAT?! 42",
+   "preprocessed": "WHAT? 42",
+   "rettt": "WHAT? 42",
+   "detected": "en",
+   "normalized": "w h a t ? 四十二.",
+   "language": "en",
+   "ids": [
+    57235,
+    86,
+    276,
+    257,
+    256,
+    2506,
+    220,
+    19425,
+    20145,
+    11217,
+    13
+   ],
+   "split": [
+    "WHAT?!42"
+   ]
+  },
+  {
+   "text": "Mixed 中文 and English 混合 text 123 测试。",
+   "preprocessed": "Mixed 中文 and English 混合 text 123 测试。",
+   "rettt": "Mixed 中文 and English 混合 text 123 测试。",
+   "detected": "zh",
+   "normalized": "mixed 中文 and english 混合 text 幺二三 测试.",
+   "language": "zh",
+   "ids": [
+    57236,
+    76,
+    40303,
+    220,
+    5975,
+    17174,
+    293,
+    32169,
+    220,
+    48640,
+    14245,
+    2487,
+    220,
+    51855,
+    11217,
+    10960,
+    220,
+    53225,
+    55701,
+    13
+   ],
+   "split": [
+    "Mixed 中文 and English 混合 text 123 测试,"
+   ]
+  },
+  {
+   "text": "zero width​space and‍zwj and nbsp and � replacement",
+   "preprocessed": "zero widthspace andzwj and nbsp and replacement",
+   "rettt": "zero widthspace andzwj and nbsp and replacement",
+   "detected": "en",
+   "normalized": "zero widthspace andzwj and nbsp and replacement.",
+   "language": "en",
+   "ids": [
+    57235,
+    32226,
+    11402,
+    24824,
+    293,
+    14406,
+    73,
+    293,
+    297,
+    22424,
+    293,
+    14419,
+    13
+   ],
+   "split": [
+    "zero width​space and‍zwj and nbsp and � replacement"
+   ]
+  },
+  {
+   "text": "Emoji test 😀👍 with symbols ☺ ✂ ★.",
+   "preprocessed": "Emoji test with symbols .",
+   "rettt": "Emoji test with symbols .",
+   "detected": "en",
+   "normalized": "emoji test with symbols.",
+   "language": "en",
+   "ids": [
+    57235,
+    36221,
+    4013,
+    1500,
+    365,
+    16944,
+    13
+   ],
+   "split": [
+    "Emoji test 😀👍 with symbols ☺ ✂ ★."
+   ]
+  },
+  {
+   "text": "Ms. Johnson and Mrs. Lee have a Ph.D from St. Andrews on Sun. at 5 p.m. via Main St. and Oak Rd.",
+   "preprocessed": "Ms. Johnson and Mrs. Lee have a Ph.D from St. Andrews on Sun. at 5 p.m. via Main St. and Oak Rd.",
+   "rettt": "miss Johnson and misses Lee have a P_H_D from saint Andrews on sunday at 5 P_M via Main street and Oak road",
+   "detected": "en",
+   "normalized": "miss johnson and misses lee have a p h d from saint andrews on sunday at five p m via main street and oak road.",
+   "language": "en",
+   "ids": [
+    57235,
+    76,
+    891,
+    35097,
+    3015,
+    293,
+    29394,
+    46571,
+    362,
+    257,
+    280,
+    276,
+    274,
+    490,
+    28374,
+    293,
+    2236,
+    82,
+    322,
+    33047,
+    320,
+    412,
+    1732,
+    280,
+    275,
+    5766,
+    2135,
+    4838,
+    293,
+    31322,
+    3060,
+    13
+   ],
+   "split": [
+    "Ms. Johnson and Mrs. Lee have a Ph.D from St. Andrews on Sun."
+   ]
+  },
+  {
+   "text": "Sept. 3 and Sep. 4 and May. 5, Tues. and Thur. meetings, e.g. reviews & b.t.w. notes.",
+   "preprocessed": "Sept. 3 and Sep. 4 and May. 5, Tues. and Thur. meetings, e.g. reviews & b.t.w. notes.",
+   "rettt": "september 3 and september 4 and may 5, tuesday and thursday meetings, for example reviews & by the way notes.",
+   "detected": "en",
+   "normalized": "the third of september and the fourth of september and the fifth of may, tuesday and thursday meetings, for example reviews by the way notes.",
+   "language": "en",
+   "ids": [
+    57235,
+    3322,
+    2636,
+    295,
+    23891,
+    1304,
+    293,
+    264,
+    6409,
+    295,
+    23891,
+    1304,
+    293,
+    264,
+    9266,
+    295,
+    815,
+    11,
+    256,
+    9775,
+    293,
+    258,
+    10125,
+    8410,
+    11,
+    337,
+    1365,
+    10229,
+    538,
+    264,
+    636,
+    5570,
+    13
+   ],
+   "split": [
+    "Sept. 3 and Sep. 4 and May. 5, Tues."
+   ]
+  },
+  {
+   "text": "A.D. 100 and 300 B.C. and the ad. disclaimer",
+   "preprocessed": "A.D. 100 and 300 B.C. and the ad. disclaimer",
+   "rettt": "A_D 100 and 300 B_C and the ad. disclaimer",
+   "detected": "en",
+   "normalized": "a d one hundred and three hundred b c and the ad. disclaimer.",
+   "language": "en",
+   "ids": [
+    57235,
+    64,
+    274,
+    472,
+    3262,
+    293,
+    1045,
+    3262,
+    272,
+    269,
+    293,
+    264,
+    614,
+    13,
+    40896,
+    13
+   ],
+   "split": [
+    "A.D. 100 and 300 B.C. and the ad.disclaimer"
+   ]
+  },
+  {
+   "text": "[laugh] I can't believe it [breath] really",
+   "preprocessed": "[laugh] I can't believe it [breath] really",
+   "rettt": "[laugh] I can't believe it [breath] really",
+   "detected": "en",
+   "normalized": "[laugh] i can't believe it [breath] really.",
+   "language": "en",
+   "ids": [
+    57235,
+    57199,
+    741,
+    393,
+    380,
+    1697,
+    309,
+    220,
+    57201,
+    534,
+    13
+   ],
+   "split": [
+    "[laugh] I can't believe it [breath] really"
+   ]
+  },
+  {
+   "text": "就是 [rep] 就是 我 [hic] 我 [elong] 好",
+   "preprocessed": "就是 [rep] 就是，我 [hic] 我 [elong] 好",
+   "rettt": "就是 [rep] 就是，我 [hic] 我 [elong] 好",
+   "detected": "zh",
+   "normalized": "就是 [rep] 就是,我 [hic] 我 [elong] 好.",
+   "language": "zh",
+   "ids": [
+    57236,
+    3111,
+    1541,
+    542,
+    19919,
+    60,
+    31526,
+    11,
+    1654,
+    542,
+    32582,
+    60,
+    8624,
+    542,
+    25490,
+    60,
+    12202,
+    13
+   ],
+   "split": [
+    "就是 [rep] 就是 我 [hic] 我 [elong] 好"
+   ]
+  },
+  {
+   "text": "Numbers: 1000000, 2,500, 3.14159 and 007.",
+   "preprocessed": "Numbers: 1000000, 2,500, 3.14159 and 007.",
+   "rettt": "Numbers: 1000000, 2,500, 3.14159 and 007.",
+   "detected": "en",
+   "normalized": "numbers, one million, two thousand five hundred, three point one four one five nine and oh oh seven.",
+   "language": "en",
+   "ids": [
+    57235,
+    77,
+    36353,
+    11,
+    472,
+    2459,
+    11,
+    732,
+    4714,
+    1732,
+    3262,
+    11,
+    1045,
+    935,
+    472,
+    1451,
+    472,
+    1732,
+    4949,
+    293,
+    1954,
+    1954,
+    3407,
+    13
+   ],
+   "split": [
+    "Numbers: 1000000, 2,500, 3.14159 and 007."
+   ]
+  },
+  {
+   "text": "电话号码是13800138000，邮箱是test@example.com。",
+   "preprocessed": "电话号码是13800138000，邮箱是test@example.com。",
+   "rettt": "电话号码是13800138000，邮箱是test at example.com。",
+   "detected": "zh",
+   "normalized": "电话号码是幺三八零零幺三八零零零,邮箱是test at example.com.",
+   "language": "zh",
+   "ids": [
+    57236,
+    42182,
+    21596,
+    26987,
+    54139,
+    1541,
+    51855,
+    10960,
+    33453,
+    56642,
+    56642,
+    51855,
+    10960,
+    33453,
+    56642,
+    56642,
+    56642,
+    11,
+    56167,
+    54453,
+    1541,
+    31636,
+    412,
+    1365,
+    13,
+    1112,
+    13
+   ],
+   "split": [
+    "电话号码是13800138000，邮箱是test@example.com,"
+   ]
+  },
+  {
+   "text": "",
+   "preprocessed": "",
+   "rettt": "",
+   "detected": null,
+   "normalized": "",
+   "language": "zh",
+   "ids": [
+    57236
+   ],
+   "split": []
+  },
+  {
+   "text": "   ",
+   "preprocessed": "",
+   "rettt": "",
+   "detected": null,
+   "normalized": "",
+   "language": "zh",
+   "ids": [
+    57236
+   ],
+   "split": []
+  },
+  {
+   "text": "!!!",
+   "preprocessed": "",
+   "rettt": "",
+   "detected": null,
+   "normalized": "",
+   "language": "zh",
+   "ids": [
+    57236
+   ],
+   "split": [
+    "!!!"
+   ]
+  },
+  {
+   "text": "第1名和第2名，1/2的人，50%的概率，-5度。",
+   "preprocessed": "第1名和第2名，1/2的人，50%的概率，-5度。",
+   "rettt": "第1名和第2名，1/2的人，50%的概率，-5度。",
+   "detected": "zh",
+   "normalized": "第一名和第两名,二分之一的人,百分之五十的概率,负五度.",
+   "language": "zh",
+   "ids": [
+    57236,
+    7536,
+    2257,
+    15940,
+    12565,
+    7536,
+    36257,
+    15940,
+    11,
+    11217,
+    6627,
+    9574,
+    2257,
+    1546,
+    4035,
+    11,
+    31906,
+    6627,
+    9574,
+    21001,
+    20145,
+    1546,
+    26181,
+    44866,
+    11,
+    55815,
+    21001,
+    13127,
+    13
+   ],
+   "split": [
+    "第1名和第2名，1/2的人，50%的概率，-5度,"
+   ]
+  },
+  {
+   "text": "The quick brown fox jumps over the lazy dog. It was a sunny day in the park. Children were playing football happily. Then it started raining heavily over the whole town.",
+   "preprocessed": "The quick brown fox jumps over the lazy dog. It was a sunny day in the park. Children were playing football happily. Then it started raining heavily over the whole town.",
+   "rettt": "The quick brown fox jumps over the lazy dog. It was a sunny day in the park. Children were playing football happily. Then it started raining heavily over the whole town.",
+   "detected": "en",
+   "normalized": "the quick brown fox jumps over the lazy dog. it was a sunny day in the park. children were playing football happily. then it started raining heavily over the whole town.",
+   "language": "en",
+   "ids": [
+    57235,
+    3322,
+    1702,
+    6292,
+    21026,
+    16704,
+    670,
+    264,
+    14847,
+    3000,
+    13,
+    309,
+    390,
+    257,
+    20412,
+    786,
+    294,
+    264,
+    3884,
+    13,
+    2227,
+    645,
+    2433,
+    7346,
+    19909,
+    13,
+    550,
+    309,
+    1409,
+    18441,
+    10950,
+    670,
+    264,
+    1379,
+    3954,
+    13
+   ],
+   "split": [
+    "The quick brown fox jumps over the lazy dog.",
+    "It was a sunny day in the park.",
+    "Children were playing football happily."
+   ]
+  },
+  {
+   "text": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。床前明月光，疑是地上霜。举头望明月，低头思故乡。白日依山尽，黄河入海流。欲穷千里目，更上一层楼。",
+   "preprocessed": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。床前明月光，疑是地上霜。举头望明月，低头思故乡。白日依山尽，黄河入海流。欲穷千里目，更上一层楼。",
+   "rettt": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。床前明月光，疑是地上霜。举头望明月，低头思故乡。白日依山尽，黄河入海流。欲穷千里目，更上一层楼。",
+   "detected": "zh",
+   "normalized": "春眠不觉晓,处处闻啼鸟.夜来风雨声,花落知多少.床前明月光,疑是地上霜.举头望明月,低头思故乡.白日依山尽,黄河入海流.欲穷千里目,更上一层楼.",
+   "language": "zh",
+   "ids": [
+    57236,
+    46953,
+    54059,
+    1960,
+    24447,
+    52591,
+    11,
+    51388,
+    51388,
+    56532,
+    51049,
+    57040,
+    13,
+    30124,
+    6912,
+    47209,
+    35339,
+    32045,
+    11,
+    20127,
+    30848,
+    6498,
+    6392,
+    15686,
+    13,
+    51866,
+    8945,
+    11100,
+    6939,
+    20690,
+    11,
+    53905,
+    1541,
+    10928,
+    5708,
+    56659,
+    13,
+    50283,
+    39862,
+    22694,
+    11100,
+    6939,
+    11,
+    41377,
+    39862,
+    8870,
+    43045,
+    50303,
+    13,
+    13558,
+    6890,
+    50438,
+    24113,
+    51676,
+    11,
+    57124,
+    53148,
+    14028,
+    20078,
+    27854,
+    13,
+    52996,
+    54333,
+    20787,
+    15759,
+    11386,
+    11,
+    19002,
+    5708,
+    2257,
+    51680,
+    52911,
+    13
+   ],
+   "split": [
+    "春眠不觉晓，处处闻啼鸟,夜来风雨声，花落知多少,床前明月光，疑是地上霜,"
+   ]
+  },
+  {
+   "text": "这是一个非常非常长的句子没有任何标点符号一直写下去直到超过三十个字符为止看看会怎么切分这段文本内容呢真的很长很长很长很长",
+   "preprocessed": "这是一个非常非常长的句子没有任何标点符号一直写下去直到超过三十个字符为止看看会怎么切分这段文本内容呢真的很长很长很长很长",
+   "rettt": "这是一个非常非常长的句子没有任何标点符号一直写下去直到超过三十个字符为止看看会怎么切分这段文本内容呢真的很长很长很长很长",
+   "detected": "zh",
+   "normalized": "这是一个非常非常长的句子没有任何标点符号一直写下去直到超过三十个字符为止看看会怎么切分这段文本内容呢真的很长很长很长很长.",
+   "language": "zh",
+   "ids": [
+    57236,
+    5562,
+    1541,
+    2257,
+    7549,
+    12107,
+    11279,
+    12107,
+    11279,
+    32271,
+    1546,
+    34592,
+    7626,
+    10062,
+    2412,
+    26443,
+    11906,
+    52764,
+    12579,
+    54396,
+    26987,
+    2257,
+    16186,
+    50596,
+    4438,
+    6734,
+    16186,
+    4511,
+    19869,
+    16866,
+    10960,
+    20145,
+    7549,
+    22381,
+    54396,
+    13992,
+    30438,
+    4200,
+    4200,
+    12949,
+    7627,
+    6656,
+    23632,
+    6627,
+    5562,
+    28427,
+    17174,
+    8802,
+    34742,
+    25750,
+    6240,
+    6303,
+    1546,
+    4563,
+    32271,
+    4563,
+    32271,
+    4563,
+    32271,
+    4563,
+    32271,
+    13
+   ],
+   "split": [
+    "这是一个非常非常长的句子没有任何标点符号一直写下去直到超过三十个字符为止看看会怎么切分这段文本内容呢真的很长很长很长很长"
+   ]
+  },
+  {
+   "text": "Short one. Another short. A third one that is somewhat longer than the others here.",
+   "preprocessed": "Short one. Another short. A third one that is somewhat longer than the others here.",
+   "rettt": "Short one. Another short. A third one that is somewhat longer than the others here.",
+   "detected": "en",
+   "normalized": "short one. another short. a third one that is somewhat longer than the others here.",
+   "language": "en",
+   "ids": [
+    57235,
+    2716,
+    477,
+    472,
+    13,
+    1071,
+    2099,
+    13,
+    257,
+    2636,
+    472,
+    300,
+    307,
+    8344,
+    2854,
+    813,
+    264,
+    2357,
+    510,
+    13
+   ],
+   "split": [
+    "Short one.Another short.A third one that is somewhat longer than the others here."
+   ]
+  },
+  {
+   "text": "He said \"Stop. Now.\" and left. (See fig. 3.) Then e.g. more. Visit U.S. soon!",
+   "preprocessed": "He said \"Stop. Now.\" and left. (See fig. 3.) Then e.g. more. Visit U.S. soon",
+   "rettt": "He said \"Stop. Now.\" and left. (See fig. 3.) Then for example more. Visit U.S. soon",
+   "detected": "en",
+   "normalized": "he said stop. now. and left. see fig. three. then for example more. visit  u s  soon.",
+   "language": "en",
+   "ids": [
+    57235,
+    675,
+    848,
+    1590,
+    13,
+    586,
+    13,
+    293,
+    1411,
+    13,
+    536,
+    2147,
+    13,
+    1045,
+    13,
+    550,
+    337,
+    1365,
+    544,
+    13,
+    3441,
+    220,
+    344,
+    262,
+    220,
+    2321,
+    13
+   ],
+   "split": [
+    "He said \"Stop. Now.\" and left.(See fig. 3.) Then e.g. more."
+   ]
+  },
+  {
+   "text": "First paragraph here.\n\nSecond paragraph after a blank line. With two sentences.",
+   "preprocessed": "First paragraph here.，，Second paragraph after a blank line. With two sentences.",
+   "rettt": "First paragraph here.，，Second paragraph after a blank line. With two sentences.",
+   "detected": "en",
+   "normalized": "first paragraph here.second paragraph after a blank line. with two sentences.",
+   "language": "en",
+   "ids": [
+    57235,
+    29581,
+    18865,
+    510,
+    13,
+    27375,
+    18865,
+    934,
+    257,
+    8247,
+    1622,
+    13,
+    365,
+    732,
+    16579,
+    13
+   ],
+   "split": [
+    "First paragraph here.\n\nSecond paragraph after a blank line."
+   ]
+  },
+  {
+   "text": "Yahoo! is a company. What!? Really?! Yes!!! OK.",
+   "preprocessed": "Yahoo is a company. What? Really? Yes OK.",
+   "rettt": "Yahoo is a company. What? Really? Yes OK.",
+   "detected": "en",
+   "normalized": "yahoo is a company. what? really? yes  o k.",
+   "language": "en",
+   "ids": [
+    57235,
+    42534,
+    1986,
+    307,
+    257,
+    2237,
+    13,
+    437,
+    30,
+    534,
+    30,
+    2086,
+    220,
+    277,
+    350,
+    13
+   ],
+   "split": [
+    "Yahoo! is a company.What!?Really?!Yes!!!OK."
+   ]
+  },
+  {
+   "text": "第一句话。第二句话！第三句话？第四句话；第五句话：结束",
+   "preprocessed": "第一句话。第二句话第三句话?第四句话;第五句话：结束",
+   "rettt": "第一句话。第二句话第三句话?第四句话;第五句话：结束",
+   "detected": "zh",
+   "normalized": "第一句话.第二句话第三句话?第四句话,第五句话,结束.",
+   "language": "zh",
+   "ids": [
+    57236,
+    7536,
+    2257,
+    34592,
+    21596,
+    13,
+    7536,
+    11217,
+    34592,
+    21596,
+    7536,
+    10960,
+    34592,
+    21596,
+    30,
+    7536,
+    19425,
+    34592,
+    21596,
+    11,
+    7536,
+    21001,
+    34592,
+    21596,
+    11,
+    45641,
+    44320,
+    13
+   ],
+   "split": [
+    "第一句话,第二句话！第三句话？第四句话；第五句话：结束"
+   ]
+  },
+  {
+   "text": "Price is 3.5 dollars. Version 2.0 released. Call 911. Done.",
+   "preprocessed": "Price is 3.5 dollars. Version 2.0 released. Call 911. Done.",
+   "rettt": "Price is 3.5 dollars. Version 2.0 released. Call 911. Done.",
+   "detected": "en",
+   "normalized": "price is three point five dollars. version two point oh released. call nine hundred and eleven. done.",
+   "language": "en",
+   "ids": [
+    57235,
+    1424,
+    573,
+    307,
+    1045,
+    935,
+    1732,
+    3808,
+    13,
+    3037,
+    732,
+    935,
+    1954,
+    4736,
+    13,
+    818,
+    4949,
+    3262,
+    293,
+    21090,
+    13,
+    1096,
+    13
+   ],
+   "split": [
+    "Price is 3.5 dollars.Version 2.0 released.Call 911.Done."
+   ]
+  },
+  {
+   "text": "hello",
+   "preprocessed": "hello",
+   "rettt": "hello",
+   "detected": "en",
+   "normalized": "hello.",
+   "language": "en",
+   "ids": [
+    57235,
+    675,
+    1913,
+    13
+   ],
+   "split": [
+    "hello"
+   ]
+  },
+  {
+   "text": "UPPER lower UPPER",
+   "preprocessed": "UPPER lower UPPER",
+   "rettt": "UPPER lower UPPER",
+   "detected": "en",
+   "normalized": "u p p e r lower  u p p e r.",
+   "language": "en",
+   "ids": [
+    57235,
+    84,
+    280,
+    280,
+    308,
+    367,
+    3126,
+    220,
+    344,
+    280,
+    280,
+    308,
+    367,
+    13
+   ],
+   "split": [
+    "UPPER lower UPPER"
+   ]
+  }
+ ],
+ "probes": [
+  {
+   "text": "hello world",
+   "detected": "en"
+  },
+  {
+   "text": "123 456",
+   "detected": null
+  },
+  {
+   "text": "...!?",
+   "detected": null
+  },
+  {
+   "text": "",
+   "detected": null
+  },
+  {
+   "text": " ",
+   "detected": null
+  },
+  {
+   "text": "αβγ",
+   "detected": null
+  },
+  {
+   "text": "αβγ hello",
+   "detected": "en"
+  },
+  {
+   "text": "〇 abc",
+   "detected": "en"
+  },
+  {
+   "text": "〇〇 aa",
+   "detected": "zh"
+  },
+  {
+   "text": "〇 a",
+   "detected": "en"
+  },
+  {
+   "text": "a 〇",
+   "detected": "en"
+  },
+  {
+   "text": "〇 a α",
+   "detected": "en"
+  },
+  {
+   "text": "ab 〇〇",
+   "detected": "zh"
+  },
+  {
+   "text": "abc 〇〇〇 αβγ",
+   "detected": "zh"
+  },
+  {
+   "text": "〆",
+   "detected": null
+  },
+  {
+   "text": "〆 a",
+   "detected": "en"
+  },
+  {
+   "text": "〱〱 a",
+   "detected": "en"
+  },
+  {
+   "text": "〇 α",
+   "detected": null
+  },
+  {
+   "text": "〮〮〮 a",
+   "detected": null
+  },
+  {
+   "text": "〡〢 hello",
+   "detected": "zh"
+  },
+  {
+   "text": "hello 々々々 x",
+   "detected": "zh"
+  },
+  {
+   "text": "αβγ δεζ ηθι κλμ x",
+   "detected": null
+  },
+  {
+   "text": "x",
+   "detected": "en"
+  },
+  {
+   "text": "X Y Z 〇〇",
+   "detected": "en"
+  }
+ ],
+ "segments": [
+  {
+   "text": "Mr. Smith went to Washington. He arrived at 5 p.m. and left.",
+   "sentences": [
+    "Mr. Smith went to Washington.",
+    "He arrived at 5 p.m. and left."
+   ]
+  },
+  {
+   "text": "The value is 3.14. It is pi. Use it wisely!",
+   "sentences": [
+    "The value is 3.14.",
+    "It is pi.",
+    "Use it wisely!"
+   ]
+  },
+  {
+   "text": "She said \"Hello. How are you?\" Then she left.",
+   "sentences": [
+    "She said \"Hello. How are you?\" Then she left."
+   ]
+  },
+  {
+   "text": "See ref.[1] for details. Next sentence [2] here. Final.",
+   "sentences": [
+    "See ref.[1]",
+    "for details.",
+    "Next sentence [2] here.",
+    "Final."
+   ]
+  },
+  {
+   "text": "Email me at john.doe@example.com. Thanks.",
+   "sentences": [
+    "Email me at john.doe@example.com.",
+    "Thanks."
+   ]
+  },
+  {
+   "text": "Is it e.g. this? Or i.e. that? I.B.M. is a company.",
+   "sentences": [
+    "Is it e.g. this?",
+    "Or i.e. that?",
+    "I.B.M. is a company."
+   ]
+  },
+  {
+   "text": "One!Two?Three. four five. Six.",
+   "sentences": [
+    "One!",
+    "Two?",
+    "Three.",
+    "four five.",
+    "Six."
+   ]
+  },
+  {
+   "text": "Ends without terminator",
+   "sentences": [
+    "Ends without terminator"
+   ]
+  },
+  {
+   "text": "Multiple...dots... here. And here!!",
+   "sentences": [
+    "Multiple...",
+    "dots...",
+    "here.",
+    "And here!!"
+   ]
+  },
+  {
+   "text": "A sentence.  Double spaced.   Triple.",
+   "sentences": [
+    "A sentence.",
+    "Double spaced.",
+    "Triple."
+   ]
+  }
+ ],
+ "zh_segments": [
+  {
+   "text": "小红书，是中国大陆的网络购物和社交平台，成立于二零一三年六月。",
+   "sentences": [
+    "小红书，是中国大陆的网络购物和社交平台，成立于二零一三年六月。"
+   ]
+  },
+  {
+   "text": "今天是2024年10月17日，气温25.5℃，我花了￥128.50买了3本书。",
+   "sentences": [
+    "今天是2024年10月17日，气温25.5℃，我花了￥128.50买了3本书。"
+   ]
+  },
+  {
+   "text": "我、真是hello USA啊？谢谢你world！",
+   "sentences": [
+    "我、真是hello USA啊？",
+    "谢谢你world！"
+   ]
+  },
+  {
+   "text": "他说：“你好……我很好。。。”然后走了~~~",
+   "sentences": [
+    "他说：“你好……我很好。。。”然后走了~~~"
+   ]
+  },
+  {
+   "text": "表情(＾▽＾)真开心o(*￣▽￣*)ブ哈哈",
+   "sentences": [
+    "表情(＾▽＾)真开心o(*￣▽￣*)ブ哈哈"
+   ]
+  },
+  {
+   "text": "【重要】《三体》是刘慈欣的作品｛科幻｝",
+   "sentences": [
+    "【重要】《三体》是刘慈欣的作品｛科幻｝"
+   ]
+  },
+  {
+   "text": "〇一二三〇 and 々 marks",
+   "sentences": [
+    "〇一二三〇 and 々 marks"
+   ]
+  },
+  {
+   "text": "Mixed 中文 and English 混合 text 123 测试。",
+   "sentences": [
+    "Mixed 中文 and English 混合 text 123 测试。"
+   ]
+  },
+  {
+   "text": "就是 [rep] 就是 我 [hic] 我 [elong] 好",
+   "sentences": [
+    "就是 [rep] 就是 我 [hic] 我 [elong] 好"
+   ]
+  },
+  {
+   "text": "电话号码是13800138000，邮箱是test@example.com。",
+   "sentences": [
+    "电话号码是13800138000，邮箱是test@example.com。"
+   ]
+  },
+  {
+   "text": "第1名和第2名，1/2的人，50%的概率，-5度。",
+   "sentences": [
+    "第1名和第2名，1/2的人，50%的概率，-5度。"
+   ]
+  },
+  {
+   "text": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。床前明月光，疑是地上霜。举头望明月，低头思故乡。白日依山尽，黄河入海流。欲穷千里目，更上一层楼。",
+   "sentences": [
+    "春眠不觉晓，处处闻啼鸟。",
+    "夜来风雨声，花落知多少。",
+    "床前明月光，疑是地上霜。",
+    "举头望明月，低头思故乡。",
+    "白日依山尽，黄河入海流。",
+    "欲穷千里目，更上一层楼。"
+   ]
+  },
+  {
+   "text": "这是一个非常非常长的句子没有任何标点符号一直写下去直到超过三十个字符为止看看会怎么切分这段文本内容呢真的很长很长很长很长",
+   "sentences": [
+    "这是一个非常非常长的句子没有任何标点符号一直写下去直到超过三十个字符为止看看会怎么切分这段文本内容呢真的很长很长很长很长"
+   ]
+  },
+  {
+   "text": "第一句话。第二句话！第三句话？第四句话；第五句话：结束",
+   "sentences": [
+    "第一句话。",
+    "第二句话！",
+    "第三句话？",
+    "第四句话；第五句话：结束"
+   ]
+  }
+ ],
+ "generator": "tools/reference-data/fireredtts_text_reference.py"
+}
