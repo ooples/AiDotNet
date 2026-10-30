@@ -9893,18 +9893,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "OmnilangualASR" && model.TypeParameterCount == 1)
             {
-                // The production defaults remain the paper-scale 24-layer,
-                // 1024-wide multilingual encoder with a 10k CTC vocabulary.
-                // Generated invariants exercise the same configurable
-                // feature-projection/transformer/CTC path at runner-safe scale.
+                // The production defaults remain the paper's 300M wav2vec 2.0 encoder (24 layers, 1024 wide)
+                // with its 9812-token CTC layer. Generated invariants exercise the same feature encoder ->
+                // Transformer -> CTC network at runner-safe width and depth, with the regularizers off.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
                     "new AiDotNet.SpeechRecognition.Multilingual.OmnilangualASROptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 64, NumEncoderLayers = 2, " +
+                    "NumAttentionHeads = 4, FeedForwardDim = 128, VocabSize = 64, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0, ActivationDropout = 0.0, FeatureProjectionDropout = 0.0, " +
+                    "FinalDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0, Language = \"en\" })";
             }
             else if (model.ClassName == "Phi4Audio" && model.TypeParameterCount == 1)
             {
