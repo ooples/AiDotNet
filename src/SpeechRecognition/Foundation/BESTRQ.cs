@@ -128,7 +128,7 @@ public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // the pre-training softmax and the fine-tuning projection + CTC layer (Chiu et al. 2022). It used to be a generic
         // Transformer template with no quantizer at all (#2321).
         var layers = new List<LayerBase<T>>();
-        _network = new BestRqNetwork<T>(Engine, layers, _options, Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42));
+        _network = new BestRqNetwork<T>(Engine, layers, _options.ToConfiguration(), Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42));
         _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         Layers.AddRange(layers);
     }
