@@ -7,16 +7,18 @@ namespace AiDotNet.Safety.Watermarking;
 
 /// <summary>
 /// Keyed spread-spectrum image watermarker that hides a pseudo-random +/-1 sequence in the image's mid- and
-/// high-frequency DCT coefficients and detects it by correlation.
+/// high-frequency block DCT coefficients and detects it by correlation.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Follows the spread-spectrum scheme of Cox, Kilian, Leighton and Shamoon (1997): a key-derived sequence is spread
-/// over many full-frame DCT coefficients, so each changes imperceptibly. This implementation is the blind (non-informed)
-/// variant: the watermark is added (c' = c + a * x) rather than multiplied, so detection needs only the key and
-/// not the original image. The coefficients used are those at normalized frequency radius 0.1-0.8, excluding the
-/// first row and column, which carry the energy of image borders and straight gradients. Images larger than
-/// <see cref="ImageWatermarkerBase{T}.MaxTileSize"/> pixels per side are marked tile by tile.
+/// Builds on the spread-spectrum idea of Cox, Kilian, Leighton and Shamoon (1997), spreading a key-derived sequence
+/// over many DCT coefficients so each changes imperceptibly, but it is not their scheme. Cox et al. take a full-frame
+/// DCT, embed multiplicatively (c' = c * (1 + a * x)) in the perceptually most significant, mostly low-frequency
+/// coefficients, and detect by comparing against the original image. This class is a blind additive variant: the
+/// image is cut into independent tiles of at most <see cref="ImageWatermarkerBase{T}.MaxTileSize"/> pixels per side,
+/// each tile gets its own DCT and its own key-derived sequence, the sequence is added (c' = c + a * x), and detection
+/// needs only the key, not the original. The coefficients used in each tile are those at normalized frequency radius
+/// 0.1-0.8, excluding the first row and column, which carry the energy of tile borders and straight gradients.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> the image is rewritten as a sum of wave patterns (the DCT). A secret, random-looking
@@ -26,8 +28,8 @@ namespace AiDotNet.Safety.Watermarking;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.AnomalyDetection)]
-[ModelTask(ModelTask.Classification)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Secure Spread Spectrum Watermarking for Multimedia",
