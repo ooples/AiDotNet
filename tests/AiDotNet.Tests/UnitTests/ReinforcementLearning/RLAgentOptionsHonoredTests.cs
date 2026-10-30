@@ -10,6 +10,7 @@ using AiDotNet.ReinforcementLearning.Agents.A2C;
 using AiDotNet.ReinforcementLearning.Agents.A3C;
 using AiDotNet.ReinforcementLearning.Agents.CQL;
 using AiDotNet.ReinforcementLearning.Agents.Dreamer;
+using AiDotNet.ReinforcementLearning.Agents.MADDPG;
 using AiDotNet.ReinforcementLearning.Agents.MuZero;
 using AiDotNet.ReinforcementLearning.Agents.Rainbow;
 using AiDotNet.ReinforcementLearning.Agents.SAC;
@@ -647,6 +648,20 @@ public class RLAgentOptionsHonoredTests
             OptimizerFactory = factory.Create,
         });
         AssertOneOptimizerPerNetwork("WorldModels", factory, agent.GetNetworks());
+    }
+
+    [Fact]
+    public void MADDPG_GivesEveryNetworkItsOwnOptimizer()
+    {
+        var factory = new CountingFactory();
+        var agent = new MADDPGAgent<double>(new MADDPGOptions<double>
+        {
+            NumAgents = 2,
+            StateSize = StateSize,
+            ActionSize = 2,
+            OptimizerFactory = factory.Create,
+        });
+        AssertOneOptimizerPerNetwork("MADDPG", factory, agent.GetNetworks());
     }
 
     [Fact]

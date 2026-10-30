@@ -81,8 +81,6 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
     private MADDPGOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
-
     // Networks for each agent
     private List<INeuralNetwork<T>> _actorNetworks;
     [Buffer]
@@ -106,22 +104,16 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public MADDPGAgent() : this(new MADDPGOptions<T>()) { }
 
-    public MADDPGAgent(MADDPGOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    /// <summary>Initializes a new instance with the given options.</summary>
+    /// <param name="options">The agent's configuration. Its <see cref="MADDPGOptions{T}.OptimizerFactory"/>, when set,
+    /// supplies every actor's and critic's optimizer.</param>
+    public MADDPGAgent(MADDPGOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
         _options.Validate();
-        // Issue #3 fix: Use configured actor learning rate for default optimizer
-        _optimizer = optimizer ?? options.Optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-            {
-                InitialLearningRate = NumOps.ToDouble(_options.ActorLearningRate),
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8
-            }));
         _stepCount = 0;
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _perAgentRewards = new Dictionary<int, List<T>>();
@@ -185,7 +177,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers);
 
         return new NeuralNetwork<T>(architecture,
-            optimizer: CreateNetworkOptimizer(_options.ActorLearningRate),
+            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.ActorLearningRate),
             lossFunction: _options.LossFunction);
     }
 
@@ -218,7 +210,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers);
 
         return new NeuralNetwork<T>(architecture,
-            optimizer: CreateNetworkOptimizer(_options.CriticLearningRate),
+            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.CriticLearningRate),
             lossFunction: _options.LossFunction);
     }
 
