@@ -187,6 +187,9 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
         }
     }
 
+    /// <summary>The value table's estimate for a state, or zero for a state the agent has not seen.</summary>
+    internal T StateValue(Vector<T> state) => _valueTable.TryGetValue(GetStateKey(state), out var value) ? value : NumOps.Zero;
+
     private bool PolicyImprovement()
     {
         bool policyStable = true;

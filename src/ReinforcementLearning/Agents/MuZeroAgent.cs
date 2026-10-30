@@ -84,6 +84,15 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     // starting there drawn with probability p^PriorityAlpha / sum p^PriorityAlpha. A new transition gets the
     // largest priority seen so far, so it is replayed at least once before its own error is known.
     private double[] _priorities = Array.Empty<double>();
+
+    // The policy target of every buffer slot: the root visit distribution of the search that chose the stored
+    // action (Schrittwieser et al. 2020, Appendix G: "the policy target is the MCTS visit distribution").
+    private double[]?[] _policyTargets = Array.Empty<double[]?>();
+
+    // The observation and visit distribution of the most recent training-time search, matched against the next
+    // stored transition.
+    private Vector<T>? _lastSearchObservation;
+    private double[]? _lastSearchVisits;
     private double _maxPriority = 1.0;
 
     // #1756: Adam optimizer moment state for the K-step unrolled joint training. The representation,
@@ -116,6 +125,11 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         _options = options;
         Options = _options;
         _updateCount = 0;
+        if (double.IsNaN(_options.VisitTemperature) || _options.VisitTemperature < 0.0 || double.IsInfinity(_options.VisitTemperature))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), _options.VisitTemperature,
+                "VisitTemperature must be a finite, non-negative number.");
+        }
 
         // Initialize networks directly in constructor
         // Representation function: observation -> hidden state
@@ -208,15 +222,19 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             return oneHot;
         }
 
-        // Run MCTS to select action
-        int selectedAction = RunMCTS(hiddenState);
+        // Run MCTS; act by sampling the root's visit distribution at VisitTemperature.
+        var visits = RunMCTS(hiddenState);
+        _lastSearchObservation = observation.Clone();
+        _lastSearchVisits = VisitDistribution(visits, 1.0);
+        int selectedAction = SampleAction(VisitDistribution(visits, _options.VisitTemperature));
 
         var result = new Vector<T>(_options.ActionSize);
         result[selectedAction] = NumOps.One;
         return result;
     }
 
-    private int RunMCTS(Vector<T> rootHiddenState)
+    /// <summary>Runs the search from a root and returns the root's visit count per action.</summary>
+    private int[] RunMCTS(Vector<T> rootHiddenState)
     {
         var root = new MCTSNode<T> { HiddenState = rootHiddenState, Value = NumOps.Zero };
 
@@ -237,46 +255,89 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             SimulateFromNode(root);
         }
 
-        // Select action with highest visit count
-        int bestAction = 0;
-        int maxVisits = 0;
-
-        foreach (var kvp in root.VisitCounts)
-        {
-            if (kvp.Value > maxVisits)
-            {
-                maxVisits = kvp.Value;
-                bestAction = kvp.Key;
-            }
-        }
-
-        return bestAction;
+        var counts = new int[_options.ActionSize];
+        foreach (var kvp in root.VisitCounts) counts[kvp.Key] = kvp.Value;
+        return counts;
     }
 
     /// <summary>
-    /// The prediction head's policy as a distribution PUCT can use: negative outputs clipped to zero and the rest
-    /// renormalized to sum to one, or uniform when no output is positive and finite.
+    /// p(a) = N(a)^(1/T) / sum_b N(b)^(1/T) over root visit counts; T = 0 puts all mass on the most visited action
+    /// (the lowest index on ties), and a search with no visits gives the uniform distribution.
     /// </summary>
-    /// <remarks>
-    /// The head is linear and regresses toward the one-hot action taken, so its raw outputs estimate probabilities
-    /// but can be negative and need not sum to one.
-    /// </remarks>
-    internal double[] PolicyPriors(Vector<T> policy)
+    internal static double[] VisitDistribution(int[] visits, double temperature)
+    {
+        int actions = visits.Length;
+        var p = new double[actions];
+        int total = visits.Sum();
+        if (total == 0)
+        {
+            for (int a = 0; a < actions; a++) p[a] = 1.0 / actions;
+            return p;
+        }
+
+        if (temperature <= 0.0)
+        {
+            int best = 0;
+            for (int a = 1; a < actions; a++) if (visits[a] > visits[best]) best = a;
+            p[best] = 1.0;
+            return p;
+        }
+
+        // Scale by the largest count before the power so 1/T up to large values cannot overflow.
+        double max = visits.Max();
+        double sum = 0.0;
+        for (int a = 0; a < actions; a++)
+        {
+            p[a] = visits[a] == 0 ? 0.0 : Math.Pow(visits[a] / max, 1.0 / temperature);
+            sum += p[a];
+        }
+        for (int a = 0; a < actions; a++) p[a] /= sum;
+        return p;
+    }
+
+    private int SampleAction(double[] distribution)
+    {
+        double r = Random.NextDouble();
+        double cumulative = 0.0;
+        for (int a = 0; a < distribution.Length; a++)
+        {
+            cumulative += distribution[a];
+            if (r < cumulative) return a;
+        }
+        // Rounding can leave the cumulative sum just under 1: take the last action with mass.
+        for (int a = distribution.Length - 1; a > 0; a--) if (distribution[a] > 0.0) return a;
+        return 0;
+    }
+
+    /// <summary>
+    /// The PUCT priors p = softmax(logits) of the prediction head's policy logits (Schrittwieser et al. 2020,
+    /// Appendix B). Non-finite logits get no mass; if none is finite the priors are uniform.
+    /// </summary>
+    internal double[] PolicyPriors(Vector<T> logits)
     {
         int actions = _options.ActionSize;
         var priors = new double[actions];
+        double max = double.NegativeInfinity;
+        for (int a = 0; a < actions; a++)
+        {
+            double z = NumOps.ToDouble(logits[a]);
+            if (!double.IsNaN(z) && !double.IsInfinity(z) && z > max) max = z;
+        }
+
+        if (double.IsNegativeInfinity(max))
+        {
+            for (int a = 0; a < actions; a++) priors[a] = 1.0 / actions;
+            return priors;
+        }
+
         double total = 0.0;
         for (int a = 0; a < actions; a++)
         {
-            double p = NumOps.ToDouble(policy[a]);
-            priors[a] = p > 0.0 && !double.IsInfinity(p) ? p : 0.0;
+            double z = NumOps.ToDouble(logits[a]);
+            priors[a] = double.IsNaN(z) || double.IsInfinity(z) ? 0.0 : Math.Exp(z - max);
             total += priors[a];
         }
-
-        for (int a = 0; a < actions; a++)
-        {
-            priors[a] = total > 0.0 ? priors[a] / total : 1.0 / actions;
-        }
+        for (int a = 0; a < actions; a++) priors[a] /= total;
         return priors;
     }
 
@@ -535,7 +596,9 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             throw new ArgumentException($"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
 
         EnsurePriorityStorage();
-        _priorities[_replayBuffer.NextWriteSlot] = _maxPriority;
+        int slot = _replayBuffer.NextWriteSlot;
+        _priorities[slot] = _maxPriority;
+        _policyTargets[slot] = PolicyTargetFor(observation, action);
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
     }
 
@@ -545,10 +608,52 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     private void EnsurePriorityStorage()
     {
+        if (_policyTargets.Length != _replayBuffer.Capacity) _policyTargets = new double[]?[_replayBuffer.Capacity];
         if (_priorities.Length == _replayBuffer.Capacity) return;
         _priorities = new double[_replayBuffer.Capacity];
         for (int i = 0; i < _replayBuffer.Count; i++) _priorities[i] = _maxPriority;
     }
+
+    /// <summary>
+    /// The policy target of a transition: the visit distribution of the search that chose it when the stored
+    /// observation is the one last searched, otherwise (a transition the agent did not choose, such as a
+    /// demonstration) the one-hot action itself.
+    /// </summary>
+    private double[] PolicyTargetFor(Vector<T> observation, Vector<T> action)
+    {
+        if (_lastSearchObservation is { } searched && _lastSearchVisits is { } visits && SameVector(searched, observation))
+        {
+            _lastSearchObservation = null;
+            _lastSearchVisits = null;
+            return visits;
+        }
+
+        return OneHotTarget(action);
+    }
+
+    private double[] OneHotTarget(Vector<T> action)
+    {
+        var oneHot = new double[_options.ActionSize];
+        oneHot[GetDiscreteActionIndex(action)] = 1.0;
+        return oneHot;
+    }
+
+    private static bool SameVector(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (!NumOps.Equals(a[i], b[i])) return false;
+        return true;
+    }
+
+    private int GetDiscreteActionIndex(Vector<T> action)
+    {
+        int best = 0;
+        for (int i = 1; i < action.Length; i++) if (NumOps.GreaterThan(action[i], action[best])) best = i;
+        return best;
+    }
+
+    /// <summary>The stored policy target of every transition, in buffer-slot order.</summary>
+    internal IReadOnlyList<double[]?> ReplayPolicyTargets => _policyTargets.Take(_replayBuffer.Count).ToList();
 
     /// <summary>The replay priority of every stored transition, in buffer-slot order.</summary>
     internal IReadOnlyList<double> ReplayPriorities => _priorities.Take(_replayBuffer.Count).ToList();
@@ -649,7 +754,8 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         double maxWeight = importanceWeights.Max();
         for (int s = 0; s < importanceWeights.Count; s++) importanceWeights[s] /= maxWeight;
 
-        int perStep = actionDim + 3;
+        // Per step: action (dynamics input), policy target, value target, reward target, step mask.
+        int perStep = 2 * actionDim + 3;
         int perSequence = stateDim + unroll * perStep;
         var data = new Vector<T>(sequences.Count * perSequence + 1);
         int realElements = 0;
@@ -665,12 +771,16 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 int at = offset + stateDim + k * perStep;
                 var action = seq[k].Action;
                 for (int i = 0; i < actionDim; i++) data[at + i] = i < action.Length ? action[i] : NumOps.Zero;
-                data[at + actionDim] = NStepValueTarget(seq, k, nStep, gamma, bootValueCache);
-                data[at + actionDim + 1] = seq[k].Reward;
+                var policyTarget = _policyTargets[(sampledSlots[s] + k) % _replayBuffer.Capacity] ?? OneHotTarget(action);
+                for (int i = 0; i < actionDim; i++) data[at + actionDim + i] = NumOps.FromDouble(policyTarget[i]);
+                int scalars = at + 2 * actionDim;
+                data[scalars] = NStepValueTarget(seq, k, nStep, gamma, bootValueCache);
+                data[scalars + 1] = seq[k].Reward;
                 // The step mask carries the sequence's importance weight 1/(N P(i)), normalised by the batch
-                // maximum, which scales each of its squared residuals as the paper scales that sample's loss.
-                data[at + actionDim + 2] = NumOps.FromDouble(importanceWeights[s]);
-                realElements += 1 + actionDim + 1;
+                // maximum, which scales each of its loss terms as the paper scales that sample's loss.
+                data[scalars + 2] = NumOps.FromDouble(importanceWeights[s]);
+                // Three loss terms per step: policy cross-entropy, value and reward squared errors.
+                realElements += 3;
             }
         }
         data[data.Length - 1] = NumOps.FromDouble(1.0 / realElements);
@@ -683,14 +793,15 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             int at = s * perSequence + stateDim;
             var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(sequences[s][0].State)).ToVector();
             var predicted = ExtractValue(_predictionNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector());
-            newPriorities[s] = Math.Abs(NumOps.ToDouble(predicted) - NumOps.ToDouble(data[at + actionDim])) + PriorityFloor;
+            newPriorities[s] = Math.Abs(NumOps.ToDouble(predicted) - NumOps.ToDouble(data[at + 2 * actionDim])) + PriorityFloor;
         }
         var packed = Tensor<T>.FromVector(data);
         int sequenceCount = sequences.Count;
 
         // h_0 = h(o_0); for k: (p_k, v_k) = f(h_k), (h_{k+1}, r_k) = g(h_k, a_k). The dynamics network is applied K
-        // times, so gradients flow through the recurrence. The loss is the mean squared residual over the real
-        // steps (equivalent to summing the per-head value/reward/policy MSEs, unroll-length-normalized).
+        // times, so gradients flow through the recurrence. Per step the loss is the paper's l_p + l_v + l_r
+        // (Appendix G): the cross-entropy of softmax(policy logits) against the stored visit distribution, plus the
+        // value and reward squared errors, averaged over the real steps' terms.
         Tensor<T> JointObjective(Tensor<T> step)
         {
             Tensor<T>? total = null;
@@ -702,21 +813,24 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
                 {
                     int at = offset + stateDim + k * perStep;
                     var action = Engine.TensorSlice(step, new[] { at }, new[] { actionDim });
-                    var mask = Engine.TensorSlice(step, new[] { at + actionDim + 2 }, new[] { 1 });
+                    var policyTarget = Engine.TensorSlice(step, new[] { at + actionDim }, new[] { actionDim });
+                    int scalars = at + 2 * actionDim;
+                    var mask = Engine.TensorSlice(step, new[] { scalars + 2 }, new[] { 1 });
 
                     var pred = predNet.ForwardForTraining(h);
-                    var policyResidual = Engine.TensorSubtract(Engine.TensorSlice(pred, new[] { 0 }, new[] { actionDim }), action);
+                    var logProbs = Engine.TensorLogSoftmax(Engine.TensorSlice(pred, new[] { 0 }, new[] { actionDim }), 0);
+                    var policyCrossEntropy = Engine.TensorNegate(Engine.ReduceSum(Engine.TensorMultiply(policyTarget, logProbs), null));
                     var valueResidual = Engine.TensorSubtract(
                         Engine.TensorSlice(pred, new[] { actionDim }, new[] { 1 }),
-                        Engine.TensorSlice(step, new[] { at + actionDim }, new[] { 1 }));
+                        Engine.TensorSlice(step, new[] { scalars }, new[] { 1 }));
 
                     var dynOut = dynNet.ForwardForTraining(Engine.TensorConcatenate(new[] { h, action }, 0));
                     var rewardResidual = Engine.TensorSubtract(
                         Engine.TensorSlice(dynOut, new[] { latent }, new[] { 1 }),
-                        Engine.TensorSlice(step, new[] { at + actionDim + 1 }, new[] { 1 }));
+                        Engine.TensorSlice(step, new[] { scalars + 1 }, new[] { 1 }));
 
                     var squared = Engine.TensorAdd(
-                        Engine.ReduceSum(Engine.TensorMultiply(policyResidual, policyResidual), null),
+                        policyCrossEntropy,
                         Engine.TensorAdd(
                             Engine.ReduceSum(Engine.TensorMultiply(valueResidual, valueResidual), null),
                             Engine.ReduceSum(Engine.TensorMultiply(rewardResidual, rewardResidual), null)));
