@@ -2,7 +2,7 @@ OptionsType	PropertyDocumented	SourceFile	Occurrences	Resolution	Detail
 ACGANOptions	LatentSize	src/NeuralNetworks/ACGAN.cs	1	architecture	input width of the generator architecture; GanOptions.LatentSize is not read by this model
 ACGANOptions	NumClasses	src/NeuralNetworks/ACGAN.cs	1	constructor	numClasses
 AutoencoderOptions	InputSize	src/NeuralNetworks/Autoencoder.cs	1	architecture	NeuralNetworkArchitecture input shape
-AutoencoderOptions	LatentSize	src/NeuralNetworks/Autoencoder.cs	1	open	
+AutoencoderOptions	LatentSize	src/NeuralNetworks/Autoencoder.cs	1	implemented	AutoencoderOptions.LatentSize (bottleneck width; null derives max(input / 4, 4))
 BGEOptions	MaxSequenceLength	src/NeuralNetworks/BGE.cs	1	exists	
 BGEOptions	ModelSize	src/NeuralNetworks/BGE.cs	1	not-applicable	BGE sizes (small/base/large) differ only in EmbeddingDimension, NumLayers and NumHeads, which are options
 Blip2Options	ImageSize	src/NeuralNetworks/Blip2NeuralNetwork.cs	1	exists	
@@ -15,7 +15,7 @@ CapsuleNetworkOptions	NumCapsules	src/NeuralNetworks/CapsuleNetwork.cs	1	archite
 ClipOptions	EmbeddingDim	src/NeuralNetworks/ClipNeuralNetwork.cs	1	renamed	EmbeddingDimension
 ClipOptions	ImageSize	src/NeuralNetworks/ClipNeuralNetwork.cs	1	exists	
 ColBERTOptions	EmbeddingDim	src/NeuralNetworks/ColBERT.cs	1	renamed	EmbeddingDimension
-ColBERTOptions	MaxQueryLength	src/NeuralNetworks/ColBERT.cs	1	open	
+ColBERTOptions	MaxQueryLength	src/NeuralNetworks/ColBERT.cs	1	implemented	ColBERTOptions.MaxQueryLength = 32 with [MASK] query augmentation (Khattab & Zaharia 2020)
 ConditionalGANOptions	LatentSize	src/NeuralNetworks/ConditionalGAN.cs	1	architecture	input width of the generator architecture; GanOptions.LatentSize is not read by this model
 ConditionalGANOptions	NumClasses	src/NeuralNetworks/ConditionalGAN.cs	1	constructor	numConditionClasses
 ConvolutionalNeuralNetworkOptions	InputChannels	src/NeuralNetworks/ConvolutionalNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture.InputDepth
@@ -25,9 +25,9 @@ CycleGANOptions	ImageSize	src/NeuralNetworks/CycleGAN.cs	1	architecture	generato
 CycleGANOptions	NumResidualBlocks	src/NeuralNetworks/CycleGAN.cs	1	architecture	layers of the supplied generator architectures
 DCGANOptions	ImageSize	src/NeuralNetworks/DCGAN.cs	1	constructor	imageHeight, imageWidth
 DCGANOptions	LatentSize	src/NeuralNetworks/DCGAN.cs	1	exists	
-DeepBeliefNetworkOptions	HiddenLayers	src/NeuralNetworks/DeepBeliefNetwork.cs	1	open	
+DeepBeliefNetworkOptions	HiddenLayers	src/NeuralNetworks/DeepBeliefNetwork.cs	1	implemented	DeepBeliefNetworkOptions.HiddenLayers = 500-500-2000 (Hinton, Osindero & Teh 2006)
 DeepBeliefNetworkOptions	InputSize	src/NeuralNetworks/DeepBeliefNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-DeepBoltzmannMachineOptions	HiddenLayers	src/NeuralNetworks/DeepBoltzmannMachine.cs	1	open	
+DeepBoltzmannMachineOptions	HiddenLayers	src/NeuralNetworks/DeepBoltzmannMachine.cs	1	implemented	DeepBoltzmannMachineOptions.HiddenLayers (null derives two layers of min(500, 4 x input))
 DeepBoltzmannMachineOptions	VisibleSize	src/NeuralNetworks/DeepBoltzmannMachine.cs	1	architecture	NeuralNetworkArchitecture input shape
 DeepQNetworkOptions	ActionSize	src/NeuralNetworks/DeepQNetwork.cs	1	architecture	NeuralNetworkArchitecture.OutputSize
 DeepQNetworkOptions	StateSize	src/NeuralNetworks/DeepQNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
@@ -47,9 +47,9 @@ FalconMambaOptions	ModelDim	src/NeuralNetworks/FalconMambaLanguageModel.cs	1	ren
 FalconMambaOptions	NumLayers	src/NeuralNetworks/FalconMambaLanguageModel.cs	1	exists	
 FalconMambaOptions	VocabSize	src/NeuralNetworks/FalconMambaLanguageModel.cs	1	exists	
 FastTextOptions	EmbeddingDim	src/NeuralNetworks/FastText.cs	1	renamed	EmbeddingDimension
-FastTextOptions	MaxNgramLength	src/NeuralNetworks/FastText.cs	1	open	
-FastTextOptions	MinNgramLength	src/NeuralNetworks/FastText.cs	1	open	
-FeedForwardNeuralNetworkOptions	HiddenLayers	src/NeuralNetworks/FeedForwardNeuralNetwork.cs	1	open	
+FastTextOptions	MaxNgramLength	src/NeuralNetworks/FastText.cs	1	implemented	FastTextOptions.MaxNgramLength = 6 (Bojanowski et al. 2017); 0 turns subwords off
+FastTextOptions	MinNgramLength	src/NeuralNetworks/FastText.cs	1	implemented	FastTextOptions.MinNgramLength = 3 (Bojanowski et al. 2017)
+FeedForwardNeuralNetworkOptions	HiddenLayers	src/NeuralNetworks/FeedForwardNeuralNetwork.cs	1	implemented	FeedForwardNeuralNetworkOptions.HiddenLayers = 64-64
 FeedForwardNeuralNetworkOptions	InputSize	src/NeuralNetworks/FeedForwardNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 FinchOptions	ModelDim	src/NeuralNetworks/FinchLanguageModel.cs	1	renamed	ModelDimension
 FinchOptions	NumHeads	src/NeuralNetworks/FinchLanguageModel.cs	1	exists	
@@ -71,7 +71,7 @@ GloVeOptions	VocabSize	src/NeuralNetworks/GloVe.cs	1	exists
 Gpt4VisionOptions	ImageSize	src/NeuralNetworks/Gpt4VisionNeuralNetwork.cs	1	exists	
 Gpt4VisionOptions	MaxTextLength	src/NeuralNetworks/Gpt4VisionNeuralNetwork.cs	1	renamed	MaxSequenceLength
 GradientBanditOptions	StepSize	src/ReinforcementLearning/Agents/GradientBanditAgent.cs	1	renamed	Alpha
-GraphAttentionNetworkOptions	HiddenSize	src/NeuralNetworks/GraphAttentionNetwork.cs	1	open	
+GraphAttentionNetworkOptions	HiddenSize	src/NeuralNetworks/GraphAttentionNetwork.cs	1	implemented	GraphAttentionNetworkOptions.HiddenSize = 64 (8 heads x 8 features, Velickovic et al. 2018)
 GraphAttentionNetworkOptions	NodeFeatureSize	src/NeuralNetworks/GraphAttentionNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 GraphAttentionNetworkOptions	NumHeads	src/NeuralNetworks/GraphAttentionNetwork.cs	1	exists	
 GraphIsomorphismNetworkOptions	HiddenSize	src/NeuralNetworks/GraphIsomorphismNetwork.cs	1	renamed	MlpHiddenDim
@@ -87,13 +87,13 @@ HopeNetworkOptions	InputSize	src/NeuralNetworks/HopeNetwork.cs	1	architecture	Ne
 HopfieldNetworkOptions	MaxPatterns	src/NeuralNetworks/HopfieldNetwork.cs	1	not-applicable	capacity follows from the pattern size (about 0.138 N, Hopfield 1982); it is not a setting
 HopfieldNetworkOptions	PatternSize	src/NeuralNetworks/HopfieldNetwork.cs	1	constructor	size
 HyperbolicNeuralNetworkOptions	Curvature	src/NeuralNetworks/HyperbolicNeuralNetwork.cs	1	exists	
-HyperbolicNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/HyperbolicNeuralNetwork.cs	1	open	
+HyperbolicNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/HyperbolicNeuralNetwork.cs	1	architecture	hidden widths of the architecture layers
 HyperbolicNeuralNetworkOptions	InputSize	src/NeuralNetworks/HyperbolicNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 ImageBindOptions	EmbeddingDim	src/NeuralNetworks/ImageBindNeuralNetwork.cs	1	renamed	EmbeddingDimension
 ImageBindOptions	ImageSize	src/NeuralNetworks/ImageBindNeuralNetwork.cs	1	exists	
 InfoGANOptions	LatentSize	src/NeuralNetworks/InfoGAN.cs	1	architecture	input width of the generator architecture; GanOptions.LatentSize is not read by this model
-InfoGANOptions	NumCategoricalCodes	src/NeuralNetworks/InfoGAN.cs	1	open	
-InfoGANOptions	NumContinuousCodes	src/NeuralNetworks/InfoGAN.cs	1	open	
+InfoGANOptions	NumCategoricalCodes	src/NeuralNetworks/InfoGAN.cs	1	implemented	InfoGANOptions.NumCategoricalCodes = 1 of CategoricalCodeDimension = 10 (Chen et al. 2016)
+InfoGANOptions	NumContinuousCodes	src/NeuralNetworks/InfoGAN.cs	1	implemented	InfoGANOptions.NumContinuousCodes = 2 (Chen et al. 2016)
 InstructorEmbeddingOptions	EmbeddingDim	src/NeuralNetworks/InstructorEmbedding.cs	1	renamed	EmbeddingDimension
 InstructorEmbeddingOptions	MaxSequenceLength	src/NeuralNetworks/InstructorEmbedding.cs	1	exists	
 JambaOptions	ModelDim	src/NeuralNetworks/JambaLanguageModel.cs	1	renamed	ModelDimension
@@ -123,32 +123,32 @@ MobileNetV3Options	Variant	src/NeuralNetworks/MobileNetV3Network.cs	1	constructo
 NEATOptions	InputSize	src/NeuralNetworks/NEAT.cs	1	architecture	NeuralNetworkArchitecture input shape
 NEATOptions	OutputSize	src/NeuralNetworks/NEAT.cs	1	architecture	NeuralNetworkArchitecture.OutputSize
 NEATOptions	PopulationSize	src/NeuralNetworks/NEAT.cs	1	constructor	populationSize
-NeuralNetworkOptions	HiddenLayers	src/NeuralNetworks/NeuralNetwork.cs	1	open	
+NeuralNetworkOptions	HiddenLayers	src/NeuralNetworks/NeuralNetwork.cs	1	implemented	NeuralNetworkDefaultOptions.HiddenLayers (null sizes by NetworkComplexity)
 NeuralNetworkOptions	InputSize	src/NeuralNetworks/NeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 NeuralTuringMachineOptions	InputSize	src/NeuralNetworks/NeuralTuringMachine.cs	1	architecture	NeuralNetworkArchitecture input shape
 NeuralTuringMachineOptions	MemorySize	src/NeuralNetworks/NeuralTuringMachine.cs	1	constructor	memorySize
 NeuralTuringMachineOptions	MemoryWordSize	src/NeuralNetworks/NeuralTuringMachine.cs	1	constructor	memoryVectorSize
-OctonionNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/OctonionNeuralNetwork.cs	1	open	
+OctonionNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/OctonionNeuralNetwork.cs	1	architecture	hidden widths of the architecture layers
 OctonionNeuralNetworkOptions	InputSize	src/NeuralNetworks/OctonionNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 Pix2PixOptions	ImageSize	src/NeuralNetworks/Pix2Pix.cs	1	architecture	generator and discriminator architectures
 Pix2PixOptions	InputChannels	src/NeuralNetworks/Pix2Pix.cs	1	architecture	generator architecture input depth
 Pix2PixOptions	OutputChannels	src/NeuralNetworks/Pix2Pix.cs	1	architecture	generator architecture output depth
-QuantumNeuralNetworkOptions	NumLayers	src/NeuralNetworks/QuantumNeuralNetwork.cs	1	open	
+QuantumNeuralNetworkOptions	NumLayers	src/NeuralNetworks/QuantumNeuralNetwork.cs	1	implemented	QuantumNeuralNetworkOptions.NumLayers = 2 quantum layers
 QuantumNeuralNetworkOptions	NumQubits	src/NeuralNetworks/QuantumNeuralNetwork.cs	1	constructor	numQubits
 RWKV7Options	ModelDim	src/NeuralNetworks/RWKV7LanguageModel.cs	1	renamed	ModelDimension
 RWKV7Options	NumLayers	src/NeuralNetworks/RWKV7LanguageModel.cs	1	exists	
 RWKV7Options	VocabSize	src/NeuralNetworks/RWKV7LanguageModel.cs	1	exists	
 RadialBasisFunctionNetworkOptions	InputSize	src/NeuralNetworks/RadialBasisFunctionNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-RadialBasisFunctionNetworkOptions	NumCenters	src/NeuralNetworks/RadialBasisFunctionNetwork.cs	1	open	
+RadialBasisFunctionNetworkOptions	NumCenters	src/NeuralNetworks/RadialBasisFunctionNetwork.cs	1	implemented	RadialBasisFunctionNetworkOptions.NumCenters (null derives max(10, (input + output) / 2))
 RecurrentGemmaOptions	ModelDim	src/NeuralNetworks/RecurrentGemmaLanguageModel.cs	1	renamed	ModelDimension
 RecurrentGemmaOptions	NumLayers	src/NeuralNetworks/RecurrentGemmaLanguageModel.cs	1	exists	
 RecurrentGemmaOptions	VocabSize	src/NeuralNetworks/RecurrentGemmaLanguageModel.cs	1	exists	
-RecurrentNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	open	
+RecurrentNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	implemented	RecurrentNeuralNetworkOptions.HiddenSize (null derives max(64, input, output))
 RecurrentNeuralNetworkOptions	InputSize	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-RecurrentNeuralNetworkOptions	NumLayers	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	open	
-ResidualNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	open	
+RecurrentNeuralNetworkOptions	NumLayers	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	implemented	RecurrentNeuralNetworkOptions.NumLayers = 2
+ResidualNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	not-applicable	the default stack has no single width: it doubles per stage from max(64, input) up to 512, as in He et al. 2016
 ResidualNeuralNetworkOptions	InputSize	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-ResidualNeuralNetworkOptions	NumResidualBlocks	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	open	
+ResidualNeuralNetworkOptions	NumResidualBlocks	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	implemented	ResidualNeuralNetworkOptions.NumResidualBlocks = 3
 RestrictedBoltzmannMachineOptions	HiddenSize	src/NeuralNetworks/RestrictedBoltzmannMachine.cs	1	constructor	hiddenSize
 RestrictedBoltzmannMachineOptions	VisibleSize	src/NeuralNetworks/RestrictedBoltzmannMachine.cs	1	constructor	visibleSize
 SARIMAOptions	DifferencingOrder	src/TimeSeries/SARIMAModel.cs	1	renamed	D
@@ -165,12 +165,12 @@ SiameseNeuralNetworkOptions	EmbeddingSize	src/NeuralNetworks/SiameseNeuralNetwor
 SiameseNeuralNetworkOptions	InputSize	src/NeuralNetworks/SiameseNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 SimCSEOptions	EmbeddingDim	src/NeuralNetworks/SimCSE.cs	1	renamed	EmbeddingDimension
 SimCSEOptions	MaxSequenceLength	src/NeuralNetworks/SimCSE.cs	1	exists	
-SparseNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/SparseNeuralNetwork.cs	1	open	
+SparseNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/SparseNeuralNetwork.cs	1	architecture	hidden widths of the architecture layers; with none the stack derives max(32, (input + output) / 2)
 SparseNeuralNetworkOptions	InputSize	src/NeuralNetworks/SparseNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 SparseNeuralNetworkOptions	Sparsity	src/NeuralNetworks/SparseNeuralNetwork.cs	1	exists	
-SpikingNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	open	
+SpikingNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	implemented	SpikingNeuralNetworkOptions.HiddenLayers = 128-64
 SpikingNeuralNetworkOptions	InputSize	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-SpikingNeuralNetworkOptions	TimeSteps	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	renamed	SimulationSteps
+SpikingNeuralNetworkOptions	TimeSteps	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	renamed	SimulationSteps (the predict-time simulation loop); the default surrogate-gradient core unrolls its own 20 steps per forward
 SpiralNetOptions	HiddenSize	src/NeuralNetworks/SpiralNet.cs	1	renamed	ConvChannels
 StateSpaceModelOptions	StateDimension	src/TimeSeries/StateSpaceModel.cs	1	renamed	StateSize
 StyleGANOptions	LatentSize	src/NeuralNetworks/StyleGAN.cs	1	constructor	latentSize; GanOptions.LatentSize is not read by this model
@@ -183,9 +183,9 @@ TabROptions	HiddenSize	src/NeuralNetworks/Tabular/TabRNetwork.cs	1	renamed	Embed
 TransformerEmbeddingOptions	EmbeddingDim	src/NeuralNetworks/TransformerEmbeddingNetwork.cs	1	renamed	EmbeddingDimension
 TransformerEmbeddingOptions	NumHeads	src/NeuralNetworks/TransformerEmbeddingNetwork.cs	1	exists	
 TransformerEmbeddingOptions	NumLayers	src/NeuralNetworks/TransformerEmbeddingNetwork.cs	1	exists	
-TransformerOptions	HiddenSize	src/NeuralNetworks/Transformer.cs	1	open	
-TransformerOptions	NumHeads	src/NeuralNetworks/Transformer.cs	1	open	
-TransformerOptions	NumLayers	src/NeuralNetworks/Transformer.cs	1	open	
+TransformerOptions	HiddenSize	src/NeuralNetworks/Transformer.cs	1	architecture	TransformerArchitecture.ModelDimension
+TransformerOptions	NumHeads	src/NeuralNetworks/Transformer.cs	1	architecture	TransformerArchitecture.NumHeads
+TransformerOptions	NumLayers	src/NeuralNetworks/Transformer.cs	1	architecture	TransformerArchitecture.NumEncoderLayers / NumDecoderLayers
 UNet3DOptions	BaseChannels	src/NeuralNetworks/UNet3D.cs	1	renamed	BaseFilters
 UNet3DOptions	InputChannels	src/NeuralNetworks/UNet3D.cs	1	architecture	NeuralNetworkArchitecture.InputDepth
 UNet3DOptions	OutputChannels	src/NeuralNetworks/UNet3D.cs	1	architecture	NeuralNetworkArchitecture.OutputSize
