@@ -27,6 +27,12 @@ internal sealed record Wav2Vec2Configuration
     public int PositionalConvKernel { get; init; } = 128;
     public int PositionalConvGroups { get; init; } = 16;
 
+    /// <summary>
+    /// 0: wav2vec 2.0's positional embedding, one weight-normed grouped convolution followed by GELU. Above 0:
+    /// data2vec-audio's, this many plain grouped convolutions each followed by a parameter-free layer norm and GELU.
+    /// </summary>
+    public int PositionalConvLayers { get; init; }
+
     /// <summary>Pre-norm encoder layers with a final norm (LARGE-LV60) instead of post-norm layers (BASE).</summary>
     public bool StableLayerNorm { get; init; }
 
@@ -97,7 +103,11 @@ internal sealed class Wav2Vec2Network<T>
         ProjectionNorm = Norm(c.ConvDims[^1]);
         Projection = Linear(c.HiddenSize);
         MaskEmbedding = Own(new BiasFreeLinearLayer<T>(1, c.HiddenSize));
-        PositionalConv = Own(new Wav2Vec2PositionalConvLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups));
+        if (c.PositionalConvLayers > 0)
+            for (int i = 0; i < c.PositionalConvLayers; i++)
+                PositionalConvStack.Add(Own(new GroupedConv1DLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups)));
+        else
+            PositionalConv = Own(new Wav2Vec2PositionalConvLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups));
         EncoderNorm = Norm(c.HiddenSize);
         for (int i = 0; i < c.Layers; i++)
         {
@@ -130,7 +140,10 @@ internal sealed class Wav2Vec2Network<T>
     /// <summary>The learned embedding that replaces masked frames (a [1 → H] map of a constant one).</summary>
     public BiasFreeLinearLayer<T> MaskEmbedding { get; }
 
-    public Wav2Vec2PositionalConvLayer<T> PositionalConv { get; }
+    public Wav2Vec2PositionalConvLayer<T>? PositionalConv { get; }
+
+    // data2vec-audio's positional convolutions (empty for wav2vec 2.0).
+    public List<GroupedConv1DLayer<T>> PositionalConvStack { get; } = new();
     public LayerNormalizationLayer<T> EncoderNorm { get; }
     public List<EncoderLayer> EncoderLayers { get; } = new();
 
@@ -190,7 +203,7 @@ internal sealed class Wav2Vec2Network<T>
         if (applied is not null) hidden = ApplyMask(hidden, applied);
 
         var states = new List<Tensor<T>>();
-        hidden = _engine.TensorAdd(hidden, ActivationHelper.ExactGelu(PositionalConv.Forward(hidden), _engine));
+        hidden = _engine.TensorAdd(hidden, PositionalEmbedding(hidden));
         if (!c.StableLayerNorm) hidden = EncoderNorm.Forward(hidden);
         hidden = Drop(hidden, c.HiddenDropout, training, random);
         states.Add(hidden);
@@ -265,6 +278,27 @@ internal sealed class Wav2Vec2Network<T>
         var context = _engine.Reshape(_engine.BatchMatMul(weights, v), new[] { batch, heads, length, e });
         var merged = _engine.Reshape(_engine.TensorPermute(context, new[] { 0, 2, 1, 3 }), new[] { batch, length, heads * e });
         return Dense(l.Output, merged);
+    }
+
+    private Tensor<T> PositionalEmbedding(Tensor<T> hidden)
+    {
+        if (PositionalConv is not null) return ActivationHelper.ExactGelu(PositionalConv.Forward(hidden), _engine);
+        // Data2VecAudioPositionalConvEmbedding: conv -> layer norm without affine parameters -> GELU, per layer.
+        var x = hidden;
+        foreach (var conv in PositionalConvStack) x = ActivationHelper.ExactGelu(NormalizeLastAxis(conv.Forward(x)), _engine);
+        return x;
+    }
+
+    // (x - mean) / sqrt(var + eps) over the last axis, the population variance, as nn.LayerNorm(elementwise_affine=False).
+    private Tensor<T> NormalizeLastAxis(Tensor<T> x)
+    {
+        int last = x.Rank - 1, width = x.Shape[last];
+        var inverseWidth = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1.0 / width) }));
+        var mean = _engine.TensorMultiply(_engine.ReduceSum(x, new[] { last }, keepDims: true), inverseWidth);
+        var centred = _engine.TensorSubtract(x, mean);
+        var variance = _engine.TensorMultiply(_engine.ReduceSum(_engine.TensorMultiply(centred, centred), new[] { last }, keepDims: true), inverseWidth);
+        var epsilon = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(Configuration.LayerNormEpsilon) }));
+        return _engine.TensorDivide(centred, _engine.TensorSqrt(_engine.TensorAdd(variance, epsilon)));
     }
 
     private Tensor<T> FeedForward(EncoderLayer l, Tensor<T> x, bool training, Random random)
@@ -374,9 +408,16 @@ internal sealed class Wav2Vec2Network<T>
         for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble();
         TorchParameters.Linear(MaskEmbedding, 1, c.HiddenSize, mask);
         int perGroup = c.HiddenSize / c.PositionalConvGroups;
-        // Wav2Vec2PositionalConvEmbedding: N(0, 2·√(1/(k·C_in))) on the weight, then weight_norm's g = ‖v‖ per tap.
-        var direction = Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, 2 * Math.Sqrt(1.0 / ((double)c.PositionalConvKernel * c.HiddenSize)));
-        LoadPositional(direction, null, new double[c.HiddenSize]);
+        if (PositionalConv is not null)
+        {
+            // Wav2Vec2PositionalConvEmbedding: N(0, 2·√(1/(k·C_in))) on the weight, then weight_norm's g = ‖v‖ per tap.
+            var direction = Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, 2 * Math.Sqrt(1.0 / ((double)c.PositionalConvKernel * c.HiddenSize)));
+            LoadPositional(direction, null, new double[c.HiddenSize]);
+        }
+        // Data2VecAudioPositionalConvLayer: Kaiming-normal weight (fan-in (C/G)·K), zero bias.
+        foreach (var conv in PositionalConvStack)
+            LoadGroupedConv(conv, Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, Math.Sqrt(2.0 / (perGroup * c.PositionalConvKernel))),
+                new double[c.HiddenSize]);
         foreach (var l in EncoderLayers)
         {
             Linear(l.Query, c.HiddenSize, c.HiddenSize);
@@ -393,12 +434,21 @@ internal sealed class Wav2Vec2Network<T>
         }
     }
 
+    private void LoadGroupedConv(GroupedConv1DLayer<T> conv, double[] weight, double[] bias)
+    {
+        var (w, b) = conv.ConvParameters;
+        for (int i = 0; i < weight.Length; i++) w[i] = NumOps.FromDouble(weight[i]);
+        for (int i = 0; i < bias.Length; i++) b[i] = NumOps.FromDouble(bias[i]);
+        _engine.InvalidatePersistentTensor(w);
+        _engine.InvalidatePersistentTensor(b);
+    }
+
     // v [C, C/G, K] and g [K] (null: g = ‖v‖ per tap, as weight_norm initializes it) and the bias.
     private void LoadPositional(double[] direction, double[]? magnitude, double[] bias)
     {
         var c = Configuration;
         int perGroup = c.HiddenSize / c.PositionalConvGroups, k = c.PositionalConvKernel;
-        var (v, g, b) = PositionalConv.WeightNormParameters;
+        var (v, g, b) = (PositionalConv ?? throw new InvalidOperationException("This network has no weight-normed positional convolution.")).WeightNormParameters;
         for (int i = 0; i < direction.Length; i++) v[i] = NumOps.FromDouble(direction[i]);
         for (int t = 0; t < k; t++)
         {
@@ -466,9 +516,13 @@ internal sealed class Wav2Vec2Network<T>
         Lin(Projection, "feature_projection.projection", c.ConvDims[^1], h);
         TorchParameters.Linear(MaskEmbedding, 1, h, read("masked_spec_embed", new[] { h }));
         int perGroup = h / c.PositionalConvGroups;
-        LoadPositional(read("encoder.pos_conv_embed.conv.parametrizations.weight.original1", new[] { h, perGroup, c.PositionalConvKernel }),
-            read("encoder.pos_conv_embed.conv.parametrizations.weight.original0", new[] { 1, 1, c.PositionalConvKernel }),
-            read("encoder.pos_conv_embed.conv.bias", new[] { h }));
+        if (PositionalConv is not null)
+            LoadPositional(read("encoder.pos_conv_embed.conv.parametrizations.weight.original1", new[] { h, perGroup, c.PositionalConvKernel }),
+                read("encoder.pos_conv_embed.conv.parametrizations.weight.original0", new[] { 1, 1, c.PositionalConvKernel }),
+                read("encoder.pos_conv_embed.conv.bias", new[] { h }));
+        for (int i = 0; i < PositionalConvStack.Count; i++)
+            LoadGroupedConv(PositionalConvStack[i], read($"encoder.pos_conv_embed.layers.{i}.conv.weight", new[] { h, perGroup, c.PositionalConvKernel }),
+                read($"encoder.pos_conv_embed.layers.{i}.conv.bias", new[] { h }));
         Norm(EncoderNorm, "encoder.layer_norm", h);
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
