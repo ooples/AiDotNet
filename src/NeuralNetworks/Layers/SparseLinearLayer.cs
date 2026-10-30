@@ -279,7 +279,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        SaveForBackward(ref _lastInput, input); // #1668: skip in inference (arena safety)
         bool wasSingleSample = input.Rank == 1;
 
         // Promote a single rank-1 [InputFeatures] sample to [1, InputFeatures] so the whole
@@ -313,11 +313,11 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         if (wasSingleSample)
         {
             var result = Engine.Reshape(activated, new[] { OutputFeatures });
-            _lastOutput = result;
+            SaveForBackward(ref _lastOutput, result);
             return result;
         }
 
-        _lastOutput = activated;
+        SaveForBackward(ref _lastOutput, activated);
         return activated;
     }
 

@@ -168,24 +168,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
-    /// Cached input from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached pre-activation output from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
-    /// Cached output from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Spiral indices for each vertex [numVertices, SpiralLength].
     /// </summary>
     private int[,]? _spiralIndices;
@@ -456,7 +438,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
         }
 
         bool cacheBwd = ShouldCacheForBackward; // #1668: gate all backward caches (arena safety)
-        _lastInput = cacheBwd ? input : null;
 
         bool hasBatch = input.Rank == 3;
         int numVertices = hasBatch ? input.Shape[1] : input.Shape[0];
@@ -481,9 +462,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
             output = ProcessSingle(input, numVertices, cacheBwd);
         }
 
-        _lastPreActivation = cacheBwd ? output : null;
         var activated = ApplyActivation(output);
-        _lastOutput = cacheBwd ? activated : null;
 
         return activated;
     }
@@ -782,9 +761,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastPreActivation = null;
-        _lastOutput = null;
         _gatheredFeatures = null;
         _weightsGradient = null;
         _biasesGradient = null;

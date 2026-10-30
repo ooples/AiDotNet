@@ -159,53 +159,9 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     private readonly LayerBase<T> _innerLayer;
 
     /// <summary>
-    /// The input tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the input tensor from the most recent forward pass, which is needed during the backward
-    /// pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the layer's memory of what sequence it last processed.
-    /// 
-    /// Storing the input is necessary because:
-    /// - During training, the layer needs to remember what sequence it processed
-    /// - This information helps calculate how to improve the inner layer's performance
-    /// - It enables the backward pass to compute gradients correctly
-    /// 
-    /// Think of it as keeping a copy of the work so the layer can analyze what it did right
-    /// or wrong during the learning process.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// The output tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor from the most recent forward pass, which is needed during the backward
-    /// pass to compute gradients with respect to the activation function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the layer's memory of what result it produced last time.
-    /// 
-    /// Storing the output is necessary because:
-    /// - During training, the layer needs to know what results it produced
-    /// - Some activation functions need their original output to calculate how to improve
-    /// - It helps compute the correct gradients during the backward pass
-    /// 
-    /// This cached output helps the layer understand how its processing affected the final result,
-    /// which is crucial for learning.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
@@ -401,8 +357,6 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, [batchSize, 1, input.Shape[1]])
             : input;
 
-        _lastInput = processInput;
-
         var innerOutputShape = _innerLayer.GetOutputShape();
 
         // Concatenated through the engine, NOT written into a rented buffer. SetSlice on a rented
@@ -431,8 +385,7 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
             activated = Engine.Reshape(activated, new[] { batchSize }.Concat(innerOutputShape).ToArray());
         }
 
-        _lastOutput = activated;
-        return _lastOutput;
+        return activated;
     }
 
     private static Tensor<T> SqueezeAxis(Tensor<T> tensor, int axis)
@@ -509,10 +462,6 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     {
         // Reset the inner layer's state
         _innerLayer.ResetState();
-
-        // Clear cached values
-        _lastInput = null;
-        _lastOutput = null;
     }
 
     /// <summary>

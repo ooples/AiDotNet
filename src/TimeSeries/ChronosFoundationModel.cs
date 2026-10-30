@@ -893,7 +893,7 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 // Rank 1, in equals out - a pre-norm transformer block is shape-preserving by construction, and the
 // code says so twice. Both constructors declare the same width on each side
 // (`base(new[] { embeddingDim }, new[] { embeddingDim })`), and Forward ends on
-// `AddResidual(_cachedResidual1, ffnOutput)`: a residual add can only return the shape it was added
+// `AddResidual(residual1, ffnOutput)`: a residual add can only return the shape it was added
 // to, so attention and the 4x FFN expansion both come back to _embeddingDim before the layer exits.
 // The single-tensor ForwardTraced wraps its argument as a one-position sequence and returns that
 // sequence's last element, so the same relation holds on the traced path.
@@ -939,30 +939,14 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Beta;
 
-    // Forward pass cache for backpropagation
-    [Scratch]
-    private List<Tensor<T>>? _cachedInput;
-    [Scratch]
-    private List<Tensor<T>>? _cachedNorm1;
-    [Scratch]
-    private List<Tensor<T>>? _cachedAttentionOutput;
-    [Scratch]
-    private List<Tensor<T>>? _cachedResidual1;
-    [Scratch]
-    private List<Tensor<T>>? _cachedNorm2;
-    [Scratch]
-    private List<Tensor<T>>? _cachedFfnHidden;
-
     public override bool SupportsTraining => true;
 
+    /// <summary>
+    /// Nothing to reset: the forward keeps its intermediates as locals, so no activation outlives
+    /// the call.
+    /// </summary>
     public override void ResetState()
     {
-        _cachedInput = null;
-        _cachedNorm1 = null;
-        _cachedAttentionOutput = null;
-        _cachedResidual1 = null;
-        _cachedNorm2 = null;
-        _cachedFfnHidden = null;
     }
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
@@ -1122,17 +1106,15 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
 
     public List<Tensor<T>> Forward(List<Tensor<T>> input)
     {
-        _cachedInput = input;
-
         // Pre-norm + causal self-attention
-        _cachedNorm1 = LayerNorm(input, _layerNorm1Gamma, _layerNorm1Beta);
-        _cachedAttentionOutput = CausalSelfAttention(_cachedNorm1);
-        _cachedResidual1 = AddResidual(input, _cachedAttentionOutput);
+        var norm1 = LayerNorm(input, _layerNorm1Gamma, _layerNorm1Beta);
+        var attentionOutput = CausalSelfAttention(norm1);
+        var residual1 = AddResidual(input, attentionOutput);
 
         // Pre-norm + FFN
-        _cachedNorm2 = LayerNorm(_cachedResidual1, _layerNorm2Gamma, _layerNorm2Beta);
-        var ffnOutput = FeedForward(_cachedNorm2);
-        return AddResidual(_cachedResidual1, ffnOutput);
+        var norm2 = LayerNorm(residual1, _layerNorm2Gamma, _layerNorm2Beta);
+        var ffnOutput = FeedForward(norm2);
+        return AddResidual(residual1, ffnOutput);
     }
 
     private List<Tensor<T>> CausalSelfAttention(List<Tensor<T>> input)
@@ -1213,7 +1195,6 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
 
     private List<Tensor<T>> FeedForward(List<Tensor<T>> input)
     {
-        _cachedFfnHidden = new List<Tensor<T>>();
         var output = new List<Tensor<T>>();
 
         foreach (var vec in input)
@@ -1221,7 +1202,6 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
             var hidden = MatVecMul(_ffn1, vec);
             hidden = Engine.TensorAdd(hidden, _ffn1Bias);
             hidden = Engine.GELU(hidden);
-            _cachedFfnHidden.Add(hidden);
 
             var result = MatVecMul(_ffn2, hidden);
             result = Engine.TensorAdd(result, _ffn2Bias);

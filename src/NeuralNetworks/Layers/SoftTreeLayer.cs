@@ -107,8 +107,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _leafValuesGrad;
 
     // Caches for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
     private Tensor<T>? _pathProbabilities;
 
     /// <summary>
@@ -123,12 +121,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    [Scratch]
-    private Tensor<T>? _cachedRightProbs;
-    [Scratch]
-    private Tensor<T>? _cachedSplitLogits;
 
     /// <summary>Construction state: the 'initScale' the layer was built with.</summary>
     private readonly double _initScale;
@@ -224,7 +216,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         bool wasRank1 = input.Rank == 1;
         bool wasHigherRank = input.Rank > 2;
         var x = input.Rank == 2 ? input : Engine.Reshape(input, new[] { input.Length / features, features });
-        _lastInput = x;
         int batchSize = x.Shape[0];
 
         // Compute split logits: input @ splitWeights^T + splitBiases
@@ -240,12 +231,8 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         var tempScale = NumOps.FromDouble(1.0 / _temperature);
         splitLogits = Engine.TensorMultiplyScalar(splitLogits, tempScale);
 
-        // Cache split logits for backward
-        _cachedSplitLogits = splitLogits;
-
         // Apply sigmoid to get right-branch probabilities
         var rightProbs = Engine.Sigmoid(splitLogits);
-        _cachedRightProbs = rightProbs;
 
         // Compute path probabilities to each leaf (also caches nodeProbs)
         _pathProbabilities = ComputePathProbabilities(rightProbs, batchSize);
@@ -350,7 +337,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
         _pathProbabilities = null;
         _splitWeightsGrad = null;
         _splitBiasesGrad = null;

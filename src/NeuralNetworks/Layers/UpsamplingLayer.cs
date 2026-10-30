@@ -110,28 +110,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _scaleFactor;
 
     /// <summary>
-    /// The input tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the input tensor from the most recent forward pass, which is needed during the backward
-    /// pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the layer's memory of what it last processed.
-    ///
-    /// Storing the input is necessary because:
-    /// - During training, the layer needs to remember what input it processed
-    /// - This helps calculate the correct gradients during the backward pass
-    /// - It's part of the layer's "working memory" for the learning process
-    ///
-    /// This cached input helps the layer understand how to adjust the network's behavior
-    /// to improve its performance on future inputs.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -276,7 +254,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         return Engine.Upsample(input, _scaleFactor, _scaleFactor);
     }
@@ -302,8 +279,6 @@ public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear the cached input
-        _lastInput = null;
     }
 
     internal override Dictionary<string, string> GetMetadata()

@@ -246,46 +246,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     private Tensor<T> _biases;
 
     /// <summary>
-    /// The cached input from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the input tensor from the most recent forward pass, which is needed during the backward
-    /// pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the layer's short-term memory of what it last processed.
-    /// 
-    /// During training, the layer needs to remember:
-    /// - What input it received
-    /// - How it processed that input
-    /// 
-    /// This stored input helps the layer figure out how to improve its kernels and biases
-    /// during the backward pass (the learning phase).
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The cached output from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor from the most recent forward pass, which is needed during the backward
-    /// pass to compute gradients with respect to the activation function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the layer's memory of what result it produced last time.
-    /// 
-    /// Storing the output is necessary because:
-    /// - During training, the layer needs to know how its output differed from the expected result
-    /// - Some activation functions need their original output to calculate how to improve
-    /// - It helps the layer adjust its parameters more efficiently
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Stores the original input shape before any reshaping.
     /// </summary>
     private int[]? _originalInputShape;
@@ -768,8 +728,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
             input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _lastInput = input4D;
-
         // Perform fused convolution + bias (without activation since PixelShuffle must come before activation)
         // Note: Can't use FusedConv2D with activation because PixelShuffle must occur between conv and activation
         int padSize = _kernelSize / 2;
@@ -792,7 +750,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
         {
-            _lastOutput = result;
         }
 
         // Return with matching dimensions to preserve original tensor rank
@@ -1116,8 +1073,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     public override void ResetState()
     {
         // Clear cached values
-        _lastInput = null;
-        _lastOutput = null;
         _kernelGradients = null;
         _biasGradients = null;
 

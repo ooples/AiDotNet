@@ -125,8 +125,6 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     private readonly int CellsPerColumn;
-    [Scratch]
-    private Tensor<T>? _lastInput;
 
     /// <summary>
     /// The states of all cells in the temporal memory layer.
@@ -273,7 +271,6 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         // Reshape CellStates from [ColumnCount, CellsPerColumn] to [ColumnCount * CellsPerColumn]
         var flatCellStates = Engine.Reshape(CellStates, [ColumnCount * CellsPerColumn]);
 
