@@ -30,6 +30,12 @@ internal sealed record Wav2Vec2Configuration
     /// <summary>Pre-norm encoder layers with a final norm (LARGE-LV60) instead of post-norm layers (BASE).</summary>
     public bool StableLayerNorm { get; init; }
 
+    /// <summary>
+    /// Width of the attention adapter each stable-layer-norm encoder layer adds after its feed-forward block
+    /// (transformers' <c>adapter_attn_dim</c>, MMS's per-language adapters); 0 adds none.
+    /// </summary>
+    public int AdapterAttentionDim { get; init; }
+
     public double LayerNormEpsilon { get; init; } = 1e-5;
     public double FeatureProjectionDropout { get; init; }
     public double HiddenDropout { get; init; } = 0.1;
@@ -68,6 +74,9 @@ internal sealed class Wav2Vec2Network<T>
         if (c.ConvDims.Length == 0 || c.ConvDims.Length != c.ConvKernels.Length || c.ConvDims.Length != c.ConvStrides.Length)
             throw new ArgumentException("The feature encoder needs matching conv dims, kernels and strides.");
         if (c.HiddenSize % c.Heads != 0) throw new ArgumentException($"The width {c.HiddenSize} must divide into {c.Heads} heads.");
+        // transformers adds the adapter only to Wav2Vec2EncoderLayerStableLayerNorm.
+        if (c.AdapterAttentionDim < 0 || (c.AdapterAttentionDim > 0 && !c.StableLayerNorm))
+            throw new ArgumentException("An attention adapter needs a positive width and the stable-layer-norm encoder.");
         TLayer Own<TLayer>(TLayer layer) where TLayer : LayerBase<T>
         {
             layers.Add(layer);
@@ -91,8 +100,13 @@ internal sealed class Wav2Vec2Network<T>
         PositionalConv = Own(new Wav2Vec2PositionalConvLayer<T>(c.HiddenSize, c.PositionalConvKernel, c.PositionalConvGroups));
         EncoderNorm = Norm(c.HiddenSize);
         for (int i = 0; i < c.Layers; i++)
-            EncoderLayers.Add(new EncoderLayer(Linear(c.HiddenSize), Linear(c.HiddenSize), Linear(c.HiddenSize), Linear(c.HiddenSize),
-                Norm(c.HiddenSize), Linear(c.IntermediateSize), Linear(c.HiddenSize), Norm(c.HiddenSize)));
+        {
+            var layer = new EncoderLayer(Linear(c.HiddenSize), Linear(c.HiddenSize), Linear(c.HiddenSize), Linear(c.HiddenSize),
+                Norm(c.HiddenSize), Linear(c.IntermediateSize), Linear(c.HiddenSize), Norm(c.HiddenSize));
+            if (c.AdapterAttentionDim > 0)
+                layer = layer with { Adapter = new AdapterLayer(Norm(c.HiddenSize), Linear(c.AdapterAttentionDim), Linear(c.HiddenSize)) };
+            EncoderLayers.Add(layer);
+        }
     }
 
     /// <summary>A feature-encoder layer: the convolution (a linear map of the unfolded kernel window) and its norm.</summary>
@@ -100,7 +114,13 @@ internal sealed class Wav2Vec2Network<T>
 
     /// <summary>An encoder layer: attention projections, its norm, the feed-forward and the final norm.</summary>
     internal sealed record EncoderLayer(DenseLayer<T> Query, DenseLayer<T> Key, DenseLayer<T> Value, DenseLayer<T> Output,
-        LayerNormalizationLayer<T> AttentionNorm, DenseLayer<T> Intermediate, DenseLayer<T> FeedForwardOutput, LayerNormalizationLayer<T> FinalNorm);
+        LayerNormalizationLayer<T> AttentionNorm, DenseLayer<T> Intermediate, DenseLayer<T> FeedForwardOutput, LayerNormalizationLayer<T> FinalNorm)
+    {
+        public AdapterLayer? Adapter { get; init; }
+    }
+
+    // Wav2Vec2AttnAdapterLayer: norm -> linear_1 (to the adapter width) -> ReLU -> linear_2 (back), added residually.
+    internal sealed record AdapterLayer(LayerNormalizationLayer<T> Norm, DenseLayer<T> Down, DenseLayer<T> Up);
 
     public Wav2Vec2Configuration Configuration { get; }
     public List<ConvLayer> ConvLayers { get; } = new();
@@ -260,7 +280,10 @@ internal sealed class Wav2Vec2Network<T>
         if (c.StableLayerNorm)
         {
             x = _engine.TensorAdd(x, Drop(Attention(l, l.AttentionNorm.Forward(x), training, random), c.HiddenDropout, training, random));
-            return _engine.TensorAdd(x, FeedForward(l, l.FinalNorm.Forward(x), training, random));
+            x = _engine.TensorAdd(x, FeedForward(l, l.FinalNorm.Forward(x), training, random));
+            if (l.Adapter is { } a)
+                x = _engine.TensorAdd(x, Dense(a.Up, _engine.ReLU(Dense(a.Down, a.Norm.Forward(x)))));
+            return x;
         }
         x = l.AttentionNorm.Forward(_engine.TensorAdd(x, Drop(Attention(l, x, training, random), c.HiddenDropout, training, random)));
         return l.FinalNorm.Forward(_engine.TensorAdd(x, FeedForward(l, x, training, random)));
@@ -362,6 +385,11 @@ internal sealed class Wav2Vec2Network<T>
             Linear(l.Output, c.HiddenSize, c.HiddenSize);
             Linear(l.Intermediate, c.HiddenSize, c.IntermediateSize);
             Linear(l.FeedForwardOutput, c.IntermediateSize, c.HiddenSize);
+            if (l.Adapter is { } a)
+            {
+                Linear(a.Down, c.HiddenSize, c.AdapterAttentionDim);
+                Linear(a.Up, c.AdapterAttentionDim, c.HiddenSize);
+            }
         }
     }
 
@@ -454,6 +482,12 @@ internal sealed class Wav2Vec2Network<T>
             Lin(l.Intermediate, $"{p}.feed_forward.intermediate_dense", h, c.IntermediateSize);
             Lin(l.FeedForwardOutput, $"{p}.feed_forward.output_dense", c.IntermediateSize, h);
             Norm(l.FinalNorm, $"{p}.final_layer_norm", h);
+            if (l.Adapter is { } a)
+            {
+                Norm(a.Norm, $"{p}.adapter_layer.norm", h);
+                Lin(a.Down, $"{p}.adapter_layer.linear_1", h, c.AdapterAttentionDim);
+                Lin(a.Up, $"{p}.adapter_layer.linear_2", c.AdapterAttentionDim, h);
+            }
         }
     }
 }
