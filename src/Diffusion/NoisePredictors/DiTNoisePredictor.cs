@@ -1260,7 +1260,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
                 "Source and target layer presence mismatch — both must be " +
                 "non-null or both null. Architectures may differ.");
         }
-        target.SetParameters(source.GetParameters());
+        AiDotNet.Models.Parameters.ParameterTransfer.CopyLayer(source, target);
     }
 
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()

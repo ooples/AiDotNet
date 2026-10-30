@@ -174,10 +174,13 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
             if (NumOps.GreaterThan(_lowerBound, bestLowerBound))
             {
                 bestLowerBound = _lowerBound;
-                bestWeights = FittedWeights.Clone();
-                bestMeans = FittedMeans.Clone();
-                bestCovariances = FittedCovariances.Clone();
-                bestResponsibilities = FittedResponsibilities.Clone();
+                bestWeights = AiDotNet.Training.HostStateCheckpoint<T>.Capture(FittedWeights, bestWeights);
+                bestMeans = AiDotNet.Training.HostStateCheckpoint<T>.Capture(FittedMeans, bestMeans);
+                if (bestCovariances is null)
+                    bestCovariances = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { FittedCovariances })[0];
+                else
+                    AiDotNet.Training.TensorCheckpoint<T>.CopyValues(FittedCovariances, bestCovariances);
+                bestResponsibilities = AiDotNet.Training.HostStateCheckpoint<T>.Capture(FittedResponsibilities, bestResponsibilities);
             }
         }
 

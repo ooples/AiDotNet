@@ -22,8 +22,23 @@ namespace AiDotNet.Clustering.Base;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape,
     IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>,
-    IParameterManifestProvider
+    IParameterManifestProvider, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
+    /// <summary>Enumerates canonical persistent state without flattening tensor-backed components.</summary>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+        => AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(this, typeof(ClusteringBase<T>), Registry, GetParameters);
+
+    /// <summary>Streams state in the same order as the parameter manifest.</summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+        => GetParameterStateChunks().Select(chunk => chunk.Tensor);
+
+    /// <summary>Restores tensor-backed chunks on their device and retains custom-setter semantics.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(ClusteringBase<T>), chunks, Registry, SetParameters, OnParametersRestored);
+    }
+
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
     // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.

@@ -260,15 +260,13 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
     public override void FinalizeTask(IFullModel<T, TInput, TOutput> model)
     {
         // Update teacher model with the trained model
-        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
-
         if (_teacherModel == null)
         {
             _teacherModel = model.Clone();
         }
         else
         {
-            InterfaceGuard.Parameterizable(_teacherModel).SetParameters(currentParams);
+            AiDotNet.Models.Parameters.ParameterTransfer.Copy(InterfaceGuard.Parameterizable(model), InterfaceGuard.Parameterizable(_teacherModel));
         }
 
         // Record metrics

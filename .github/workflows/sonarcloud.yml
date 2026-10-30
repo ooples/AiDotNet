@@ -394,6 +394,7 @@ jobs:
           dotnet restore src/AiDotNet.csproj
           dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
           dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
+          dotnet restore src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj
 
       # Build-less extraction of the whole library still held a runner ~41 minutes per PR. A PR's
       # code-scanning result only gates alerts in the lines it changes, so it extracts only the C#
@@ -420,6 +421,7 @@ jobs:
           dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
           dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
           dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
+          dotnet build src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4

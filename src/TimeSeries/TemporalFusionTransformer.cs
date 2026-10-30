@@ -232,7 +232,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
         int batchSize = Math.Max(1, _options.BatchSize);
         double bestLoss = double.PositiveInfinity;
-        List<Tensor<T>>? bestSnapshot = null;
+        Tensor<T>[]? bestSnapshot = null;
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
@@ -280,7 +280,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
                 if (!double.IsNaN(epochLoss) && !double.IsInfinity(epochLoss) && epochLoss < bestLoss)
                 {
                     bestLoss = epochLoss;
-                    bestSnapshot = allParams.Select(p => p.Clone()).ToList();
+                    bestSnapshot = SnapshotParameters(allParams, bestSnapshot);
                 }
 
                 // Report after checkpointing so an early stop still leaves the best weights to
@@ -293,14 +293,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         }
 
         if (bestSnapshot is not null)
-        {
-            for (int i = 0; i < allParams.Count; i++)
-            {
-                var src = bestSnapshot[i];
-                var dst = allParams[i];
-                for (int k = 0; k < Math.Min(src.Length, dst.Length); k++) dst[k] = src[k];
-            }
-        }
+            RestoreParameters(allParams, bestSnapshot);
     }
 
     /// <summary>Collects all trainable parameter tensors (embedding, VSN, enrichment, attention, post-GRN, head).</summary>

@@ -403,32 +403,17 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// input. The output is h_t = c_t (no output gate, no tanh).
     /// </para>
     /// <para>
-    /// In a production implementation, this recurrence would be computed via a parallel prefix scan
-    /// for O(log T) parallel depth. This sequential implementation is functionally equivalent and
-    /// serves as a clear reference.
+    /// The engine evaluates this affine recurrence as independent scalar heads in its fused scan.
     /// </para>
     /// </remarks>
     private Tensor<T> MinLSTMRecurrenceForward(
         Tensor<T> forgetNorm, Tensor<T> inputNorm, Tensor<T> cellCandidate,
         int batchSize, int seqLen)
     {
-        var cellState = Tensor<T>.CreateDefault([batchSize, _expandedDimension], NumOps.Zero);
-        var cellSteps = new List<Tensor<T>>(seqLen);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var fPrime = Engine.TensorSqueeze(Engine.TensorNarrow(forgetNorm, 1, t, 1), axis: 1);
-            var iPrime = Engine.TensorSqueeze(Engine.TensorNarrow(inputNorm, 1, t, 1), axis: 1);
-            var cTilde = Engine.TensorSqueeze(Engine.TensorNarrow(cellCandidate, 1, t, 1), axis: 1);
-            cellState = Engine.TensorAdd(
-                Engine.TensorMultiply(fPrime, cellState),
-                Engine.TensorMultiply(iPrime, cTilde));
-            cellSteps.Add(Engine.TensorExpandDims(cellState, axis: 1));
-        }
-
-        var output = cellSteps.Count == 1
-            ? cellSteps[0]
-            : Engine.TensorConcatenate(cellSteps.ToArray(), axis: 1);
+        // A scalar GLA head is exactly c[t] = f[t] * c[t-1] + i[t] * candidate[t].
+        // This avoids RG-LRU's square-root normalization and preserves MinLSTM's gradients.
+        var output = Engine.GlaScanForward(CreateOnesLike(cellCandidate), cellCandidate,
+            inputNorm, forgetNorm, _expandedDimension);
         var initialState = Tensor<T>.CreateDefault([batchSize, 1, _expandedDimension], NumOps.Zero);
         _lastCellStates = Engine.TensorConcatenate([initialState, output], axis: 1);
         return output;

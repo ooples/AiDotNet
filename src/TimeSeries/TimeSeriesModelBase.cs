@@ -48,8 +48,34 @@ namespace AiDotNet.TimeSeries;
 /// </para>
 /// </remarks>
 public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
-    ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider
+    ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider, AiDotNet.Models.Parameters.IParameterChunkSource<T>
 {
+    /// <summary>Exposes canonical registered state for device-side checkpoints.</summary>
+    public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        _ = Components;
+        return AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Read(
+            this, typeof(TimeSeriesModelBase<T>), _parameterRegistry, GetParameters);
+    }
+
+    /// <summary>Streams state in manifest order without flattening tensor-backed components.</summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+        => GetParameterStateChunks().Select(chunk => chunk.Tensor);
+
+    /// <summary>Restores canonical tensor chunks on their device, preserving custom setters and hooks.</summary>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        _ = Components;
+        AiDotNet.Models.Parameters.ParameterChunkRestore<T>.Restore(
+            this, typeof(TimeSeriesModelBase<T>), chunks, _parameterRegistry, SetParameters,
+            () =>
+            {
+                // Canonical tensors stay authoritative until a caller requests the packed view.
+                _modelParametersDirty = !_legacyModelParametersRegistered;
+                OnParametersRestored();
+            });
+    }
+
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
     // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
@@ -253,6 +279,22 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// Copies <paramref name="parameters"/> into <paramref name="snapshot"/> (allocated on the first call and reused),
+    /// on whichever device holds them: the best-epoch checkpoint a training loop restores at its end.
+    /// </summary>
+    /// <remarks>
+    /// One engine copy per tensor. Cloning on the host instead downloaded every GPU-resident parameter at each
+    /// improving epoch (96 MB for N-BEATS's 24M weights), and the element-by-element restore wrote each value through
+    /// the indexer, so the checkpoint cost more than the epoch it protected (AiDotNet#1804).
+    /// </remarks>
+    private protected Tensor<T>[] SnapshotParameters(IReadOnlyList<Tensor<T>> parameters, Tensor<T>[]? snapshot)
+        => AiDotNet.Training.TensorCheckpoint<T>.Capture(parameters, snapshot);
+
+    /// <summary>Writes a <see cref="SnapshotParameters"/> checkpoint back into <paramref name="parameters"/>.</summary>
+    private protected void RestoreParameters(IReadOnlyList<Tensor<T>> parameters, Tensor<T>[] snapshot)
+        => AiDotNet.Training.TensorCheckpoint<T>.Restore(parameters, snapshot);
+
+    /// <summary>
     /// Trains one batch on the gradient tape: the fused compiled plan (forward, backward and optimizer update as
     /// one plan, GPU-resident on a GPU engine, a fused CPU kernel otherwise) when it applies, the eager tape with
     /// <paramref name="optimizer"/> when it does not.
@@ -321,7 +363,22 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// the recipe ingredients with specific measurements that the model has figured out work best.
     /// </para>
     /// </remarks>
-    protected Vector<T> ModelParameters { get; set; }
+    protected Vector<T> ModelParameters
+    {
+        get
+        {
+            if (_modelParametersDirty)
+            {
+                _modelParameters = _parameterRegistry.GetParameters();
+                _modelParametersDirty = false;
+            }
+            return _modelParameters;
+        }
+        set { _modelParameters = value; _modelParametersDirty = false; }
+    }
+
+    private Vector<T> _modelParameters = new(0);
+    private bool _modelParametersDirty;
 
     /// <summary>
     /// Indicates whether the model has been trained.

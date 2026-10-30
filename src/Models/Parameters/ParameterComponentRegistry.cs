@@ -422,6 +422,85 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
     }
 
+    /// <summary>
+    /// Restores a canonical stream directly when every destination is a live dense tensor.
+    /// Returns false without writing when a component needs its custom flat setter or the caller
+    /// supplied a different chunk framing. The caller retains its ordinary SetParameters fallback.
+    /// </summary>
+    internal bool TrySetParameterChunks(IReadOnlyList<Tensor<T>> chunks, Action? onRestoring = null)
+    {
+        lock (_surfaceGate)
+        {
+            // Writable storage alone does not authorize bypassing a nested model's setter.
+            // Field adapters and canonical layers support value copies with cache invalidation.
+            if (!HasComponents || CurrentComponents.Any(source =>
+                !CanCopyChunkValues(source) && ParameterTransfer.ChunkRestoreAction(source) is null)) return false;
+            PrepareSources(ParameterSurfaceIntent.Restore);
+            if (!CaptureLayout().Snapshot.ParameterCount.HasValue) return false;
+            var targets = GetParameterStateChunks().ToArray();
+            if (targets.Length != chunks.Count) return false;
+            for (int i = 0; i < targets.Length; i++)
+            {
+                if (!targets[i].IsWritableInPlace || !targets[i].Tensor.IsContiguous || targets[i].Tensor is SparseTensor<T>
+                    || chunks[i] is SparseTensor<T> || targets[i].Tensor.Length != chunks[i].Length)
+                    return false;
+            }
+            // Snapshot before any write: callers may supply reordered or aliased live views.
+            var snapshot = AiDotNet.Training.TensorCheckpoint<T>.Capture(chunks);
+            if (onRestoring is not null)
+            {
+                onRestoring();
+                // A restore hook may detach copy-on-write fields. Resolve destinations again.
+                if (!CaptureLayout().Snapshot.ParameterCount.HasValue)
+                    throw new ArgumentException("Restore hook left the parameter layout unresolved.", nameof(chunks));
+                targets = GetParameterStateChunks().ToArray();
+                if (targets.Length != snapshot.Length || targets.Where((target, i) =>
+                    !target.IsWritableInPlace || !target.Tensor.IsContiguous || target.Tensor is SparseTensor<T>
+                    || target.Tensor.Length != snapshot[i].Length).Any())
+                    throw new ArgumentException("Restore hook changed the parameter layout.", nameof(chunks));
+            }
+            // Build every child restore before writing. Nested models own their restore hooks;
+            // bypassing those hooks would leave derived state or copy-on-write storage stale.
+            var actions = new List<Action>();
+            int offset = 0;
+            foreach (var source in CurrentComponents)
+            {
+                if (source is not IParameterChunkSource<T> chunked)
+                    throw new ArgumentException("Restore hook changed the parameter contract.", nameof(chunks));
+                var live = chunked.GetParameterStateChunks().Where(c => c.Tensor.Length > 0).ToArray();
+                if (offset + live.Length > targets.Length || live.Where((c, i) =>
+                    !ReferenceEquals(c.Tensor, targets[offset + i].Tensor)).Any())
+                    throw new ArgumentException("Restore hook changed the parameter layout.", nameof(chunks));
+                var values = snapshot.Skip(offset).Take(live.Length).ToArray();
+                if (CanCopyChunkValues(source))
+                    actions.Add(() =>
+                    {
+                        for (int i = 0; i < live.Length; i++)
+                            AiDotNet.Training.TensorCheckpoint<T>.CopyValues(values[i], live[i].Tensor);
+                    });
+                else
+                {
+                    var restore = ParameterTransfer.ChunkRestoreAction(source)
+                        ?? throw new ArgumentException("Restore hook changed the parameter contract.", nameof(chunks));
+                    actions.Add(() => restore(values));
+                }
+                offset += live.Length;
+            }
+            if (offset != targets.Length)
+                throw new ArgumentException("Restore hook changed the parameter layout.", nameof(chunks));
+            foreach (var action in actions) action();
+            AiDotNet.NeuralNetworks.Layers.LayerBase<T>.NotifyParameterChunksRestored();
+            return true;
+        }
+    }
+
+    private static bool CanCopyChunkValues(IParameterSource<T> source)
+        => source is TensorFieldParameterSource<T> or ResizableTensorFieldParameterSource<T>
+            || source is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layer && layer.CanRestoreParameterChunksInPlace()
+            || source.GetType() == typeof(AiDotNet.SelfSupervisedLearning.LinearProjector<T>)
+            || source.GetType() == typeof(AiDotNet.SelfSupervisedLearning.MLPProjector<T>)
+            || source.GetType() == typeof(AiDotNet.SelfSupervisedLearning.SymmetricProjector<T>);
+
     /// <summary>Restores slices using the exact manifest snapshot used to validate the vector.</summary>
     public void SetParameters(Vector<T> parameters)
     {

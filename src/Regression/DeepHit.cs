@@ -1315,7 +1315,7 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             {
                 bestLoss = meanLoss;
                 epochsWithoutImprovement = 0;
-                bestWeights = SaveWeights();
+                bestWeights = SaveWeights(bestWeights);
             }
             else
             {
@@ -1484,15 +1484,15 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         return array;
     }
 
-    private (List<Matrix<T>>, List<Vector<T>>, List<List<Matrix<T>>>, List<List<Vector<T>>>, List<Matrix<T>>, List<Vector<T>>) SaveWeights()
+    private (List<Matrix<T>>, List<Vector<T>>, List<List<Matrix<T>>>, List<List<Vector<T>>>, List<Matrix<T>>, List<Vector<T>>) SaveWeights((List<Matrix<T>>, List<Vector<T>>, List<List<Matrix<T>>>, List<List<Vector<T>>>, List<Matrix<T>>, List<Vector<T>>)? snapshot = null)
     {
         return (
-            _sharedWeights.Select(CloneMatrix).ToList(),
-            _sharedBiases.Select(CloneVector).ToList(),
-            _causeWeights.Select(cw => cw.Select(CloneMatrix).ToList()).ToList(),
-            _causeBiases.Select(cb => cb.Select(CloneVector).ToList()).ToList(),
-            _outputWeights.Select(CloneMatrix).ToList(),
-            _outputBiases.Select(CloneVector).ToList()
+            AiDotNet.Training.HostStateCheckpoint<T>.Capture(_sharedWeights, snapshot?.Item1),
+            AiDotNet.Training.HostStateCheckpoint<T>.Capture(_sharedBiases, snapshot?.Item2),
+            _causeWeights.Select((cw, i) => AiDotNet.Training.HostStateCheckpoint<T>.Capture(cw, snapshot?.Item3[i])).ToList(),
+            _causeBiases.Select((cb, i) => AiDotNet.Training.HostStateCheckpoint<T>.Capture(cb, snapshot?.Item4[i])).ToList(),
+            AiDotNet.Training.HostStateCheckpoint<T>.Capture(_outputWeights, snapshot?.Item5),
+            AiDotNet.Training.HostStateCheckpoint<T>.Capture(_outputBiases, snapshot?.Item6)
         );
     }
 
@@ -1504,23 +1504,6 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         _causeBiases = weights.Item4;
         _outputWeights = weights.Item5;
         _outputBiases = weights.Item6;
-    }
-
-    private static Matrix<T> CloneMatrix(Matrix<T> src)
-    {
-        var dst = new Matrix<T>(src.Rows, src.Columns);
-        for (int i = 0; i < src.Rows; i++)
-            for (int j = 0; j < src.Columns; j++)
-                dst[i, j] = src[i, j];
-        return dst;
-    }
-
-    private static Vector<T> CloneVector(Vector<T> src)
-    {
-        var dst = new Vector<T>(src.Length);
-        for (int i = 0; i < src.Length; i++)
-            dst[i] = src[i];
-        return dst;
     }
 
     /// <inheritdoc/>

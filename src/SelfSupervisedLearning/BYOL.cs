@@ -109,21 +109,9 @@ public partial class BYOL<T> : SelfSupervisedLearningMethodBase<T>
 
     private void UpdateTargetProjector()
     {
-        // EMA of the target projector toward the online one. The online projector also carries the predictor, which
-        // the target lacks; both flatten the projector first, so the target follows that leading part only. Blending
-        // the whole online vector into the shorter target one mismatched their lengths.
-        double momentum = _targetEncoder.Momentum;
-        var onlineParams = _onlineProjector.GetParameters();
-        var targetParams = _targetProjector.GetParameters();
-        var updated = new Vector<T>(targetParams.Length);
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            updated[i] = NumOps.Add(
-                NumOps.Multiply(targetParams[i], NumOps.FromDouble(momentum)),
-                NumOps.Multiply(onlineParams[i], NumOps.FromDouble(1.0 - momentum)));
-        }
-
-        _targetProjector.SetParameters(updated);
+        // The online head also contains a predictor; only its leading projector tensors belong to the target.
+        ProjectorParameterTransfer<T>.Update(_onlineProjector, _targetProjector, _targetEncoder.Momentum,
+            leadingProjectorOnly: true);
     }
 
     /// <inheritdoc />
@@ -207,18 +195,6 @@ public partial class BYOL<T> : SelfSupervisedLearningMethodBase<T>
     private static void CopyProjectorToTarget(
         SymmetricProjector<T> online, SymmetricProjector<T> target)
     {
-        // Copy only the projector parameters (target doesn't have predictor)
-        var onlineParams = online.GetParameters();
-        int targetParamCount = checked((int)target.ParameterCount);
-
-        var targetParams = new T[targetParamCount];
-        for (int i = 0; i < targetParamCount; i++)
-        {
-            targetParams[i] = onlineParams[i];
-        }
-
-        target.SetParameters(new Vector<T>(targetParams));
-    
-
-}
+        ProjectorParameterTransfer<T>.Copy(online, target, leadingProjectorOnly: true);
+    }
 }

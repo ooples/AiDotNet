@@ -162,7 +162,7 @@ public class DINO<T> : TeacherStudentSSL<T>
             encoderOutputDim, hiddenDim, outputDim, useBatchNormOnOutput: true);
 
         // Copy projector parameters
-        teacherProjector.SetParameters(studentProjector.GetParameters());
+        ProjectorParameterTransfer<T>.Copy(studentProjector, teacherProjector);
 
         // Create teacher encoder
         var encoderCopy = createEncoderCopy(encoder);
