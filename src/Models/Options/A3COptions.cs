@@ -48,9 +48,13 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 128, 128 };
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// Every network this agent trains steps with this optimizer, whose learning rate then replaces the
+    /// agent's learning-rate options. Moments are kept per parameter tensor, so one instance can serve every
+    /// network; an optimizer with a step counter (Adam's bias correction) advances it on each network's step.
+    /// When null, the policy networks train with Adam at PolicyLearningRate and the value networks with Adam
+    /// at ValueLearningRate.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; init; }
 
     public A3COptions()
     {

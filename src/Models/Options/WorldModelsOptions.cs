@@ -60,7 +60,10 @@ public class WorldModelsOptions<T> : ReinforcementLearningOptions<T>
     public int RolloutLength { get; init; } = 1000;
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// Every network this agent trains steps with this optimizer, whose learning rate then replaces the
+    /// agent's learning-rate options. Moments are kept per parameter tensor, so one instance can serve every
+    /// network; an optimizer with a step counter (Adam's bias correction) advances it on each network's step.
+    /// When null, each network trains with its own default optimizer.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; init; }
 }

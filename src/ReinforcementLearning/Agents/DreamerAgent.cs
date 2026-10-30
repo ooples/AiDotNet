@@ -83,7 +83,9 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
     private DreamerOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    // The caller's optimizer (constructor argument, else Options.Optimizer), or null for each network's own default.
+    // Its moment state is keyed by parameter tensor, so one instance serves every network.
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _configuredOptimizer;
 
     // World model components
     private INeuralNetwork<T> _representationNetwork;  // Observation -> latent state
@@ -116,37 +118,19 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
     }
 
-    public DreamerAgent(DreamerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    /// <param name="options">The agent's configuration.</param>
+    /// <param name="optimizer">
+    /// The optimizer every network trains with, overriding <see cref="DreamerOptions{T}.Optimizer"/>. When both are
+    /// null, each network trains with its own default optimizer.
+    /// </param>
+    public DreamerAgent(DreamerOptions<T> options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
 
-        // Use the rate the BASE class already resolved, not the raw option. `options.LearningRate`
-        // is declared `T?`, but for a value-type T — float and double, i.e. every real use — that
-        // is not Nullable<T>, so an unconfigured option reads as default(T) == 0 and `is not null`
-        // is TRUE. This ctor therefore handed Adam InitialLearningRate = 0 whenever the caller did
-        // not set one, which is every default-constructed DreamerAgent.
-        //
-        // ReinforcementLearningAgentBase already solves this and says so at length: it treats
-        // default(T) as "not configured" and substitutes 0.001, precisely because "a zero learning
-        // rate ... is meaningless for Bellman updates (every Q-update collapses to Q <- Q + 0 = Q,
-        // which is the symptom that surfaced as the entire RL test family failing
-        // Training_ShouldChangeParameters)". The base runs first, so LearningRate is resolved by
-        // the time this body executes; re-deriving it here reintroduced the bug the base fixed.
-        //
-        // The zero was silent until an optimizer validated its rate at construction, at which point
-        // it became "Base learning rate must be positive" and took DreamerAgent's whole suite plus
-        // AllDefaultConstructableModels_ShouldConstructWithoutException with it. Silent was worse.
-        _optimizer = optimizer ?? options.Optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-            {
-                InitialLearningRate = NumOps.ToDouble(LearningRate),
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8
-            }));
+        _configuredOptimizer = optimizer ?? options.Optimizer;
         _updateCount = 0;
 
         // Initialize networks directly in constructor
@@ -186,7 +170,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, _configuredOptimizer, new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
@@ -206,7 +190,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: _options.LatentSize,
             outputSize: _options.ActionSize);
-        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, _configuredOptimizer, new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {

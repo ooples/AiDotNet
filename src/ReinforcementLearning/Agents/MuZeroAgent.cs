@@ -770,14 +770,15 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Add(ret, NumOps.Multiply(disc, bootValue));
     }
 
-    private AdamOptimizer<T, Tensor<T>, Tensor<T>>? _jointOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _jointOptimizer;
 
     /// <summary>
-    /// Adam (β1 = 0.9, β2 = 0.999, ε = 1e-8, no clipping) at the agent's RESOLVED learning rate (the base-class value
-    /// with its non-zero fallback, not the nullable <c>Options.LearningRate</c>), over the three networks' parameters
-    /// together, keyed by tensor so its moments follow the weights from step to step.
+    /// The optimizer over the three networks' parameters together: <c>Options.Optimizer</c> when set, otherwise Adam
+    /// (β1 = 0.9, β2 = 0.999, ε = 1e-8, no clipping) at the agent's RESOLVED learning rate (the base-class value with
+    /// its non-zero fallback, not the nullable <c>Options.LearningRate</c>). Either way its state is keyed by tensor,
+    /// so its moments follow the weights from step to step.
     /// </summary>
-    private AdamOptimizer<T, Tensor<T>, Tensor<T>> JointOptimizer => _jointOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> JointOptimizer => _jointOptimizer ??= _options.Optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
         null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = Convert.ToDouble(LearningRate),

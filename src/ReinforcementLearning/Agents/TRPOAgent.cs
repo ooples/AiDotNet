@@ -73,8 +73,6 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
     private TRPOOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
-
     private INeuralNetwork<T> _policyNetwork;
     [Buffer]
     private INeuralNetwork<T> _oldPolicyNetwork;  // For KL divergence
@@ -91,19 +89,17 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
     }
 
-    public TRPOAgent(TRPOOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    /// <param name="options">The agent's configuration.</param>
+    /// <remarks>
+    /// TRPO takes no optimizer: its policy step is the natural-gradient step solved by conjugate gradient inside the
+    /// MaxKL trust region, and its value function regresses with Adam at ValueLearningRate.
+    /// </remarks>
+    public TRPOAgent(TRPOOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, Vector<T>, bool)>();
 

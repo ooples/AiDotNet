@@ -183,7 +183,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             inputSize: inputSize,
             outputSize: outputSize,
             layers: layers);
-        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, _options.Optimizer, new MeanSquaredErrorLoss<T>());
     }
 
     /// <summary>
@@ -227,7 +227,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             inputSize: inputSize,
             outputSize: outputSize,
             layers: layers);
-        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, _options.Optimizer, new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateRNNNetwork()
@@ -255,7 +255,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             inputSize: inputSize,
             outputSize: outputSize,
             layers: layers);
-        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, _options.Optimizer, new MeanSquaredErrorLoss<T>());
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)

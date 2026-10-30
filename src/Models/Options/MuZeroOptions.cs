@@ -133,7 +133,11 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public bool UseValuePrefix { get; init; } = false;
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam is used.
+    /// Every network this agent trains steps with this optimizer, whose learning rate then replaces the
+    /// agent's learning-rate options. Moments are kept per parameter tensor, so one instance can serve every
+    /// network; an optimizer with a step counter (Adam's bias correction) advances it on each network's step.
+    /// When null, the representation, dynamics and prediction networks train jointly with Adam at the
+    /// agent's learning rate.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; init; }
 }

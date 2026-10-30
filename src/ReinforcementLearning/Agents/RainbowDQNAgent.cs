@@ -89,7 +89,8 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     }
     private RainbowDQNOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    // The caller's optimizer (constructor argument, else Options.Optimizer), or null for Adam at LearningRate.
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _configuredOptimizer;
 
     [ParameterAlias("rainbow/online-network")]
     private INeuralNetwork<T> _onlineNetwork;
@@ -113,7 +114,12 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     {
     }
 
-    public RainbowDQNAgent(RainbowDQNOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    /// <param name="options">The agent's configuration.</param>
+    /// <param name="optimizer">
+    /// The optimizer the online network trains with, overriding <see cref="RainbowDQNOptions{T}.Optimizer"/>. When both
+    /// are null, it trains with Adam at the agent's learning rate.
+    /// </param>
+    public RainbowDQNAgent(RainbowDQNOptions<T> options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(options)
     {
         if (options == null)
@@ -123,13 +129,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
 
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.0001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
+        _configuredOptimizer = optimizer ?? options.Optimizer;
 
         _stepCount = 0;
         _updateCount = 0;
@@ -218,7 +218,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         );
 
         return new NeuralNetwork<T>(finalArchitecture,
-            optimizer: CreateNetworkOptimizer(LearningRate),
+            optimizer: _configuredOptimizer ?? CreateNetworkOptimizer(LearningRate),
             lossFunction: LossFunction);
     }
 
