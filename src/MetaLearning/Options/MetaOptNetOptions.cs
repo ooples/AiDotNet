@@ -52,15 +52,12 @@ public class MetaOptNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// Default: null (uses cross-entropy loss internally).
-    /// </summary>
+    /// <summary>Loss function for meta-training; null uses cross-entropy over logits.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for meta-parameter (outer loop) updates.
-    /// Default: null (uses built-in Adam optimizer with OuterLearningRate).
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
