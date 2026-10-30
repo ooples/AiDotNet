@@ -30,7 +30,6 @@ internal static class DefectBaselines
             "global::AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>",
             "global::AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>",
             "global::AiDotNet.MetaLearning.Algorithms.NeuralProcessModel<T, TInput, TOutput>",
-            "global::AiDotNet.MetaLearning.Models.LinearVectorModel",
             "global::AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>",
             "global::AiDotNet.NeuralNetworks.SuperNet<T>",
             "global::AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>",
