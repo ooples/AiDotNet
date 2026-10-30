@@ -97,7 +97,7 @@ public class SACOptions<T> : ModelOptions
     /// Typical: -ActionSize (for continuous actions).
     /// If null, uses -ActionSize as default.
     /// </remarks>
-    public T? TargetEntropy { get; set; }
+    public double? TargetEntropy { get; set; }
 
     /// <summary>
     /// Mini-batch size for training.

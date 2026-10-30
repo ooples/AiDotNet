@@ -37,7 +37,7 @@ public class CQLOptions<T> : ModelOptions
     public T TargetUpdateTau { get; set; }
     public T InitialTemperature { get; set; }
     public bool AutoTuneTemperature { get; set; } = true;
-    public T? TargetEntropy { get; set; }
+    public double? TargetEntropy { get; set; }
 
     // CQL-specific parameters
     public T CQLAlpha { get; set; }  // Weight of conservative penalty

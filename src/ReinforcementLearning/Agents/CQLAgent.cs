@@ -562,21 +562,8 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _alpha = _numOps.FromDouble(Math.Exp(logAlpha));
     }
 
-    /// <summary>
-    /// TargetEntropy, or the −dim(A) heuristic of Haarnoja et al. 2018b when it is unset. TargetEntropy is declared
-    /// <c>T?</c> on an unconstrained generic, which for float and double is not <c>Nullable&lt;T&gt;</c>: an unset
-    /// value reads as zero, so zero is treated as unset, exactly as the base class treats a zero learning rate.
-    /// </summary>
-    private double ResolvedTargetEntropy
-    {
-        get
-        {
-            var configured = _options.TargetEntropy;
-            return configured is null || _numOps.Equals(configured, _numOps.Zero)
-                ? -_options.ActionSize
-                : _numOps.ToDouble(configured);
-        }
-    }
+    /// <summary>TargetEntropy, or the −dim(A) heuristic of Haarnoja et al. 2018b when it is null.</summary>
+    internal double ResolvedTargetEntropy => _options.TargetEntropy ?? -_options.ActionSize;
 
 
     private void SoftUpdateTargetNetworks()

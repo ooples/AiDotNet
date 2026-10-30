@@ -580,13 +580,7 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
 
         var avgEntropy = NumOps.Divide(totalEntropy, NumOps.FromDouble(batch.Count));
-        // TargetEntropy is declared T? on an unconstrained generic, which for float and double is not
-        // Nullable<T>: an unset value reads as zero and `??` never falls back. Zero is therefore treated as
-        // unset, as the base class treats a zero learning rate, giving the -dim(A) heuristic of Haarnoja et al.
-        var configuredEntropy = _sacOptions.TargetEntropy;
-        var targetEntropy = configuredEntropy is null || NumOps.Equals(configuredEntropy, NumOps.Zero)
-            ? NumOps.FromDouble(-_sacOptions.ActionSize)
-            : configuredEntropy;
+        var targetEntropy = NumOps.FromDouble(ResolvedTargetEntropy);
 
         // Alpha loss: -alpha * (log_prob + target_entropy)
         var alphaLoss = NumOps.Multiply(
@@ -598,6 +592,9 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var alphaGrad = NumOps.Multiply(_sacOptions.AlphaLearningRate, alphaLoss);
         _logAlpha = NumOps.Subtract(_logAlpha, alphaGrad);
     }
+
+    /// <summary>TargetEntropy, or the −dim(A) heuristic of Haarnoja et al. 2018b when it is null.</summary>
+    internal double ResolvedTargetEntropy => _sacOptions.TargetEntropy ?? -_sacOptions.ActionSize;
 
     private void SoftUpdateTargets()
     {
