@@ -1,0 +1,227 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Optimization;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
+
+/// <summary>
+/// #2382: MobileNetV2 opted out of the fused compiled training step because its loss differed from the eager tape's,
+/// which read as the plan not preserving the inverted-residual block. The block was fine: the eager path froze the
+/// top-level batch-norm statistics during training (an override added in #2295; Sandler et al. 2018 and torchvision
+/// train them) and the compiled step did not. One fused step must match the eager tape: same loss, same update.
+/// </summary>
+[Collection("NonParallelIntegration")]
+public class MobileNetV2FusedParityTests
+{
+    private const int Batch = 4;
+    private const int Size = 8;
+    private const int Classes = 4;
+    private readonly ITestOutputHelper _output;
+
+    public MobileNetV2FusedParityTests(ITestOutputHelper output) => _output = output;
+
+    /// <summary>The stacks the parity is checked on: the stem alone, its parts, and the stem before each block form.</summary>
+    public enum StackVariant
+    {
+        /// <summary>Convolution, batch norm, ReLU6.</summary>
+        Stem,
+        /// <summary>Convolution and batch norm, no activation.</summary>
+        ConvBatchNorm,
+        /// <summary>Convolution and ReLU6, no batch norm.</summary>
+        ConvRelu6,
+        /// <summary>The stem, then an inverted residual block with a residual connection.</summary>
+        Residual,
+        /// <summary>The stem, then a strided inverted residual block.</summary>
+        Stride2,
+        /// <summary>The stem, then an inverted residual block without the expansion stage.</summary>
+        NoExpansion,
+    }
+
+    private static List<ILayer<float>> Layers(StackVariant variant)
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new ConvolutionalLayer<float>(outputDepth: 8, kernelSize: 3, stride: 1, padding: 1,
+                activationFunction: new IdentityActivation<float>()),
+        };
+        if (variant != StackVariant.ConvRelu6) layers.Add(new BatchNormalizationLayer<float>());
+        if (variant != StackVariant.ConvBatchNorm) layers.Add(new ActivationLayer<float>(activationFunction: new ReLU6Activation<float>()));
+        switch (variant)
+        {
+            case StackVariant.Stem:
+            case StackVariant.ConvBatchNorm:
+            case StackVariant.ConvRelu6:
+                break;
+            case StackVariant.Residual:
+                layers.Add(new InvertedResidualBlock<float>(outChannels: 8, expansionRatio: 2, stride: 1,
+                    activationFunction: new ReLU6Activation<float>()));
+                break;
+            case StackVariant.Stride2:
+                layers.Add(new InvertedResidualBlock<float>(outChannels: 12, expansionRatio: 2, stride: 2,
+                    activationFunction: new ReLU6Activation<float>()));
+                break;
+            case StackVariant.NoExpansion:
+                layers.Add(new InvertedResidualBlock<float>(outChannels: 8, expansionRatio: 1, stride: 1,
+                    activationFunction: new ReLU6Activation<float>()));
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(variant));
+        }
+        layers.Add(new AdaptiveAveragePoolingLayer<float>(1, 1));
+        layers.Add(new FlattenLayer<float>());
+        layers.Add(new DenseLayer<float>(Classes, (IActivationFunction<float>)new IdentityActivation<float>()));
+        return layers;
+    }
+
+    private static NeuralNetworkBase<float> Build(StackVariant variant)
+    {
+
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: Size, inputWidth: Size, inputDepth: 3, outputSize: Classes,
+            layers: Layers(variant));
+
+        return new MobileNetV2Network<float>(arch,
+            new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, Classes, Size, Size),
+            options: new MobileNetV2Options { DisableFusedOptimizerStep = false });
+    }
+
+    private static Tensor<float> Seeded(int seed, params int[] shape)
+    {
+        var rng = new Random(seed);
+        var t = new Tensor<float>(shape);
+        for (int i = 0; i < t.Length; i++) t[i] = (float)(rng.NextDouble() * 2 - 1);
+        return t;
+    }
+
+    [Theory]
+    [InlineData(StackVariant.Stem)]
+    [InlineData(StackVariant.ConvBatchNorm)]
+    [InlineData(StackVariant.ConvRelu6)]
+    [InlineData(StackVariant.Residual)]
+    [InlineData(StackVariant.Stride2)]
+    [InlineData(StackVariant.NoExpansion)]
+    public void One_fused_step_matches_the_eager_tape(StackVariant variant)
+    {
+        var prior = AiDotNetEngine.Current;
+        var priorOptions = TensorCodecOptions.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            var x = Seeded(11, Batch, 3, Size, Size);
+            var y = new Tensor<float>(new[] { Batch, Classes });
+            for (int b = 0; b < Batch; b++) y[b, b % Classes] = 1f;
+
+            var fused = Build(variant);
+            var eager = Build(variant);
+            fused.Predict(x);   // materialise the lazy weights
+            eager.Predict(x);
+            var init = fused.GetParameters();
+            eager.UpdateParameters(init);
+            var before = fused.Predict(x).ToArray();
+            var beforeEager = eager.Predict(x).ToArray();
+            double predDiff = 0;
+            for (int i = 0; i < before.Length; i++) predDiff = Math.Max(predDiff, Math.Abs(before[i] - beforeEager[i]));
+            Assert.True(predDiff == 0, $"{variant}: the parameter copy left the two models {predDiff:E3} apart");
+            fused.SetTrainingMode(true);
+            eager.SetTrainingMode(true);
+
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            int hitsBefore = AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits;
+            fused.Train(x, y);
+            // Without this, a fused step that silently fell back to the tape would make every variant agree.
+            Assert.True(AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits > hitsBefore,
+                $"{variant}: the compiled fused step did not engage");
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
+            eager.Train(x, y);
+
+            double lossFused = Convert.ToDouble(fused.GetLastLoss());
+            double lossEager = Convert.ToDouble(eager.GetLastLoss());
+            var p0 = init.ToArray();
+            var pf = fused.GetParameters().ToArray();
+            var pe = eager.GetParameters().ToArray();
+            double dot = 0, nf = 0, ne = 0, nd = 0, maxAbs = 0;
+            for (int i = 0; i < p0.Length; i++)
+            {
+                double df = pf[i] - p0[i], de = pe[i] - p0[i];
+                dot += df * de; nf += df * df; ne += de * de;
+                nd += (pf[i] - pe[i]) * (pf[i] - pe[i]);
+                maxAbs = Math.Max(maxAbs, Math.Abs(pf[i] - pe[i]));
+            }
+            // Direction alone accepts an update 100x too large; the difference must be small next to the update.
+            double relativeDiff = Math.Sqrt(nd / ne);
+            double cosine = dot / Math.Sqrt(nf * ne);
+            _output.WriteLine($"{variant}: loss fused {lossFused:R} eager {lossEager:R}; update cosine {cosine:R}; " +
+                              $"max |param diff| {maxAbs:E3}; params {p0.Length}");
+
+            Assert.True(Math.Abs(lossFused - lossEager) <= 1e-4 * Math.Max(1.0, Math.Abs(lossEager)),
+                $"{variant}: fused loss {lossFused} vs eager {lossEager}");
+            Assert.True(cosine >= 0.9999, $"{variant}: fused vs eager update cosine {cosine}");
+            Assert.True(relativeDiff <= 1e-3, $"{variant}: |fused - eager| / |eager update| = {relativeDiff}");
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(priorOptions);
+            AiDotNetEngine.Current = prior;
+        }
+    }
+
+    [Fact]
+    public void Fused_step_is_the_default()
+    {
+        // The parity theory opts in explicitly so it compares the two paths even if the default changes; this pins
+        // the default itself (#2382).
+        Assert.False(new MobileNetV2Options().DisableFusedOptimizerStep);
+    }
+
+    [Fact]
+    public void Turning_the_fused_step_off_after_it_committed_throws()
+    {
+        // The committed plan owns the optimizer moments; an eager step would continue with fresh ones and change the
+        // trajectory without saying so, so the switch is refused.
+        var prior = AiDotNetEngine.Current;
+        var priorOptions = TensorCodecOptions.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            var x = Seeded(13, Batch, 3, Size, Size);
+            var y = new Tensor<float>(new[] { Batch, Classes });
+            for (int b = 0; b < Batch; b++) y[b, b % Classes] = 1f;
+            var options = new MobileNetV2Options { DisableFusedOptimizerStep = false };
+            var arch = new NeuralNetworkArchitecture<float>(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.MultiClassClassification,
+                inputHeight: Size, inputWidth: Size, inputDepth: 3, outputSize: Classes,
+                layers: Layers(StackVariant.ConvBatchNorm));
+            var net = new MobileNetV2Network<float>(arch,
+                new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, Classes, Size, Size), options: options);
+            net.Predict(x);
+            net.SetTrainingMode(true);
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            int hitsBefore = AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits;
+            net.Train(x, y);
+            net.Train(x, y);
+            Assert.True(AiDotNet.Configuration.TrainingDiagnosticsConfig.FusedOptimizerHits > hitsBefore,
+                "the compiled fused step did not engage, so nothing committed");
+
+            options.DisableFusedOptimizerStep = true;
+            var ex = Assert.Throws<InvalidOperationException>(() => net.Train(x, y));
+            Assert.Contains("after fused training had committed", ex.Message);
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(priorOptions);
+            AiDotNetEngine.Current = prior;
+        }
+    }
+}

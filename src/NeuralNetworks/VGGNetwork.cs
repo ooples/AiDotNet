@@ -68,6 +68,12 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Simonyan and Zisserman 2015, Sec. 3.1 (Training): SGD, initial lr 0.01 divided by 10 on plateau, momentum 0.9, weight decay 5e-4.")]
 public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <summary>
+    /// The generated feed-forward CNN keeps nothing between calls, so each Predict frees its GPU intermediates when it
+    /// ends. Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the default.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates => Architecture.Layers is not { Count: > 0 };
+
     private readonly VGGOptions _options;
 
     /// <summary>

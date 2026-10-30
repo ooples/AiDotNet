@@ -6890,26 +6890,55 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _deferLazyShapeResolutionToForward = priorDefer;
         }
 
+        // A model whose forward keeps nothing between calls frees its GPU intermediates when the call ends, instead of
+        // when a garbage collection finalizes them (ooples/AiDotNet.Tensors#1432); only the output survives.
+        // Disposed in the finally below, before the collection there, which must see the intermediates already returned.
+        // Not while a layer observer is recording: it keeps intermediate outputs to read after Predict returns.
+        var resultScope = ReleasesInferenceIntermediates && Graph.LayerForwardObserver<T>.Current is null
+            ? TensorScope.Begin()
+            : null;
         using var noGrad = new NoGradScope<T>();
         try
         {
             var output = PredictInInferenceMode(input);
             RequireArchitectureAgreesWithOutput(output);
-            return output;
+            return resultScope is null ? output : resultScope.Keep(output);
         }
         finally
         {
-            _deferLazyShapeResolutionToForward = true;
             try
             {
-                if (wasTraining) SetTrainingMode(true);
+                _deferLazyShapeResolutionToForward = true;
+                try
+                {
+                    if (wasTraining) SetTrainingMode(true);
+                }
+                finally
+                {
+                    _deferLazyShapeResolutionToForward = priorDefer;
+                }
             }
             finally
             {
-                _deferLazyShapeResolutionToForward = priorDefer;
+                // Even when restoring the mode throws: an abandoned scope would keep collecting this thread's GPU results.
+                resultScope?.Dispose();
             }
+            // The call's intermediates are dead now: run the young collection a GPU backend asked for while they are
+            // still young, as a finished training step does, instead of inside the next call's allocation, where it
+            // blocked mid-forward (#1432: once per ResNet-50 predict on OpenCL). It runs only while bytes nobody disposed
+            // remain past the backend's threshold, so after the scope above it is usually skipped. Not while any thread
+            // records a tape: the process-wide collection would promote that tape's live activation owners.
+            if (!AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive())
+                AiDotNet.Tensors.Engines.DirectGpu.DeviceMemoryReclaim.CollectIfDueAtStepBoundary();
         }
     }
+
+    /// <summary>
+    /// True for a model whose forward keeps no GPU tensor between <see cref="Predict(Tensor{T})"/> calls (no
+    /// generation cache or carried state), so each call can free its GPU intermediates when it ends through a
+    /// <see cref="TensorScope"/>. A model that does keep one must leave this false: its kept tensors would be freed.
+    /// </summary>
+    protected virtual bool ReleasesInferenceIntermediates => false;
 
     /// <summary>
     /// Whether this model sizes its layers from its options rather than from its architecture, so an architecture
@@ -7042,6 +7071,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             _inferenceRecycleArena = prevRecycle;
         }
+        // #2385: with no host scratch rented, nothing in this arena can back the output (a GPU forward keeps its
+        // result on the device). Detaching anyway downloaded every result to a fresh host array on each call,
+        // a device sync the caller may never need. Same rule as DetachAndRecycleBetweenLayers. Still detach when the
+        // output IS (or views) the caller's input, e.g. a forward through only an InputLayer: the caller would get its
+        // own tensor back, and the streaming PredictInBatches path disposes each result after its callback.
+        // Only a result still on the device skips the copy. A host result that rented nothing can be a layer's own
+        // resident buffer (DenseLayer's and FeedForwardLayer's FusedLinearInto scratch, reused every call): handed
+        // out uncopied, the caller's result would change under it on the next Predict. Copying it costs no device sync.
+        if (arena.PeakBackingBytes == 0 && output.HasPendingGpuData && !output.SharesStorageWith(input)) return output;
         return DetachFromArena(output);
     }
 
@@ -10931,8 +10969,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // A model with its own PredictCore owns its public-input convention (its own batching, time-major audio,
         // token sequences), and prediction leaves its input alone (PrepareInputForTraining); training follows the
         // same rule. Promoting it guessed from the architecture's rank and turned a batched [B, T, F] into rank 4.
-        if (!PredictCoreOwnsPublicInputPreparation())
+        bool leadingAxisIsBatch = !PredictCoreOwnsPublicInputPreparation();
+        if (leadingAxisIsBatch)
             (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+        // The fused step's lazy-initialization forward may then run on one sample (see LazyInitializationSample).
+        using var batchAxis = leadingAxisIsBatch ? Training.CompiledTapeTrainingStep<T>.DeclareLeadingAxisIsBatch() : default;
 
         // Data-dependent LSUV init (Mishkin & Matas 2015): on the FIRST training step, rescale
         // each trainable layer's weights so its output has ~unit variance across this batch. This
@@ -13341,6 +13382,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
+        if (FusedTrainingDisabledByConfiguration)
+        {
+            // A committed plan owns the optimizer moments, which cannot move to the eager optimizer: turning the fused step
+            // off now would continue with fresh moments and silently change the trajectory, as a committed failure would.
+            if (FusedSession.IsCommitted)
+                throw new InvalidOperationException(
+                    $"{GetType().Name}'s configuration turned the fused optimizer step off after fused training had committed. " +
+                    "The compiled plan's optimizer moments cannot move to the eager optimizer, so the switch would change the " +
+                    "training trajectory. Set it before the first Train call.");
+            return EmitFusedMissAndFallback(
+                $"disabled by {GetType().Name}'s configuration (FusedTrainingDisabledByConfiguration), not by a fallback");
+        }
         if (FusedSession.IsDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)

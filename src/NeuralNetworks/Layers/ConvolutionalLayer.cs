@@ -320,6 +320,22 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     internal Tensor<T>? BiasesForFolding => UseBias ? _biases : null;
 
     /// <summary>
+    /// A following batch norm's running mean minus this depthwise convolution's bias, cached across predicts by
+    /// <see cref="ConvolutionBatchNormFolding{T}.TryDepthwiseBatchNormActivation"/>.
+    /// </summary>
+    internal DerivedTensorCache<T> FoldedBatchNormMean { get; } = new();
+
+    /// <summary>
+    /// Drops <see cref="FoldedBatchNormMean"/> on a training-mode transition: training moves the bias and the running
+    /// mean, and a device-side update need not advance the host tensors' versions the cache keys on.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        if (isTraining != IsTrainingMode) FoldedBatchNormMean.Invalidate();
+        base.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
     /// Whether a following batch norm can fold into this convolution: a dense (ungrouped) convolution with no
     /// activation of its own whose kernels are allocated, [OutputDepth, InputDepth, KernelSize, KernelSize].
     /// </summary>
@@ -328,6 +344,19 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
            && (ScalarActivation is null || ScalarActivation is IdentityActivation<T>)
            && _kernels.Rank == 4 && OutputDepth > 0 && _kernels.Shape[0] == OutputDepth
            && _kernels.Shape[1] == InputDepth && _kernels.Shape[2] == KernelSize && _kernels.Shape[3] == KernelSize
+           && (!UseBias || _biases.Length == OutputDepth);
+
+    /// <summary>
+    /// Whether a following batch norm can absorb this depthwise convolution's bias: a depthwise convolution (one
+    /// [1, K, K] kernel per channel) with no activation of its own whose kernels are allocated, [C, 1, K, K]. The batch
+    /// norm then runs on the bias-free convolution with its mean shifted by the bias (bn(x + b) = bn'(x), mean' = mean - b),
+    /// one pass fewer over the activation.
+    /// </summary>
+    internal bool CanFoldBiasIntoFollowingBatchNorm
+        => IsDepthwise && VectorActivation is null
+           && (ScalarActivation is null || ScalarActivation is IdentityActivation<T>)
+           && _kernels.Rank == 4 && _kernels.Shape[0] == OutputDepth && _kernels.Shape[1] == 1
+           && _kernels.Shape[2] == KernelSize && _kernels.Shape[3] == KernelSize
            && (!UseBias || _biases.Length == OutputDepth);
 
     /// <summary>

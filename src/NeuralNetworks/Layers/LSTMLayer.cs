@@ -764,20 +764,12 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     // [i, f, g, o] layout). Packing the 8 split tensors into the concatenated
     // [4*hidden, *] arrays is invariant across forward calls while the weights are
     // unchanged, so cache it and reuse on repeated inference. Invalidated alongside
-    // the GPU stacked weights whenever the underlying weights mutate.
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _cpuStackedWeightsIh;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _cpuStackedWeightsHh;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _cpuStackedBiasIh;
-    private bool _cpuStackedWeightsValid;
-    [AiDotNet.Attributes.Scratch]
-    private IEngine? _sequenceCacheEngine;
-    // The source tensors' summed mutation versions when the stack was packed. An in-place write (an optimizer step, a
-    // finite-difference probe) bumps a version without going through an invalidating method; without this the cached
-    // stack kept serving the old weights, so eval-mode inference ignored every such update.
-    private long _cpuStackedWeightsSourceVersion = -1;
+    // the GPU stacked weights whenever the underlying weights mutate. Each cache also rebuilds when a source tensor's
+    // identity or version changes: an in-place write (an optimizer step, a finite-difference probe) bumps a version
+    // without going through an invalidating method, and without that check eval-mode inference ignored such updates.
+    private readonly DerivedTensorCache<T> _stackedWeightsIhCache = new();
+    private readonly DerivedTensorCache<T> _stackedWeightsHhCache = new();
+    private readonly DerivedTensorCache<T> _stackedBiasIhCache = new();
 
     #endregion
 
@@ -974,7 +966,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
 
         _isInitialized = false;
     }
-
+
 
     /// <summary>
     /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the
@@ -1413,23 +1405,9 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         }
         else
         {
-            long version = StackedWeightsSourceVersion();
-            if (!_cpuStackedWeightsValid || _cpuStackedWeightsSourceVersion != version
-                || !ReferenceEquals(_sequenceCacheEngine, engine)
-                || _cpuStackedWeightsIh is null || _cpuStackedWeightsHh is null || _cpuStackedBiasIh is null)
-            {
-                using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
-                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-                _cpuStackedWeightsIh = engine.Concat(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 0);
-                _cpuStackedWeightsHh = engine.Concat(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 0);
-                _cpuStackedBiasIh = engine.Concat(new[] { _biasI, _biasF, _biasC, _biasO }, 0);
-                _cpuStackedWeightsSourceVersion = version;
-                _sequenceCacheEngine = engine;
-                _cpuStackedWeightsValid = true;
-            }
-            wIh = _cpuStackedWeightsIh;
-            wHh = _cpuStackedWeightsHh;
-            bias = _cpuStackedBiasIh;
+            wIh = _stackedWeightsIhCache.GetOrBuild(engine, ConcatGates, _weightsIi, _weightsFi, _weightsCi, _weightsOi);
+            wHh = _stackedWeightsHhCache.GetOrBuild(engine, ConcatGates, _weightsIh, _weightsFh, _weightsCh, _weightsOh);
+            bias = _stackedBiasIhCache.GetOrBuild(engine, ConcatGates, _biasI, _biasF, _biasC, _biasO);
         }
 
         Tensor<T> result;
@@ -1463,23 +1441,18 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         _gpuStackedBiasHh = null;
     }
 
+    // Stacks per-gate tensors in i/f/g/o order along the gate axis.
+    private static Tensor<T> ConcatGates(IEngine engine, Tensor<T>[] gates) => engine.Concat(gates, 0);
+
     /// <summary>
     /// Drops the cached CPU stacked weights so the next fused forward repacks
     /// them. Called whenever the underlying split weights/biases change.
     /// </summary>
-    // Every version only grows, so the sum changes whenever any of the twelve source tensors is written in place.
-    private long StackedWeightsSourceVersion() =>
-        (long)_weightsIi.Version + _weightsFi.Version + _weightsCi.Version + _weightsOi.Version
-        + _weightsIh.Version + _weightsFh.Version + _weightsCh.Version + _weightsOh.Version
-        + _biasI.Version + _biasF.Version + _biasC.Version + _biasO.Version;
-
     private void InvalidateCpuStackedWeights()
     {
-        _cpuStackedWeightsIh = null;
-        _cpuStackedWeightsHh = null;
-        _cpuStackedBiasIh = null;
-        _cpuStackedWeightsValid = false;
-        _sequenceCacheEngine = null;
+        _stackedWeightsIhCache.Invalidate();
+        _stackedWeightsHhCache.Invalidate();
+        _stackedBiasIhCache.Invalidate();
     }
 
     /// <summary>
@@ -1985,8 +1958,8 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Invalidates the cached CPU pre-packed stacked weights on any training-mode
     /// TRANSITION. The fused inference fast path (<see cref="TryFusedLstmForward"/>) packs
-    /// the eight per-gate weight tensors into <c>_cpuStackedWeightsIh/Hh/BiasIh</c> ONCE and
-    /// reuses them while <c>_cpuStackedWeightsValid</c> stays set. Tape-based training
+    /// the eight per-gate weight tensors into its stacked-weight caches ONCE and
+    /// reuses them until they are invalidated. Tape-based training
     /// updates the per-gate weights IN PLACE (the optimizer writes the tensors' backing
     /// buffers directly; it never routes through SetParameters / UpdateParameters, the only
     /// sites that call <see cref="InvalidateCpuStackedWeights"/>), so a stacked pack built
