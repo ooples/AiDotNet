@@ -506,12 +506,20 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (action.Length != _options.ActionSize)
             throw new ArgumentException($"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
 
-        if (_priorities.Length != _replayBuffer.Capacity)
-        {
-            _priorities = new double[_replayBuffer.Capacity];
-        }
+        EnsurePriorityStorage();
         _priorities[_replayBuffer.NextWriteSlot] = _maxPriority;
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(observation, action, reward, nextObservation, done));
+    }
+
+    /// <summary>
+    /// Sizes the priority table to the buffer. Transitions already in the buffer when the table is created (a
+    /// buffer the agent did not fill itself) start at the running maximum, like any new transition.
+    /// </summary>
+    private void EnsurePriorityStorage()
+    {
+        if (_priorities.Length == _replayBuffer.Capacity) return;
+        _priorities = new double[_replayBuffer.Capacity];
+        for (int i = 0; i < _replayBuffer.Count; i++) _priorities[i] = _maxPriority;
     }
 
     /// <summary>The replay priority of every stored transition, in buffer-slot order.</summary>
@@ -583,11 +591,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         var sampledSlots = new System.Collections.Generic.List<int>(batchSize);
         var importanceWeights = new System.Collections.Generic.List<double>(batchSize);
         int stored = _replayBuffer.Count;
-        if (_priorities.Length != _replayBuffer.Capacity)
-        {
-            _priorities = new double[_replayBuffer.Capacity];
-            for (int i = 0; i < stored; i++) _priorities[i] = _maxPriority;
-        }
+        EnsurePriorityStorage();
         var scaledPriorities = new double[stored];
         var cumulative = new double[stored];
         double running = 0.0;
