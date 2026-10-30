@@ -8023,14 +8023,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
             {
-                // MMS (Pratap et al. 2023): massively-multilingual speech — production 1024-d / 24-layer
-                // Wav2Vec2-style encoder OOMs the runner. Exercise encoder + head at bounded scale (#1789).
+                // MMS (Pratap et al. 2023): massively-multilingual speech — the production 1280-wide, 48-layer
+                // wav2vec 2.0 encoder OOMs the runner. Exercise the same network (raw-waveform feature encoder,
+                // adapters in every layer, CTC head) at bounded scale with the regularizers off (#1789, #2321).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.Multilingual.MMSOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, VocabSize = 64 })";
+                    "new AiDotNet.SpeechRecognition.Multilingual.MMSOptions { MaxAudioLengthSeconds = 2, " +
+                    "EncoderDim = 64, NumEncoderLayers = 2, NumAttentionHeads = 4, FeedForwardDim = 128, AdapterDim = 8, " +
+                    "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0, ActivationDropout = 0.0, " +
+                    "FeatureProjectionDropout = 0.0, FinalDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0 })";
             }
             else if (model.ClassName == "KyutaiMoshi" && model.TypeParameterCount == 1)
             {
@@ -9858,10 +9861,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.Multilingual.MMSOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "new AiDotNet.SpeechRecognition.Multilingual.MMSOptions { MaxAudioLengthSeconds = 2, " +
+                    "EncoderDim = 64, NumEncoderLayers = 2, NumAttentionHeads = 4, FeedForwardDim = 128, AdapterDim = 8, " +
+                    "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0, ActivationDropout = 0.0, " +
+                    "FeatureProjectionDropout = 0.0, FinalDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0 })";
             }
             else if (model.ClassName == "OmnilangualASR" && model.TypeParameterCount == 1)
             {
