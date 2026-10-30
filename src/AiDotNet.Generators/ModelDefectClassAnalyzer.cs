@@ -187,7 +187,7 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
                             "the two are not models of the same paper under the same name; remove the declaration"));
                         continue;
                     }
-                    string? network = graph.SharedExclusive(pairing.Type, pairing.Target, group, paperTypes[pairing.Type], paperTypes);
+                    string? network = graph.SharedExclusive(pairing.Type, pairing.Target, group, paperTypes[pairing.Type], paperTypes, declared);
                     if (pairing.IsVariant && network is null)
                     {
                         end.ReportDiagnostic(Diagnostic.Create(UnverifiedVariant, pairing.Location, pairing.Type, attribute, pairing.Target,
@@ -326,7 +326,8 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
 
         /// <summary>Whether every model that reaches <paramref name="piece"/> is in <paramref name="group"/> or cites
         /// <paramref name="paper"/> (a language identifier on the wav2vec 2.0 network is a third task, not a copy).</summary>
-        private bool UsedOnlyBy(string piece, HashSet<string> group, string paper, Dictionary<string, string> models)
+        private bool UsedOnlyBy(string piece, HashSet<string> group, string paper, Dictionary<string, string> models,
+            IReadOnlyDictionary<string, string?> reusers)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal) { piece };
             var queue = new Queue<string>();
@@ -335,6 +336,9 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
             {
                 var current = queue.Dequeue();
                 models.TryGetValue(current, out var cited);
+                // A model that declares [ArchitectureFromPaper] naming this paper runs this paper's network by a
+                // reviewed claim (XLS-R is wav2vec 2.0), so using the piece does not make it another paper's.
+                if (cited is not null && reusers.TryGetValue(current, out var reused) && reused == paper) cited = paper;
                 if (cited is not null && !group.Contains(current) && cited != paper) return false;
                 // A model that reaches the piece through a group member (a detector built on the ResNet backbone) uses
                 // that member; it does not implement the network again.
@@ -347,11 +351,12 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
         }
 
         /// <summary>A piece both models reach that no model outside the group reaches, or null.</summary>
-        public string? SharedExclusive(string a, string b, HashSet<string> group, string paper, Dictionary<string, string> models)
+        public string? SharedExclusive(string a, string b, HashSet<string> group, string paper, Dictionary<string, string> models,
+            IReadOnlyDictionary<string, string?> reusers)
         {
             var reachB = Reach(b);
             return Reach(a).Where(reachB.Contains).OrderBy(p => p, StringComparer.Ordinal)
-                .FirstOrDefault(piece => UsedOnlyBy(piece, group, paper, models));
+                .FirstOrDefault(piece => UsedOnlyBy(piece, group, paper, models, reusers));
         }
     }
 

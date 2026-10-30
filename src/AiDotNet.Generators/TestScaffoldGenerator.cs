@@ -5887,7 +5887,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
-                    or "WavLMASR" or "WavLMRobust" or "XLSR"
+                    or "WavLMASR" or "WavLMRobust"
                 && model.TypeParameterCount == 1)
             {
                 // These ASR encoders have already exhausted the first two timeout rungs:
@@ -5908,8 +5908,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
                     "TDTDecoder" => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions",
                     "WavLMASR" => "AiDotNet.SpeechRecognition.Foundation.WavLMASROptions",
-                    "WavLMRobust" => "AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions",
-                    _ => "AiDotNet.SpeechRecognition.Multilingual.XLSROptions"
+                    _ => "AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions"
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
@@ -7682,9 +7681,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    // XLS-R now builds its paper network (wav2vec 2.0 LARGE over the raw waveform, #2321): the same
+                    // shape as Wav2Vec2Model's fixture, with the regularizers off so the invariants see a
+                    // deterministic objective.
                     "new AiDotNet.SpeechRecognition.Multilingual.XLSROptions { MaxAudioLengthSeconds = 2, " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0 })";
+                    "EncoderDim = 64, NumEncoderLayers = 2, NumAttentionHeads = 4, FeedForwardDim = 128, VocabSize = 64, " +
+                    "MaxTextLength = 16, DropoutRate = 0.0, ActivationDropout = 0.0, FeatureProjectionDropout = 0.0, " +
+                    "FinalDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0 })";
             }
             else if ((model.ClassName == "XLMRoBERTaNER" || model.ClassName == "TemplateNER")
                      && model.TypeParameterCount == 1)

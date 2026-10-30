@@ -26,6 +26,8 @@ namespace AiDotNet.Attributes
     public sealed class TaskVariantOfAttribute : Attribute { public TaskVariantOfAttribute(Type canonical, string task) { } }
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public sealed class DistinctImplementationOfAttribute : Attribute { public DistinctImplementationOfAttribute(Type other, string reason) { } }
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
+    public sealed class ArchitectureFromPaperAttribute : Attribute { public ArchitectureFromPaperAttribute(string paperUrl, string reason) { } }
 }
 namespace Lib
 {
@@ -154,6 +156,32 @@ namespace A {{ {Paper} public class ResNetNetwork<T> {{ object n = new Lib.Netwo
 namespace B {{ {Paper} [AiDotNet.Attributes.TaskVariantOf(typeof(A.ResNetNetwork<>), ""backbone"")]
   public class ResNet<T> {{ object n = new Lib.Network<T>(); }} }}
 namespace C {{ {OtherPaper} public class Detector<T> {{ object b = new B.ResNet<T>(); }} }}"));
+    }
+
+    // XLS-R cites its own paper but declares it runs wav2vec 2.0's architecture, so its using the wav2vec 2.0 network
+    // does not make that network another paper's. Mutation: drop the reusers check in UsedOnlyBy.
+    [Fact]
+    public async Task OtherPaperDeclaringThisArchitecture_DoesNotBreakTheVariant()
+    {
+        Assert.Empty(await RunAsync($@"
+namespace A {{ {Paper} public class Wav2Vec2<T> {{ object n = new Lib.Network<T>(); }} }}
+namespace B {{ {Paper} [AiDotNet.Attributes.TaskVariantOf(typeof(A.Wav2Vec2<>), ""asr"")]
+  public class Wav2Vec2Model<T> {{ object n = new Lib.Network<T>(); }} }}
+namespace C {{ {OtherPaper} [AiDotNet.Attributes.ArchitectureFromPaper(""https://arxiv.org/abs/2001.00001"", ""same network"")]
+  public class Xlsr<T> {{ object n = new Lib.Network<T>(); }} }}"));
+    }
+
+    // A declaration naming some third paper is no claim to this one, so the network is still shared with another paper.
+    [Fact]
+    public async Task OtherPaperDeclaringADifferentArchitecture_StillBreaksTheVariant()
+    {
+        var reports = await RunAsync($@"
+namespace A {{ {Paper} public class Wav2Vec2<T> {{ object n = new Lib.Network<T>(); }} }}
+namespace B {{ {Paper} [AiDotNet.Attributes.TaskVariantOf(typeof(A.Wav2Vec2<>), ""asr"")]
+  public class Wav2Vec2Model<T> {{ object n = new Lib.Network<T>(); }} }}
+namespace C {{ {OtherPaper} [AiDotNet.Attributes.ArchitectureFromPaper(""https://arxiv.org/abs/2001.00009"", ""other"")]
+  public class Xlsr<T> {{ object n = new Lib.Network<T>(); }} }}");
+        Assert.Contains("ADNDEF005:B.Wav2Vec2Model<T>", reports);
     }
 
     [Fact]
