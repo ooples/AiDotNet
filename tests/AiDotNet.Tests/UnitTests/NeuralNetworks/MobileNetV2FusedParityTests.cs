@@ -29,30 +29,47 @@ public class MobileNetV2FusedParityTests
 
     public MobileNetV2FusedParityTests(ITestOutputHelper output) => _output = output;
 
-    private static List<ILayer<float>> Layers(string variant)
+    /// <summary>The stacks the parity is checked on: the stem alone, its parts, and the stem before each block form.</summary>
+    public enum StackVariant
+    {
+        /// <summary>Convolution, batch norm, ReLU6.</summary>
+        Stem,
+        /// <summary>Convolution and batch norm, no activation.</summary>
+        ConvBatchNorm,
+        /// <summary>Convolution and ReLU6, no batch norm.</summary>
+        ConvRelu6,
+        /// <summary>The stem, then an inverted residual block with a residual connection.</summary>
+        Residual,
+        /// <summary>The stem, then a strided inverted residual block.</summary>
+        Stride2,
+        /// <summary>The stem, then an inverted residual block without the expansion stage.</summary>
+        NoExpansion,
+    }
+
+    private static List<ILayer<float>> Layers(StackVariant variant)
     {
         var layers = new List<ILayer<float>>
         {
             new ConvolutionalLayer<float>(outputDepth: 8, kernelSize: 3, stride: 1, padding: 1,
                 activationFunction: new IdentityActivation<float>()),
         };
-        if (variant != "conv-relu6") layers.Add(new BatchNormalizationLayer<float>());
-        if (variant != "conv-bn") layers.Add(new ActivationLayer<float>(activationFunction: new ReLU6Activation<float>()));
+        if (variant != StackVariant.ConvRelu6) layers.Add(new BatchNormalizationLayer<float>());
+        if (variant != StackVariant.ConvBatchNorm) layers.Add(new ActivationLayer<float>(activationFunction: new ReLU6Activation<float>()));
         switch (variant)
         {
-            case "stem":
-            case "conv-bn":
-            case "conv-relu6":
+            case StackVariant.Stem:
+            case StackVariant.ConvBatchNorm:
+            case StackVariant.ConvRelu6:
                 break;
-            case "residual":
+            case StackVariant.Residual:
                 layers.Add(new InvertedResidualBlock<float>(outChannels: 8, expansionRatio: 2, stride: 1,
                     activationFunction: new ReLU6Activation<float>()));
                 break;
-            case "stride2":
+            case StackVariant.Stride2:
                 layers.Add(new InvertedResidualBlock<float>(outChannels: 12, expansionRatio: 2, stride: 2,
                     activationFunction: new ReLU6Activation<float>()));
                 break;
-            case "noexpand":
+            case StackVariant.NoExpansion:
                 layers.Add(new InvertedResidualBlock<float>(outChannels: 8, expansionRatio: 1, stride: 1,
                     activationFunction: new ReLU6Activation<float>()));
                 break;
@@ -65,7 +82,7 @@ public class MobileNetV2FusedParityTests
         return layers;
     }
 
-    private static NeuralNetworkBase<float> Build(string variant)
+    private static NeuralNetworkBase<float> Build(StackVariant variant)
     {
 
         var arch = new NeuralNetworkArchitecture<float>(
@@ -88,13 +105,13 @@ public class MobileNetV2FusedParityTests
     }
 
     [Theory]
-    [InlineData("stem")]
-    [InlineData("conv-bn")]
-    [InlineData("conv-relu6")]
-    [InlineData("residual")]
-    [InlineData("stride2")]
-    [InlineData("noexpand")]
-    public void One_fused_step_matches_the_eager_tape(string variant)
+    [InlineData(StackVariant.Stem)]
+    [InlineData(StackVariant.ConvBatchNorm)]
+    [InlineData(StackVariant.ConvRelu6)]
+    [InlineData(StackVariant.Residual)]
+    [InlineData(StackVariant.Stride2)]
+    [InlineData(StackVariant.NoExpansion)]
+    public void One_fused_step_matches_the_eager_tape(StackVariant variant)
     {
         var prior = AiDotNetEngine.Current;
         var priorOptions = TensorCodecOptions.Current;
