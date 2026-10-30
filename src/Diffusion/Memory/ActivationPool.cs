@@ -44,7 +44,7 @@ namespace AiDotNet.Diffusion.Memory;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class ActivationPool<T> : IDisposable
+internal class ActivationPool<T> : IDisposable
 {
     /// <summary>
     /// Maximum memory to use for pooling in bytes.
