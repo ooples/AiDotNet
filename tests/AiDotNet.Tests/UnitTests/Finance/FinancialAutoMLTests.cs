@@ -52,6 +52,7 @@ public class FinancialAutoMLTests
     [InlineData(typeof(AiDotNet.Finance.Forecasting.Transformers.TFT<>), FinancialDomain.Forecasting)]
     [InlineData(typeof(AiDotNet.Finance.Risk.NeuralVaR<>), FinancialDomain.Risk)]
     [InlineData(typeof(AiDotNet.Finance.Risk.TabNet<>), FinancialDomain.Risk)]
+    [InlineData(typeof(AiDotNet.Finance.Risk.TabTransformer<>), FinancialDomain.Risk)]
     public async Task OneTrialSearch_TrainsTheCandidate(Type candidate, FinancialDomain domain)
     {
         var options = new FinancialAutoMLOptions<double>
