@@ -5315,6 +5315,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsSpeakerRecognitionBase)
             return TestFamily.SpeakerRecognition;
 
+        // Priority 8c: a text-to-mel model built on the audio base (TtsModel) takes phoneme IDs and returns mel
+        // frames. The audio invariants assume a waveform in (silence in, near-silence out), which a phoneme sequence
+        // of token 0 is not, so it is judged with the other text-to-mel models.
+        if (model.ExtendsAudioNeuralNetworkBase && IsTextToMelTTS(model.ClassName))
+            return TestFamily.TTS;
+
         // Priority 8: Audio NN
         if (model.ExtendsAudioNeuralNetworkBase)
             return TestFamily.AudioNN;
@@ -18217,6 +18223,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (afterMatch >= testName.Length) continue;
 
             string remainder = testName.Substring(afterMatch);
+            // A family test base is shared scaffolding, not a test of the model that its name happens to end with:
+            // counting TTSModelTestBase as coverage hid TtsModel from generation entirely.
+            if (remainder.StartsWith("TestBase", System.StringComparison.Ordinal)) continue;
             if (remainder.StartsWith("Tests", System.StringComparison.Ordinal) ||
                 remainder.StartsWith("Test", System.StringComparison.Ordinal) ||
                 remainder.StartsWith("_", System.StringComparison.Ordinal)) return true;
@@ -21088,6 +21097,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // ForwardTacotron, etc. all use CreateDefaultAcousticModelLayers.
             "FastSpeech" => true,
             "FastSpeech2" => true,
+            // TtsModel's native stack is CreateDefaultAcousticModelLayers, the FastSpeech2 stack: phoneme IDs in, mel
+            // frames out, like the acoustic models above.
+            "TtsModel" => true,
             "AdaSpeech" => true,
             "AdaSpeech2" => true,
             "AlignTTS" => true,

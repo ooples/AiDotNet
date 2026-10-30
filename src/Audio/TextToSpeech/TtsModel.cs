@@ -1,4 +1,4 @@
-﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.LearningRateSchedulers;
 using System.Diagnostics;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
@@ -68,6 +68,8 @@ namespace AiDotNet.Audio.TextToSpeech;
                 Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
                 ReferenceBatchSize = 48,
                 Source = "Ren et al. 2021, Sec. 4.1: Adam with beta1 0.9, beta2 0.98, eps 1e-9 following the learning rate schedule of Vaswani et al. 2017, batch size 48 sentences, 160k steps. No constant rate is declared because that schedule states none.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2006.04558",
+    "The native acoustic model is FastSpeech 2's stack (CreateDefaultAcousticModelLayers, shared with FastSpeech2).")]
 public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly TtsOptions _options;
@@ -176,11 +178,6 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// FFT size for Griffin-Lim.
     /// </summary>
     private readonly int _fftSize;
-
-    /// <summary>
-    /// Hop length for Griffin-Lim.
-    /// </summary>
-    private readonly int _hopLength;
 
     /// <summary>
     /// Hidden dimension for the acoustic model.
@@ -302,7 +299,6 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _useGriffinLimFallback = _options.UseGriffinLimFallback;
         _griffinLimIterations = _options.GriffinLimIterations;
         _fftSize = _options.FftSize;
-        _hopLength = _options.HopLength;
         // These were hardcoded here while the NATIVE constructor read all five from options,
         // so one model described itself two different ways and a caller configuring the ONNX
         // path had their settings silently discarded. No ratchet sees this: the native path
@@ -429,7 +425,6 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _useGriffinLimFallback = _options.UseGriffinLimFallback;
         _griffinLimIterations = _options.GriffinLimIterations;
         _fftSize = _options.FftSize;
-        _hopLength = _options.HopLength;
         _hiddenDim = _options.HiddenDim;
         _numHeads = _options.NumHeads;
         _numEncoderLayers = _options.NumEncoderLayers;
@@ -469,7 +464,7 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// Follows the golden standard pattern:
     /// 1. Check if in native mode (ONNX mode returns early)
     /// 2. Use Architecture.Layers if provided by user
-    /// 3. Fall back to LayerHelper.CreateDefaultTtsLayers() otherwise
+    /// 3. Fall back to LayerHelper.CreateDefaultAcousticModelLayers() otherwise
     /// </remarks>
     protected override void InitializeLayers()
     {
@@ -481,19 +476,19 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
         else
         {
-            int maxMelFrames = (SampleRate * 30) / _hopLength; // Max 30 seconds
             int phonemeVocabSize = 128;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultTtsLayers(
-                vocabSize: phonemeVocabSize,
-                textHiddenDim: _hiddenDim,
-                audioHiddenDim: _hiddenDim,
+            // A FastSpeech-style acoustic stack (Ren et al., 2019): a phoneme embedding, residual feed-forward
+            // Transformer blocks for the encoder and the decoder, and a projection to NumMels bins. Predict therefore
+            // returns the [frames, mels] spectrogram that Synthesize hands to the vocoder or Griffin-Lim.
+            Layers.AddRange(LayerHelper<T>.CreateDefaultAcousticModelLayers(
+                encoderDim: _hiddenDim,
+                decoderDim: NumMels,
+                hiddenDim: _hiddenDim,
                 numEncoderLayers: _numEncoderLayers,
                 numDecoderLayers: _numDecoderLayers,
                 numHeads: _numHeads,
-                maxTextLength: _maxPhonemeLength,
-                maxMelFrames: maxMelFrames,
-                numMels: NumMels,
-                dropoutRate: 0.0));
+                dropoutRate: 0.0,
+                vocabSize: phonemeVocabSize));
         }
     }
 
