@@ -170,6 +170,9 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
             });
     }
 
+    /// <summary>The networks this agent registered, in <see cref="Networks"/> order.</summary>
+    internal IReadOnlyList<INeuralNetwork<T>> GetNetworks() => Networks;
+
     /// <summary>
     /// The weights of every network in <see cref="Networks"/>, concatenated in list order. Unlike
     /// <c>GetParameters</c>, this leaves out state an agent keeps outside its networks.

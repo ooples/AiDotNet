@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.Agents;
 using AiDotNet.ReinforcementLearning.Agents.A2C;
@@ -238,10 +240,11 @@ public class RLAgentOptionsHonoredTests
     }
 
     private static MuZeroAgent<double> SmallMuZero(
-        double dirichletAlpha, double fraction, AdamOptimizer<double, Tensor<double>, Tensor<double>>? optimizer = null) =>
+        double dirichletAlpha, double fraction,
+        Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>? optimizerFactory = null) =>
         new MuZeroAgent<double>(new MuZeroOptions<double>
         {
-            Optimizer = optimizer,
+            OptimizerFactory = optimizerFactory,
             ObservationSize = StateSize,
             ActionSize = 4,
             LatentStateSize = 6,
@@ -335,7 +338,7 @@ public class RLAgentOptionsHonoredTests
         Assert.True(fast > 100 * slow, $"ValueLearningRate ignored: displacement {fast} at 1e-2 vs {slow} at 1e-5.");
     }
 
-    // ── Options.Optimizer reaches every network ──────────────────────────────────────────────────────────
+    // ── OptimizerFactory reaches every network ───────────────────────────────────────────────────────────
 
     private const double FastRate = 1e-3;
     private const double SlowRate = 1e-9;
@@ -377,7 +380,7 @@ public class RLAgentOptionsHonoredTests
         double slow = displacementAtRate(SlowRate);
         Assert.True(fast > 0.0 && !double.IsNaN(fast), $"{agent}: the update did not move the networks ({fast}).");
         Assert.True(fast > 1e3 * slow,
-            $"{agent}: Options.Optimizer ignored: displacement {fast} at {FastRate} vs {slow} at {SlowRate}.");
+            $"{agent}: OptimizerFactory ignored: displacement {fast} at {FastRate} vs {slow} at {SlowRate}.");
     }
 
     private static Action Feed(DeepReinforcementLearningAgentBase<double> agent, int count, int actionSize, int seed) => () =>
@@ -397,7 +400,7 @@ public class RLAgentOptionsHonoredTests
                 ActionSize = 2,
                 PolicyHiddenLayers = new List<int> { 8 },
                 ValueHiddenLayers = new List<int> { 8 },
-                Optimizer = Adam(rate),
+                OptimizerFactory = () => Adam(rate),
             });
             return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 43));
         });
@@ -420,7 +423,7 @@ public class RLAgentOptionsHonoredTests
                 ReplayBufferSize = 64,
                 WarmupSteps = 0,
                 TargetUpdateFrequency = 10_000,
-                Optimizer = Adam(rate),
+                OptimizerFactory = () => Adam(rate),
             });
             return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 47));
         });
@@ -440,7 +443,7 @@ public class RLAgentOptionsHonoredTests
                 ImaginationHorizon = 2,
                 BatchSize = 8,
                 ReplayBufferSize = 64,
-                Optimizer = Adam(rate),
+                OptimizerFactory = () => Adam(rate),
             });
             return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 53));
         });
@@ -461,7 +464,7 @@ public class RLAgentOptionsHonoredTests
                 RNNHiddenSize = 4,
                 BatchSize = 8,
                 ReplayBufferSize = 64,
-                Optimizer = Adam(rate),
+                OptimizerFactory = () => Adam(rate),
             });
             return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 59));
         });
@@ -472,9 +475,145 @@ public class RLAgentOptionsHonoredTests
     {
         AssertOptimizerDrivesTraining("MuZero", rate =>
         {
-            var agent = SmallMuZero(0.3, 0.25, Adam(rate));
+            var agent = SmallMuZero(0.3, 0.25, () => Adam(rate));
             return SecondUpdateDisplacement(agent, Feed(agent, 16, 4, seed: 61));
         });
+    }
+
+    // ── OptimizerFactory gives every network its own optimizer ───────────────────────────────────────────
+
+    /// <summary>A factory that records every optimizer it hands out.</summary>
+    private sealed class CountingFactory
+    {
+        public List<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>> Created { get; } = new();
+
+        public IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> Create()
+        {
+            var optimizer = Adam(FastRate);
+            Created.Add(optimizer);
+            return optimizer;
+        }
+    }
+
+    private static IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>? TrainingOptimizerOf(INeuralNetwork<double> network) =>
+        ((NeuralNetworkBase<double>)network).TrainingOptimizer;
+
+    /// <summary>
+    /// The factory ran once per network, and each network trains with the instance its own call returned. One
+    /// shared instance would advance Adam's bias-correction step counter on every network's step.
+    /// </summary>
+    private static void AssertOneOptimizerPerNetwork(string agent, CountingFactory factory, IReadOnlyList<INeuralNetwork<double>> networks)
+    {
+        Assert.Equal(networks.Count, factory.Created.Count);
+        var used = networks.Select(TrainingOptimizerOf).ToList();
+        Assert.All(used, optimizer => Assert.Contains(factory.Created, created => ReferenceEquals(created, optimizer)));
+        // ReferenceEqualityComparer is not available on net471, so compare pairwise.
+        for (int i = 0; i < used.Count; i++)
+            for (int j = i + 1; j < used.Count; j++)
+                Assert.False(ReferenceEquals(used[i], used[j]), $"{agent}: networks {i} and {j} share one optimizer instance.");
+    }
+
+    [Fact]
+    public void A3C_GivesEveryNetworkItsOwnOptimizer_IncludingEachWorkersLocalNetworks()
+    {
+        var factory = new CountingFactory();
+        var agent = new A3CAgent<double>(new A3COptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = 2,
+            PolicyHiddenLayers = new List<int> { 8 },
+            ValueHiddenLayers = new List<int> { 8 },
+            OptimizerFactory = factory.Create,
+        });
+        AssertOneOptimizerPerNetwork("A3C", factory, agent.GetNetworks());
+
+        var first = agent.WorkerNetworks(0);
+        var second = agent.WorkerNetworks(1);
+        var again = agent.WorkerNetworks(0);
+        Assert.Same(first.Policy, again.Policy);
+
+        var all = agent.GetNetworks().Concat(new[] { first.Policy, first.Value, second.Policy, second.Value }).ToList();
+        AssertOneOptimizerPerNetwork("A3C", factory, all);
+    }
+
+    [Fact]
+    public void Rainbow_GivesEveryNetworkItsOwnOptimizer()
+    {
+        var factory = new CountingFactory();
+        var agent = new RainbowDQNAgent<double>(new RainbowDQNOptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = 2,
+            SharedLayers = new List<int> { 8 },
+            NumAtoms = 5,
+            OptimizerFactory = factory.Create,
+        });
+        AssertOneOptimizerPerNetwork("Rainbow", factory, agent.GetNetworks());
+    }
+
+    [Fact]
+    public void Dreamer_GivesEveryNetworkItsOwnOptimizer()
+    {
+        var factory = new CountingFactory();
+        var agent = new DreamerAgent<double>(new DreamerOptions<double>
+        {
+            ObservationSize = StateSize,
+            ActionSize = 2,
+            LatentSize = 6,
+            HiddenSize = 8,
+            OptimizerFactory = factory.Create,
+        });
+        AssertOneOptimizerPerNetwork("Dreamer", factory, agent.GetNetworks());
+    }
+
+    [Fact]
+    public void WorldModels_GivesEveryNetworkItsOwnOptimizer()
+    {
+        var factory = new CountingFactory();
+        var agent = new WorldModelsAgent<double>(new WorldModelsOptions<double>
+        {
+            ObservationWidth = StateSize,
+            ObservationHeight = 1,
+            ObservationChannels = 1,
+            ActionSize = 2,
+            LatentSize = 4,
+            RNNHiddenSize = 4,
+            OptimizerFactory = factory.Create,
+        });
+        AssertOneOptimizerPerNetwork("WorldModels", factory, agent.GetNetworks());
+    }
+
+    [Fact]
+    public void MuZero_BuildsOneJointOptimizerPerAgent_EvenFromSharedOptions()
+    {
+        // MuZero's three networks train in one joint step, so each agent asks for exactly one optimizer, however
+        // many steps it takes; two agents built from the same options get one each.
+        var factory = new CountingFactory();
+        var options = new MuZeroOptions<double>
+        {
+            ObservationSize = StateSize,
+            ActionSize = 4,
+            LatentStateSize = 6,
+            RepresentationLayers = new List<int> { 8 },
+            DynamicsLayers = new List<int> { 8 },
+            PredictionLayers = new List<int> { 8 },
+            BatchSize = 4,
+            UnrollSteps = 2,
+            TDSteps = 2,
+            Seed = 29,
+            OptimizerFactory = factory.Create,
+        };
+        foreach (var agent in new[] { new MuZeroAgent<double>(options), new MuZeroAgent<double>(options) })
+        {
+            var feed = Feed(agent, 16, 4, seed: 67);
+            feed();
+            agent.Train();
+            feed();
+            agent.Train();
+        }
+
+        Assert.Equal(2, factory.Created.Count);
+        Assert.NotSame(factory.Created[0], factory.Created[1]);
     }
 
     // ── Options with no effect are not offered ───────────────────────────────────────────────────────────

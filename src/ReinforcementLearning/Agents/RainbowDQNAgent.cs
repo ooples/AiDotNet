@@ -89,8 +89,6 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     }
     private RainbowDQNOptions<T> _options;
 
-    // The caller's optimizer (constructor argument, else Options.Optimizer), or null for Adam at LearningRate.
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _configuredOptimizer;
 
     [ParameterAlias("rainbow/online-network")]
     private INeuralNetwork<T> _onlineNetwork;
@@ -115,11 +113,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     }
 
     /// <param name="options">The agent's configuration.</param>
-    /// <param name="optimizer">
-    /// The optimizer the online network trains with, overriding <see cref="RainbowDQNOptions{T}.Optimizer"/>. When both
-    /// are null, it trains with Adam at the agent's learning rate.
-    /// </param>
-    public RainbowDQNAgent(RainbowDQNOptions<T> options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public RainbowDQNAgent(RainbowDQNOptions<T> options)
         : base(options)
     {
         if (options == null)
@@ -129,7 +123,6 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
 
         _options = options;
         Options = _options;
-        _configuredOptimizer = optimizer ?? options.Optimizer;
 
         _stepCount = 0;
         _updateCount = 0;
@@ -218,7 +211,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         );
 
         return new NeuralNetwork<T>(finalArchitecture,
-            optimizer: _configuredOptimizer ?? CreateNetworkOptimizer(LearningRate),
+            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate),
             lossFunction: LossFunction);
     }
 

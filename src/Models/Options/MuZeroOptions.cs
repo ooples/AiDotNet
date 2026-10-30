@@ -76,7 +76,7 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
         TDSteps = other.TDSteps;
         PriorityAlpha = other.PriorityAlpha;
         UseValuePrefix = other.UseValuePrefix;
-        Optimizer = other.Optimizer;
+        OptimizerFactory = other.OptimizerFactory;
     }
 
     /// <summary>
@@ -133,11 +133,18 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public bool UseValuePrefix { get; init; } = false;
 
     /// <summary>
-    /// Every network this agent trains steps with this optimizer, whose learning rate then replaces the
-    /// agent's learning-rate options. Moments are kept per parameter tensor, so one instance can serve every
-    /// network; an optimizer with a step counter (Adam's bias correction) advances it on each network's step.
-    /// When null, the representation, dynamics and prediction networks train jointly with Adam at the
-    /// agent's learning rate.
+    /// Gets or sets a factory for the optimizer of the agent's joint training step.
     /// </summary>
-    public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; init; }
+    /// <remarks>
+    /// <para>
+    /// MuZero trains its representation, dynamics and prediction networks with one loss in one step
+    /// (Schrittwieser et al. 2020), so the agent invokes the factory once and steps all three networks with
+    /// that optimizer. When this is <c>null</c>, the step uses Adam at the agent's learning rate.
+    /// </para>
+    /// <para>
+    /// The factory must create a new optimizer instance on each call, so agents built from copies of these
+    /// options never share moment buffers or a step counter.
+    /// </para>
+    /// </remarks>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

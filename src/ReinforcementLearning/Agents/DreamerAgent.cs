@@ -83,10 +83,6 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
     private DreamerOptions<T> _options;
 
-    // The caller's optimizer (constructor argument, else Options.Optimizer), or null for each network's own default.
-    // Its moment state is keyed by parameter tensor, so one instance serves every network.
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _configuredOptimizer;
-
     // World model components
     private INeuralNetwork<T> _representationNetwork;  // Observation -> latent state
     private INeuralNetwork<T> _dynamicsNetwork;  // (latent state, action) -> next latent state
@@ -119,18 +115,13 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <param name="options">The agent's configuration.</param>
-    /// <param name="optimizer">
-    /// The optimizer every network trains with, overriding <see cref="DreamerOptions{T}.Optimizer"/>. When both are
-    /// null, each network trains with its own default optimizer.
-    /// </param>
-    public DreamerAgent(DreamerOptions<T> options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public DreamerAgent(DreamerOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
 
-        _configuredOptimizer = optimizer ?? options.Optimizer;
         _updateCount = 0;
 
         // Initialize networks directly in constructor
@@ -170,7 +161,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, _configuredOptimizer, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke(), new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
@@ -190,7 +181,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: _options.LatentSize,
             outputSize: _options.ActionSize);
-        var network = new NeuralNetwork<T>(architecture, _configuredOptimizer, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, _options.OptimizerFactory?.Invoke(), new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {

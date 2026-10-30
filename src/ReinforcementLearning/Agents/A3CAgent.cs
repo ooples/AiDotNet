@@ -82,12 +82,8 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
     private readonly A3COptions<T> _options;
 
-    // The caller's optimizer (constructor argument, else Options.Optimizer), or null for Adam at each network's own
-    // configured rate. Its moment state is keyed by parameter tensor, so one instance serves every network.
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _configuredOptimizer;
-
     // Each worker's local policy and value networks, built once and reused across TrainAsync calls, so a worker keeps
-    // its optimizer statistics and a shared optimizer does not collect state for networks that are thrown away.
+    // its optimizer state instead of starting a fresh optimizer on every call.
     private readonly Dictionary<int, (INeuralNetwork<T> Policy, INeuralNetwork<T> Value)> _workerNetworks = new();
 
     private INeuralNetwork<T> _globalPolicyNetwork;
@@ -114,17 +110,12 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <param name="options">The agent's configuration.</param>
-    /// <param name="optimizer">
-    /// The optimizer every network trains with, overriding <see cref="A3COptions{T}.Optimizer"/>. When both are null,
-    /// the policy networks use Adam at PolicyLearningRate and the value networks Adam at ValueLearningRate.
-    /// </param>
-    public A3CAgent(A3COptions<T> options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public A3CAgent(A3COptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _configuredOptimizer = optimizer ?? options.Optimizer;
         _globalSteps = 0;
 
         // Initialize networks directly in constructor
@@ -168,7 +159,7 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers);
 
         return new NeuralNetwork<T>(architecture,
-            optimizer: _configuredOptimizer ?? CreateNetworkOptimizer(_options.PolicyLearningRate),
+            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.PolicyLearningRate),
             lossFunction: _options.ValueLossFunction);
     }
 
@@ -194,7 +185,7 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers);
 
         return new NeuralNetwork<T>(architecture,
-            optimizer: _configuredOptimizer ?? CreateNetworkOptimizer(_options.ValueLearningRate),
+            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.ValueLearningRate),
             lossFunction: _options.ValueLossFunction);
     }
 
@@ -304,7 +295,8 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
     }
 
-    private (INeuralNetwork<T> Policy, INeuralNetwork<T> Value) WorkerNetworks(int workerId)
+    /// <summary>Worker <paramref name="workerId"/>'s local policy and value networks, built on first use.</summary>
+    internal (INeuralNetwork<T> Policy, INeuralNetwork<T> Value) WorkerNetworks(int workerId)
     {
         lock (_workerNetworks)
         {
