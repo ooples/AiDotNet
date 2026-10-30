@@ -299,7 +299,7 @@ namespace AiDotNet.NeuralNetworks
                 totalComponents++;
 
                 // Add n-gram embeddings
-                var ngrams = GetCharacterNGrams(tokens[s], 3, 6);
+                var ngrams = GetCharacterNGrams(tokens[s], _options.MinNgramLength, _options.MaxNgramLength);
                 if (ngrams.Count > 0)
                 {
                     // Subword ids live ABOVE the word ids in the one shared table, matching
@@ -406,6 +406,8 @@ namespace AiDotNet.NeuralNetworks
                     { "EmbeddingDimension", _embeddingDimension },
                     { "VocabSize", _vocabSize },
                     { "BucketSize", _bucketSize },
+                    { "MinNgramLength", _options.MinNgramLength },
+                    { "MaxNgramLength", _options.MaxNgramLength },
                     { "MaxTokens", _maxTokens }
                 }
             };
