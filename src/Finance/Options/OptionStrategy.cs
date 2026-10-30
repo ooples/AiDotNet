@@ -27,8 +27,13 @@ public sealed record StockLeg(OptionTradeAction Action, int Shares)
 {
     /// <summary>The number of shares, a non-negative magnitude; the direction comes from <see cref="Action"/>.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown if the share count is negative.</exception>
-    public int Shares { get; init; } = Shares >= 0
-        ? Shares
+    public int Shares { get => _shares; init => _shares = NonNegative(value); }
+
+    // Validated in the init accessor too, so `leg with { Shares = -5 }` is refused like the constructor is.
+    private readonly int _shares = NonNegative(Shares);
+
+    private static int NonNegative(int shares) => shares >= 0
+        ? shares
         : throw new ArgumentOutOfRangeException(nameof(Shares), "Shares is a magnitude; use Action for the direction.");
 
     /// <summary>Share count, positive for a long (bought) leg and negative for a short (sold) one.</summary>

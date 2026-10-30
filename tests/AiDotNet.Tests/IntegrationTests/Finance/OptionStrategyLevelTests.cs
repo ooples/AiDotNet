@@ -39,6 +39,8 @@ public class OptionStrategyLevelTests
     public void A_stock_leg_takes_a_non_negative_share_count()
     {
         Assert.Throws<System.ArgumentOutOfRangeException>(() => new StockLeg(OptionTradeAction.Buy, -100));
+        var leg = new StockLeg(OptionTradeAction.Buy, 100);
+        Assert.Throws<System.ArgumentOutOfRangeException>(() => leg with { Shares = -100 });
         Assert.Equal(-100, new StockLeg(OptionTradeAction.Sell, 100).SignedShares);
     }
 
