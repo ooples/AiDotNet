@@ -102,15 +102,15 @@ public class PURENER<T> : SpanBasedNERBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>PURE's entity model (Zhong and Chen 2021, section 3.2): each span is the concatenation of its start and end token states and a learned 150-dimensional width embedding, classified by a two-layer feed-forward network of 150 units; spans up to 8 tokens are candidates.</remarks>
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers()
     {
-        return LayerHelper<T>.CreateDefaultSpanBasedNERLayers(
-            hiddenDimension: NEROptions.HiddenDimension,
-            numAttentionHeads: NEROptions.NumAttentionHeads,
-            numTransformerLayers: NEROptions.NumTransformerLayers,
-            intermediateDimension: NEROptions.IntermediateDimension,
-            spanEmbeddingDimension: NEROptions.SpanEmbeddingDimension,
-            numLabels: NEROptions.NumLabels,
-            dropoutRate: NEROptions.DropoutRate);
+        foreach (var layer in CreateTokenEncoderLayers()) yield return layer;
+        int maxWidth = NEROptions.MaxSpanLength > 0 ? NEROptions.MaxSpanLength : 8;
+        yield return new SpanRepresentationScorerLayer<T>(SpanRepresentationKind.Endpoints, NEROptions.HiddenDimension,
+            widthDim: 150, maxWidth: maxWidth, hiddenDim: 150, numCategories: NEROptions.NumLabels);
     }
+
+    /// <inheritdoc />
+    protected override Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen) => BuildSpanGridTargets(labels, seqLen);
 }
