@@ -99,13 +99,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
 
     // Cached values
     [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
     private Tensor<T>? _featureSelectionsCache;
-    [Scratch]
-    private Tensor<T>? _splitDecisionsCache;
-    [Scratch]
-    private Tensor<T>? _leafProbabilitiesCache;
 
     private readonly int _numLeaves;
 
@@ -328,7 +322,6 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
                 $"was resolved with _inputDim={_inputDim}, but input has " +
                 $"{input.Shape[1]} features.", nameof(input));
 
-        _inputCache = input;
         int batchSize = input.Shape[0];
 
         // Compute soft feature selections for each level (entmax/softmax)
@@ -337,11 +330,9 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
 
         // Compute split decisions for each level
         var splitDecisions = ComputeSplitDecisions(input, featureSelections, batchSize);
-        _splitDecisionsCache = splitDecisions;
 
         // Compute leaf probabilities
         var leafProbs = ComputeLeafProbabilities(splitDecisions, batchSize);
-        _leafProbabilitiesCache = leafProbs;
 
         // Weighted sum of leaf values
         var output = ComputeOutput(leafProbs, batchSize);
@@ -468,10 +459,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _inputCache = null;
         _featureSelectionsCache = null;
-        _splitDecisionsCache = null;
-        _leafProbabilitiesCache = null;
 
         Engine.TensorFill(_featureSelectionGrad, NumOps.Zero);
         Engine.TensorFill(_thresholdsGrad, NumOps.Zero);

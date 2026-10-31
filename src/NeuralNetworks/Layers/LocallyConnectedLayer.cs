@@ -159,27 +159,9 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biases;
 
     /// <summary>
-    /// Stores the input tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Stores the pre-activation output from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
-    /// Stores the output tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
@@ -642,8 +624,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
             processInput = Engine.Reshape(input, [flatBatch, height, width, channels]);
         }
 
-        _lastInput = processInput;
-
         // === GPU-Accelerated LocallyConnectedConv2D ===
         // The layer uses NHWC format but Engine expects NCHW, so we transpose.
         // Every shape op via Engine so the gradient tape records the transformation —
@@ -664,13 +644,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
 
         // Apply activation function
         var result = ApplyActivation(preActivation);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastPreActivation = preActivation;
-            _lastOutput = result;
-        }
 
         // Restore output shape to match original input rank
         if (_originalInputShape != null && _originalInputShape.Length != 4)
@@ -813,9 +786,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastPreActivation = null;
-        _lastOutput = null;
         _weightGradients = null;
         _biasGradients = null;
 

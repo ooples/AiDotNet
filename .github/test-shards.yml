@@ -1527,6 +1527,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureLayerAgreementTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.OptionsSeedReassignmentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.LazyLayerSeedSequenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.LazyShapeWalkFeatureAxisTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.CallerBuiltLayerSeedingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.StepOnTapeClippingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.NetworkSerializationParameterWidthTests.|
@@ -1563,6 +1564,9 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ConvolutionalLayerInitAllocationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ConvolutionBatchNormFoldingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DenseLayerRegistrationSwapTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DuelingCombinationLayerDistributionalTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.MultiHeadAttentionDropoutTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.TransformerBlockAttentionConfigurationRoundTripTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DenseLayerInitializationRollbackTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.TransformerDecoderLayerDecoderOnlyTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.UNet3DCallerLayersTests.|

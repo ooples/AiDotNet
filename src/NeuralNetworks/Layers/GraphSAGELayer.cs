@@ -121,22 +121,10 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private int[]? _originalInputShape;
 
     /// <summary>
-    /// Cached output from forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Cached aggregated neighbor features.
     /// </summary>
     [Scratch]
     private Tensor<T>? _lastAggregated;
-
-    /// <summary>
-    /// Cached pre-normalization output for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreNorm;
 
     /// <summary>
     /// Cached degrees for each node.
@@ -294,7 +282,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
-        _lastInput = processInput;
+        SaveForBackward(ref _lastInput, processInput);
         int numNodes = processInput.Shape[1];
 
         // Ensure adjacency matrix has matching rank for batch operation
@@ -319,49 +307,44 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             adjForBatch = _adjacencyMatrix;
         }
 
-        // Store for backward pass
-        _adjForBatch = adjForBatch;
+        SaveForBackward(ref _adjForBatch, adjForBatch);
 
         // Step 1: Compute degrees for normalization
-        _lastDegrees = Engine.ReduceSum(adjForBatch, [2], keepDims: false); // [batch, nodes]
+        var degrees = Engine.ReduceSum(adjForBatch, [2], keepDims: false); // [batch, nodes]
+        SaveForBackward(ref _lastDegrees, degrees);
 
         // Clamp degrees to minimum of 1 to avoid division by zero
-        var oneTensor = new Tensor<T>(_lastDegrees._shape);
+        var oneTensor = new Tensor<T>(degrees._shape);
         oneTensor.Fill(NumOps.One);
-        var safeDegrees = Engine.TensorMax(_lastDegrees, oneTensor);
+        var safeDegrees = Engine.TensorMax(degrees, oneTensor);
 
         // Step 2: Aggregate neighbor features using vectorized operations
-        _lastAggregated = ComputeVectorizedAggregation(processInput, safeDegrees, batchSize, numNodes, adjForBatch);
+        var aggregated = ComputeVectorizedAggregation(processInput, safeDegrees, batchSize, numNodes, adjForBatch);
+        SaveForBackward(ref _lastAggregated, aggregated);
 
         // Step 3: Transform self features (3D @ 2D requires reshape pattern)
         var selfTransformed = BatchedMatMul3Dx2D(processInput, _selfWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
 
         // Step 4: Transform neighbor features (3D @ 2D requires reshape pattern)
-        var neighborTransformed = BatchedMatMul3Dx2D(_lastAggregated, _neighborWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
+        var neighborTransformed = BatchedMatMul3Dx2D(aggregated, _neighborWeights, batchSize, numNodes, _inputFeatures, _outputFeatures);
 
         // Step 5: Combine: self + neighbor + bias
         var combined = Engine.TensorAdd(selfTransformed, neighborTransformed);
         var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
-        _lastPreNorm = Engine.TensorAdd(combined, biasBroadcast);
+        var preNorm = Engine.TensorAdd(combined, biasBroadcast);
 
         // Step 6: Apply L2 normalization if enabled
         Tensor<T> output;
         if (_normalize)
         {
-            output = L2NormalizeVectorized(_lastPreNorm, batchSize, numNodes);
+            output = L2NormalizeVectorized(preNorm, batchSize, numNodes);
         }
         else
         {
-            output = _lastPreNorm;
+            output = preNorm;
         }
 
         var result = ApplyActivation(output);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
 
         // Restore original shape for any-rank tensor support
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -657,9 +640,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override void ResetState()
     {
         _lastInput = null;
-        _lastOutput = null;
         _lastAggregated = null;
-        _lastPreNorm = null;
         _lastDegrees = null;
         _lastMaxIndices = null;
         _lastMaxInputShape = null;

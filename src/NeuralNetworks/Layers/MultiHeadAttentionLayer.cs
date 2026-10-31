@@ -380,6 +380,85 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
+    /// Probability with which each post-softmax attention weight is zeroed during training (0 = disabled).
+    /// </summary>
+    private double _attentionDropoutRate;
+
+    /// <summary>
+    /// Inverted-dropout sublayer applied to the attention probabilities; null when the rate is zero.
+    /// </summary>
+    private DropoutLayer<T>? _attentionDropout;
+
+    /// <summary>
+    /// Gets the dropout probability applied to the attention weights (the softmax output) during training.
+    /// </summary>
+    /// <value>A value in [0, 1); 0 means no attention dropout.</value>
+    /// <remarks>
+    /// <para>
+    /// This is the "attention dropout" of the reference transformer implementations (GPT-2's
+    /// <c>attn_pdrop</c>, PyTorch's <c>nn.MultiheadAttention(dropout=...)</c>): after
+    /// <c>softmax(QK^T / sqrt(d))</c> each weight is zeroed with this probability and the survivors are scaled by
+    /// <c>1 / (1 - p)</c>, before the weights multiply V. It is distinct from the residual dropout a transformer
+    /// block applies to the attention layer's OUTPUT.
+    /// </para>
+    /// <para><b>For Beginners:</b> Each token decides how much to "look at" every other token. Attention dropout
+    /// randomly hides some of those looks while training, so the model cannot rely on any single connection.
+    /// When the model is used for predictions (inference), nothing is hidden.</para>
+    /// </remarks>
+    public double AttentionDropoutRate => _attentionDropoutRate;
+
+    /// <summary>
+    /// Configures dropout on the attention probabilities (the softmax output), active in training mode only.
+    /// </summary>
+    /// <param name="dropoutRate">Drop probability in [0, 1). 0 disables attention dropout.</param>
+    /// <returns>This layer.</returns>
+    /// <remarks>
+    /// In training mode with a positive rate the layer computes attention explicitly as
+    /// <c>Dropout(softmax(QK^T / sqrt(d) + bias)) V</c> with tape-recorded engine ops, so gradients flow through the
+    /// same mask the forward used. In inference mode the dropout is the identity and the usual fused kernels run,
+    /// so predictions are identical to a layer configured with rate 0.
+    /// </remarks>
+    public MultiHeadAttentionLayer<T> ConfigureAttentionDropout(double dropoutRate)
+    {
+        if (double.IsNaN(dropoutRate) || dropoutRate < 0.0 || dropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate),
+                $"Attention dropout rate must be in [0, 1), got {dropoutRate}.");
+
+        if (_attentionDropout is not null)
+        {
+            UnregisterSubLayer(_attentionDropout);
+            _attentionDropout = null;
+        }
+
+        _attentionDropoutRate = dropoutRate;
+        if (dropoutRate > 0.0)
+        {
+            var dropout = new DropoutLayer<T>(dropoutRate);
+            dropout.SetTrainingMode(IsTrainingMode);
+            if (RandomSeed is int seed)
+                dropout.RandomSeed = DeriveAttentionDropoutSeed(seed);
+            _attentionDropout = dropout;
+            RegisterSubLayer(dropout);
+        }
+
+        return this;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The attention-dropout sublayer draws a fresh mask every training forward, so a seeded attention layer
+    /// hands it a seed derived from its own; that keeps two identically seeded models bit-identical in training.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        base.OnRandomSeedAssigned();
+        if (_attentionDropout is not null && RandomSeed is int seed)
+            _attentionDropout.RandomSeed = DeriveAttentionDropoutSeed(seed);
+    }
+
+    private static int DeriveAttentionDropoutSeed(int seed) => unchecked(seed * 31 + 0x5DEECE6);
+
+    /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
 
@@ -865,12 +944,33 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // deserialization derived embeddingDimension from that placeholder (1) and threw
         // "embeddingDimension 1 is not divisible by headCount N".
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
-        metadata["PositionalEncoding"] = PositionalEncoding.ToString();
-        metadata["UseCausalMask"] = UseCausalMask.ToString();
-        metadata["RopeTheta"] = _ropeTheta.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["PositionalMaxSequenceLength"] =
-            _positionalMaxSequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        WriteConfigurationMetadata(metadata, string.Empty);
         return metadata;
+    }
+
+    /// <summary>
+    /// Writes the settings that are configured AFTER construction -- the causal mask, the attention dropout rate and
+    /// the positional encoding -- under <paramref name="prefix"/>.
+    /// </summary>
+    /// <param name="metadata">The metadata dictionary to write into.</param>
+    /// <param name="prefix">Key prefix; empty for this layer's own metadata, or a sublayer name (for example
+    /// <c>"Attn."</c>) when a composite block persists the attention layer it hosts.</param>
+    /// <remarks>
+    /// None of these settings is a constructor argument, so a composite block that rebuilds its attention from its
+    /// own constructor loses them unless it persists them here and restores them through
+    /// <c>DeserializationHelper</c>. A causal decoder block then came back bidirectional, which changes what every
+    /// position attends to without any error.
+    /// </remarks>
+    internal void WriteConfigurationMetadata(Dictionary<string, string> metadata, string prefix)
+    {
+        if (metadata is null) throw new ArgumentNullException(nameof(metadata));
+        if (prefix is null) throw new ArgumentNullException(nameof(prefix));
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        metadata[prefix + "PositionalEncoding"] = PositionalEncoding.ToString();
+        metadata[prefix + "UseCausalMask"] = UseCausalMask.ToString();
+        metadata[prefix + "RopeTheta"] = _ropeTheta.ToString("R", ci);
+        metadata[prefix + "PositionalMaxSequenceLength"] = _positionalMaxSequenceLength.ToString(ci);
+        metadata[prefix + "AttentionDropoutRate"] = _attentionDropoutRate.ToString("R", ci);
     }
 
     /// <summary>
@@ -1177,6 +1277,58 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return new Tensor<bool>(data, [batch, heads, seqQ, seqKv]);
     }
 
+    /// <summary>
+    /// The additive logit bias of the explicit (attention-dropout) path, [batchHeads, seqQ, seqKv]: the ALiBi bias
+    /// when configured (which already carries the causal mask when <see cref="UseCausalMask"/> is set), otherwise
+    /// <c>-inf</c> on the future keys of a causal layer. Null when neither applies.
+    /// </summary>
+    /// <remarks>
+    /// The causal rule matches <see cref="CausalAttentionMask"/>: query i (over the last seqQ keys) attends keys
+    /// <c>[0 .. seqKv - seqQ + i]</c>. A true <c>-inf</c> gives <c>exp(-inf) = 0</c> exactly after the softmax.
+    /// </remarks>
+    private Tensor<T>? AttentionDropoutLogitBias(int batchHeads, int seqQ, int seqKv)
+    {
+        Tensor<T> plane;
+        int planes;
+        if (_alibiLayer != null)
+        {
+            plane = _alibiLayer.ComputeBias(seqQ, seqKv, useCausalMask: UseCausalMask);
+            planes = _headCount;
+        }
+        else if (UseCausalMask)
+        {
+            plane = new Tensor<T>([1, seqQ, seqKv]);
+            T negInf = NumOps.FromDouble(double.NegativeInfinity);
+            int keyOffset = seqKv - seqQ;
+            for (int i = 0; i < seqQ; i++)
+            {
+                int lastAllowed = Math.Min(keyOffset + i, seqKv - 1);
+                for (int j = lastAllowed + 1; j < seqKv; j++)
+                    plane[0, i, j] = negInf;
+            }
+
+            planes = 1;
+        }
+        else
+        {
+            return null;
+        }
+
+        // Tile to every (batch, head) slice; batch-major so slice b*H + h receives head h's plane.
+        int planeLength = seqQ * seqKv;
+        var source = plane.Contiguous();
+        var tiled = new Tensor<T>([batchHeads, seqQ, seqKv]);
+        for (int slice = 0; slice < batchHeads; slice++)
+        {
+            int sourceBase = (slice % planes) * planeLength;
+            int targetBase = slice * planeLength;
+            for (int e = 0; e < planeLength; e++)
+                tiled.SetFlat(targetBase + e, source.GetFlat(sourceBase + e));
+        }
+
+        return tiled;
+    }
+
     private int[] _originalQueryShape = [];
     private int[] _originalKeyShape = [];
     private int[] _originalValueShape = [];
@@ -1453,7 +1605,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Only for float: the engine fuses this op on the host for float alone and composes it from
         // ScaledDotProductAttention (which materializes the score matrix) for every other element type, while
         // the FlashAttention path below is fused for every precision.
-        if (typeof(T) == typeof(float)
+        // Attention-probability dropout needs the softmax output as a tensor, which neither fused kernel exposes,
+        // so a training forward with a positive rate takes the explicit composition further down.
+        bool attentionDropoutActive = IsTrainingMode && _attentionDropout is not null;
+
+        if (typeof(T) == typeof(float) && !attentionDropoutActive
             && _ropeLayer == null && _alibiLayer == null && _attentionGroupSize <= 1 && !UseAuxiliaryLoss
             && (!cacheForManualBackward || !IsTrainingMode || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive))
         {
@@ -1548,7 +1704,36 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // computes the same attention without ever materializing it.
         bool scoresNeeded = cacheForManualBackward || (UseAuxiliaryLoss && IsTrainingMode);
 
-        if (_alibiLayer != null)
+        if (attentionDropoutActive && _attentionDropout is { } attentionDropout)
+        {
+            // Training-time attention dropout: P = softmax(QK^T * scale + bias), context = Dropout(P) V.
+            // Every step is an engine op the gradient tape records, so the backward multiplies by the same
+            // mask the forward drew. The pre-dropout P is what the auxiliary losses and diagnostics read.
+            int bh = batchSize * _headCount;
+            var q3 = Engine.Reshape(queries, [bh, attentionSeqLengthQ, attentionHeadDimension]);
+            var kT3 = Engine.Reshape(
+                Engine.TensorPermute(keys, new[] { 0, 1, 3, 2 }),
+                [bh, attentionHeadDimension, attentionSeqLengthKV]);
+            var v3 = Engine.Reshape(values, [bh, attentionSeqLengthKV, attentionHeadDimension]);
+
+            var logits = Engine.TensorMultiplyScalar(
+                Engine.BatchMatMul(q3, kT3),
+                NumOps.FromDouble(1.0 / Math.Sqrt(attentionHeadDimension)));
+            var bias = AttentionDropoutLogitBias(bh, attentionSeqLengthQ, attentionSeqLengthKV);
+            if (bias is not null)
+                logits = Engine.TensorAdd(logits, bias);
+
+            var probabilities = Engine.Softmax(logits, -1);
+            var dropped = attentionDropout.Forward(probabilities);
+            context_4D = Engine.Reshape(
+                Engine.BatchMatMul(dropped, v3),
+                [batchSize, _headCount, attentionSeqLengthQ, attentionHeadDimension]);
+            attentionWeights4D = scoresNeeded
+                ? Engine.Reshape(probabilities, [batchSize, _headCount, attentionSeqLengthQ, attentionSeqLengthKV])
+                : Tensor<T>.Empty();
+            LastAttentionKernelPath = AttentionKernelPath.ScoreMaterializing;
+        }
+        else if (_alibiLayer != null)
         {
             // Use FlashAttention with ALiBi bias injection.
             // queries/keys/values are non-contiguous views (Engine.TensorPermute above),
@@ -1645,7 +1830,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // per MHA forward; on a 12-layer LayoutLM × 30 training iters
         // that's 360 dead permute/tape entries per Train_ShouldReduceLoss
         // run, each one tracked + walked by the gradient tape backward.
-        if (UseAuxiliaryLoss)
+        // Training only: an inference forward never asks for the auxiliary loss.
+        if (UseAuxiliaryLoss && IsTrainingMode)
         {
             // via Engine so the tape records the transpose
             var permutedForCache = Engine.TensorPermute(context_4D, new[] { 1, 0, 2, 3 }); // [H, B, S, D]

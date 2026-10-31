@@ -66,36 +66,6 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
     private ILayer<T>? _innerLayer;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the input to the layer during the forward pass, which is needed during the backward pass
-    /// to compute gradients. It is cleared when ResetState() is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the layer's short-term memory of what input it received.
-    ///
-    /// During training, the layer needs to remember what input it processed so that it can
-    /// properly calculate how to improve. This temporary storage is cleared between batches
-    /// or when you explicitly reset the layer.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the output tensor from the inner layer during the forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the inner layer's output during the forward pass, which is needed during the backward pass
-    /// to avoid recomputing and potentially corrupting the inner layer's state. It is cleared when ResetState() is called.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInnerOutput;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
     /// </summary>
     /// <value>
@@ -365,9 +335,6 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        // #1668: gate backward caches; forward uses the local innerOutput (chained).
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
         var innerOutput = _innerLayer?.Forward(input);
 
         // A residual block's inner branch is shape-preserving by contract (out = x + F(x)), so the
@@ -383,7 +350,6 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
             innerOutput = Engine.Reshape(innerOutput, input._shape);
         }
 
-        _lastInnerOutput = cacheBwd ? innerOutput : null;
         var result = innerOutput == null ? input : Engine.TensorAdd(input, innerOutput);
 
         return ApplyActivation(result);
@@ -520,8 +486,6 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastInnerOutput = null;
         _innerLayer?.ResetState();
     }
 

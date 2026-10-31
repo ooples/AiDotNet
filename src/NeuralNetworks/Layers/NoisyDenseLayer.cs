@@ -132,6 +132,9 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _inputSize;
     private readonly int _outputSize;
     private readonly double _sigmaInit;
+
+    /// <summary>The value every sigma weight and bias was initialized to.</summary>
+    internal double SigmaInit => _sigmaInit;
     private readonly Random _rng;
     private readonly object _rngLock = new();
 

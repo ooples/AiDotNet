@@ -38,6 +38,8 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     public MuZeroOptions()
     {
+        // MuZero samples its replay by priority (Schrittwieser et al. 2020, Appendix G: alpha = beta = 1).
+        UsePrioritizedReplay = true;
     }
 
     /// <summary>
@@ -72,11 +74,12 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
         PUCTConstant = other.PUCTConstant;
         RootDirichletAlpha = other.RootDirichletAlpha;
         RootExplorationFraction = other.RootExplorationFraction;
+        VisitTemperature = other.VisitTemperature;
         UnrollSteps = other.UnrollSteps;
         TDSteps = other.TDSteps;
         PriorityAlpha = other.PriorityAlpha;
         UseValuePrefix = other.UseValuePrefix;
-        Optimizer = other.Optimizer;
+        OptimizerFactory = other.OptimizerFactory;
     }
 
     /// <summary>
@@ -120,6 +123,25 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public double RootDirichletAlpha { get; init; } = 0.3;
     public double RootExplorationFraction { get; init; } = 0.25;
 
+    /// <summary>
+    /// Gets or sets the temperature T of the visit-count distribution that training-time actions are sampled from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// While acting in training, MuZero samples the action from p(a) = N(a)^(1/T) / sum_b N(b)^(1/T) over the
+    /// root's visit counts N (Schrittwieser et al. 2020, Appendix D). The paper's Atari schedule uses T = 1, then
+    /// 0.5, then 0.25 as training proceeds. The value is fixed for the agent's lifetime (the options are
+    /// init-only), so following such a schedule means building the agent for each stage with that stage's value and
+    /// carrying the trained parameters over. T = 0 picks the most visited action. Inference (<c>training: false</c>) always takes the policy's most likely action.
+    /// </para>
+    /// <para><b>For Beginners:</b> After the search, the agent knows how often it explored each action. A
+    /// temperature of 1 picks actions in proportion to those counts, which keeps exploring; smaller values favour the
+    /// most-explored action more strongly, and 0 always takes it.
+    /// </para>
+    /// </remarks>
+    /// <value>A non-negative temperature. Default: 1.0, the paper's initial value.</value>
+    public double VisitTemperature { get; init; } = 1.0;
+
     // Training parameters
     // Number of recurrent unroll steps K used to build training targets (Schrittwieser et al. 2020
     // use K=5). MuZeroAgent.Train unrolls the learned model K steps from a real trajectory window and
@@ -133,7 +155,24 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public bool UseValuePrefix { get; init; } = false;
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam is used.
+    /// Gets or sets a factory for the optimizer of the agent's joint training step.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    /// <remarks>
+    /// <para>
+    /// MuZero trains its representation, dynamics and prediction networks with one loss in one step
+    /// (Schrittwieser et al. 2020), so the agent invokes the factory once and steps all three networks with
+    /// that optimizer. When this is <c>null</c>, the step uses Adam at the agent's learning rate.
+    /// </para>
+    /// <para>
+    /// The factory must create a new optimizer instance on each call, so agents built from copies of these
+    /// options never share moment buffers or a step counter.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is the rule that turns the training loss's gradients into weight
+    /// changes for all three networks at once. Leave this unset to get Adam at the agent's learning rate; supply a
+    /// factory to choose a different optimizer or its settings. Return a new optimizer from every call.
+    /// </para>
+    /// </remarks>
+    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for Adam at the
+    /// agent's learning rate.</value>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

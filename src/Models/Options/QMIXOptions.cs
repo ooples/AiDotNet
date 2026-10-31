@@ -33,6 +33,22 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class QMIXOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>
+    /// Initializes a new instance with the paper's training settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The inherited <c>LearningRate</c> is set to 5e-4, the RMSprop learning rate of Rashid et al. 2018 (Sec. 5).
+    /// It can still be overridden in an object initializer.
+    /// </para>
+    /// <para><b>For Beginners:</b> Creating the options with no arguments gives you the learning rate the QMIX
+    /// paper trained with.</para>
+    /// </remarks>
+    public QMIXOptions()
+    {
+        LearningRate = MathHelper.GetNumericOperations<T>().FromDouble(5e-4);
+    }
+
     public int NumAgents { get; init; }
     public int StateSize { get; init; }  // Per-agent observation size
     public int ActionSize { get; init; }  // Per-agent action size
@@ -43,7 +59,18 @@ public class QMIXOptions<T> : ReinforcementLearningOptions<T>
     public List<int> MixingHiddenLayers { get; init; } = new List<int> { 32 };
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// Gets or sets a factory for the optimizer of the agent's joint training step.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    /// <remarks>
+    /// <para>
+    /// QMIX trains every agent network and the mixing network on one TD loss in one step (Rashid et al. 2018),
+    /// so the agent invokes the factory once and steps all of them with that optimizer. When this is
+    /// <c>null</c>, the step uses the paper's RMSprop (smoothing 0.99, epsilon 1e-5) at the agent's learning rate.
+    /// </para>
+    /// <para>
+    /// The factory must create a new optimizer instance on each call, so agents built from copies of these
+    /// options never share moment buffers or a step counter.
+    /// </para>
+    /// </remarks>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

@@ -123,21 +123,9 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
-    /// Cached input from forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Cached output from forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached aggregated features (before MLP).
@@ -156,12 +144,6 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </summary>
     [Scratch]
     private Tensor<T>? _lastMlpHidden;
-
-    /// <summary>
-    /// Cached neighbor sum before applying epsilon.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastNeighborSum;
 
     /// <summary>
     /// Gradients for epsilon.
@@ -298,8 +280,6 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
             processInput = input;
         }
 
-        _lastInput = processInput;
-
         // Reshape adjacency matrix to match batch dimension if needed
         Tensor<T> adjForBatch;
         if (_adjacencyMatrix.Shape.Length == 2 && batchSize == 1)
@@ -328,36 +308,32 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
 
         // Step 1: Aggregate neighbor features using sum (batched matmul: [batch, nodes, nodes] @ [batch, nodes, features])
-        _lastNeighborSum = Engine.BatchMatMul(adjForBatch, processInput);
+        var neighborSum = Engine.BatchMatMul(adjForBatch, processInput);
 
         // Step 2: Combine with self features: (1 + epsilon) * h_v + sum(h_u)
         T onePlusEpsilon = NumOps.Add(NumOps.One, _epsilon);
         var scaledSelf = Engine.TensorMultiplyScalar(processInput, onePlusEpsilon);
-        _lastAggregated = Engine.TensorAdd(scaledSelf, _lastNeighborSum);
+        var aggregated = Engine.TensorAdd(scaledSelf, neighborSum);
+        SaveForBackward(ref _lastAggregated, aggregated);
 
         // Step 3: Apply MLP - First layer (3D @ 2D requires reshape pattern)
-        var hidden1 = BatchedMatMul3Dx2D(_lastAggregated, _mlpWeights1, batchSize, numNodes, _inputFeatures, _mlpHiddenDim);
+        var hidden1 = BatchedMatMul3Dx2D(aggregated, _mlpWeights1, batchSize, numNodes, _inputFeatures, _mlpHiddenDim);
         var bias1Broadcast = BroadcastBias(_mlpBias1, batchSize, numNodes);
-        _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden1, bias1Broadcast);
-        var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu;
+        var lastMlpHiddenPreRelu = Engine.TensorAdd(hidden1, bias1Broadcast);
+        SaveForBackward(ref _lastMlpHiddenPreRelu, lastMlpHiddenPreRelu);
 
         // Apply ReLU activation using Engine operations
         var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu._shape);
         zeroTensor.Fill(NumOps.Zero);
-        _lastMlpHidden = Engine.TensorMax(lastMlpHiddenPreRelu, zeroTensor);
+        var mlpHidden = Engine.TensorMax(lastMlpHiddenPreRelu, zeroTensor);
+        SaveForBackward(ref _lastMlpHidden, mlpHidden);
 
         // Step 4: Apply MLP - Second layer (3D @ 2D requires reshape pattern)
-        var hidden2 = BatchedMatMul3Dx2D(_lastMlpHidden, _mlpWeights2, batchSize, numNodes, _mlpHiddenDim, _outputFeatures);
+        var hidden2 = BatchedMatMul3Dx2D(mlpHidden, _mlpWeights2, batchSize, numNodes, _mlpHiddenDim, _outputFeatures);
         var bias2Broadcast = BroadcastBias(_mlpBias2, batchSize, numNodes);
         var mlpOutput = Engine.TensorAdd(hidden2, bias2Broadcast);
 
         var result = ApplyActivation(mlpOutput);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
 
         // Reshape output to match original input shape (except for feature dimension)
         if (_originalInputShape != null && _originalInputShape.Length == 2)
@@ -489,12 +465,9 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _lastAggregated = null;
         _lastMlpHiddenPreRelu = null;
         _lastMlpHidden = null;
-        _lastNeighborSum = null;
         _mlpWeights1Gradient = null;
         _mlpWeights2Gradient = null;
         _mlpBias1Gradient = null;

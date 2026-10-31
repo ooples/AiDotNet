@@ -37,7 +37,6 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
     public T PolicyLearningRate { get; init; }
     public T ValueLearningRate { get; init; }
     public T EntropyCoefficient { get; init; }
-    public T ValueLossCoefficient { get; init; }
 
     // A3C-specific parameters
     public int NumWorkers { get; init; } = 4;  // Number of parallel agents
@@ -48,9 +47,27 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 128, 128 };
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// Gets or sets a factory for the optimizer each of this agent's networks trains with.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    /// <remarks>
+    /// <para>
+    /// When this is <c>null</c>, the policy networks train with Adam at PolicyLearningRate and the value
+    /// networks with Adam at ValueLearningRate.
+    /// </para>
+    /// <para>
+    /// The agent invokes the factory once for every network it builds, so the factory must create a new
+    /// optimizer instance on each call. A shared instance would share its step counter, and Adam's bias
+    /// correction would then advance on every network's step instead of only on that network's own.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is the rule that turns each network's gradients into weight
+    /// changes. Leave this unset to get Adam at the learning rate above; supply a factory such as
+    /// <c>() =&gt; new AdamOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(null, myOptions)</c> to choose a
+    /// different optimizer or its settings. Return a new optimizer from every call.
+    /// </para>
+    /// </remarks>
+    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for Adam at
+    /// <see cref="PolicyLearningRate"/> and <see cref="ValueLearningRate"/>.</value>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 
     public A3COptions()
     {
@@ -58,7 +75,6 @@ public class A3COptions<T> : ReinforcementLearningOptions<T>
         PolicyLearningRate = numOps.FromDouble(0.0001);
         ValueLearningRate = numOps.FromDouble(0.0005);
         EntropyCoefficient = numOps.FromDouble(0.01);
-        ValueLossCoefficient = numOps.FromDouble(0.5);
         DiscountFactor = numOps.FromDouble(0.99);
     }
 }

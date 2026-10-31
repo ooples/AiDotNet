@@ -141,21 +141,9 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private bool _useSparseAggregation = false;
 
     /// <summary>
-    /// Cached input from forward pass for backward computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Cached output from forward pass for backward computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached attention coefficients from forward pass.
@@ -389,13 +377,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
-        // #1668: compute the backward-cache decision once up front so every backward-only cache
-        // in both the sparse and dense paths (and _lastInput here) is gated/cleared consistently.
-        // Clearing (not just skipping) is required: a prior step's arena-owned tensor must not
-        // survive into the next denoise-loop Reset().
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? processInput : null;
-
         Tensor<T> output;
         Tensor<T> activatedOutput;
 
@@ -466,9 +447,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 sparseReshaped = Engine.Reshape(activatedOutput, outputShape);
             }
 
-            // #1668: _lastOutput is a backward-only cache; clear it in inference so the
-            // arena-owned reshaped output is not retained across the next Reset().
-            _lastOutput = cacheBwd ? sparseReshaped : null;
             return sparseReshaped;
         }
 
@@ -596,9 +574,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             denseReshaped = Engine.Reshape(activatedOutput, outputShape);
         }
 
-        // #1668: _lastOutput is a backward-only cache; clear it in inference so the
-        // arena-owned reshaped output is not retained across the next Reset().
-        _lastOutput = cacheBwd ? denseReshaped : null;
         return denseReshaped;
     }
 
@@ -893,8 +868,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _lastAttentionCoefficients = null;
         _lastPreSoftmaxScores = null;
         _weightsGradient = null;

@@ -219,7 +219,6 @@ internal sealed class RandomSearchRLAutoML<T>
             ["GaeLambda"] = new ParameterRange { Type = ParameterType.Float, MinValue = 0.90, MaxValue = 0.99, Step = 0.01, DefaultValue = 0.95 },
             ["ClipEpsilon"] = new ParameterRange { Type = ParameterType.Float, MinValue = 0.10, MaxValue = 0.30, Step = 0.01, DefaultValue = 0.20 },
             ["EntropyCoefficient"] = new ParameterRange { Type = ParameterType.Float, MinValue = 0.0, MaxValue = 0.05, Step = 0.005, DefaultValue = 0.01 },
-            ["ValueLossCoefficient"] = new ParameterRange { Type = ParameterType.Float, MinValue = 0.25, MaxValue = 1.0, Step = 0.05, DefaultValue = 0.5 },
             ["StepsPerUpdate"] = new ParameterRange { Type = ParameterType.Integer, MinValue = 128, MaxValue = 2048, Step = 128, DefaultValue = 2048 },
             ["MiniBatchSize"] = new ParameterRange { Type = ParameterType.Integer, MinValue = 32, MaxValue = 256, Step = 32, DefaultValue = 64 },
             ["TrainingEpochs"] = new ParameterRange { Type = ParameterType.Integer, MinValue = 3, MaxValue = 15, Step = 1, DefaultValue = 10 }
@@ -234,7 +233,6 @@ internal sealed class RandomSearchRLAutoML<T>
             ["ValueLearningRate"] = new ParameterRange { Type = ParameterType.Float, MinValue = 1e-5, MaxValue = 1e-3, UseLogScale = true, DefaultValue = 0.001 },
             ["DiscountFactor"] = new ParameterRange { Type = ParameterType.Float, MinValue = 0.90, MaxValue = 0.999, Step = 0.001, DefaultValue = 0.99 },
             ["EntropyCoefficient"] = new ParameterRange { Type = ParameterType.Float, MinValue = 0.0, MaxValue = 0.05, Step = 0.005, DefaultValue = 0.01 },
-            ["ValueLossCoefficient"] = new ParameterRange { Type = ParameterType.Float, MinValue = 0.25, MaxValue = 1.0, Step = 0.05, DefaultValue = 0.5 },
             ["StepsPerUpdate"] = new ParameterRange { Type = ParameterType.Integer, MinValue = 1, MaxValue = 20, Step = 1, DefaultValue = 5 }
         };
     }

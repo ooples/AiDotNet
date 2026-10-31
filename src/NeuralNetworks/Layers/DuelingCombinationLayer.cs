@@ -84,9 +84,24 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _advantageBias;
 
+    // Hidden ReLU layers of each stream (Wang et al. 2016, Fig. 1: each stream is its own fully connected
+    // layer before its output), in order. Empty arrays give the single-projection head.
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T>[] _valueHiddenWeights;
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Biases)]
+    private Tensor<T>[] _valueHiddenBiases;
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Weights)]
+    private Tensor<T>[] _advantageHiddenWeights;
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Biases)]
+    private Tensor<T>[] _advantageHiddenBiases;
+
+    private readonly int _numAtoms;
+    private readonly int[] _valueHiddenWidths;
+    private readonly int[] _advantageHiddenWidths;
+
     /// <inheritdoc />
-    /// <remarks>All four head tensors are sized by <c>featureDim</c> and <c>actionSize</c> in the
-    /// constructor; no input observation is needed to restore them.</remarks>
+    /// <remarks>Every head and stream tensor is sized by the constructor arguments; no input observation is
+    /// needed to restore them.</remarks>
     protected override bool ParametersAreConstructionSized => true;
 
     /// <summary>
@@ -99,32 +114,98 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="actionSize">Number of discrete actions (advantage-head output width).</param>
     /// <param name="seed">Optional RNG seed for weight initialisation.</param>
     public DuelingCombinationLayer(int featureDim, int actionSize, int? seed = null)
+        : this(featureDim, actionSize, 1, Array.Empty<int>(), Array.Empty<int>(), seed)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a dueling head with hidden stream layers and, for a distributional agent, one value per atom.
+    /// </summary>
+    /// <param name="featureDim">Trunk output feature dimension (the per-sample width of the input).</param>
+    /// <param name="actionSize">Number of discrete actions.</param>
+    /// <param name="numAtoms">
+    /// Support atoms per action: 1 for a Q-value head; the categorical support size for a distributional one
+    /// (Hessel et al. 2018, Sec. 3). The output has <c>actionSize * numAtoms</c> values, action-major.
+    /// </param>
+    /// <param name="valueHiddenWidths">Widths of the value stream's hidden ReLU layers, in order; empty for none.</param>
+    /// <param name="advantageHiddenWidths">Widths of the advantage stream's hidden ReLU layers; empty for none.</param>
+    /// <param name="seed">Optional RNG seed for weight initialisation.</param>
+    /// <remarks>
+    /// With atoms, V(s) has one output per atom and the advantage mean is taken over actions separately for each
+    /// atom: logit(s, a, z) = V(s, z) + A(s, a, z) − mean_a' A(s, a', z) (Hessel et al. 2018, Sec. 3). A scalar V,
+    /// or a mean over every (action, atom) logit, adds the same constant to all of an action's logits, which
+    /// the per-action softmax over atoms cancels, so the value stream would receive no gradient.
+    /// </remarks>
+    public DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms, int[] valueHiddenWidths,
+        int[] advantageHiddenWidths, int? seed = null)
         : base(
             inputShape: [-1],
-            outputShape: [actionSize],
+            outputShape: [actionSize * numAtoms],
             scalarActivation: new IdentityActivation<T>())
     {
         if (featureDim <= 0) throw new ArgumentOutOfRangeException(nameof(featureDim));
         if (actionSize <= 0) throw new ArgumentOutOfRangeException(nameof(actionSize));
+        if (numAtoms <= 0) throw new ArgumentOutOfRangeException(nameof(numAtoms));
+        Guard.NotNull(valueHiddenWidths);
+        Guard.NotNull(advantageHiddenWidths);
+        if (valueHiddenWidths.Any(w => w <= 0) || advantageHiddenWidths.Any(w => w <= 0))
+            throw new ArgumentOutOfRangeException(nameof(valueHiddenWidths), "Every stream width must be positive.");
 
         _featureDim = featureDim;
         _actionSize = actionSize;
-
-        _valueWeights = new Tensor<T>([featureDim, 1]);
-        _valueBias = new Tensor<T>([1]);
-        _advantageWeights = new Tensor<T>([featureDim, actionSize]);
-        _advantageBias = new Tensor<T>([actionSize]);
+        _numAtoms = numAtoms;
+        _valueHiddenWidths = (int[])valueHiddenWidths.Clone();
+        _advantageHiddenWidths = (int[])advantageHiddenWidths.Clone();
 
         var rng = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
 
+        int valueIn = featureDim;
+        int advantageIn = featureDim;
+        _valueWeights = new Tensor<T>([LastWidth(_valueHiddenWidths, featureDim), numAtoms]);
+        _valueBias = new Tensor<T>([numAtoms]);
+        _advantageWeights = new Tensor<T>([LastWidth(_advantageHiddenWidths, featureDim), actionSize * numAtoms]);
+        _advantageBias = new Tensor<T>([actionSize * numAtoms]);
+
         // Glorot-uniform initialisation, separate range per head:
-        // U(-sqrt(6 / (fan_in + fan_out)), +same).
-        InitializeUniform(_valueWeights, rng, _featureDim, 1);
-        InitializeUniform(_advantageWeights, rng, _featureDim, actionSize);
+        // U(-sqrt(6 / (fan_in + fan_out)), +same). The value and advantage heads draw first, in that order, so a
+        // head without hidden streams initialises exactly as it always did.
+        InitializeUniform(_valueWeights, rng, _valueWeights.Shape[0], numAtoms);
+        InitializeUniform(_advantageWeights, rng, _advantageWeights.Shape[0], actionSize * numAtoms);
         // Biases zeroed (PyTorch default for linear layers).
+
+        _valueHiddenWeights = new Tensor<T>[_valueHiddenWidths.Length];
+        _valueHiddenBiases = new Tensor<T>[_valueHiddenWidths.Length];
+        for (int i = 0; i < _valueHiddenWidths.Length; i++)
+        {
+            _valueHiddenWeights[i] = new Tensor<T>([valueIn, _valueHiddenWidths[i]]);
+            _valueHiddenBiases[i] = new Tensor<T>([_valueHiddenWidths[i]]);
+            InitializeUniform(_valueHiddenWeights[i], rng, valueIn, _valueHiddenWidths[i]);
+            valueIn = _valueHiddenWidths[i];
+        }
+
+        _advantageHiddenWeights = new Tensor<T>[_advantageHiddenWidths.Length];
+        _advantageHiddenBiases = new Tensor<T>[_advantageHiddenWidths.Length];
+        for (int i = 0; i < _advantageHiddenWidths.Length; i++)
+        {
+            _advantageHiddenWeights[i] = new Tensor<T>([advantageIn, _advantageHiddenWidths[i]]);
+            _advantageHiddenBiases[i] = new Tensor<T>([_advantageHiddenWidths[i]]);
+            InitializeUniform(_advantageHiddenWeights[i], rng, advantageIn, _advantageHiddenWidths[i]);
+            advantageIn = _advantageHiddenWidths[i];
+        }
     }
+
+    private static int LastWidth(int[] widths, int input) => widths.Length == 0 ? input : widths[widths.Length - 1];
+
+    /// <summary>Support atoms per action; 1 for a plain Q-value head.</summary>
+    internal int NumAtoms => _numAtoms;
+
+    /// <summary>Widths of the value stream's hidden layers.</summary>
+    internal IReadOnlyList<int> ValueHiddenWidths => _valueHiddenWidths;
+
+    /// <summary>Widths of the advantage stream's hidden layers.</summary>
+    internal IReadOnlyList<int> AdvantageHiddenWidths => _advantageHiddenWidths;
 
     private void InitializeUniform(Tensor<T> tensor, Random rng, int fanIn, int fanOut)
     {
@@ -172,7 +253,7 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     {
         if (inputRank is not (1 or 2) || _actionSize <= 0) return null;
 
-        var actions = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_actionSize));
+        var actions = new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_actionSize * _numAtoms));
 
         return inputRank == 1
             ? new[] { actions }
@@ -219,32 +300,44 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
             flatInput = Engine.Reshape(input, [batchSize, _featureDim]);
         }
 
-        // V(s): [batch, 1].
-        var vRaw = Engine.TensorMatMul(flatInput, _valueWeights);
-        var vBiasBroadcast = Engine.Reshape(_valueBias, [1, 1]);
-        var v = Engine.TensorAdd(vRaw, vBiasBroadcast);
+        // Each stream's hidden ReLU layers.
+        var valueFeatures = flatInput;
+        for (int i = 0; i < _valueHiddenWeights.Length; i++)
+            valueFeatures = Engine.ReLU(Engine.TensorAdd(Engine.TensorMatMul(valueFeatures, _valueHiddenWeights[i]),
+                Engine.Reshape(_valueHiddenBiases[i], [1, _valueHiddenWidths[i]])));
+        var advantageFeatures = flatInput;
+        for (int i = 0; i < _advantageHiddenWeights.Length; i++)
+            advantageFeatures = Engine.ReLU(Engine.TensorAdd(Engine.TensorMatMul(advantageFeatures, _advantageHiddenWeights[i]),
+                Engine.Reshape(_advantageHiddenBiases[i], [1, _advantageHiddenWidths[i]])));
 
-        // A(s, a): [batch, actionSize].
-        var aRaw = Engine.TensorMatMul(flatInput, _advantageWeights);
-        var aBiasBroadcast = Engine.Reshape(_advantageBias, [1, _actionSize]);
-        var a = Engine.TensorAdd(aRaw, aBiasBroadcast);
+        int width = _actionSize * _numAtoms;
 
-        // Mean of A across the action axis (axis=1), keepdims=true → [batch, 1].
+        // V(s, z): [batch, numAtoms] -> [batch, 1, numAtoms].
+        var vRaw = Engine.TensorMatMul(valueFeatures, _valueWeights);
+        var vBiasBroadcast = Engine.Reshape(_valueBias, [1, _numAtoms]);
+        var v = Engine.Reshape(Engine.TensorAdd(vRaw, vBiasBroadcast), [batchSize, 1, _numAtoms]);
+
+        // A(s, a, z): [batch, actionSize * numAtoms] -> [batch, actionSize, numAtoms], action-major.
+        var aRaw = Engine.TensorMatMul(advantageFeatures, _advantageWeights);
+        var aBiasBroadcast = Engine.Reshape(_advantageBias, [1, width]);
+        var a = Engine.Reshape(Engine.TensorAdd(aRaw, aBiasBroadcast), [batchSize, _actionSize, _numAtoms]);
+
+        // Mean of A across the action axis (axis=1) for each atom → [batch, 1, numAtoms].
         var aMean = Engine.ReduceMean(a, [1], keepDims: true);
         // A_centered = A − mean_a A. Tile mean across actionSize and subtract.
-        var aMeanTiled = Engine.TensorTile(aMean, [1, _actionSize]);
+        var aMeanTiled = Engine.TensorTile(aMean, [1, _actionSize, 1]);
         var aCentered = Engine.TensorSubtract(a, aMeanTiled);
 
-        // Q(s, a) = V(s) + A_centered. Tile V across actionSize first.
-        var vTiled = Engine.TensorTile(v, [1, _actionSize]);
-        var q = Engine.TensorAdd(vTiled, aCentered);
+        // Q(s, a, z) = V(s, z) + A_centered. Tile V across actionSize first.
+        var vTiled = Engine.TensorTile(v, [1, _actionSize, 1]);
+        var q = Engine.Reshape(Engine.TensorAdd(vTiled, aCentered), [batchSize, width]);
 
         // Restore the caller's rank (1D in → 1D out, N-D batch in → N-D out).
-        if (input.Rank == 1) return Engine.Reshape(q, [_actionSize]);
+        if (input.Rank == 1) return Engine.Reshape(q, [width]);
         if (input.Rank == 2) return q;
         var outShape = new int[input.Rank];
         for (int i = 0; i < input.Rank - 1; i++) outShape[i] = input.Shape[i];
-        outShape[^1] = _actionSize;
+        outShape[^1] = width;
         return Engine.Reshape(q, outShape);
     }
 
@@ -257,19 +350,13 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
                 $"DuelingCombinationLayer.UpdateParameters: gradient buffer length " +
                 $"{ParameterGradients.Length} does not match ParameterCount {ParameterCount}.");
 
-        int idx = 0;
-        for (int i = 0; i < _valueWeights.Length; i++)
-            _valueWeights[i] = NumOps.Subtract(_valueWeights[i],
-                NumOps.Multiply(learningRate, ParameterGradients[idx++]));
-        for (int i = 0; i < _valueBias.Length; i++)
-            _valueBias[i] = NumOps.Subtract(_valueBias[i],
-                NumOps.Multiply(learningRate, ParameterGradients[idx++]));
-        for (int i = 0; i < _advantageWeights.Length; i++)
-            _advantageWeights[i] = NumOps.Subtract(_advantageWeights[i],
-                NumOps.Multiply(learningRate, ParameterGradients[idx++]));
-        for (int i = 0; i < _advantageBias.Length; i++)
-            _advantageBias[i] = NumOps.Subtract(_advantageBias[i],
-                NumOps.Multiply(learningRate, ParameterGradients[idx++]));
+        // GetParameters and ParameterGradients share the generated registry's order (heads, then the stream
+        // arrays), so one flat step covers every tensor without restating that order here.
+        var parameters = GetParameters();
+        var stepped = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+            stepped[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, ParameterGradients[i]));
+        SetParameters(stepped);
     }
 
     /// <inheritdoc/>
@@ -284,6 +371,9 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         metadata["FeatureDim"] = _featureDim.ToString(inv);
         metadata["ActionSize"] = _actionSize.ToString(inv);
+        metadata["NumAtoms"] = _numAtoms.ToString(inv);
+        metadata["ValueHiddenWidths"] = string.Join(",", _valueHiddenWidths.Select(w => w.ToString(inv)));
+        metadata["AdvantageHiddenWidths"] = string.Join(",", _advantageHiddenWidths.Select(w => w.ToString(inv)));
         return metadata;
     }
 }

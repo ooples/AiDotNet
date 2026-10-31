@@ -53,11 +53,16 @@ public class DeepEMDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
 
     #region Standard Meta-Learning Properties
 
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerLearningRate"/>
+    /// <summary>
+    /// Not used by DeepEMD: its adaptation takes no gradient steps (see <see cref="AdaptationSteps"/>). Default: 0.01.
+    /// </summary>
     public double InnerLearningRate { get; set; } = 0.01;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.OuterLearningRate"/>
     public double OuterLearningRate { get; set; } = 0.001;
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.AdaptationSteps"/>
+    /// <summary>
+    /// Not used by DeepEMD: it adapts by extracting support features and solving the EMD matching, with no gradient
+    /// steps on the support set. Default: 1.
+    /// </summary>
     public int AdaptationSteps { get; set; } = 1;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaBatchSize"/>
     public int MetaBatchSize { get; set; } = 4;
@@ -77,11 +82,17 @@ public class DeepEMDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <summary>Gets or sets the loss function.</summary>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <summary>Gets or sets the outer loop optimizer.</summary>
+    /// <summary>
+    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
+    /// supplied optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <summary>Gets or sets the inner loop optimizer.</summary>
+    /// <summary>
+    /// Not used by DeepEMD: its adaptation takes no gradient steps (see <see cref="AdaptationSteps"/>). A supplied
+    /// optimizer is only reset along with the learner.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
     /// <summary>Gets or sets the episodic data loader.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }

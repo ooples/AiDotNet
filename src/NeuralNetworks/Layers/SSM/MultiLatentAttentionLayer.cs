@@ -111,26 +111,6 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastLatent;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastAttnWeights;
-    [Scratch]
-    private Tensor<T>? _lastAttnOutput;
-    [Scratch]
-    private Tensor<T>? _lastOutputGate;
-    [Scratch]
-    private Tensor<T>? _lastOutputGateRaw;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -280,8 +260,6 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         // Step 1: Compress input to latent c_t = W_c * x_t + b_c
@@ -289,31 +267,24 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
             Engine.TensorMatMul(inputFlat, _compressWeights),
             Engine.Reshape(_compressBias, new[] { 1, _latentDimension }));
         var latent = Engine.Reshape(latentFlat, new[] { batchSize, seqLen, _latentDimension });
-        _lastLatent = latent;
 
         // Step 2: Reconstruct K and V from latent
         var kFlat = Engine.TensorMatMul(latentFlat, _keyUpWeights);
         var vFlat = Engine.TensorMatMul(latentFlat, _valueUpWeights);
         var k = Engine.Reshape(kFlat, new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(vFlat, new[] { batchSize, seqLen, _modelDimension });
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 3: Q projection (full rank)
         var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
 
         // Step 4: Output gate
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
-        _lastOutputGate = gate;
-        _lastOutputGateRaw = gateRaw;
 
         // Step 5: Causal multi-head attention
         var attnOutput = CausalMultiHeadAttention(q, k, v, batchSize, seqLen);
-        _lastAttnOutput = attnOutput;
 
         // Step 6: Gated output
         var gatedOutput = Engine.TensorMultiply(attnOutput, gate);
@@ -326,7 +297,6 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -378,7 +348,6 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
             scale: 1.0 / Math.Sqrt(_headDimension),
             out var attentionWeights);
 
-        _lastAttnWeights = attentionWeights;
         return MergeHeads(attended, batchSize, seqLen);
     }
 
@@ -483,16 +452,6 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastLatent = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastAttnWeights = null;
-        _lastAttnOutput = null;
-        _lastOutputGate = null;
-        _lastOutputGateRaw = null;
         _originalInputShape = null;
         _compressWeightsGradient = null;
         _compressBiasGradient = null;

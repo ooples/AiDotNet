@@ -89,7 +89,6 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     }
     private RainbowDQNOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     [ParameterAlias("rainbow/online-network")]
     private INeuralNetwork<T> _onlineNetwork;
@@ -113,7 +112,11 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     {
     }
 
-    public RainbowDQNAgent(RainbowDQNOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    /// <summary>
+    /// Initializes a Rainbow DQN agent from <paramref name="options"/>.
+    /// </summary>
+    /// <param name="options">The agent's configuration.</param>
+    public RainbowDQNAgent(RainbowDQNOptions<T> options)
         : base(options)
     {
         if (options == null)
@@ -123,13 +126,6 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
 
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.0001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
 
         _stepCount = 0;
         _updateCount = 0;
@@ -182,26 +178,34 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         // putting a NoisyDenseLayer between the trunk and the dueling head
         // so the action-conditional projection picks up the exploration
         // noise.
-        const int trunkHidden = 64;
-        IEnumerable<ILayer<T>> layers;
+        // Shared feature trunk: one ReLU dense layer per SharedLayers width. With noisy nets on, a noisy hidden
+        // layer of the trunk's width then feeds both streams, so the action-conditional projection sees the
+        // exploration noise. The streams' own hidden layers are deterministic.
+        var trunkWidths = _options.SharedLayers is { Count: > 0 } ? _options.SharedLayers : new List<int> { 64 };
+        var layerList = new List<ILayer<T>>();
+        foreach (var width in trunkWidths)
+        {
+            layerList.Add(new DenseLayer<T>(width, new ReLUActivation<T>() as IActivationFunction<T>));
+        }
+
+        int trunkHidden = trunkWidths[trunkWidths.Count - 1];
         if (_options.UseNoisyNetworks)
         {
-            layers = new ILayer<T>[]
-            {
-                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
-                new NoisyDenseLayer<T>(trunkHidden, trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
-                new DuelingCombinationLayer<T>(trunkHidden, duelingActionWidth)
-            };
+            // Factorised Gaussian noise (Fortunato et al. 2018, §3.2): sigma_0 = NoisyNetSigma, initial
+            // sigma = sigma_0 / sqrt(p) for p inputs. The noisy layer sits between the trunk and both streams.
+            layerList.Add(new NoisyDenseLayer<T>(trunkHidden, trunkHidden,
+                new ReLUActivation<T>() as IActivationFunction<T>,
+                sigmaInit: _options.NoisyNetSigma / Math.Sqrt(trunkHidden)));
         }
-        else
-        {
-            layers = new ILayer<T>[]
-            {
-                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
-                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
-                new DuelingCombinationLayer<T>(trunkHidden, duelingActionWidth)
-            };
-        }
+
+        // The value and advantage streams (Wang et al. 2016, Fig. 1) each run their own hidden layers,
+        // ValueStreamLayers and AdvantageStreamLayers. With distributional RL, V has one output per atom and the
+        // advantage mean is taken over actions for each atom (Hessel et al. 2018, Sec. 3).
+        layerList.Add(new DuelingCombinationLayer<T>(trunkHidden, _options.ActionSize,
+            _options.UseDistributional ? _options.NumAtoms : 1,
+            (_options.ValueStreamLayers ?? new List<int>()).ToArray(),
+            (_options.AdvantageStreamLayers ?? new List<int>()).ToArray()));
+        IEnumerable<ILayer<T>> layers = layerList;
 
         var finalArchitecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -212,8 +216,20 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             layers: layers.ToList()
         );
 
-        return new NeuralNetwork<T>(finalArchitecture, lossFunction: LossFunction);
+        return new NeuralNetwork<T>(finalArchitecture,
+            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate),
+            lossFunction: LossFunction);
     }
+
+    /// <summary>
+    /// The initial sigma of every noisy layer in the online network, as each layer recorded it; empty when
+    /// noisy networks are off.
+    /// </summary>
+    internal IReadOnlyList<double> NoisyLayerSigmaInits =>
+        ((NeuralNetworkBase<T>)_onlineNetwork).Layers
+            .OfType<NoisyDenseLayer<T>>()
+            .Select(layer => layer.SigmaInit)
+            .ToList();
 
     /// <summary>
     /// IFullModel.Predict surfaces the raw Q-value vector (one element per

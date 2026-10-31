@@ -166,56 +166,6 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private readonly PoolingType _poolingType;
 
-    /// <summary>
-    /// The input tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the input received during the last forward pass. It is necessary for computing
-    /// gradients during the backward pass, particularly for max pooling which needs to know which
-    /// input values were selected as the maximum.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what input data was processed most recently.
-    /// 
-    /// During training:
-    /// - The layer needs to remember what input values it processed
-    /// - For max pooling, it needs to know which value was the maximum
-    /// - For average pooling, it needs the input dimensions
-    /// - This helps when calculating how to distribute gradients during backpropagation
-    /// 
-    /// This is automatically cleared between training batches to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The output tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the output produced during the last forward pass. It is used during
-    /// backpropagation to compute gradients, particularly when an activation function is applied
-    /// after pooling.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores what the layer output after its most recent calculation.
-    /// 
-    /// During training:
-    /// - The network needs to remember what pooled values it produced
-    /// - This helps calculate how to improve the network
-    /// - It's especially important if an activation function was applied after pooling
-    /// 
-    /// This is also cleared after each training batch to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
-    /// Stores the indices of the maximum values found during global max pooling.
-    /// </summary>
-    private int[]? _maxIndices;
-
     // GPU-resident cached tensors for GPU training pipeline
     [Scratch]
     private Tensor<T>? _lastOutputGpu;
@@ -474,7 +424,6 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Industry-standard: dynamically determine axes based on input rank
         // For any rank, reduce all dimensions except first (batch) and last (features/channels)
@@ -485,29 +434,21 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
         {
             // No dimensions to reduce (1D or 2D input)
             output = input;
-            _maxIndices = null;
         }
         else if (_poolingType == PoolingType.Average)
         {
             // Use GPU-accelerated ReduceMean
             // keepDims=true for rank >= 4 to preserve dimension structure for subsequent reshape
             output = Engine.ReduceMean(input, axes, keepDims: input.Shape.Length >= 4);
-            _maxIndices = null;
         }
         else // Max pooling
         {
             // Use GPU-accelerated ReduceMax
             // keepDims=true for rank >= 4 to preserve dimension structure for subsequent reshape
-            output = Engine.ReduceMax(input, axes, keepDims: input.Shape.Length >= 4, out _maxIndices);
+            output = Engine.ReduceMax(input, axes, keepDims: input.Shape.Length >= 4, out _);
         }
 
         var result = ApplyActivation(output);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
 
         return result;
     }
@@ -608,9 +549,6 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
-        _maxIndices = null;
 
         // Clear GPU cached data
         _lastOutputGpu?.Dispose();

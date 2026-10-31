@@ -667,6 +667,26 @@ public static class DeserializationHelper
                 tnNumStep, tnRelax, tnVbs, tnMomentum, tnEpsilon
             });
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.DuelingCombinationLayer<>))
+        {
+            // DuelingCombinationLayer(featureDim, actionSize, numAtoms, int[] valueHidden, int[] advantageHidden, int? seed).
+            // A model saved before NumAtoms existed has a scalar-value head with no hidden streams.
+            int featureDim = TryGetInt(additionalParams, "FeatureDim")
+                ?? throw new InvalidOperationException("DuelingCombinationLayer metadata has no FeatureDim.");
+            int numAtoms = TryGetInt(additionalParams, "NumAtoms") ?? 1;
+            int actionSize = TryGetInt(additionalParams, "ActionSize")
+                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] / numAtoms : 1);
+            int[] valueHidden = TryGetIntArray(additionalParams, "ValueHiddenWidths") ?? Array.Empty<int>();
+            int[] advantageHidden = TryGetIntArray(additionalParams, "AdvantageHiddenWidths") ?? Array.Empty<int>();
+
+            var duelingCtor = type.GetConstructor(new[] { typeof(int), typeof(int), typeof(int), typeof(int[]), typeof(int[]), typeof(int?) });
+            if (duelingCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find DuelingCombinationLayer(int, int, int, int[], int[], int?) constructor.");
+            }
+
+            instance = duelingCtor.Invoke(new object?[] { featureDim, actionSize, numAtoms, valueHidden, advantageHidden, null });
+        }
         else if (genericDef == typeof(TabMEnsembleLayer<>))
         {
             // TabMEnsembleLayer(numFeatures, int[] hiddenDimensions, outputDim, numMembers).
@@ -2760,7 +2780,11 @@ public static class DeserializationHelper
                     _ => p.HasDefaultValue ? p.DefaultValue : null,
                 };
             }
-            instance = ctorTeb.Invoke(argsTeb);
+            var blockTeb = (NeuralNetworks.Layers.TransformerEncoderBlock<T>)ctorTeb.Invoke(argsTeb);
+            if (blockTeb.AttentionLayer is MultiHeadAttentionLayer<T> attentionTeb)
+                RestoreNestedMultiHeadAttentionConfiguration(attentionTeb, additionalParams,
+                    NeuralNetworks.Layers.TransformerEncoderBlock<T>.AttentionMetadataPrefix);
+            instance = blockTeb;
         }
         else if (genericDef.Name == "TimeSformerBlockLayer`1")
         {
@@ -2847,7 +2871,13 @@ public static class DeserializationHelper
                     _ => p.HasDefaultValue ? p.DefaultValue : null,
                 };
             }
-            instance = ctorTdb.Invoke(argsTdb);
+            var blockTdb = (NeuralNetworks.Layers.TransformerDecoderBlock<T>)ctorTdb.Invoke(argsTdb);
+            if (blockTdb.SelfAttentionLayer is MultiHeadAttentionLayer<T> selfAttentionTdb)
+                RestoreNestedMultiHeadAttentionConfiguration(selfAttentionTdb, additionalParams,
+                    NeuralNetworks.Layers.TransformerDecoderBlock<T>.SelfAttentionMetadataPrefix);
+            RestoreNestedMultiHeadAttentionConfiguration(blockTdb.CrossAttentionLayer, additionalParams,
+                NeuralNetworks.Layers.TransformerDecoderBlock<T>.CrossAttentionMetadataPrefix);
+            instance = blockTdb;
         }
         else if (genericDef.Name == "GroupedQueryAttentionLayer`1" || genericDef.Name == "CachedGroupedQueryAttention`1")
         {
@@ -4516,6 +4546,33 @@ public static class DeserializationHelper
         configure.Invoke(layer, new object[] { positionalType, ropeTheta, maxSequenceLength });
     }
 
+    /// <summary>
+    /// Restores the post-construction settings (causal mask, attention dropout, positional encoding) of an attention
+    /// layer hosted inside a composite block, from the keys the block wrote under <paramref name="prefix"/> through
+    /// <see cref="MultiHeadAttentionLayer{T}.WriteConfigurationMetadata"/>.
+    /// </summary>
+    /// <remarks>
+    /// The block's constructor rebuilds the attention from its own arguments, which never include these settings, so
+    /// without this a causal block deserialized on its own came back bidirectional and without attention dropout.
+    /// Blocks saved before the keys existed carry none of them and keep the constructor defaults, as before.
+    /// </remarks>
+    private static void RestoreNestedMultiHeadAttentionConfiguration<T>(
+        MultiHeadAttentionLayer<T> attention,
+        Dictionary<string, object>? additionalParams,
+        string prefix)
+    {
+        if (additionalParams is null) return;
+        var nested = new Dictionary<string, object>();
+        foreach (var kv in additionalParams)
+        {
+            if (kv.Key.Length > prefix.Length && kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+                nested[kv.Key.Substring(prefix.Length)] = kv.Value;
+        }
+
+        if (nested.Count > 0)
+            RestoreMultiHeadAttentionConfiguration(attention, nested);
+    }
+
     private static void RestoreMultiHeadAttentionConfiguration<T>(
         MultiHeadAttentionLayer<T> attention,
         Dictionary<string, object>? additionalParams)
@@ -4530,6 +4587,12 @@ public static class DeserializationHelper
         if (causalMask.HasValue)
         {
             attention.UseCausalMask = causalMask.Value;
+        }
+
+        double? attentionDropoutRate = TryGetDouble(additionalParams, "AttentionDropoutRate");
+        if (attentionDropoutRate is double rate && rate > 0.0)
+        {
+            attention.ConfigureAttentionDropout(rate);
         }
 
         string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");

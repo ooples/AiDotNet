@@ -121,23 +121,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastRouterLogits;
-    [Scratch]
-    private Tensor<T>? _lastRouterWeightsResult;
-    private int[,]? _lastTopKIndices;
-    [Scratch]
-    private Tensor<T>? _lastExpertOutputs;
-    [Scratch]
-    private Tensor<T>? _lastGate;
-    [Scratch]
-    private Tensor<T>? _lastGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastMoEOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -311,14 +294,11 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Router - compute expert selection per token
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var routerLogits = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _routerWeights),
             Engine.Reshape(_routerBias, new[] { 1, _numExperts }));
-        _lastRouterLogits = routerLogits;
 
         // Softmax over experts, then use top-K only to construct the constant sparse mask. The
         // selected probabilities and their renormalization remain ordinary tape-tracked ops.
@@ -338,8 +318,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         var weightSums = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true);
         var routerWeightsResult = Engine.TensorDivide(
             maskedWeights, Engine.TensorAddScalar(weightSums, NumOps.FromDouble(1e-10)));
-        _lastRouterWeightsResult = routerWeightsResult;
-        _lastTopKIndices = topKIndices;
 
         // Step 2: one operation-specific recurrent node owns the routed expert scan. This exactly
         // preserves the legacy reset semantics: an expert not selected at t has zero state at t+1.
@@ -347,22 +325,18 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         var transition = Engine.TensorExp(_expertA);
         var expertOutputs = Engine.RoutedDiagonalSsmScanForward(
             input3D, activeMask, transition, _expertB, _expertC, _expertD);
-        _lastExpertOutputs = expertOutputs;
 
         // Step 3: Combine expert outputs weighted by router scores
         var routing4D = Engine.Reshape(
             routerWeightsResult, new[] { batchSize, seqLen, _numExperts, 1 });
         var weightedExperts = Engine.TensorMultiply(expertOutputs, routing4D);
         var moeOutput = Engine.ReduceSum(weightedExperts, new[] { 2 }, keepDims: false);
-        _lastMoEOutput = moeOutput;
 
         // Step 4: Output gate
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
-        _lastGate = gate;
-        _lastGateRaw = gateRaw;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(moeOutput, gate);
@@ -375,7 +349,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -520,15 +493,6 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastRouterLogits = null;
-        _lastRouterWeightsResult = null;
-        _lastTopKIndices = null;
-        _lastExpertOutputs = null;
-        _lastGate = null;
-        _lastGateRaw = null;
-        _lastMoEOutput = null;
         _originalInputShape = null;
         _routerWeightsGradient = null;
         _routerBiasGradient = null;

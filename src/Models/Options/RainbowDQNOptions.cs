@@ -26,7 +26,28 @@ public class RainbowDQNOptions<T> : ReinforcementLearningOptions<T>
 
     // Dueling network architecture
     public List<int> SharedLayers { get; init; } = new List<int> { 128 };
+
+    /// <summary>
+    /// Gets or sets the widths of the value stream's hidden ReLU layers, between the shared trunk and V(s).
+    /// </summary>
+    /// <value>One width per hidden layer, in order; empty for a value head straight off the trunk. Default: { 128 }.</value>
+    /// <remarks>
+    /// <para>The dueling network (Wang et al. 2016, Fig. 1) gives the value and advantage streams their own fully
+    /// connected layers after the shared trunk. With distributional RL the value stream ends in one output per atom.</para>
+    /// <para><b>For Beginners:</b> How big the part of the network is that judges "how good is this state".</para>
+    /// </remarks>
     public List<int> ValueStreamLayers { get; init; } = new List<int> { 128 };
+
+    /// <summary>
+    /// Gets or sets the widths of the advantage stream's hidden ReLU layers, between the shared trunk and A(s, a).
+    /// </summary>
+    /// <value>One width per hidden layer, in order; empty for an advantage head straight off the trunk. Default: { 128 }.</value>
+    /// <remarks>
+    /// <para>The advantage stream (Wang et al. 2016, Fig. 1) is combined with the value stream as
+    /// Q = V + (A − mean over actions of A); with distributional RL the mean is taken per atom.</para>
+    /// <para><b>For Beginners:</b> How big the part of the network is that judges "how much better is each action
+    /// than average".</para>
+    /// </remarks>
     public List<int> AdvantageStreamLayers { get; init; } = new List<int> { 128 };
 
     // Prioritized experience replay parameters (base has UsePrioritizedReplay)
@@ -48,7 +69,25 @@ public class RainbowDQNOptions<T> : ReinforcementLearningOptions<T>
     public double NoisyNetSigma { get; init; } = 0.5;
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// Gets or sets a factory for the optimizer each of this agent's networks trains with.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    /// <remarks>
+    /// <para>
+    /// When this is <c>null</c>, the networks train with Adam at the agent's learning rate, with ε = 1e-8.
+    /// Hessel et al. 2018 used ε = 1.5e-4; supply a factory to train with the paper's ε.
+    /// </para>
+    /// <para>
+    /// The agent invokes the factory once for every network it builds, so the factory must create a new
+    /// optimizer instance on each call. A shared instance would share its step counter, and Adam's bias
+    /// correction would then advance on every network's step instead of only on that network's own.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer is the rule that turns each network's gradients into weight
+    /// changes. Leave this unset to get Adam at the learning rate above; supply a factory such as
+    /// <c>() =&gt; new AdamOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(null, myOptions)</c> to choose a
+    /// different optimizer or its settings. Return a new optimizer from every call.
+    /// </para>
+    /// </remarks>
+    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for Adam at the
+    /// agent's learning rate.</value>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

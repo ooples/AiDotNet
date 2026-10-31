@@ -158,27 +158,9 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
-    /// Cached input from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Cached edge adjacency from the last forward pass.
     /// </summary>
     private int[,]? _lastEdgeAdjacency;
-
-    /// <summary>
-    /// Cached output before activation from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
-
-    /// <summary>
-    /// Cached output after activation from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     #endregion
 
@@ -349,8 +331,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
                 "Edge adjacency must be set via SetEdgeAdjacency before calling Forward.");
         }
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         int numEdges = input.Shape[0];
         int aggregatedFeatures = InputChannels * (1 + NumNeighbors);
 
@@ -360,10 +340,8 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
         var weightsTransposed = Engine.TensorTranspose(_weights);
         var preActivation = Engine.TensorMatMul(aggregatedInput, weightsTransposed);
         preActivation = AddBiases(preActivation);
-        _lastPreActivation = preActivation;
 
         var output = ApplyActivation(preActivation);
-        _lastOutput = output;
 
         return output;
     }
@@ -589,9 +567,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastPreActivation = null;
-        _lastOutput = null;
         _weightsGradient = null;
         _biasesGradient = null;
     }

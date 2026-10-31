@@ -115,24 +115,6 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastBeta;
-    [Scratch]
-    private Tensor<T>? _lastHouseholderVecs;
-    [Scratch]
-    private Tensor<T>? _lastStates;
-    [Scratch]
-    private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -283,32 +265,25 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         // Step 1: Q, K, V projections
         var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         var k = Engine.Reshape(Engine.TensorMatMul(inputFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(inputFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 2: Beta (write strength)
         var betaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _betaWeights),
             Engine.Reshape(_betaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var beta = Engine.Sigmoid(betaRaw);
-        _lastBeta = beta;
 
         // Step 3: Compute Householder vectors per timestep
         // householderVecs: [batch, seqLen, numHouseholders, numHeads, headDim]
         var hVecs = ComputeHouseholderVectors(inputFlat, batchSize, seqLen);
-        _lastHouseholderVecs = hVecs;
 
         // Step 4: DeltaProduct recurrence
         var recOutput = DeltaProductRecurrence(q, k, v, beta, hVecs, batchSize, seqLen);
-        _lastRecurrenceOutput = recOutput;
 
         // Step 5: Output projection
         var outputFlat = Engine.TensorMatMul(
@@ -318,7 +293,6 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -465,7 +439,6 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
                 new[] { headBatch, 1, _headDimension }));
         }
 
-        _lastStates = state;
         return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), 1), batchSize, seqLen);
     }
 
@@ -604,15 +577,6 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastBeta = null;
-        _lastHouseholderVecs = null;
-        _lastStates = null;
-        _lastRecurrenceOutput = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

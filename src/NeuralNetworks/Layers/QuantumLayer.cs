@@ -86,7 +86,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
     private Tensor<T> _circuitImag;
-    private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
@@ -106,14 +105,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _angleGradients;
 
-    /// <summary>
-    /// Cached result amplitudes from Forward for use in Backward.
-    /// Shape: [batch, dimension] for real and imaginary parts.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastResultReal;
-    [Scratch]
-    private Tensor<T>? _lastResultImag;
     private readonly INumericOperations<Complex<T>> _complexOps;
 
     public override bool SupportsTraining => true;
@@ -228,7 +219,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 1]]);
         }
 
-        _lastInput = processInput;
         int dimension = 1 << _numQubits;
         int inputDim = processInput.Shape[1]; // Use processInput which is always 2D
 
@@ -293,10 +283,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 
         // Apply quantum circuit using complex matrix multiplication
         var (resultRealT, resultImagT) = Engine.ComplexMatMul(_circuitReal, _circuitImag, normalizedRealT, normalizedImagT);
-
-        // Cache amplitudes for Backward (transpose to [batch, dimension])
-        _lastResultReal = Engine.TensorTranspose(resultRealT);
-        _lastResultImag = Engine.TensorTranspose(resultImagT);
 
         // Convert amplitudes to probabilities and transpose back to [batch, dimension]
         var probabilitiesT = Engine.ComplexMagnitudeSquared(resultRealT, resultImagT);
@@ -399,9 +385,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward pass
-        _lastInput = null;
-        _lastResultReal = null;
-        _lastResultImag = null;
 
         // Reset angle gradients
         _angleGradients = new Tensor<T>([_numQubits]);

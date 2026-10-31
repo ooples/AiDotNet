@@ -31,7 +31,6 @@ public class A2COptions<T> : ModelOptions
     public T ValueLearningRate { get; set; }
     public T DiscountFactor { get; set; }
     public T EntropyCoefficient { get; set; }
-    public T ValueLossCoefficient { get; set; }
     public int StepsPerUpdate { get; set; } = 5;
     public ILossFunction<T> ValueLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
     public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 64, 64 };
@@ -44,6 +43,5 @@ public class A2COptions<T> : ModelOptions
         ValueLearningRate = numOps.FromDouble(0.001);
         DiscountFactor = numOps.FromDouble(0.99);
         EntropyCoefficient = numOps.FromDouble(0.01);
-        ValueLossCoefficient = numOps.FromDouble(0.5);
     }
 }

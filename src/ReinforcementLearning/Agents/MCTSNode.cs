@@ -16,4 +16,10 @@ public class MCTSNode<T>
     public Dictionary<int, T> Rewards { get; set; } = new();
     public required T Value { get; set; }
     public int TotalVisits { get; set; }
+
+    /// <summary>
+    /// Search priors that replace the prediction network's policy at this node, or null to use the policy.
+    /// The root carries the policy mixed with Dirichlet exploration noise while acting in training.
+    /// </summary>
+    internal double[]? Priors { get; set; }
 }

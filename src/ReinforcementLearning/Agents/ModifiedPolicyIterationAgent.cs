@@ -161,9 +161,11 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
 
     private void ModifiedPolicyEvaluation()
     {
-        // Only do k sweeps instead of iterating to convergence
+        // At most MaxEvaluationSweeps sweeps (Puterman & Shin 1978's partial evaluation), stopping early once the
+        // largest value change in a sweep falls below Theta, the evaluation tolerance.
         for (int sweep = 0; sweep < _options.MaxEvaluationSweeps; sweep++)
         {
+            double largestChange = 0.0;
             foreach (var stateKey in _valueTable.Keys.ToList())
             {
                 if (!_policy.ContainsKey(stateKey))
@@ -173,10 +175,20 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
 
                 int action = _policy[stateKey];
                 T newValue = ComputeActionValue(stateKey, action);
+                largestChange = Math.Max(largestChange,
+                    Math.Abs(NumOps.ToDouble(newValue) - NumOps.ToDouble(_valueTable[stateKey])));
                 _valueTable[stateKey] = newValue;
+            }
+
+            if (largestChange < _options.Theta)
+            {
+                break;
             }
         }
     }
+
+    /// <summary>The value table's estimate for a state, or zero for a state the agent has not seen.</summary>
+    internal T StateValue(Vector<T> state) => _valueTable.TryGetValue(GetStateKey(state), out var value) ? value : NumOps.Zero;
 
     private bool PolicyImprovement()
     {

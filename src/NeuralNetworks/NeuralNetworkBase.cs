@@ -5794,6 +5794,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // it should have declared [-1, 16].
                     currentShape = outShape;
                     if (outShape.Length >= 2) lastGoodShape = outShape;
+                    else if (TryApplyFeatureAxisWidth(layer, lastGoodShape, outShape) is { } carried)
+                        lastGoodShape = carried;
                 }
 
                 // ...but the layer must not keep CLAIMING the spatial dims this walk inferred. They
@@ -5818,6 +5820,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// The sequence shape after a per-feature layer, or null when the layer is not one.
+    /// </summary>
+    /// <remarks>
+    /// A dense or normalization layer declares rank-1 shapes ([features] in, [width] out) but runs along the last axis
+    /// of a [time, features] sequence, keeping the leading axes. The walk records only rank-2+ outputs as its
+    /// fallback, so without this the fallback stayed at the shape from before the projection: in EfficientConformer
+    /// the stage-1 frame splicer resolved from [32, 64] (the stage-0 splicer's output) where its real input is
+    /// [32, 32], declared [16, 128] while computing [16, 64], and every training step failed its shape check.
+    /// It applies only when the layer's own input is exactly the fallback's last axis.
+    /// </remarks>
+    private static int[]? TryApplyFeatureAxisWidth(ILayer<T> layer, int[] lastGoodShape, int[] outShape)
+    {
+        if (outShape.Length != 1 || lastGoodShape.Length < 2) return null;
+        int[] inShape;
+        try { inShape = layer.GetInputShape(); }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) { return null; }
+        if (inShape.Length != 1 || inShape[0] != lastGoodShape[^1]) return null;
+        var carried = (int[])lastGoodShape.Clone();
+        carried[^1] = outShape[0];
+        return carried;
     }
 
     /// <summary>
@@ -6293,6 +6318,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             observed = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
         }
+        catch
+        {
+            // The recording holds every layer's activations; a failed forward must not leave them alive.
+            trace?.ReleaseRecording();
+            throw;
+        }
         finally
         {
             trace?.Dispose();
@@ -6303,16 +6334,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // untraced path, and a second forward would draw a stochastic layer's randomness twice (a
         // seeded Monte Carlo dropout call then differed from the next one). Under an enclosing
         // observer the re-run would take the same unfolded path, so it is skipped there too.
-        output = trace is null || !trace.SuppressedFolding || enclosedByObserver
-            ? observed
-            : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
+        try
+        {
+            output = trace is null || !trace.SuppressedFolding || enclosedByObserver
+                ? observed
+                : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
 
-        // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
-        // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
-        // of this method's caller - Layers was still EMPTY, because these stacks materialise during
-        // the forward. A check that runs before the layers exist cannot fail, and would have shipped
-        // as a diagnostic that silently never fired.
-        ReportArchitectureLayerDisagreement();
+            // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
+            // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
+            // of this method's caller - Layers was still EMPTY, because these stacks materialise during
+            // the forward. A check that runs before the layers exist cannot fail, and would have shipped
+            // as a diagnostic that silently never fired.
+            ReportArchitectureLayerDisagreement();
+        }
+        catch
+        {
+            trace?.ReleaseRecording();
+            throw;
+        }
 
         if (trace is not null)
         {
@@ -6323,6 +6362,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             catch
             {
                 // Diagnostic only.
+            }
+            finally
+            {
+                // The recording holds every layer's input and output of that forward. Drop it here, so a
+                // context that captured the observer (a thread or task started during the forward) cannot
+                // keep those activations alive.
+                trace.ReleaseRecording();
             }
         }
 
@@ -14145,6 +14191,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Each member then publishes and steps exactly its own share with its own optimizer, since
     /// members may train at different rates: StyleGAN's mapping network learns 100 times slower.
     /// </para>
+    /// <para>
+    /// A positive <c>groupMaxGradientNorm</c> clips the members as one group before any of them steps: the joint
+    /// gradient of all members is rescaled to at most that global L2 norm, as TensorFlow's
+    /// <c>clip_by_global_norm</c> over one optimizer's whole variable set does (Dreamer clips its world model this
+    /// way). This is not the same as each member's optimizer clipping its own share, which bounds every member
+    /// separately and lets the group's joint step grow with the number of members.
+    /// </para>
     /// </remarks>
     /// <param name="tape">The open tape on which every member's forward was recorded.</param>
     /// <param name="lossTensor">The scalar loss recorded on <paramref name="tape"/>.</param>
@@ -14159,16 +14212,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         => StepOnTape(tape, lossTensor, new[] { (network, optimizer) });
 
     /// <inheritdoc cref="StepOnTape(GradientTape{T}, Tensor{T}, NeuralNetworkBase{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>
+    /// <param name="groupMaxGradientNorm">When positive, the largest global L2 norm of the members' joint gradient;
+    /// zero (the default) leaves the gradient as the tape computed it.</param>
     internal static T StepOnTape(
         GradientTape<T> tape,
         Tensor<T> lossTensor,
-        IReadOnlyList<(NeuralNetworkBase<T> Network, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer)> members)
+        IReadOnlyList<(NeuralNetworkBase<T> Network, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer)> members,
+        double groupMaxGradientNorm = 0.0)
     {
         if (tape is null) throw new ArgumentNullException(nameof(tape));
         if (lossTensor is null) throw new ArgumentNullException(nameof(lossTensor));
         if (members is null) throw new ArgumentNullException(nameof(members));
         if (members.Count == 0)
             throw new ArgumentException("At least one network must be trained by the step.", nameof(members));
+        if (double.IsNaN(groupMaxGradientNorm) || double.IsInfinity(groupMaxGradientNorm) || groupMaxGradientNorm < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(groupMaxGradientNorm), groupMaxGradientNorm,
+                "A group gradient-norm bound must be finite and non-negative (zero disables it).");
+        }
 
         var sentinels = new List<TrainSentinel>(members.Count);
         try
@@ -14194,6 +14255,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             var gradients = tape.ComputeGradients(lossTensor, union, false);
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : members[0].Network.NumOps.Zero;
+
+            if (groupMaxGradientNorm > 0.0)
+            {
+                // One norm over every member's parameters, then one scale applied to all of them in place, so each
+                // member's optimizer below steps on its share of the jointly clipped gradient.
+                var groupGradients = new Dictionary<Tensor<T>, Tensor<T>>(
+                    AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var parameter in union)
+                {
+                    if (gradients.TryGetValue(parameter, out var gradient)) groupGradients[parameter] = gradient;
+                }
+                Training.TapeTrainingStepper<T>.ClipByGlobalNorm(groupGradients, groupMaxGradientNorm);
+            }
 
             for (int i = 0; i < members.Count; i++)
             {

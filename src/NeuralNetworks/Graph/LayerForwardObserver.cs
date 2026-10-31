@@ -216,6 +216,9 @@ internal sealed class LayerForwardObserver<T> : IDisposable
         }
     }
 
+    /// <summary>Drops the recorded calls and the tensors they reference, once they have been read.</summary>
+    public void ReleaseRecording() => _calls.Clear();
+
     /// <inheritdoc />
     public void Dispose()
     {
