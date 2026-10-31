@@ -975,9 +975,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // CI-smoke fixture would have to shrink the architecture past recognizability; deferred to the nightly
         // HeavyTimeout lane where they run full-scale. Families: CLIP dual-encoders (MetaCLIP, LLM2CLIP,
         // MedCLIP), SAM segmentation (MedSAM, MedSAM2, MaskAdapter), forecasting foundations (MOIRAI), speech
-        // /audio LMs (MMS, MARS5TTS), state-space LM (Mamba2), and the
+        // /audio LMs (MMS), state-space LM (Mamba2), and the
         // mixture-of-Gaussians generative net (MoG). Paper defaults intact + customizable.
-        "MARS5TTS",
         // #1789 J-M mid-tier classes that still OOM or time out on the forward/training even at <float>
         // (verified locally): Mask2Former (segmentation foundation), LLMTime (LLM-forecasting),
         // MedicalASR / MedSegDiffV2 (medical ASR / seg-diffusion), MemFlow (optical flow — its
@@ -1445,7 +1444,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // defaults (dims, depth, vocab) are unchanged and fully user-customizable; only the test numeric type
         // changes. Any that still OOM at fp32 (paper-scale generative LMs) will show in the live run and move
         // to the nightly HeavyTimeout lane.
-        "KeywordSpotting", "LiteDVDNet", "LLMTime", "LSTNet", "MARS5TTS", "MGTSD", "MQCNN", "MadmomBeatTracker", "Mamba",
+        "KeywordSpotting", "LiteDVDNet", "LLMTime", "LSTNet", "MGTSD", "MQCNN", "MadmomBeatTracker", "Mamba",
         "MarbleNet", "MatchaTTS", "MedicalASR", "MeloTTS", "MelodyExtractor", "MusicGenModel",
         "MusicStructureAnalyzer",
         // --- #1624 training/perf-bound inventory (OOM / TIMEOUT in training/clone) ---
@@ -7883,6 +7882,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "MARS5TTS" && model.TypeParameterCount == 1)
+            {
+                // MARS5 is a Mistral AR decoder and an encoder-decoder diffusion NAR over EnCodec codes, decoded by Vocos;
+                // keep all of it at width 16 with one layer each, four codebooks (a Vocos bandwidth class) of 64 codes, a
+                // 2560-sample codec hop, four diffusion steps and a 64-token AR cap. The release's 10k-step warmup is off and
+                // the AR rate raised to 3e-3 so fifteen steps descend.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions { HiddenDim = 16, NumHeads = 2, ArLayers = 1, ArFeedForward = 32, " +
+                    "ArSpeakerLayers = 1, SlidingWindow = 512, NarDim = 16, NarHeads = 2, NarEncoderLayers = 1, NarDecoderLayers = 1, " +
+                    "NarSpeakerLayers = 1, TimeDim = 8, DiffusionSteps = 4, Q0OverrideSteps = 1, MaxGenerationLength = 64, " +
+                    "NumCodebooks = 4, CodebookSize = 64, HopSize = 2560, DecoderDim = 16, DecoderIntermediateDim = 32, DecoderLayers = 1, " +
+                    "WarmupSteps = 0, ArLearningRate = 3e-3, NarLearningRate = 3e-3, " +
+                    "Codec = new AiDotNet.Audio.Generation.EnCodecOptions { SampleRate = 24000, NumQuantizers = 4, " +
+                    "CodebookSize = 64, Filters = 4, Ratios = [8, 5, 4, 4, 4], Dimension = 8, ResidualKernelSizes = [3, 1], " +
+                    "TargetBandwidthKbps = 0.225 } })";
+            }
             else if (model.ClassName == "MinMo" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.MultiModal.", System.StringComparison.Ordinal))
             {
@@ -7891,21 +7909,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Qwen2.5's real tokenizer (the token table keeps its 151,665 rows).
                 constructorExpr = "AiDotNet.Tests.TextToSpeech.MinMoFixture.Tts<double>()";
             }
-            else if ((model.ClassName == "MARS5TTS"
-                      || model.ClassName == "Voicebox"
+            else if ((model.ClassName == "Voicebox"
                       || model.ClassName == "WhisperSpeech")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
             {
                 // CodecTtsOptions models whose production defaults are foundation-scale codec LMs —
-                // an 8x1024 codec-token head behind a wide, deep autoregressive decoder (MARS5-TTS
-                // 1536-wide/24-layer, and MinMo's former placeholder 1024-wide/12-layer). On the J-M shard they produced 16
-                // and 4 OutOfMemoryExceptions respectively, cascading across nearly every invariant in
-                // each class because a class that OOMs mid-suite leaves too little headroom for
-                // the tests that follow it.
-                // MinMo was already on Fp32TestClassNames, so <float> was applied first and measured
-                // insufficient — it OOMs during CONSTRUCTION, which halving element width cannot fix.
-                // MARS5TTS carried no mitigation at all.
+                // a codec-token head behind a wide, deep autoregressive decoder.
                 // Voicebox and WhisperSpeech join from the T-Z shard, which ran only 23 classes
                 // before hitting the 45-min job timeout: measured there at 356s and 199s of test time. Voicebox and WhisperSpeech
                 // additionally failed Training_ShouldReduceLoss and
@@ -7923,7 +7933,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // it only widens the codec head from 1x16 to 2x16.
                 string codecOptionsType = model.ClassName switch
                 {
-                    "MARS5TTS" => "AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions",
                     "Voicebox" => "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions",
                     _ => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
                 };
@@ -8980,22 +8989,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Chirp" && model.TypeParameterCount == 1)
             {
-                // Chirp builds the paper's real Conformer encoder (USM, arXiv:2303.01037 §2.1), and its
-                // production defaults size that at 1024 wide x 12 blocks with a 4x macaron FFN (4096)
-                // and a 32000-way vocabulary head — each block now also running a genuine convolution
-                // module. Materializing that per test does not fit a shard that is serialized against a
-                // 45-minute CI job timeout. Exercise the identical topology (mel projection ->
-                // ConformerBlock stack -> LayerNorm + vocab projection) at CI-smoke width/depth,
-                // matching the [1, 64, 32] mel input this fixture feeds. Production defaults stay
-                // paper-faithful and every dimension remains configurable through the options object.
+                // Chirp's defaults are USM's Conformer-2B (32 blocks, 1536 wide) with sixteen 8192-entry codebooks. The
+                // fixture is the same log-mel -> conv subsampling -> chunk-attention Conformer -> projection + CTC
+                // network at width 32, 2 blocks, 32 mel bins and two 64-entry codebooks.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.Multilingual.ChirpOptions { " +
-                    "EncoderDim = 32, NumEncoderLayers = 2, NumAttentionHeads = 4, " +
-                    "FeedForwardExpansionFactor = 2, ConvKernelSize = 3, NumMels = 32, " +
-                    "VocabSize = 32, DropoutRate = 0.0 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.ChirpOptions { EncoderDim = 32, " +
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, CodebookSize = 64, NumCodebooks = 2, " +
+                    "VocabSize = 16, MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "SpeechEmotionRecognizer" && model.TypeParameterCount == 1)
             {
@@ -10565,24 +10568,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Chirp3" && model.TypeParameterCount == 1)
             {
-                // Chirp3 keeps Google's paper-scale encoder in production: 1024-wide,
-                // 12 layers, 16 heads, a 4x feed-forward expansion, 128 mel bins and a
-                // 32,000-entry vocabulary. It is the second most expensive class in the A-C
-                // shard at 133 s across its training probes (run 30286528012). Its repetition
-                // counts are already bounded by the FP32 audio branch (2 training steps,
-                // 2-vs-5 MoreData), so — as with Chronos — the residual cost is per-step
-                // scale rather than repeat count, and only a fixture bound can address it.
-                // Exercise the same mel projection -> Conformer encoder -> vocabulary head at
-                // CI-smoke scale; NumMels=64 matches the generated [1,64,32] audio fixture.
-                // Production defaults and every customization point are unchanged.
+                // Chirp3's defaults are USM's Conformer-2B (32 blocks, 1536 wide) with sixteen 8192-entry codebooks. The
+                // fixture is the same log-mel -> conv subsampling -> chunk-attention Conformer -> projection + CTC
+                // network at width 32, 2 blocks, 32 mel bins and two 64-entry codebooks.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.Multilingual.Chirp3Options { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, FeedForwardExpansionFactor = 2, NumMels = 64, " +
-                    "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.Chirp3Options { EncoderDim = 32, " +
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, CodebookSize = 64, NumCodebooks = 2, " +
+                    "VocabSize = 16, MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "APNet" && model.TypeParameterCount == 1)
             {
@@ -10805,20 +10800,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Chirp2" && model.TypeParameterCount == 1)
             {
-                // Chirp2's production defaults retain the USM-scale 1024-wide, 12-layer encoder and
-                // 32K vocabulary. Float was applied first and measured on PR #1789: it brought the
-                // timed-out tests under budget, but the paper-scale 1-vs-2-step MoreData smoke probe
-                // still overshot (loss 0.164716 -> 0.782144). Build the SAME Conformer/CTC-style
-                // architecture at CI-smoke width/depth/vocabulary in the generated fixture only.
-                // NumMels matches the generic audio input feature width and NumAttentionHeads divides
-                // EncoderDim; production defaults and every user-settable option remain untouched.
+                // Chirp2's defaults are USM's Conformer-2B (32 blocks, 1536 wide) with sixteen 8192-entry codebooks. The
+                // fixture is the same log-mel -> conv subsampling -> chunk-attention Conformer -> projection + CTC
+                // network at width 32, 2 blocks, 32 mel bins and two 64-entry codebooks.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.Multilingual.Chirp2Options { EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 8, DropoutRate = 0.0 })";
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, CodebookSize = 64, NumCodebooks = 2, " +
+                    "VocabSize = 16, MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Qwen2Audio" && model.TypeParameterCount == 1)
             {
@@ -16483,6 +16474,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "MARS5TTS")
+                {
+                    // MARS5 reads a text's tokens and trains on a 24 kHz recording: eight tokens, and 25600 samples (ten frames of
+                    // the fixture codec). Generation samples its codes, so the probes compare the training objective at a fixed
+                    // draw, which reads the text.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 25600 };");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "GPTSoVITS")
                 {
                     // GPT-SoVITS reads a sentence's phone ids and trains on a 32 kHz recording: eight ids, and 12800 samples (0.4 s:
@@ -16733,7 +16739,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "MARS5TTS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
@@ -17027,7 +17033,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 16 };");
             }
-            else if (model.ClassName == "BESTRQ" || model.ClassName == "USM")
+            else if (model.ClassName is "BESTRQ" or "USM" or "Chirp" or "Chirp2" or "Chirp3")
             {
                 // BEST-RQ reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
@@ -17160,21 +17166,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         "SileroVad" => "    protected override int TrainingIterations => 7;",
                         _ => "    protected override int TrainingIterations => 2;",
                     });
-                    // Chirp3 and ParaformerLarge have a measured Adam warm-up transient: the loss rises
+                    // ParaformerLarge has a measured Adam warm-up transient: the loss rises
                     // at step 2 before its normal descent begins. Compare after that transient while
                     // keeping the same real training path, paper-default optimizer, and customizable model.
                     // Other floated audio models retain the cheaper 1-vs-2 convergence smoke probe.
-                    // RoomImpulseResponse shows the same measured warm-up transient as Chirp3: its
+                    // RoomImpulseResponse showed the same measured warm-up transient: its
                     // MoreData probe compared 1 iteration against 2 and the loss was still RISING
                     // there, so "more data" read as degradation while training was healthy. Compare
                     // after the transient (2 vs 5) on the same real training path, keeping the
                     // paper-default optimizer and the DEFAULT tolerance rather than relaxing it.
-                    sb.AppendLine(model.ClassName is "Chirp3" or "ParaformerLarge"
+                    sb.AppendLine(model.ClassName == "ParaformerLarge"
                         ? "    protected override int MoreDataShortIterations => 2;"
                         : "    protected override int MoreDataShortIterations => 1;");
-                    sb.AppendLine(model.ClassName == "Chirp3"
-                        ? "    protected override int MoreDataLongIterations => 5;"
-                        : model.ClassName == "ParaformerLarge"
+                    sb.AppendLine(model.ClassName == "ParaformerLarge"
                             ? "    protected override int MoreDataLongIterations => 15;"
                         : model.ClassName is "FastEmit" or "EmformerRNNT"
                             ? "    protected override int MoreDataLongIterations => 10;"
