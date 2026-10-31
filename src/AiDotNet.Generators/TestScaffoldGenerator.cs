@@ -2752,7 +2752,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // Hand-written <Model>PaperTests classes with at least one test method (ADNGEN003).
         var paperTestClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsPaperTestCandidate(node),
-            transform: static (ctx, _) => GetTestClassName(ctx))
+            transform: static (ctx, _) => GetRunnablePaperTestClassName(ctx))
             .Where(static s => s is not null);
 
         var combined = modelClasses.Collect()
@@ -20072,24 +20072,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
 
     /// <summary>Finds the public ModelOptions-derived parameter that configures a model.</summary>
     private static INamedTypeSymbol? FindDeclaredModelOptionsType(INamedTypeSymbol modelType)
-    {
-        foreach (var constructor in modelType.InstanceConstructors
-                     .Where(c => c.DeclaredAccessibility == Accessibility.Public)
-                     .OrderBy(c => c.Parameters.Length))
-        {
-            foreach (var parameter in constructor.Parameters)
-            {
-                if (parameter.Type is not INamedTypeSymbol candidate) continue;
-                for (var walk = candidate; walk is not null; walk = walk.BaseType)
-                {
-                    if (walk.ToDisplayString() == "AiDotNet.Models.Options.ModelOptions")
-                        return candidate;
-                }
-            }
-        }
-
-        return null;
-    }
+        => OptionsFidelityAnalyzer.FindDeclaredOptionsType(modelType);
 
     /// <summary>Names the public constructor parameter that configures a model, if there is one.</summary>
     /// <remarks>

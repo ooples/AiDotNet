@@ -28,5 +28,13 @@ public class DifferentialEvolutionOptions<T, TInput, TOutput> : GeneticAlgorithm
         PopulationSize = 50;
     }
 
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public DifferentialEvolutionOptions(DifferentialEvolutionOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+    }
+
 
 }

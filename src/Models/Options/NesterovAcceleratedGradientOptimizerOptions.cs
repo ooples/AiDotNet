@@ -45,6 +45,17 @@ public class NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> : G
         MomentumDecreaseFactor = 0.98;
     }
 
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public NesterovAcceleratedGradientOptimizerOptions(NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        BatchSize = other.BatchSize;
+        LearningRateIncreaseFactor = other.LearningRateIncreaseFactor;
+        LearningRateDecreaseFactor = other.LearningRateDecreaseFactor;
+    }
+
     /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>

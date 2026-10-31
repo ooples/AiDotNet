@@ -289,7 +289,7 @@ public static class OptionSensitivityHarness
                 {
                     untrained = probe.Observe(perturbed);
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+                catch (Exception ex) when (IsInputContractRejection(ex))
                 {
                     return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
                         $"with {option} = {Describe(candidate)} the model rejects the fixture input "
@@ -315,10 +315,10 @@ public static class OptionSensitivityHarness
                     probe.Train(perturbed);
                     trained = probe.Observe(perturbed);
                 }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
+                catch (Exception ex) when (IsInputContractRejection(ex))
                 {
                     return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
-                        $"with {option} = {Describe(candidate)} training fails where the control trains "
+                        $"with {option} = {Describe(candidate)} training rejects the fixture data where the control trains "
                         + $"({Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}).");
                 }
 
@@ -707,6 +707,18 @@ public static class OptionSensitivityHarness
     /// Whether an exception thrown while rebuilding is the constructor refusing the configuration,
     /// which moves on to the next candidate, rather than a harness fault, which propagates.
     /// </summary>
+    /// <summary>
+    /// True when a perturbed model refuses the fixture's data the way a changed input contract does: an argument or
+    /// shape rejection, or an explicit "not supported". Only that is evidence the option changed behaviour. Any other
+    /// failure (a null dereference, an engine or tape fault) is a defect, so it propagates and the case is recorded
+    /// as an Error rather than passing as Sensitive.
+    /// </summary>
+    private static bool IsInputContractRejection(Exception ex)
+    {
+        var inner = Unwrap(ex);
+        return inner is ArgumentException or NotSupportedException or AiDotNet.Exceptions.TensorShapeMismatchException;
+    }
+
     private static bool IsConstructionRejection(Exception ex)
     {
         var inner = Unwrap(ex);

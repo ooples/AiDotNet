@@ -92,11 +92,13 @@ public static class PaperFidelityResultLog
                 File.AppendAllText(path, line + "\n", new UTF8Encoding(false));
             }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-        }
-        catch (UnauthorizedAccessException)
-        {
+            // The verdict stands, but a lost record would let the baseline converter keep a stale entry for this case,
+            // so say so where the CI log shows it.
+            Console.Error.WriteLine(
+                $"warning: paper-fidelity result not recorded ({ex.GetType().Name}: {ex.Message}); the case's baseline entry "
+                + $"cannot be refreshed from this run: {line}");
         }
     }
 

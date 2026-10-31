@@ -106,6 +106,33 @@ public partial class TestScaffoldGenerator
     // Paper tests (ADNGEN003 / ADNGEN004)
     // ---------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The class name of a <c>*PaperTests</c> class that can actually run a test: public, not abstract, with at least
+    /// one <c>[Fact]</c>/<c>[Theory]</c>/<c>[SkippableFact]</c>/<c>[SkippableTheory]</c> method whose attribute carries
+    /// no constant <c>Skip</c> reason. An abstract or always-skipped class proves nothing about the paper, so it must
+    /// not clear ADNGEN003. Null otherwise.
+    /// </summary>
+    private static string? GetRunnablePaperTestClassName(GeneratorSyntaxContext ctx)
+    {
+        if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is not INamedTypeSymbol type) return null;
+        if (type.IsAbstract || type.DeclaredAccessibility != Accessibility.Public) return null;
+
+        foreach (var method in type.GetMembers().OfType<IMethodSymbol>())
+        {
+            foreach (var attribute in method.GetAttributes())
+            {
+                string? name = attribute.AttributeClass?.Name;
+                if (name is not ("FactAttribute" or "TheoryAttribute" or "SkippableFactAttribute" or "SkippableTheoryAttribute"))
+                    continue;
+                bool staticallySkipped = attribute.NamedArguments.Any(argument =>
+                    argument.Key == "Skip" && argument.Value.Value is string reason && reason.Length > 0);
+                if (!staticallySkipped) return type.Name;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>A class named <c>*PaperTests</c> with at least one xUnit test method.</summary>
     private static bool IsPaperTestCandidate(SyntaxNode node)
     {
@@ -314,9 +341,12 @@ public partial class TestScaffoldGenerator
         sb.AppendLine("{");
         foreach (var options in declaring.OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
         {
+            // An abstract base cannot be constructed, and the concrete classes that inherit its declarations are
+            // enumerated on their own, whose tests check its values; reporting it would be an error no edit can fix.
+            if (options.IsAbstract) continue;
+
             string? problem = null;
-            if (options.IsAbstract) problem = "it is abstract";
-            else if (!HasPublicParameterlessConstructor(options)) problem = "it has no public parameterless constructor";
+            if (!HasPublicParameterlessConstructor(options)) problem = "it has no public parameterless constructor";
             else if (options.IsGenericType && !CanCloseOptionsWithDouble(options))
                 problem = "it is generic in a way the generated test cannot close over double";
 

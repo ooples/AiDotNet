@@ -14,7 +14,18 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public int ActionSize { get; set; } = 0;
         public int[] HiddenLayers { get; set; } = new int[] { 256, 256 };
         public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
-        public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new OrnsteinUhlenbeckNoise<T>(actionSize: 1);
+        private IExplorationStrategy<T>? _explorationStrategy;
+
+        /// <summary>
+        /// The exploration strategy. Unless one is assigned, it is Ornstein-Uhlenbeck noise sized to
+        /// <see cref="ActionSize"/> (1 while that is unset), created when first read, so setting ActionSize after
+        /// construction still gives noise of the right size.
+        /// </summary>
+        public IExplorationStrategy<T> ExplorationStrategy
+        {
+            get => _explorationStrategy ??= new OrnsteinUhlenbeckNoise<T>(actionSize: Math.Max(1, ActionSize));
+            set => _explorationStrategy = value ?? throw new ArgumentNullException(nameof(value));
+        }
         public bool UseTanhSquashing { get; set; } = true;
     }
 }

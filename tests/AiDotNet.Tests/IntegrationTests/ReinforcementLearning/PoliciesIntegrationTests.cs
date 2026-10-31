@@ -358,13 +358,47 @@ public class PoliciesIntegrationTests
     {
         await Task.Yield();
         var network = CreateNetwork(StateSize, ContinuousActionSize);
-        DeterministicPolicy<double> Build() => new(network, WithSeed(new DeterministicPolicyOptions<double>
+        // The network's action is deterministic, so only the exploration noise can show the seed is read: Gaussian
+        // noise draws from the policy's Random, which the options' Seed creates.
+        DeterministicPolicy<double> Build(int seed)
         {
-            ActionSize = ContinuousActionSize,
-            ExplorationStrategy = new NoExploration<double>(),
-        }));
+            var options = new DeterministicPolicyOptions<double>
+            {
+                ActionSize = ContinuousActionSize,
+                ExplorationStrategy = new GaussianNoiseExploration<double>(initialStdDev: 0.5),
+                UseTanhSquashing = false,
+            };
+            AiDotNet.Models.Options.ModelOptions inherited = options;
+            inherited.Seed = seed;
+            return new DeterministicPolicy<double>(network, options);
+        }
 
-        AssertSameSampledActions(Build, ContinuousActionSize);
+        var actions = AssertSameSampledActions(() => Build(OptionsSeed), ContinuousActionSize);
+
+        // A different seed must give different noise; a policy that ignored the seed would repeat the same actions.
+        var state = CreateState(StateSize, 0.25);
+        using var other = Build(OptionsSeed + 1);
+        bool anyDifferent = false;
+        foreach (var expected in actions)
+        {
+            var got = other.SelectAction(state, training: true);
+            for (int i = 0; i < got.Length; i++) anyDifferent |= got[i] != expected[i];
+        }
+        Assert.True(anyDifferent, "A different Seed produced the same exploration noise, so the seed is not read.");
+    }
+
+    // The default exploration noise is created for the final ActionSize, not the size 1 it had before ActionSize was set.
+    [Fact(Timeout = 120000)]
+    public async Task DeterministicPolicyOptions_DefaultExploration_MatchesTheActionSize()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize);
+        var options = new DeterministicPolicyOptions<double> { ActionSize = ContinuousActionSize };
+        Assert.IsType<OrnsteinUhlenbeckNoise<double>>(options.ExplorationStrategy);
+
+        using var policy = new DeterministicPolicy<double>(network, options);
+        var action = policy.SelectAction(CreateState(StateSize, 0.25), training: true);
+        Assert.Equal(ContinuousActionSize, action.Length);
     }
 
     [Fact(Timeout = 120000)]

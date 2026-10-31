@@ -46,6 +46,41 @@ public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
         SeasonalPeriod = 12;
     }
 
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public STLDecompositionOptions(STLDecompositionOptions<T> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        SeasonalDegree = other.SeasonalDegree;
+        TrendDegree = other.TrendDegree;
+        SeasonalJump = other.SeasonalJump;
+        TrendJump = other.TrendJump;
+        InnerLoopPasses = other.InnerLoopPasses;
+        RobustIterations = other.RobustIterations;
+        RobustWeightThreshold = other.RobustWeightThreshold;
+        SeasonalBandwidth = other.SeasonalBandwidth;
+        TrendBandwidth = other.TrendBandwidth;
+        LowPassBandwidth = other.LowPassBandwidth;
+        TrendWindowSize = other.TrendWindowSize;
+        SeasonalLoessWindow = other.SeasonalLoessWindow;
+        LowPassFilterWindowSize = other.LowPassFilterWindowSize;
+        TrendLoessWindow = other.TrendLoessWindow;
+        AlgorithmType = other.AlgorithmType;
+        Dates = (DateTime[])other.Dates.Clone();
+        StartDate = other.StartDate;
+        Interval = other.Interval;
+        AdjustForDayOfWeek = other.AdjustForDayOfWeek;
+        AdjustForMonthOfYear = other.AdjustForMonthOfYear;
+        AdjustForHolidays = other.AdjustForHolidays;
+        DayOfWeekFactors = other.DayOfWeekFactors.Clone();
+        MonthOfYearFactors = other.MonthOfYearFactors.Clone();
+        Holidays = new Dictionary<DateTime, T>(other.Holidays);
+        OutlierDetectionMethod = other.OutlierDetectionMethod;
+        ZScoreThreshold = other.ZScoreThreshold;
+        IQRMultiplier = other.IQRMultiplier;
+    }
+
 
     /// <summary>
     /// Gets or sets the degree of the polynomial used in the seasonal LOESS smoothing.

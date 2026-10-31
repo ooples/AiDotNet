@@ -120,6 +120,25 @@ function Select-PaperFidelitySlice {
     return @(for ($i = 0; $i -lt $sorted.Count; $i++) { if ($i % $SliceCount -eq $Slice) { $sorted[$i] } })
 }
 
+function Find-PaperFidelityClasses {
+    <#
+    .SYNOPSIS
+        Every test class carrying the paper-fidelity category, discovered from the built test assembly.
+    .DESCRIPTION
+        Throws when discovery fails or finds nothing: discovering nothing would "pass" by running nothing.
+    #>
+    $listed = @(& dotnet test $script:PaperFidelityProject -c Release --framework $script:PaperFidelityFramework `
+        --no-build --no-restore --filter "Category=$($script:PaperFidelityCategory)" --list-tests 2>&1 |
+        ForEach-Object { [string] $_ })
+    if ($LASTEXITCODE -ne 0) {
+        $listed | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }
+        throw "dotnet test --list-tests exited $LASTEXITCODE"
+    }
+    $classes = @(ConvertFrom-PaperFidelityTestListing -Lines $listed)
+    if ($classes.Count -eq 0) { throw "no $($script:PaperFidelityCategory) test classes were discovered" }
+    return $classes
+}
+
 function ConvertFrom-PaperFidelityTestListing {
     <#
     .SYNOPSIS

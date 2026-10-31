@@ -18,6 +18,33 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
+    /// <summary>Initializes a new instance with the default settings.</summary>
+    public GeneticAlgorithmOptimizerOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public GeneticAlgorithmOptimizerOptions(GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        MaxGenerations = other.MaxGenerations;
+        PopulationSize = other.PopulationSize;
+        MinPopulationSize = other.MinPopulationSize;
+        MaxPopulationSize = other.MaxPopulationSize;
+        CrossoverRate = other.CrossoverRate;
+        MutationRate = other.MutationRate;
+        CrossoverRateDecay = other.CrossoverRateDecay;
+        CrossoverRateIncrease = other.CrossoverRateIncrease;
+        MinCrossoverRate = other.MinCrossoverRate;
+        MaxCrossoverRate = other.MaxCrossoverRate;
+        MutationRateDecay = other.MutationRateDecay;
+        MutationRateIncrease = other.MutationRateIncrease;
+        MinMutationRate = other.MinMutationRate;
+        MaxMutationRate = other.MaxMutationRate;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of generations (iterations) the genetic algorithm will run.
     /// </summary>

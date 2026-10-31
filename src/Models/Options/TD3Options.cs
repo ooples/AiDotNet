@@ -28,8 +28,9 @@ public class TD3Options<T> : ReinforcementLearningOptions<T>
         ActorLearningRate = numOps.FromDouble(0.001);
         CriticLearningRate = numOps.FromDouble(0.001);
         TargetUpdateTau = numOps.FromDouble(0.005);
-        // Fujimoto et al. 2018: 25,000 random-action steps before learning starts. Set on the inherited
-        // WarmupSteps, which ReinforcementLearningAgentBase reads.
+        // 25,000 random-action steps before learning starts: the authors' reference implementation
+        // (sfujim/TD3, start_timesteps = 25e3). The paper itself reports shorter warmups (1,000 steps, and 10,000 on
+        // some MuJoCo tasks). Set on the inherited WarmupSteps, which ReinforcementLearningAgentBase reads.
         WarmupSteps = 25000;
     }
 }
