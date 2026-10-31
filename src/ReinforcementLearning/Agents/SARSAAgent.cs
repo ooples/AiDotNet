@@ -102,7 +102,7 @@ public partial class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradien
         Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = _options.EpsilonStart;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
         _lastState = null;
         _lastAction = null;
     }

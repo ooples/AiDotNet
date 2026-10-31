@@ -111,7 +111,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         _options = options;
         Options = _options;
         _updateCount = 0;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
 
         // Initialize networks directly in constructor
         int observationSize = _options.ObservationWidth * _options.ObservationHeight * _options.ObservationChannels;

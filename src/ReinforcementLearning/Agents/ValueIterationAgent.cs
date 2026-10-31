@@ -71,7 +71,7 @@ public partial class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
         Options = _options;
         _valueTable = new Dictionary<string, T>();
         _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

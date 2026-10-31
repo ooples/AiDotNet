@@ -83,7 +83,7 @@ public partial class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _eligibilityTraces = new Dictionary<string, Dictionary<int, T>>();
         _activeTraceStates = new HashSet<string>();
         _epsilon = options.EpsilonStart;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

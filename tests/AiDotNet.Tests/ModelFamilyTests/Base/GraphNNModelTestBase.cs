@@ -25,6 +25,13 @@ public abstract class GraphNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         return model;
     }
 
+    /// <summary>The synthetic adjacency is instance state the clone plan does not carry, so a rebuilt network is wired again.</summary>
+    protected override void PrepareRebuiltNetwork(INeuralNetworkModel<T> network)
+    {
+        network.GetType().GetMethod("EnableImplicitIdentityAdjacency", System.Type.EmptyTypes)
+            ?.Invoke(network, null);
+    }
+
     // =====================================================
     // GRAPH INVARIANT: Self-Loops Should Not Cause Numerical Issues
     // A diagonal-heavy adjacency matrix (self-loops) is common in graph

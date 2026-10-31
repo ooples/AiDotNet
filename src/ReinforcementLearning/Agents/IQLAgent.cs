@@ -112,7 +112,7 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _options = options;
         _options.Validate();
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        _random = Random;
         _updateCount = 0;
 
         // Initialize networks directly in constructor

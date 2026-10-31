@@ -89,7 +89,7 @@ public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T
         _options = options;
         Options = _options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
         _epsilon = _options.EpsilonStart;
     }
 

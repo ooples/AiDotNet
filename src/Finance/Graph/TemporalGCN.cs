@@ -268,9 +268,10 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         _useResidualConnections = _options.UseResidualConnections;
         _useBatchNormalization = _options.UseBatchNormalization;
 
+        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
         _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
         _normalizedLaplacian = ComputeNormalizedLaplacian(_adjacencyMatrix);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
     }
 
     /// <summary>
@@ -316,9 +317,10 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         _useResidualConnections = _options.UseResidualConnections;
         _useBatchNormalization = _options.UseBatchNormalization;
 
+        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
         _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
         _normalizedLaplacian = ComputeNormalizedLaplacian(_adjacencyMatrix);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeLayers();
     }

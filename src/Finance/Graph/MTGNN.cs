@@ -286,7 +286,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         _subgraphSize = _options.SubgraphSize;
 
         _predefinedAdjacency = predefinedAdjacency;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeNodeEmbeddings();
     }
@@ -337,7 +337,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         _subgraphSize = _options.SubgraphSize;
 
         _predefinedAdjacency = predefinedAdjacency;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeNodeEmbeddings();
         InitializeLayers();

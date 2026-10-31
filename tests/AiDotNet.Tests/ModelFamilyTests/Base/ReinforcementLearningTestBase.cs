@@ -1344,8 +1344,26 @@ public abstract class ReinforcementLearningTestBase<T>
             {
                 TryLowerInt(options, "WarmupSteps", 2);
                 TryLowerInt(options, "BatchSize", 8);
-            });
+            },
+            model => DescribeAgent(model, battery));
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
+    }
+
+    /// <summary><see cref="ObserveAgent"/> as named parts: the parameters, then the output on each battery state.</summary>
+    private static IReadOnlyList<KeyValuePair<string, long>> DescribeAgent(IFullModel<T, Vector<T>, Vector<T>> model, Vector<T>[] battery)
+    {
+        var parameters = ((IParameterizable<T, Vector<T>, Vector<T>>)model).GetParameters();
+        var parts = new List<KeyValuePair<string, long>>
+        {
+            new("parameters", OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, parameters.Length).Select(i => ToD(parameters[i])))),
+        };
+        for (int s = 0; s < battery.Length; s++)
+        {
+            var output = model.Predict(battery[s]);
+            parts.Add(new($"output on state {s}", OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, output.Length).Select(i => ToD(output[i])))));
+        }
+
+        return parts;
     }
 
     /// <summary>Fingerprints an agent's parameters and its greedy outputs over the state battery.</summary>

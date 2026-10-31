@@ -70,7 +70,7 @@ public partial class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBas
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
         _qValues = new Vector<T>(_options.NumArms);
         _actionCounts = new Vector<int>(_options.NumArms);
         for (int i = 0; i < _options.NumArms; i++)

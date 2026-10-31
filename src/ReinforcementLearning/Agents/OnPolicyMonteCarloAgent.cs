@@ -73,7 +73,7 @@ public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase
         _returns = new Dictionary<string, Dictionary<int, List<T>>>();
         _episode = new List<(Vector<T>, int, T)>();
         _epsilon = options.EpsilonStart;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

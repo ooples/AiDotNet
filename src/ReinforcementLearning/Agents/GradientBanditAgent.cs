@@ -72,7 +72,7 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
         _preferences = new Vector<T>(_options.NumArms);
         for (int i = 0; i < _options.NumArms; i++)
         {

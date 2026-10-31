@@ -72,7 +72,7 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
         _successCounts = new Vector<int>(_options.NumArms);
         _failureCounts = new Vector<int>(_options.NumArms);
         for (int i = 0; i < _options.NumArms; i++)
