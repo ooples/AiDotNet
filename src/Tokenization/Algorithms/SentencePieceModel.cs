@@ -189,6 +189,13 @@ public sealed class SentencePieceModel
     /// <summary>The piece with id <paramref name="id"/>.</summary>
     public string IdToPiece(int id) => _pieces[id];
 
+    /// <summary>Whether a piece is a control symbol (&lt;s&gt;, &lt;/s&gt;, …) or a user-defined one, both of which a
+    /// Hugging Face tokenizer converted from this model matches as added tokens.</summary>
+    public bool IsControl(int id) => _types[id] == Control;
+
+    /// <inheritdoc cref="IsControl"/>
+    public bool IsUserDefined(int id) => _types[id] == UserDefined;
+
     /// <summary>The id of <paramref name="piece"/>, or the unknown id.</summary>
     public int PieceToId(string piece) => _ids.TryGetValue(piece, out int id) ? id : UnknownId;
 
@@ -202,7 +209,14 @@ public sealed class SentencePieceModel
     public List<(string Piece, int Id)> EncodePieces(string text)
     {
         Guard.NotNull(text);
-        var normalized = Normalize(text);
+        return EncodeNormalized(Normalize(text));
+    }
+
+    /// <summary>The pieces and ids of text already in the model's piece alphabet (spaces as "▁"), with no normalization:
+    /// what a Hugging Face fast tokenizer's model step reads after its own normalizer and pre-tokenizer.</summary>
+    public List<(string Piece, int Id)> EncodeNormalized(string normalized)
+    {
+        Guard.NotNull(normalized);
         if (_bpe) return EncodeBpe(normalized);
         if (_character) return MergeUnknown(EncodeCharacters(normalized));
         // Positions are UTF-16 indices of Unicode scalar starts (a surrogate pair is one character).
