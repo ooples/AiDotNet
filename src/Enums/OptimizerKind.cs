@@ -88,4 +88,8 @@ public enum OptimizerKind
     /// <summary>RAdam, Adam with a rectified adaptive learning rate (Liu et al. 2020).</summary>
     /// <remarks>Parallel WaveGAN trains with it (Yamamoto et al. 2020, §4.1.2).</remarks>
     RAdam,
+
+    /// <summary>ScaledAdam: Adam scaled by each tensor's rms, learning each tensor's scale (k2-fsa icefall).</summary>
+    /// <remarks>GPT-SoVITS trains its text-to-semantic model with it (AR/modules/optim.py).</remarks>
+    ScaledAdam,
 }

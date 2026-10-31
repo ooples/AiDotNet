@@ -255,6 +255,11 @@ internal static class PaperOptimizerFactory
                     if (!double.IsNaN(recipe.Epsilon)) lamb.Epsilon = recipe.Epsilon;
                     if (!double.IsNaN(recipe.WeightDecay)) lamb.WeightDecay = recipe.WeightDecay;
                     break;
+                case ScaledAdamOptimizerOptions<T, TInput, TOutput> scaledAdam:
+                    if (!double.IsNaN(recipe.Beta1)) scaledAdam.Beta1 = recipe.Beta1;
+                    if (!double.IsNaN(recipe.Beta2)) scaledAdam.Beta2 = recipe.Beta2;
+                    if (!double.IsNaN(recipe.Epsilon)) scaledAdam.Epsilon = recipe.Epsilon;
+                    break;
                 case LionOptimizerOptions<T, TInput, TOutput> lion:
                     if (!double.IsNaN(recipe.Beta1))
                     {
@@ -344,6 +349,9 @@ internal static class PaperOptimizerFactory
 
             OptimizerKind.Lion => new LionOptimizer<T, TInput, TOutput>(
                 model, Configured(new LionOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.ScaledAdam => new ScaledAdamOptimizer<T, TInput, TOutput>(
+                model, Configured(new ScaledAdamOptimizerOptions<T, TInput, TOutput>())),
 
                 // Unspecified, and optimizers with no gradient-based implementation here, fall
                 // through to the caller's own default rather than being approximated by a
