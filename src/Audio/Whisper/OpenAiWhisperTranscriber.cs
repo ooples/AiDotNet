@@ -223,9 +223,16 @@ internal sealed class OpenAiWhisperTranscriber<T>
         double max = double.NegativeInfinity;
         for (int f = 0; f < used; f++)
         {
-            for (int n = 0; n < FftSize; n++) frame[n] = padded[f * HopLength + n] * window[n];
+            bool silent = true;
+            for (int n = 0; n < FftSize; n++)
+            {
+                frame[n] = padded[f * HopLength + n] * window[n];
+                if (frame[n] != 0.0) silent = false;
+            }
             for (int k = 0; k < bins; k++)
             {
+                // A frame of zeros (the padding of a short window) has zero power at every bin.
+                if (silent) { power[k] = 0.0; continue; }
                 double re = 0, im = 0;
                 for (int n = 0; n < FftSize; n++)
                 {

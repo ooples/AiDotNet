@@ -1,11 +1,14 @@
-﻿using AiDotNet.Models.Options;
+using AiDotNet.Audio.Foundations;
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
 
-/// <summary>Options for ConvTransformer (Conformer: convolution-augmented Transformer for ASR, 2020).</summary>
+/// <summary>Options for ConvTransformer.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the ConvTransformer model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para>The defaults are the canonical model of section 3.1: width 1024, 10 encoder and 10 decoder Transformer blocks, 16 heads.</para>
+/// <para><b>For Beginners:</b> These options set the size of the encoder and decoder, the feature front end and
+/// the training augmentation.</para>
 /// </remarks>
 public class ConvTransformerOptions : ModelOptions
 {
@@ -20,58 +23,96 @@ public class ConvTransformerOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
-        // below; Seed is not declared here, so it was silently dropped and a copied configuration
-        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
-        // the most to diagnose, because the two configurations compare equal on everything visible.
-        Seed = other.Seed;
-
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        FeedForwardDim = other.FeedForwardDim;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        RopeTheta = other.RopeTheta;
+        NumDecoderLayers = other.NumDecoderLayers;
+        DecoderEmbeddingDim = other.DecoderEmbeddingDim;
         NumMels = other.NumMels;
+        MaxTextLength = other.MaxTextLength;
+        FrequencyMasks = other.FrequencyMasks;
+        FrequencyMaskWidth = other.FrequencyMaskWidth;
+        TimeMasks = other.TimeMasks;
+        TimeMaskRatio = other.TimeMaskRatio;
         VocabSize = other.VocabSize;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        WarmupSteps = other.WarmupSteps;
-        LearningRateFactor = other.LearningRateFactor;
-        WeightDecay = other.WeightDecay;
-        Language = other.Language;
-        Vocabulary = other.Vocabulary.ToArray();
     }
 
+    /// <summary>Audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 16000;
+
+    /// <summary>Longest audio a transcription covers, in seconds; longer input is truncated.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
-    public int EncoderDim { get; set; } = 512;
-    public int NumEncoderLayers { get; set; } = 12;
-    public int NumAttentionHeads { get; set; } = 8;
-    public int FeedForwardDim { get; set; } = 2048;
+
+
+    /// <summary>Log-mel bins (section 3.1: 80-dimensional log mel-filterbank coefficients).</summary>
     public int NumMels { get; set; } = 80;
+
+    /// <summary>Transformer width.</summary>
+    public int EncoderDim { get; set; } = 1024;
+
+    /// <summary>Conformer blocks.</summary>
+    public int NumEncoderLayers { get; set; } = 10;
+
+    /// <summary>Attention heads per block.</summary>
+    public int NumAttentionHeads { get; set; } = 16;
+
+    /// <summary>Expansion of each feed-forward network: 2048 ReLU units at width 1024.</summary>
+    public int FeedForwardMultiplier { get; set; } = 2;
+
+
+    /// <summary>Rotary base of the attention; zero, since the convolutional context replaces positional encodings (section 2.2).</summary>
+    public double RopeTheta { get; set; } = 0.0;
+
+    /// <summary>Decoder layers (Table 1).</summary>
+    public int NumDecoderLayers { get; set; } = 10;
+
+    /// <summary>Width of the decoder's token embedding (section 3.1: 512).</summary>
+    public int DecoderEmbeddingDim { get; set; } = 512;
+
+    /// <summary>Most tokens a transcription decodes.</summary>
+    public int MaxTextLength { get; set; } = 194;
+
+    /// <summary>SpecAugment frequency masks; Moonshine reads the waveform and trains without them.</summary>
+    public int FrequencyMasks { get; set; } = 0;
+
+    /// <summary>Largest frequency mask, in mel bins (section 3.1: F = 27).</summary>
+    public int FrequencyMaskWidth { get; set; } = 27;
+
+    /// <summary>SpecAugment time masks; none in the paper.</summary>
+    public int TimeMasks { get; set; } = 0;
+
+    /// <summary>Largest time mask as a fraction of the utterance (section 3.1: pS = 0.05).</summary>
+    public double TimeMaskRatio { get; set; } = 0.05;
+
+    /// <summary>Output vocabulary (section 3.1: 5,000 unigram subword units).</summary>
     public int VocabSize { get; set; } = 5000;
-    public string? ModelPath { get; set; }
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
-    public double DropoutRate { get; set; } = 0.1;
 
-    /// <summary>Gets or sets the number of Transformer learning-rate warmup steps.</summary>
-    /// <value>Defaults to 10,000 steps.</value>
-    /// <remarks>The Conformer training recipe linearly warms Adam for 10,000 optimizer steps before inverse-square-root decay.</remarks>
-    public int WarmupSteps { get; set; } = 10000;
+    /// <summary>The text of each token; tokens past the list decode as Unicode code points, and tokens in angle brackets
+    /// decode to nothing.</summary>
+    public string[] Vocabulary { get; set; } = { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
 
-    /// <summary>Gets or sets the multiplicative factor for the Transformer learning-rate schedule.</summary>
-    /// <value>Defaults to 2.0.</value>
-    /// <remarks>The official EfficientConformer repository uses factor <c>K = 2</c> for its Conformer CTC baselines.</remarks>
-    public double LearningRateFactor { get; set; } = 2.0;
-
-    /// <summary>Gets or sets Adam's coupled L2 weight decay.</summary>
-    /// <value>Defaults to 1e-6.</value>
-    /// <remarks>This is the weight decay used by the official Conformer CTC baseline recipe.</remarks>
-    public double WeightDecay { get; set; } = 1e-6;
-
+    /// <summary>Language reported for transcriptions.</summary>
     public string Language { get; set; } = "en";
-    public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
-    private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    internal ConformerAsrConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
+        NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, RopeTheta = RopeTheta,
+        Block = ConformerAsrBlock.Transformer, Decoder = ConformerAsrDecoder.Attention, Subsampling = ConformerAsrSubsampling.VggBlocks, NoPositions = true, AttentionDecoderLayers = NumDecoderLayers, AttentionDecoderFeedForward = EncoderDim * FeedForwardMultiplier, DecoderContextConvolutions = 3, DecoderEmbeddingDim = DecoderEmbeddingDim, CtcWeight = 0, LabelSmoothing = 0, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
+        VocabSize = VocabSize,
+    };
 }

@@ -1,5 +1,8 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -11,28 +14,27 @@ using AiDotNet.Optimizers;
 namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 
 /// <summary>
-/// FireRedASR: fire-and-reduce dual-pass ASR system
+/// FireRedASR-AED (Xu et al. 2025): a Conformer encoder with a Transformer decoder for Mandarin and English recognition.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition" (FireRed Team, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> FireRedASR is an industrial-grade ASR system using a dual-pass architecture. The first pass (Fire) uses a fast Conformer-CTC encoder for streaming results. The second pass (Reduce) refines the output using attention-based rescoring with language m...</para>
+/// <para><b>For Beginners:</b> FireRedASR-AED turns 16 kHz audio into an 80-band log-mel spectrogram, shortens it 4x with two
+/// convolutions, and encodes it with Conformer blocks, each mixing self-attention (long-range context) with a convolution
+/// (local patterns). A linear layer gives every frame a probability for each token; collapsing repeats and blanks gives the transcript.</para>
 /// <para>
-/// FireRedASR is an industrial-grade ASR system using a dual-pass architecture. The first pass (Fire) uses a fast Conformer-CTC encoder for streaming results. The second pass (Reduce) refines the output using attention-based rescoring with language model integration. The dual-pass design balances latency and accuracy for production deployments. Achieves state-of-the-art on Mandarin ASR benchmarks with robust performance on accented and noisy speech.
+/// The defaults are FireRedASR-AED-L (section 2.1 and Table 1): 80-dimensional log-mel features, two stride-2 3x3 convolutions of 32 channels with ReLU, 16 Conformer blocks of width 1280 with relative attention and a 33-wide depthwise kernel, and a 16-layer pre-norm Transformer decoder with fixed sinusoidal positions whose output layer shares the token embedding. The vocabulary is 7,832 tokens (1,000 English BPE tokens, 6,827 Chinese characters and 5 special tokens) and training is cross-entropy. The paper does not state the head count or feed-forward width; these use 20 heads (64 dimensions each) and four times the width. FireRedASR-LLM, the paper's encoder-adapter-LLM variant, is a separate class. SpecAugment masks the features in training (section 3.1). Training minimizes the decoder's cross-entropy and transcription decodes greedily. The paper's blocks use relative
+/// positional encoding; these use rotary position encoding, the relative scheme
+/// <see cref="AiDotNet.NeuralNetworks.Layers.ConformerBlockLayer{T}"/> provides.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a FireRedASR model for industrial-grade dual-pass Mandarin ASR
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
-///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
-/// var model = new FireRedASR&lt;double&gt;(architecture);
-///
-/// // Or load a pre-trained ONNX model for production Mandarin ASR
-/// var onnxModel = new FireRedASR&lt;double&gt;(architecture, "fireredasr.onnx");
+///     inputSize: 16000, outputSize: 34);
+/// var model = new FireRedASR&lt;float&gt;(architecture);
+/// var text = model.Transcribe(waveform).Text;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -47,162 +49,202 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
     "https://arxiv.org/abs/2501.14350",
     Year = 2025,
     Authors = "Kai-Tuo Xu, Feng-Long Xie, Xu Tang, Yao Hu")]
-public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />
-    /// <remarks>
-    /// Measured from this model's own output head. <c>InitializeLayers</c> builds
-    /// <c>LayerHelper&lt;T&gt;.CreateDefaultConformerLayers(..., vocabSize: _options.VocabSize, ...)</c>
-    /// (the encoder-decoder AED variant reuses the Conformer factory), whose LAST emitted layer is
-    /// <c>new DenseLayer&lt;T&gt;(vocabSize, identity)</c>. <c>PredictCore</c> folds the layer stack and
-    /// <c>PostprocessOutput</c> is the identity.
-    /// </remarks>
+    /// <remarks>The output vocabulary, blank (0) included.</remarks>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
     private readonly FireRedASROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
-
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private ConformerAsrNetwork<T>? _network;
+    private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
+    internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public FireRedASR(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        FireRedASROptions? options = null)
-        : base(architecture)
+    public FireRedASR(NeuralNetworkArchitecture<T> architecture, string modelPath, FireRedASROptions? options = null) : base(architecture)
     {
-        _options = options ?? new FireRedASROptions();
-        Options = _options;
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        SupportedLanguages = new[] { "zh", "en" };
-        InitializeLayers();
+        _options = options ?? new FireRedASROptions(); Options = _options; _useNativeMode = false;
+        base.SampleRate = _options.SampleRate; base.NumMels = 0;
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
     }
 
-    public FireRedASR(
-        NeuralNetworkArchitecture<T> architecture,
-        FireRedASROptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+    public FireRedASR(NeuralNetworkArchitecture<T> architecture, FireRedASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
-        _options = options ?? new FireRedASROptions();
-        Options = _options;
-        _useNativeMode = true;
+        _options = options ?? new FireRedASROptions(); Options = _options; _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-        SupportedLanguages = new[] { "zh", "en" };
-        InitializeLayers();
+        base.SampleRate = _options.SampleRate; base.NumMels = 0;
+        SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
     }
 
-    /// <summary>
-    /// Transcribes audio using FireRedASR's dual-pass architecture.
-    /// Per FireRed Team (2025): first pass uses Conformer-CTC for fast initial results,
-    /// second pass uses attention rescoring for refinement. CTC decoding produces output.
-    /// </summary>
+    /// <summary>Transcribes audio: the encoder and the decoder with greedy decoding.</summary>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
-        var features = PreprocessAudio(audio);
-        Tensor<T> logits;
-
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            logits = OnnxEncoder.Run(features);
-        }
+        if (ResolveReturnTimestamps(includeTimestamps)) throw new NotSupportedException("Word-level timestamps are not supported for FireRedASR.");
+        var waveform = PreprocessAudio(audio);
+        List<int> tokens;
+        if (_network is null) tokens = ConformerAsrNetwork<T>.GreedyCtc(Logits(waveform, training: false));
         else
         {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
+            using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+            var encoded = _network.Encode(_network.Features(Samples(waveform, 0, waveform.Length)), training: false);
+            tokens = _network.GreedyAttention(encoded, _options.MaxTextLength);
         }
-
-        var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
-        var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-
         return new TranscriptionResult<T>
         {
-            Text = text,
-            Language = language ?? _options.Language,
-            Confidence = NumOps.FromDouble(confidence),
-            DurationSeconds = duration,
-            Segments = ResolveReturnTimestamps(includeTimestamps)
-                ? ExtractSegments(text, duration, tokens, confidence)
-                : Array.Empty<TranscriptionSegment<T>>()
+            Text = Text(tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Count > 0 ? 1.0 : 0.0),
+            DurationSeconds = audio.Length / (double)SampleRate, Segments = Array.Empty<TranscriptionSegment<T>>(),
         };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(
-        Tensor<T> audio,
-        string? language = null,
-        bool? includeTimestamps = null,
-        CancellationToken cancellationToken = default)
-        => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
 
-    public string DetectLanguage(Tensor<T> audio)
+    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("FireRedASR does not support streaming.");
+
+    // Each token is its vocabulary entry; tokens past the vocabulary list decode as Unicode code points.
+    private string Text(List<int> tokens)
     {
-        var features = PreprocessAudio(audio);
-        Tensor<T> logits;
-        if (IsOnnxMode && OnnxEncoder is not null)
-            logits = OnnxEncoder.Run(features);
-        else
+        var sb = new System.Text.StringBuilder();
+        foreach (int t in tokens)
         {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
+            if (t < _options.Vocabulary.Length) { string s = _options.Vocabulary[t]; sb.Append(s == "|" ? " " : s.StartsWith("<", StringComparison.Ordinal) ? string.Empty : s); }
+            else if (t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t));
         }
-
-        var (tokens, _) = CTCGreedyDecodeWithConfidence(logits);
-        return ClassifyLanguageFromTokens(tokens);
+        return sb.ToString().Trim();
     }
 
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
-    {
-        var detected = DetectLanguage(audio);
-        var result = new Dictionary<string, T>();
-        double primaryProb = 0.85;
-        double otherProb = SupportedLanguages.Count > 1
-            ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1)
-            : 0.0;
-        foreach (var lang in SupportedLanguages)
-            result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb);
-        return result;
-    }
+    protected override void InitializeLayers() => InitializeLayersCore();
 
-    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null)
-        => throw new NotSupportedException("FireRedASR does not support streaming.");
-
-    protected override void InitializeLayers()
+    private void InitializeLayersCore()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(
-                encoderDim: _options.EncoderDim,
-                numLayers: _options.NumEncoderLayers,
-                numAttentionHeads: _options.NumAttentionHeads,
-                numMels: _options.NumMels,
-                vocabSize: _options.VocabSize,
-                dropoutRate: _options.DropoutRate));
+        _network = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network (see the class remarks). It used to be a generic template.
+        var layers = new List<LayerBase<T>>();
+        _network = new ConformerAsrNetwork<T>(Engine, layers, _options.ToConfiguration());
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        Layers.AddRange(layers);
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        ThrowIfDisposed();
+        if (_network is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private double[] Samples(Tensor<T> waveform, int offset, int count)
+    {
+        var samples = new double[count];
+        var span = waveform.Data.Span;
+        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
+        return samples;
+    }
+
+    // The decoder's logits [1, vocabulary] for the first token of a waveform [S], or [batch, 1, vocabulary] for [batch, S].
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input;
-        foreach (var l in Layers) c = l.Forward(c);
-        return c;
+        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++) outputs[r] = FrameLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
+        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
+    }
+
+    private Tensor<T> FrameLogits(Tensor<T> encoded)
+    {
+        var network = _network ?? throw new InvalidOperationException("No native network.");
+        return network.DecoderLogits(new[] { network.StartToken }, encoded);
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    // The labels a training target names: label ids [length], or one distribution per encoder frame [frames, vocabulary]
+    // read as a CTC alignment (the most likely symbol per frame, repeats merged, blanks removed).
+    private int[] Labels(Tensor<T> target)
+    {
+        if (target.Rank >= 2 && target.Shape[^1] == _options.VocabSize)
+        {
+            var frames = Engine.Reshape(target, new[] { target.Length / _options.VocabSize, _options.VocabSize });
+            return ConformerAsrNetwork<T>.GreedyCtc(frames).ToArray();
+        }
+        var labels = new int[target.Length];
+        var span = target.Data.Span;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            double value = Math.Round(NumOps.ToDouble(span[i]));
+            if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
+            labels[i] = (int)value;
+        }
+        return labels;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The CTC loss (Graves et al. 2006) of the target labels over SpecAugmented features.</remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network;
+        if (network is null) return false;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        var labels = new int[rows][];
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            labels[r] = Labels(row);
+        }
+        TrainWithCustomLoss(input, _ =>
+        {
+            Tensor<T>? total = null;
+            for (int r = 0; r < rows; r++)
+            {
+                var loss = network.CtcTrainingLoss(network.SpecAugment(network.Features(Samples(input, r * samples, samples)), _random), labels[r], training: true);
+                total = total is null ? loss : Engine.TensorAdd(total, loss);
+            }
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+        }, _optimizer);
+        return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes (the CTC loss), on unaugmented features in inference
+    /// mode, averaged over the batch.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        double total = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            var features = network.Features(Samples(input, r * samples, samples));
+            total += NumOps.ToDouble(network.CtcTrainingLoss(features, Labels(row), training: false)[0]);
+        }
+        return NumOps.FromDouble(total / rows);
     }
 
     /// <inheritdoc />
@@ -210,164 +252,9 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "FireRedASR-Native" : "FireRedASR-ONNX", Description = "FireRedASR-AED: a Conformer encoder with a Transformer decoder for Mandarin and English recognition", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
-    public override ModelMetadata<T> GetModelMetadata() => new()
-    {
-        Name = _useNativeMode ? "FireRedASR-Native" : "FireRedASR-ONNX",
-        Description = "FireRedASR: dual-pass industrial ASR (2025)",
-        FeatureCount = _options.NumMels,
-        Complexity = _options.NumEncoderLayers,
-        AdditionalInfo = BaseAudioMetadataInfo()
-    };
-
-
-
-
-
-    /// <summary>
-    /// CTC greedy decode with per-frame softmax confidence tracking.
-    /// Returns decoded token IDs and average confidence across non-blank frames.
-    /// </summary>
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits)
-    {
-        var tokens = new List<int>();
-        double totalConf = 0;
-        int confCount = 0;
-        int prevToken = -1;
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-
-        for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++)
-        {
-            int maxIdx = 0;
-            double maxVal = double.NegativeInfinity;
-
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2
-                    ? NumOps.ToDouble(logits[t, v])
-                    : NumOps.ToDouble(logits[v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-
-            // Compute softmax probability for the best token
-            double sumExp = 0;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2
-                    ? NumOps.ToDouble(logits[t, v])
-                    : NumOps.ToDouble(logits[v]);
-                sumExp += Math.Exp(val - maxVal);
-            }
-            double frameConf = 1.0 / sumExp;
-
-            if (maxIdx != prevToken && maxIdx > 0)
-            {
-                tokens.Add(maxIdx);
-                totalConf += frameConf;
-                confCount++;
-            }
-            prevToken = maxIdx;
-        }
-
-        return (tokens, confCount > 0 ? totalConf / confCount : 0.0);
-    }
-
-    /// <summary>
-    /// Converts token IDs to text with full Unicode support.
-    /// Supports CJK characters for Mandarin and other non-ASCII scripts.
-    /// </summary>
-    private static string TokensToText(List<int> tokens)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var t in tokens)
-        {
-            if (t > 0 && t <= char.MaxValue)
-                sb.Append((char)t);
-            else if (t > char.MaxValue && t <= 0x10FFFF)
-                sb.Append(char.ConvertFromUtf32(t));
-        }
-        return sb.ToString().Trim();
-    }
-
-    /// <summary>
-    /// Extracts timestamped segments using proportional token-position alignment.
-    /// </summary>
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(
-        string text, double duration, List<int> tokens, double confidence)
-    {
-        if (string.IsNullOrWhiteSpace(text) || tokens.Count == 0)
-            return Array.Empty<TranscriptionSegment<T>>();
-
-        double timePerToken = duration / tokens.Count;
-        var segments = new List<TranscriptionSegment<T>>();
-        var currentText = new System.Text.StringBuilder();
-        double segStart = 0;
-
-        for (int i = 0; i < tokens.Count; i++)
-        {
-            if (tokens[i] > 0 && tokens[i] <= char.MaxValue)
-                currentText.Append((char)tokens[i]);
-
-            bool isWordBoundary = tokens[i] == ' ' || i == tokens.Count - 1;
-            if (isWordBoundary && currentText.Length > 0)
-            {
-                segments.Add(new TranscriptionSegment<T>
-                {
-                    Text = currentText.ToString().Trim(),
-                    StartTime = segStart,
-                    EndTime = (i + 1) * timePerToken,
-                    Confidence = NumOps.FromDouble(confidence)
-                });
-                currentText.Clear();
-                segStart = (i + 1) * timePerToken;
-            }
-        }
-
-        if (segments.Count == 0)
-        {
-            segments.Add(new TranscriptionSegment<T>
-            {
-                Text = text,
-                StartTime = 0.0,
-                EndTime = duration,
-                Confidence = NumOps.FromDouble(confidence)
-            });
-        }
-
-        return segments;
-    }
-
-    /// <summary>
-    /// Classifies language from decoded token distribution using script detection heuristics.
-    /// </summary>
-    private string ClassifyLanguageFromTokens(List<int> tokens)
-    {
-        if (tokens.Count == 0) return _options.Language;
-
-        int cjkCount = 0, latinCount = 0;
-        foreach (var t in tokens)
-        {
-            if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++;
-            else if (t >= 0x41 && t <= 0x7A) latinCount++;
-        }
-
-        if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh";
-        return _options.Language;
-    }
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FireRedASR<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed) return;
-        if (disposing) OnnxEncoder?.Dispose();
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FireRedASR<T>)); }
+    protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

@@ -5913,9 +5913,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ProjectionDim = 16, PredictorChannels = 16, ClassifierChannels = 16, VocabSize = 16, " +
                     "MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
-            else if (model.ClassName is "FunASRNano" or "InterCTC" or "RobustConformer" or "SALM"
+            else if (model.ClassName is "FunASRNano" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR"
-                    or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
+                    or "StreamingZipformer"
                 && model.TypeParameterCount == 1)
             {
                 // These ASR encoders have already exhausted the first two timeout rungs:
@@ -5926,13 +5926,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string optionsType = model.ClassName switch
                 {
                     "FunASRNano" => "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions",
-                    "InterCTC" => "AiDotNet.SpeechRecognition.CTCVariants.InterCTCOptions",
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     "SpeakerDiarizedASR" => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
-                    "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
-                    "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
-                    _ => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions"
+                    _ => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
@@ -5972,20 +5969,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "EncoderDim = 32, NumEncoderLayers = 1, NumEncoderHeads = 4, " +
                     "PredictionDim = 32, NumPredictionLayers = 1, EmbeddingDim = 16, " +
                     "JointDim = 32, NumMels = 32, VocabSize = 16, DropoutRate = 0.0 })";
-            }
-            else if (model.ClassName == "Branchformer" && model.TypeParameterCount == 1)
-            {
-                // Branchformer keeps the paper's parallel attention/CGMLP branch and
-                // merge path. Only the generated fixture width/depth is reduced after
-                // FP32 plus the 1-vs-2 cap still timed out in the exact B shard.
-                string optionsExpr = "new AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions { " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, " +
-                    "CgmlpDim = 64, NumMels = 32, VocabSize = 16 }";
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    $"{optionsExpr})";
             }
             else if (model.ClassName == "Squeezeformer" && model.TypeParameterCount == 1)
             {
@@ -6722,13 +6705,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // normal Adam rate (~2e-3) by step 6; the paper default stays on the options.
                     "DropoutRate = 0.0, UseLayerNormalization = true, WarmupSteps = 100 })";
             }
-            else if ((model.ClassName is "EmformerRNNT" or "FastEmit") && model.TypeParameterCount == 1)
+            else if (model.ClassName == "EmformerRNNT" && model.TypeParameterCount == 1)
             {
                 // These streaming transducers retain their released 512-wide, 18/20-layer
                 // defaults. Exercise the complete Conformer -> prediction -> joint path at
                 // a bounded configuration through each model's public options.
                 pinInitSeed = true;
-                string optionsType = model.ClassName == "EmformerRNNT" ? "EmformerRNNTOptions" : "FastEmitOptions";
+                string optionsType = "EmformerRNNTOptions";
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
@@ -8325,22 +8308,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8 }" + ", seed: 42)";
             }
-            else if (model.ClassName == "AssemblyAIUniversal2" && model.TypeParameterCount == 1)
-            {
-                // Universal-2 keeps its production acoustic encoder and
-                // 5000-token recognition head intact. MoreData creates two
-                // trained clones, so exercise the complete feature projection
-                // -> proprietary ASR encoder -> vocabulary head at a bounded
-                // scale that can use the same-topology COW clone path.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 32), " +
-                    "new AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2Options { " +
-                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, " +
-                    "VocabSize = 32, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
-            }
             else if (model.ClassName == "BandSplitRNN" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.Audio.SourceSeparation.", System.StringComparison.Ordinal))
@@ -8571,15 +8538,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal))
             {
-                // Preserve production scale while exercising the complete mel projection ->
-                // Conformer -> vocabulary topology through public options at CI scale.
+                // FireRedASR-AED's Conformer encoder and tied-output Transformer decoder at width 16, one layer each, 32 mel
+                // bins and a 16-token vocabulary. Production defaults are FireRedASR-AED-L's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASROptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 8, DropoutRate = 0.0 })";
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASROptions { EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumDecoderLayers = 1, DecoderFeedForwardDim = 32, NumAttentionHeads = 2, ConvKernel = 3, NumMels = 32, " +
+                    "VocabSize = 16, MaxTextLength = 4, MaxAudioLengthSeconds = 1, FrequencyMasks = 0, TimeMasks = 0 })";
             }
             else if (model.ClassName == "FireRedASRLLM" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -8986,6 +8953,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "WithPositiveSmokeWarmup(new AiDotNet.NER.Options.TransformerNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 16, DropoutRate = 0.0, LearningRate = 5e-5 }))";
+            }
+            else if (model.ClassName == "GoogleSpeechV2" && model.TypeParameterCount == 1)
+            {
+                // Speech-to-Text V2 is USM-CTC (Conformer-2B, sixteen 8192-entry codebooks); the fixture is the same network at
+                // width 32, 2 blocks, 32 mel bins and two 64-entry codebooks.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2Options { EncoderDim = 32, " +
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, CodebookSize = 64, NumCodebooks = 2, " +
+                    "VocabSize = 16, MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Chirp" && model.TypeParameterCount == 1)
             {
@@ -9624,74 +9603,51 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "outputSize: 4), " +
                     "options: new AiDotNet.Video.Options.TimeSformerOptions { NumClasses = 4, EmbedDim = 64, NumHeads = 4, NumLayers = 2, NumFrames = 4, PatchSize = 8 }" + ")";
             }
-            else if (model.ClassName == "Conformer" && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal))
+            else if ((model.ClassName is "ConformerCTC" or "ConformerTransducer" or "StreamingConformer" or "Branchformer" or "EBranchformer"
+                      or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
+                      or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation"
+                      || (model.ClassName == "Conformer" && typeName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
+                     && model.TypeParameterCount == 1)
             {
-                // Keep the production Conformer-Medium defaults (512 wide, 18 macaron
-                // blocks, 5000-way CTC head). The generated post-training clone otherwise
-                // materializes and serializes that entire model in one process. Exercise
-                // the same feature projection -> Conformer stack -> CTC head at smoke scale.
+                // Gulati et al.'s Conformer recognizers (and Branchformer, E-Branchformer): log-mel -> 4x convolution
+                // subsampling -> encoder blocks -> CTC layer
+                // or RNN-T decoder, at width 16 with one block, 32 mel bins and a 16-token vocabulary. Production defaults
+                // are the paper's.
+                string conformerOptions = model.ClassName switch
+                {
+                    "Conformer" => "AiDotNet.Audio.SpeechRecognition.ConformerOptions",
+                    "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
+                    "FastEmit" or "TDTDecoder" => $"AiDotNet.SpeechRecognition.Streaming.{model.ClassName}Options",
+                    "ESPnetASR" or "SpeechBrain" => $"AiDotNet.SpeechRecognition.Robust.{model.ClassName}Options",
+                    "OWSM" => "AiDotNet.SpeechRecognition.Multilingual.OWSMOptions",
+                    "AssemblyAIUniversal2" => "AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2Options",
+                    "InterCTC" or "SelfConditionedCTC" or "CTCSegmentation" => $"AiDotNet.SpeechRecognition.CTCVariants.{model.ClassName}Options",
+                    "ParakeetCTC" or "ParakeetRNNT" or "ParakeetTDT" => $"AiDotNet.SpeechRecognition.NeMo.{model.ClassName}Options",
+                    _ => $"AiDotNet.SpeechRecognition.ConformerFamily.{model.ClassName}Options",
+                };
+                string decoderOptions = model.ClassName switch
+                {
+                    "ConformerCTC" => string.Empty,
+                    // One decoder layer for the joint CTC/attention models.
+                    "Branchformer" or "EBranchformer" or "OWSM" => "CgmlpDim = 32, AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
+                    "ESPnetASR" or "SpeechBrain" => "AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
+                    "CTCSegmentation" => "NumEncoderLayers = 1, AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
+                    // Two layers, so the intermediate CTC loss reads the first.
+                    "InterCTC" or "SelfConditionedCTC" => "NumEncoderLayers = 2, IntermediateCtcLayers = new[] { 1 }, ",
+                    "ParakeetCTC" => "SubsamplingChannels = 8, ",
+                    "ParakeetRNNT" or "ParakeetTDT" => "SubsamplingChannels = 8, PredictionDim = 16, JointDim = 16, ",
+                    "AssemblyAIUniversal2" => "PredictionDim = 16, JointDim = 16, AttentionChunkSize = 2, ",
+                    _ => "PredictionDim = 16, JointDim = 16, ",
+                };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.Audio.SpeechRecognition.ConformerOptions { Variant = \"medium\", " +
-                    "EncoderDim = 32, NumEncoderLayers = 2, NumAttentionHeads = 4, " +
-                    "FeedForwardExpansionFactor = 2, ConvKernelSize = 7, NumMels = 32, " +
-                    "VocabSize = 4, DropoutRate = 0.0 })";
-            }
-            else if (model.ClassName == "ConvTransformer" && model.TypeParameterCount == 1)
-            {
-                // ConvTransformer's production default remains the 512-wide,
-                // 12-layer convolution-augmented attention encoder with a 5,000-way
-                // CTC head. Existing FP32/audio iteration caps were insufficient
-                // because one fused-linear backward still exhausted 16 GB. Exercise
-                // the complete acoustic projection (the native local-feature front-end approximation) ->
-                // Transformer stack -> frame-level CTC head through public options
-                // at a bounded per-step scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformerOptions { " +
-                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, FeedForwardDim = 64, " +
-                    "NumMels = 32, VocabSize = 4, Vocabulary = new[] { \"<blank>\", \"a\", \"b\", \" \" }, " +
-                    "DropoutRate = 0.0, Language = \"en\" })";
-            }
-            else if (model.ClassName == "ConformerTransducer" && model.TypeParameterCount == 1)
-            {
-                // Preserve the paper-scale 18-layer, 512-wide Conformer encoder,
-                // 640-wide prediction/joint networks, and 5000-token vocabulary
-                // in production. The generated FP32 invariant fixture exercises
-                // the complete encoder -> label predictor -> joint -> vocabulary
-                // topology with bounded optimizer state on a 16 GB runner.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducerOptions { " +
-                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, FeedForwardExpansionFactor = 2, " +
-                    "PredictionDim = 32, JointDim = 32, NumMels = 32, VocabSize = 4, " +
-                    "DropoutRate = 0.0, Language = \"en\" })";
-            }
-            else if (model.ClassName == "ConformerCTC" && model.TypeParameterCount == 1)
-            {
-                // Conformer-CTC keeps the paper's 18-layer, 512-wide
-                // non-autoregressive encoder and 5000-token CTC head in
-                // production. Exercise the complete acoustic projection ->
-                // Conformer encoder -> frame-level CTC projection at bounded
-                // scale while retaining the same CTC-only topology.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTCOptions { " +
-                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, FeedForwardExpansionFactor = 2, " +
-                    "NumMels = 32, VocabSize = 4, DropoutRate = 0.0, Language = \"en\" })";
+                    "inputSize: 3200, outputSize: 16), " +
+                    $"new {conformerOptions} {{ EncoderDim = 16, NumAttentionHeads = 2, NumMels = 32, " +
+                    (model.ClassName is "InterCTC" or "SelfConditionedCTC" or "CTCSegmentation" ? string.Empty : "NumEncoderLayers = 1, ConvKernel = 3, ") + decoderOptions + "VocabSize = 16, MaxAudioLengthSeconds = 1, " +
+                    // SpecAugment draws new masks each step (up to 27 of the 32 bins), so the step-to-step training losses
+                    // the invariants compare would measure the masks; the fixture trains on unmasked features.
+                    "FrequencyMasks = 0, TimeMasks = 0 })";
             }
             else if (model.ClassName == "MusicSourceSeparator" && model.TypeParameterCount == 1)
             {
@@ -9987,19 +9943,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // memorization probe's two steps; a short ramp reaches the recipe's 1e-4.
                     "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16, " + SmokeWarmupSteps + " })";
             }
-            else if (model.ClassName == "OWSM" && model.TypeParameterCount == 1)
-            {
-                // Preserve OWSM's paper-aligned production defaults while exercising
-                // its public Conformer sizing controls within the CI runner budget.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.Multilingual.OWSMOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
-            }
             else if (model.ClassName == "Paraformer" && model.TypeParameterCount == 1)
             {
                 // Paraformer retains its existing 512-wide, 12-layer production defaults.
@@ -10033,46 +9976,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
                     "FeedForwardDim = 32, NumMels = 32, VocabSize = 64, " +
                     "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
-            }
-            else if (model.ClassName == "NoiseRobustASR" && model.TypeParameterCount == 1)
-            {
-                // Preserve the paper-scale 18-layer Conformer production defaults while
-                // exercising the same public noise-robust ASR controls at CI-safe scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.Robust.NoiseRobustASROptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
-            }
-            else if (model.ClassName == "ParakeetRNNT" && model.TypeParameterCount == 1)
-            {
-                // Preserve Parakeet-RNNT's 1.1B production defaults while exercising
-                // the same public Conformer/transducer controls at CI-safe scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.NeMo.ParakeetRNNTOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, PredictionDim = 32, JointDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, FeedForwardDim = 64, " +
-                    "NumMels = 32, VocabSize = 64, MaxTextLength = 16, " +
-                    "DropoutRate = 0.0, Language = \"en\" })";
-            }
-            else if (model.ClassName == "ParakeetCTC" && model.TypeParameterCount == 1)
-            {
-                // Preserve Parakeet-CTC's 1.1B production defaults while exercising
-                // the same public Fast Conformer/CTC controls at CI-safe scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.NeMo.ParakeetCTCOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, FeedForwardDim = 64, NumMels = 32, " +
-                    "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
             }
             else if (model.ClassName == "MaskGCT" && model.TypeParameterCount == 1)
             {
@@ -10373,19 +10276,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumMelBands = 16, NumClasses = 4, EmbeddingDim = 16, DropoutRate = 0.0, HeadDropoutRate = 0.0, " +
                     "LearningRate = 1e-6, EnableGradientClipping = true, MaxGradientNorm = 1.0 }) " +
                     "{ StreamingTraining = AiDotNet.Enums.StreamingTrainingMode.ForceOn }";
-            }
-            else if (model.ClassName == "ParakeetTDT" && model.TypeParameterCount == 1)
-            {
-                // Retain the released 1.1B defaults in production while exercising every
-                // native transducer stage through the public options surface at runner scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.NeMo.ParakeetTDTOptions { EncoderDim = 32, " +
-                    "PredictionDim = 32, JointDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, " +
-                    "FeedForwardDim = 128, NumMels = 32, VocabSize = 4, MaxTextLength = 8, " +
-                    "DropoutRate = 0.0, MaxDurationTokens = 2 })";
             }
             else if (model.ClassName == "WavLMSER" && model.TypeParameterCount == 1)
             {
@@ -10769,21 +10659,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     $"new {qwenOptionsType} {{ EncoderDim = 32, " +
                     "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 64, VocabSize = 64 })";
-            }
-            else if (model.ClassName == "ESPnetASR" && model.TypeParameterCount == 1)
-            {
-                // ESPnetASR's default Conformer/CTC fixture (512-wide, 12 layers,
-                // 5000-way vocabulary over a 30-second feature window) makes the
-                // generic MoreData probe exceed the CPU timeout. Exercise the same
-                // acoustic encoder -> CTC/attention head topology at CI scale only.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.Robust.ESPnetASROptions { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, MaxTextLength = 8, " +
-                    "DropoutRate = 0.0, Language = \"en\" })";
             }
             else if (model.ClassName == "AVHuBERT" && model.TypeParameterCount == 1)
             {
@@ -11616,71 +11491,62 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new AiDotNet.Audio.Foundations.{model.ClassName}Options {{ HiddenDim = 64, NumLayers = 2, " +
                     "NumAttentionHeads = 4, FeedForwardDim = 128, FeatureEncoderDim = 64 })";
             }
-            else if ((model.ClassName is "DistilWhisper" or "KotobaWhisper" or "WhisperLargeV3"
-                     or "WhisperLargeV3Turbo" or "WhisperLive" or "WhisperX")
+            else if (model.ClassName is "DistilWhisper" or "FasterWhisper" or "KotobaWhisper" or "WhisperLargeV3"
+                     or "WhisperLargeV3Turbo" or "WhisperLive" or "WhisperX" or "WhisperCPP" or "GroqWhisper" or "GladiaASR" or "NoiseRobustASR"
                      && model.TypeParameterCount == 1)
             {
-                // The production constructors intentionally retain each checkpoint's paper scale
-                // (up to 32 encoder + 32 decoder layers at width 1280 with a 51,866-token head).
-                // Float was already applied to this family and proved insufficient in #1789:
-                // DistilWhisper stalled Generated D-F, KotobaWhisper consumed the J-M runner, and
-                // WhisperLargeV3Turbo consumed the T-Z runner. Exercise the identical Whisper
-                // encoder/decoder structure with explicit CI-only width/depth/vocabulary options.
-                // No production default is changed and every option remains user-customizable.
-                string feedForwardOption = model.ClassName is "DistilWhisper" or "WhisperLargeV3" or "WhisperLargeV3Turbo"
-                    ? "FeedForwardDim = 128, "
-                    : string.Empty;
+                // openai-whisper's network at width 16 with one encoder and one decoder block. The 30-second window
+                // (80 mel bins, 1500 encoder positions) and the 51,865-token multilingual vocabulary are kept: the
+                // tokenizer's special tokens need it. Production defaults are each checkpoint's.
+                string whisperNamespace = model.ClassName switch
+                {
+                    "WhisperCPP" => "Specialized",
+                    "GroqWhisper" or "GladiaASR" => "ProprietaryAPI",
+                    "NoiseRobustASR" => "Robust",
+                    _ => "WhisperFamily",
+                };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
-                    $"new AiDotNet.SpeechRecognition.WhisperFamily.{model.ClassName}Options " +
-                    "{ SampleRate = 16000, NumMels = 32, EncoderDim = 32, DecoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
-                    feedForwardOption + "VocabSize = 16, DropoutRate = 0.0 })";
+                    "inputSize: 3200, outputSize: 51865), " +
+                    $"new AiDotNet.SpeechRecognition.{whisperNamespace}.{model.ClassName}Options " +
+                    "{ NumMels = 80, EncoderDim = 16, DecoderDim = 16, NumEncoderLayers = 1, NumDecoderLayers = 1, " +
+                    "NumAttentionHeads = 2, VocabSize = 51865, Language = \"en\" })";
             }
             else if ((model.ClassName is "CanaryFlash" or "NeMoMultitask") && model.TypeParameterCount == 1)
             {
-                // NeMo's Whisper-style encoder/decoder variants have the same foundation-scale failure
-                // mode as the large-v3 family above. Keep their defaults intact and reduce only the
-                // generated fixture's structural scale.
+                // Canary's Fast Conformer encoder and Transformer decoder at width 16, one layer each, 32 mel bins and a
+                // 16-token vocabulary. Production defaults are the released models'.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
-                    $"new AiDotNet.SpeechRecognition.NeMo.{model.ClassName}Options " +
-                    "{ SampleRate = 16000, NumMels = 32, EncoderDim = 32, DecoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
-                    "VocabSize = 16, DropoutRate = 0.0 })";
+                    "inputSize: 3200, outputSize: 16), " +
+                    $"new AiDotNet.SpeechRecognition.NeMo.{model.ClassName}Options {{ EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumDecoderLayers = 1, DecoderFeedForwardDim = 32, NumAttentionHeads = 2, ConvKernel = 3, NumMels = 32, " +
+                    "SubsamplingChannels = 8, VocabSize = 16, MaxTextLength = 4, MaxAudioLengthSeconds = 1, FrequencyMasks = 0, TimeMasks = 0 })";
             }
-            else if ((model.ClassName is "Moonshine" or "WhisperCPP") && model.TypeParameterCount == 1)
+            else if (model.ClassName == "ConvTransformer" && model.TypeParameterCount == 1)
             {
-                // These variants derive decoder depth as NumEncoderLayers / 2, so two smoke encoder
-                // layers preserve a real decoder block. Their paper defaults remain unchanged.
-                string optionsType = model.ClassName == "Moonshine"
-                    ? "AiDotNet.SpeechRecognition.Streaming.MoonshineOptions"
-                    : "AiDotNet.SpeechRecognition.Specialized.WhisperCPPOptions";
+                // Mohamed et al.'s convolutional-context Transformer at width 16 with one encoder and one decoder block,
+                // a width-8 decoder embedding, 32 mel bins and a 16-token vocabulary.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 16), " +
-                    $"new {optionsType} {{ SampleRate = 16000, NumMels = 32, EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 2, VocabSize = 16, DropoutRate = 0.0 })";
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformerOptions { EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumDecoderLayers = 1, NumAttentionHeads = 2, DecoderEmbeddingDim = 8, NumMels = 32, VocabSize = 16, " +
+                    "MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
-            else if (model.ClassName == "FasterWhisper" && model.TypeParameterCount == 1)
+            else if (model.ClassName is "Moonshine" or "MoonshineBase" && model.TypeParameterCount == 1)
             {
-                // FasterWhisper's production defaults mirror a large Whisper
-                // checkpoint. The invariant scaffold runs many CPU training
-                // steps, so keep the same paper contract (log-mel sequence ->
-                // per-frame vocabulary logits) at smoke-test width/depth/vocab.
+                // Moonshine's waveform stem, rotary encoder and SwiGLU decoder at width 16 with one layer each and a
+                // 16-token vocabulary. Production defaults are Table 1's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 80, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.WhisperFamily.FasterWhisperOptions " +
-                    "{ SampleRate = 16000, NumMels = 80, EncoderDim = 64, DecoderDim = 64, " +
-                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 4, " +
-                    "VocabSize = 4, MaxTextLength = 8, DropoutRate = 0.0, ComputeType = \"float32\", BeamSize = 1 })";
+                    "inputSize: 3200, outputSize: 16), " +
+                    $"new AiDotNet.SpeechRecognition.Streaming.{model.ClassName}Options {{ EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumDecoderLayers = 1, NumAttentionHeads = 2, VocabSize = 16, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Pengi" && model.TypeParameterCount == 1)
             {
@@ -12363,37 +12229,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
                     "new AiDotNet.SpeechRecognition.CTCVariants.CIFDecoderOptions { EncoderDim = 32, " +
                     "NumEncoderLayers = 2, VocabSize = 64, NumMels = 32 })";
-            }
-            else if (model.ClassName == "SelfConditionedCTC" && model.TypeParameterCount == 1)
-            {
-                // Self-Conditioned CTC keeps the paper's 512-wide, 18-layer Conformer and 5,000-way
-                // CTC head as its production default. Float is the first mitigation, but the resulting
-                // generated fixture still allocates more than 13 GB before its first test can complete
-                // on the 16 GB runner. Exercise the identical Conformer -> self-conditioned CTC topology
-                // through the public options at scaffold scale; production defaults and every public
-                // customization point remain untouched.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.CTCVariants.SelfConditionedCTCOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0 })";
-            }
-            else if (model.ClassName == "CTCSegmentation" && model.TypeParameterCount == 1)
-            {
-                // CTCSegmentation's production default remains a 512-wide, 12-layer Conformer
-                // with a 5,000-way CTC posterior head. FP32 alone was insufficient: its exact
-                // GradientFlow backward exhausted the 16 GB runner in FusedLinearBackwardCore.
-                // Exercise the complete mel projection -> residual Conformer encoder -> CTC
-                // segmentation head through public options at bounded CI scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentationOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 16, MaxAudioLengthSeconds = 1, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "USM" && model.TypeParameterCount == 1)
             {
@@ -16978,17 +16813,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName is "DistilWhisper" or "FasterWhisper" or "KotobaWhisper"
                 or "WhisperLargeV3" or "WhisperLargeV3Turbo" or "WhisperLive" or "WhisperX"
-                or "Moonshine" or "WhisperCPP" or "CanaryFlash" or "NeMoMultitask")
+                or "WhisperCPP" or "GroqWhisper" or "GladiaASR" or "NoiseRobustASR")
             {
-                // Whisper consumes frame-major log-mel features. Match the CI-only constructor scale;
-                // FasterWhisper retains its existing 80-mel / 4-token fixture, while the other
-                // foundation variants use 32 mel features and a 16-token head.
-                int whisperMels = model.ClassName == "FasterWhisper" ? 80 : 32;
-                int whisperVocab = model.ClassName == "FasterWhisper" ? 4 : 16;
-                sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 8, {whisperMels} }};");
-                sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 8, {whisperVocab} }};");
-                sb.AppendLine("    protected override int MoreDataShortIterations => 3;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 10;");
+                // Whisper reads waveforms (0.2 s here, padded to its 30-second window) and returns the decoder's logits
+                // over the four start tokens.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 51865 };");
+            }
+            else if (model.ClassName is "Moonshine" or "MoonshineBase" or "ConvTransformer"
+                || (model.ClassName == "FireRedASR" && model.FullyQualifiedName.StartsWith("AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal)))
+            {
+                // Moonshine reads waveforms (0.2 s) and returns the decoder's logits for the first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName is "CanaryFlash" or "NeMoMultitask")
+            {
+                // Canary reads waveforms (0.2 s) and returns the decoder's logits for the first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
             else if (model.ClassName == "Pengi")
             {
@@ -17033,7 +16876,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 16 };");
             }
-            else if (model.ClassName is "BESTRQ" or "USM" or "Chirp" or "Chirp2" or "Chirp3")
+            else if (model.ClassName is "ConformerCTC" or "ConformerTransducer" or "StreamingConformer" or "Branchformer" or "EBranchformer"
+                or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
+                or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation"
+                     || (model.ClassName == "Conformer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
+            {
+                // Conformer reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine(model.ClassName is "ParakeetCTC" or "ParakeetRNNT" or "ParakeetTDT"
+                    ? "    protected override int[] OutputShape => new[] { 3, 16 };"   // Fast Conformer: 8x, 3 frames of 80 ms
+                    : "    protected override int[] OutputShape => new[] { 4, 16 };");
+            }
+            else if (model.ClassName is "BESTRQ" or "USM" or "Chirp" or "Chirp2" or "Chirp3" or "GoogleSpeechV2")
             {
                 // BEST-RQ reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
