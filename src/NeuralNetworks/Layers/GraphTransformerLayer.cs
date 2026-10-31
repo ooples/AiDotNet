@@ -206,12 +206,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
-    /// Cached values for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
@@ -232,11 +226,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     [Scratch]
     private Tensor<T>? _lastAttnOutput;
     [Scratch]
-    private Tensor<T>? _lastNormed1;
-    [Scratch]
     private Tensor<T>? _lastFFNHidden;
-    [Scratch]
-    private Tensor<T>? _lastFFNOutput;
 
     /// <summary>
     /// Gradients for parameters.
@@ -550,7 +540,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
 
         bool cacheBwd = ShouldCacheForBackward; // #1668: gate backward-only caches (arena safety)
-        _lastInput = cacheBwd ? processInput : null;
         int numNodes = processInput.Shape[1];
 
         // Multi-head attention block with residual connection
@@ -579,11 +568,9 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
 
         var normed1 = Engine.TensorAdd(attended, residualInput);
-        _lastNormed1 = cacheBwd ? normed1 : null;
 
         // Feed-forward network with residual
         var ffnOutput = FeedForwardNetwork(normed1, batchSize, numNodes);
-        _lastFFNOutput = cacheBwd ? ffnOutput : null;
 
         // Final residual and layer norm
         var output = Engine.TensorAdd(normed1, ffnOutput);
@@ -902,7 +889,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
     public override void ResetState()
     {
-        _lastInput = null;
         _lastOutput = null;
         _lastQueries = null;
         _lastKeys = null;
@@ -911,9 +897,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         _lastHeadOutputs = null;
         _lastConcatenated = null;
         _lastAttnOutput = null;
-        _lastNormed1 = null;
         _lastFFNHidden = null;
-        _lastFFNOutput = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;

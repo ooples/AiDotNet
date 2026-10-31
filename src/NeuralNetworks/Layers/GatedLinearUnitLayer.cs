@@ -168,71 +168,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _gateBias;
 
     /// <summary>
-    /// The input tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the input received during the last forward pass. It is necessary for computing
-    /// gradients during the backward pass (backpropagation).
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what input data was processed most recently.
-    /// 
-    /// During training:
-    /// - The layer needs to remember what input values it processed
-    /// - This helps when calculating how to improve the weights and biases
-    /// - It's like keeping your work when solving a math problem
-    /// 
-    /// This value is automatically cleared between training batches to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The output tensor from the linear path of the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the output from the linear transformation (before gating) during the last forward pass.
-    /// It is used during backpropagation to compute gradients for the gating path.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers the values produced by the linear path before gating.
-    /// 
-    /// During training:
-    /// - The layer needs to know what values were being gated
-    /// - This helps calculate how the gate affected the final output
-    /// - It's essential for computing how to improve both paths
-    /// 
-    /// This intermediate result is saved because it's needed when computing
-    /// gradients during the backward pass.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastLinearOutput;
-
-    /// <summary>
-    /// The output tensor from the gating path of the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the output from the gating path (after activation) during the last forward pass.
-    /// It is used during backpropagation to compute gradients for the linear path and the gate activation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers how open or closed each gate was in the latest calculation.
-    /// 
-    /// During training:
-    /// - The layer needs to know what gate values were applied
-    /// - This helps calculate how the gates affected the output
-    /// - It's needed for computing gradients for both paths
-    /// 
-    /// These gate values (typically between 0 and 1) determined how much
-    /// of each linear output value passed through to the final output.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastGateOutput;
-
-    /// <summary>
     /// The gradients for the linear weights, computed during backpropagation.
     /// </summary>
     /// <remarks>
@@ -544,7 +479,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Linear path: linear = input @ weights^T + bias
         var linearWeightsT = Engine.TensorPermute(_linearWeights, [1, 0]);
@@ -556,11 +490,9 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         var gateOutput = input.MatrixMultiply(gateWeightsT);
         gateOutput = Engine.TensorAdd(gateOutput, _gateBias); // Broadcasting
 
-        // #1668: cache the linear/gate activations for backward only; forward uses locals.
+        // Locals only: backward runs on the tape, so nothing here needs to outlive the forward.
         var linOut = linearOutput;
         var gateOut = ApplyActivation(gateOutput);
-        _lastLinearOutput = ShouldCacheForBackward ? linOut : null;
-        _lastGateOutput = ShouldCacheForBackward ? gateOut : null;
 
         // GLU output: output = linear * gate
         var output = Engine.TensorMultiply(linOut, gateOut);
@@ -635,9 +567,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastLinearOutput = null;
-        _lastGateOutput = null;
         _linearWeightsGradient = null;
         _gateWeightsGradient = null;
         _linearBiasGradient = null;

@@ -178,9 +178,9 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         // putting a NoisyDenseLayer between the trunk and the dueling head
         // so the action-conditional projection picks up the exploration
         // noise.
-        // Shared feature trunk: one ReLU dense layer per SharedLayers width. A noisy (or, with noisy nets off,
-        // plain) hidden layer of the trunk's width then feeds the dueling head, so the action-conditional
-        // projection sees the exploration noise.
+        // Shared feature trunk: one ReLU dense layer per SharedLayers width. With noisy nets on, a noisy hidden
+        // layer of the trunk's width then feeds both streams, so the action-conditional projection sees the
+        // exploration noise. The streams' own hidden layers are deterministic.
         var trunkWidths = _options.SharedLayers is { Count: > 0 } ? _options.SharedLayers : new List<int> { 64 };
         var layerList = new List<ILayer<T>>();
         foreach (var width in trunkWidths)
@@ -192,16 +192,19 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         if (_options.UseNoisyNetworks)
         {
             // Factorised Gaussian noise (Fortunato et al. 2018, §3.2): sigma_0 = NoisyNetSigma, initial
-            // sigma = sigma_0 / sqrt(p) for p inputs.
+            // sigma = sigma_0 / sqrt(p) for p inputs. The noisy layer sits between the trunk and both streams.
             layerList.Add(new NoisyDenseLayer<T>(trunkHidden, trunkHidden,
                 new ReLUActivation<T>() as IActivationFunction<T>,
                 sigmaInit: _options.NoisyNetSigma / Math.Sqrt(trunkHidden)));
         }
-        else
-        {
-            layerList.Add(new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>));
-        }
-        layerList.Add(new DuelingCombinationLayer<T>(trunkHidden, duelingActionWidth));
+
+        // The value and advantage streams (Wang et al. 2016, Fig. 1) each run their own hidden layers,
+        // ValueStreamLayers and AdvantageStreamLayers. With distributional RL, V has one output per atom and the
+        // advantage mean is taken over actions for each atom (Hessel et al. 2018, Sec. 3).
+        layerList.Add(new DuelingCombinationLayer<T>(trunkHidden, _options.ActionSize,
+            _options.UseDistributional ? _options.NumAtoms : 1,
+            (_options.ValueStreamLayers ?? new List<int>()).ToArray(),
+            (_options.AdvantageStreamLayers ?? new List<int>()).ToArray()));
         IEnumerable<ILayer<T>> layers = layerList;
 
         var finalArchitecture = new NeuralNetworkArchitecture<T>(

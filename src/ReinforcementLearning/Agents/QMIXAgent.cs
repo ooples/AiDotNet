@@ -77,8 +77,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
     private QMIXOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
-
     // Per-agent Q-networks
     private List<INeuralNetwork<T>> _agentNetworks;
     [Buffer]
@@ -101,19 +99,12 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
     }
 
-    public QMIXAgent(QMIXOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    public QMIXAgent(QMIXOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
         _epsilon = options.EpsilonStart;
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
         _stepCount = 0;
@@ -419,9 +410,34 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
 
     private Training.TapeTrainingStepper<T>? _jointStepper;
-    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _jointSgd;
+    // The joint step's optimizer, built on first use: Options.OptimizerFactory's when set, else the paper's RMSprop.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _jointOptimizer;
 
-    /// <summary>One plain-SGD step on the TD loss over the agent and mixing networks, from a packed step.</summary>
+    /// <summary>
+    /// The paper's optimizer (Rashid et al. 2018, Sec. 5): RMSprop at the agent's learning rate (5e-4 by default),
+    /// with the smoothing constant 0.99 and epsilon 1e-5 of the authors' PyMARL configuration
+    /// (<c>optim_alpha</c>, <c>optim_eps</c>), no momentum and no gradient clipping.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+    {
+        double rate = NumOps.ToDouble(LearningRate);
+        if (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), rate, "LearningRate must be positive and finite.");
+
+        return new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(null,
+            new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = rate,
+                Decay = 0.99,
+                Epsilon = 1e-5,
+                InitialMomentum = 0.0,
+                Centered = false,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
+            });
+    }
+
+    /// <summary>One joint-optimizer step on the TD loss over the agent and mixing networks, from a packed step.</summary>
     private void TrainJointStep(Tensor<T> packed, int globalStateLength)
     {
         var agentBases = _agentNetworks.Cast<NeuralNetworkBase<T>>().ToList();
@@ -453,12 +469,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             return Engine.ReduceMean(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
         }
 
-        _jointSgd ??= new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
-            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = Convert.ToDouble(LearningRate),
-                EnableGradientClipping = false,
-            });
+        _jointOptimizer ??= _options.OptimizerFactory?.Invoke() ?? CreatePaperOptimizer();
         var stepper = _jointStepper ??= new Training.TapeTrainingStepper<T>(this);
         stepper.Step(new Training.FusedTrainingStepRequest<T>
         {
@@ -467,7 +478,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             Target = packed,
             Forward = TdLoss,
             ComputeLoss = (loss, _) => loss,
-            Optimizer = _jointSgd,
+            Optimizer = _jointOptimizer,
             ExtraParameters = parameters,
         });
     }

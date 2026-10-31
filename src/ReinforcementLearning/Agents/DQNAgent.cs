@@ -181,7 +181,8 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
         );
 
         return new NeuralNetwork<T>(architecture,
-            optimizer: _dqnOptions.Optimizer ?? CreateNetworkOptimizer(LearningRate),
+            // A user's factory builds each network's optimizer; otherwise Adam at the configured learning rate.
+            optimizer: _dqnOptions.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate),
             lossFunction: _dqnOptions.LossFunction);
     }
 

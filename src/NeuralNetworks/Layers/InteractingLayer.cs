@@ -83,19 +83,7 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values
     [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
-    private Tensor<T>? _queriesCache;
-    [Scratch]
-    private Tensor<T>? _keysCache;
-    [Scratch]
-    private Tensor<T>? _valuesCache;
-    [Scratch]
     private Tensor<T>? _attentionScoresCache;
-    [Scratch]
-    private Tensor<T>? _attendedCache;
-    [Scratch]
-    private Tensor<T>? _preActivationCache;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -190,8 +178,6 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>Feature interactions [batchSize, numFeatures, embeddingDim].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _inputCache = input;
-
         int batchSize = input.Shape[0];
         int numFeatures = input.Shape[1];
         int embDim = input.Shape[2];
@@ -201,13 +187,8 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
         var keys = ProjectInput(input, _keyWeights, batchSize, numFeatures, embDim, _attentionDim);
         var values = ProjectInput(input, _valueWeights, batchSize, numFeatures, embDim, _attentionDim);
 
-        _queriesCache = queries;
-        _keysCache = keys;
-        _valuesCache = values;
-
         // Multi-head self-attention using Engine ops
         var attended = MultiHeadAttention(queries, keys, values, batchSize, numFeatures);
-        _attendedCache = attended;
 
         // Output projection using Engine.TensorMatMul
         var output = ProjectOutput(attended, batchSize, numFeatures);
@@ -217,8 +198,6 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
         {
             output = AddResidual(input, output, batchSize, numFeatures, embDim);
         }
-
-        _preActivationCache = output;
 
         // Apply ReLU activation using Engine
         output = Engine.ReLU(output);
@@ -360,13 +339,7 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _inputCache = null;
-        _queriesCache = null;
-        _keysCache = null;
-        _valuesCache = null;
         _attentionScoresCache = null;
-        _attendedCache = null;
-        _preActivationCache = null;
 
         Engine.TensorFill(_queryWeightsGrad, NumOps.Zero);
         Engine.TensorFill(_keyWeightsGrad, NumOps.Zero);

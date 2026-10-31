@@ -98,65 +98,6 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => false;
 
     /// <summary>
-    /// The input tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the input tensor from the most recent forward pass. It is needed during the backward pass
-    /// to compute gradients correctly. This field is reset when ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the most recent data that was fed into the layer.
-    /// 
-    /// The layer needs to remember the input:
-    /// - To calculate how each input value affected the output
-    /// - To determine how to propagate gradients during training
-    /// - To ensure the backward pass works correctly
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The output tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor from the most recent forward pass. It is needed during the backward pass
-    /// because the derivative of the logarithm function depends on the output value. This field is reset when ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the most recent result that came out of the layer.
-    /// 
-    /// The layer needs to remember its output:
-    /// - Because the derivative of log(x) is 1/x, so we need x (our output) during backpropagation
-    /// - To avoid recalculating values during the backward pass
-    /// - To make the training process more efficient
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
-    /// The mean values calculated during the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the mean values calculated during the most recent forward pass. These values are needed
-    /// during both the variance calculation and the backward pass. This field is reset when ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the average values calculated during the first step.
-    /// 
-    /// The layer needs to remember these mean values:
-    /// - They're used when calculating the variance (which measures deviation from the mean)
-    /// - They're needed again during the backward pass
-    /// - Storing them avoids having to recalculate them multiple times
-    /// 
-    /// Think of it as saving an intermediate result that will be reused later.
-    /// </para>
-    /// </remarks>
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _meanValues;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="LogVarianceLayer{T}"/> class.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor.</param>
@@ -261,13 +202,8 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Use Engine operations for GPU/CPU acceleration
-        _meanValues = Engine.ReduceMean(input, [Axis], keepDims: true);
-        _lastOutput = Engine.ReduceLogVariance(input, [Axis], keepDims: false, epsilon: 1e-8);
-
-        return _lastOutput;
+        return Engine.ReduceLogVariance(input, [Axis], keepDims: false, epsilon: 1e-8);
     }
 
     /// <summary>
@@ -315,9 +251,7 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
-        _lastInput = null;
-        _lastOutput = null;
-        _meanValues = null;
+        // Nothing to clear: the forward keeps no per-pass state.
+        return;
     }
 }

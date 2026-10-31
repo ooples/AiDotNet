@@ -26,7 +26,28 @@ public class RainbowDQNOptions<T> : ReinforcementLearningOptions<T>
 
     // Dueling network architecture
     public List<int> SharedLayers { get; init; } = new List<int> { 128 };
+
+    /// <summary>
+    /// Gets or sets the widths of the value stream's hidden ReLU layers, between the shared trunk and V(s).
+    /// </summary>
+    /// <value>One width per hidden layer, in order; empty for a value head straight off the trunk. Default: { 128 }.</value>
+    /// <remarks>
+    /// <para>The dueling network (Wang et al. 2016, Fig. 1) gives the value and advantage streams their own fully
+    /// connected layers after the shared trunk. With distributional RL the value stream ends in one output per atom.</para>
+    /// <para><b>For Beginners:</b> How big the part of the network is that judges "how good is this state".</para>
+    /// </remarks>
     public List<int> ValueStreamLayers { get; init; } = new List<int> { 128 };
+
+    /// <summary>
+    /// Gets or sets the widths of the advantage stream's hidden ReLU layers, between the shared trunk and A(s, a).
+    /// </summary>
+    /// <value>One width per hidden layer, in order; empty for an advantage head straight off the trunk. Default: { 128 }.</value>
+    /// <remarks>
+    /// <para>The advantage stream (Wang et al. 2016, Fig. 1) is combined with the value stream as
+    /// Q = V + (A − mean over actions of A); with distributional RL the mean is taken per atom.</para>
+    /// <para><b>For Beginners:</b> How big the part of the network is that judges "how much better is each action
+    /// than average".</para>
+    /// </remarks>
     public List<int> AdvantageStreamLayers { get; init; } = new List<int> { 128 };
 
     // Prioritized experience replay parameters (base has UsePrioritizedReplay)

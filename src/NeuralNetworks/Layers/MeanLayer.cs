@@ -130,26 +130,6 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsGpuTraining => true;
 
     /// <summary>
-    /// The input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the input tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the output tensor from the most recent forward pass, which may be
-    /// useful for certain operations or debugging.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="MeanLayer{T}"/> class with the specified input shape and axis.
     /// </summary>
     /// <param name="inputShape">The shape of the input tensor.</param>
@@ -263,12 +243,8 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Use Engine operation for GPU/CPU acceleration
-        _lastOutput = Engine.ReduceMean(input, [Axis], keepDims: false);
-
-        return _lastOutput;
+        return Engine.ReduceMean(input, [Axis], keepDims: false);
     }
 
     /// <summary>
@@ -322,8 +298,7 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
-        _lastInput = null;
-        _lastOutput = null;
+        // Nothing to clear: the forward keeps no per-pass state.
+        return;
     }
 }

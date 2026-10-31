@@ -132,23 +132,6 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastForgetGate;
-    private Tensor<T>? _lastOutputGate;
-    [Scratch]
-    private Tensor<T>? _lastOutputGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastSlotReadOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -339,31 +322,23 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         var k = Engine.Reshape(Engine.TensorMatMul(inputFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(inputFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 2: Forget gate
         var forgetRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _forgetGateWeights),
             Engine.Reshape(_forgetGateBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var forgetGate = Engine.Sigmoid(forgetRaw);
-        _lastForgetGate = forgetGate;
 
         // Step 3: Output gate
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var outputGate = Engine.Swish(gateRaw);
-        _lastOutputGate = outputGate;
-        _lastOutputGateRaw = gateRaw;
 
         // Step 4: Slot competition, write, and read.
         // One fused, differentiable op for the whole recurrence. The scalar loop this replaces was
@@ -371,7 +346,6 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
         // never learned - this layer has no Backward override, so the tape is its only gradient path.
         var slotOutput = Engine.AbcScanForward(
             q, k, v, forgetGate, _slotKeys, _numHeads, SlotInitScale);
-        _lastSlotReadOutput = slotOutput;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(slotOutput, outputGate);
@@ -384,7 +358,6 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -475,15 +448,6 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastForgetGate = null;
-        _lastOutputGate = null;
-        _lastOutputGateRaw = null;
-        _lastSlotReadOutput = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

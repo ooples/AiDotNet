@@ -136,29 +136,9 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
 
     // Cached forward pass values
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
     private Tensor<T>? _lastEmaInput;
     [Scratch]
     private Tensor<T>? _lastEmaStates;
-    [Scratch]
-    private Tensor<T>? _lastEmaProjected;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastAttnScores;
-    [Scratch]
-    private Tensor<T>? _lastAttnOutput;
-    [Scratch]
-    private Tensor<T>? _lastGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastGate;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -370,14 +350,12 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Project input to EMA space
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var emaInput = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _emaProjectInWeights),
             Engine.Reshape(_emaProjectInBias, new[] { 1, _emaDimension })), new[] { batchSize, seqLen, _emaDimension });
-        _lastEmaInput = emaInput;
+        SaveForBackward(ref _lastEmaInput, emaInput);
 
         // Step 2: Apply multi-dimensional EMA through the fused RG-LRU scan.
         // RG-LRU evolves h_t = a*h_{t-1} + sqrt(1-a^2)*(i_t*v_t).
@@ -410,7 +388,6 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
         var emaProjected = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(emaFlat, _emaProjectOutWeights),
             Engine.Reshape(_emaProjectOutBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
-        _lastEmaProjected = emaProjected;
 
         // Step 4: Compute Q, K from EMA output, V from original input
         var emaFlatFull = Engine.Reshape(emaProjected, new[] { batchSize * seqLen, _modelDimension });
@@ -423,22 +400,16 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
         var v = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
             Engine.Reshape(_valueBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 5: Compute gated attention
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Sigmoid(gateRaw);
-        _lastGateRaw = gateRaw;
-        _lastGate = gate;
 
         // Step 6: Multi-head causal attention
         var attnOutput = CausalLinearAttention.ScaledDotProduct(
             Engine, q, k, v, _numHeads, causal: true);
-        _lastAttnOutput = attnOutput;
 
         // Step 7: Gated output
         var gatedOutput = Engine.TensorMultiply(gate, attnOutput);
@@ -451,7 +422,6 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -578,7 +548,6 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
-        _lastAttnScores = attnScores;
         return output;
     }
 
@@ -685,18 +654,8 @@ public partial class MEGALayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _lastEmaInput = null;
         _lastEmaStates = null;
-        _lastEmaProjected = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastAttnScores = null;
-        _lastAttnOutput = null;
-        _lastGateRaw = null;
-        _lastGate = null;
         _originalInputShape = null;
         _emaAlphaLogitGradient = null;
         _emaProjectInWeightsGradient = null;

@@ -133,17 +133,6 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>, IShapeContract
 
     #region Private Fields
 
-    /// <summary>
-    /// Stores the indices of maximum values from the forward pass for gradient routing.
-    /// Shape: [batch, channels, outD, outH, outW, 3] where the last dimension stores [d, h, w] indices.
-    /// </summary>
-    private int[,,,,,]? _maxIndices;
-
-    /// <summary>
-    /// Cached input from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
     private int[]? _originalInputShape;
 
     /// <summary>
@@ -233,7 +222,6 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
         int rank = input.Rank;
 
@@ -265,7 +253,7 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>, IShapeContract
             batchedInput,
             [PoolSize, PoolSize, PoolSize],
             [Stride, Stride, Stride],
-            out _maxIndices);
+            out _);
 
         // Restore original tensor rank
         if (_originalInputShape.Length > 5)
@@ -322,8 +310,6 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastInput = null;
-        _maxIndices = null;
         _gpuIndicesBuffer?.Dispose();
         _gpuIndicesBuffer = null;
     }

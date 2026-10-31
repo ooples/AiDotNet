@@ -70,10 +70,10 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
     public double ExplorationNoise { get; init; } = 0.1;
 
     /// <summary>Hidden layer sizes for each agent's actor network.</summary>
-    public List<int> ActorHiddenLayers { get; init; } = new List<int> { 128, 128 };
+    public List<int> ActorHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
     /// <summary>Hidden layer sizes for each agent's critic network.</summary>
-    public List<int> CriticHiddenLayers { get; init; } = new List<int> { 128, 128 };
+    public List<int> CriticHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
     /// <summary>
     /// Gets or sets a factory for the optimizer each of this agent's actor and critic networks trains with.
@@ -95,14 +95,28 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
     public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 
     /// <summary>
-    /// Initializes a new instance with default values.
+    /// Initializes a new instance with the paper's training settings.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lowe et al. 2017 (Sec. 5 and Appendix) train every actor and critic with Adam at a learning rate of 0.01,
+    /// soft-update the target networks with τ = 0.01, discount by γ = 0.95, sample minibatches of 1024 from a replay
+    /// buffer of 10^6 transitions, and use two-layer ReLU MLPs of 64 units. Those are this constructor's values; the
+    /// earlier 1e-4 / 1e-3 learning rates and τ = 0.001 were single-agent DDPG's, not MADDPG's. Any of them can
+    /// still be overridden in an object initializer.
+    /// </para>
+    /// <para><b>For Beginners:</b> Creating the options with no arguments gives you the settings the MADDPG paper
+    /// trained with.</para>
+    /// </remarks>
     public MADDPGOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        ActorLearningRate = numOps.FromDouble(0.0001);
-        CriticLearningRate = numOps.FromDouble(0.001);
-        TargetUpdateTau = numOps.FromDouble(0.001);
+        ActorLearningRate = numOps.FromDouble(0.01);
+        CriticLearningRate = numOps.FromDouble(0.01);
+        TargetUpdateTau = numOps.FromDouble(0.01);
+        DiscountFactor = numOps.FromDouble(0.95);
+        BatchSize = 1024;
+        ReplayBufferSize = 1000000;
     }
 
     /// <summary>

@@ -130,24 +130,6 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _lnBeta;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastNormalized;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastGate;
-    [Scratch]
-    private Tensor<T>? _lastGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastMesaOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -333,11 +315,8 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Layer normalization
         var normalized = LayerNormForward(input3D, batchSize, seqLen);
-        _lastNormalized = normalized;
 
         // Step 2: Q, K, V projections
         var normFlat = Engine.Reshape(normalized, new[] { batchSize * seqLen, _modelDimension });
@@ -354,21 +333,14 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
             Engine.TensorMatMul(normFlat, _valueWeights),
             Engine.Reshape(_valueBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
-
         // Step 3: Output gate (SiLU activation)
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(normFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
-        _lastGate = gate;
-        _lastGateRaw = gateRaw;
 
         // Step 4: Mesa (ridge regression) recurrence per head using Woodbury updates
         var mesaOutput = MesaForward(q, k, v, batchSize, seqLen);
-        _lastMesaOutput = mesaOutput;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(mesaOutput, gate);
@@ -383,7 +355,6 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
         // Step 7: Residual connection
         var result = Engine.TensorAdd(output3D, input3D);
         result = ApplyActivation(result);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -558,15 +529,6 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastNormalized = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastGate = null;
-        _lastGateRaw = null;
-        _lastMesaOutput = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _queryBiasGradient = null;

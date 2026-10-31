@@ -159,27 +159,9 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _importanceWeightsGradient;
 
     /// <summary>
-    /// Cached input from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Cached edge adjacency from the last forward pass.
     /// </summary>
     private int[,]? _lastEdgeAdjacency;
-
-    /// <summary>
-    /// Cached output from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
-    /// Cached importance scores from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastImportanceScores;
 
     /// <summary>
     /// Number of neighboring edges per edge (default 4 for triangular meshes).
@@ -274,13 +256,10 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
                 "Edge adjacency must be set via SetEdgeAdjacency before calling Forward.");
         }
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         int numEdges = input.Shape[0];
         int numToKeep = Math.Min(TargetEdges, numEdges);
 
         var importanceScores = ComputeImportanceScores(input);
-        _lastImportanceScores = importanceScores;
 
         var sortedIndices = SortEdgesByImportance(importanceScores, numEdges);
 
@@ -304,7 +283,6 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
         UpdatedAdjacency = UpdateAdjacency(_lastEdgeAdjacency, RemainingEdgeIndices, numToKeep);
 
         var output = new Tensor<T>(outputData, [numToKeep, InputChannels]);
-        _lastOutput = output;
 
         return output;
     }
@@ -492,9 +470,6 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastImportanceScores = null;
         _importanceWeightsGradient = null;
         RemainingEdgeIndices = null;
         UpdatedAdjacency = null;

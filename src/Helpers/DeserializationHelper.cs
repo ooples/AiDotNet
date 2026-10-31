@@ -667,6 +667,26 @@ public static class DeserializationHelper
                 tnNumStep, tnRelax, tnVbs, tnMomentum, tnEpsilon
             });
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.DuelingCombinationLayer<>))
+        {
+            // DuelingCombinationLayer(featureDim, actionSize, numAtoms, int[] valueHidden, int[] advantageHidden, int? seed).
+            // A model saved before NumAtoms existed has a scalar-value head with no hidden streams.
+            int featureDim = TryGetInt(additionalParams, "FeatureDim")
+                ?? throw new InvalidOperationException("DuelingCombinationLayer metadata has no FeatureDim.");
+            int numAtoms = TryGetInt(additionalParams, "NumAtoms") ?? 1;
+            int actionSize = TryGetInt(additionalParams, "ActionSize")
+                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] / numAtoms : 1);
+            int[] valueHidden = TryGetIntArray(additionalParams, "ValueHiddenWidths") ?? Array.Empty<int>();
+            int[] advantageHidden = TryGetIntArray(additionalParams, "AdvantageHiddenWidths") ?? Array.Empty<int>();
+
+            var duelingCtor = type.GetConstructor(new[] { typeof(int), typeof(int), typeof(int), typeof(int[]), typeof(int[]), typeof(int?) });
+            if (duelingCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find DuelingCombinationLayer(int, int, int, int[], int[], int?) constructor.");
+            }
+
+            instance = duelingCtor.Invoke(new object?[] { featureDim, actionSize, numAtoms, valueHidden, advantageHidden, null });
+        }
         else if (genericDef == typeof(TabMEnsembleLayer<>))
         {
             // TabMEnsembleLayer(numFeatures, int[] hiddenDimensions, outputDim, numMembers).

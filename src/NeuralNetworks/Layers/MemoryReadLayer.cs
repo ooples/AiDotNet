@@ -137,36 +137,6 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     private Tensor<T> _outputBias;
 
     /// <summary>
-    /// The input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the input tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The memory tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the memory tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastMemory;
-
-    /// <summary>
-    /// The output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the output tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// The attention scores tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
@@ -175,16 +145,6 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     /// </remarks>
     [Scratch]
     private Tensor<T>? _lastAttentionScores;
-
-    /// <summary>
-    /// The transformed tensor from the most recent forward pass (input to output weights).
-    /// </summary>
-    /// <remarks>
-    /// This field stores the transformed tensor (result of readValues × valueWeights) from the most
-    /// recent forward pass, which is needed during the backward pass for output weights gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastTransformed;
 
     /// <summary>
     /// The gradient of the loss with respect to the key weights.
@@ -469,9 +429,6 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         // initial [0, 0] sentinel — matmul then throws on incompatible dims.
         EnsureInitializedFromInput(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastMemory = memory;
-
         // Use Engine operations for matrix multiplications
         var keys = Engine.TensorMatMul(input, _keyWeights);
 
@@ -482,14 +439,14 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         // Apply softmax to get attention weights
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);
-        _lastAttentionScores = attentionWeights;
+        // Read only by ComputeAuxiliaryLoss, so it is kept only while that loss can be asked for.
+        _lastAttentionScores = IsTrainingMode && UseAuxiliaryLoss ? attentionWeights : null;
 
         // Read from memory: attentionWeights × memory
         var readValues = Engine.TensorMatMul(attentionWeights, memory);
 
         // Apply value and output transformations
         var transformed = Engine.TensorMatMul(readValues, _valueWeights);
-        _lastTransformed = transformed; // Cache for output weights gradient computation
         var projected = Engine.TensorMatMul(transformed, _outputWeights);
 
         // Broadcast bias and add
@@ -497,15 +454,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var biasBroadcast = BroadcastBiases(_outputBias, batchSize);
         var output = Engine.TensorAdd(projected, biasBroadcast);
 
-        var result = ApplyActivation(output);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
-
-        return result;
+        return ApplyActivation(output);
     }
 
     /// <summary>
@@ -745,11 +694,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastMemory = null;
-        _lastOutput = null;
         _lastAttentionScores = null;
-        _lastTransformed = null;
 
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;

@@ -178,12 +178,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private Tensor<T> _bias;
 
     /// <summary>
-    /// Stores the input tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
@@ -208,12 +202,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
-
-    /// <summary>
-    /// Cached reshaped adjacency matrix (3D) for backward pass.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _adjForBatch;
 
     /// <summary>
     /// Edge source node indices for sparse graph representation.
@@ -821,7 +809,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
-        _lastInput = processInput;
         int numNodes = processInput.Shape[1];
         int outputFeatures = _weights.Shape[1];
 
@@ -855,9 +842,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 // Set the aggregated results in output tensor for this batch
                 output.SetSlice(b, aggregated);
             }
-
-            // Store for backward pass (null for sparse path)
-            _adjForBatch = null;
         }
         else
         {
@@ -891,9 +875,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             {
                 adjForBatch = _adjacencyMatrix;
             }
-
-            // Store for backward pass
-            _adjForBatch = adjForBatch;
 
             // Then: A * (X * W) using batched matmul for 3D @ 3D
             output = Engine.BatchMatMul(adjForBatch, xw);
@@ -1187,9 +1168,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
         _lastNodeFeatures = null;
-        _adjForBatch = null;
         _weightsGradient = null;
         _biasGradient = null;
     }

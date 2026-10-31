@@ -245,53 +245,11 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     private Tensor<T>? _lastRoutingWeights;
 
     /// <summary>
-    /// Cached expert outputs from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This stores the output from each expert before they are combined. During backpropagation,
-    /// these are used to compute gradients for both the router and the experts themselves.
-    /// </para>
-    /// <para><b>For Beginners:</b> Stored memory of what each expert predicted.
-    ///
-    /// We save each expert's output so we can:
-    /// - Calculate how much each expert contributed to any errors
-    /// - Adjust the router if it chose the wrong experts
-    /// - Adjust each expert to improve its predictions
-    ///
-    /// It's like keeping a record of each team member's contribution to a group project,
-    /// so you can give appropriate feedback to each person.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private List<Tensor<T>>? _lastExpertOutputs;
-
-    /// <summary>
     /// Cached combined output before activation from the most recent forward pass.
     /// </summary>
     [Scratch]
     private Tensor<T>? _lastPreActivation;
 
-
-    /// <summary>
-    /// Cached routing logits (before softmax) from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// These are the raw scores from the router before applying softmax. They're needed for
-    /// computing the gradient of softmax during backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> The router's raw scores before normalization.
-    ///
-    /// The router produces raw scores (logits), then we convert them to probabilities (weights).
-    /// We save the raw scores because:
-    /// - The conversion process (softmax) is nonlinear
-    /// - To compute gradients correctly, we need the pre-conversion values
-    /// - This is a technical requirement for proper backpropagation through softmax
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastRoutingLogits;
 
     /// <summary>
     /// Cached top-K indices for sparse routing from the most recent forward pass.
@@ -692,7 +650,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
 
         // Cache input for backward pass
-        _lastInput = ShouldCacheForBackward ? input2D : null; // #1668: skip in inference (arena safety)
+        SaveForBackward(ref _lastInput, input2D);
 
         // Step 1: Compute routing scores
         var routingLogits = _router.Forward(input2D);
@@ -720,8 +678,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             routingLogits = Engine.TensorAdd(routingLogits, Engine.TensorMultiply(noise, noiseScale));
         }
 
-        _lastRoutingLogits = routingLogits;
-
         // Step 2: Apply softmax to get routing probabilities
         var routingWeights = ApplySoftmax(routingLogits);
 
@@ -738,7 +694,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         _lastRoutingWeights = routingWeights;
 
         // Step 4: Get outputs from all experts (or only top-K if sparse)
-        _lastExpertOutputs = new List<Tensor<T>>();
+        var expertOutputs = new List<Tensor<T>>(_experts.Count);
         _activeExpertsDuringBackward = [];
 
         if (_topK > 0)
@@ -759,13 +715,13 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 
                 if (isActive)
                 {
-                    _lastExpertOutputs.Add(_experts[i].Forward(input2D));
+                    expertOutputs.Add(_experts[i].Forward(input2D));
                     _activeExpertsDuringBackward.Add(i);
                 }
                 else
                 {
                     // Create a zero tensor for inactive experts
-                    _lastExpertOutputs.Add(new Tensor<T>(new int[] { batchSize }.Concat(OutputShape).ToArray()));
+                    expertOutputs.Add(new Tensor<T>(new int[] { batchSize }.Concat(OutputShape).ToArray()));
                 }
             }
         }
@@ -774,14 +730,14 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             // Dense: All experts process all inputs
             for (int i = 0; i < _experts.Count; i++)
             {
-                _lastExpertOutputs.Add(_experts[i].Forward(input2D));
+                expertOutputs.Add(_experts[i].Forward(input2D));
                 _activeExpertsDuringBackward.Add(i);
             }
         }
 
         // Step 5: Combine expert outputs using routing weights
-        var combinedOutput = CombineExpertOutputs(_lastExpertOutputs, routingWeights);
-        _lastPreActivation = combinedOutput;
+        var combinedOutput = CombineExpertOutputs(expertOutputs, routingWeights);
+        SaveForBackward(ref _lastPreActivation, combinedOutput);
 
         // Step 6: Apply activation function
         var output = ApplyActivation(combinedOutput);
@@ -884,8 +840,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     {
         _lastInput = null;
         _lastRoutingWeights = null;
-        _lastRoutingLogits = null;
-        _lastExpertOutputs = null;
         _lastPreActivation = null;
         _lastTopKIndices = null;
         _originalInputShape = null;

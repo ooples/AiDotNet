@@ -55,8 +55,6 @@ public partial class PReLULayer<T> : LayerBase<T>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _alpha;
 
-    private Tensor<T>? _lastInput;
-
     /// <summary>
     /// Gets a value indicating that this layer has trainable parameters (α).
     /// </summary>
@@ -160,8 +158,6 @@ public partial class PReLULayer<T> : LayerBase<T>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        // #1668: also clear a previously-cached activation when caching is off (don't leave it pinned).
-        _lastInput = ShouldCacheForBackward ? input : null;
 
         // Use the dedicated IEngine primitive where its channel convention exactly matches this
         // layer: shared slope, a rank-1 elementwise slope, rank-2 [batch, channels], or NCHW. It
@@ -191,6 +187,5 @@ public partial class PReLULayer<T> : LayerBase<T>
     }
     public override void ResetState()
     {
-        _lastInput = null;
     }
 }
