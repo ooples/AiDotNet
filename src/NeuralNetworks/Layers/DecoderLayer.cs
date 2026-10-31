@@ -179,7 +179,9 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         _feedForwardSize = feedForwardSize;
         _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
-        _crossAttention = new AttentionLayer<T>(attentionSize, activation);
+        // Cross-attention normalises its scores with softmax, like self-attention; the layer's activation
+        // belongs to the feed-forward. Passing it here replaced the softmax over the scores with it.
+        _crossAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
 
         // FFN's second projection matches input feature size (resolved on first forward).
         // We use a sentinel-large outputDim that the lazy ctor accepts; OnFirstForward
@@ -322,7 +324,9 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         _feedForwardSize = feedForwardSize;
         _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
-        _crossAttention = new AttentionLayer<T>(attentionSize, activation);
+        // Cross-attention normalises its scores with softmax, like self-attention; the layer's activation
+        // belongs to the feed-forward. Passing it here replaced the softmax over the scores with it.
+        _crossAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
 
         var ffActivation = activation ?? (IVectorActivationFunction<T>)new ReLUActivation<T>();
         _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, ffActivation);
