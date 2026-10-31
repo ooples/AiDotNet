@@ -30,6 +30,15 @@ internal sealed class GptSoVitsDiT<T>
     internal sealed record Block(DenseLayer<T> Modulation, DenseLayer<T> Query, DenseLayer<T> Key, DenseLayer<T> Value, DenseLayer<T> Out,
         DenseLayer<T> FfIn, DenseLayer<T> FfOut);
 
+    /// <summary>A LoRA adapter (peft's <c>lora_A</c>, <c>lora_B</c>): the update <c>(α/r)·B(A x)</c>.</summary>
+    internal sealed record Lora(BiasFreeLinearLayer<T> A, BiasFreeLinearLayer<T> B);
+
+    /// <summary>One block's adapters on <c>to_q</c>, <c>to_k</c>, <c>to_v</c> and <c>to_out.0</c>.</summary>
+    internal sealed record BlockLora(Lora Query, Lora Key, Lora Value, Lora Out);
+
+    private readonly List<BlockLora> _lora = new();
+    private double _loraScale;
+
     public GptSoVitsDiT(IEngine engine, List<LayerBase<T>> layers, GptSoVitsDiTConfiguration configuration, Random random)
     {
         _engine = engine;
@@ -202,9 +211,10 @@ internal sealed class GptSoVitsDiT<T>
             var normed = _engine.TensorAdd(_engine.TensorMultiply(AiDotNet.TextToSpeech.FlowDiffusion.FlowMatchingTts.PlainLayerNorm(_engine, h),
                 Rows(_engine.TensorAddScalar(Chunk(1), NumOps.One))), Rows(Chunk(0)));
             // Attention: q, k, v over all heads; the rotary table (head width) rotates the first head's dimensions only.
-            var q = b.Query.Forward(normed);
-            var k = b.Key.Forward(normed);
-            var v = b.Value.Forward(normed);
+            var lora = _lora.Count > 0 ? _lora[Blocks.IndexOf(b)] : null;
+            var q = Project(b.Query, lora?.Query, normed);
+            var k = Project(b.Key, lora?.Key, normed);
+            var v = Project(b.Value, lora?.Value, normed);
             q = RotateFirstHead(q);
             k = RotateFirstHead(k);
             Tensor<T> Split(Tensor<T> y) => _engine.TensorPermute(_engine.Reshape(y, new[] { frames, c.Heads, c.HeadDim }), new[] { 1, 0, 2 });
@@ -212,7 +222,7 @@ internal sealed class GptSoVitsDiT<T>
                 NumOps.FromDouble(1.0 / Math.Sqrt(c.HeadDim)));
             var attended = _engine.Reshape(_engine.TensorPermute(_engine.BatchMatMul(_engine.Softmax(scores, axis: 2), Split(v)), new[] { 1, 0, 2 }),
                 new[] { frames, inner });
-            var attention = Drop(b.Out.Forward(attended), training, random);
+            var attention = Drop(Project(b.Out, lora?.Out, attended), training, random);
             h = _engine.TensorAdd(h, _engine.TensorMultiply(Rows(Chunk(2)), attention));
             normed = _engine.TensorAdd(_engine.TensorMultiply(AiDotNet.TextToSpeech.FlowDiffusion.FlowMatchingTts.PlainLayerNorm(_engine, h),
                 Rows(_engine.TensorAddScalar(Chunk(4), NumOps.One))), Rows(Chunk(3)));
@@ -224,6 +234,96 @@ internal sealed class GptSoVitsDiT<T>
         var shift = _engine.TensorBroadcastTo(_engine.TensorNarrow(final, 1, c.Dim, c.Dim), new[] { frames, c.Dim });
         h = _engine.TensorAdd(_engine.TensorMultiply(AiDotNet.TextToSpeech.FlowDiffusion.FlowMatchingTts.PlainLayerNorm(_engine, h), scale), shift);
         return ProjectionOut.Forward(h);
+    }
+
+    private Tensor<T> Project(DenseLayer<T> layer, Lora? lora, Tensor<T> x)
+    {
+        var y = layer.Forward(x);
+        if (lora is null) return y;
+        return _engine.TensorAdd(y, _engine.TensorMultiplyScalar(lora.B.Forward(lora.A.Forward(x)), NumOps.FromDouble(_loraScale)));
+    }
+
+    /// <summary>Whether LoRA adapters are attached.</summary>
+    public bool HasLora => _lora.Count > 0;
+
+    /// <summary>The adapters' layers (what LoRA training updates).</summary>
+    public IReadOnlyList<LayerBase<T>> LoraLayers =>
+        _lora.SelectMany(l => new[] { l.Query, l.Key, l.Value, l.Out }).SelectMany(a => new LayerBase<T>[] { a.A, a.B }).ToList();
+
+    /// <summary>
+    /// Attaches LoRA adapters of rank <paramref name="rank"/> to every block's <c>to_q</c>, <c>to_k</c>, <c>to_v</c> and
+    /// <c>to_out.0</c> (s2_train_v3_lora.py's <c>LoraConfig</c>: α = rank, so the update is unscaled; peft's
+    /// initialization, A from U(±1/√fan_in) and B zero, so the adapted model starts equal to the base).
+    /// </summary>
+    public void AddLora(List<LayerBase<T>> layers, int rank, double alpha, Random random)
+    {
+        if (rank <= 0) throw new ArgumentOutOfRangeException(nameof(rank), "The LoRA rank is positive.");
+        if (HasLora) throw new InvalidOperationException("The DiT already has LoRA adapters.");
+        var c = Configuration;
+        int inner = c.Heads * c.HeadDim;
+        Lora Adapter(int inputs, int outputs)
+        {
+            var a = IndexTtsOps.BiasFree(layers, random, inputs, rank);
+            var b = IndexTtsOps.BiasFree(layers, random, rank, outputs);
+            TorchParameters.Linear(b, rank, outputs, new double[rank * outputs]);
+            return new Lora(a, b);
+        }
+        foreach (var _ in Blocks) _lora.Add(new BlockLora(Adapter(c.Dim, inner), Adapter(c.Dim, inner), Adapter(c.Dim, inner), Adapter(inner, c.Dim)));
+        _loraScale = alpha / rank;
+    }
+
+    /// <summary>Loads peft's adapter weights (<c>...attn.to_q.lora_A.weight</c>, with or without <c>.default</c>).</summary>
+    public void LoadLora(Func<string, double[]?> read, string prefix, int rank)
+    {
+        var c = Configuration;
+        int inner = c.Heads * c.HeadDim;
+        void Load(Lora lora, string name, int inputs, int outputs)
+        {
+            double[] Read(string part) => read($"{name}.{part}.weight") ?? read($"{name}.{part}.default.weight")
+                ?? throw new KeyNotFoundException($"The LoRA checkpoint has no '{name}.{part}.weight'.");
+            TorchParameters.Linear(lora.A, inputs, rank, Read("lora_A"));
+            TorchParameters.Linear(lora.B, rank, outputs, Read("lora_B"));
+        }
+        for (int i = 0; i < _lora.Count; i++)
+        {
+            string n = $"{prefix}transformer_blocks.{i}.attn.";
+            Load(_lora[i].Query, n + "to_q", c.Dim, inner);
+            Load(_lora[i].Key, n + "to_k", c.Dim, inner);
+            Load(_lora[i].Value, n + "to_v", c.Dim, inner);
+            Load(_lora[i].Out, n + "to_out.0", inner, c.Dim);
+        }
+    }
+
+    /// <summary>peft's <c>merge_and_unload</c>: each adapter's <c>(α/r)·B A</c> added to its base weight, the adapters
+    /// removed (the release merges a LoRA checkpoint before inference).</summary>
+    public void MergeLora()
+    {
+        if (!HasLora) return;
+        for (int i = 0; i < Blocks.Count; i++)
+        {
+            var b = Blocks[i];
+            Merge(b.Query, _lora[i].Query);
+            Merge(b.Key, _lora[i].Key);
+            Merge(b.Value, _lora[i].Value);
+            Merge(b.Out, _lora[i].Out);
+        }
+        _lora.Clear();
+    }
+
+    private void Merge(DenseLayer<T> layer, Lora lora)
+    {
+        var w = layer.GetWeights();                                                                       // [in, out]
+        var a = lora.A.GetParameters();                                                                   // [in, r]
+        var bw = lora.B.GetParameters();                                                                  // [r, out]
+        int inputs = w.Shape[0], outputs = w.Shape[1], rank = a.Length / inputs;
+        for (int i = 0; i < inputs; i++)
+            for (int o = 0; o < outputs; o++)
+            {
+                double update = 0;
+                for (int r = 0; r < rank; r++) update += NumOps.ToDouble(a[i * rank + r]) * NumOps.ToDouble(bw[r * outputs + o]);
+                w[i, o] = NumOps.Add(w[i, o], NumOps.FromDouble(_loraScale * update));
+            }
+        _engine.InvalidatePersistentTensor(w);
     }
 
     // GELU with the tanh approximation (FeedForward's approximate="tanh").

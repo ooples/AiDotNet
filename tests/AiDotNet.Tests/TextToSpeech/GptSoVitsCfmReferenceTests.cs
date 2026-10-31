@@ -179,4 +179,25 @@ public class GptSoVitsCfmReferenceTests
             Assert.True(Math.Abs(expected - loss.GetFlat(0)) <= 1e-5 * (1 + Math.Abs(expected)), $"loss (bootstrap {c.GetProperty("bootstrap")}, k {c.GetProperty("k")}): {expected} vs {loss.GetFlat(0)}");
         }
     }
+
+    [Fact(Timeout = 600000)]
+    public async Task Lora_MatchesPeftBeforeAndAfterMerging()
+    {
+        await Task.Yield();
+        var (model, e) = Model("v3");
+        var l = e.GetProperty("lora");
+        int rank = l.GetProperty("rank").GetInt32(), bridge = Reference.Value.GetProperty("bridge").GetInt32();
+        var dit = model.Cfm.Estimator;
+        dit.AddLora(new List<LayerBase<double>>(), rank, rank, new Random(3));
+        var state = l.GetProperty("state");
+        dit.LoadLora(name => state.TryGetProperty(name, out var v) ? Doubles(v) : null, "estimator.", rank);
+        var mu = T(l.GetProperty("mu"), 9, bridge);
+        var prompt = Transpose(T(l.GetProperty("prompt"), 1, 100, 3));
+        var adapted = model.Cfm.Inference(mu, prompt, 3, 1.0, 0.0, Noise()(new[] { 9, 100 }));
+        Close(Doubles(l.GetProperty("adapted")), Channels(adapted), 1e-6, "adapted");
+        dit.MergeLora();
+        Assert.False(dit.HasLora);
+        var merged = model.Cfm.Inference(mu, prompt, 3, 1.0, 0.0, Noise()(new[] { 9, 100 }));
+        Close(Doubles(l.GetProperty("merged")), Channels(merged), 1e-6, "merged");
+    }
 }
