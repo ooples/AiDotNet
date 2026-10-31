@@ -1,4 +1,4 @@
-// Copyright (c) AiDotNet. All rights reserved.
+// Copyright (c) CrowdTrainer LLC. All rights reserved.
 // Phase 1c: prove the continuous-batching engine's PAGED incremental path produces byte-for-byte
 // identical greedy output to a direct model forward (the ground truth), over the SAME optimized model
 // and SAME shared PagedKVCache. This de-risks routing the live serving path (TextGenerationService)
