@@ -398,6 +398,74 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     protected virtual Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen)
         => PreprocessLabels(labels, seqLen);
 
+    /// <summary>The token encoder every span model starts from: a stack of Transformer encoder layers (the paper's
+    /// pre-trained BERT stands here as a trainable encoder of <see cref="SpanBasedNEROptions.NumTransformerLayers"/> layers).</summary>
+    protected IEnumerable<ILayer<T>> CreateTokenEncoderLayers()
+    {
+        int heads = _options.NumAttentionHeads;
+        while (heads > 1 && _options.HiddenDimension % heads != 0) heads--;
+        for (int layer = 0; layer < _options.NumTransformerLayers; layer++)
+        {
+            yield return new TransformerEncoderLayer<T>(numHeads: heads, feedForwardDim: _options.IntermediateDimension);
+            if (_options.DropoutRate > 0 && layer < _options.NumTransformerLayers - 1) yield return new DropoutLayer<T>(_options.DropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Span-grid training targets for a scorer that emits one score vector per span <c>[S * S, C]</c>: a token's label on
+    /// the diagonal (single-token entity), the non-entity category for the other candidate spans up to
+    /// <see cref="SpanBased_options.MaxSpanLength"/>, and -1 (ignored) for the rest.
+    /// </summary>
+    protected Tensor<T> BuildSpanGridTargets(Tensor<T> labels, int seqLen)
+    {
+        var tokenLabels = PreprocessLabels(labels, seqLen);
+
+        // The scorer emits [batch, l*l, c] for a batched input and [l*l, c] unbatched, so the
+        // target has to carry the same batch axis. Building a flat [l*l] regardless meant a
+        // two-example batch produced a [26] target against a [2, 64, 9] prediction, which cannot
+        // broadcast -- the failure DifferentInputs_AfterTraining reported, since that test is the
+        // one that feeds two distinct inputs at once.
+        int batch = tokenLabels.Rank >= 2 ? tokenLabels.Shape[0] : 1;
+
+        var spanTargets = batch > 1
+            ? new Tensor<T>([batch, seqLen * seqLen])
+            : new Tensor<T>([seqLen * seqLen]);
+
+        var ignore = NumOps.FromDouble(-1.0);
+        int maxSpan = _options.MaxSpanLength > 0 ? _options.MaxSpanLength : seqLen;
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int start = 0; start < seqLen; start++)
+            {
+                var category = tokenLabels.Rank == 1 ? tokenLabels[start] : tokenLabels[b, start];
+
+                for (int end = 0; end < seqLen; end++)
+                {
+                    bool isCandidate = end >= start && (end - start + 1) <= maxSpan;
+
+                    // A single-token entity occupies the diagonal; other candidate spans are
+                    // non-entities; non-candidates are ignored rather than taught as negatives.
+                    var value = !isCandidate ? ignore
+                        : end == start ? category
+                        : NumOps.Zero;
+
+                    if (batch > 1)
+                    {
+                        spanTargets[b, (start * seqLen) + end] = value;
+                    }
+                    else
+                    {
+                        spanTargets[(start * seqLen) + end] = value;
+                    }
+                }
+            }
+        }
+
+        return spanTargets;
+    }
+
+
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
