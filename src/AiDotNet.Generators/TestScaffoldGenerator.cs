@@ -8884,7 +8884,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.NER.Options.SpanBasedNEROptions { HiddenDimension = 32, " +
                     "NumAttentionHeads = 4, NumTransformerLayers = 2, IntermediateDimension = 64, " +
                     "NumLabels = 9, MaxSequenceLength = 12, MaxSpanLength = 3, " +
-                    "SpanEmbeddingDimension = 32, " +
+                    "SpanEmbeddingDimension = 8, " +
                     "DropoutRate = 0.0, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "BiaffineNER" && model.TypeParameterCount == 1)
