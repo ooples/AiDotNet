@@ -975,9 +975,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // CI-smoke fixture would have to shrink the architecture past recognizability; deferred to the nightly
         // HeavyTimeout lane where they run full-scale. Families: CLIP dual-encoders (MetaCLIP, LLM2CLIP,
         // MedCLIP), SAM segmentation (MedSAM, MedSAM2, MaskAdapter), forecasting foundations (MOIRAI), speech
-        // /audio LMs (MMS, MARS5TTS, MinMo), state-space LM (Mamba2), and the
+        // /audio LMs (MMS, MARS5TTS), state-space LM (Mamba2), and the
         // mixture-of-Gaussians generative net (MoG). Paper defaults intact + customizable.
-        "MARS5TTS", "MinMo",
+        "MARS5TTS",
         // #1789 J-M mid-tier classes that still OOM or time out on the forward/training even at <float>
         // (verified locally): Mask2Former (segmentation foundation), LLMTime (LLM-forecasting),
         // MedicalASR / MedSegDiffV2 (medical ASR / seg-diffusion), MemFlow (optical flow — its
@@ -1919,7 +1919,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "CLIPA", "InternVL25", "InternVL3", "ACEStep", "AudioVisualEventLocalizationNetwork", "BASIC", "ConvolutionalNeuralNetwork",
         "DCGAN", "Data2VecASR", "DeepBeliefNetwork", "DenseNetNetwork", "Donut", "Emu",
         "ExtremeLearningMachine", "Kokoro", "MCDropoutNeuralNetwork", "MPLUGOwl2",
-        "Mamba2", "MedCLIP", "MedFlamingo", "MinMo", "LLaVANeXTVideo", "NaturalSpeech2", "NeuFlowV2",
+        "Mamba2", "MedCLIP", "MedFlamingo", "LLaVANeXTVideo", "NaturalSpeech2", "NeuFlowV2",
         "NeuralParametricEQ", "OMGLLaVA",
         // LSTMDetector (AnomalyDetection.TimeSeries): Builder/Predictions overran the 60 s gate at
         // <double>. Now that TimeSeriesModelTestBase is generic over T, <float> halves its per-step cost.
@@ -7884,8 +7884,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "MinMo" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.MultiModal.", System.StringComparison.Ordinal))
+            {
+                // MinMo is a voice encoder and projector into Qwen2.5, an output projector into CosyVoice 2's language
+                // model, flow and HiFT, and a duplex predictor. The fixture builds every part 16 wide with one layer, over
+                // Qwen2.5's real tokenizer (the token table keeps its 151,665 rows).
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.MinMoFixture.Tts<double>()";
+            }
             else if ((model.ClassName == "MARS5TTS"
-                      || model.ClassName == "MinMo"
                       || model.ClassName == "Voicebox"
                       || model.ClassName == "WhisperSpeech")
                      && model.TypeParameterCount == 1
@@ -7893,7 +7900,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 // CodecTtsOptions models whose production defaults are foundation-scale codec LMs —
                 // an 8x1024 codec-token head behind a wide, deep autoregressive decoder (MARS5-TTS
-                // 1536-wide/24-layer, MinMo 1024-wide/12-layer). On the J-M shard they produced 16
+                // 1536-wide/24-layer, and MinMo's former placeholder 1024-wide/12-layer). On the J-M shard they produced 16
                 // and 4 OutOfMemoryExceptions respectively, cascading across nearly every invariant in
                 // each class because a class that OOMs mid-suite leaves too little headroom for
                 // the tests that follow it.
@@ -7919,8 +7926,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 {
                     "MARS5TTS" => "AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions",
                     "Voicebox" => "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions",
-                    "WhisperSpeech" => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
-                    _ => "AiDotNet.TextToSpeech.MultiModal.MinMoOptions",
+                    _ => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
                 };
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
