@@ -973,9 +973,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // CI-smoke fixture would have to shrink the architecture past recognizability; deferred to the nightly
         // HeavyTimeout lane where they run full-scale. Families: CLIP dual-encoders (MetaCLIP, LLM2CLIP,
         // MedCLIP), SAM segmentation (MedSAM, MedSAM2, MaskAdapter), forecasting foundations (MOIRAI), speech
-        // /audio LMs (MMS, KyutaiMoshi, MARS5TTS, MinMo), state-space LM (Mamba2), and the
+        // /audio LMs (MMS, KyutaiMoshi, MinMo), state-space LM (Mamba2), and the
         // mixture-of-Gaussians generative net (MoG). Paper defaults intact + customizable.
-        "MARS5TTS", "MinMo",
+        "MinMo",
         // #1789 J-M mid-tier classes that still OOM or time out on the forward/training even at <float>
         // (verified locally): Mask2Former (segmentation foundation), LLMTime (LLM-forecasting),
         // MedicalASR / MedSegDiffV2 (medical ASR / seg-diffusion), MemFlow (optical flow — its
@@ -1443,7 +1443,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // defaults (dims, depth, vocab) are unchanged and fully user-customizable; only the test numeric type
         // changes. Any that still OOM at fp32 (paper-scale generative LMs) will show in the live run and move
         // to the nightly HeavyTimeout lane.
-        "KeywordSpotting", "LiteDVDNet", "LLMTime", "LSTNet", "MARS5TTS", "MGTSD", "MQCNN", "MadmomBeatTracker", "Mamba",
+        "KeywordSpotting", "LiteDVDNet", "LLMTime", "LSTNet", "MGTSD", "MQCNN", "MadmomBeatTracker", "Mamba",
         "MarbleNet", "MatchaTTS", "MedicalASR", "MeloTTS", "MelodyExtractor", "MusicGenModel",
         "MusicStructureAnalyzer",
         // --- #1624 training/perf-bound inventory (OOM / TIMEOUT in training/clone) ---
@@ -7895,22 +7895,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
             }
-            else if ((model.ClassName == "MARS5TTS"
-                      || model.ClassName == "MinMo"
+            else if (model.ClassName == "MARS5TTS" && model.TypeParameterCount == 1)
+            {
+                // MARS5 is a Mistral AR decoder and an encoder-decoder diffusion NAR over EnCodec codes, decoded by Vocos;
+                // keep all of it at width 16 with one layer each, four codebooks (a Vocos bandwidth class) of 64 codes, a
+                // 2560-sample codec hop, four diffusion steps and a 64-token AR cap. The release's 10k-step warmup is off and
+                // the AR rate raised to 3e-3 so fifteen steps descend.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions { HiddenDim = 16, NumHeads = 2, ArLayers = 1, ArFeedForward = 32, " +
+                    "ArSpeakerLayers = 1, SlidingWindow = 512, NarDim = 16, NarHeads = 2, NarEncoderLayers = 1, NarDecoderLayers = 1, " +
+                    "NarSpeakerLayers = 1, TimeDim = 8, DiffusionSteps = 4, Q0OverrideSteps = 1, MaxGenerationLength = 64, " +
+                    "NumCodebooks = 4, CodebookSize = 64, HopSize = 2560, DecoderDim = 16, DecoderIntermediateDim = 32, DecoderLayers = 1, " +
+                    "WarmupSteps = 0, ArLearningRate = 3e-3, NarLearningRate = 3e-3, " +
+                    "Codec = new AiDotNet.Audio.Generation.EnCodecOptions { SampleRate = 24000, NumQuantizers = 4, " +
+                    "CodebookSize = 64, Filters = 4, Ratios = [8, 5, 4, 4, 4], Dimension = 8, ResidualKernelSizes = [3, 1], " +
+                    "TargetBandwidthKbps = 0.225 } })";
+            }
+            else if ((model.ClassName == "MinMo"
                       || model.ClassName == "Voicebox"
                       || model.ClassName == "WhisperSpeech")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
             {
                 // CodecTtsOptions models whose production defaults are foundation-scale codec LMs —
-                // an 8x1024 codec-token head behind a wide, deep autoregressive decoder (MARS5-TTS
-                // 1536-wide/24-layer, MinMo 1024-wide/12-layer). On the J-M shard they produced 16
-                // and 4 OutOfMemoryExceptions respectively, cascading across nearly every invariant in
-                // each class because a class that OOMs mid-suite leaves too little headroom for
-                // the tests that follow it.
+                // an 8x1024 codec-token head behind a wide, deep autoregressive decoder (MinMo
+                // 1024-wide/12-layer). On the J-M shard it produced 4 OutOfMemoryExceptions, cascading
+                // across nearly every invariant in the class because a class that OOMs mid-suite leaves
+                // too little headroom for the tests that follow it.
                 // MinMo was already on Fp32TestClassNames, so <float> was applied first and measured
                 // insufficient — it OOMs during CONSTRUCTION, which halving element width cannot fix.
-                // MARS5TTS carried no mitigation at all.
                 // Voicebox and WhisperSpeech join from the T-Z shard, which ran only 23 classes
                 // before hitting the 45-min job timeout: measured there at 356s and 199s of test time. Voicebox and WhisperSpeech
                 // additionally failed Training_ShouldReduceLoss and
@@ -7928,7 +7944,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // it only widens the codec head from 1x16 to 2x16.
                 string codecOptionsType = model.ClassName switch
                 {
-                    "MARS5TTS" => "AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions",
                     "Voicebox" => "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions",
                     "WhisperSpeech" => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
                     _ => "AiDotNet.TextToSpeech.MultiModal.MinMoOptions",
@@ -16517,6 +16532,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "MARS5TTS")
+                {
+                    // MARS5 reads a text's tokens and trains on a 24 kHz recording: eight tokens, and 25600 samples (ten frames of
+                    // the fixture codec). Generation samples its codes, so the probes compare the training objective at a fixed
+                    // draw, which reads the text.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 25600 };");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "GPTSoVITS")
                 {
                     // GPT-SoVITS reads a sentence's phone ids and trains on a 32 kHz recording: eight ids, and 12800 samples (0.4 s:
@@ -16767,7 +16797,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "MARS5TTS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
