@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.235.1](https://github.com/ooples/AiDotNet/compare/v0.235.0...v0.235.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **layers:** drop the activation on transformer attention outputs ([#2421](https://github.com/ooples/AiDotNet/issues/2421)) ([d290c71](https://github.com/ooples/AiDotNet/commit/d290c71c371be82edfb3c447e3e0b0d6e1494416))
+
 ## [0.235.0](https://github.com/ooples/AiDotNet/compare/v0.234.0...v0.235.0) (2026-10-29)
 
 
