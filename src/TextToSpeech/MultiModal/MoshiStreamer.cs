@@ -57,10 +57,12 @@ internal sealed class MoshiStreamer<T>
     /// One step. <paramref name="input"/> holds the streams the model does not predict (their raw values for this frame,
     /// written at their delays); <paramref name="forcedText"/> and <paramref name="forcedAudio"/> (per predicted stream,
     /// <see cref="Ungenerated"/> to sample) replace sampling; <paramref name="textLogitsBias"/> adjusts the text logits
-    /// before sampling. Returns the undelayed frame (text, then the predicted audio streams), or null until the delays
-    /// have passed.
+    /// before sampling and <paramref name="textFilter"/> may replace the sampled text token (App. C's TTS puts the next word
+    /// in place of a token that is not padding). Returns the undelayed frame (text, then the predicted audio streams), or
+    /// null until the delays have passed.
     /// </summary>
-    public int[]? Step(int[]? input = null, int? forcedText = null, int[]? forcedAudio = null, Action<double[]>? textLogitsBias = null)
+    public int[]? Step(int[]? input = null, int? forcedText = null, int[]? forcedAudio = null, Action<double[]>? textLogitsBias = null,
+        Func<int, int>? textFilter = null)
     {
         var c = _lm.Configuration;
         int ct = _maxDelay + 2, dep = c.DepthStreams, needed = c.Streams - dep - 1;
@@ -81,6 +83,7 @@ internal sealed class MoshiStreamer<T>
         textLogitsBias?.Invoke(logits);
         LastTextLogits = logits;
         int text = forcedText ?? Sample(logits, _sampling.TextTemperature, _sampling.TextTopK);
+        if (forcedText is null && textFilter is not null) text = textFilter(text);
         var audio = new int[dep];
         bool allForced = forcedAudio is not null && forcedAudio.Length >= dep && forcedAudio.Take(dep).All(v => v != Ungenerated);
         if (allForced) Array.Copy(forcedAudio!, audio, dep);

@@ -46,6 +46,9 @@ internal static class SpiritLmFixture
 
     public static int VocabularySize => (int)Reference.Value["tiny_pieces"]!;
 
+    /// <summary>The tiny SentencePiece model written to a temporary file (Moshi's fixture reads it too).</summary>
+    public static string TinyTokenizerPath => TokenizerPath.Value;
+
     /// <summary>An NLLB-layout tokenizer directory for the tiny SONAR text encoder: the fixture's SentencePiece model and
     /// two language codes (ids pieces + 1 and + 2).</summary>
     private static readonly Lazy<string> SonarTokenizerDirectory = new(() =>

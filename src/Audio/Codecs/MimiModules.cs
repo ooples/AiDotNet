@@ -483,9 +483,11 @@ internal sealed class MimiResidualQuantizer<T>
     /// once the codebook before it was, on an earlier step) and updates its averages; the output is the input plus the
     /// detached difference to the quantized sum (straight-through), or, with <paramref name="quantize"/> false, the
     /// unquantized projection (the paper's 50% quantization rate), projected back. The penalty is the mean over codebooks of
-    /// the mean squared distance from each residual to its detached quantization.
+    /// the mean squared distance from each residual to its detached quantization. With <paramref name="updateCodebooks"/>
+    /// false the codebooks only encode (their averages, initialization and dead codes untouched).
     /// </summary>
-    public (Tensor<T> Output, Tensor<T> Penalty, int[][] Codes) TrainingForward(Tensor<T> latent, int count, bool quantize, Random random)
+    public (Tensor<T> Output, Tensor<T> Penalty, int[][] Codes) TrainingForward(Tensor<T> latent, int count, bool quantize, Random random,
+        bool updateCodebooks = true)
     {
         var projected = InputProjection.Forward(latent);
         int frames = projected.Shape[2], dim = projected.Shape[1];
@@ -499,7 +501,7 @@ internal sealed class MimiResidualQuantizer<T>
         {
             var book = Codebooks[q];
             bool wasInitialized = book.Initialized;
-            codes[q] = book.Train(Detached(residual), previousInitialized, random);
+            codes[q] = updateCodebooks ? book.Train(Detached(residual), previousInitialized, random) : book.Encode(Detached(residual));
             previousInitialized = wasInitialized;
             var quantized = book.Decode(codes[q]);
             var difference = _engine.TensorSubtract(residual, quantized);
@@ -507,7 +509,7 @@ internal sealed class MimiResidualQuantizer<T>
             residual = _engine.TensorSubtract(residual, quantized);
             sum = sum is null ? quantized : _engine.TensorAdd(sum, quantized);
         }
-        for (int q = 0; q < count; q++) Codebooks[q].Commit();
+        if (updateCodebooks) for (int q = 0; q < count; q++) Codebooks[q].Commit();
         var output = quantize ? _engine.TensorAdd(x, Detached(_engine.TensorSubtract(sum!, x))) : x;
         var penalty = penalties[0];
         for (int q = 1; q < penalties.Count; q++) penalty = _engine.TensorAdd(penalty, penalties[q]);
@@ -655,13 +657,22 @@ internal sealed class Mimi<T>
     /// </summary>
     public (Tensor<T> Audio, Tensor<T> Semantic, Tensor<T> Penalty) TrainingForward(Tensor<T> audio, int acousticCodebooks, double noQuantizationRate, Random random)
     {
+        bool quantizeSemantic = random.NextDouble() > noQuantizationRate;
+        return TrainingForward(audio, acousticCodebooks, quantizeSemantic, random.NextDouble() > noQuantizationRate, random);
+    }
+
+    /// <summary>The training forward with the per-sequence quantization decisions given, and the codebooks updated or only
+    /// encoding (<see cref="MimiResidualQuantizer{T}.TrainingForward"/>).</summary>
+    public (Tensor<T> Audio, Tensor<T> Semantic, Tensor<T> Penalty) TrainingForward(Tensor<T> audio, int acousticCodebooks, bool quantizeSemantic,
+        bool quantizeAcoustic, Random random, bool updateCodebooks = true)
+    {
         var c = Configuration;
         int acousticMax = c.Codebooks - c.SemanticCodebooks;
         if (acousticCodebooks < 1 || acousticCodebooks > acousticMax) throw new ArgumentOutOfRangeException(nameof(acousticCodebooks), $"Mimi has 1 … {acousticMax} acoustic codebooks.");
         int length = audio.Shape[2];
         var latent = Latent(audio);
-        var (semantic, semanticPenalty, _) = _semantic.TrainingForward(latent, c.SemanticCodebooks, random.NextDouble() > noQuantizationRate, random);
-        var (acoustic, acousticPenalty, _) = _acoustic.TrainingForward(latent, acousticCodebooks, random.NextDouble() > noQuantizationRate, random);
+        var (semantic, semanticPenalty, _) = _semantic.TrainingForward(latent, c.SemanticCodebooks, quantizeSemantic, random, updateCodebooks);
+        var (acoustic, acousticPenalty, _) = _acoustic.TrainingForward(latent, acousticCodebooks, quantizeAcoustic, random, updateCodebooks);
         var quantized = _engine.TensorAdd(semantic, acoustic);
         int total = c.SemanticCodebooks + acousticCodebooks;
         var penalty = _engine.TensorAdd(_engine.TensorMultiplyScalar(semanticPenalty, NumOps.FromDouble((double)c.SemanticCodebooks / total)),

@@ -474,9 +474,6 @@
                          "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.KokoroTests::AiDotNet.Tests.ModelFamilyTests.Generated.KokoroTests.Training_ShouldReduceLoss"
                      },
                      {
-                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.KyutaiMoshiTests::AiDotNet.Tests.ModelFamilyTests.Generated.KyutaiMoshiTests.LossStrictlyDecreasesOnMemorizationTask"
-                     },
-                     {
                          "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.LinearRecurrentUnitLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.LinearRecurrentUnitLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
                      },
                      {
