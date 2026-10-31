@@ -7,8 +7,9 @@ the DiT is built through the release's constructor call with dim 32, depth 2, 2 
 smaller widths. Every torch.randn the CFM draws is replaced by a closed-form pattern (noise below) so the fixture need
 not store it. Records per version: the state dict; the style vector; decode_encp at speed 1 and 1.25 (with the recorded
 style vector); one cfm.inference; the release's chunked synthesis (inference_webui's v3/v4 loop, synthesize_v5_mel) over
-a target long enough for two chunks, subsampled; and the training loss with its draws fixed (with and without the
-shortcut bootstrap for v3/v4).
+a target long enough for two chunks, subsampled; the training loss with its draws fixed (with and without the
+shortcut bootstrap for v3/v4); and for v3, LoRA adapters (peft, as s2_train_v3_lora.py attaches them) before and after
+merging.
 
     docker run --rm -v <refsrc>:/ref -v <repo>:/repo -w /ref/GPT-SoVITS/GPT_SoVITS gptsovits-ref \
         python /repo/tools/reference-data/gptsovits_cfm_reference.py
@@ -143,6 +144,30 @@ def loss(model, ssl, spec, mel, text, prompt_u, t, bootstrap, k):
     return value.item()
 
 
+def lora(model):
+    """s2_train_v3_lora.py's adapters (rank 4 here, alpha = rank) with lora_B given values, the inference of the adapted
+    CFM, and of the merged one (merge_and_unload)."""
+    from peft import LoraConfig, get_peft_model
+    model.cfm = get_peft_model(model.cfm, LoraConfig(target_modules=["to_k", "to_q", "to_v", "to_out.0"], r=4, lora_alpha=4,
+                                                     init_lora_weights=True))
+    with torch.no_grad():
+        for name, p in model.cfm.named_parameters():
+            if "lora_B" in name:
+                p.copy_(torch.randn_like(p) * 0.1)
+    state = {k.replace("base_model.model.", ""): tolist(v) for k, v in model.cfm.state_dict().items() if "lora_" in k}
+    mu = real_randn(1, 9, BRIDGE)
+    prompt = real_randn(1, 100, 3)
+    torch.randn = patched_randn
+    with torch.no_grad():
+        calls["n"] = 0
+        adapted = model.cfm.inference(mu, torch.LongTensor([9]), prompt, 3, inference_cfg_rate=0)
+        merged_cfm = model.cfm.merge_and_unload()
+        calls["n"] = 0
+        merged = merged_cfm.inference(mu, torch.LongTensor([9]), prompt, 3, inference_cfg_rate=0)
+    torch.randn = real_randn
+    return {"rank": 4, "state": state, "mu": tolist(mu), "prompt": tolist(prompt), "adapted": tolist(adapted), "merged": tolist(merged)}
+
+
 def main():
     torch.manual_seed(7)
     torch.set_default_dtype(torch.float64)
@@ -194,6 +219,8 @@ def main():
             value = loss(model, ssl, spec, mel, text, 0.6, 0.35, bootstrap, k)
             losses.append({"bootstrap": bootstrap, "k": k, "prompt_u": 0.6, "t": 0.35, "loss": value})
         entry["loss"] = {"ssl": tolist(ssl), "spec": tolist(spec), "mel": tolist(mel), "mel_frames": mel_frames, "cases": losses}
+        if version == "v3":
+            entry["lora"] = lora(model)
         out["versions"][version] = entry
     path = os.path.join(HERE, "..", "..", "tests", "AiDotNet.Tests", "TextToSpeech", "ReferenceData", "gptsovits_cfm_reference.json")
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
