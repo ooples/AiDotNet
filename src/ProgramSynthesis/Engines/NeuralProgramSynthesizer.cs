@@ -15,7 +15,6 @@ using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.ProgramSynthesis.Options;
 using AiDotNet.Tensors.LinearAlgebra;
-using TreeSitter;
 
 namespace AiDotNet.ProgramSynthesis.Engines;
 
@@ -81,6 +80,10 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
     /// <param name="codeModel">The underlying code model (CodeT5 recommended).</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <param name="optimizer">Optional optimizer.</param>
+    /// <param name="executionEngine">Optional engine that runs candidate programs against test cases.</param>
+    /// <param name="options">Optional synthesizer options; defaults are used when null.</param>
+    /// <param name="sqlSyntaxValidator">Optional precise SQL validator; null falls back to the global registration.</param>
+    /// <param name="codeSyntaxProvider">Optional parser for validating generated code (for example TreeSitterCodeSyntaxProvider); null falls back to the host-level provider.</param>
     /// <remarks>
     /// <para>
     /// Creates a new neural program synthesizer. Uses a code model (like CodeT5)
@@ -103,7 +106,8 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         IProgramExecutionEngine? executionEngine = null,
         NeuralProgramSynthesizerOptions? options = null,
-        ISqlSyntaxValidator? sqlSyntaxValidator = null)
+        ISqlSyntaxValidator? sqlSyntaxValidator = null,
+        ICodeSyntaxProvider? codeSyntaxProvider = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new NeuralProgramSynthesizerOptions();
@@ -116,11 +120,16 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
         // process-global SqlSyntaxValidation.Validator only when not injected here, so
         // callers can supply their own validator without mutating global state.
         _sqlSyntaxValidator = sqlSyntaxValidator;
+        // The same for the code parser: the host-level fallback applies only when none is passed here.
+        _codeSyntaxProvider = codeSyntaxProvider;
         InitializeLayersCore();
     }
 
     /// <summary>Per-instance precise SQL validator; null falls back to the global registration.</summary>
     private readonly ISqlSyntaxValidator? _sqlSyntaxValidator;
+
+    /// <summary>Per-instance code parser; null falls back to the host-level provider.</summary>
+    private readonly ICodeSyntaxProvider? _codeSyntaxProvider;
 
     protected override void InitializeLayers()
     {
@@ -312,64 +321,24 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
             return ValidateSql(program.SourceCode);
         }
 
-        var treeSitterLanguageSpec = GetTreeSitterLanguageSpec(program.Language);
-        if (treeSitterLanguageSpec is not null)
+        // A registered parser (the TreeSitter one ships in the opt-in AiDotNet.CodeAnalysis.TreeSitter package, which
+        // keeps its native grammars out of core) validates precisely; it returns null for a language it cannot parse.
+        if ((_codeSyntaxProvider ?? CodeSyntaxProviders.Provider) is { } syntaxProvider)
         {
             try
             {
-                return ValidateWithTreeSitter(treeSitterLanguageSpec.Value, program.SourceCode);
+                if (syntaxProvider.TryValidate(program.Language, program.SourceCode) is { } parsed)
+                    return parsed;
             }
-            catch (DllNotFoundException)
-            {
-                return ValidateGenericSource(program.SourceCode);
-            }
-            catch (BadImageFormatException)
-            {
-                return ValidateGenericSource(program.SourceCode);
-            }
-            catch (InvalidOperationException)
-            {
-                return ValidateGenericSource(program.SourceCode);
-            }
-            catch (ArgumentException)
+            // Only a grammar library that cannot load falls back, under the same rule the tokenization pipeline uses
+            // (wrapped type-initializer failures included). A provider's own parse or argument errors surface.
+            catch (Exception ex) when (Tokenization.CodeTokenizationPipeline.IsNativeLoadFailure(ex))
             {
                 return ValidateGenericSource(program.SourceCode);
             }
         }
 
         return ValidateGenericSource(program.SourceCode);
-    }
-
-    private static (string LibraryName, string FunctionName)? GetTreeSitterLanguageSpec(ProgramLanguage language)
-    {
-        return language switch
-        {
-            ProgramLanguage.CSharp => ("tree-sitter-c-sharp", "tree_sitter_c_sharp"),
-            ProgramLanguage.Python => ("tree-sitter-python", "tree_sitter_python"),
-            ProgramLanguage.Java => ("tree-sitter-java", "tree_sitter_java"),
-            ProgramLanguage.JavaScript => ("tree-sitter-javascript", "tree_sitter_javascript"),
-            ProgramLanguage.TypeScript => ("tree-sitter-typescript", "tree_sitter_typescript"),
-            ProgramLanguage.C => ("tree-sitter-c", "tree_sitter_c"),
-            ProgramLanguage.CPlusPlus => ("tree-sitter-cpp", "tree_sitter_cpp"),
-            ProgramLanguage.Go => ("tree-sitter-go", "tree_sitter_go"),
-            ProgramLanguage.Rust => ("tree-sitter-rust", "tree_sitter_rust"),
-            _ => null
-        };
-    }
-
-    private static bool ValidateWithTreeSitter((string LibraryName, string FunctionName) languageSpec, string sourceCode)
-    {
-        using var language = new Language(languageSpec.LibraryName, languageSpec.FunctionName);
-        using var parser = new Parser(language);
-        using var tree = parser.Parse(sourceCode ?? string.Empty);
-
-        if (tree is null)
-        {
-            return false;
-        }
-
-        var root = tree.RootNode;
-        return !root.HasError && !root.IsError;
     }
 
     private bool ValidateSql(string sourceCode)

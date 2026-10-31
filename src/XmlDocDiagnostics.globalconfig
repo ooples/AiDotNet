@@ -1,0 +1,40 @@
+is_global = true
+
+# XML documentation diagnostics: repository-wide default (issue #2393, phase A-4).
+#
+# These 20 codes used to be suppressed with <NoWarn> in src/Directory.Build.props. NoWarn
+# overrides every analyzer-config severity, so no part of the codebase could be held to a
+# documentation standard. They are silenced here instead (severity = none, exactly the old
+# behaviour), and the repository .editorconfig re-enables them as errors for the documented
+# facade: an .editorconfig section takes precedence over a global config for the files it
+# matches.
+#
+# This is a global config (included by src/Directory.Build.props) rather than an .editorconfig
+# section on purpose: a global config applies to every syntax tree in the compilation, including
+# source-generator output, which lives under obj/ (or an --artifacts-path anywhere on disk) and
+# so is matched by no path-based .editorconfig section.
+#
+#   CS1591 missing XML comment; CS1570/CS1587/CS1592 malformed XML; CS1571/CS1572/CS1573
+#   duplicate/unmatched/missing param; CS1574/CS1580/CS1581/CS1584/CS1589/CS1590 bad cref or
+#   include; CS0419 ambiguous cref; CS1723 cref to a type parameter; CS1710/CS1711/CS1712
+#   duplicate/unmatched/missing typeparam; CS1734/CS1735 bad paramref/typeparamref.
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CS1570.severity = none
+dotnet_diagnostic.CS1571.severity = none
+dotnet_diagnostic.CS1572.severity = none
+dotnet_diagnostic.CS1573.severity = none
+dotnet_diagnostic.CS1574.severity = none
+dotnet_diagnostic.CS1580.severity = none
+dotnet_diagnostic.CS1581.severity = none
+dotnet_diagnostic.CS1584.severity = none
+dotnet_diagnostic.CS1587.severity = none
+dotnet_diagnostic.CS1589.severity = none
+dotnet_diagnostic.CS1590.severity = none
+dotnet_diagnostic.CS1592.severity = none
+dotnet_diagnostic.CS0419.severity = none
+dotnet_diagnostic.CS1710.severity = none
+dotnet_diagnostic.CS1711.severity = none
+dotnet_diagnostic.CS1712.severity = none
+dotnet_diagnostic.CS1723.severity = none
+dotnet_diagnostic.CS1734.severity = none
+dotnet_diagnostic.CS1735.severity = none

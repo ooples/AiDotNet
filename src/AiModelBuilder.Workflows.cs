@@ -1415,18 +1415,21 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     // Deployment Configuration Methods
     // ============================================================================
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null)
     {
         _quantizationConfig = config;
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCompression(CompressionConfig? config = null)
     {
         _compressionConfig = config ?? new CompressionConfig();
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null)
     {
         _storage.ConfigureCaching(config);
@@ -1434,6 +1437,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null)
     {
         _storage.ConfigureVersioning(config);
@@ -1441,6 +1445,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null)
     {
         _storage.ConfigureABTesting(config);
@@ -1448,6 +1453,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null)
     {
         _observability.ConfigureTelemetry(config);
@@ -1496,7 +1502,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// "use the auto-detect default": models above the parameter
     /// threshold (10B by default) auto-engage streaming; models below
     /// stay eager. Set via <see cref="ConfigureWeightStreaming"/> and
-    /// applied during model construction in <see cref="BuildAsync"/>.
+    /// applied during model construction in <see cref="BuildAsync()"/>.
     /// </summary>
     private WeightStreamingConfig? _weightStreamingConfig;
 
@@ -1809,6 +1815,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return new ProfilerSession(_profilingConfig);
     }
 
+    /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)
     {
         _exportConfig = config;
@@ -2346,7 +2353,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <para>
     /// Tokenizer selection:
     /// - If <paramref name="options"/> provides a tokenizer, it is used.
-    /// - Otherwise, if a tokenizer was configured earlier via <see cref="ConfigureTokenizer"/>, that tokenizer is reused.
+    /// - Otherwise, if an earlier <c>ConfigureProgramSynthesis</c> call on this builder resolved a tokenizer, that tokenizer is reused.
     /// - If no tokenizer is available, a code-aware tokenizer is created automatically based on the target language.
     /// </para>
     /// <para>
@@ -2449,6 +2456,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         // Store the program-synthesis model separately so it is available regardless of the primary model's TInput/TOutput types.
         _programSynthesisModel = codeModel;
+        _codeSyntaxProvider = options.SyntaxProvider ?? _codeSyntaxProvider;
 
         // If compatible, also apply as the primary model (supports code-only workflows).
         if (codeModel is IFullModel<T, TInput, TOutput> fullModel)

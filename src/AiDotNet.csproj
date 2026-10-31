@@ -60,6 +60,8 @@
     <InternalsVisibleTo Include="AiDotNetTests" />
     <InternalsVisibleTo Include="AiDotNetTestConsole" />
     <InternalsVisibleTo Include="AiDotNet.Serving" />
+    <!-- The TreeSitter AST extractor builds spans with the internal CodeSpanBuilder. -->
+    <InternalsVisibleTo Include="AiDotNet.CodeAnalysis.TreeSitter" />
     <InternalsVisibleTo Include="AiDotNet.Serving.Tests" />
     <InternalsVisibleTo Include="AiDotNet.ProgramSynthesis.Tooling" />
     <InternalsVisibleTo Include="AiDotNetBenchmarkTests" />
@@ -97,7 +99,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Azure.Search.Documents" />
 	  <!-- audit-2026-05 phase 2b: Elasticsearch backend extracted to
 	       src/AiDotNet.Storage.Elasticsearch (consumers add a project /
 	       package reference to AiDotNet.Storage.Elasticsearch to opt in).
@@ -120,7 +121,12 @@
 	       and falls back to generic validation when none is registered. The
 	       SQLite-backed validator ships in AiDotNet.Storage.Sqlite.
 	  <PackageReference Include="Microsoft.Data.Sqlite" /> -->
-	  <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+	  <!-- ONNX Runtime's MANAGED API only (about 1 MB). The full Microsoft.ML.OnnxRuntime package adds every platform's
+	       native runtime, about 151 MB, to every AiDotNet consumer. An application that loads ONNX models (a model's
+	       onnxModelPath constructor, ONNX export round-trips, the ONNX rerankers) adds the native package it wants:
+	       Microsoft.ML.OnnxRuntime (CPU), .Gpu or .DirectML. This is the reference pattern ONNX Runtime documents
+	       for libraries (#2393). -->
+	  <PackageReference Include="Microsoft.ML.OnnxRuntime.Managed" />
 	  <!-- Microsoft.Research.SEALNet (homomorphic encryption) extracted to the
 	       opt-in AiDotNet.Privacy.HE metapackage in audit-2026-05 phase 2c
 	       (finding #14). SealHomomorphicEncryptionProvider moved there; the
@@ -143,7 +149,8 @@
 	  <!-- StackExchange.Redis lives only in the opt-in AiDotNet.Storage.Redis
 	       metapackage; the core package must not pull it transitively. -->
 	  <PackageReference Include="System.ValueTuple" />
-	  <PackageReference Include="TreeSitter.DotNet" />
+	  <!-- TreeSitter.DotNet (native grammars, about 51 MB) lives only in the opt-in AiDotNet.CodeAnalysis.TreeSitter
+	       package (#2393); core reaches it through ICodeSyntaxProvider / CodeSyntaxProviders. -->
 	  <PackageReference Include="FftSharp" />
 	  <PackageReference Include="Parquet.Net" />
 	  <!-- Explicit pin to override vulnerable transitive Snappier 1.3.0 (GHSA-pggp-6c3x-2xmx) -->
@@ -225,6 +232,9 @@
 	  <Compile Remove="AiDotNet.Storage.Sqlite\**\*.cs" />
 	  <EmbeddedResource Remove="AiDotNet.Storage.Sqlite\**\*" />
 	  <None Remove="AiDotNet.Storage.Sqlite\**\*" />
+	  <Compile Remove="AiDotNet.CodeAnalysis.TreeSitter\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.CodeAnalysis.TreeSitter\**\*" />
+	  <None Remove="AiDotNet.CodeAnalysis.TreeSitter\**\*" />
 	</ItemGroup>
 
 	<!-- Exclude the AiDotNet.Playground project files from this project -->
@@ -310,8 +320,6 @@
 	  Users can also install these separately to enable specific accelerators.
 	-->
 	<ItemGroup>
-	  <!-- CPU acceleration via OpenBLAS -->
-	  <PackageReference Include="AiDotNet.Native.OpenBLAS" />
 	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
 	  <PackageReference Include="AiDotNet.Native.CLBlast" />
 	  <!-- CPU acceleration via Intel OneDNN -->

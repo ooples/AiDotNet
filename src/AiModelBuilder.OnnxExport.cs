@@ -14,7 +14,7 @@ namespace AiDotNet;
 /// <remarks>
 /// v0.1 limitation: the flag does NOT auto-fire from inside <c>Build()</c>. Users
 /// call <see cref="ValidateOnnxExportableIfRequired"/> on the resulting model, or
-/// simply rely on <see cref="AiModelResultOnnxExtensions.ExportToOnnx"/> to throw
+/// simply rely on <see cref="AiModelResultOnnxExtensions.ExportToOnnx{T, TInput, TOutput}(AiModelResult{T, TInput, TOutput}, string, OnnxExportOptions)"/> to throw
 /// at export time. A future PR can wire the flag into the Build() pipeline so
 /// the check fires eagerly.
 /// </remarks>

@@ -8,9 +8,6 @@ namespace AiDotNet;
 /// <summary>
 /// Segmentation-specific fields and configuration for AiModelBuilder.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input type.</typeparam>
-/// <typeparam name="TOutput">The output type.</typeparam>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private SegmentationVisualizationConfig? _segmentationVisualizationConfig;
@@ -39,7 +36,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> These methods let you perform segmentation on images after configuring
-/// a model with <see cref="AiModelBuilder{T, TInput, TOutput}.ConfigureModel"/>. Each method
+/// a model with <see cref="AiModelBuilder{T, TInput, TOutput}.ConfigureModel(IFullModel{T, TInput, TOutput})"/>. Each method
 /// detects what kind of segmentation model you configured and calls the appropriate interface.
 ///
 /// Usage pattern:

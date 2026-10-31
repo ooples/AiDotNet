@@ -42,6 +42,8 @@ namespace AiDotNet.Interfaces;
 /// - Create different variations of models without writing repetitive code
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data the model consumes, for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
+/// <typeparam name="TOutput">The type of output the model produces, for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
 public interface IAiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
@@ -783,12 +785,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <summary>
     /// Configures distributed training across multiple GPUs or machines.
     /// </summary>
-    /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
-    /// <param name="strategy">Distributed training strategy. Default is FSDP.</param>
-    /// <param name="autoSyncGradients">Whether to automatically synchronize gradients. Default is true.</param>
-    /// <param name="minimumParameterGroupSize">Minimum parameter group size for communication. Default is 1024.</param>
-    /// <param name="enableGradientCompression">Whether to enable gradient compression. Default is false.</param>
-    /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
     /// When distributed training is configured, the builder automatically wraps the model and optimizer
@@ -2437,11 +2433,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
 
     // ── Extended Coverage: Model Options, Data Transformers, Splitting, Metrics, Vectorization, Storage ──
 
-    /// <summary>
-    /// Configures model options that control training behavior and hyperparameters.
-    /// </summary>
-    /// <param name="options">The model options to apply.</param>
-    /// <returns>The builder instance for method chaining.</returns>
     // ConfigureModelOptions was removed: a model's options are a constructor parameter
     // (new NBEATSModel<T>(new NBEATSModelOptions<T> { ... })), read during construction to build the
     // model's layers and state. By the time the builder sees the model those decisions are already
@@ -2449,11 +2440,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     // exposes only GetOptions(); there is no setter to route this to. It accepted an options object
     // and silently discarded it; removing it turns that runtime no-op into a compile error.
 
-    /// <summary>
-    /// Configures a data transformer for preprocessing or postprocessing data transformations.
-    /// </summary>
-    /// <param name="transformer">The data transformer implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
     // ConfigureDataTransformer was removed: it was a strict duplicate of ConfigurePreprocessing,
     // which takes the identical IDataTransformer<T, TInput, TInput> and is fully wired. Its doc
     // claimed "preprocessing OR postprocessing", but its type parameters <T, TInput, TInput> only

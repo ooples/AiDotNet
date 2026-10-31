@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>AiDotNet.Serving</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,6 +31,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AiDotNet.csproj" />
+    <ProjectReference Include="..\AiDotNet.CodeAnalysis.TreeSitter\AiDotNet.CodeAnalysis.TreeSitter.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Core references only ONNX Runtime's managed API; running ONNX models needs a native runtime. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
   </ItemGroup>
 
 </Project>

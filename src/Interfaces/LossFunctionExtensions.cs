@@ -17,7 +17,7 @@ namespace AiDotNet.Interfaces;
 /// it belongs to — the two are the same expression.
 /// </para>
 /// <para>
-/// <b>Prefer your own tape when you have one.</b> <see cref="ComputeGradient{T}"/> opens a tape,
+/// <b>Prefer your own tape when you have one.</b> <see cref="ComputeGradient{T}(ILossFunction{T}, Tensor{T}, Tensor{T})"/> opens a tape,
 /// records one loss, and discards it. If you are already running a forward pass under a tape, record
 /// <c>ComputeTapeLoss</c> on <i>that</i> tape instead: one tape then spans forward and loss, you get
 /// parameter gradients directly, and the intermediate prediction-space gradient never has to be

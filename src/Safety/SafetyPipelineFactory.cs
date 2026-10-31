@@ -180,8 +180,23 @@ internal static class SafetyPipelineFactory<T>
 
         if (config.Watermarking.EffectiveImageWatermarking || config.Watermarking.EffectiveDetectionMode)
         {
+            double strength = config.Watermarking.EffectiveWatermarkStrength;
+            if (double.IsNaN(strength) || strength <= 0 || strength > 1)
+                throw new InvalidOperationException(
+                    $"Watermarking.WatermarkStrength must be in (0, 1]; got {strength}.");
+
+            // A watermark made with the public key proves nothing, since anyone can reproduce it, so marking
+            // images requires the application's own key. Detection alone may look for public-key marks.
+            string? key = config.Watermarking.ImageWatermarkKey;
+            if (config.Watermarking.EffectiveImageWatermarking
+                && (string.IsNullOrWhiteSpace(key) || string.Equals(key, ImageWatermarkerBase<T>.PublicKey, StringComparison.Ordinal)))
+                throw new InvalidOperationException(
+                    "Watermarking.ImageWatermarking requires Watermarking.ImageWatermarkKey: a secret key of your own " +
+                    "(not blank and not the published PublicKey), so the watermark cannot be forged.");
+
             pipeline.AddModule(new ImageWatermarker<T>(
-                watermarkStrength: config.Watermarking.EffectiveWatermarkStrength));
+                watermarkStrength: strength,
+                key: string.IsNullOrWhiteSpace(key) ? null : key));
         }
 
         if (config.Watermarking.EffectiveAudioWatermarking || config.Watermarking.EffectiveDetectionMode)

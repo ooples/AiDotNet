@@ -183,6 +183,35 @@ dotnet_diagnostic.ADN0063.severity = warning
 [tests/AiDotNet.Tests/IntegrationTests/Document/*.cs]
 dotnet_diagnostic.CA2000.severity = error
 
+# XML documentation diagnostics for the documented facade (issue #2393, phase A-4).
+# src/XmlDocDiagnostics.globalconfig silences the 20 XML-doc codes for everything; this section
+# overrides it (an .editorconfig section beats a global config) and makes doc defects build
+# errors in AiModelBuilder, AiModelResult, the Serving extensions over it, and the interfaces
+# those types expose in their public signatures, and every public interface under src/Interfaces (A-4 slice 2).
+# When a further area is fully documented, add
+# its paths here.
+[{src/AiModelBuilder*.cs,src/Models/Results/AiModelResult*.cs,src/AiDotNet.Serving/Extensions/AiModelResultExtensions.cs,src/Interfaces/IAiModelBuilder.cs,src/Interfaces/IFullModel.cs,src/Configuration/IConfiguredView.cs,src/Interfaces/**.cs}]
+dotnet_diagnostic.CS1591.severity = error
+dotnet_diagnostic.CS1570.severity = error
+dotnet_diagnostic.CS1571.severity = error
+dotnet_diagnostic.CS1572.severity = error
+dotnet_diagnostic.CS1573.severity = error
+dotnet_diagnostic.CS1574.severity = error
+dotnet_diagnostic.CS1580.severity = error
+dotnet_diagnostic.CS1581.severity = error
+dotnet_diagnostic.CS1584.severity = error
+dotnet_diagnostic.CS1587.severity = error
+dotnet_diagnostic.CS1589.severity = error
+dotnet_diagnostic.CS1590.severity = error
+dotnet_diagnostic.CS1592.severity = error
+dotnet_diagnostic.CS0419.severity = error
+dotnet_diagnostic.CS1710.severity = error
+dotnet_diagnostic.CS1711.severity = error
+dotnet_diagnostic.CS1712.severity = error
+dotnet_diagnostic.CS1723.severity = error
+dotnet_diagnostic.CS1734.severity = error
+dotnet_diagnostic.CS1735.severity = error
+
 [src/libraries/System.Net.Http/src/System/Net/Http/{SocketsHttpHandler/Http3RequestStream.cs,BrowserHttpHandler/BrowserHttpHandler.cs}]
 # disable CA2025, the analyzer throws a NullReferenceException when processing this file: https://github.com/dotnet/roslyn-analyzers/issues/7652
 dotnet_diagnostic.CA2025.severity = none

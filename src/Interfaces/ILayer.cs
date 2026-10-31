@@ -15,13 +15,13 @@ namespace AiDotNet.Interfaces;
 /// This interface defines what all layers must be able to do, regardless of their specific type.
 /// Think of it as a checklist of abilities that every layer must have to work within our neural network.
 /// </remarks>
-[AiDotNet.Configuration.YamlConfigurable("Layer")]
 /// <remarks>
 /// ParameterCount, GetParameters and SetParameters come from <see cref="IParameterSource{T}"/>,
 /// the minimal contract shared with models and internal components. Inheriting it means a layer
 /// can BE a component of a model -- which several VAEs rely on, holding their encoder and
 /// decoder stacks as plain layer lists.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Layer")]
 public interface ILayer<T> : IParameterSource<T>, IDiagnosticsProvider, IWeightLoadable<T>
 {
     /// <summary>

@@ -10,7 +10,7 @@ namespace AiDotNet.Interfaces;
 /// <b>For Beginners:</b> some time-series models forecast using known future conditions —
 /// "next month is a holiday", "the promotion runs for N days". Those are <i>exogenous</i>
 /// variables. To forecast N steps ahead you pass an N-row matrix whose columns are those
-/// future values. The unified <see cref="AiDotNet.Models.Results.AiModelResult{T, TInput, TOutput}.Predict"/>
+/// future values. The unified <see cref="AiDotNet.Models.Results.AiModelResult{T, TInput, TOutput}.Predict(TInput)"/>
 /// front routes such models here, so callers use one <c>Predict</c> entry point for every
 /// time-series model class (univariate, exogenous, multivariate).
 /// </remarks>

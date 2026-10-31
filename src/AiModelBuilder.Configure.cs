@@ -271,21 +271,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Configures the optimization algorithm to find the best model parameters.
-    /// </summary>
-    /// <param name="optimizationAlgorithm">The optimization algorithm to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> The optimizer helps find the best settings for your model.
-    /// It's like having someone adjust the knobs on a radio to get the clearest signal.
-    /// The optimizer tries different settings and keeps the ones that work best.
-    /// </remarks>
-    /// <summary>
     /// Configures TARGET (label) scaling for regression: the targets are scaled (default: z-score via
     /// <see cref="AiDotNet.Preprocessing.TargetStandardScaler{T,TOutput}"/>) before training — fit on the
     /// TRAINING split only — and <c>Predict</c> automatically inverse-transforms model outputs back to the
     /// ORIGINAL target units. Pass a custom pipeline to control the transformation.
     /// </summary>
+    /// <param name="pipeline">The target transformation pipeline, or <c>null</c> (the default) for a pipeline
+    /// containing a single <see cref="AiDotNet.Preprocessing.TargetStandardScaler{T,TOutput}"/>.</param>
+    /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> If your target is, say, a price in the hundreds while your features are
     /// scaled to ~1, gradient training struggles. This scales the target down for training and scales
@@ -313,6 +306,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// features map to different within-group ranks on different dates), collapsing the net to a constant.
     /// Neural models with Tensor inputs only; epochs come from the configured optimizer's MaxIterations.
     /// </summary>
+    /// <param name="groups">The query groups; each inner list holds the training row indices of one group.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="groups"/> is <c>null</c> or empty.</exception>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingGroups(IReadOnlyList<IReadOnlyList<int>> groups)
     {
         if (groups is null || groups.Count == 0)
@@ -324,6 +320,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return this;
     }
 
+    /// <summary>
+    /// Configures the optimization algorithm to find the best model parameters.
+    /// </summary>
+    /// <param name="optimizationAlgorithm">The optimization algorithm to use.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> The optimizer helps find the best settings for your model.
+    /// It's like having someone adjust the knobs on a radio to get the clearest signal.
+    /// The optimizer tries different settings and keeps the ones that work best.
+    /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _trainingCore.ConfigureOptimizer(optimizationAlgorithm);
@@ -490,7 +496,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// - ✅ Memory-constrained scenarios where you need bigger batch sizes
     /// - ❌ Non-gradient optimizers (evolutionary algorithms, random search)
     /// - ❌ CPU-only training (minimal benefit without Tensor Cores)
-    /// - ❌ Very small models (<1M parameters) where memory isn't a concern
+    /// - ❌ Very small models (&lt;1M parameters) where memory isn't a concern
     /// - ❌ Non-float types (double, decimal, int)
     ///
     /// <b>Technical Details:</b>
@@ -845,7 +851,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <remarks>
     /// <para>
     /// Useful for production observability — shows exactly which of AVX2/AVX-512/NEON,
-    /// CUDA/OpenCL/HIP, OpenBLAS/CLBlast/MKL are active on the target host. Users can
+    /// CUDA/OpenCL/HIP, CLBlast and oneDNN are active on the target host. Users can
     /// assert against the returned snapshot in CI (e.g., fail build if AVX-512 isn't
     /// detected on an Intel Xeon host).
     /// </para>
@@ -924,7 +930,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>This builder for fluent chaining.</returns>
     /// <remarks>
     /// <para>
-    /// By default, <see cref="BuildAsync"/> calls
+    /// By default, <see cref="BuildAsync()"/> calls
     /// <c>AiDotNetEngine.SetDeterministicMode(true)</c> so every model built by
     /// this library produces bitwise-identical results across runs on the same
     /// hardware.
@@ -981,7 +987,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// - ✅ Large datasets (>10,000 samples)
     /// - ✅ Matrix-heavy operations (linear regression, etc.)
     /// - ✅ When you have a GPU available
-    /// - ⚠️ Small datasets (<1,000 samples) - minimal benefit
+    /// - ⚠️ Small datasets (&lt;1,000 samples) - minimal benefit
     /// - ⚠️ Simple models with no matrix operations - no benefit
     ///
     /// <b>Performance Expectations:</b>
@@ -990,7 +996,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// - Large matrix multiplication: **50-100x faster**
     /// - Neural network training: **10-50x faster**
     /// - Element-wise operations: **5-20x faster**
-    /// - Small operations (<100K elements): Similar or slower (transfer overhead)
+    /// - Small operations (&lt;100K elements): Similar or slower (transfer overhead)
     ///
     /// The system automatically uses CPU for small operations and GPU for large ones,
     /// so you get optimal performance without any manual tuning!
@@ -1594,6 +1600,30 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
+    /// <summary>
+    /// Builds the configured model, observing a cancellation token. This is the overload every other
+    /// <c>BuildAsync</c> overload delegates to.
+    /// </summary>
+    /// <param name="cancellationToken">A token that cancels the build. It is checked before any work starts. What it
+    /// does after that depends on the training path: the supervised and streaming paths stop at the next epoch
+    /// boundary and return the model trained so far (they do not throw), and data loading observes it. The
+    /// self-supervised and image-only paths throw at the next epoch boundary, and the evolution path passes it to the
+    /// evolution run. The reinforcement-learning and meta-learning paths, and the AutoML inner search, do not observe
+    /// it once training has started.</param>
+    /// <returns>A task whose result is the trained <see cref="AiModelResult{T, TInput, TOutput}"/>.</returns>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled before
+    /// training started or during data loading; on the self-supervised and image-only paths, during training (thrown
+    /// at the next epoch boundary); or while the evolution run observed it.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if no training path was configured, or the configured
+    /// RAG components do not form a valid pipeline.</exception>
+    /// <exception cref="NotSupportedException">Streaming training options were configured but the data loader is not
+    /// an <c>IStreamingDataLoader</c>.</exception>
+    /// <remarks>
+    /// Before training, this applies the build-wide settings (gradient checkpointing, weight streaming, JIT
+    /// compilation and the deterministic-by-default engine mode unless <see cref="AllowNondeterminism"/> was called),
+    /// validates any configured RAG components, and then runs the training path that matches the configuration.
+    /// See <see cref="BuildAsync()"/> for the available paths and examples.
+    /// </remarks>
     public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -1813,6 +1843,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
             JitCompiledFunction = BuildCompiledPredictFunction(optimizationResult.BestSolution),
@@ -2187,6 +2218,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             PromptTemplate = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,
@@ -2252,13 +2284,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return search.Search();
     }
 
-    /// <summary>
-    /// Internal method that performs reinforcement learning training.
-    /// This contains all the core RL training logic.
-    /// </summary>
-    /// <param name="episodes">Number of episodes to train for.</param>
-    /// <param name="verbose">Whether to print training progress.</param>
-    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
 #pragma warning disable CS1998
     // ── SELF-SUPERVISED / GENERATIVE TRAINING ────────────────────────────────
     // Trains a model that owns its objective (ISelfSupervisedModel, e.g. diffusion).
@@ -2479,6 +2504,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             PromptTemplate = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,
@@ -2540,6 +2566,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
+    /// <summary>
+    /// Internal method that performs reinforcement learning training.
+    /// This contains all the core RL training logic.
+    /// </summary>
+    /// <param name="episodes">Number of episodes to train for.</param>
+    /// <param name="verbose">Whether to print training progress.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
         // RL TRAINING PATH
@@ -2854,6 +2887,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             PromptTemplate = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,

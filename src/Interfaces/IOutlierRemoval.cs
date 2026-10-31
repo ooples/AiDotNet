@@ -4,6 +4,8 @@ namespace AiDotNet.Interfaces;
 /// Defines methods for detecting and removing outliers from datasets.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// <b>For Beginners:</b> Outliers are unusual data points that differ significantly from most of your data.
 /// These unusual values can negatively impact machine learning models by skewing results.

@@ -43,9 +43,8 @@
   </ItemGroup>
 
   <!--
-    Native acceleration packages are now provided via NuGet.
-    OpenBLAS and CLBlast are included via AiDotNet's transitive dependencies.
-    OneDNN will be added once the AiDotNet.Native.OneDNN package is published.
+    Native acceleration packages come from AiDotNet's transitive dependencies: CLBlast and OneDNN.
+    (AiDotNet.Tensors has no native BLAS since its #368, so there is no OpenBLAS package.)
   -->
 
 </Project>

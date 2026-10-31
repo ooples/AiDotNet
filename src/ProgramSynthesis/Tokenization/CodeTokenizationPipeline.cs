@@ -10,6 +10,21 @@ namespace AiDotNet.ProgramSynthesis.Tokenization;
 /// </summary>
 public sealed class CodeTokenizationPipeline : ICodeTokenizationPipeline
 {
+    private readonly Interfaces.ICodeSyntaxProvider? _syntaxProvider;
+
+    /// <summary>Creates a pipeline that uses the host's fallback parser, if any, for syntax trees.</summary>
+    public CodeTokenizationPipeline()
+        : this(null)
+    {
+    }
+
+    /// <summary>Creates a pipeline that extracts syntax trees with <paramref name="syntaxProvider"/>.</summary>
+    /// <param name="syntaxProvider">The parser to use; null uses the host's fallback parser, if any.</param>
+    public CodeTokenizationPipeline(Interfaces.ICodeSyntaxProvider? syntaxProvider)
+    {
+        _syntaxProvider = syntaxProvider;
+    }
+
     public CodeTokenizationResult Tokenize(
         string code,
         ProgramLanguage language,
@@ -55,15 +70,36 @@ public sealed class CodeTokenizationPipeline : ICodeTokenizationPipeline
 
         var result = Tokenize(code, language, tokenizer, options, filePath);
 
-        if (pipelineOptions.IncludeAst &&
-            TreeSitterAstExtractor.TryExtractAst(code, language, pipelineOptions, out var nodes, out var edges))
+        if (pipelineOptions.IncludeAst && (_syntaxProvider ?? Engines.CodeSyntaxProviders.Provider) is { } syntaxProvider)
         {
-            result.AstNodes = nodes;
-            result.AstEdges = edges;
+            // A provider's native grammar is optional: when it cannot load, the tokenization still stands and the
+            // result says why it has no syntax tree.
+            try
+            {
+                if (syntaxProvider.TryExtractAst(code, language, pipelineOptions, out var nodes, out var edges))
+                {
+                    result.AstNodes = nodes;
+                    result.AstEdges = edges;
+                }
+            }
+            catch (Exception ex) when (IsNativeLoadFailure(ex))
+            {
+                result.AstUnavailableReason =
+                    $"The syntax provider could not load its native grammar for {language} ({ex.GetType().Name}); the result has no syntax tree.";
+            }
         }
 
         return result;
     }
+
+    /// <summary>
+    /// True when a syntax provider failed because its native grammar library could not load (missing, wrong
+    /// architecture, missing entry point), including a failure wrapped by a type initializer. Only these warrant a
+    /// fallback to generic handling; a parser's own errors are real failures.
+    /// </summary>
+    internal static bool IsNativeLoadFailure(Exception ex) =>
+        ex is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException
+        || (ex is TypeInitializationException { InnerException: { } inner } && IsNativeLoadFailure(inner));
 
     private static List<CodeSpan> BuildSpansFromOffsets(string text, List<(int Start, int End)> offsets)
     {

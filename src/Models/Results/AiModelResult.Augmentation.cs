@@ -16,8 +16,14 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// <param name="data">The input data to predict on.</param>
     /// <param name="convertToModelInput">Function to convert augmented data to model input type.</param>
     /// <param name="convertFromModelOutput">Function to convert model output to a format suitable for aggregation.</param>
+    /// <param name="augmentationPipeline">
+    /// The augmentation policy applied <c>TTANumAugmentations</c> times (from the configured augmentation options) to
+    /// produce the augmented variants, or <c>null</c> to predict on the original input only, which then requires
+    /// <c>TTAIncludeOriginal</c> to be enabled.
+    /// </param>
     /// <returns>A TTA result containing the aggregated prediction and individual predictions.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if TTA is not configured or disabled.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if TTA is not configured or disabled, or if no prediction
+    /// was made (no augmentation policy and <c>TTAIncludeOriginal</c> disabled).</exception>
     /// <remarks>
     /// <para>
     /// Test-Time Augmentation improves prediction accuracy by:
@@ -110,6 +116,11 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// Makes a prediction using Test-Time Augmentation when input/output types match augmentation types.
     /// </summary>
     /// <param name="data">The input data to predict on (must be augmentable).</param>
+    /// <param name="augmentationPipeline">
+    /// The augmentation policy applied <c>TTANumAugmentations</c> times (from the configured augmentation options) to
+    /// produce the augmented variants, or <c>null</c> to predict on the original input only, which then requires
+    /// <c>TTAIncludeOriginal</c> to be enabled.
+    /// </param>
     /// <returns>A TTA result containing the aggregated prediction and individual predictions.</returns>
     /// <remarks>
     /// This is a simplified overload for when TInput is directly augmentable (e.g., ImageTensor).
