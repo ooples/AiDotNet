@@ -29,6 +29,22 @@ internal enum ConformerAsrBlock
     /// <summary>E-Branchformer (Kim et al. 2022): Branchformer's branches merged through a depthwise convolution, between
     /// macaron feed-forward modules.</summary>
     EBranchformer,
+
+    /// <summary>A pre-norm Transformer encoder layer (ESPnet's): self-attention and a ReLU feed-forward network, each with
+    /// a residual, after absolute sinusoidal positions are added to the scaled input.</summary>
+    Transformer,
+}
+
+/// <summary>The convolutional front end that shortens the feature sequence.</summary>
+internal enum ConformerAsrSubsampling
+{
+    /// <summary>Two 3x3 stride-2 convolutions with ReLU: 4x (Gulati et al. 2020, Figure 1).</summary>
+    Conv4x,
+
+    /// <summary>Fast Conformer's 8x depthwise-separable striding (Rekesh et al. 2023, section 3.1): a 3x3 stride-2
+    /// convolution, then two depthwise 3x3 stride-2 convolutions each followed by a pointwise convolution, all with ReLU
+    /// and padding 1.</summary>
+    DepthwiseStriding8x,
 }
 
 /// <summary>A Conformer recognizer's shape: front end, encoder and decoder.</summary>
@@ -39,6 +55,9 @@ internal sealed record ConformerAsrConfiguration
     public int WindowLength { get; init; } = 400;
     public int HopLength { get; init; } = 160;
     public double LogMelFloor { get; init; } = 1e-6;
+    public ConformerAsrSubsampling Subsampling { get; init; } = ConformerAsrSubsampling.Conv4x;
+    /// <summary>Channels of the 8x depthwise-striding front end (Fast Conformer: 256).</summary>
+    public int SubsamplingChannels { get; init; } = 256;
     public int EncoderDim { get; init; } = 256;
     public int NumEncoderLayers { get; init; } = 16;
     public int NumAttentionHeads { get; init; } = 4;
@@ -49,10 +68,19 @@ internal sealed record ConformerAsrConfiguration
     public int CgmlpDim { get; init; } = 2048;
     /// <summary>Depthwise kernel of E-Branchformer's merge convolution.</summary>
     public int MergeKernel { get; init; } = 31;
+    /// <summary>Encoder layers (1-based) whose outputs get an intermediate CTC loss through the shared CTC layer.</summary>
+    public int[] IntermediateCtcLayers { get; init; } = Array.Empty<int>();
+    /// <summary>Weight of the mean intermediate CTC loss: L = (1 - w) L_CTC + w L_inter.</summary>
+    public double IntermediateCtcWeight { get; init; }
+    /// <summary>Whether each intermediate prediction is fed back into the next layer's input (self-conditioned CTC,
+    /// Nozaki and Komatsu 2021, Equation 9).</summary>
+    public bool SelfConditioning { get; init; }
     /// <summary>Rotary base standing in for the relative positional encoding; zero for none.</summary>
     public double RopeTheta { get; init; } = 10000.0;
     /// <summary>Encoder frames per attention chunk (streaming); zero attends over the whole input.</summary>
     public int AttentionChunkSize { get; init; }
+    /// <summary>Whether the blocks see only past frames (causal attention and convolution), for streaming.</summary>
+    public bool Causal { get; init; }
     public ConformerAsrDecoder Decoder { get; init; } = ConformerAsrDecoder.Ctc;
     public int PredictionDim { get; init; } = 640;
     public int PredictionLayers { get; init; } = 1;
@@ -101,21 +129,41 @@ internal sealed class ConformerAsrNetwork<T>
             throw new ArgumentException($"EncoderDim {d} must divide into {_o.NumAttentionHeads} heads.", nameof(options));
         _mel = new MelSpectrogram<T>(sampleRate: _o.SampleRate, nMels: _o.NumMels, nFft: _o.WindowLength,
             hopLength: _o.HopLength, logMel: true, logOffset: _o.LogMelFloor);
-        FirstConv = Own(new Conv2DLayer<T>(1, d, 3, 3, 2, 2, 0, 0));
-        SecondConv = Own(new Conv2DLayer<T>(d, d, 3, 3, 2, 2, 0, 0));
-        _subsampledBins = Subsampled(Subsampled(_o.NumMels));
+        if (_o.Subsampling == ConformerAsrSubsampling.Conv4x)
+        {
+            FirstConv = Own(new Conv2DLayer<T>(1, d, 3, 3, 2, 2, 0, 0));
+            SecondConv = Own(new Conv2DLayer<T>(d, d, 3, 3, 2, 2, 0, 0));
+            _subsampledBins = Subsampled(Subsampled(_o.NumMels));
+            _channels = d;
+        }
+        else
+        {
+            int c = _o.SubsamplingChannels;
+            FirstConv = Own(new Conv2DLayer<T>(1, c, 3, 3, 2, 2, 1, 1));
+            DepthwiseStages.Add(Own(new DepthwiseSeparableConvolutionalLayer<T>(c, 3, stride: 2, padding: 1, activation: (IActivationFunction<T>)new ReLUActivation<T>())));
+            DepthwiseStages.Add(Own(new DepthwiseSeparableConvolutionalLayer<T>(c, 3, stride: 2, padding: 1, activation: (IActivationFunction<T>)new ReLUActivation<T>())));
+            _subsampledBins = Padded(Padded(Padded(_o.NumMels)));
+            _channels = c;
+        }
         if (_subsampledBins <= 0) throw new ArgumentException("Too few mel bins for two stride-2 3x3 convolutions.", nameof(options));
         InputProjection = Own(new DenseLayer<T>(d, identity));
         for (int i = 0; i < _o.NumEncoderLayers; i++)
         {
             if (_o.Block == ConformerAsrBlock.Conformer)
                 Blocks.Add(Own(new ConformerBlockLayer<T>(d, _o.NumAttentionHeads, _o.FeedForwardMultiplier, _o.ConvKernel,
-                    ropeTheta: _o.RopeTheta, attentionChunkSize: _o.AttentionChunkSize)));
+                    ropeTheta: _o.RopeTheta, attentionChunkSize: _o.AttentionChunkSize, causal: _o.Causal)));
+            else if (_o.Block == ConformerAsrBlock.Transformer) TransformerBlocks.Add(new TransformerBlock(_o, layer => Own(layer)));
             else BranchBlocks.Add(new BranchBlock(_o, layer => Own(layer)));
         }
+        foreach (int layer in _o.IntermediateCtcLayers)
+            if (layer < 1 || layer >= _o.NumEncoderLayers)
+                throw new ArgumentException($"Intermediate CTC layer {layer} is not below the last of {_o.NumEncoderLayers}.", nameof(options));
+        if (_o.SelfConditioning || _o.Block == ConformerAsrBlock.Transformer)
+            CtcNorm = Own(new LayerNormalizationLayer<T>(d));
         if (_o.Decoder == ConformerAsrDecoder.Ctc)
         {
             CtcHead = Own(new DenseLayer<T>(_o.VocabSize, identity));
+            if (_o.SelfConditioning) Conditioning = Own(new DenseLayer<T>(d, identity));
             return;
         }
         // The prediction network reads the previous label, the blank (0) standing for "no label yet".
@@ -126,10 +174,16 @@ internal sealed class ConformerAsrNetwork<T>
         JointOutput = Own(new DenseLayer<T>(_o.VocabSize, identity));
     }
 
+    private readonly int _channels;
+
     private static int Subsampled(int length) => (length - 3) / 2 + 1;
 
+    // A 3x3 stride-2 convolution with padding 1.
+    private static int Padded(int length) => (length - 1) / 2 + 1;
+
     public Conv2DLayer<T> FirstConv { get; }
-    public Conv2DLayer<T> SecondConv { get; }
+    public Conv2DLayer<T>? SecondConv { get; }
+    public List<DepthwiseSeparableConvolutionalLayer<T>> DepthwiseStages { get; } = new();
     public DenseLayer<T> InputProjection { get; }
     public List<ConformerBlockLayer<T>> Blocks { get; } = new();
     public List<BranchBlock> BranchBlocks { get; } = new();
@@ -227,6 +281,39 @@ internal sealed class ConformerAsrNetwork<T>
         }
     }
     public DenseLayer<T>? CtcHead { get; }
+    /// <summary>The layer norm before the CTC layer (self-conditioned CTC's Equation 6; the Transformer encoder's final norm).</summary>
+    public LayerNormalizationLayer<T>? CtcNorm { get; }
+    /// <summary>Self-conditioned CTC's shared Linear_{|V|->D} that feeds each intermediate prediction back.</summary>
+    public DenseLayer<T>? Conditioning { get; }
+    public List<TransformerBlock> TransformerBlocks { get; } = new();
+
+    /// <summary>A pre-norm Transformer encoder layer: x + MHSA(LN(x)), then + FFN(LN(x)) with ReLU.</summary>
+    internal sealed class TransformerBlock
+    {
+        public TransformerBlock(ConformerAsrConfiguration o, Func<LayerBase<T>, LayerBase<T>> own)
+        {
+            int d = o.EncoderDim;
+            TLayer Own<TLayer>(TLayer layer) where TLayer : LayerBase<T> { own(layer); return layer; }
+            AttentionNorm = Own(new LayerNormalizationLayer<T>(d));
+            Attention = Own(new MultiHeadAttentionLayer<T>(o.NumAttentionHeads, d / o.NumAttentionHeads));
+            FeedForwardNorm = Own(new LayerNormalizationLayer<T>(d));
+            Expand = Own(new FullyConnectedLayer<T>(d, d * o.FeedForwardMultiplier, (IActivationFunction<T>)new ReLUActivation<T>()));
+            Project = Own(new FullyConnectedLayer<T>(d * o.FeedForwardMultiplier, d, (IActivationFunction<T>)new IdentityActivation<T>()));
+        }
+
+        public LayerNormalizationLayer<T> AttentionNorm { get; }
+        public MultiHeadAttentionLayer<T> Attention { get; }
+        public LayerNormalizationLayer<T> FeedForwardNorm { get; }
+        public FullyConnectedLayer<T> Expand { get; }
+        public FullyConnectedLayer<T> Project { get; }
+
+        public Tensor<T> Forward(IEngine engine, Tensor<T> x)
+        {
+            int length = x.Shape[0], d = x.Shape[1];
+            x = engine.TensorAdd(x, engine.Reshape(Attention.Forward(engine.Reshape(AttentionNorm.Forward(x), new[] { 1, length, d })), new[] { length, d }));
+            return engine.TensorAdd(x, Project.Forward(Expand.Forward(FeedForwardNorm.Forward(x))));
+        }
+    }
     public EmbeddingLayer<T>? Embedding { get; }
     public List<LSTMLayer<T>> PredictionLstms { get; } = new();
     public DenseLayer<T>? JointEncoder { get; }
@@ -236,7 +323,8 @@ internal sealed class ConformerAsrNetwork<T>
     public ConformerAsrConfiguration Configuration => _o;
 
     /// <summary>Encoder frames of <paramref name="melFrames"/> log-mel frames.</summary>
-    public int EncodedLength(int melFrames) => Subsampled(Subsampled(melFrames));
+    public int EncodedLength(int melFrames) => _o.Subsampling == ConformerAsrSubsampling.Conv4x
+        ? Subsampled(Subsampled(melFrames)) : Padded(Padded(Padded(melFrames)));
 
     /// <summary>Log-mel features <c>[frames, bins]</c> of a waveform, each bin normalized over the utterance.</summary>
     public double[,] Features(IReadOnlyList<double> waveform)
@@ -281,30 +369,91 @@ internal sealed class ConformerAsrNetwork<T>
     }
 
     /// <summary>The encoder output <c>[L, EncoderDim]</c> of features <c>[frames, bins]</c>.</summary>
-    public Tensor<T> Encode(double[,] features, bool training)
+    public Tensor<T> Encode(double[,] features, bool training) => EncodeWithIntermediates(features, training).Output;
+
+    /// <summary>The encoder output and the CTC logits of each intermediate CTC layer, in order.</summary>
+    public (Tensor<T> Output, List<Tensor<T>> IntermediateLogits) EncodeWithIntermediates(double[,] features, bool training)
     {
+        var intermediates = new List<Tensor<T>>();
         int frames = features.GetLength(0), bins = features.GetLength(1), d = _o.EncoderDim;
         var mel = new Tensor<T>(new[] { 1, 1, frames, bins });
         for (int t = 0; t < frames; t++)
             for (int b = 0; b < bins; b++) mel[0, 0, t, b] = NumOps.FromDouble(features[t, b]);
         var x = _engine.ReLU(FirstConv.Forward(mel));
-        x = _engine.ReLU(SecondConv.Forward(x));
+        if (SecondConv is not null) x = _engine.ReLU(SecondConv.Forward(x));
+        foreach (var stage in DepthwiseStages) x = stage.Forward(x);
         int length = x.Shape[2];
         if (length <= 0) throw new ArgumentException("The audio is too short for the convolution subsampling.");
-        var steps = _engine.Reshape(_engine.TensorPermute(x, new[] { 0, 2, 1, 3 }), new[] { length, d * _subsampledBins });
+        var steps = _engine.Reshape(_engine.TensorPermute(x, new[] { 0, 2, 1, 3 }), new[] { length, _channels * _subsampledBins });
         var h = InputProjection.Forward(steps);
-        foreach (var block in Blocks)
+        if (_o.Block == ConformerAsrBlock.Transformer) h = _engine.TensorAdd(_engine.TensorMultiplyScalar(h, NumOps.FromDouble(Math.Sqrt(d))), Positions(length, d));
+        int count = Math.Max(Blocks.Count, Math.Max(BranchBlocks.Count, TransformerBlocks.Count));
+        for (int i = 0; i < count; i++)
         {
-            block.SetTrainingMode(training);
-            h = block.Forward(h);
+            if (Blocks.Count > 0)
+            {
+                Blocks[i].SetTrainingMode(training);
+                h = Blocks[i].Forward(h);
+            }
+            else if (TransformerBlocks.Count > 0) h = TransformerBlocks[i].Forward(_engine, h);
+            else h = BranchBlocks[i].Forward(_engine, h);
+            if (Array.IndexOf(_o.IntermediateCtcLayers, i + 1) < 0) continue;
+            // Self-conditioned CTC (Equations 6, 7 and 9): the shared norm and CTC layer give Z_l, fed back through a shared
+            // linear layer; InterCTC (Lee and Watanabe 2021, Equation 13) only reads the prediction.
+            var normed = CtcNorm is not null ? CtcNorm.Forward(h) : h;
+            var logits = CtcLogitsOfNormed(normed);
+            intermediates.Add(logits);
+            if (_o.SelfConditioning && Conditioning is not null)
+                h = _engine.TensorAdd(normed, Conditioning.Forward(_engine.Softmax(logits, axis: -1)));
         }
-        foreach (var block in BranchBlocks) h = block.Forward(_engine, h);
-        return h;
+        return (h, intermediates);
     }
 
+    // Absolute sinusoidal positions [L, D] (Vaswani et al. 2017).
+    private Tensor<T> Positions(int length, int d)
+    {
+        var positions = new Tensor<T>(new[] { length, d });
+        for (int t = 0; t < length; t++)
+            for (int i = 0; i < d; i += 2)
+            {
+                double angle = t / Math.Pow(10000.0, (double)i / d);
+                positions[t, i] = NumOps.FromDouble(Math.Sin(angle));
+                if (i + 1 < d) positions[t, i + 1] = NumOps.FromDouble(Math.Cos(angle));
+            }
+        return positions;
+    }
+
+    private Tensor<T> CtcLogitsOfNormed(Tensor<T> normed) =>
+        (CtcHead ?? throw new InvalidOperationException("This network decodes with a transducer.")).Forward(normed);
+
     /// <summary>The CTC logits <c>[L, VocabSize]</c>.</summary>
-    public Tensor<T> CtcLogits(Tensor<T> encoded) =>
-        (CtcHead ?? throw new InvalidOperationException("This network decodes with a transducer.")).Forward(encoded);
+    public Tensor<T> CtcLogits(Tensor<T> encoded) => CtcLogitsOfNormed(CtcNorm is not null ? CtcNorm.Forward(encoded) : encoded);
+
+    /// <summary>The CTC loss of labels for CTC logits <c>[L, VocabSize]</c>.</summary>
+    public Tensor<T> CtcLoss(Tensor<T> logits, int[] labels) =>
+        _engine.TensorCTCLoss(_engine.Reshape(_engine.TensorLogSoftmax(logits, axis: -1), new[] { logits.Shape[0], 1, _o.VocabSize }),
+            new Tensor<int>(labels, new[] { labels.Length }), new[] { logits.Shape[0] }, new[] { labels.Length }, 0);
+
+    /// <summary>
+    /// The CTC training loss of an utterance: the final layer's CTC loss, mixed with the mean intermediate CTC loss as
+    /// L = (1 - w) L_CTC + w L_inter when intermediate layers are configured (InterCTC Equation 14; self-conditioned CTC
+    /// Equations 11 and 12).
+    /// </summary>
+    public Tensor<T> CtcTrainingLoss(double[,] features, int[] labels, bool training)
+    {
+        var (output, intermediates) = EncodeWithIntermediates(features, training);
+        var loss = CtcLoss(CtcLogits(output), labels);
+        if (intermediates.Count == 0) return loss;
+        Tensor<T>? inter = null;
+        foreach (var logits in intermediates)
+        {
+            var term = CtcLoss(logits, labels);
+            inter = inter is null ? term : _engine.TensorAdd(inter, term);
+        }
+        double w = _o.IntermediateCtcWeight;
+        return _engine.TensorAdd(_engine.TensorMultiplyScalar(loss, NumOps.FromDouble(1 - w)),
+            _engine.TensorMultiplyScalar(inter ?? loss, NumOps.FromDouble(w / intermediates.Count)));
+    }
 
     /// <summary>The prediction network's output <c>[U + 1, PredictionDim]</c> for the label history: the blank, then each
     /// label.</summary>

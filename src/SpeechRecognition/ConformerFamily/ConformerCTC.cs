@@ -215,8 +215,7 @@ public partial class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             Tensor<T>? total = null;
             for (int r = 0; r < rows; r++)
             {
-                var encoded = network.Encode(network.SpecAugment(network.Features(Samples(input, r * samples, samples)), _random), training: true);
-                var loss = Engine.TensorCTCLoss(Engine.Reshape(Engine.TensorLogSoftmax(network.CtcLogits(encoded), axis: -1), new[] { encoded.Shape[0], 1, _options.VocabSize }), new Tensor<int>(labels[r], new[] { labels[r].Length }), new[] { encoded.Shape[0] }, new[] { labels[r].Length }, 0);
+                var loss = network.CtcTrainingLoss(network.SpecAugment(network.Features(Samples(input, r * samples, samples)), _random), labels[r], training: true);
                 total = total is null ? loss : Engine.TensorAdd(total, loss);
             }
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
