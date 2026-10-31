@@ -2349,7 +2349,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// This is important because different optimizers might interpret the same options differently,
     /// or might have additional specialized options.
     /// </para>
-    /// </para>
     /// <para>
     /// Overriding this is now the EXCEPTION rather than the rule. It used to be abstract, so all 42
     /// concrete optimizers implemented it, and 36 of those implementations were the same eight lines:
@@ -2515,7 +2514,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// - Upper bounds: maximum value for each feature across all training samples
     /// </para>
     /// <para>
-    /// This ensures valid random initialization where lower < upper for proper random solution generation.
+    /// This ensures valid random initialization where lower &lt; upper for proper random solution generation.
     /// </para>
     /// <para><b>For Beginners:</b> Instead of you having to manually specify lower and upper bounds,
     /// this method analyzes your training data to find the minimum and maximum values for each feature,

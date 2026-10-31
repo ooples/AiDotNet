@@ -35,7 +35,7 @@ namespace AiDotNet.Evaluation.Metrics.Classification;
 /// </list>
 /// </para>
 /// <para>
-/// <b>Research reference:</b> Matthews (1975), Chicco & Jurman (2020) recommend MCC over F1.
+/// <b>Research reference:</b> Matthews (1975), Chicco &amp; Jurman (2020) recommend MCC over F1.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>

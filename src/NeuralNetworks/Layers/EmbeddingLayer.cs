@@ -293,10 +293,10 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// For example:
     /// ```csharp
     /// // Create an embedding layer for 10,000 words with 300-dimensional embeddings
-    /// var wordEmbedding = new EmbeddingLayer<float>(10000, 300);
+    /// var wordEmbedding = new EmbeddingLayer&lt;float>(10000, 300);
     ///
     /// // Create an embedding layer for 128 characters with 50-dimensional embeddings
-    /// var charEmbedding = new EmbeddingLayer<float>(128, 50);
+    /// var charEmbedding = new EmbeddingLayer&lt;float>(128, 50);
     /// ```
     ///
     /// Typical embedding dimensions:

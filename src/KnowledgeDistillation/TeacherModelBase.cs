@@ -92,7 +92,7 @@ public abstract class TeacherModelBase<TInput, TOutput, T> : ITeacherModel<TInpu
     /// <para><b>Temperature Effects:</b>
     /// - temperature = 1.0: Standard softmax (sharp distribution)
     /// - temperature > 1.0: Softened distribution (more uniform, better for distillation)
-    /// - temperature < 1.0: Sharpened distribution (more peaked)</para>
+    /// - temperature &lt; 1.0: Sharpened distribution (more peaked)</para>
     ///
     /// <para><b>Stability:</b> Uses LogSumExp trick to prevent numerical overflow/underflow.</para>
     /// </remarks>

@@ -15,7 +15,7 @@ namespace AiDotNet.PromptEngineering.FewShot;
 ///
 /// Example:
 /// ```csharp
-/// var selector = new FixedExampleSelector<double>();
+/// var selector = new FixedExampleSelector&lt;double>();
 ///
 /// // Add examples in desired order
 /// selector.AddExample(new FewShotExample { Input = "Easy example", Output = "Result 1" });

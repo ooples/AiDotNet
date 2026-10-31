@@ -717,7 +717,7 @@ public partial class ShortTimeFourierTransform<T>
     /// </summary>
     /// <param name="idx">The virtual index (can be negative or >= length).</param>
     /// <param name="length">The length of the original signal.</param>
-    /// <returns>A valid index within [0, length-1], or -1 if length <= 1.</returns>
+    /// <returns>A valid index within [0, length-1], or -1 if length &lt;= 1.</returns>
     private static int ReflectIndex(int idx, int length)
     {
         if (length <= 1)

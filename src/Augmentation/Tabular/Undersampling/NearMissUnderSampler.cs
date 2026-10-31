@@ -31,7 +31,7 @@ namespace AiDotNet.Augmentation.Tabular.Undersampling;
 /// </list>
 /// </para>
 ///
-/// <para><b>Reference:</b> Zhang & Mani, "kNN Approach to Unbalanced Data Distributions" (2003)</para>
+/// <para><b>Reference:</b> Zhang &amp; Mani, "kNN Approach to Unbalanced Data Distributions" (2003)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class NearMissUnderSampler<T> : IUnderSampler<T>

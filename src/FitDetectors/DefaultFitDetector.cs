@@ -65,10 +65,10 @@ public class DefaultFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput,
     /// <remarks>
     /// This method uses R² (R-squared) values to classify the model's fit:
     /// - GoodFit: High R² values across all datasets (>0.9)
-    /// - Overfit: High R² on training (>0.9) but lower on validation (<0.7)
-    /// - Underfit: Low R² values on both training and validation (<0.7)
+    /// - Overfit: High R² on training (>0.9) but lower on validation (&lt;0.7)
+    /// - Underfit: Low R² values on both training and validation (&lt;0.7)
     /// - HighVariance: Large difference between training and validation R² (>0.2)
-    /// - HighBias: Very low R² values across all datasets (<0.5)
+    /// - HighBias: Very low R² values across all datasets (&lt;0.5)
     /// - Unstable: Any other pattern that doesn't fit the above categories
     /// 
     /// R² is a statistical measure that represents how well the model explains the variance in the data,

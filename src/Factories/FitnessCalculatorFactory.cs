@@ -12,7 +12,7 @@ public static class FitnessCalculatorFactory
     /// <typeparam name="TInput">The input data type for the fitness calculator.</typeparam>
     /// <typeparam name="TOutput">The output data type for the fitness calculator.</typeparam>
     /// <param name="type">The type of fitness calculator to create.</param>
-    /// <returns>An implementation of IFitnessCalculator<T, TInput, TOutput> for the specified fitness calculator type.</returns>
+    /// <returns>An implementation of IFitnessCalculator&lt;T, TInput, TOutput> for the specified fitness calculator type.</returns>
     /// <exception cref="ArgumentException">Thrown when the requested fitness calculator type is not supported.</exception>
     public static IFitnessCalculator<T, TInput, TOutput> CreateFitnessCalculator<T, TInput, TOutput>(FitnessCalculatorType type)
     {

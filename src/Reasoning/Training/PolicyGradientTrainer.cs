@@ -103,13 +103,13 @@ namespace AiDotNet.Reasoning.Training;
 ///
 /// **Training loop:**
 /// ```csharp
-/// var trainer = new PolicyGradientTrainer<double>(
+/// var trainer = new PolicyGradientTrainer&lt;double>(
 ///     model,
-///     rewardModel: new HybridRewardModel<double>(prm, orm),
+///     rewardModel: new HybridRewardModel&lt;double>(prm, orm),
 ///     learningRate: 0.0001
 /// );
 ///
-/// for (int epoch = 0; epoch < 100; epoch++)
+/// for (int epoch = 0; epoch &lt; 100; epoch++)
 /// {
 ///     foreach (var batch in trainingData)
 ///     {

@@ -340,7 +340,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// ```csharp
     /// // Create an RBM with 784 visible units (28x28 image), 200 hidden units,
     /// // and sigmoid activation function
-    /// var rbmLayer = new RBMLayer<float>(784, 200, new SigmoidActivation<float>());
+    /// var rbmLayer = new RBMLayer&lt;float>(784, 200, new SigmoidActivation&lt;float>());
     /// ```
     /// 
     /// The sigmoid activation is most common for RBMs because it produces probabilities
@@ -464,7 +464,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// ```csharp
     /// // Create an RBM with 784 visible units, 200 hidden units,
     /// // and a vectorized sigmoid activation function
-    /// var rbmLayer = new RBMLayer<float>(784, 200, new VectorizedSigmoidActivation<float>());
+    /// var rbmLayer = new RBMLayer&lt;float>(784, 200, new VectorizedSigmoidActivation&lt;float>());
     /// ```
     /// 
     /// This approach is functionally equivalent to using scalar activation, but can be more

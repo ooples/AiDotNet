@@ -69,7 +69,7 @@ public class GeneralizedHistogramIntersectionKernel<T> : IKernelFunction<T>
     /// <para>
     /// - When beta = 1.0: This is the standard Histogram Intersection kernel
     /// - When beta > 1.0: Larger intersection values have more influence
-    /// - When beta < 1.0: The influence of larger intersection values is reduced
+    /// - When beta &lt; 1.0: The influence of larger intersection values is reduced
     /// </para>
     /// <para>
     /// If you're just starting out, you can use the default value. As you become more experienced,

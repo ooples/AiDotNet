@@ -180,7 +180,7 @@ public class OptimizationIterationInfo<T>
     /// - Recording the results of an optimization step
     /// - Initializing with a known starting fitness
     /// 
-    /// For example: new OptimizationIterationInfo<double>(0.85) creates an
+    /// For example: new OptimizationIterationInfo&lt;double>(0.85) creates an
     /// iteration info with a fitness of 0.85.
     /// </para>
     /// </remarks>

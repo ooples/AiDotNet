@@ -729,7 +729,7 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
 
     /// <summary>
     /// GPU parameter update is handled by the tape-based Step(TapeStepContext) method.
-    /// Tensor<T> is natively GPU-resident — no separate GPU update path needed.
+    /// Tensor&lt;T> is natively GPU-resident — no separate GPU update path needed.
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {

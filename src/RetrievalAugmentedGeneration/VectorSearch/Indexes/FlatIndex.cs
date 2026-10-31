@@ -15,7 +15,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// This is the simplest and most accurate index type, comparing the query
     /// against every vector in the index. It guarantees exact nearest neighbors
     /// but has O(n) search complexity where n is the number of vectors.
-    /// Best for small datasets (< 10K vectors) where accuracy is critical.
+    /// Best for small datasets (&lt; 10K vectors) where accuracy is critical.
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
     [ComponentType(ComponentType.VectorIndex)]

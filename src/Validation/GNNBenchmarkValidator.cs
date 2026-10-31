@@ -45,7 +45,7 @@ namespace AiDotNet.Validation;
 ///
 /// **Example Usage:**
 /// ```csharp
-/// var validator = new GNNBenchmarkValidator<double>();
+/// var validator = new GNNBenchmarkValidator&lt;double>();
 ///
 /// // Test node classification
 /// var nodeResults = validator.ValidateNodeClassification();

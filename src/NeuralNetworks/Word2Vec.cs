@@ -158,16 +158,6 @@ namespace AiDotNet.NeuralNetworks
         #region Constructors
 
         /// <summary>
-        /// Initializes a new instance of the Word2Vec model.
-        /// </summary>
-        /// <param name="architecture">The architecture configuration defining the neural network's metadata.</param>
-        /// <param name="tokenizer">Optional tokenizer for text processing. Defaults to a standard BERT-style tokenizer.</param>
-        /// <param name="optimizer">Optional optimizer for training. Defaults to the Adam optimizer.</param>
-        /// <param name="vocabSize">The size of the vocabulary (default: 10000).</param>
-        /// <param name="embeddingDimension">The dimension of the embedding vectors (default: 100).</param>
-        /// <param name="windowSize">The context window size (default: 5).</param>
-        /// </summary>
-        /// <summary>
         /// Initializes a new instance with default architecture settings.
         /// </summary>
         public Word2Vec()
@@ -182,10 +172,12 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the Word2Vec model.
         /// </summary>
-        /// <param name="maxTokens">The maximum tokens to process per input (default: 512).</param>
-        /// <param name="type">The Word2Vec architecture type (default: SkipGram).</param>
+        /// <param name="architecture">The architecture configuration defining the neural network's metadata.</param>
+        /// <param name="options">Word2Vec settings (vocabulary size, embedding dimension, window, type, gradient norm);
+        /// null uses the defaults.</param>
+        /// <param name="tokenizer">Optional tokenizer for text processing. Defaults to a standard BERT-style tokenizer.</param>
+        /// <param name="optimizer">Optional optimizer for training. Defaults to the Adam optimizer.</param>
         /// <param name="lossFunction">Optional loss function. Defaults to Binary Cross Entropy.</param>
-        /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         /// <remarks>
         /// <b>For Beginners:</b> This sets up the model's brain. You can decide how many words it should
         /// know (vocabSize), how detailed its "mental map" should be (embeddingDimension), and which

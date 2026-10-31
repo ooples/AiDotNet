@@ -198,7 +198,7 @@ public enum DistributionType
     /// 
     /// It's defined by two main parameters:
     /// - k (shape): Controls the shape of the distribution
-    ///   - k < 1: Failure rate decreases over time
+    ///   - k &lt; 1: Failure rate decreases over time
     ///   - k = 1: Constant failure rate (becomes Exponential distribution)
     ///   - k > 1: Failure rate increases over time
     /// - ? (scale): Stretches or compresses the distribution

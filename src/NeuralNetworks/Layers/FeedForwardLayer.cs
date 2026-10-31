@@ -489,11 +489,11 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// ```csharp
     /// // Create a layer with 784 inputs (e.g., from a 28×28 image), 
     /// // 128 outputs, and ReLU activation
-    /// var hiddenLayer = new FeedForwardLayer<float>(128, new ReLUActivation<float>());
+    /// var hiddenLayer = new FeedForwardLayer&lt;float>(128, new ReLUActivation&lt;float>());
     /// 
     /// // Create an output layer with 128 inputs (from previous layer),
     /// // 10 outputs (e.g., for 10 classes), and Softmax activation
-    /// var outputLayer = new FeedForwardLayer<float>(10, new SoftmaxActivation<float>());
+    /// var outputLayer = new FeedForwardLayer&lt;float>(10, new SoftmaxActivation&lt;float>());
     /// ```
     /// 
     /// The constructor automatically initializes weights and biases with appropriate

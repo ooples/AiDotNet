@@ -87,7 +87,7 @@ public class ThinPlateSplineRBF<T> : IRadialBasisFunction<T>
     /// 
     /// Some key properties of this function:
     /// - At r = 0, the value is 0
-    /// - For very small r (close to 0), the value is negative because log(r) is negative when r < 1
+    /// - For very small r (close to 0), the value is negative because log(r) is negative when r &lt; 1
     /// - At r = 1, the value is 0 again (since log(1) = 0)
     /// - For r > 1, the value grows increasingly positive as r increases
     /// </para>

@@ -300,7 +300,7 @@ public class NormalizationParameters<T>
     /// 
     /// For example, if binning house prices, you might have bins at:
     /// [200000, 400000, 600000, 800000]
-    /// Creating 5 categories: <200K, 200K-400K, 400K-600K, 600K-800K, >800K
+    /// Creating 5 categories: &lt;200K, 200K-400K, 400K-600K, 600K-800K, >800K
     /// 
     /// This approach is useful when:
     /// - You want to convert continuous data to categorical

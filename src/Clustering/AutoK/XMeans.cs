@@ -46,7 +46,7 @@ namespace AiDotNet.Clustering.AutoK;
 /// var options = new XMeansOptions&lt;double&gt;();
 /// var xMeans = new XMeans&lt;double&gt;(options);
 /// xMeans.Train(dataMatrix);
-/// Vector<double> labels = xMeans.Labels;
+/// Vector&lt;double> labels = xMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

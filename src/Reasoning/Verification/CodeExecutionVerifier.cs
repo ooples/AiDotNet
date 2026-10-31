@@ -41,7 +41,7 @@ namespace AiDotNet.Reasoning.Verification;
 ///
 /// **Example:**
 /// ```csharp
-/// var verifier = new CodeExecutionVerifier<double>();
+/// var verifier = new CodeExecutionVerifier&lt;double>();
 /// var result = await verifier.VerifyCodeAsync(
 ///     pythonCode,
 ///     testCases: new[] { "assert add(2, 3) == 5" },

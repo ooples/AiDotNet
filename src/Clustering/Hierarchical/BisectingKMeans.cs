@@ -45,7 +45,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// var options = new BisectingKMeansOptions&lt;double&gt;();
 /// var bisectingKMeans = new BisectingKMeans&lt;double&gt;(options);
 /// bisectingKMeans.Train(dataMatrix);
-/// Vector<double> labels = bisectingKMeans.Labels;
+/// Vector&lt;double> labels = bisectingKMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

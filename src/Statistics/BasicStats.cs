@@ -110,7 +110,7 @@ public partial class BasicStats<T>
     /// Think of it as measuring which way your data "leans":
     /// - Positive skewness (> 0): There's a longer tail on the right side - most values are on the left with a few high outliers
     /// - Zero skewness (= 0): The data is symmetric around the mean - balanced on both sides
-    /// - Negative skewness (< 0): There's a longer tail on the left side - most values are on the right with a few low outliers
+    /// - Negative skewness (&lt; 0): There's a longer tail on the left side - most values are on the right with a few low outliers
     /// 
     /// For example, income distribution often has positive skewness because most people have moderate incomes,
     /// but a few extremely wealthy individuals pull the right tail out.
@@ -132,7 +132,7 @@ public partial class BasicStats<T>
     /// Think of it as measuring the shape of your data's peaks and tails:
     /// - High kurtosis (> 3): "Heavy-tailed" - more values in the extremes, with a sharper peak
     /// - Normal kurtosis (= 3): Follows a normal distribution (bell curve)
-    /// - Low kurtosis (< 3): "Light-tailed" - fewer outliers, with a flatter peak
+    /// - Low kurtosis (&lt; 3): "Light-tailed" - fewer outliers, with a flatter peak
     /// 
     /// For example, stock returns often have high kurtosis because they mostly have small changes day-to-day,
     /// but occasionally have extreme movements.

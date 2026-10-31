@@ -284,10 +284,10 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     /// For example:
     /// ```csharp
     /// // Create a flatten layer for 28×28 grayscale images
-    /// var flattenLayer = new FlattenLayer<float>();
+    /// var flattenLayer = new FlattenLayer&lt;float>();
     /// 
     /// // Create a flatten layer for output from a convolutional layer with 64 feature maps of size 7×7
-    /// var flattenConvOutput = new FlattenLayer<float>();
+    /// var flattenConvOutput = new FlattenLayer&lt;float>();
     /// ```
     /// 
     /// The constructor automatically calculates how large the output vector will be
@@ -343,7 +343,7 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     /// <para>
     /// This method implements the forward pass of the flatten layer. It takes a multi-dimensional tensor
     /// and reshapes it into a 2D tensor where each row corresponds to a flattened example from the batch.
-    /// For unbatched inputs (rank <= 3), it returns a 1D vector of length input.Length. The values are
+    /// For unbatched inputs (rank &lt;= 3), it returns a 1D vector of length input.Length. The values are
     /// preserved and their order is maintained according to a row-major traversal of the input tensor.
     /// The input tensor is cached for use during the backward pass.
     /// </para>

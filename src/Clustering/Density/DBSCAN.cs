@@ -50,7 +50,7 @@ namespace AiDotNet.Clustering.Density;
 /// var options = new DBSCANOptions&lt;double&gt;();
 /// var dBSCAN = new DBSCAN&lt;double&gt;(options);
 /// dBSCAN.Train(dataMatrix);
-/// Vector<double> labels = dBSCAN.Labels;
+/// Vector&lt;double> labels = dBSCAN.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

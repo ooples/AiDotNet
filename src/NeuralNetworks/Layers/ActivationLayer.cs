@@ -120,7 +120,7 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Create a ReLU activation layer for 28x28 images
-    /// var reluLayer = new ActivationLayer<float>(new ReLUActivation<float>());
+    /// var reluLayer = new ActivationLayer&lt;float>(new ReLUActivation&lt;float>());
     /// ```
     /// 
     /// The inputShape parameter defines the dimensions of your data:
@@ -184,7 +184,7 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Create a Softmax layer for a classification network with 10 classes
-    /// var softmaxLayer = new ActivationLayer<float>(new Softmax<float>());
+    /// var softmaxLayer = new ActivationLayer&lt;float>(new Softmax&lt;float>());
     /// ```
     /// 
     /// The difference from the other constructor is that these functions need to

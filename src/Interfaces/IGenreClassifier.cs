@@ -19,7 +19,7 @@ namespace AiDotNet.Interfaces;
 /// 3. The network outputs probabilities for each genre
 ///
 /// Common genres:
-/// - Rock, Pop, Hip-Hop, R&B
+/// - Rock, Pop, Hip-Hop, R&amp;B
 /// - Jazz, Blues, Classical
 /// - Electronic, EDM, House, Techno
 /// - Country, Folk, Reggae

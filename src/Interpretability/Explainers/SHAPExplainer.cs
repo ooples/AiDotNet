@@ -519,7 +519,7 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
     /// information about individual feature contributions) and lower for coalitions
     /// near size M/2 (which are less informative).
     ///
-    /// <b>Reference:</b> Lundberg & Lee, "A Unified Approach to Interpreting Model Predictions" (2017)
+    /// <b>Reference:</b> Lundberg &amp; Lee, "A Unified Approach to Interpreting Model Predictions" (2017)
     /// </para>
     /// </remarks>
     private static double ComputeShapleyKernelWeight(int numFeatures, int coalitionSize)

@@ -12,7 +12,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.HighDimensional;
 /// <para>
 /// The Benjamini-Hochberg procedure controls the False Discovery Rate (FDR) when
 /// testing multiple hypotheses. It sorts p-values and finds the largest k such that
-/// p_(k) <= k/m * alpha, where m is the number of tests.
+/// p_(k) &lt;= k/m * alpha, where m is the number of tests.
 /// </para>
 /// <para><b>For Beginners:</b> When you test many features, some will look significant
 /// just by chance (false positives). This method controls how many of your "discoveries"

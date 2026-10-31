@@ -363,7 +363,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// 
     /// Example: For processing 32×32 color images with 16 filters of size 3×3 and dilation of 2:
     /// ```csharp
-    /// var convLayer = new DilatedConvolutionalLayer<float>(
+    /// var convLayer = new DilatedConvolutionalLayer&lt;float>(
     ///     inputDepth: 3,           // RGB input
     ///     outputDepth: 16,         // 16 different feature detectors
     ///     kernelSize: 3,           // 3×3 filters

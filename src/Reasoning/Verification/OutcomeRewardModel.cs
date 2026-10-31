@@ -40,11 +40,11 @@ namespace AiDotNet.Reasoning.Verification;
 ///
 /// **Example:**
 /// ```csharp
-/// var orm = new OutcomeRewardModel<double>(chatModel);
+/// var orm = new OutcomeRewardModel&lt;double>(chatModel);
 ///
-/// var chain = new ReasoningChain<double> {
+/// var chain = new ReasoningChain&lt;double> {
 ///     FinalAnswer = "42",
-///     Steps = new List<ReasoningStep<double>> { /* ... */ }
+///     Steps = new List&lt;ReasoningStep&lt;double>> { /* ... */ }
 /// };
 ///
 /// // Only cares about final answer

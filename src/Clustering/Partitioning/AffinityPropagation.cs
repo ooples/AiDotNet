@@ -44,7 +44,7 @@ namespace AiDotNet.Clustering.Partitioning;
 /// var options = new AffinityPropagationOptions&lt;double&gt;();
 /// var affinityPropagation = new AffinityPropagation&lt;double&gt;(options);
 /// affinityPropagation.Train(dataMatrix);
-/// Vector<double> labels = affinityPropagation.Labels;
+/// Vector&lt;double> labels = affinityPropagation.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

@@ -83,7 +83,7 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
     /// - Intermediate predictions (auxiliary losses)
     ///
     /// This is optional and most useful for very deep networks (100+ layers).
-    /// For shallower networks (< 50 layers), it may not provide significant benefits.
+    /// For shallower networks (&lt; 50 layers), it may not provide significant benefits.
     /// </para>
     /// </remarks>
     public bool UseAuxiliaryLoss { get; set; } = false;

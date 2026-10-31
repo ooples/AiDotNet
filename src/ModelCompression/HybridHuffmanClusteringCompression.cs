@@ -43,7 +43,7 @@ namespace AiDotNet.ModelCompression;
 /// - Original model: 100 million weights × 32 bits = 3.2 GB
 /// - After clustering: 100 million cluster IDs × 8 bits = 100 MB (32x compression)
 /// - After Huffman: 100 million IDs with variable length ≈ 60 MB (53x total compression!)
-/// - Result: 3.2 GB → 60 MB with <2% accuracy loss
+/// - Result: 3.2 GB → 60 MB with &lt;2% accuracy loss
 /// </para>
 /// </remarks>
 public class HybridHuffmanClusteringCompression<T> : ModelCompressionBase<T>
