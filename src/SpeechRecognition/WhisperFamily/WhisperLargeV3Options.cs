@@ -1,11 +1,14 @@
+using AiDotNet.Audio.Whisper;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.WhisperFamily;
 
-/// <summary>Options for Whisper large-v3 (OpenAI, 2023) with 1.55B parameters and 128 mel bins.</summary>
+/// <summary>Options for Whisper large-v3, built on openai-whisper's network.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the WhisperLargeV3 model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para>The defaults are Whisper large-v3: 32 encoder and 32 decoder layers, width 1280, 20 heads, 128 mel bins and 51866 tokens.</para>
+/// <para><b>For Beginners:</b> These options set the size of the Whisper encoder and decoder, the language and how
+/// transcription decodes.</para>
 /// </remarks>
 public class WhisperLargeV3Options : ModelOptions
 {
@@ -20,38 +23,66 @@ public class WhisperLargeV3Options : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        SampleRate = other.SampleRate;
-        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
-        DecoderDim = other.DecoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
+        DecoderDim = other.DecoderDim;
         NumDecoderLayers = other.NumDecoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        FeedForwardDim = other.FeedForwardDim;
-        NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
+        Language = other.Language;
+        WordTimestamps = other.WordTimestamps;
+        Temperatures = (double[])other.Temperatures.Clone();
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        Language = other.Language;
-        SupportedLanguagesList = other.SupportedLanguagesList;
     }
 
-    public int SampleRate { get; set; } = 16000;
-    public int MaxAudioLengthSeconds { get; set; } = 30;
-    public int EncoderDim { get; set; } = 1280;
-    public int DecoderDim { get; set; } = 1280;
-    public int NumEncoderLayers { get; set; } = 32;
-    public int NumDecoderLayers { get; set; } = 32;
-    public int NumAttentionHeads { get; set; } = 20;
-    public int FeedForwardDim { get; set; } = 5120;
+    /// <summary>Log-mel bins of the input window (80 up to large-v2, 128 from large-v3 on).</summary>
     public int NumMels { get; set; } = 128;
+
+    /// <summary>Encoder width (<c>n_audio_state</c>).</summary>
+    public int EncoderDim { get; set; } = 1280;
+
+    /// <summary>Encoder blocks (<c>n_audio_layer</c>).</summary>
+    public int NumEncoderLayers { get; set; } = 32;
+
+    /// <summary>Decoder width (<c>n_text_state</c>).</summary>
+    public int DecoderDim { get; set; } = 1280;
+
+    /// <summary>Decoder blocks (<c>n_text_layer</c>).</summary>
+    public int NumDecoderLayers { get; set; } = 32;
+
+    /// <summary>Attention heads of every encoder and decoder block (<c>n_audio_head</c> = <c>n_text_head</c>).</summary>
+    public int NumAttentionHeads { get; set; } = 20;
+
+    /// <summary>Token vocabulary (<c>n_vocab</c>): 51,865 for the multilingual models up to large-v2, 51,866 from large-v3 on.</summary>
     public int VocabSize { get; set; } = 51866;
+
+    /// <summary>Decoder positions (<c>n_text_ctx</c>: 448).</summary>
     public int MaxTextLength { get; set; } = 448;
+
+    /// <summary>Language code of the audio; null detects it from the first 30 seconds.</summary>
+    public string? Language { get; set; } = null;
+
+    /// <summary>Whether transcription times every word (openai-whisper's <c>word_timestamps</c>).</summary>
+    public bool WordTimestamps { get; set; } = false;
+
+    /// <summary>Decoding temperatures tried in turn when a window's decoding fails the compression or log-probability
+    /// checks (openai-whisper's default: 0 to 1 in steps of 0.2).</summary>
+    public double[] Temperatures { get; set; } = { 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 };
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
     public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-    public double DropoutRate { get; set; } = 0.0;
-    public string Language { get; set; } = "en";
-    public string[] SupportedLanguagesList { get; set; } = new[] { "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro", "da", "hu", "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy", "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu", "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km", "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo", "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg", "as", "tt", "haw", "ln", "ha", "ba", "jw", "su", "yue" };
+
+    // openai-whisper's ModelDimensions for these options: 30-second windows of 1500 encoder positions.
+    internal WhisperDimensions ToDimensions()
+    {
+        if (EncoderDim != DecoderDim) throw new NotSupportedException("openai-whisper's network ties the encoder and decoder widths.");
+        return new WhisperDimensions(NumMels, 1500, EncoderDim, NumAttentionHeads, NumEncoderLayers, VocabSize, MaxTextLength, DecoderDim,
+            NumAttentionHeads, NumDecoderLayers);
+    }
 }
