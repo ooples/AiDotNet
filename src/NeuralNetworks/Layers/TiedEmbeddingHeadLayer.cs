@@ -48,6 +48,8 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
     private readonly Tensor<T>? _logitScaleTensor;
 
     [ExternalState]
+    // The embedding is owned by the network, which registers it; this head only reads its table.
+    [AiDotNet.Attributes.SharedLayerReference]
     private EmbeddingLayer<T>? _embedding;
 
     // Inference-only int8 copy of the table (GGUF Q8_0, laid out [vocabulary, hidden] = the block-Q8 kernel's [N, K]).

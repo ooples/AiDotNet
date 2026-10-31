@@ -1,4 +1,4 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -2246,6 +2246,9 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         foreach (var field in layer.GetType().GetFields(
                      System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic))
         {
+            // A shared reference (a tied output head reading the embedding the network owns) is registered where it is
+            // owned; it is not a child of this layer.
+            if (field.IsDefined(typeof(AiDotNet.Attributes.SharedLayerReferenceAttribute), inherit: false)) continue;
             object? value;
             try { value = field.GetValue(layer); } catch { continue; }
             if (value is null) continue;
