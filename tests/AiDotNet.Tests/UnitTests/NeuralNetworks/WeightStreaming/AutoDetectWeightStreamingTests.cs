@@ -1,4 +1,5 @@
-﻿using System.IO;
+using System;
+using System.IO;
 using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -81,6 +82,90 @@ public class AutoDetectWeightStreamingTests
             => new() { Name = "FixedParamCountNetwork" };
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+    }
+
+    /// <summary>
+    /// A model whose PredictCore answers from its own path without the default PredictCore (as
+    /// FeedForwardNeuralNetwork's fused dense predict does), so only the Predict funnel can record its first
+    /// forward.
+    /// </summary>
+    private sealed class OwnPredictPathNetwork : VectorModelLayoutBase<float>
+    {
+        private readonly long _fixedCount;
+        private long _parameterCountReads;
+
+        public OwnPredictPathNetwork(long fixedCount)
+            : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
+        {
+            _fixedCount = fixedCount;
+            Layers.Add(new DenseLayer<float>(outputSize: 1));
+        }
+
+        public override long ParameterCount
+        {
+            get
+            {
+                long reads = Interlocked.Increment(ref _parameterCountReads);
+                if (reads <= ThrowingReads)
+                    throw new InvalidOperationException("Parameter count not readable yet.");
+                return _fixedCount;
+            }
+        }
+
+        /// <summary>How many first ParameterCount reads throw, as a partially built model's can.</summary>
+        public int ThrowingReads { get; set; }
+
+        public long ParameterCountReadCount => Interlocked.Read(ref _parameterCountReads);
+
+        public void SetThresholdForTest(long thresholdParams) => ApplyAutoDetectThresholdOverride(thresholdParams);
+
+        protected override Tensor<float> PredictCore(Tensor<float> input) => input;
+        protected override void InitializeLayers() { /* layer added in ctor */ }
+        public override void UpdateParameters(Vector<float> parameters) { /* not exercised */ }
+        public override ModelMetadata<float> GetModelMetadata() => new() { Name = "OwnPredictPathNetwork" };
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+    }
+
+    [Fact]
+    public void BelowThreshold_OwnPredictPath_FinalizesAfterFirstPredict()
+    {
+        // Detection below the threshold finalizes only after a first forward. A model answering from its own
+        // PredictCore never recorded one, so every Predict re-ran detection: both of its SetTrainingMode transitions
+        // walked the parameter count and built (and hashed) the parameter layout again.
+        var net = new OwnPredictPathNetwork(fixedCount: 1_000_000_000L);
+        net.SetThresholdForTest(10_000_000_000L);
+        var input = new Tensor<float>(new[] { 1, 1 });
+        net.Predict(input);
+        long readsAfterFirst = net.ParameterCountReadCount;
+        net.Predict(input);
+        net.Predict(input);
+        Assert.Equal(readsAfterFirst, net.ParameterCountReadCount);
+        Assert.False(net.IsWeightStreamingActive, "A below-threshold model must stay eager.");
+    }
+    [Fact]
+    public void OwnPredictPath_CountThatThrew_IsRetriedUntilDetectionFinalizes()
+    {
+        // Already in inference mode, so Predict makes no SetTrainingMode transition: the funnel's own retry is the only
+        // detection call. A count that threw on the first Predict must be read again on the next one, then never again.
+        // Every count read during the first Predict throws (as a partially built model's can). The second Predict must
+        // read the count again, succeed and finalize detection; the third reads it no more.
+        var net = new OwnPredictPathNetwork(fixedCount: 1_000_000_000L);
+        net.SetThresholdForTest(10_000_000_000L);
+        net.SetTrainingMode(false);
+        net.ThrowingReads = int.MaxValue;   // every read during the first Predict throws
+        var input = new Tensor<float>(new[] { 1, 1 });
+        long beforeFirst = net.ParameterCountReadCount;
+        net.Predict(input);
+        long afterFirst = net.ParameterCountReadCount;
+        Assert.True(afterFirst > beforeFirst, "The first Predict must attempt detection.");
+        net.ThrowingReads = 0;
+        net.Predict(input);
+        long afterRetry = net.ParameterCountReadCount;
+        Assert.True(afterRetry > afterFirst, "The second Predict must retry the count the first one could not read.");
+        net.Predict(input);
+        Assert.Equal(afterRetry, net.ParameterCountReadCount);
+        Assert.False(net.IsWeightStreamingActive, "A below-threshold model must stay eager.");
     }
 
     [Fact]

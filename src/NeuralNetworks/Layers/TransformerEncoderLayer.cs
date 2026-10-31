@@ -539,8 +539,10 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             // Sublayers are built once; a re-entry only upgrades shapes to weights.
             if (!_isInitialized)
             {
-                _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads,
-                    new GELUActivation<T>() as IActivationFunction<T>);
+                // No activation on the attention output (Vaswani et al. 2017; ViT, Dosovitskiy et al. 2021): the
+                // block's only nonlinearity outside softmax is the feed-forward's. A GELU here changed the model
+                // (PyTorch's nn.TransformerEncoderLayer has none) and cost a pass over every attention output.
+                _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads);
                 _norm1 = new LayerNormalizationLayer<T>();
                 _feedForward1 = new FeedForwardLayer<T>(_feedForwardDim,
                     new GELUActivation<T>() as IActivationFunction<T>);
