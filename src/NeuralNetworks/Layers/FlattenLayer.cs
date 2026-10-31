@@ -216,28 +216,6 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     private int _outputSize;
 
     /// <summary>
-    /// The input tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the input received during the last forward pass. It is necessary
-    /// for computing gradients during the backward pass, as it provides information about
-    /// the original shape of the data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what input data was processed most recently.
-    /// 
-    /// During training:
-    /// - The layer needs to remember the shape and organization of its input
-    /// - This helps when calculating how to send gradients back to previous layers
-    /// - Without this information, the layer couldn't "unflatten" the gradients correctly
-    /// 
-    /// This is automatically cleared between training batches to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -387,8 +365,6 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
             BindToActualInput(input);
         }
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Handle truly unbatched 1D input
         if (input.Rank == 1)
         {
@@ -430,8 +406,7 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
-        _lastInput = null;
+        // No per-pass state is retained between forwards, so there is nothing to clear.
     }
 
 }

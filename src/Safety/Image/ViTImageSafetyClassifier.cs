@@ -7,42 +7,39 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Safety.Image;
 
 /// <summary>
-/// Vision Transformer (ViT)-inspired image safety classifier using patch-based feature extraction
-/// and multi-head attention pooling for multi-label safety classification.
+/// Patch-statistics image safety classifier: hand-set colour and edge rules evaluated per image patch and pooled with
+/// fixed similarity weights. Despite its name it is not a Vision Transformer and has no learned weights.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Divides the image into fixed-size patches, computes feature embeddings per patch using
-/// spatial statistics and color histograms, then aggregates with attention-weighted pooling.
-/// The aggregated representation is classified against multiple safety categories using
-/// per-category linear classifiers with learned biases.
+/// The image is cut into square patches, as a ViT tokenizes an image, but each patch is then summarised by fixed
+/// statistics (channel means and spreads, the fraction of pixels passing an RGB skin-colour rule after Kovac, Peer and
+/// Solina 2003, dark, bright and red-dominant fractions, and gradient energy). The patch summaries are pooled with
+/// softmax weights given by their similarity to the mean patch, and each safety category is scored by a hand-written
+/// rule on the pooled summary. Nothing is trained: the scores are heuristics that colour and texture alone can trigger,
+/// and should be treated as weak signals for review rather than classifications.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Rather than looking at the whole image at once (like CLIP), this
-/// classifier cuts the image into small squares (patches), analyzes each one separately, then
-/// combines the results using attention — paying more attention to suspicious patches. This
-/// approach catches localized unsafe content even in mostly-safe images.
+/// <b>For Beginners:</b> this classifier cuts the image into small squares, measures simple colour and edge
+/// statistics in each, and combines them with fixed rules. It catches some obviously skin-heavy or red-heavy images,
+/// but it does not understand what the image shows the way a trained neural network would.
 /// </para>
 /// <para>
 /// <b>References:</b>
-/// - Sensitive image classification via Vision Transformers (2024, arxiv:2412.16446)
-/// - UnsafeBench: 11 categories, GPT-4V achieves top F1 (2024, arxiv:2405.03486)
-/// - ShieldDiff: RL-based suppression of sexual content in diffusion (2024, arxiv:2410.05309)
-/// - ViT: An Image is Worth 16x16 Words (Dosovitskiy et al., ICLR 2021)
+/// - Kovac, Peer, Solina. Human Skin Colour Clustering for Face Detection (EUROCON 2003) — the skin rule
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.Classifier)]
 [ModelCategory(ModelCategory.AnomalyDetection)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
+[ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Sensitive Image Classification by Vision Transformers",
-    "https://arxiv.org/abs/2412.16446",
-    Year = 2024,
-    Authors = "Various")]
+[ResearchPaper("Human Skin Colour Clustering for Face Detection",
+    "https://doi.org/10.1109/EURCON.2003.1248169",
+    Year = 2003,
+    Authors = "Jure Kovac, Peter Peer, Franc Solina")]
 public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
 {
 
@@ -59,7 +56,7 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     public override string ModuleName => "ViTImageSafetyClassifier";
 
     /// <summary>
-    /// Initializes a new ViT-inspired image safety classifier.
+    /// Initializes a new patch-statistics image safety classifier.
     /// </summary>
     /// <param name="patchSize">Patch size in pixels. Default: 16.</param>
     /// <param name="threshold">Classification threshold (0-1). Default: 0.7.</param>
@@ -132,7 +129,7 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
                     Category = _categories[c],
                     Severity = score >= 0.9 ? SafetySeverity.High : SafetySeverity.Medium,
                     Confidence = score,
-                    Description = $"ViT patch analysis: {_categories[c]} detected (score: {score:F3}). " +
+                    Description = $"Patch colour/edge heuristic: possible {_categories[c]} (score: {score:F3}). " +
                                   $"Analyzed {numPatches} patches of size {_patchSize}x{_patchSize}.",
                     RecommendedAction = score >= 0.9 ? SafetyAction.Block : SafetyAction.Warn,
                     SourceModule = ModuleName

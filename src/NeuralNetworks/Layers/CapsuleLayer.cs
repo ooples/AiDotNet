@@ -157,17 +157,11 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     private Tensor<T>? _transformationMatrixGradient;
     [Scratch]
     private Tensor<T>? _biasGradient;
-    [Scratch]
-    private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastPreSquash;
     [Scratch]
     private Tensor<T>? _lastCouplingCoefficients;
 
@@ -552,8 +546,6 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
             throw new ArgumentException($"CapsuleLayer requires at least 2D input, got {rank}D");
         }
 
-        _lastInput = input3D;
-
         // Transform input capsules using per-capsule weight matrices
         var transformedInput = TensorAllocator.Rent<T>([batchSize, inputCapsules, _numCapsules, _capsuleDimension]);
         for (int i = 0; i < inputCapsules; i++)
@@ -596,7 +588,6 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
             weightedSum = Engine.TensorAdd(weightedSum, biasReshaped);
 
             // Apply squash activation
-            _lastPreSquash = weightedSum;
             output = ApplyActivation(weightedSum);
 
             // Update coupling coefficients
@@ -644,10 +635,13 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
             output = Engine.Reshape(output, [_numCapsules, _capsuleDimension]);
         }
 
-        _lastOutput = output;
-        _lastCouplingCoefficients = couplingCoefficients;
+        // Kept for the manual backward and, in training, the routing-entropy auxiliary loss; dropped in inference.
+        if (ShouldCacheForBackward || (UseAuxiliaryLoss && IsTrainingMode))
+            _lastCouplingCoefficients = couplingCoefficients;
+        else
+            _lastCouplingCoefficients = null;
 
-        return _lastOutput;
+        return output;
     }
 
     /// <summary>
@@ -755,8 +749,6 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _lastCouplingCoefficients = null;
         _transformationMatrixGradient = null;
         _biasGradient = null;

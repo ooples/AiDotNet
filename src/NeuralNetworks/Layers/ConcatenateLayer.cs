@@ -129,8 +129,6 @@ public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
     }
 
     private readonly int _axis;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
     [Scratch]
@@ -359,18 +357,18 @@ public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
         {
             throw new ArgumentException("ConcatenateLayer requires at least two inputs.");
         }
-        _lastOutput = Engine.Concat(inputs, _axis);
+        var output = Engine.Concat(inputs, _axis);
 
         if (ScalarActivation != null)
         {
-            _lastOutput = ScalarActivation.Activate(_lastOutput);
+            output = ScalarActivation.Activate(output);
         }
         else if (VectorActivation != null)
         {
-            _lastOutput = VectorActivation.Activate(_lastOutput);
+            output = VectorActivation.Activate(output);
         }
 
-        return _lastOutput;
+        return output;
     }
 
     /// <summary>
@@ -455,8 +453,6 @@ public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastOutput = null;
-
         // Clear GPU cached data
         _lastOutputGpu?.Dispose();
         _lastOutputGpu = null;

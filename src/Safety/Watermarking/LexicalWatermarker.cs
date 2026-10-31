@@ -5,124 +5,83 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Safety.Watermarking;
 
 /// <summary>
-/// Text watermarker that embeds watermarks via synonym substitution patterns.
+/// Keyed synonym-substitution text watermark: at every word from a synonym group, the key and the preceding word
+/// choose which synonym the text uses.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Uses a deterministic mapping from a secret key to select between synonym pairs.
-/// Given a set of interchangeable word pairs (e.g., "big"/"large", "fast"/"quick"),
-/// the watermark selects one synonym per pair based on the key. Detection checks
-/// whether the observed synonym choices match the expected key-based pattern.
+/// This is the synonym-substitution family of natural-language watermarks (Topkara, Topkara and Atallah 2006) with a
+/// keyed, context-dependent choice and a z-test detector; see <see cref="KeyedSubstitutionWatermarker{T}"/> for the
+/// embedding and the statistic. It works on finished text, so it can mark the output of any model.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> This watermarker swaps words with their synonyms in a
-/// pattern that encodes a hidden signature. For example, choosing "large" over "big"
-/// in specific positions. The meaning stays the same, but the pattern of synonym
-/// choices reveals the watermark.
+/// The default groups are words that can replace each other in nearly every context and start with the same kind of
+/// sound, so a preceding "a" or "an" stays correct (for example "rarely" and "seldom", "toward" and "towards",
+/// "additional" and "extra"). Pass your own groups to cover the vocabulary of your domain. Ordinary prose contains
+/// only a few sites per hundred words, so this watermark needs long text: with two-member groups, 36 distinct sites
+/// reach full confidence.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This watermarker swaps words with their synonyms in a pattern that only your key can
+/// recognise. The meaning stays the same, but text marked with your key always agrees with the key's choice, while
+/// other text agrees only about half the time.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.AnomalyDetection)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Adaptive Text Watermarks Resistant to Paraphrasing",
-    "https://openreview.net/forum?id=ICLR2024",
-    Year = 2024,
-    Authors = "Various")]
-public class LexicalWatermarker<T> : TextWatermarkerBase<T>
+[ResearchPaper("The Hiding Virtues of Ambiguity: Quantifiably Resilient Watermarking of Natural Language Text through Synonym Substitutions",
+    "https://doi.org/10.1145/1161366.1161397",
+    Year = 2006,
+    Authors = "Umut Topkara, Mercan Topkara, Mikhail J. Atallah")]
+public class LexicalWatermarker<T> : KeyedSubstitutionWatermarker<T>
 {
-    // Synonym pairs for watermark embedding
-    private static readonly (string, string)[] SynonymPairs = new[]
+    /// <summary>The default synonym groups.</summary>
+    public static IReadOnlyList<IReadOnlyList<string>> DefaultSynonymGroups { get; } = new IReadOnlyList<string>[]
     {
-        ("big", "large"), ("small", "little"), ("fast", "quick"), ("happy", "glad"),
-        ("sad", "unhappy"), ("begin", "start"), ("end", "finish"), ("also", "additionally"),
-        ("however", "nevertheless"), ("important", "significant"), ("show", "demonstrate"),
-        ("use", "utilize"), ("help", "assist"), ("make", "create"), ("give", "provide"),
-        ("tell", "inform"), ("think", "believe"), ("seem", "appear"), ("often", "frequently"),
-        ("enough", "sufficient"), ("hard", "difficult"), ("easy", "simple"),
-        ("rich", "wealthy"), ("poor", "impoverished"), ("old", "elderly")
+        new[] { "rarely", "seldom" },
+        new[] { "toward", "towards" },
+        new[] { "afterward", "afterwards" },
+        new[] { "among", "amongst" },
+        new[] { "anyway", "anyhow" },
+        new[] { "additional", "extra" },
+        new[] { "perhaps", "maybe" },
+        new[] { "therefore", "thus", "hence" },
+        new[] { "furthermore", "moreover" },
+        new[] { "nevertheless", "nonetheless" },
+        new[] { "quickly", "rapidly", "swiftly" },
+        new[] { "usually", "typically", "normally" },
+        new[] { "mainly", "chiefly", "primarily" },
+        new[] { "mostly", "largely" },
+        new[] { "currently", "presently" },
+        new[] { "certainly", "surely" },
+        new[] { "primary", "main" },
+        new[] { "dreamed", "dreamt" },
+        new[] { "spelled", "spelt" },
     };
 
     /// <inheritdoc />
     public override string ModuleName => "LexicalWatermarker";
 
+    /// <inheritdoc />
+    protected override string WatermarkDescription => "Keyed synonym watermark";
+
+    /// <inheritdoc />
+    protected override int SeedSalt => 0x4C455831; // "LEX1"
+
     /// <summary>
     /// Initializes a new lexical watermarker.
     /// </summary>
-    /// <param name="watermarkStrength">Unused for lexical approach; retained for API consistency.</param>
-    public LexicalWatermarker(double watermarkStrength = 0.5) : base(watermarkStrength) { }
-
-    /// <inheritdoc />
-    public override double DetectWatermark(string text)
+    /// <param name="watermarkStrength">Validated and kept for the shared API; every synonym site is embedded.</param>
+    /// <param name="key">The secret key; <c>null</c> uses the published <see cref="WatermarkKey.Public"/> key.</param>
+    /// <param name="synonymGroups">The synonym groups; <c>null</c> uses <see cref="DefaultSynonymGroups"/>.</param>
+    public LexicalWatermarker(double watermarkStrength = 0.5, string? key = null,
+        IReadOnlyList<IReadOnlyList<string>>? synonymGroups = null)
+        : base(synonymGroups ?? DefaultSynonymGroups, watermarkStrength, key)
     {
-        if (string.IsNullOrWhiteSpace(text)) return 0;
-
-        string lower = text.ToLowerInvariant();
-        int matchCount = 0;
-        int pairsSeen = 0;
-
-        foreach (var (a, b) in SynonymPairs)
-        {
-            bool hasA = lower.Contains(a);
-            bool hasB = lower.Contains(b);
-
-            if (hasA || hasB)
-            {
-                pairsSeen++;
-                // Check if the "watermarked" synonym is preferred based on pair index parity
-                int pairHash = GetFNVHash(a + b);
-                bool expectB = (pairHash & 1) == 1;
-
-                if (expectB && hasB && !hasA) matchCount++;
-                else if (!expectB && hasA && !hasB) matchCount++;
-            }
-        }
-
-        if (pairsSeen < 3) return 0;
-
-        double matchRate = (double)matchCount / pairsSeen;
-        // Random text would match ~50% of the time; watermarked text matches much higher
-        if (matchRate <= 0.5) return 0;
-        return Math.Max(0, Math.Min(1.0, (matchRate - 0.5) / 0.4));
-    }
-
-    /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> EvaluateText(string text)
-    {
-        var findings = new List<SafetyFinding>();
-        double score = DetectWatermark(text);
-
-        if (score >= 0.3)
-        {
-            findings.Add(new SafetyFinding
-            {
-                Category = SafetyCategory.Watermarked,
-                Severity = SafetySeverity.Info,
-                Confidence = score,
-                Description = $"Lexical watermark pattern detected (confidence: {score:F3}). " +
-                              "Synonym choice pattern consistent with lexical watermarking.",
-                RecommendedAction = SafetyAction.Log,
-                SourceModule = ModuleName
-            });
-        }
-
-        return findings;
-    }
-
-    private static int GetFNVHash(string s)
-    {
-        unchecked
-        {
-            int hash = (int)2166136261;
-            foreach (char c in s)
-            {
-                hash ^= c;
-                hash *= 16777619;
-            }
-            return hash;
-        }
     }
 }

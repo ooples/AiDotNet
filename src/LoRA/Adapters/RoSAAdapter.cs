@@ -100,16 +100,6 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _sparseGradients;
 
     /// <summary>
-    /// Cached input matrix from forward pass, needed for computing sparse weight gradients.
-    /// </summary>
-    /// <remarks>
-    /// Stores the input activations in matrix form [batchSize, inputSize] to enable proper
-    /// gradient computation: dL/dW_sparse[i,j] = sum_batch(gradMatrix[b,i] * input[b,j]) / batchSize.
-    /// </remarks>
-    [Scratch]
-    private Matrix<T>? _cachedInputMatrix;
-
-    /// <summary>
     /// Threshold for magnitude-based pruning of sparse weights.
     /// Weights with magnitude below this threshold are set to zero.
     /// </summary>
@@ -415,9 +405,6 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Cache input matrix for gradient computation in backward pass
-        _cachedInputMatrix = inputMatrix.Clone();
-
         // Multiply by sparse weights: [batchSize, inputSize] @ [inputSize, outputSize]
         Matrix<T> sparseOutputMatrix = inputMatrix.Multiply(_sparseWeights.ToMatrix().Transpose());
 
@@ -582,6 +569,5 @@ public partial class RoSAAdapter<T> : LoRAAdapterBase<T>
         _baseLayer.ResetState();
         _loraLayer.ResetState();
         _sparseGradients = null;
-        _cachedInputMatrix = null;
     }
 }

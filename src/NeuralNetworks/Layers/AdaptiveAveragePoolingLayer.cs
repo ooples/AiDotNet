@@ -52,10 +52,6 @@ public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>, IShapeContra
     private readonly int _outputWidth;
     private int _channels;
 
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    private int[]? _lastInputShape;
-
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
@@ -174,8 +170,6 @@ public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>, IShapeContra
             throw new ArgumentException("Input must have at least 3 dimensions (channels, height, width).");
 
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastInputShape = input._shape;
 
         // Handle any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         int rank = input.Shape.Length;
@@ -254,7 +248,6 @@ public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>, IShapeContra
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastInputShape = null;
+        // No per-pass state is retained between forwards, so there is nothing to clear.
     }
 }

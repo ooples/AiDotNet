@@ -143,12 +143,6 @@ public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<ILayer<T>> _layers;
 
     /// <summary>
-    /// Stores the pre-activation output for use in backpropagation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivationOutput;
-
-    /// <summary>
     /// Gets a value indicating whether this expert supports training through backpropagation.
     /// </summary>
     /// <value>
@@ -280,9 +274,6 @@ public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
         {
             output = layer.Forward(output);
         }
-
-        // Store pre-activation output for backpropagation
-        _lastPreActivationOutput = output;
 
         // Apply the expert's activation function if specified
         return ApplyActivation(output);

@@ -352,29 +352,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
-    /// Stored input data from the most recent forward pass, used for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// During the backward pass (training), the layer needs access to the input data from the forward
-    /// pass to calculate the gradients for the weights. This tensor stores that input data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the network's "short-term memory" of what it just processed.
-    /// 
-    /// The layer remembers:
-    /// - The last batch of data it saw
-    /// - So it can calculate exactly how to improve
-    /// 
-    /// Without this stored input, the layer wouldn't know which inputs contributed to
-    /// errors in the output, making learning impossible.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
-
-    /// <summary>
     /// Reusable per-layer scratch for the fused-linear OUTPUT ([batchDim, outputSize]),
     /// used only on the #1672 <see cref="ForwardScratchGate"/> inference path
     /// (<c>ForwardScratchGate.FusedLinear</c>). The fused matmul output is the dominant
@@ -1239,23 +1216,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             lowPrecResident = true;
         }
 
-        // _lastInput / _lastOutput are layer-side activation retention for
-        // a backward path that's never reached when training goes through
-        // the autodiff tape (the tape holds its own intermediate refs
-        // already). When a tape is active, skip the assignment so this
-        // field doesn't double-root the activation; null it so the
-        // previous step's tensor is eligible for GC. At VGG paper scale
-        // FC1 takes a [1, 25088] input × 4 B = 100 KB per call, but the
-        // 4096-wide intermediate `preActivation` is the larger cost — 16
-        // KB at fp32 / 32 KB at fp64, and that's the value we'd otherwise
-        // pin into _lastOutput.
-        // Retain the manual-backward activation caches only when an eager Backward will
-        // read them. A plain "no tape" test still cached during inference, which pinned the
-        // activation set and — inside the denoise-loop arena — aliased scratch recycled by
-        // the per-step Reset (issue #1668). ShouldCacheForBackward is additionally false in
-        // eval mode and inside an InferenceMode scope.
+        // Whether an eager manual backward could follow this forward (false under a recording tape, in eval mode and
+        // inside InferenceMode). The layer keeps no activation caches of its own; this only selects the ReLU fusion below.
         bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;
 
         // Industry standard: Support any-rank input tensors [..., inputSize]
@@ -1388,7 +1351,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // nothing, so the values equal FusedLinear followed by ApplyActivation. Other activations keep the separate
             // op: their fused epilogues are not guaranteed to round like the layer's activation function.
             result = Engine.FusedLinear(flattenedInput, _weights, BiasOrNull(), FusedActivationType.ReLU);
-            _lastOutput = null;
         }
         else
         {
@@ -1397,7 +1359,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // FusedLinear entry per forward pass (calling FusedLinear twice corrupts tape
             // entries via RemoveLastNTapeEntries).
             var preActivation = Engine.FusedLinear(flattenedInput, _weights, BiasOrNull(), FusedActivationType.None);
-            _lastOutput = cacheBwd ? preActivation : null;
             result = ApplyActivation(preActivation);
         }
 
@@ -1662,9 +1623,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward and backward passes (CPU)
-        _lastInput = null;
-        _lastOutput = null;
+        // Clear gradients from the backward pass (CPU)
         _weightsGradient = null;
         _biasesGradient = null;
         _lastPreActivationGpu = null;
@@ -1712,8 +1671,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // Clear other managed resources (CPU)
             _weightsGradient = null;
             _biasesGradient = null;
-            _lastInput = null;
-            _lastOutput = null;
             _lastPreActivationGpu = null;
             _lastOutputGpu = null;
         }

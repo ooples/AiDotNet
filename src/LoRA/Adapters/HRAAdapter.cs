@@ -318,8 +318,8 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Cache input for computing sparse gradients in backward pass
-        _cachedInput = input;
+        // Cache input for the sparse-gradient backward only when a manual backward will read it
+        SaveForBackward(ref _cachedInput, input);
 
         // 1. Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);

@@ -83,12 +83,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
 
     private readonly SiLUActivation<T> _silu = new();
 
-    // Cache for backward
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _preSiLU1;   // norm1 output (before SiLU)
-    private Tensor<T>? _preSiLU2;   // norm2 output (before SiLU)
-    private bool _lastForwardUsedTime; // whether last forward was time-conditioned
     private int[]? _originalInputShape;
 
     // Pre-allocated reusable buffers for the eval-mode fused fast path. The
@@ -303,17 +297,9 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
-        // Only retain the per-layer backward-activation caches when an eager manual
-        // Backward will read them. In inference (and under the tape / graph capture)
-        // these references are dead weight and, inside the denoise-loop arena, would
-        // alias scratch recycled by the per-step Reset (issue #1668).
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-        _lastForwardUsedTime = false;
 
         // First block: GroupNorm → SiLU → Conv3x3
         var h = _norm1.Forward(input);
-        _preSiLU1 = cacheBwd ? h : null;
         h = ApplySiLU(h);
         h = _conv1.Forward(h);
 
@@ -322,7 +308,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
 
         // Second block: GroupNorm → SiLU → Conv3x3
         h = _norm2.Forward(h);
-        _preSiLU2 = cacheBwd ? h : null;
         h = ApplySiLU(h);
         h = _conv2.Forward(h);
 
@@ -340,12 +325,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> timeEmbed)
     {
         _originalInputShape = input._shape;
-        // See Forward(input): keep the backward-activation caches only when an eager
-        // manual Backward will read them, so inference (denoise-loop arena) holds no
-        // recycled-scratch reference across the per-step Reset (issue #1668).
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-        _lastForwardUsedTime = true;
 
         // Eval-mode (no tape) can use the in-place Engine variants for the
         // two element-wise adds in this block (broadcast-add of timeProj and
@@ -393,8 +372,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
                 h, input,
                 _norm1.NumGroups, _norm1.GetGammaTensor(), _norm1.GetBetaTensor(),
                 Convert.ToDouble(_norm1.GetEpsilon(), System.Globalization.CultureInfo.InvariantCulture));
-            // _preSiLU1 is only consumed by Backward; eval-mode skips it.
-            _preSiLU1 = null;
             RbTick("gn1swish");
             h = _conv1.Forward(h);
             RbTick("conv1");
@@ -404,7 +381,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
             // Tape-active path: keep the allocating Forward chain so
             // backward can recover the pre-SiLU tensor.
             h = _norm1.Forward(input);
-            _preSiLU1 = cacheBwd ? h : null;
             h = ApplySiLU(h);
             h = _conv1.Forward(h);
         }
@@ -470,7 +446,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
                 n2, h,
                 _norm2.NumGroups, _norm2.GetGammaTensor(), _norm2.GetBetaTensor(),
                 Convert.ToDouble(_norm2.GetEpsilon(), System.Globalization.CultureInfo.InvariantCulture));
-            _preSiLU2 = null;
             h = n2;
             RbTick("gn2swish");
             h = _conv2.Forward(h);
@@ -479,7 +454,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         else
         {
             h = _norm2.Forward(h);
-            _preSiLU2 = cacheBwd ? h : null;
             h = ApplySiLU(h);
             h = _conv2.Forward(h);
         }
@@ -596,7 +570,6 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
         _originalInputShape = null;
         _norm1.ResetState();
         _conv1.ResetState();

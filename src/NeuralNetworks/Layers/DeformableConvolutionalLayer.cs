@@ -147,11 +147,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     [Scratch]
     private Vector<T>? _pendingParameters;
 
-    // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOffsets;
+    // The modulation mask of the last training forward (DCNv2/v3), kept for inspection.
     [Scratch]
     private Tensor<T>? _lastMask;
 
@@ -483,8 +479,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         // and allocate weights on the first Forward.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Ensure 4D input [batch, channels, height, width]
         var input4D = EnsureBatchDimension(input);
         int batch = input4D.Shape[0];
@@ -494,14 +488,13 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
 
         // Predict offsets using standard convolution via IEngine
         var offsets = PredictOffsetsViaEngine(input4D);
-        _lastOffsets = offsets;
 
         // Predict modulation mask if using DCNv2
         Tensor<T>? mask = null;
         if (_useModulation)
         {
             mask = PredictMaskViaEngine(input4D);
-            _lastMask = mask;
+            SaveForBackward(ref _lastMask, mask);
         }
 
         // Perform deformable convolution using IEngine's fused grouped (DCNv3) kernel — a single
@@ -1076,8 +1069,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOffsets = null;
         _lastMask = null;
         _weightGradients = null;
         _biasGradients = null;

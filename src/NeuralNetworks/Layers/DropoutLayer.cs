@@ -97,27 +97,6 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     private readonly T _scale;
 
     /// <summary>
-    /// The input tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the input tensor received during the last forward pass. It is necessary
-    /// for computing gradients during the backward pass (backpropagation).
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what input data was processed most recently.
-    /// 
-    /// During training:
-    /// - The layer needs to remember what input it received
-    /// - This helps when calculating how to improve the network
-    /// - It's like keeping your work when solving a math problem
-    /// 
-    /// This value is automatically cleared between training batches to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// The binary mask that indicates which neurons were kept active during the last forward pass.
     /// </summary>
     /// <remarks>
@@ -297,8 +276,6 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         if (!IsTrainingMode)
             return input;
 
@@ -376,7 +353,6 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached CPU values
-        _lastInput = null;
         _dropoutMask = null;
 
         // Clean up GPU resources

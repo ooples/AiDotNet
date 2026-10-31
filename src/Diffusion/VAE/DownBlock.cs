@@ -138,14 +138,6 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly bool _hasDownsample;
 
-    /// <summary>
-    /// Cached inputs and intermediate values for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    private readonly Tensor<T>?[] _resBlockOutputs;
-    private Tensor<T>? _preDownsampleOutput;
-
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
@@ -218,7 +210,6 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
         _numGroups = CalculateValidGroups(numGroups, inChannels, outChannels);
         _inputSpatialSize = inputSpatialSize;
         _hasDownsample = hasDownsample;
-        _resBlockOutputs = new Tensor<T>?[numLayers];
 
         // Create residual blocks
         _resBlocks = new VAEResBlock<T>[numLayers];
@@ -273,17 +264,13 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
     /// <returns>Output tensor with shape [batch, outChannels, H/2, W/2] if hasDownsample, else [batch, outChannels, H, W].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
         var x = input;
 
         // Process through residual blocks
         for (int i = 0; i < _numLayers; i++)
         {
             x = _resBlocks[i].Forward(x);
-            _resBlockOutputs[i] = x;
         }
-
-        _preDownsampleOutput = x;
 
         // Apply downsampling if enabled
         if (_downsample is not null)
@@ -334,14 +321,6 @@ public partial class DownBlock<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _preDownsampleOutput = null;
-
-        for (int i = 0; i < _resBlockOutputs.Length; i++)
-        {
-            _resBlockOutputs[i] = null;
-        }
-
         foreach (var block in _resBlocks)
         {
             block.ResetState();

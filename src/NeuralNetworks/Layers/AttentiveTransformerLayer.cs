@@ -79,15 +79,9 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
     private readonly GhostBatchNormalization<T> _bnLayer;
     private readonly Sparsemax<T> _sparsemax;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
-    private Tensor<T>? _priorScalesCache;
+    // Last attention mask, exposed through GetAttentionMask for feature-importance inspection
     [Scratch]
     private Tensor<T>? _attentionMaskCache;
-    [Scratch]
-    private Tensor<T>? _sparsemaxInputCache;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -190,9 +184,6 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> processedFeatures, Tensor<T> priorScales)
     {
-        _inputCache = processedFeatures;
-        _priorScalesCache = priorScales;
-
         // Step 1: FC layer to compute attention logits
         var logits = _fcLayer.Forward(processedFeatures);
 
@@ -202,7 +193,6 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
         // Step 3: Apply prior scales (element-wise multiplication)
         // This discourages reusing features from previous steps
         var scaledLogits = Engine.TensorMultiply(normalizedLogits, priorScales);
-        _sparsemaxInputCache = scaledLogits;
 
         // Step 4: Apply Sparsemax to get sparse attention
         var attentionMask = _sparsemax.Forward(scaledLogits, axis: 1);
@@ -360,10 +350,7 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _inputCache = null;
-        _priorScalesCache = null;
         _attentionMaskCache = null;
-        _sparsemaxInputCache = null;
         _fcLayer.ResetState();
     }
 

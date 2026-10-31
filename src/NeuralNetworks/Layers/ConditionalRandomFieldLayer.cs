@@ -76,15 +76,10 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
 
     private Tensor<T> _endScores;
 
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     [Scratch]
     private Tensor<T>? _transitionMatrixGradient;
@@ -489,8 +484,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
             input3D = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
-        _lastInput = ShouldCacheForBackward ? input3D : null; // #1668: skip in inference (arena safety)
-
         // The actual sequence length of THIS input. Used for all Viterbi buffers and
         // loops below so the layer handles variable-length sequences (see note above).
         int seqLen = input3D.Shape[1];
@@ -536,7 +529,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         // doesn't need to be tape-tracked.
         if (IsTrainingMode)
         {
-            _lastOutput = sequenceScores;
             return _originalInputShape != null && _originalInputShape.Length != 3
                 ? Engine.Reshape(sequenceScores, _originalInputShape)
                 : sequenceScores;
@@ -641,8 +633,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
                 output[b, t, bestPath[t]] = NumOps.One;
             }
         }
-
-        _lastOutput = output;
 
         // Restore original rank if needed for any-rank tensor support
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -1228,8 +1218,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
     /// </remarks>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _transitionMatrixGradient = null;
         _startScoresGradient = null;
         _endScoresGradient = null;

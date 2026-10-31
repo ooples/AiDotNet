@@ -49,12 +49,6 @@ public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
     private readonly LayerNormalizationLayer<T> _crossNorm;
     private readonly LayerNormalizationLayer<T> _ffnNorm;
 
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _afterSpatial;
-    private Tensor<T>? _afterTemporal;
-    private Tensor<T>? _afterCross;
-
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
@@ -162,14 +156,6 @@ public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // The residual-stream checkpoints below double as forward locals (each stage
-        // feeds the next), so compute them into locals and only mirror them into the
-        // backward-cache fields when an eager manual Backward will read them. In
-        // inference/under tape the fields are left null so the denoise-loop arena can
-        // recycle scratch without aliasing a stale reference (issue #1668).
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-
         // 1. Spatial self-attention with residual
         var afterSpatial = AddTensors(input, _spatialAttention.Forward(_spatialNorm.Forward(input)));
 
@@ -178,19 +164,6 @@ public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
 
         // 3. Cross-attention with residual
         var afterCross = AddTensors(afterTemporal, _crossAttention.Forward(_crossNorm.Forward(afterTemporal)));
-
-        if (cacheBwd)
-        {
-            _afterSpatial = afterSpatial;
-            _afterTemporal = afterTemporal;
-            _afterCross = afterCross;
-        }
-        else
-        {
-            _afterSpatial = null;
-            _afterTemporal = null;
-            _afterCross = null;
-        }
 
         // 4. Feed-forward network with residual
         var ffnInput = _ffnNorm.Forward(afterCross);
@@ -216,10 +189,6 @@ public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _afterSpatial = null;
-        _afterTemporal = null;
-        _afterCross = null;
         _spatialAttention.ResetState();
         _temporalAttention.ResetState();
         _crossAttention.ResetState();

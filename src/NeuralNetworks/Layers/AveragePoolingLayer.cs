@@ -110,17 +110,6 @@ public partial class AveragePoolingLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Stores the last input tensor from the forward pass for use in autodiff backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the output shape for backward pass gradient distribution.
-    /// </summary>
-    private int[]? _lastOutputShape;
-
-    /// <summary>
     /// Tracks whether a batch dimension was added during the forward pass.
     /// </summary>
     private bool _addedBatchDimension;
@@ -250,8 +239,6 @@ public partial class AveragePoolingLayer<T> : LayerBase<T>, IShapeContract
         if (input.Shape.Length < 3)
             throw new ArgumentException($"AveragePooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
-        // Store input for autodiff backward pass
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
@@ -297,19 +284,16 @@ public partial class AveragePoolingLayer<T> : LayerBase<T>, IShapeContract
             outputShape[_originalInputShape.Length - 3] = output4D.Shape[1];
             outputShape[_originalInputShape.Length - 2] = output4D.Shape[2];
             outputShape[_originalInputShape.Length - 1] = output4D.Shape[3];
-            _lastOutputShape = outputShape;
             return Engine.Reshape(output4D, outputShape);
         }
         if (_addedBatchDimension)
         {
             var actualOutputShape = new int[] { output4D.Shape[1], output4D.Shape[2], output4D.Shape[3] };
             var output = Engine.Reshape(output4D, actualOutputShape);
-            _lastOutputShape = actualOutputShape;
             return output;
         }
         else
         {
-            _lastOutputShape = output4D._shape;
             return output4D;
         }
     }
@@ -351,8 +335,6 @@ public partial class AveragePoolingLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward pass
-        _lastInput = null;
-        _lastOutputShape = null;
         _addedBatchDimension = false;
     }
 }

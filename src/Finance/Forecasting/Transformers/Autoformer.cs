@@ -119,17 +119,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     [Scratch]
     private Tensor<T>? _instanceStd;
 
-    /// <summary>
-    /// Trend component from decomposition.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _trendComponent;
-
-    /// <summary>
-    /// Seasonal component from decomposition.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _seasonalComponent;
 
     #endregion
 
@@ -626,26 +615,25 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
             current = _inputEmbedding.Forward(current);
         }
 
-        (_trendComponent, _seasonalComponent) = InitializeDecomposition(current);
+        var (trendComponent, _) = InitializeDecomposition(current);
 
         foreach (var layer in _encoderLayers)
         {
             current = layer.Forward(current);
             var (trend, seasonal) = SeriesDecomposition(current);
-            _trendComponent = AddTensors(_trendComponent, trend);
-            _seasonalComponent = seasonal;
-            current = _seasonalComponent;
+            trendComponent = AddTensors(trendComponent, trend);
+            current = seasonal;
         }
 
         foreach (var layer in _decoderLayers)
         {
             current = layer.Forward(current);
             var (trend, seasonal) = SeriesDecomposition(current);
-            _trendComponent = AddTensors(_trendComponent, trend);
+            trendComponent = AddTensors(trendComponent, trend);
             current = seasonal;
         }
 
-        current = AddTensors(current, _trendComponent);
+        current = AddTensors(current, trendComponent);
 
         if (_finalNorm is not null)
         {

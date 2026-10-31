@@ -113,21 +113,10 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
     public DenseLayer<T> GatingNetwork => _gatingNetwork;
 
     /// <summary>
-    /// Temporary storage for expert outputs during forward pass (needed for backward pass).
-    /// </summary>
-    private Tensor<T>[]? _lastExpertOutputs;
-
-    /// <summary>
     /// Temporary storage for gating weights during forward pass (needed for backward pass).
     /// </summary>
     [Scratch]
     private Tensor<T>? _lastGatingWeights;
-
-    /// <summary>
-    /// Temporary storage for the last input during forward pass (needed for backward pass).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
 
     /// <summary>Construction state: the 'numberOfExperts' the layer was built with.</summary>
     private readonly int _numberOfExperts;
@@ -234,8 +223,6 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input.Clone();
-
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -244,8 +231,7 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> gatingWeights = _gatingNetwork.Forward(input);
         _lastGatingWeights = gatingWeights.Clone();
 
-        // Forward through all experts and store their outputs
-        _lastExpertOutputs = new Tensor<T>[_experts.Length];
+        // Forward through all experts
         Tensor<T> combinedExpertOutput = new Tensor<T>(baseOutput._shape);
 
         // Initialize combined output to zero
@@ -263,7 +249,6 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             // Forward through this expert
             Tensor<T> expertOutput = _experts[expertIdx].Forward(input);
-            _lastExpertOutputs[expertIdx] = expertOutput.Clone();
 
             // Weight each sample's expert output by its corresponding gating weight
             for (int batchIdx = 0; batchIdx < batchSize; batchIdx++)
@@ -417,9 +402,7 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
 
         _gatingNetwork.ResetState();
 
-        _lastInput = null;
         _lastGatingWeights = null;
-        _lastExpertOutputs = null;
     }
 
     /// <summary>
