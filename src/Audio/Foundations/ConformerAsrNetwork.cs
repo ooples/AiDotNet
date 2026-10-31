@@ -13,6 +13,10 @@ internal enum ConformerAsrDecoder
 
     /// <summary>An RNN transducer: an LSTM prediction network and a joint network (Graves 2012).</summary>
     Transducer,
+
+    /// <summary>A token-and-duration transducer (Xu et al. 2023): the joint network also predicts how many frames each
+    /// emission advances.</summary>
+    TokenAndDuration,
 }
 
 /// <summary>The encoder block a <see cref="ConformerAsrNetwork{T}"/> stacks.</summary>
@@ -64,6 +68,8 @@ internal sealed record ConformerAsrConfiguration
     public int FeedForwardMultiplier { get; init; } = 4;
     public int ConvKernel { get; init; } = 32;
     public ConformerAsrBlock Block { get; init; } = ConformerAsrBlock.Conformer;
+    /// <summary>Whether sinusoidal absolute positions are added to the scaled input (always for the Transformer block).</summary>
+    public bool AbsolutePositions { get; init; }
     /// <summary>Hidden units of the convolutional gating MLP (Branchformer and E-Branchformer).</summary>
     public int CgmlpDim { get; init; } = 2048;
     /// <summary>Depthwise kernel of E-Branchformer's merge convolution.</summary>
@@ -72,6 +78,14 @@ internal sealed record ConformerAsrConfiguration
     public int[] IntermediateCtcLayers { get; init; } = Array.Empty<int>();
     /// <summary>Weight of the mean intermediate CTC loss: L = (1 - w) L_CTC + w L_inter.</summary>
     public double IntermediateCtcWeight { get; init; }
+    /// <summary>Transformer decoder layers of a hybrid CTC/attention model (Watanabe et al. 2017); zero for none.</summary>
+    public int AttentionDecoderLayers { get; init; }
+    /// <summary>Feed-forward units of each attention-decoder layer.</summary>
+    public int AttentionDecoderFeedForward { get; init; } = 2048;
+    /// <summary>Weight of the CTC loss in the hybrid objective: L = w L_CTC + (1 - w) L_attention.</summary>
+    public double CtcWeight { get; init; } = 0.3;
+    /// <summary>Label smoothing of the attention decoder's cross-entropy.</summary>
+    public double LabelSmoothing { get; init; } = 0.1;
     /// <summary>Whether each intermediate prediction is fed back into the next layer's input (self-conditioned CTC,
     /// Nozaki and Komatsu 2021, Equation 9).</summary>
     public bool SelfConditioning { get; init; }
@@ -85,6 +99,8 @@ internal sealed record ConformerAsrConfiguration
     public int PredictionDim { get; init; } = 640;
     public int PredictionLayers { get; init; } = 1;
     public int JointDim { get; init; } = 640;
+    /// <summary>The durations a token-and-duration joint network chooses among (Parakeet-TDT: 0 to 4).</summary>
+    public int[] Durations { get; init; } = { 0, 1, 2, 3, 4 };
     /// <summary>Output vocabulary, blank (0) included.</summary>
     public int VocabSize { get; init; } = 1024;
     public int FrequencyMasks { get; init; } = 2;
@@ -164,6 +180,14 @@ internal sealed class ConformerAsrNetwork<T>
         {
             CtcHead = Own(new DenseLayer<T>(_o.VocabSize, identity));
             if (_o.SelfConditioning) Conditioning = Own(new DenseLayer<T>(d, identity));
+            if (_o.AttentionDecoderLayers > 0)
+            {
+                // The last token is the start and end of a sentence, as ESPnet sets them.
+                TokenEmbedding = Own(new EmbeddingLayer<T>(_o.VocabSize, d));
+                for (int i = 0; i < _o.AttentionDecoderLayers; i++) DecoderBlocks.Add(new DecoderBlock(_o, layer => Own(layer)));
+                DecoderNorm = Own(new LayerNormalizationLayer<T>(d));
+                DecoderOutput = Own(new DenseLayer<T>(_o.VocabSize, identity));
+            }
             return;
         }
         // The prediction network reads the previous label, the blank (0) standing for "no label yet".
@@ -171,7 +195,7 @@ internal sealed class ConformerAsrNetwork<T>
         for (int i = 0; i < _o.PredictionLayers; i++) PredictionLstms.Add(Own(new LSTMLayer<T>(_o.PredictionDim)));
         JointEncoder = Own(new DenseLayer<T>(_o.JointDim, identity));
         JointPrediction = Own(new BiasFreeLinearLayer<T>(_o.PredictionDim, _o.JointDim));
-        JointOutput = Own(new DenseLayer<T>(_o.VocabSize, identity));
+        JointOutput = Own(new DenseLayer<T>(_o.VocabSize + (_o.Decoder == ConformerAsrDecoder.TokenAndDuration ? _o.Durations.Length : 0), identity));
     }
 
     private readonly int _channels;
@@ -286,6 +310,100 @@ internal sealed class ConformerAsrNetwork<T>
     /// <summary>Self-conditioned CTC's shared Linear_{|V|->D} that feeds each intermediate prediction back.</summary>
     public DenseLayer<T>? Conditioning { get; }
     public List<TransformerBlock> TransformerBlocks { get; } = new();
+    public EmbeddingLayer<T>? TokenEmbedding { get; }
+    public List<DecoderBlock> DecoderBlocks { get; } = new();
+    public LayerNormalizationLayer<T>? DecoderNorm { get; }
+    public DenseLayer<T>? DecoderOutput { get; }
+
+    /// <summary>The start-and-end-of-sentence token of the attention decoder: the vocabulary's last.</summary>
+    public int SentenceBoundary => _o.VocabSize - 1;
+
+    /// <summary>A pre-norm Transformer decoder layer (ESPnet's <c>DecoderLayer</c>): causal self-attention, attention over
+    /// the encoder output and a ReLU feed-forward network, each with a residual.</summary>
+    internal sealed class DecoderBlock
+    {
+        public DecoderBlock(ConformerAsrConfiguration o, Func<LayerBase<T>, LayerBase<T>> own)
+        {
+            int d = o.EncoderDim;
+            TLayer Own<TLayer>(TLayer layer) where TLayer : LayerBase<T> { own(layer); return layer; }
+            SelfNorm = Own(new LayerNormalizationLayer<T>(d));
+            var self = new MultiHeadAttentionLayer<T>(o.NumAttentionHeads, d / o.NumAttentionHeads) { UseCausalMask = true };
+            SelfAttention = Own(self);
+            SourceNorm = Own(new LayerNormalizationLayer<T>(d));
+            SourceAttention = Own(new MultiHeadAttentionLayer<T>(o.NumAttentionHeads, d / o.NumAttentionHeads));
+            FeedForwardNorm = Own(new LayerNormalizationLayer<T>(d));
+            Expand = Own(new FullyConnectedLayer<T>(d, o.AttentionDecoderFeedForward, (IActivationFunction<T>)new ReLUActivation<T>()));
+            Project = Own(new FullyConnectedLayer<T>(o.AttentionDecoderFeedForward, d, (IActivationFunction<T>)new IdentityActivation<T>()));
+        }
+
+        public LayerNormalizationLayer<T> SelfNorm { get; }
+        public MultiHeadAttentionLayer<T> SelfAttention { get; }
+        public LayerNormalizationLayer<T> SourceNorm { get; }
+        public MultiHeadAttentionLayer<T> SourceAttention { get; }
+        public LayerNormalizationLayer<T> FeedForwardNorm { get; }
+        public FullyConnectedLayer<T> Expand { get; }
+        public FullyConnectedLayer<T> Project { get; }
+
+        /// <summary>Tokens' states <c>[1, n, D]</c> given the encoder output <c>[1, L, D]</c>.</summary>
+        public Tensor<T> Forward(IEngine engine, Tensor<T> x, Tensor<T> memory)
+        {
+            x = engine.TensorAdd(x, SelfAttention.Forward(SelfNorm.Forward(x)));
+            x = engine.TensorAdd(x, SourceAttention.Forward(SourceNorm.Forward(x), memory));
+            return engine.TensorAdd(x, Project.Forward(Expand.Forward(FeedForwardNorm.Forward(x))));
+        }
+    }
+
+    /// <summary>The attention decoder's logits <c>[n, VocabSize]</c> for a token history, reading the encoder output
+    /// <c>[L, D]</c>: embedding scaled by sqrt(D) plus sinusoidal positions, the decoder layers and a final norm.</summary>
+    public Tensor<T> DecoderLogits(IReadOnlyList<int> tokens, Tensor<T> encoded)
+    {
+        if (TokenEmbedding is null || DecoderNorm is null || DecoderOutput is null) throw new InvalidOperationException("This network has no attention decoder.");
+        int n = tokens.Count, d = _o.EncoderDim;
+        var ids = new Tensor<T>(new[] { 1, n });
+        for (int i = 0; i < n; i++) ids[0, i] = NumOps.FromDouble(tokens[i]);
+        var x = _engine.Reshape(TokenEmbedding.Forward(ids), new[] { n, d });
+        x = _engine.Reshape(_engine.TensorAdd(_engine.TensorMultiplyScalar(x, NumOps.FromDouble(Math.Sqrt(d))), Positions(n, d)), new[] { 1, n, d });
+        var memory = _engine.Reshape(encoded, new[] { 1, encoded.Shape[0], d });
+        foreach (var block in DecoderBlocks) x = block.Forward(_engine, x, memory);
+        return DecoderOutput.Forward(_engine.Reshape(DecoderNorm.Forward(x), new[] { n, d }));
+    }
+
+    /// <summary>The attention decoder's label-smoothed cross-entropy of a transcript: it reads the boundary token then
+    /// the labels, and predicts the labels then the boundary token (Watanabe et al. 2017, section 3.2).</summary>
+    public Tensor<T> AttentionLoss(Tensor<T> encoded, IReadOnlyList<int> labels)
+    {
+        var input = new List<int> { SentenceBoundary };
+        input.AddRange(labels);
+        var logits = DecoderLogits(input, encoded);
+        int n = input.Count, v = _o.VocabSize;
+        double smooth = _o.LabelSmoothing;
+        var weights = new Tensor<T>(new[] { n, v });
+        for (int i = 0; i < n; i++)
+        {
+            int target = i < labels.Count ? labels[i] : SentenceBoundary;
+            for (int k = 0; k < v; k++)
+                weights[i, k] = NumOps.FromDouble(-((k == target ? 1 - smooth : 0) + smooth / v) / n);
+        }
+        return _engine.ReduceSum(_engine.TensorMultiply(_engine.TensorLogSoftmax(logits, axis: -1), weights), new[] { 0, 1 }, keepDims: false);
+    }
+
+    /// <summary>Greedy attention decoding: the most likely next token until the boundary token or
+    /// <paramref name="maxLength"/> tokens.</summary>
+    public List<int> GreedyAttention(Tensor<T> encoded, int maxLength)
+    {
+        var tokens = new List<int> { SentenceBoundary };
+        for (int step = 0; step < maxLength; step++)
+        {
+            var logits = DecoderLogits(tokens, encoded);
+            int last = tokens.Count - 1, best = 0;
+            for (int k = 1; k < _o.VocabSize; k++)
+                if (NumOps.GreaterThan(logits[last, k], logits[last, best])) best = k;
+            if (best == SentenceBoundary) break;
+            tokens.Add(best);
+        }
+        tokens.RemoveAt(0);
+        return tokens;
+    }
 
     /// <summary>A pre-norm Transformer encoder layer: x + MHSA(LN(x)), then + FFN(LN(x)) with ReLU.</summary>
     internal sealed class TransformerBlock
@@ -386,7 +504,7 @@ internal sealed class ConformerAsrNetwork<T>
         if (length <= 0) throw new ArgumentException("The audio is too short for the convolution subsampling.");
         var steps = _engine.Reshape(_engine.TensorPermute(x, new[] { 0, 2, 1, 3 }), new[] { length, _channels * _subsampledBins });
         var h = InputProjection.Forward(steps);
-        if (_o.Block == ConformerAsrBlock.Transformer) h = _engine.TensorAdd(_engine.TensorMultiplyScalar(h, NumOps.FromDouble(Math.Sqrt(d))), Positions(length, d));
+        if (_o.Block == ConformerAsrBlock.Transformer || _o.AbsolutePositions) h = _engine.TensorAdd(_engine.TensorMultiplyScalar(h, NumOps.FromDouble(Math.Sqrt(d))), Positions(length, d));
         int count = Math.Max(Blocks.Count, Math.Max(BranchBlocks.Count, TransformerBlocks.Count));
         for (int i = 0; i < count; i++)
         {
@@ -443,6 +561,10 @@ internal sealed class ConformerAsrNetwork<T>
     {
         var (output, intermediates) = EncodeWithIntermediates(features, training);
         var loss = CtcLoss(CtcLogits(output), labels);
+        // Hybrid CTC/attention (Watanabe et al. 2017, Equation 13): L = w L_CTC + (1 - w) L_attention.
+        if (DecoderBlocks.Count > 0)
+            loss = _engine.TensorAdd(_engine.TensorMultiplyScalar(loss, NumOps.FromDouble(_o.CtcWeight)),
+                _engine.TensorMultiplyScalar(AttentionLoss(output, labels), NumOps.FromDouble(1 - _o.CtcWeight)));
         if (intermediates.Count == 0) return loss;
         Tensor<T>? inter = null;
         foreach (var logits in intermediates)
@@ -476,18 +598,25 @@ internal sealed class ConformerAsrNetwork<T>
         var f = _engine.Reshape(JointEncoder.Forward(encoded), new[] { frames, 1, j });
         var g = _engine.Reshape(JointPrediction.Forward(predicted), new[] { 1, width, j });
         var hidden = _engine.Tanh(_engine.TensorAdd(_engine.TensorBroadcastTo(f, new[] { frames, width, j }), _engine.TensorBroadcastTo(g, new[] { frames, width, j })));
-        var logits = JointOutput.Forward(_engine.Reshape(hidden, new[] { frames * width, j }));
-        return _engine.TensorLogSoftmax(_engine.Reshape(logits, new[] { frames, width, _o.VocabSize }), axis: -1);
+        var logits = _engine.Reshape(JointOutput.Forward(_engine.Reshape(hidden, new[] { frames * width, j })), new[] { frames, width, _o.VocabSize + (_o.Decoder == ConformerAsrDecoder.TokenAndDuration ? _o.Durations.Length : 0) });
+        if (_o.Decoder != ConformerAsrDecoder.TokenAndDuration) return _engine.TensorLogSoftmax(logits, axis: -1);
+        // The token and duration distributions are normalized separately (Xu et al. 2023, section 3).
+        int v = _o.VocabSize, n = _o.Durations.Length;
+        var tokens = _engine.TensorLogSoftmax(_engine.TensorSlice(logits, new[] { 0, 0, 0 }, new[] { frames, width, v }), axis: -1);
+        var lengths = _engine.TensorLogSoftmax(_engine.TensorSlice(logits, new[] { 0, 0, v }, new[] { frames, width, n }), axis: -1);
+        return _engine.TensorConcatenate(new[] { tokens, lengths }, 2);
     }
 
     /// <summary>The transducer loss of a label sequence for an encoded utterance.</summary>
-    public Tensor<T> TransducerLoss(Tensor<T> encoded, IReadOnlyList<int> labels) =>
-        Foundations.TransducerLoss.Compute(_engine, Joint(encoded, Predict(labels)), labels, blank: 0, _o.FastEmitLambda);
+    public Tensor<T> TransducerLoss(Tensor<T> encoded, IReadOnlyList<int> labels) => _o.Decoder == ConformerAsrDecoder.TokenAndDuration
+        ? Foundations.TransducerLoss.ComputeTokenAndDuration(_engine, Joint(encoded, Predict(labels)), _o.VocabSize, _o.Durations, labels, blank: 0)
+        : Foundations.TransducerLoss.Compute(_engine, Joint(encoded, Predict(labels)), labels, blank: 0, _o.FastEmitLambda);
 
     /// <summary>Greedy transducer decoding: at each frame emit the most likely symbol until it is the blank (at most
     /// <paramref name="maxSymbolsPerFrame"/> labels per frame).</summary>
     public List<int> GreedyTransducer(Tensor<T> encoded, int maxSymbolsPerFrame = 10)
     {
+        if (_o.Decoder == ConformerAsrDecoder.TokenAndDuration) return GreedyTokenAndDuration(encoded, maxSymbolsPerFrame);
         var labels = new List<int>();
         int frames = encoded.Shape[0], d = encoded.Shape[1];
         for (int t = 0; t < frames; t++)
@@ -504,6 +633,29 @@ internal sealed class ConformerAsrNetwork<T>
                 if (best == 0) break;
                 labels.Add(best);
             }
+        }
+        return labels;
+    }
+
+    // TDT greedy decoding (Xu et al. 2023, Algorithm 1): the most likely token and duration at the current frame; a token
+    // is emitted and the frame advances by the duration (a blank advances at least one frame).
+    private List<int> GreedyTokenAndDuration(Tensor<T> encoded, int maxSymbolsPerFrame)
+    {
+        var labels = new List<int>();
+        int frames = encoded.Shape[0], d = encoded.Shape[1], v = _o.VocabSize, symbols = 0;
+        for (int t = 0; t < frames;)
+        {
+            var g = Predict(labels);
+            var last = _engine.TensorSlice(g, new[] { labels.Count, 0 }, new[] { 1, _o.PredictionDim });
+            var logProbs = Joint(_engine.TensorSlice(encoded, new[] { t, 0 }, new[] { 1, d }), last);
+            int token = 0, duration = 0;
+            for (int k = 1; k < v; k++)
+                if (NumOps.GreaterThan(logProbs[0, 0, k], logProbs[0, 0, token])) token = k;
+            for (int i = 1; i < _o.Durations.Length; i++)
+                if (NumOps.GreaterThan(logProbs[0, 0, v + i], logProbs[0, 0, v + duration])) duration = i;
+            int step = _o.Durations[duration];
+            if (token != 0) { labels.Add(token); symbols++; }
+            if (token == 0 || step > 0 || symbols >= maxSymbolsPerFrame) { t += Math.Max(step, 1); symbols = 0; }
         }
         return labels;
     }

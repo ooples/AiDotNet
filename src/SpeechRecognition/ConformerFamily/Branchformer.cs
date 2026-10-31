@@ -22,7 +22,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// convolutions, and encodes it with Conformer blocks, each mixing self-attention (long-range context) with a convolution
 /// (local patterns). A linear layer gives every frame a probability for each token; collapsing repeats and blanks gives the transcript.</para>
 /// <para>
-/// Each block runs pre-norm self-attention (global context) and a convolutional gating MLP (local context) side by side and merges them by concatenation and a linear projection (section 3). The defaults are the Branchformer of the ESPnet LibriSpeech recipe: 18 blocks, width 512, 8 heads, 3072 gating-MLP units and a 31-wide gating convolution. The paper decodes with a joint CTC/attention decoder; this class keeps the CTC branch. SpecAugment masks the features in training (section 3.1). The CTC layer trains with the CTC loss (Graves et al. 2006) and decodes greedily. The paper's blocks use relative
+/// Each block runs pre-norm self-attention (global context) and a convolutional gating MLP (local context) side by side and merges them by concatenation and a linear projection (section 3). The defaults are the Branchformer of the ESPnet LibriSpeech recipe (train_asr_branchformer_hop_length160_e18_linear3072): 18 blocks, width 512, 8 heads, 3072 gating-MLP units and a 31-wide gating convolution, with a 6-layer Transformer decoder trained jointly with CTC (CTC weight 0.3, label smoothing 0.1) and a 5000-token vocabulary. SpecAugment masks the features in training (section 3.1). Training minimizes the joint CTC/attention loss (Watanabe et al. 2017); transcription decodes the attention decoder greedily. The paper's blocks use relative
 /// positional encoding; these use rotary position encoding, the relative scheme
 /// <see cref="AiDotNet.NeuralNetworks.Layers.ConformerBlockLayer{T}"/> provides.
 /// </para>
@@ -45,7 +45,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ResearchPaper("Branchformer: Parallel MLP-Attention Architectures to Capture Local and Global Context for Speech Recognition and Understanding", "https://arxiv.org/abs/2207.02971", Year = 2022, Authors = "Peng et al.")]
 [PaperOptimizer(OptimizerKind.Adam, WeightDecay = 1e-6,
                 Source = "Peng et al. 2022, Sec. 4: the Adam optimizer with weight decay 1e-6. No learning rate is declared because the paper states none, following the ESPnet recipes it cites for training configuration.")]
-public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />
     /// <remarks>The output vocabulary, blank (0) included.</remarks>
@@ -82,7 +82,7 @@ public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
     }
 
-    /// <summary>Transcribes audio: the encoder and the CTC layer with greedy decoding.</summary>
+    /// <summary>Transcribes audio: the encoder and the attention decoder with greedy decoding.</summary>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
@@ -94,7 +94,7 @@ public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         {
             using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
             var encoded = _network.Encode(_network.Features(Samples(waveform, 0, waveform.Length)), training: false);
-            tokens = ConformerAsrNetwork<T>.GreedyCtc(_network.CtcLogits(encoded));
+            tokens = _network.GreedyAttention(encoded, _options.MaxTextLength);
         }
         return new TranscriptionResult<T>
         {
@@ -219,6 +219,29 @@ public partial class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
         }, _optimizer);
         return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes (the CTC loss), on unaugmented features in inference
+    /// mode, averaged over the batch.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        double total = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            var features = network.Features(Samples(input, r * samples, samples));
+            total += NumOps.ToDouble(network.CtcTrainingLoss(features, Labels(row), training: false)[0]);
+        }
+        return NumOps.FromDouble(total / rows);
     }
 
     /// <inheritdoc />

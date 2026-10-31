@@ -7,6 +7,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.SpeechRecognition.ConformerFamily;
 using AiDotNet.SpeechRecognition.CTCVariants;
 using AiDotNet.SpeechRecognition.NeMo;
+using AiDotNet.SpeechRecognition.Multilingual;
+using AiDotNet.SpeechRecognition.Robust;
 using AiDotNet.SpeechRecognition.Streaming;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -221,5 +223,45 @@ public class ConformerFamilyPaperTests
             for (int step = 0; step < 30; step++) model.Train(audio, target);
             Assert.True(Loss() < 0.5 * mixed, $"mixed CTC loss {mixed} -> {Loss()}");
         }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task HybridDefaults_AreTheReleasedRecipes()
+    {
+        await Task.Yield();
+        // ESPnet LibriSpeech train_asr_conformer10_hop_length160: 12 x 512 Conformer, 8 heads, kernel 31, 6-layer decoder,
+        // CTC weight 0.3, label smoothing 0.1, 5000 BPE tokens.
+        var e = new ESPnetASROptions();
+        Assert.Equal((12, 512, 8, 31, 6, 2048, 0.3, 0.1, 5000), (e.NumEncoderLayers, e.EncoderDim, e.NumAttentionHeads, e.ConvKernel, e.AttentionDecoderLayers, e.AttentionDecoderFeedForward, e.CtcWeight, e.LabelSmoothing, e.VocabSize));
+        // OWSM v3.1 medium: 18 x 1024 E-Branchformer, 16 heads, 4096 cgMLP units, 18-layer decoder, 50,002 tokens, absolute positions.
+        var o = new OWSMOptions();
+        Assert.Equal((18, 1024, 16, 4096, 18, 4096, 50002, 0.0), (o.NumEncoderLayers, o.EncoderDim, o.NumAttentionHeads, o.CgmlpDim, o.AttentionDecoderLayers, o.AttentionDecoderFeedForward, o.VocabSize, o.RopeTheta));
+        Assert.True(o.ToConfiguration().AbsolutePositions);
+        // ESPnet LibriSpeech E-Branchformer: 1024 feed-forward units at width 512.
+        Assert.Equal(1024, new EBranchformerOptions().EncoderDim * new EBranchformerOptions().FeedForwardMultiplier);
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task HybridTraining_LowersTheJointLoss_AndAttentionDecodingRuns()
+    {
+        await Task.Yield();
+        using var model = new ESPnetASR<double>(Architecture(), new ESPnetASROptions
+        {
+            EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, NumMels = 16, AttentionDecoderLayers = 1,
+            AttentionDecoderFeedForward = 16, VocabSize = 8, FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, MaxTextLength = 6, Seed = 5,
+        });
+        var network = model.Network ?? throw new InvalidOperationException("native model");
+        var audio = Voice(8000, 180);
+        var labels = new[] { 3, 5, 2 };
+        var target = new Tensor<double>(new[] { 3 }, new Vector<double>(labels.Select(l => (double)l).ToArray()));
+        var features = network.Features(audio.ToArray());
+        double Loss() => network.CtcTrainingLoss(features, labels, training: false)[0];
+        var encoded = network.Encode(features, training: false);
+        double ctc = network.CtcLoss(network.CtcLogits(encoded), labels)[0], attention = network.AttentionLoss(encoded, labels)[0];
+        double before = Loss();
+        Assert.Equal(0.3 * ctc + 0.7 * attention, before, 8);
+        for (int step = 0; step < 30; step++) model.Train(audio, target);
+        Assert.True(Loss() < 0.5 * before, $"joint loss {before} -> {Loss()}");
+        Assert.True(model.Transcribe(audio).Text.Length <= 6);
     }
 }
