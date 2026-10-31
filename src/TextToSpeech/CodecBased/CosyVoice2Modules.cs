@@ -138,6 +138,7 @@ internal sealed record CosyVoice2LmConfiguration(
 /// </remarks>
 internal sealed class CosyVoice2Lm<T>
 {
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private const int Ignore = -1;
     private readonly IEngine _engine;
@@ -201,21 +202,43 @@ internal sealed class CosyVoice2Lm<T>
 
     /// <summary>The training sequence and its targets (<c>prepare_lm_input_target</c> for one utterance): bistream with
     /// probability ½ when the utterance qualifies (<paramref name="random"/> draws it), unistream otherwise.</summary>
-    internal (Tensor<T> Input, int[] Targets) TrainingSequence(IReadOnlyList<int> text, IReadOnlyList<int> speech, Random random)
+    internal (Tensor<T> Input, int[] Targets) TrainingSequence(IReadOnlyList<int> text, IReadOnlyList<int> speech, Random random) =>
+        TrainingSequence(TextEmbeddings(text), speech, random);
+
+    /// <summary>The speech embedding's rows for speech tokens (and the end and fill tokens after them).</summary>
+    internal Tensor<T> SpeechRows(IReadOnlyList<int> ids) => Rows(SpeechEmbedding, ids);
+
+    /// <summary>The LLM embedding's row for a special token: 0 sos, 1 the task id (MinMo's turn of speech).</summary>
+    internal Tensor<T> SpecialRow(int id) => Rows(LlmEmbedding, new[] { id });
+
+    /// <summary>
+    /// The training sequence for text given as embeddings <c>[N, d]</c> (MinMo's semantic vectors): after
+    /// <paramref name="prefix"/> (unscored rows after sos), bistream when <paramref name="bistream"/> says so (null: with
+    /// probability ½ when the utterance qualifies, as CosyVoice 2 trains), unistream otherwise.
+    /// </summary>
+    internal (Tensor<T> Input, int[] Targets) TrainingSequence(Tensor<T> textEmbeddings, IReadOnlyList<int> speech, Random random,
+        Tensor<T>? prefix = null, bool? bistream = null)
     {
         var c = Configuration;
+        int n = textEmbeddings.Shape[0], d = textEmbeddings.Shape[1];
+        Tensor<T> Slice(int start, int count) => _engine.TensorSlice(textEmbeddings, new[] { start, 0 }, new[] { count, d });
         var sos = Rows(LlmEmbedding, new[] { 0 });
         var task = Rows(LlmEmbedding, new[] { 1 });
         var parts = new List<Tensor<T>> { sos };
         var targets = new List<int> { Ignore };
-        bool bistream = random.NextDouble() < 0.5 && (double)speech.Count / text.Count > (double)c.SpeechChunk / c.TextChunk;
-        if (bistream)
+        if (prefix is not null)
         {
-            int chunks = (int)Math.Ceiling((text.Count + 1) / (double)c.TextChunk);
+            parts.Add(prefix);
+            for (int i = 0; i < prefix.Shape[0]; i++) targets.Add(Ignore);
+        }
+        bool useBistream = bistream ?? (random.NextDouble() < 0.5 && (double)speech.Count / n > (double)c.SpeechChunk / c.TextChunk);
+        if (useBistream)
+        {
+            int chunks = (int)Math.Ceiling((n + 1) / (double)c.TextChunk);
             for (int j = 0; j < chunks; j++)
             {
                 int textStart = j * c.TextChunk, speechStart = j * c.SpeechChunk;
-                int textCount = Math.Max(0, Math.Min(c.TextChunk, text.Count - textStart));
+                int textCount = Math.Max(0, Math.Min(c.TextChunk, n - textStart));
                 if (textCount == c.TextChunk)
                 {
                     int speechCount = Math.Max(0, Math.Min(c.SpeechChunk, speech.Count - speechStart));
@@ -224,7 +247,7 @@ internal sealed class CosyVoice2Lm<T>
                     for (int i = 0; i < c.TextChunk - 1; i++) targets.Add(Ignore);
                     for (int i = 0; i < c.SpeechChunk; i++) targets.Add(speech[speechStart + i]);
                     targets.Add(FillToken);
-                    parts.Add(TextEmbeddings(text.Skip(textStart).Take(c.TextChunk).ToList()));
+                    parts.Add(Slice(textStart, c.TextChunk));
                     parts.Add(Rows(SpeechEmbedding, speech.Skip(speechStart).Take(c.SpeechChunk).ToList()));
                 }
                 else
@@ -233,7 +256,7 @@ internal sealed class CosyVoice2Lm<T>
                     for (int i = 0; i < textCount; i++) targets.Add(Ignore);
                     targets.AddRange(rest);
                     targets.Add(EndToken);
-                    if (textCount > 0) parts.Add(TextEmbeddings(text.Skip(textStart).ToList()));
+                    if (textCount > 0) parts.Add(Slice(textStart, textCount));
                     parts.Add(task);
                     if (rest.Count > 0) parts.Add(Rows(SpeechEmbedding, rest));
                 }
@@ -241,10 +264,10 @@ internal sealed class CosyVoice2Lm<T>
         }
         else
         {
-            for (int i = 0; i < text.Count; i++) targets.Add(Ignore);
+            for (int i = 0; i < n; i++) targets.Add(Ignore);
             targets.AddRange(speech);
             targets.Add(EndToken);
-            parts.Add(TextEmbeddings(text));
+            if (n > 0) parts.Add(textEmbeddings);
             parts.Add(task);
             if (speech.Count > 0) parts.Add(Rows(SpeechEmbedding, speech));
         }
@@ -252,9 +275,13 @@ internal sealed class CosyVoice2Lm<T>
     }
 
     /// <summary>The training loss: the mean cross-entropy of the scored positions of <see cref="TrainingSequence"/>.</summary>
-    public Tensor<T> Loss(IReadOnlyList<int> text, IReadOnlyList<int> speech, Random random)
+    public Tensor<T> Loss(IReadOnlyList<int> text, IReadOnlyList<int> speech, Random random) =>
+        Loss(TrainingSequence(text, speech, random));
+
+    /// <summary>The mean cross-entropy of the scored positions of a training sequence.</summary>
+    internal Tensor<T> Loss((Tensor<T> Input, int[] Targets) sequence)
     {
-        var (input, targets) = TrainingSequence(text, speech, random);
+        var (input, targets) = sequence;
         var logp = _engine.TensorLogSoftmax(LogitsOf(input), axis: -1);
         int scored = targets.Count(t => t != Ignore);
         var picks = new Tensor<T>(logp._shape);
