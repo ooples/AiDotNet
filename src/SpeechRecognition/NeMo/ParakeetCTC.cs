@@ -48,7 +48,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
                 ReferenceBatchSize = 2048,
                 LearningRate = 0.001,
                 Source = "Rekesh et al. 2023, Sec. 4.1: Fast Conformer models were trained using cosine scheduler with a 15k linear warmup, AdamW, global batch size 2048 across 32 GPUs. Peak learning rate 0.001 for CTC.")]
-public partial class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />
     /// <remarks>The output vocabulary, blank (0) included.</remarks>
@@ -222,6 +222,29 @@ public partial class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
         }, _optimizer);
         return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes (the CTC loss), on unaugmented features in inference
+    /// mode, averaged over the batch.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        double total = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            var features = network.Features(Samples(input, r * samples, samples));
+            total += NumOps.ToDouble(network.CtcTrainingLoss(features, Labels(row), training: false)[0]);
+        }
+        return NumOps.FromDouble(total / rows);
     }
 
     /// <inheritdoc />
