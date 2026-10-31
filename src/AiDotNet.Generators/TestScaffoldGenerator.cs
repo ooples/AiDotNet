@@ -5913,8 +5913,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ActivationDropout = 0.0, FeatureProjectionDropout = 0.0, FinalDropout = 0.0, LayerDrop = 0.0, " +
                     "MaskTimeProbability = 0.0 })";
             }
+            else if (model.ClassName == "SPIRAL" && model.TypeParameterCount == 1)
+            {
+                // SPIRAL's defaults are the BASE model of Table 1 (91.5M). The fixture is the same two convolution +
+                // Transformer blocks, projection head, predictor and convolutional CTC classifier at width 32, one
+                // Transformer layer per block and 32 mel bins, with dropout and LayerDrop off.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Foundation.SPIRALOptions { NumMels = 32, FirstBlockDim = 32, " +
+                    "FirstBlockLayers = 1, FirstBlockHeads = 2, FirstBlockFeedForwardDim = 64, EncoderDim = 32, " +
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 64, LayerDrop = 0.0, DropoutRate = 0.0, " +
+                    "ProjectionDim = 16, PredictorChannels = 16, ClassifierChannels = 16, VocabSize = 16, " +
+                    "MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
+            }
             else if (model.ClassName is "FunASRNano" or "InterCTC" or "RobustConformer" or "SALM"
-                    or "SpeakerDiarizedASR" or "SPIRAL"
+                    or "SpeakerDiarizedASR"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                 && model.TypeParameterCount == 1)
             {
@@ -5930,7 +5945,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     "SpeakerDiarizedASR" => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
-                    "SPIRAL" => "AiDotNet.SpeechRecognition.Foundation.SPIRALOptions",
                     "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
                     "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
                     _ => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions"
@@ -17027,6 +17041,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // overstates recurrent work while violating the public streaming input contract.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 512 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
+            }
+            else if (model.ClassName == "SPIRAL")
+            {
+                // SPIRAL reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 3 encoder frames at 80 ms.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 16 };");
             }
             else if (model.ClassName == "BESTRQ" || model.ClassName == "USM")
             {
