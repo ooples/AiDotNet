@@ -59,13 +59,13 @@ internal sealed record GptSoVitsSynthesizerConfiguration
     /// <summary>The reference spectrogram rows the style encoder reads (all for v1, the first 704 after).</summary>
     public int ReferenceChannels => Version == "v1" ? SpecChannels : 704;
 
-    /// <summary>The release's s2 configurations: s2.json for v1, v2, v2Pro (with gin 512) and the flow-matching versions,
-    /// and s2v2ProPlus.json.</summary>
+    /// <summary>The release's s2 configurations: s2.json for v1, v2 and the flow-matching versions, s2v2Pro.json (gin 1024,
+    /// no dropout) and s2v2ProPlus.json (gin 1024, no dropout, a 768-wide generator).</summary>
     public static GptSoVitsSynthesizerConfiguration For(string version) => version switch
     {
         "v1" => new() { Version = "v1", Dropout = 0.1, UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 }, Gin = 512, Symbols = 322 },
         "v2" => new() { Version = "v2", Dropout = 0.1, UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 }, Gin = 512 },
-        "v2Pro" => new() { Version = "v2Pro", Dropout = 0.1, UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 }, Gin = 512 },
+        "v2Pro" => new() { Version = "v2Pro", UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 } },
         "v2ProPlus" => new(),
         "v3" or "v4" or "v5dev" or "v5turbo" => new() { Version = version, Dropout = 0.1, UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 }, Gin = 512 },
         _ => throw new ArgumentException($"GPT-SoVITS has no SoVITS version {version}.", nameof(version)),
@@ -585,14 +585,19 @@ internal sealed class GptSoVitsSynthesizer<T>
         var projected = SslProjection.Forward(ssl);
         var (quantized, _, commitment) = Quantizer.Forward(freezeQuantizer ? MeloOps.Detach(projected) : projected, training: !freezeQuantizer, random);
         quantized = Upsample(quantized);
-        if (quantized.Shape[2] != frames)
+        // The collate pads the SSL features to an even length; the frames past the spectrogram's are masked off.
+        if (quantized.Shape[2] < frames)
             throw new ArgumentException($"The SSL features give {quantized.Shape[2]} frames for a {frames}-frame spectrogram.", nameof(ssl));
+        if (quantized.Shape[2] > frames) quantized = _engine.TensorNarrow(quantized, 2, 0, frames);
         var (m, logs) = Encode(quantized, text, ge, 1.0, training: true, random);
         var (z, _, logsQ) = Posterior.Forward(spectrogram, MeloOps.Detach(ge), posteriorNoise);
         var zp = Flow(z, ge, reverse: false);
         int maxStart = Math.Max(frames - segmentFrames + 1, 1);
         int start = (int)(random.NextDouble() * maxStart);
         var segment = _engine.TensorSlice(z, new[] { 0, 0, start }, new[] { 1, c.InterChannels, Math.Min(segmentFrames, frames - start) });
+        // slice_segments reads past a short utterance into the padding, where z is masked to zero.
+        if (segment.Shape[2] < segmentFrames)
+            segment = _engine.TensorConcatenate(new[] { segment, new Tensor<T>(new[] { 1, c.InterChannels, segmentFrames - segment.Shape[2] }) }, 2);
         var generated = Generator.Forward(segment, ge);
         var audio = _engine.Reshape(generated, new[] { generated.Length });
         return new TrainingPass(audio, start, commitment, zp, m, logs, logsQ);

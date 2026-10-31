@@ -34,15 +34,30 @@ internal sealed class GptSoVitsCfmSynthesizer<T>
         Configuration = c;
         SslProjection = new NormedConv1DLayer<T>(c.SslDim, c.SslDim, c.SemanticRate25Hz ? 2 : 1, c.SemanticRate25Hz ? 2 : 1, 1, 1, 0, false,
             ConvolutionNormalization.None);
+        int start = layers.Count;
         layers.Add(SslProjection);
         Quantizer = new GptSoVitsQuantizer<T>(engine, c.SslDim, c.Bins, random);
         TextEncoder = new GptSoVitsTextEncoder<T>(engine, layers, c, random);
+        FrozenLayers = layers.Skip(start).ToList();
+        start = layers.Count;
         ReferenceEncoder = new GptSoVitsMelStyleEncoder<T>(engine, layers, random, c.ReferenceChannels, c.Gin, c.StyleHidden, c.Dropout > 0 ? 0.1 : 0.0);
         // The release declares the bridge over inter_channels but feeds it the hidden state; the two are equal (192) in every config.
         Bridge = MeloOps.Conv(layers, c.Hidden, bridgeChannels, 1);
         MelEncoder = new GptSoVitsMaskedEncoder<T>(engine, layers, bridgeChannels, bridgeChannels, bridgeChannels, 5, 1, 8, c.Gin);
+        AdapterLayers = layers.Skip(start).ToList();
+        start = layers.Count;
         Cfm = new GptSoVitsCfm<T>(engine, new GptSoVitsDiT<T>(engine, layers, dit with { UseStepEmbedding = !c.IsV5 }, random), c.IsV5);
+        EstimatorLayers = layers.Skip(start).ToList();
     }
+
+    /// <summary>The SSL projection and text encoder, which s2.json's <c>freeze_quantizer</c> freezes.</summary>
+    public IReadOnlyList<LayerBase<T>> FrozenLayers { get; }
+
+    /// <summary>The style encoder, bridge and wns1, which LoRA training leaves trainable.</summary>
+    public IReadOnlyList<LayerBase<T>> AdapterLayers { get; }
+
+    /// <summary>The DiT's base layers (frozen under LoRA).</summary>
+    public IReadOnlyList<LayerBase<T>> EstimatorLayers { get; }
 
     public GptSoVitsSynthesizerConfiguration Configuration { get; }
     public NormedConv1DLayer<T> SslProjection { get; }
@@ -223,8 +238,10 @@ internal sealed class GptSoVitsCfmSynthesizer<T>
         var projected = SslProjection.Forward(ssl);
         var (quantized, _, _) = Quantizer.Forward(freezeQuantizer ? MeloOps.Detach(projected) : projected, training: training && !freezeQuantizer, random);
         quantized = NearestUpsample(_engine, quantized, 2.0);
-        if (quantized.Shape[2] != spectrogram.Shape[2])
+        // The collate pads the SSL features to an even length; the frames past the spectrogram's are masked off.
+        if (quantized.Shape[2] < spectrogram.Shape[2])
             throw new ArgumentException($"The SSL features give {quantized.Shape[2]} frames for a {spectrogram.Shape[2]}-frame spectrogram.", nameof(ssl));
+        if (quantized.Shape[2] > spectrogram.Shape[2]) quantized = _engine.TensorNarrow(quantized, 2, 0, spectrogram.Shape[2]);
         int melFrames = mel.Shape[2];
         Tensor<T> hidden;
         if (freezeQuantizer)

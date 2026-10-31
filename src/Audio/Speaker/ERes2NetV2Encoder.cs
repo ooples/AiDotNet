@@ -24,6 +24,7 @@ internal sealed class ERes2NetV2Encoder<T>
     private readonly int[] _blocks;
     private readonly Dictionary<string, Tensor<T>> _weights = new(StringComparer.Ordinal);
     private readonly KaldiFbank<T> _fbank;
+    private readonly Random? _initialization;
 
     /// <param name="engine">The engine.</param>
     /// <param name="read">The checkpoint's tensors by name (null where absent).</param>
@@ -32,10 +33,13 @@ internal sealed class ERes2NetV2Encoder<T>
     /// <param name="scale">scale (4).</param>
     /// <param name="expansion">expansion (4).</param>
     /// <param name="blocks">The blocks per stage (3, 4, 6, 3).</param>
+    /// <param name="initialization">When given, tensors <paramref name="read"/> lacks are initialized as PyTorch does
+    /// (convolutions from U(±1/√fan_in), BatchNorm at γ 1, β 0, mean 0, variance 1) instead of failing.</param>
     public ERes2NetV2Encoder(IEngine engine, Func<string, double[]?> read, int channels = 64, int baseWidth = 24, int scale = 4,
-        int expansion = 4, int[]? blocks = null)
+        int expansion = 4, int[]? blocks = null, Random? initialization = null)
     {
         _engine = engine;
+        _initialization = initialization;
         _channels = channels;
         _baseWidth = baseWidth;
         _scale = scale;
@@ -81,7 +85,10 @@ internal sealed class ERes2NetV2Encoder<T>
 
     private void Conv(string name, int outputs, int inputs, int kernel, Func<string, double[]?> read)
     {
-        var values = read(name + ".weight") ?? throw new KeyNotFoundException($"The ERes2NetV2 checkpoint has no '{name}.weight'.");
+        int fanIn = inputs * kernel * kernel;
+        var values = read(name + ".weight")
+            ?? (_initialization is { } random ? AiDotNet.TextToSpeech.Latest.IndexTtsOps.Uniform(random, outputs * fanIn, fanIn) : null)
+            ?? throw new KeyNotFoundException($"The ERes2NetV2 checkpoint has no '{name}.weight'.");
         if (values.Length != outputs * inputs * kernel * kernel) throw new InvalidDataException($"'{name}.weight' has {values.Length} values.");
         _weights[name + ".weight"] = new Tensor<T>(new[] { outputs, inputs, kernel, kernel }, new Vector<T>(values.Select(v => NumOps.FromDouble(v)).ToArray()));
         var bias = read(name + ".bias");
@@ -91,7 +98,9 @@ internal sealed class ERes2NetV2Encoder<T>
     // BatchNorm2d in evaluation: y = (x − mean)/√(var + 1e-5)·γ + β, kept as one scale and shift per channel.
     private void Norm(string name, int channels, Func<string, double[]?> read)
     {
-        double[] Require(string field) => read($"{name}.{field}") ?? throw new KeyNotFoundException($"The ERes2NetV2 checkpoint has no '{name}.{field}'.");
+        double[] Require(string field) => read($"{name}.{field}")
+            ?? (_initialization is not null ? Enumerable.Repeat(field is "weight" or "running_var" ? 1.0 : 0.0, channels).ToArray() : null)
+            ?? throw new KeyNotFoundException($"The ERes2NetV2 checkpoint has no '{name}.{field}'.");
         var gamma = Require("weight");
         var beta = Require("bias");
         var mean = Require("running_mean");

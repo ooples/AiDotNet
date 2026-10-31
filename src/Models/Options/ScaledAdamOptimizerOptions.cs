@@ -43,4 +43,12 @@ public class ScaledAdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptim
 
     /// <summary>Gets or sets how often, in steps, the clipping threshold updates (100).</summary>
     public int ClippingUpdatePeriod { get; set; } = 100;
+
+    /// <summary>
+    /// Gets or sets the gradient accumulation period: with a period above 1, each call's gradients are summed and the
+    /// optimizer steps on calls n &gt; 0 with n divisible by the period (counting calls from 0), as GPT-SoVITS's s1 loop
+    /// steps at <c>batch_idx &gt; 0 and batch_idx % 4 == 0</c> (so its first step sums five batches). 1 (the default)
+    /// steps on every call.
+    /// </summary>
+    public int GradientAccumulationPeriod { get; set; } = 1;
 }

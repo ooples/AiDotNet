@@ -48,6 +48,8 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
     private int _step;
     private double[]? _modelNorms;
     private double? _threshold;
+    private int _calls;
+    private readonly Dictionary<Tensor<T>, double[]> _accumulated = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <summary>Creates the optimizer.</summary>
     public ScaledAdamOptimizer(IFullModel<T, TInput, TOutput>? model = null, ScaledAdamOptimizerOptions<T, TInput, TOutput>? options = null)
@@ -66,23 +68,43 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
     {
         PrepareTapeState(context);
         if (HasAnomalousTapeGradients(context)) return;
+        int period = Math.Max(1, _options.GradientAccumulationPeriod);
+        int call = _calls++;
+        if (period > 1)
+        {
+            foreach (var parameter in context.Parameters)
+            {
+                if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, parameter, Engine, out var gradient)) continue;
+                var span = gradient.AsSpan();
+                if (!_accumulated.TryGetValue(parameter, out var sum)) _accumulated[parameter] = sum = new double[parameter.Length];
+                for (int i = 0; i < sum.Length; i++) sum[i] += NumOps.ToDouble(span[i]);
+            }
+            if (call == 0 || call % period != 0) return;
+        }
         var parameters = new List<Tensor<T>>();
         var groups = new List<(double[] Values, double[] Gradient, State State)>();
         foreach (var parameter in context.Parameters)
         {
-            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, parameter, Engine, out var gradient)) continue;
-            var gradientSpan = gradient.AsSpan();
-            var valueSpan = parameter.AsSpan();
-            var g = new double[parameter.Length];
-            var values = new double[parameter.Length];
-            for (int i = 0; i < g.Length; i++)
+            double[] g;
+            if (period > 1)
             {
-                g[i] = NumOps.ToDouble(gradientSpan[i]);
-                values[i] = NumOps.ToDouble(valueSpan[i]);
+                if (!_accumulated.TryGetValue(parameter, out var sum)) continue;
+                g = sum;
             }
+            else
+            {
+                if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, parameter, Engine, out var gradient)) continue;
+                var gradientSpan = gradient.AsSpan();
+                g = new double[parameter.Length];
+                for (int i = 0; i < g.Length; i++) g[i] = NumOps.ToDouble(gradientSpan[i]);
+            }
+            var valueSpan = parameter.AsSpan();
+            var values = new double[parameter.Length];
+            for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(valueSpan[i]);
             parameters.Add(parameter);
             groups.Add((values, g, _state.GetOrAdd(parameter, _ => Initial(values))));
         }
+        _accumulated.Clear();
         Step(groups);
         for (int k = 0; k < parameters.Count; k++)
         {
@@ -251,5 +273,7 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
         _step = 0;
         _modelNorms = null;
         _threshold = null;
+        _calls = 0;
+        _accumulated.Clear();
     }
 }
