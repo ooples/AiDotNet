@@ -189,6 +189,10 @@ internal sealed class MimiTransformer<T>
 
     public MimiTransformerLayer<T>[] Layers { get; }
 
+    /// <summary>Every parameter layer of the Transformer.</summary>
+    public IEnumerable<LayerBase<T>> AllLayers => Layers.SelectMany(l => new LayerBase<T>[]
+        { l.Norm1, l.InProjection, l.OutProjection, l.Scale1, l.Norm2, l.Linear1, l.Linear2, l.Scale2 });
+
     public Tensor<T> Forward(Tensor<T> x)
     {
         int l = x.Shape[2], hd = _c.Dimension / _c.Heads, half = hd / 2;
@@ -235,22 +239,152 @@ internal sealed class MimiCodebook<T>
         _size = size;
         _dim = dim;
         Entries = new Tensor<T>(new[] { size, dim });
+        Sum = new double[size * dim];
+        Usage = Enumerable.Repeat(1.0, size).ToArray();
     }
 
     /// <summary>The entries <c>[size, dim]</c>.</summary>
     public Tensor<T> Entries { get; }
 
+    /// <summary>The moving averages the entries are read from (reference <c>embedding_sum</c> <c>[size, dim]</c> and
+    /// <c>cluster_usage</c> <c>[size]</c>), and whether k-means has initialized them (<c>_initialized</c>).</summary>
+    public double[] Sum { get; private set; }
+
+    /// <inheritdoc cref="Sum"/>
+    public double[] Usage { get; private set; }
+
+    /// <inheritdoc cref="Sum"/>
+    public bool Initialized { get; set; }
+
+    /// <summary>Steps until the next dead-code check (the reference checks every 5).</summary>
+    public int NextUnusedCheck { get; set; } = 5;
+
+    private double _epsilon = 1e-5;
+
     /// <summary>Sets the entries from the running sums and usage (<c>embedding_sum</c> <c>[size, dim]</c>,
     /// <c>cluster_usage</c> <c>[size]</c>).</summary>
-    public void Load(double[] sum, double[] usage, double epsilon)
+    public void Load(double[] sum, double[] usage, double epsilon, bool initialized = true)
+    {
+        Sum = (double[])sum.Clone();
+        Usage = (double[])usage.Clone();
+        _epsilon = epsilon;
+        Initialized = initialized;
+        Refresh();
+    }
+
+    // embedding = embedding_sum / max(cluster_usage, ε).
+    private void Refresh()
     {
         for (int i = 0; i < _size; i++)
         {
-            double count = Math.Max(usage[i], epsilon);
-            for (int d = 0; d < _dim; d++) Entries[i, d] = NumOps.FromDouble(sum[i * _dim + d] / count);
+            double count = Math.Max(Usage[i], _epsilon);
+            for (int d = 0; d < _dim; d++) Entries[i, d] = NumOps.FromDouble(Sum[i * _dim + d] / count);
         }
         _engine.InvalidatePersistentTensor(Entries);
     }
+
+    // Distinct random rows (a permutation's first n) when there are enough, else rows drawn with replacement.
+    private static double[][] SampleRows(double[][] rows, int n, Random random)
+    {
+        if (rows.Length >= n)
+        {
+            var order = Enumerable.Range(0, rows.Length).ToArray();
+            for (int i = order.Length - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (order[i], order[j]) = (order[j], order[i]);
+            }
+            return order.Take(n).Select(i => rows[i]).ToArray();
+        }
+        return Enumerable.Range(0, n).Select(_ => rows[random.Next(rows.Length)]).ToArray();
+    }
+
+    private static double Distance(double[] a, double[] b)
+    {
+        double s = 0;
+        for (int i = 0; i < a.Length; i++) { double d = a[i] - b[i]; s += d * d; }
+        return s;
+    }
+
+    /// <summary>
+    /// One training step's codes for rows <c>[n, dim]</c> (the reference <c>EuclideanCodebook.forward</c> in training): k-means
+    /// initialization (50 iterations) on the first batch when <paramref name="initialize"/>, the dead-code check every 5
+    /// steps (codes used less than 0.1 of a uniform share are re-seeded from the batch), then the codes and the exponential
+    /// moving averages of the usage and the sums (decay <paramref name="decay"/>).
+    /// </summary>
+    public int[] Train(Tensor<T> x, bool initialize, Random random, double decay = 0.99, double thresholdUsageRatio = 0.1, double replacedUsageRatio = 1.0)
+    {
+        int n = x.Shape[0];
+        var rows = new double[n][];
+        for (int t = 0; t < n; t++)
+        {
+            rows[t] = new double[_dim];
+            for (int d = 0; d < _dim; d++) rows[t][d] = NumOps.ToDouble(x[t, d]);
+        }
+        if (initialize && !Initialized)
+        {
+            var means = SampleRows(rows, _size, random).Select(r => (double[])r.Clone()).ToArray();
+            var bins = new int[_size];
+            for (int iteration = 0; iteration < 50; iteration++)
+            {
+                var buckets = rows.Select(r =>
+                {
+                    int best = 0;
+                    double bestDistance = double.PositiveInfinity;
+                    for (int k = 0; k < _size; k++) { double dist = Distance(r, means[k]); if (dist < bestDistance) { bestDistance = dist; best = k; } }
+                    return best;
+                }).ToArray();
+                bins = new int[_size];
+                var sums = new double[_size][];
+                for (int k = 0; k < _size; k++) sums[k] = new double[_dim];
+                for (int t = 0; t < n; t++)
+                {
+                    bins[buckets[t]]++;
+                    for (int d = 0; d < _dim; d++) sums[buckets[t]][d] += rows[t][d];
+                }
+                var resampled = SampleRows(rows, _size, random);
+                for (int k = 0; k < _size; k++)
+                    means[k] = bins[k] == 0 ? (double[])resampled[k].Clone() : sums[k].Select(v => v / bins[k]).ToArray();
+            }
+            for (int k = 0; k < _size; k++)
+            {
+                double usage = Math.Max(1, bins[k]);
+                Usage[k] = usage;
+                for (int d = 0; d < _dim; d++) Sum[k * _dim + d] = means[k][d] * usage;
+            }
+            Initialized = true;
+            Refresh();
+        }
+        // The step quantizes with the entries it starts from; the dead-code check and the averages change the sums after.
+        var codes = Encode(x);
+        if (Initialized && --NextUnusedCheck <= 0)
+        {
+            NextUnusedCheck = 5;
+            double total = Usage.Sum();
+            double threshold = thresholdUsageRatio * total / _size, replaced = replacedUsageRatio * total / _size;
+            var fresh = SampleRows(rows, _size, random);
+            for (int k = 0; k < _size; k++)
+            {
+                if (Usage[k] >= threshold) continue;
+                Usage[k] = replaced;
+                for (int d = 0; d < _dim; d++) Sum[k * _dim + d] = replaced * fresh[k][d];
+            }
+        }
+        var counts = new double[_size];
+        var batchSum = new double[_size * _dim];
+        for (int t = 0; t < n; t++)
+        {
+            counts[codes[t]]++;
+            for (int d = 0; d < _dim; d++) batchSum[codes[t] * _dim + d] += rows[t][d];
+        }
+        for (int k = 0; k < _size; k++) Usage[k] = Usage[k] * decay + counts[k] * (1 - decay);
+        for (int i = 0; i < Sum.Length; i++) Sum[i] = Sum[i] * decay + batchSum[i] * (1 - decay);
+        return codes;
+    }
+
+    /// <summary>Recomputes the entries from the moving averages after a training step (the reference rebuilds its cached
+    /// embedding lazily, so a step quantizes with the entries it started from).</summary>
+    public void Commit() => Refresh();
 
     /// <summary>The nearest entry's index for each row of <paramref name="x"/> <c>[frames, dim]</c>.</summary>
     public int[] Encode(Tensor<T> x)
@@ -342,6 +476,47 @@ internal sealed class MimiResidualQuantizer<T>
         }
         return codes;
     }
+
+    /// <summary>
+    /// The training forward (reference <c>ResidualVectorQuantizer.forward</c> in training) of a latent <c>[1, dim, frames]</c>
+    /// with the first <paramref name="count"/> codebooks: each codebook quantizes the residual (k-means-initialized only
+    /// once the codebook before it was, on an earlier step) and updates its averages; the output is the input plus the
+    /// detached difference to the quantized sum (straight-through), or, with <paramref name="quantize"/> false, the
+    /// unquantized projection (the paper's 50% quantization rate), projected back. The penalty is the mean over codebooks of
+    /// the mean squared distance from each residual to its detached quantization.
+    /// </summary>
+    public (Tensor<T> Output, Tensor<T> Penalty, int[][] Codes) TrainingForward(Tensor<T> latent, int count, bool quantize, Random random)
+    {
+        var projected = InputProjection.Forward(latent);
+        int frames = projected.Shape[2], dim = projected.Shape[1];
+        var x = _engine.TensorPermute(_engine.Reshape(projected, new[] { dim, frames }), new[] { 1, 0 });           // [T, dim]
+        var residual = x;
+        Tensor<T>? sum = null;
+        var penalties = new List<Tensor<T>>();
+        var codes = new int[count][];
+        bool previousInitialized = true;
+        for (int q = 0; q < count; q++)
+        {
+            var book = Codebooks[q];
+            bool wasInitialized = book.Initialized;
+            codes[q] = book.Train(Detached(residual), previousInitialized, random);
+            previousInitialized = wasInitialized;
+            var quantized = book.Decode(codes[q]);
+            var difference = _engine.TensorSubtract(residual, quantized);
+            penalties.Add(_engine.ReduceMean(_engine.TensorMultiply(difference, difference), new[] { 0, 1 }, false));
+            residual = _engine.TensorSubtract(residual, quantized);
+            sum = sum is null ? quantized : _engine.TensorAdd(sum, quantized);
+        }
+        for (int q = 0; q < count; q++) Codebooks[q].Commit();
+        var output = quantize ? _engine.TensorAdd(x, Detached(_engine.TensorSubtract(sum!, x))) : x;
+        var penalty = penalties[0];
+        for (int q = 1; q < penalties.Count; q++) penalty = _engine.TensorAdd(penalty, penalties[q]);
+        penalty = _engine.TensorMultiplyScalar(penalty, MathHelper.GetNumericOperations<T>().FromDouble(1.0 / count));
+        return (OutputProjection.Forward(_engine.Reshape(_engine.TensorPermute(output, new[] { 1, 0 }), new[] { 1, dim, frames })), penalty, codes);
+    }
+
+    // A copy outside the gradient tape (torch's .detach()).
+    private static Tensor<T> Detached(Tensor<T> x) => new(x.Shape.ToArray(), x.ToVector());
 
     /// <summary>The latent <c>[1, dim, frames]</c> of codes <c>[codebooks][frames]</c>.</summary>
     public Tensor<T> Decode(IReadOnlyList<int[]> codes)
@@ -471,6 +646,37 @@ internal sealed class Mimi<T>
     }
 
     /// <summary>
+    /// The training forward (Défossez et al. 2024 §3.3; reference <c>MimiModel.forward</c> in training) of audio
+    /// <c>[1, 1, samples]</c>: the latent, the split quantizer in training — the semantic codebook alone, and
+    /// <paramref name="acousticCodebooks"/> acoustic codebooks (quantizer dropout picks it), each sub-quantizer passing its
+    /// input unquantized with probability <paramref name="noQuantizationRate"/> — then the decoder, cut to the input length.
+    /// Returns the reconstruction, the semantic quantizer's output <c>[1, dim, frames]</c> (the distillation reads it), and
+    /// the commitment penalty renormalized over the codebooks used.
+    /// </summary>
+    public (Tensor<T> Audio, Tensor<T> Semantic, Tensor<T> Penalty) TrainingForward(Tensor<T> audio, int acousticCodebooks, double noQuantizationRate, Random random)
+    {
+        var c = Configuration;
+        int acousticMax = c.Codebooks - c.SemanticCodebooks;
+        if (acousticCodebooks < 1 || acousticCodebooks > acousticMax) throw new ArgumentOutOfRangeException(nameof(acousticCodebooks), $"Mimi has 1 … {acousticMax} acoustic codebooks.");
+        int length = audio.Shape[2];
+        var latent = Latent(audio);
+        var (semantic, semanticPenalty, _) = _semantic.TrainingForward(latent, c.SemanticCodebooks, random.NextDouble() > noQuantizationRate, random);
+        var (acoustic, acousticPenalty, _) = _acoustic.TrainingForward(latent, acousticCodebooks, random.NextDouble() > noQuantizationRate, random);
+        var quantized = _engine.TensorAdd(semantic, acoustic);
+        int total = c.SemanticCodebooks + acousticCodebooks;
+        var penalty = _engine.TensorAdd(_engine.TensorMultiplyScalar(semanticPenalty, NumOps.FromDouble((double)c.SemanticCodebooks / total)),
+            _engine.TensorMultiplyScalar(acousticPenalty, NumOps.FromDouble((double)acousticCodebooks / total)));
+        var output = _decoder.Forward(_decoderTransformer.Forward(Upsample(quantized)));
+        return (_engine.TensorSlice(output, new[] { 0, 0, 0 }, new[] { 1, 1, length }), semantic, penalty);
+    }
+
+    /// <summary>All codebooks, semantic then acoustic.</summary>
+    internal IEnumerable<MimiCodebook<T>> AllCodebooks => _semantic.Codebooks.Concat(_acoustic.Codebooks);
+
+    /// <summary>The Transformers' layers (the paper's weight decay applies to them only).</summary>
+    internal IEnumerable<LayerBase<T>> TransformerLayers => _encoderTransformer.AllLayers.Concat(_decoderTransformer.AllLayers);
+
+    /// <summary>
     /// Loads a Mimi state dict (the released <c>tokenizer-e351c8d8-checkpoint125.safetensors</c>, the reference's
     /// <c>MimiModel</c> names): plain convolutions (<c>conv.conv</c>, <c>convtr.convtr</c>), the Transformers'
     /// <c>in_proj_weight</c>, <c>out_proj</c>, layer norms, feed-forward and layer scales, the resampling convolutions and
@@ -507,8 +713,12 @@ internal sealed class Mimi<T>
                 string p = $"{prefix}.transformer.layers.{i}";
                 TorchParameters.LayerNorm(_engine, l.Norm1, Read($"{p}.norm1.weight", d), Read($"{p}.norm1.bias", d));
                 TorchParameters.LayerNorm(_engine, l.Norm2, Read($"{p}.norm2.weight", d), Read($"{p}.norm2.bias", d));
-                TorchParameters.Linear(l.InProjection, d, 3 * d, Read($"{p}.self_attn.in_proj_weight", 3 * d * d));
-                TorchParameters.Linear(l.OutProjection, d, d, Read($"{p}.self_attn.out_proj.weight", d * d));
+                // moshi 0.2.2 and the released checkpoint name them in_proj_weight and out_proj; later moshi in_projs.0 and
+                // out_projs.0.
+                string inProj = read($"{p}.self_attn.in_proj_weight") is not null ? "in_proj_weight" : "in_projs.0.weight";
+                string outProj = read($"{p}.self_attn.out_proj.weight") is not null ? "out_proj.weight" : "out_projs.0.weight";
+                TorchParameters.Linear(l.InProjection, d, 3 * d, Read($"{p}.self_attn.{inProj}", 3 * d * d));
+                TorchParameters.Linear(l.OutProjection, d, d, Read($"{p}.self_attn.{outProj}", d * d));
                 TorchParameters.Linear(l.Linear1, d, f, Read($"{p}.linear1.weight", f * d));
                 TorchParameters.Linear(l.Linear2, f, d, Read($"{p}.linear2.weight", d * f));
                 foreach (var (scale, key) in new[] { (l.Scale1, "layer_scale_1"), (l.Scale2, "layer_scale_2") })
