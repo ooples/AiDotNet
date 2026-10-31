@@ -24,12 +24,14 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
     public SpeakerEmbeddingOptions()
     {
         SampleRate = 16000;
-        EmbeddingDimension = 256;
-        HiddenDim = 256;
-        NumEncoderLayers = 3;
-        FftSize = 512;
+        // Snyder et al. 2018, Table 1 and section 3.2: 512-dimensional x-vectors from 512-unit frame layers, 24 filterbanks
+        // over 25 ms frames every 10 ms.
+        EmbeddingDimension = 512;
+        HiddenDim = 512;
+        NumEncoderLayers = 5;
+        FftSize = 400;
         HopLength = 160;
-        NumMfcc = 40;
+        NumMfcc = 24;
         MinimumDurationSeconds = 0.5;
         MaxFrames = 1000;
         DropoutRate = 0.0;
@@ -56,6 +58,9 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
         DropoutRate = other.DropoutRate;
         OnnxOptions = other.OnnxOptions;
         MaxGradNorm = other.MaxGradNorm;
+        PoolingDim = other.PoolingDim;
+        NumTrainingSpeakers = other.NumTrainingSpeakers;
+        NormalizationWindowFrames = other.NormalizationWindowFrames;
     }
 
     /// <summary>
@@ -106,6 +111,16 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
     /// Gets or sets the ONNX runtime options used when <see cref="ModelPath"/> is supplied.
     /// </summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    /// <summary>Units of the last frame-level layer, whose statistics are pooled (Table 1: 1500).</summary>
+    public int PoolingDim { get; set; } = 1500;
+
+    /// <summary>Speakers of the training set, the width of the softmax layer that trains the x-vector network (section
+    /// 2.2); zero builds no classifier.</summary>
+    public int NumTrainingSpeakers { get; set; }
+
+    /// <summary>Frames of the sliding window over which features are mean-normalized (section 3.2: up to 3 seconds).</summary>
+    public int NormalizationWindowFrames { get; set; } = 300;
 
     /// <summary>Throws if a value this model requires has been left unset or is not positive.</summary>
     /// <exception cref="ArgumentException">Thrown when a required value is zero or negative.</exception>

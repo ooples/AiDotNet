@@ -50,7 +50,7 @@ public class SpeakerDiarizerOptions : ModelOptions
     /// <summary>
     /// Gets or sets the embedding dimension.
     /// </summary>
-    public int EmbeddingDimension { get; set; } = 256;
+    public int EmbeddingDimension { get; set; } = 512;
 
     /// <summary>
     /// Gets or sets the clustering threshold (cosine similarity).
