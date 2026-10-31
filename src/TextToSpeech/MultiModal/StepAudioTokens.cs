@@ -100,6 +100,13 @@ internal sealed class StepAudioTokens
     /// </summary>
     public int[] TtsPrompt(string text, string promptText, string speaker, IReadOnlyList<int> promptCode)
     {
+        var prefix = Encode("\n");
+        return TtsPrompt(text, Encode("\n" + text).Skip(prefix.Length).ToArray(), promptText, speaker, promptCode);
+    }
+
+    /// <summary>The TTS prompt with the text given as its token ids (<paramref name="text"/> chooses the system prompt).</summary>
+    public int[] TtsPrompt(string text, IReadOnlyList<int> textIds, string promptText, string speaker, IReadOnlyList<int> promptCode)
+    {
         string system = IsMusic(text)
             ? SystemPrompts[text.Contains("哼唱") ? "sys_prompt_for_vocal" : "sys_prompt_for_rap"]
             : speaker.Length > 0 ? SystemPrompts["sys_prompt_with_spk"].Replace("{}", speaker) : SystemPrompts["sys_prompt_wo_spk"];
@@ -120,7 +127,7 @@ internal sealed class StepAudioTokens
         ids.Add(EndTurn);
         ids.Add(BeginTurn);
         ids.AddRange(human);
-        ids.AddRange(AfterNewline(text));
+        ids.AddRange(textIds);
         ids.Add(EndTurn);
         ids.Add(BeginTurn);
         ids.AddRange(assistant);
