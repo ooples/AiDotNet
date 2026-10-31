@@ -1,4 +1,4 @@
-﻿global using System.Reflection;
+global using System.Reflection;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 
 namespace AiDotNet.Helpers;
@@ -547,6 +547,18 @@ public static class DeserializationHelper
                 ?? (outputShape.Length > 0 ? outputShape[^1] : 9);
 
             instance = new BiaffineSpanScorerLayer<T>(inputDim, spanDim, numCategories);
+        }
+        else if (genericDef == typeof(SpanRepresentationScorerLayer<>))
+        {
+            // PURE / SpERT span scorer: every dimension is persisted in the metadata.
+            var kind = Enum.TryParse<SpanRepresentationKind>(additionalParams?.TryGetValue("Kind", out var k) == true ? k?.ToString() : null, out var parsed)
+                ? parsed : SpanRepresentationKind.Endpoints;
+            int inputDim = TryGetInt(additionalParams, "InputDim") ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (inputDim <= 0)
+                throw new InvalidOperationException("SpanRepresentationScorerLayer requires a positive InputDim in metadata or input shape.");
+            instance = new SpanRepresentationScorerLayer<T>(kind, inputDim,
+                TryGetInt(additionalParams, "WidthDim") ?? 150, TryGetInt(additionalParams, "MaxWidth") ?? 8,
+                TryGetInt(additionalParams, "HiddenDim") ?? 150, TryGetInt(additionalParams, "NumCategories") ?? (outputShape.Length > 0 ? outputShape[^1] : 9));
         }
         else if (genericDef == typeof(ConvNeXtV2Block<>))
         {
