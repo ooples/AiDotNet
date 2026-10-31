@@ -61,11 +61,9 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     /// <inheritdoc />
     /// <remarks>
     /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
-    /// <c>CreateDefaultFoundationModelLayers</c> ends with the last
-    /// <c>TransformerEncoderBlock&lt;T&gt;(hiddenDim, ...)</c>, which emits its own width - there is no
-    /// projection head, so Predict returns hidden STATES at <c>_options.HiddenDim</c>. Note
-    /// <c>FeatureEncoderDim</c> is the CNN front-end width and is projected to <c>HiddenDim</c> before
-    /// the transformer; the cluster-unit vocabulary HuBERT is pre-trained against is not exposed here.
+    /// <see cref="Wav2Vec2Network{T}"/> ends with the Transformer encoder and adds no head, so Predict
+    /// returns hidden states at <c>_options.HiddenDim</c>. The convolutional feature encoder's output
+    /// (<c>FeatureEncoderDim</c>) is projected to <c>HiddenDim</c> before the encoder runs.
     /// </remarks>
     protected override int OutputFeatureWidth => _options.HiddenDim;
 
