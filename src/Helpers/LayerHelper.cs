@@ -34089,7 +34089,8 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, geluActivation); // audio
         yield return new DenseLayer<T>(embeddingDimension, geluActivation); // video
 
-        // Unified transformer layers
+        // Unified transformer layers. No activation on the attention outputs (Vaswani et al. 2017): the only
+        // nonlinearity outside softmax belongs to the feed-forward layers.
         int headCount = Math.Max(1, embeddingDimension / 64);
         if (embeddingDimension % headCount != 0)
         {
@@ -34101,13 +34102,13 @@ public static partial class LayerHelper<T>
 
         for (int i = 0; i < numTransformerLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingDimension) / (headCount), geluActivation);
+            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingDimension) / (headCount));
         }
 
         // Cross-modal attention
         for (int i = 0; i < 4; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingDimension) / (headCount), geluActivation);
+            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingDimension) / (headCount));
         }
 
         // Modality decoders
