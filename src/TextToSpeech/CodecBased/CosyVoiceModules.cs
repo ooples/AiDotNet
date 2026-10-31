@@ -27,6 +27,11 @@ internal enum CosyVoiceRegulator
     /// <summary>GLM-4-Voice's fork: nearest-neighbour interpolation, and at inference the whole sequence (prompt and
     /// text) stretched at once to the frames of all its tokens.</summary>
     Nearest,
+
+    /// <summary>Step-Audio's fork: linear interpolation, at inference the prompt and the text stretched separately with
+    /// the text in one piece (no 20-token head and tail), and its frames <c>int(tokens / frame rate · sample rate /
+    /// hop)</c> computed in double precision on a Python int.</summary>
+    LinearWhole,
 }
 
 /// <summary>The sizes of CosyVoice 1's flow model (<c>MaskedDiffWithXvec</c> with its encoder, length regulator and
@@ -130,6 +135,8 @@ internal sealed class CosyVoiceFlow<T>
     public int MelFrames(int tokens)
     {
         if (Configuration.Causal) return tokens * Configuration.TokenMelRatio;
+        if (Configuration.Regulator == CosyVoiceRegulator.LinearWhole)
+            return (int)(tokens / Configuration.InputFrameRate * Configuration.SampleRate / Configuration.HopSize);
         float seconds = (float)tokens / (float)Configuration.InputFrameRate;
         float samples = seconds * (float)Configuration.SampleRate;
         return (int)(samples / (float)Configuration.HopSize);
@@ -312,7 +319,7 @@ internal sealed class CosyVoiceFlow<T>
                 new[] { 1, encoded.Shape[1], count });
         int tokens = textEncoded.Shape[0];
         Tensor<T> text;
-        if (tokens > 40)
+        if (tokens > 40 && c.Regulator != CosyVoiceRegulator.LinearWhole)
         {
             int edge = MelFrames(20);
             text = _engine.TensorConcatenate(new[]
