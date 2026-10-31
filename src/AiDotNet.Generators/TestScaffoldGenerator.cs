@@ -1541,8 +1541,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Qwen3ASR",           // Alibaba LLM-integrated ASR — foundation-scale lazy weights OOM the 16 GB
         "Qwen3ASRSmall",      // 512-wide/12-layer sibling — generated training exceeds the CPU gate at <double>.
                               // <float> halves the footprint first; both use an architecture-equivalent CI fixture.
-        "SpiritLM",           // Interleaved speech/text codec LM — paper-scale clone/training OOM and timeout.
-                              // Explicit audio membership also activates bounded repeated-training probes.
         "SpikingFullSubNet",  // spiking speech enhancement — Clone / DifferentInputs timeout
         "Qwen3VL",            // instruction-tuned VLM — TrainingError / GradientFlow timeout
         "SimMTM",             // masked time-series foundation model — DifferentInputs / Predict timeout
@@ -5913,8 +5911,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ActivationDropout = 0.0, FeatureProjectionDropout = 0.0, FinalDropout = 0.0, LayerDrop = 0.0, " +
                     "MaskTimeProbability = 0.0 })";
             }
+            else if (model.ClassName == "SPIRAL" && model.TypeParameterCount == 1)
+            {
+                // SPIRAL's defaults are the BASE model of Table 1 (91.5M). The fixture is the same two convolution +
+                // Transformer blocks, projection head, predictor and convolutional CTC classifier at width 32, one
+                // Transformer layer per block and 32 mel bins, with dropout and LayerDrop off.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Foundation.SPIRALOptions { NumMels = 32, FirstBlockDim = 32, " +
+                    "FirstBlockLayers = 1, FirstBlockHeads = 2, FirstBlockFeedForwardDim = 64, EncoderDim = 32, " +
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 64, LayerDrop = 0.0, DropoutRate = 0.0, " +
+                    "ProjectionDim = 16, PredictorChannels = 16, ClassifierChannels = 16, VocabSize = 16, " +
+                    "MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
+            }
             else if (model.ClassName is "FunASRNano" or "InterCTC" or "RobustConformer" or "SALM"
-                    or "SpeakerDiarizedASR" or "SPIRAL"
+                    or "SpeakerDiarizedASR"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                 && model.TypeParameterCount == 1)
             {
@@ -5930,7 +5943,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     "SpeakerDiarizedASR" => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
-                    "SPIRAL" => "AiDotNet.SpeechRecognition.Foundation.SPIRALOptions",
                     "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
                     "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
                     _ => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions"
@@ -10456,18 +10468,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "SpiritLM" && model.TypeParameterCount == 1)
             {
-                // Spirit-LM's production defaults remain the paper-scale 1024-wide,
-                // 12-layer interleaved codec LM. Its FP32 generated fixture still timed
-                // out and OOMed clone paths, so exercise the identical embedding -> text
-                // encoder -> codec-LM -> acoustic-token head through public options at
-                // bounded scale. All production defaults remain user-customizable.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions { TextEncoderDim = 32, LLMDim = 32, VocabSize = 64, " +
-                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 1, " +
-                    "CodebookSize = 16, DropoutRate = 0.0 })";
+                // SpiritLM is LLaMA over text, modality markers and speech tokens, the 25 Hz mHuBERT with its CTC linear
+                // quantizer and the unit HiFi-GAN. The fixture builds them tiny over a SentencePiece model whose
+                // user-defined pieces are the markers and 12 unit tokens, laid out as the release's.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.SpiritLmFixture.Tts<double>()";
             }
             else if ((model.ClassName == "RegionCLIP" || model.ClassName == "RemoteCLIP" || model.ClassName == "SigLIP") && model.TypeParameterCount == 1)
             {
@@ -10809,20 +10813,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "AVHuBERT" && model.TypeParameterCount == 1)
             {
-                // AV-HuBERT's production defaults retain the paper's HuBERT-base
-                // encoder (768 hidden, 12 residual transformer layers, 12 heads)
-                // and a 5,000-way CTC projection. FP32 and smoke iteration caps
-                // alone still leave enough weights plus tape gradients and 8-bit
-                // Adam state to exceed a 16 GB runner during repeated training.
-                // Exercise the same feature projection -> residual transformer ->
-                // CTC topology through public options at CI scale only.
+                // AV-HuBERT's defaults are the BASE model (12 layers, 768 wide, ResNet-18 lip encoder). The fixture is the
+                // same audio encoder, fusion, pre-norm Transformer and CTC projection at width 32 with one layer; the
+                // generated invariants drive the audio stream, as Predict does.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.Robust.AVHuBERTOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 8, DropoutRate = 0.0 })";
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 64, FinalDim = 16, NumClusters = 8, " +
+                    "VocabSize = 16, MaxTextLength = 8, DropoutRate = 0.0, LayerDrop = 0.0, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Chirp2" && model.TypeParameterCount == 1)
             {
@@ -12270,20 +12270,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "BESTRQ" && model.TypeParameterCount == 1)
             {
-                // BEST-RQ production retains its 768-wide, 12-layer SSL encoder and
-                // 5,000-way posterior head. FP32 was insufficient: batch-consistency
-                // inference exhausted the runner while lazily materializing an encoder
-                // FFN. Exercise the same feature projection -> residual Transformer
-                // encoder -> random-quantizer/CTC posterior topology through public
-                // options at bounded scale; the fixed-quantizer semantics remain owned
-                // by BESTRQ while this differentiable stack predicts its targets.
+                // BEST-RQ's defaults are the paper's 0.6B Conformer XL (24 blocks, 1024 wide) with an 8192-entry
+                // codebook. The fixture is the same log-mel -> conv subsampling -> Conformer -> projection + CTC
+                // network and quantizer at width 32, 2 blocks, 32 mel bins and a 64-entry codebook.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.Foundation.BESTRQOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 16, MaxAudioLengthSeconds = 1, DropoutRate = 0.0 })";
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, CodebookSize = 64, VocabSize = 16, " +
+                    "MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "XTTSv2" && model.TypeParameterCount == 1)
             {
@@ -12438,18 +12434,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "USM" && model.TypeParameterCount == 1)
             {
-                // Google USM retains its paper-scale 1,536-wide, 32-layer BEST-RQ encoder and
-                // 32,000-way multilingual CTC head in production. The generated class is already
-                // FP32 with bounded training iterations, but still did not finish in five minutes.
-                // Exercise the same foundation-ASR topology through the public options at CI scale;
-                // production defaults and all user customization points remain unchanged.
+                // Google USM's defaults are the paper's Conformer-2B (32 blocks, 1536 wide) with sixteen 8192-entry
+                // codebooks. The fixture is the same log-mel -> conv subsampling -> chunk-attention Conformer ->
+                // projection + CTC network at width 32, 2 blocks, 32 mel bins and two 64-entry codebooks.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.Multilingual.USMOptions { EncoderDim = 64, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Multilingual.USMOptions { EncoderDim = 32, " +
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, CodebookSize = 64, NumCodebooks = 2, " +
+                    "VocabSize = 16, MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "OLMoASR" && model.TypeParameterCount == 1)
             {
@@ -17033,6 +17027,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // overstates recurrent work while violating the public streaming input contract.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 512 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
+            }
+            else if (model.ClassName == "AVHuBERT")
+            {
+                // AV-HuBERT's audio stream: 0.2 s at 16 kHz is 21 filterbank frames, 5 stacked 25 Hz frames.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 5, 16 };");
+            }
+            else if (model.ClassName == "SPIRAL")
+            {
+                // SPIRAL reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 3 encoder frames at 80 ms.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 16 };");
+            }
+            else if (model.ClassName == "BESTRQ" || model.ClassName == "USM")
+            {
+                // BEST-RQ reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 16 };");
             }
             else if (model.ClassName == "W2vBert")
             {
@@ -22178,7 +22190,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "SeedTTS" or "SeedTTSClone"
-            or "SpiritLM"
             or "WhisperSpeech"
             // SparkTTS exposes the same discrete codec-token contract.
             or "SparkTTS"
@@ -22198,7 +22209,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "VALLEXClone" => 16,
             "SeedTTS" => 16,
             "SeedTTSClone" => 16,
-            "SpiritLM" => 16,
             "Bark" or "BarkModel" => 32,
             "CosyVoice3" => 16,
             "CosyVoiceClone" => 16,
@@ -22228,7 +22238,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return IsValleCodecLMModel(className)
             || className is "Bark" or "BarkModel"
             || className is "SeedTTS" or "SeedTTSClone"
-                or "SpiritLM"
                 ? 64 : 256;
     }
 

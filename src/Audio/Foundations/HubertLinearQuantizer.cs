@@ -76,12 +76,20 @@ internal sealed class HubertLinearQuantizer<T>
             }
             code[f] = best;
         }
-        // code[blank] = roll(code, 1)[blank], every blank from the previous round's codes at once.
-        for (int round = 0; round < MaxRounds && Array.IndexOf(code, Units) >= 0; round++)
+        return FillBlanks(code, Units);
+    }
+
+    /// <summary>The release's blank filling: <c>code[blank] = roll(code, 1)[blank]</c>, every blank from the previous
+    /// round's codes at once, until none is left or 10000 rounds have run (all blanks stay blank).</summary>
+    public static int[] FillBlanks(int[] codes, int blank)
+    {
+        var code = (int[])codes.Clone();
+        int frames = code.Length;
+        for (int round = 0; round < MaxRounds && Array.IndexOf(code, blank) >= 0; round++)
         {
             var previous = (int[])code.Clone();
             for (int f = 0; f < frames; f++)
-                if (previous[f] == Units) code[f] = previous[(f - 1 + frames) % frames];
+                if (previous[f] == blank) code[f] = previous[(f - 1 + frames) % frames];
         }
         return code;
     }
