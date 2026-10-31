@@ -37,12 +37,14 @@ internal sealed class HiFiGanGenerator<T>
     /// <param name="outputChannels">Output channels (1 for a waveform; iSTFTNet's magnitude and phase bins).</param>
     /// <param name="tanhOutput">Whether tanh bounds the output (false for iSTFTNet's spectral head).</param>
     /// <param name="outputReflectPad">Frames reflect-padded on the left before the output convolution (iSTFTNet: 1).</param>
+    /// <param name="plainOutputBias">With <paramref name="plainEnds"/>, a bias on the plain output convolution (GPT-SoVITS's
+    /// <c>is_bias</c>, which its v4/V5 vocoder sets).</param>
     /// <param name="initialization">The draws of the reference's <c>init_weights</c> — N(0, 0.01) for the transposed
     /// convolutions, the residual blocks and (unless <paramref name="plainEnds"/>) the output convolution; null keeps
     /// PyTorch's default initialization everywhere.</param>
     public HiFiGanGenerator(IEngine engine, int inChannels, int initialChannels, int[] upsampleRates, int[] upsampleKernels,
         int[] resblockKernels, int[][] resblockDilations, bool resblockType1, int conditionChannels = 0, bool plainEnds = false,
-        int outputChannels = 1, bool tanhOutput = true, int outputReflectPad = 0, Random? initialization = null)
+        int outputChannels = 1, bool tanhOutput = true, int outputReflectPad = 0, Random? initialization = null, bool plainOutputBias = false)
     {
         _engine = engine;
         _resblockType1 = resblockType1;
@@ -74,7 +76,7 @@ internal sealed class HiFiGanGenerator<T>
             _blocks.Add(stage);
         }
         _post = Add(plainEnds
-            ? new NormedConv1DLayer<T>(channels, outputChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, useBias: false)
+            ? new NormedConv1DLayer<T>(channels, outputChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.None, useBias: plainOutputBias)
             : Conv(channels, outputChannels, 7, 1, 1, 3));
         if (initialization is not null)
         {
