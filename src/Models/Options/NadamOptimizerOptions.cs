@@ -318,7 +318,7 @@ public class NadamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.
     /// </para>
     /// </remarks>
-    public new double MinLearningRate { get; set; } = 1e-5;
+    public override double MinLearningRate { get; set; } = 1e-5;
 
     /// <summary>
     /// Gets or sets the maximum allowed value for the learning rate.
@@ -359,5 +359,5 @@ public class NadamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.
     /// </para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 0.1;
+    public override double MaxLearningRate { get; set; } = 0.1;
 }

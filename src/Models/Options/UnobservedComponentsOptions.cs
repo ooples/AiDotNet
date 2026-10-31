@@ -38,6 +38,29 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>Initializes a new instance with the UnobservedComponents defaults.</summary>
+    public UnobservedComponentsOptions()
+    {
+        // No seasonal component unless one is requested.
+        SeasonalPeriod = 1;
+    }
+
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public UnobservedComponentsOptions(UnobservedComponentsOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        MaxIterations = other.MaxIterations;
+        OptimizeParameters = other.OptimizeParameters;
+        Optimizer = other.Optimizer;
+        IncludeCycle = other.IncludeCycle;
+        CycleLambda = other.CycleLambda;
+        CycleMinPeriod = other.CycleMinPeriod;
+        CycleMaxPeriod = other.CycleMaxPeriod;
+        Decomposition = other.Decomposition;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of iterations for the estimation algorithm.
     /// </summary>
@@ -159,48 +182,6 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     /// </para>
     /// </remarks>
     public IOptimizer<T, Matrix<T>, Vector<T>>? Optimizer { get; set; }
-
-    /// <summary>
-    /// Gets or sets the seasonal period for the model.
-    /// </summary>
-    /// <value>A positive integer, defaulting to 1 (no seasonality).</value>
-    /// <remarks>
-    /// <para>
-    /// This property specifies the length of the seasonal cycle in the Unobserved Components Model. A value 
-    /// greater than 1 indicates that a seasonal component should be included in the model, with the specified 
-    /// period. For example, a value of 4 for quarterly data would model annual seasonality, while a value of 12 
-    /// for monthly data would also model annual seasonality. A value of 1 (the default) indicates that no 
-    /// seasonal component should be included. This property overrides the SeasonalPeriod property inherited 
-    /// from the base class to provide a more appropriate default value for UCM. The optimal value depends on 
-    /// the known or expected seasonal patterns in the data and the frequency of the observations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting specifies the length of seasonal patterns in your data.
-    /// 
-    /// The seasonal period:
-    /// - Defines the length of repeating patterns in your data
-    /// - Determines whether and how seasonality is modeled
-    /// - Should match the known or expected seasonal cycle in your data
-    /// 
-    /// The default value of 1 means:
-    /// - No seasonality is included in the model
-    /// - This is appropriate for data without seasonal patterns
-    /// 
-    /// Common values for different data frequencies:
-    /// - Monthly data: 12 (annual seasonality)
-    /// - Quarterly data: 4 (annual seasonality)
-    /// - Daily data: 7 (weekly seasonality) or 365 (annual seasonality)
-    /// - Hourly data: 24 (daily seasonality)
-    /// 
-    /// When to adjust this value:
-    /// - Set based on your knowledge of the data and its natural cycles
-    /// - Set to 1 to exclude seasonality from the model
-    /// - This setting overrides the value inherited from the base class
-    /// 
-    /// For example, for monthly sales data with annual patterns,
-    /// you would set this to 12 to capture the yearly seasonality.
-    /// </para>
-    /// </remarks>
-    public new int SeasonalPeriod { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets a value indicating whether to include a cycle component in the model.

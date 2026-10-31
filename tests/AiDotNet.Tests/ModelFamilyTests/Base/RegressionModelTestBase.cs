@@ -1074,6 +1074,112 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         Assert.True(r2 > 0.0,
             $"Builder pipeline R² = {r2:F4} — should be positive on linear data.");
     }
+
+    // =====================================================
+    // PAPER FIDELITY: Learns A Toy Task
+    // A noisy linear target over three features is solvable by every regressor this family covers.
+    // "Loss down" is measured against the only learning-free baseline there is, predicting the
+    // training mean: the fitted model's held-out MSE must be at most half of it (R^2 >= 0.5), a far
+    // stricter bar than R2_ShouldBePositive_OnLinearData's R^2 > 0. Failures known when this check
+    // was introduced are listed in RuntimeFidelityBaseline.ToyTaskFailures.
+    // =====================================================
+
+    /// <summary>The largest fraction of the mean predictor's held-out MSE a fitted regressor may keep.</summary>
+    protected virtual double ToyTaskMaximumMseRatio => 0.5;
+
+    [SkippableFact(Timeout = 60000)]
+    [Trait("Category", "PaperFidelity")]
+    public async Task LearnsToyTask_LinearTarget()
+    {
+        await Task.Yield();
+        Skip.IfNot(IdentityLinkInvariantsApplicable && PredictiveQualityInvariantsApplicable,
+            "This regressor declares that the harness's unrestricted continuous linear data is outside its response "
+            + "domain (IdentityLinkInvariantsApplicable / PredictiveQualityInvariantsApplicable), so the linear toy "
+            + "task would measure that mismatch rather than learning.");
+
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var model = CreateModel();
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.1);
+        var (testX, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng, noise: 0.1);
+
+        double trainMean = 0.0;
+        for (int i = 0; i < trainY.Length; i++) trainMean += trainY[i];
+        trainMean /= trainY.Length;
+        double baselineMse = 0.0;
+        for (int i = 0; i < testY.Length; i++) baselineMse += (testY[i] - trainMean) * (testY[i] - trainMean);
+        baselineMse /= testY.Length;
+
+        model.Train(ToT(trainX), ToTarget(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
+        double mse = ModelTestHelpers.AllFinite(predictions)
+            ? ModelTestHelpers.CalculateMSE(testY, predictions)
+            : double.PositiveInfinity;
+
+        bool learned = mse <= ToyTaskMaximumMseRatio * baselineMse;
+        RuntimeFidelityBaseline.EnforceToyTask(GetType(), model.GetType(), nameof(LearnsToyTask_LinearTarget), learned,
+            $"On a noisy linear target the regressor's held-out MSE is {mse:E4}; predicting the training mean gives "
+            + $"{baselineMse:E4}, and at most {ToyTaskMaximumMseRatio:F2} of that is required.");
+    }
+
+    // =====================================================
+    // PAPER FIDELITY: Option Sensitivity
+    // Called by the scaffold generator's per-option theory. Perturbs one options property and
+    // requires the fitted regressor to change. See OptionSensitivityHarness.
+    // =====================================================
+
+    /// <summary>
+    /// Asserts that perturbing <paramref name="option"/> on this fixture's options changes the
+    /// regressor's parameters or its held-out predictions after fitting.
+    /// </summary>
+    /// <param name="option">The options property to perturb.</param>
+    protected void AssertOptionChangesObservableBehaviour(string option)
+    {
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.1);
+        var (testX, _) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng, noise: 0.1);
+        var x = ToT(trainX);
+        var y = ToTarget(trainY);
+        var probeX = ToT(testX);
+
+        var probe = new OptionSensitivityProbe<IFullModel<T, Matrix<T>, Vector<T>>>(
+            CreateModel,
+            model => ObserveRegressor(model, probeX),
+            model => model.Train(x, y));
+        OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
+    }
+
+    /// <summary>
+    /// Fingerprints a regressor's parameters and its predictions on a fixed input. An unfitted
+    /// classical model refuses both, so the refusal itself is the (identical) fingerprint until training.
+    /// </summary>
+    private static long ObserveRegressor(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> probeX)
+    {
+        long parameters;
+        try
+        {
+            var vector = model.GetParameters();
+            parameters = OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, vector.Length).Select(i => NumOps.ToDouble(vector[i])));
+        }
+        catch (InvalidOperationException)
+        {
+            parameters = -1;
+        }
+
+        long outputs;
+        try
+        {
+            var predictions = model.Predict(probeX);
+            outputs = OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, predictions.Length).Select(i => NumOps.ToDouble(predictions[i])));
+        }
+        catch (InvalidOperationException)
+        {
+            outputs = -1;
+        }
+
+        return OptionSensitivityHarness.Combine(parameters, outputs);
+    }
 }
 
 /// <summary>Double-precision compatibility shim for existing regression fixtures.</summary>

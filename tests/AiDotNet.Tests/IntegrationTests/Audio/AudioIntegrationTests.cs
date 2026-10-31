@@ -872,6 +872,82 @@ public class AudioIntegrationTests
 
     #endregion
 
+    #region AudioGenOptions - Seed routing
+
+    /// <summary>
+    /// AudioGenOptions used to declare <c>new int? Seed</c>, hiding <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/>:
+    /// a seed set through the AudioGen type was invisible to anything holding the options as ModelOptions, and
+    /// the model read neither. The options now carry the one inherited Seed.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task AudioGenOptions_Seed_IsTheInheritedModelOptionsSeed()
+    {
+        await Task.Yield();
+        var options = new AudioGenOptions { Seed = 7 };
+        AiDotNet.Models.Options.ModelOptions asBase = options;
+
+        Assert.Equal(7, asBase.Seed);
+        Assert.Equal(7, new AudioGenOptions(options).Seed);
+    }
+
+    /// <summary>
+    /// The model reads the options' Seed when no explicit seed argument is given, so two identically built
+    /// models generate identical audio from it. Before the fix the seed was ignored and each model drew its
+    /// sampling seed from a secure random source.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task AudioGenModel_OptionsSeed_MakesUnseededGenerationReproducible()
+    {
+        await Task.Yield();
+        var first = GenerateWithOptionsSeed(7);
+        var second = GenerateWithOptionsSeed(7);
+
+        Assert.Equal(first.Length, second.Length);
+        for (int i = 0; i < first.Length; i++)
+            Assert.Equal(first[i], second[i]);
+    }
+
+    private static double[] GenerateWithOptionsSeed(int optionsSeed)
+    {
+        // The same layer-initialisation seed for both builds, held through generation so lazily built
+        // layers draw identical weights too; only the sampling seed is left to the options.
+        const int layerSeed = 1337;
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = layerSeed;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(layerSeed);
+            using var model = new AudioGenModel<double>(
+                new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                    inputType: AiDotNet.Enums.InputType.TwoDimensional,
+                    taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative,
+                    inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
+                options: new AudioGenOptions
+                {
+                    ModelSize = AudioGenModelSize.Medium,
+                    SampleRate = 8000,
+                    DurationSeconds = 0.1,
+                    MaxDurationSeconds = 0.1,
+                    TextHiddenDim = 32,
+                    LmHiddenDim = 32,
+                    NumLmLayers = 2,
+                    NumHeads = 2,
+                    NumCodebooks = 1,
+                    CodebookSize = 4,
+                    MaxTextLength = 8,
+                    Seed = optionsSeed,
+                });
+            return model.GenerateAudio("a dog barking in the distance", durationSeconds: 0.1).ToArray();
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+        }
+    }
+
+    #endregion
+
     #region AudioGenResult - Properties
 
     [Fact(Timeout = 120000)]

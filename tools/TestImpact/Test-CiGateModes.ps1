@@ -30,6 +30,10 @@ function Invoke-GateCase {
         [string] $CodeQL = 'success',
         [string] $Sonar = 'success',
         [string] $ValidationGate = 'success',
+        [string] $RequiresPaperFidelity = 'false',
+        [string] $PaperFidelityPlan = 'skipped',
+        [string] $PaperFidelityMode = '',
+        [string] $PaperFidelity = 'skipped',
         [int] $ExpectedExit
     )
 
@@ -40,7 +44,9 @@ function Invoke-GateCase {
         -RegressionAnalysisResult $Regression -VerdictEnforced $Verdict `
         -AggregateAnalysisResult $Aggregate -SizeCheckResult $SizeCheck `
         -PromotionResult $Promotion -CodeQLResult $CodeQL -SonarResult $Sonar `
-        -ValidationGateResult $ValidationGate *> $null
+        -ValidationGateResult $ValidationGate -RequiresPaperFidelity $RequiresPaperFidelity `
+        -PaperFidelityPlanResult $PaperFidelityPlan -PaperFidelityMode $PaperFidelityMode `
+        -PaperFidelityResult $PaperFidelity *> $null
     if ($LASTEXITCODE -ne $ExpectedExit) {
         [void] $failures.Add("$Name expected exit $ExpectedExit, got $LASTEXITCODE")
     }
@@ -68,6 +74,32 @@ Invoke-GateCase -Name validation_build_failure -Stage Validation -Build failure 
 Invoke-GateCase -Name validation_non_runtime -Stage Validation -RequiresValidation false `
     -Build skipped -BuildCompat skipped -Tests skipped `
     -Regression skipped -Aggregate skipped -SizeCheck skipped -Verdict false -ExpectedExit 0
+
+# Paper fidelity is required on pull requests. A plan with nothing to run skips the slices on purpose and
+# passes; a plan that selected slices requires them; the plan itself is always required.
+Invoke-GateCase -Name paper_fidelity_none_passes_with_skipped_slices -Stage Validation `
+    -RequiresPaperFidelity true -PaperFidelityPlan success -PaperFidelityMode None -PaperFidelity skipped -ExpectedExit 0
+foreach ($mode in 'Impact', 'Full') {
+    Invoke-GateCase -Name "paper_fidelity_${mode}_success" -Stage Validation `
+        -RequiresPaperFidelity true -PaperFidelityPlan success -PaperFidelityMode $mode -PaperFidelity success -ExpectedExit 0
+    Invoke-GateCase -Name "paper_fidelity_${mode}_failure" -Stage Validation `
+        -RequiresPaperFidelity true -PaperFidelityPlan success -PaperFidelityMode $mode -PaperFidelity failure -ExpectedExit 1
+    Invoke-GateCase -Name "paper_fidelity_${mode}_skipped_slices" -Stage Validation `
+        -RequiresPaperFidelity true -PaperFidelityPlan success -PaperFidelityMode $mode -PaperFidelity skipped -ExpectedExit 1
+}
+Invoke-GateCase -Name paper_fidelity_plan_failure -Stage Validation `
+    -RequiresPaperFidelity true -PaperFidelityPlan failure -PaperFidelityMode '' -ExpectedExit 1
+Invoke-GateCase -Name paper_fidelity_plan_skipped_on_pull_request -Stage Validation `
+    -RequiresPaperFidelity true -PaperFidelityPlan skipped -ExpectedExit 1
+foreach ($badMode in '', 'none', '1', 'Everything') {
+    Invoke-GateCase -Name "paper_fidelity_unknown_mode_'$badMode'" -Stage Validation `
+        -RequiresPaperFidelity true -PaperFidelityPlan success -PaperFidelityMode $badMode -PaperFidelity skipped -ExpectedExit 1
+}
+Invoke-GateCase -Name paper_fidelity_not_owed_off_pull_request -Stage Validation `
+    -RequiresPaperFidelity false -PaperFidelityPlan skipped -PaperFidelity skipped -ExpectedExit 0
+Invoke-GateCase -Name paper_fidelity_not_owed_without_runtime_validation -Stage Validation -RequiresValidation false `
+    -Build skipped -BuildCompat skipped -Tests skipped -Regression skipped -Aggregate skipped -SizeCheck skipped `
+    -Verdict false -RequiresPaperFidelity true -PaperFidelityPlan skipped -PaperFidelity skipped -ExpectedExit 0
 
 # No reuse requires current validation and current CodeQL.
 Invoke-GateCase -Name complete_current_success -ExpectedExit 0

@@ -827,9 +827,9 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             gaussian.Scale[1] = numOps.FromDouble(MinScale);
             gaussian.Scale[2] = numOps.FromDouble(MinScale);
 
-            double r = colors != null ? numOps.ToDouble(colors[i, 0]) : Random.NextDouble();
-            double g = colors != null ? numOps.ToDouble(colors[i, 1]) : Random.NextDouble();
-            double b = colors != null ? numOps.ToDouble(colors[i, 2]) : Random.NextDouble();
+            double r = colors != null ? numOps.ToDouble(colors[i, 0]) : ModelRandom.NextDouble();
+            double g = colors != null ? numOps.ToDouble(colors[i, 1]) : ModelRandom.NextDouble();
+            double b = colors != null ? numOps.ToDouble(colors[i, 2]) : ModelRandom.NextDouble();
 
             if (_useSphericalHarmonics)
             {
@@ -3301,9 +3301,9 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             double jitter = SplitPositionJitter * childScales.Position;
             if (gx == 0.0 && gy == 0.0 && gz == 0.0)
             {
-                gx = Random.NextDouble() - 0.5;
-                gy = Random.NextDouble() - 0.5;
-                gz = Random.NextDouble() - 0.5;
+                gx = ModelRandom.NextDouble() - 0.5;
+                gy = ModelRandom.NextDouble() - 0.5;
+                gz = ModelRandom.NextDouble() - 0.5;
                 NormalizeDirection(ref gx, ref gy, ref gz);
             }
 

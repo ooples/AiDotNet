@@ -118,12 +118,6 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public double GuidanceScale { get; set; } = 3.0;
 
     /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// Null for random generation.
-    /// </summary>
-    public new int? Seed { get; set; }
-
-    /// <summary>
     /// Gets or sets the number of audio channels (1=mono, 2=stereo).
     /// </summary>
     public int Channels { get; set; } = 1;

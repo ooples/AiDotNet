@@ -19,25 +19,25 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class CMAESOptimizerOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>
 {
-    /// <summary>
-    /// Gets or sets the number of candidate solutions evaluated in each generation.
-    /// </summary>
-    /// <value>
-    /// The population size, defaulting to a formula based on problem dimensionality: 4 + (int)(3 * Math.Log(100)).
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// The population size affects both the quality of solutions and computational cost.
-    /// Larger populations provide more exploration but require more function evaluations.
-    /// The default formula (4 + 3*ln(D)) is a common heuristic where D is the problem dimension.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls how many different potential solutions the algorithm 
-    /// tries in each round (or "generation"). The default value is calculated based on a formula that works well 
-    /// for most problems. Think of it like sending out search parties - more parties can cover more ground but 
-    /// require more resources. For simple problems, you might reduce this value to speed things up, while for 
-    /// complex problems with many variables, you might increase it to find better solutions.</para>
-    /// </remarks>
-    public new int PopulationSize { get; set; } = 4 + (int)(3 * Math.Log(100)); // Default assuming 100 dimensions
+    /// <summary>Initializes a new instance with the CMAES optimizer defaults.</summary>
+    public CMAESOptimizerOptions()
+    {
+        // Hansen's default population lambda = 4 + floor(3 ln n), here for n = 100 dimensions,
+        // and 100 generations.
+        PopulationSize = 4 + (int)(3 * Math.Log(100));
+        MaxGenerations = 100;
+    }
+
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public CMAESOptimizerOptions(CMAESOptimizerOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        InitialStepSize = other.InitialStepSize;
+        StopTolerance = other.StopTolerance;
+    }
+
 
     /// <summary>
     /// Gets or sets the initial step size that controls how far the algorithm explores from the starting point.
@@ -57,23 +57,6 @@ public class CMAESOptimizerOptions<T, TInput, TOutput> : GeneticAlgorithmOptimiz
     /// optimal solution.</para>
     /// </remarks>
     public double InitialStepSize { get; set; } = 0.5;
-
-    /// <summary>
-    /// Gets or sets the maximum number of generations (iterations) the algorithm will run.
-    /// </summary>
-    /// <value>The maximum number of generations, defaulting to 100.</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter limits the total computational budget of the optimization process.
-    /// The algorithm will stop either when it converges or when it reaches this number of generations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is simply how many rounds of optimization the algorithm will perform 
-    /// before stopping. Each generation involves creating and evaluating multiple solutions, then learning from 
-    /// the results to improve the next generation. The default (100) is enough for many problems, but complex 
-    /// problems might need more generations to find good solutions. If the algorithm finds an excellent solution 
-    /// earlier, it may stop before reaching this limit.</para>
-    /// </remarks>
-    public new int MaxGenerations { get; set; } = 100;
 
     /// <summary>
     /// Gets or sets the convergence threshold that determines when the algorithm should stop.

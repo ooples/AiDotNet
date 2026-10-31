@@ -723,6 +723,32 @@ public class StatisticalFitDetectorIntegrationTests
         Assert.True(Enum.IsDefined(typeof(FitType), result.FitType));
     }
 
+    /// <summary>
+    /// ResidualBootstrapFitDetectorOptions used to declare <c>new int? Seed</c>, so a seed set through the
+    /// inherited <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/> never reached the detector's bootstrap.
+    /// Set that way, two detectors must now resample identically.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ResidualBootstrapFitDetector_InheritedSeed_MakesBootstrapReproducible()
+    {
+        await Task.Yield();
+        ResidualBootstrapFitDetector<double, Matrix<double>, Vector<double>> Build()
+        {
+            var options = new ResidualBootstrapFitDetectorOptions();
+            AiDotNet.Models.Options.ModelOptions inherited = options;
+            inherited.Seed = 19;
+            Assert.Equal(19, options.Seed);
+            return new ResidualBootstrapFitDetector<double, Matrix<double>, Vector<double>>(options);
+        }
+
+        var evaluationData = CreateGoodFitData();
+        var first = Build().DetectFit(evaluationData);
+        var second = Build().DetectFit(evaluationData);
+
+        Assert.Equal(first.FitType, second.FitType);
+        Assert.Equal(first.ConfidenceLevel, second.ConfidenceLevel);
+    }
+
     #endregion
 
     #region ShapleyValueFitDetector Tests

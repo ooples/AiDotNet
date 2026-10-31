@@ -97,3 +97,11 @@ ADNDEF001 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Two models
 ADNDEF002 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Transformer factory yields attention without a residual connection
 ADNDEF003 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model reuses another paper's layer factory without declaring it
 ADNDEF004 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model defect baseline entry is stale
+ADNGEN003 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Model has no hand-written paper test
+ADNGEN004 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Missing-paper-test baseline entry is stale
+ADNGEN005 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Options class with [PaperDefault] cannot be constructed by the generated test
+ADNOPT001 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Options property is never read by the model
+ADNOPT002 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Options class of a paper model declares no paper defaults
+ADNOPT003 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Invalid [PaperDefault] declaration
+ADNOPT004 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Option-sensitivity exemption has no reason
+ADNOPT005 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Options fidelity baseline entry is stale

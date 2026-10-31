@@ -80,12 +80,6 @@ public class AffinityPropagationOptions<T> : ClusteringOptions<T>
     /// </summary>
     /// <value>Affinity type. Default is Euclidean.</value>
     public AffinityPropagationAffinityType AffinityType { get; set; } = AffinityPropagationAffinityType.Euclidean;
-
-    /// <summary>
-    /// Gets or sets the distance metric for Euclidean affinity.
-    /// </summary>
-    /// <value>Distance metric, or null for default.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }
 
 /// <summary>

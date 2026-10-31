@@ -65,10 +65,4 @@ public class OnlineKMeansOptions<T> : ClusteringOptions<T>
     /// </summary>
     /// <value>Minimum learning rate. Default is 0.0001.</value>
     public double MinLearningRate { get; set; } = 0.0001;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }

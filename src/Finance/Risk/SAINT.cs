@@ -96,12 +96,12 @@ public partial class SAINT<T> : RiskModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(
             architecture,
-            options?.NumFeatures ?? 50,
+            (options ?? DefaultOptionsFor<SAINTOptions<T>>(architecture)).NumFeatures,
             options?.ConfidenceLevel ?? 0.95,
             options?.TimeHorizon ?? 1,
             lossFunction)
     {
-        _options = options ?? new SAINTOptions<T>();
+        _options = options ?? DefaultOptionsFor<SAINTOptions<T>>(architecture);
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer
@@ -134,11 +134,11 @@ public partial class SAINT<T> : RiskModelBase<T>
         : base(
             architecture,
             onnxModelPath,
-            options?.NumFeatures ?? 50,
+            (options ?? DefaultOptionsFor<SAINTOptions<T>>(architecture)).NumFeatures,
             options?.ConfidenceLevel ?? 0.95,
             options?.TimeHorizon ?? 1)
     {
-        _options = options ?? new SAINTOptions<T>();
+        _options = options ?? DefaultOptionsFor<SAINTOptions<T>>(architecture);
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer

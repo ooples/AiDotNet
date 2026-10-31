@@ -103,6 +103,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new GaussianNoiseExploration<T>();
         public bool UseTanhSquashing { get; set; } = false;
-        public new int? Seed { get; set; } = null;
     }
 }

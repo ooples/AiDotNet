@@ -69,10 +69,4 @@ public class CLARANSOptions<T> : ClusteringOptions<T>
     /// </para>
     /// </remarks>
     public int NumLocal { get; set; } = 2;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }

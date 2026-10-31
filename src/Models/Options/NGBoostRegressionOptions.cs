@@ -57,12 +57,6 @@ public class NGBoostRegressionOptions<T> : DecisionTreeOptions
     public double LearningRate { get; set; } = 0.01;
 
     /// <summary>
-    /// Gets or sets the minimum number of samples required to split an internal node.
-    /// </summary>
-    /// <value>Default is 2.</value>
-    public new int MinSamplesSplit { get; set; } = 2;
-
-    /// <summary>
     /// Gets or sets the minimum number of samples required to be at a leaf node.
     /// </summary>
     /// <value>Default is 1.</value>

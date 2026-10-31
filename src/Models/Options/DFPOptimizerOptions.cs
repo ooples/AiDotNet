@@ -70,7 +70,7 @@ public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOpt
     /// make learning too slow or get stuck), it won't go below this minimum. Think of it as setting a minimum walking
     /// speed - even when being careful, you still need to keep moving forward at some pace.</para>
     /// </remarks>
-    public new double MinLearningRate { get; set; } = 1e-6;
+    public override double MinLearningRate { get; set; } = 1e-6;
 
     /// <summary>
     /// Gets or sets the maximum allowed learning rate during optimization.
@@ -86,7 +86,7 @@ public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOpt
     /// cause it to miss the best solution), it won't exceed this maximum. Think of it as setting a speed limit -
     /// even when the path seems clear, going too fast might cause you to miss your destination.</para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 10.0;
+    public override double MaxLearningRate { get; set; } = 10.0;
 
     /// <summary>
     /// Gets or sets the factor by which the learning rate increases when progress is being made.

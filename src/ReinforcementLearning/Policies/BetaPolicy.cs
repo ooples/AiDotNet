@@ -82,10 +82,38 @@ namespace AiDotNet.ReinforcementLearning.Policies
             Guard.NotNull(policyNetwork);
             _policyNetwork = policyNetwork;
             Guard.NotNull(explorationStrategy);
+            if (actionSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(actionSize), actionSize, "The action size must be positive.");
+            // The range must be finite too: actions are actionMin + sample * (actionMax - actionMin), and two finite
+            // bounds such as -MaxValue and MaxValue overflow that difference to infinity.
+            if (double.IsNaN(actionMin) || double.IsInfinity(actionMin) || double.IsNaN(actionMax) || double.IsInfinity(actionMax)
+                || actionMax <= actionMin || double.IsInfinity(actionMax - actionMin))
+            {
+                throw new ArgumentException(
+                    $"The action bounds must be finite with actionMax > actionMin and a finite range (got [{actionMin}, {actionMax}]).",
+                    nameof(actionMax));
+            }
             _explorationStrategy = explorationStrategy;
             _actionSize = actionSize;
             _actionMin = actionMin;
             _actionMax = actionMax;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the BetaPolicy class from its options: action size, exploration
+        /// strategy, action bounds and <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/>.
+        /// </summary>
+        /// <param name="policyNetwork">Network producing alpha and beta for each action dimension.</param>
+        /// <param name="options">The policy options.</param>
+        public BetaPolicy(INeuralNetwork<T> policyNetwork, BetaPolicyOptions<T> options)
+            : this(
+                policyNetwork,
+                (options ?? throw new ArgumentNullException(nameof(options))).ActionSize,
+                options.ExplorationStrategy,
+                options.ActionMin,
+                options.ActionMax,
+                RandomFromSeed(options.Seed))
+        {
         }
 
         /// <summary>

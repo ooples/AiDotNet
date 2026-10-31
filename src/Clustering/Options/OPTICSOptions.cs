@@ -90,12 +90,6 @@ public class OPTICSOptions<T> : ClusteringOptions<T>
     public int LeafSize { get; set; } = 30;
 
     /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
-
-    /// <summary>
     /// Gets or sets the predecessor correction setting.
     /// </summary>
     /// <value>True to apply correction. Default is true.</value>

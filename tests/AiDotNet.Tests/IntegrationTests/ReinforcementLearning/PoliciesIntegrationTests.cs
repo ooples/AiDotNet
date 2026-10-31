@@ -316,6 +316,203 @@ public class PoliciesIntegrationTests
         Assert.Equal(1.5, options.MaxGradientNorm);
     }
 
+    // ===== Options constructors =====
+    // The policy options classes used to declare `new int? Seed`, hiding ModelOptions.Seed, and no policy read
+    // them at all. Each policy now has an options constructor that reads them, and the seed is set here through
+    // the inherited ModelOptions.Seed - the path a generic caller (cloning, AutoML) takes - so two identically
+    // configured policies must draw identical action sequences.
+
+    private const int OptionsSeed = 31;
+
+    [Fact(Timeout = 120000)]
+    public async Task DiscretePolicy_OptionsConstructor_ReadsActionSizeAndInheritedSeed()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, DiscreteActionSize);
+        DiscretePolicy<double> Build() => new(network, WithSeed(new DiscretePolicyOptions<double>
+        {
+            ActionSize = DiscreteActionSize,
+            ExplorationStrategy = new NoExploration<double>(),
+        }));
+
+        AssertSameSampledActions(Build, DiscreteActionSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousPolicy_OptionsConstructor_ReadsActionSizeAndInheritedSeed()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        ContinuousPolicy<double> Build() => new(network, WithSeed(new ContinuousPolicyOptions<double>
+        {
+            ActionSize = ContinuousActionSize,
+            ExplorationStrategy = new NoExploration<double>(),
+            UseTanhSquashing = true,
+        }));
+
+        AssertSameSampledActions(Build, ContinuousActionSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DeterministicPolicy_OptionsConstructor_ReadsActionSizeAndInheritedSeed()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize);
+        // The network's action is deterministic, so only the exploration noise can show the seed is read: Gaussian
+        // noise draws from the policy's Random, which the options' Seed creates.
+        DeterministicPolicy<double> Build(int seed)
+        {
+            var options = new DeterministicPolicyOptions<double>
+            {
+                ActionSize = ContinuousActionSize,
+                ExplorationStrategy = new GaussianNoiseExploration<double>(initialStdDev: 0.5),
+                UseTanhSquashing = false,
+            };
+            AiDotNet.Models.Options.ModelOptions inherited = options;
+            inherited.Seed = seed;
+            return new DeterministicPolicy<double>(network, options);
+        }
+
+        var actions = AssertSameSampledActions(() => Build(OptionsSeed), ContinuousActionSize);
+
+        // A different seed must give different noise; a policy that ignored the seed would repeat the same actions.
+        var state = CreateState(StateSize, 0.25);
+        using var other = Build(OptionsSeed + 1);
+        bool anyDifferent = false;
+        foreach (var expected in actions)
+        {
+            var got = other.SelectAction(state, training: true);
+            for (int i = 0; i < got.Length; i++) anyDifferent |= got[i] != expected[i];
+        }
+        Assert.True(anyDifferent, "A different Seed produced the same exploration noise, so the seed is not read.");
+    }
+
+    // The default exploration noise is created for the final ActionSize, not the size 1 it had before ActionSize was set.
+    [Fact(Timeout = 120000)]
+    public async Task DeterministicPolicyOptions_DefaultExploration_MatchesTheActionSize()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize);
+        var options = new DeterministicPolicyOptions<double> { ActionSize = ContinuousActionSize };
+        Assert.IsType<OrnsteinUhlenbeckNoise<double>>(options.ExplorationStrategy);
+
+        using var policy = new DeterministicPolicy<double>(network, options);
+        var action = policy.SelectAction(CreateState(StateSize, 0.25), training: true);
+        Assert.Equal(ContinuousActionSize, action.Length);
+    }
+
+    // Ornstein-Uhlenbeck noise carries state from one action to the next. Two policies built from one options
+    // instance must each start from their own: with one shared noise, the second policy's first action would continue
+    // the first policy's noise path instead of starting it afresh.
+    [Fact(Timeout = 120000)]
+    public async Task DeterministicPolicyOptions_DefaultExploration_IsNotSharedBetweenPolicies()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize);
+        var options = new DeterministicPolicyOptions<double> { ActionSize = ContinuousActionSize, UseTanhSquashing = false };
+        AiDotNet.Models.Options.ModelOptions inherited = options;
+        inherited.Seed = OptionsSeed;
+        Assert.NotSame(options.ExplorationStrategy, options.ExplorationStrategy);
+
+        var state = CreateState(StateSize, 0.25);
+        using var first = new DeterministicPolicy<double>(network, options);
+        using var second = new DeterministicPolicy<double>(network, options);
+        var firstAction = first.SelectAction(state, training: true);
+        for (int step = 0; step < 4; step++) first.SelectAction(state, training: true);
+        var secondAction = second.SelectAction(state, training: true);
+        for (int i = 0; i < firstAction.Length; i++) Assert.Equal(firstAction[i], secondAction[i]);
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(-double.MaxValue, double.MaxValue)]
+    [InlineData(-1e308, 1e308)]
+    public async Task BetaPolicy_RejectsBoundsWhoseRangeOverflows(double actionMin, double actionMax)
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        Assert.Throws<ArgumentException>(() => new BetaPolicy<double>(
+            network, ContinuousActionSize, new NoExploration<double>(), actionMin, actionMax));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BetaPolicy_OptionsConstructor_ReadsActionSizeBoundsAndInheritedSeed()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        BetaPolicy<double> Build() => new(network, WithSeed(new BetaPolicyOptions<double>
+        {
+            ActionSize = ContinuousActionSize,
+            ExplorationStrategy = new NoExploration<double>(),
+            ActionMin = -2.0,
+            ActionMax = 2.0,
+        }));
+
+        var actions = AssertSameSampledActions(Build, ContinuousActionSize);
+        foreach (var action in actions)
+            AssertVectorInRange(action, 0, ContinuousActionSize, -2.0, 2.0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MixedPolicy_OptionsConstructor_ReadsActionSizesAndInheritedSeed()
+    {
+        await Task.Yield();
+        var discrete = CreateNetwork(StateSize, DiscreteActionSize);
+        var continuous = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        MixedPolicy<double> Build() => new(discrete, continuous, WithSeed(new MixedPolicyOptions<double>
+        {
+            DiscreteActionSize = DiscreteActionSize,
+            ContinuousActionSize = ContinuousActionSize,
+            DiscreteExplorationStrategy = new NoExploration<double>(),
+            ContinuousExplorationStrategy = new NoExploration<double>(),
+        }));
+
+        AssertSameSampledActions(Build, DiscreteActionSize + ContinuousActionSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiModalPolicy_OptionsConstructor_ReadsComponentsAndInheritedSeed()
+    {
+        await Task.Yield();
+        const int components = 2;
+        var network = CreateNetwork(StateSize, components * (1 + 2 * ContinuousActionSize));
+        MultiModalPolicy<double> Build() => new(network, WithSeed(new MultiModalPolicyOptions<double>
+        {
+            ActionSize = ContinuousActionSize,
+            NumComponents = components,
+            ExplorationStrategy = new NoExploration<double>(),
+        }));
+
+        AssertSameSampledActions(Build, ContinuousActionSize);
+    }
+
+    private static TOptions WithSeed<TOptions>(TOptions options) where TOptions : AiDotNet.Models.Options.ModelOptions
+    {
+        AiDotNet.Models.Options.ModelOptions inherited = options;
+        inherited.Seed = OptionsSeed;
+        return options;
+    }
+
+    private static List<Vector<double>> AssertSameSampledActions<TPolicy>(Func<TPolicy> build, int expectedLength)
+        where TPolicy : IDisposable, IPolicy<double>
+    {
+        var state = CreateState(StateSize, 0.25);
+        using var first = build();
+        using var second = build();
+        var actions = new List<Vector<double>>();
+        for (int step = 0; step < 6; step++)
+        {
+            var a = first.SelectAction(state, training: true);
+            var b = second.SelectAction(state, training: true);
+            Assert.Equal(expectedLength, a.Length);
+            Assert.Equal(a.Length, b.Length);
+            for (int i = 0; i < a.Length; i++)
+                Assert.Equal(a[i], b[i]);
+            actions.Add(a);
+        }
+
+        return actions;
+    }
+
     private static NeuralNetwork<double> CreateNetwork(int inputSize, int outputSize)
     {
         var architecture = new NeuralNetworkArchitecture<double>(

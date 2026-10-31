@@ -128,7 +128,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
     /// </summary>
     /// <param name="options">Configuration options for the DGCNN model.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
-    public DGCNN(DGCNNOptions options, ILossFunction<T>? lossFunction = null, DGCNNOptions? modelOptions = null)
+    public DGCNN(DGCNNOptions options, ILossFunction<T>? lossFunction = null)
         // Default to CrossEntropyWithLogitsLoss (fused LogSoftmax + NLL, = PyTorch F.cross_entropy,
         // the loss the reference DGCNN trains with) rather than the generic MultiClassClassification
         // default (CategoricalCrossEntropyLoss, which has RequiresProbabilityInputs = true). The head
@@ -141,12 +141,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         {
             throw new ArgumentNullException(nameof(options));
         }
-        // When modelOptions is null (the common case) fall back to the primary
-        // `options` argument rather than creating a fresh default — otherwise
-        // the caller's DGCNNOptions is silently discarded and _options / Options
-        // reflect default settings, causing GetOptions/GetModelMetadata to
-        // report defaults even after the caller configured NumClasses etc.
-        _options = modelOptions ?? options;
+        _options = options;
         Options = _options;
         if (options.NumClasses <= 0)
         {
@@ -179,56 +174,6 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         _edgeConvLayers = [];
         _classificationHeadLayers = [];
         InitializeLayers();
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the DGCNN class.
-    /// </summary>
-    /// <param name="numClasses">Number of output classes for classification.</param>
-    /// <param name="edgeConvChannels">Output channel dimensions for each EdgeConv layer.</param>
-    /// <param name="lossFunction">Optional loss function for training.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> Creates a DGCNN model for point cloud processing with dynamic graphs.
-    ///
-    /// Parameters explained:
-    /// - numClasses: How many categories to classify (e.g., 40 for ModelNet40)
-    /// - knnK: How many neighbors to consider for each point
-    ///   - Typical values: 20-40
-    ///   - Larger K: More context, but more computation
-    ///   - Smaller K: Faster, but might miss important relationships
-    /// - edgeConvChannels: Feature dimensions at each EdgeConv layer
-    ///   Example: [64, 64, 128, 256]
-    ///   - Layer 1: 64-dimensional features
-    ///   - Layer 2: 64-dimensional features
-    ///   - Layer 3: 128-dimensional features
-    ///   - Layer 4: 256-dimensional features
-    /// - useDropout: Prevents overfitting by randomly dropping neurons during training
-    /// - dropoutRate: Fraction of neurons to drop (e.g., 0.5 means drop 50%)
-    ///
-    /// Example configuration for ModelNet40:
-    /// - knnK: 20
-    /// - edgeConvChannels: [64, 64, 128, 256]
-    /// - useDropout: true
-    /// - dropoutRate: 0.5
-    ///
-    /// The network will:
-    /// 1. Build k-NN graph (find 20 nearest neighbors for each point)
-    /// 2. Apply EdgeConv to learn from local neighborhoods
-    /// 3. Rebuild graph based on new features
-    /// 4. Repeat for all EdgeConv layers
-    /// 5. Aggregate global features and classify
-    /// </remarks>
-    public DGCNN(
-        int numClasses,
-        int[]? edgeConvChannels = null,
-        ILossFunction<T>? lossFunction = null)
-        : this(new DGCNNOptions
-        {
-            NumClasses = numClasses,
-            EdgeConvChannels = edgeConvChannels ?? [64, 64, 128, 256]
-        },
-            lossFunction)
-    {
     }
 
     private static NeuralNetworkArchitecture<T> CreateArchitecture(DGCNNOptions options)

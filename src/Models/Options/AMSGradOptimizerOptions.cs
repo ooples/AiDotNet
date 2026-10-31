@@ -152,7 +152,7 @@ public class AMSGradOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimize
     /// Even if the algorithm wants to be extra cautious, it won't reduce the step size below this value (0.00001 by default).
     /// This ensures that your model keeps making meaningful progress and doesn't get stuck taking infinitesimally small steps.</para>
     /// </remarks>
-    public new double MinLearningRate { get; set; } = 1e-5;
+    public override double MinLearningRate { get; set; } = 1e-5;
 
     /// <summary>
     /// Gets or sets the maximum allowed learning rate during adaptive adjustments.
@@ -167,5 +167,5 @@ public class AMSGradOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimize
     /// Even when progress is smooth and the algorithm wants to speed up, it won't increase the step size above this value (0.1 by default).
     /// This prevents your model from taking such large steps that it overshoots the optimal solution or becomes unstable.</para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 0.1;
+    public override double MaxLearningRate { get; set; } = 0.1;
 }

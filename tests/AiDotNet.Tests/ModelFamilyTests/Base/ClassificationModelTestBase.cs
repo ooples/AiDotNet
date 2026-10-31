@@ -589,6 +589,122 @@ public abstract class ClassificationModelTestBase<T> : System.IDisposable
         Assert.True(accuracy > 1.0 / NumClasses,
             $"Builder pipeline accuracy = {accuracy:F4}, chance = {1.0 / NumClasses:F4}.");
     }
+
+    // =====================================================
+    // PAPER FIDELITY: Learns A Toy Task
+    // Two well-separated Gaussian blobs per class (spacing 4, sigma 0.5) are solvable by any
+    // classifier that learns at all. The accuracy floor (90%) is far above chance (1/K), and a
+    // probabilistic classifier must also bring its held-out cross-entropy below the uniform
+    // predictor's ln K, so a model that ranks the classes correctly but never moves its
+    // probabilities still fails. Failures known when this check was introduced are listed in
+    // RuntimeFidelityBaseline.ToyTaskFailures.
+    // =====================================================
+
+    /// <summary>Accuracy a classifier must reach on the separable-blobs toy task.</summary>
+    protected virtual double ToyTaskAccuracyFloor => 0.9;
+
+    [SkippableFact(Timeout = 60000)]
+    [Trait("Category", "PaperFidelity")]
+    public async Task LearnsToyTask_SeparableBlobs()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var model = CreateModel();
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
+
+        model.Train(ToT(trainX), ToT(trainY));
+        var predictions = ToD(model.Predict(ToT(testX)));
+        double accuracy = ModelTestHelpers.CalculateAccuracy(testY, predictions);
+        double chance = 1.0 / NumClasses;
+
+        double? crossEntropy = null;
+        double uniformCrossEntropy = Math.Log(NumClasses);
+        if (model is IProbabilisticClassifier<T> probabilistic)
+        {
+            var probabilities = probabilistic.PredictProbabilities(ToT(testX));
+            double total = 0.0;
+            for (int i = 0; i < testY.Length; i++)
+            {
+                int label = (int)Math.Round(testY[i]);
+                double p = label >= 0 && label < probabilities.Columns
+                    ? NumOps.ToDouble(probabilities[i, label])
+                    : 0.0;
+                total -= Math.Log(Math.Max(p, 1e-12));
+            }
+
+            crossEntropy = total / testY.Length;
+        }
+
+        bool learned = accuracy >= ToyTaskAccuracyFloor
+            && (crossEntropy is null || crossEntropy.Value < uniformCrossEntropy);
+        RuntimeFidelityBaseline.EnforceToyTask(GetType(), model.GetType(), nameof(LearnsToyTask_SeparableBlobs), learned,
+            $"On {NumClasses} separable Gaussian blobs the classifier reached accuracy {accuracy:F4} (chance {chance:F4}, "
+            + $"required >= {ToyTaskAccuracyFloor:F2})"
+            + (crossEntropy is null
+                ? "."
+                : $" and held-out cross-entropy {crossEntropy.Value:F4} (uniform predictor {uniformCrossEntropy:F4}, required below it)."));
+    }
+
+    // =====================================================
+    // PAPER FIDELITY: Option Sensitivity
+    // Called by the scaffold generator's per-option theory. Perturbs one options property and
+    // requires the fitted classifier to change. See OptionSensitivityHarness.
+    // =====================================================
+
+    /// <summary>
+    /// Asserts that perturbing <paramref name="option"/> on this fixture's options changes the
+    /// classifier's parameters or its held-out predictions after fitting.
+    /// </summary>
+    /// <param name="option">The options property to perturb.</param>
+    protected void AssertOptionChangesObservableBehaviour(string option)
+    {
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
+        var x = ToT(trainX);
+        var y = ToT(trainY);
+        var probeX = ToT(testX);
+
+        var probe = new OptionSensitivityProbe<IFullModel<T, Matrix<T>, Vector<T>>>(
+            CreateModel,
+            model => ObserveClassifier(model, probeX),
+            model => model.Train(x, y));
+        OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
+    }
+
+    /// <summary>
+    /// Fingerprints a classifier's parameters and its predictions on a fixed input. An unfitted
+    /// classical model refuses both, so the refusal itself is the (identical) fingerprint until training.
+    /// </summary>
+    private static long ObserveClassifier(IFullModel<T, Matrix<T>, Vector<T>> model, Matrix<T> probeX)
+    {
+        long parameters;
+        try
+        {
+            var vector = model.GetParameters();
+            parameters = OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, vector.Length).Select(i => NumOps.ToDouble(vector[i])));
+        }
+        catch (InvalidOperationException)
+        {
+            parameters = -1;
+        }
+
+        long outputs;
+        try
+        {
+            var predictions = model.Predict(probeX);
+            outputs = OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, predictions.Length).Select(i => NumOps.ToDouble(predictions[i])));
+        }
+        catch (InvalidOperationException)
+        {
+            outputs = -1;
+        }
+
+        return OptionSensitivityHarness.Combine(parameters, outputs);
+    }
 }
 
 /// <summary>Double-precision compatibility shim for existing classification fixtures.</summary>

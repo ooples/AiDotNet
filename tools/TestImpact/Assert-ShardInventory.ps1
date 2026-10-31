@@ -38,6 +38,7 @@ if (Test-Path -LiteralPath $serving) {
 }
 # Invoke-Shard.ps1 appends these exclusions to every shard filter, so no manifest filter names them.
 $arguments += @('--excluded-category', 'HeavyTimeout', '--excluded-category', 'ModelPerformanceCensus',
+    '--excluded-category', 'PaperFidelity',
     '--shards', $manifest, '--out', $OutFile)
 
 & dotnet run --project $tool -c Release --no-build -- @arguments

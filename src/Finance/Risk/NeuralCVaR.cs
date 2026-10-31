@@ -92,12 +92,12 @@ public partial class NeuralCVaR<T> : RiskModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(
             architecture,
-            options?.NumFeatures ?? 10,
+            (options ?? DefaultOptionsFor<NeuralCVaROptions<T>>(architecture)).NumFeatures,
             options?.ConfidenceLevel ?? 0.95,
             options?.TimeHorizon ?? 1,
             lossFunction)
     {
-        _options = options ?? new NeuralCVaROptions<T>();
+        _options = options ?? DefaultOptionsFor<NeuralCVaROptions<T>>(architecture);
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -128,11 +128,11 @@ public partial class NeuralCVaR<T> : RiskModelBase<T>
         : base(
             architecture,
             onnxModelPath,
-            options?.NumFeatures ?? 10,
+            (options ?? DefaultOptionsFor<NeuralCVaROptions<T>>(architecture)).NumFeatures,
             options?.ConfidenceLevel ?? 0.95,
             options?.TimeHorizon ?? 1)
     {
-        _options = options ?? new NeuralCVaROptions<T>();
+        _options = options ?? DefaultOptionsFor<NeuralCVaROptions<T>>(architecture);
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

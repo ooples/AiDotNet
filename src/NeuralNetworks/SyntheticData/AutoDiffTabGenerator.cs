@@ -184,9 +184,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
             {
                 InitialLearningRate = _options.LearningRate
             });
-        _random = _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeLayers();
     }
