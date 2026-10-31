@@ -121,9 +121,9 @@ public class ConformerFamilyPaperTests
         await Task.Yield();
         var b = new BranchformerOptions();
         Assert.Equal((18, 512, 8, 3072, 31), (b.NumEncoderLayers, b.EncoderDim, b.NumAttentionHeads, b.CgmlpDim, b.ConvKernel));
-        // E-Branchformer-L (Kim et al. 2022, Table 1): 17 blocks, width 512, 8 heads, 3072 cgMLP units, 2048 FFN units.
+        // ESPnet LibriSpeech train_asr_e_branchformer: 17 blocks, width 512, 8 heads, 3072 cgMLP units, linear_units 1024.
         var e = new EBranchformerOptions();
-        Assert.Equal((17, 512, 8, 3072, 2048, 31), (e.NumEncoderLayers, e.EncoderDim, e.NumAttentionHeads, e.CgmlpDim, e.EncoderDim * e.FeedForwardMultiplier, e.MergeKernel));
+        Assert.Equal((17, 512, 8, 3072, 1024, 31), (e.NumEncoderLayers, e.EncoderDim, e.NumAttentionHeads, e.CgmlpDim, e.EncoderDim * e.FeedForwardMultiplier, e.MergeKernel));
     }
 
     [Theory(Timeout = 300000)]
@@ -263,5 +263,74 @@ public class ConformerFamilyPaperTests
         for (int step = 0; step < 30; step++) model.Train(audio, target);
         Assert.True(Loss() < 0.5 * before, $"joint loss {before} -> {Loss()}");
         Assert.True(model.Transcribe(audio).Text.Length <= 6);
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task Moonshine_StemCompresses384x_AndTheDecoderTrains()
+    {
+        await Task.Yield();
+        // Table 1: Tiny is width 288 with 6 + 6 layers, Base 416 with 8 + 8; both 8 heads; 32,768 tokens.
+        var tiny = new AiDotNet.SpeechRecognition.Streaming.MoonshineOptions();
+        var baseline = new AiDotNet.SpeechRecognition.Streaming.MoonshineBaseOptions();
+        Assert.Equal((288, 6, 6, 8, 32768), (tiny.EncoderDim, tiny.NumEncoderLayers, tiny.NumDecoderLayers, tiny.NumAttentionHeads, tiny.VocabSize));
+        Assert.Equal((416, 8, 8, 8), (baseline.EncoderDim, baseline.NumEncoderLayers, baseline.NumDecoderLayers, baseline.NumAttentionHeads));
+        using var model = new AiDotNet.SpeechRecognition.Streaming.Moonshine<double>(Architecture(), new AiDotNet.SpeechRecognition.Streaming.MoonshineOptions
+        {
+            EncoderDim = 16, NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, VocabSize = 8, MaxTextLength = 5,
+            MaxAudioLengthSeconds = 1, Seed = 5,
+        });
+        var network = model.Network ?? throw new InvalidOperationException("native model");
+        var audio = Voice(8000, 180);
+        var features = network.Features(audio.ToArray());
+        // 8000 samples: (8000 - 127) / 64 + 1 = 124, then 40, then 19 frames (about 384 samples each).
+        Assert.Equal(19, network.Encode(features, training: false).Shape[0]);
+        var labels = new[] { 3, 5, 4 };
+        var target = new Tensor<double>(new[] { 3 }, new Vector<double>(labels.Select(l => (double)l).ToArray()));
+        double Loss() => network.CtcTrainingLoss(features, labels, training: false)[0];
+        double before = Loss();
+        for (int step = 0; step < 30; step++) model.Train(audio, target);
+        Assert.True(Loss() < 0.5 * before, $"decoder loss {before} -> {Loss()}");
+        Assert.Equal(new[] { 1, 8 }, model.Predict(audio).Shape.ToArray());
+        _ = model.Transcribe(audio);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task PublishedConfigurations_AreTheDefaults()
+    {
+        await Task.Yield();
+        // FireRedASR-AED-L (Table 1, section 2.1): width 1280, 16/16 layers, kernel 33, 7,832 tokens, tied decoder output.
+        var f = new AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASROptions();
+        Assert.Equal((1280, 16, 16, 33, 7832, 80), (f.EncoderDim, f.NumEncoderLayers, f.NumDecoderLayers, f.ConvKernel, f.VocabSize, f.NumMels));
+        Assert.True(f.ToConfiguration().DecoderTiedOutput);
+        // Universal-1 (section 3.2): 24 x 1024 Conformer, 8 heads, 8-second chunks, absolute positions, 2,048 WordPieces.
+        var a = new AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2Options();
+        Assert.Equal((24, 1024, 8, 200, 2048), (a.NumEncoderLayers, a.EncoderDim, a.NumAttentionHeads, a.AttentionChunkSize, a.VocabSize));
+        Assert.True(a.ToConfiguration().AbsolutePositions);
+        // Canary-1B (section 3): 24 + 24 layers at width 1024, kernel 9, 128 mels.
+        var c = new NeMoMultitaskOptions();
+        Assert.Equal((24, 24, 1024, 9, 128, 4128), (c.NumEncoderLayers, c.NumDecoderLayers, c.EncoderDim, c.ConvKernel, c.NumMels, c.VocabSize));
+        Assert.Equal((32, 4), (new CanaryFlashOptions().NumEncoderLayers, new CanaryFlashOptions().NumDecoderLayers));
+        // Mohamed et al. 2019, section 3.1: 10 + 10 blocks of width 1024, 16 heads, 2048 units, 512-dimensional decoder embedding.
+        var t = new ConvTransformerOptions();
+        Assert.Equal((10, 10, 1024, 16, 2048, 512), (t.NumEncoderLayers, t.NumDecoderLayers, t.EncoderDim, t.NumAttentionHeads, t.EncoderDim * t.FeedForwardMultiplier, t.DecoderEmbeddingDim));
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task CtcSegmentation_AlignsLabelsInOrder_WithAConfidenceBelowZero()
+    {
+        await Task.Yield();
+        using var model = new CTCSegmentation<double>(Architecture(), new CTCSegmentationOptions
+        {
+            EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 16, AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 16,
+            VocabSize = 8, FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, ConfidenceWindow = 4, Seed = 5,
+        });
+        var audio = Voice(8000, 180);
+        var labels = new[] { 3, 5, 2 };
+        var target = new Tensor<double>(new[] { 3 }, new Vector<double>(labels.Select(l => (double)l).ToArray()));
+        for (int step = 0; step < 20; step++) model.Train(audio, target);
+        var (frames, confidence) = model.Segment(audio, labels);
+        Assert.Equal(3, frames.Length);
+        Assert.True(frames[0] < frames[1] && frames[1] < frames[2], string.Join(",", frames));
+        Assert.True(confidence <= 0 && !double.IsNaN(confidence), $"confidence {confidence}");
     }
 }
