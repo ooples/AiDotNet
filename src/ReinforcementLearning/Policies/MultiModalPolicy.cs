@@ -73,6 +73,22 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         /// <summary>
+        /// Initializes a new instance of the MultiModalPolicy class from its options: action size, mixture
+        /// component count, exploration strategy and <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/>.
+        /// </summary>
+        /// <param name="policyNetwork">Network producing the mixture parameters.</param>
+        /// <param name="options">The policy options.</param>
+        public MultiModalPolicy(INeuralNetwork<T> policyNetwork, MultiModalPolicyOptions<T> options)
+            : this(
+                policyNetwork,
+                (options ?? throw new ArgumentNullException(nameof(options))).ActionSize,
+                options.NumComponents,
+                options.ExplorationStrategy,
+                RandomFromSeed(options.Seed))
+        {
+        }
+
+        /// <summary>
         /// The mode of a mixture of diagonal Gaussians: the highest-density point found by the fixed-point
         /// (mean-shift) iteration started from every component mean (Carreira-Perpinan 2000, "Mode-finding for mixtures
         /// of Gaussian distributions").

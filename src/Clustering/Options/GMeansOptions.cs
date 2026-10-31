@@ -61,10 +61,4 @@ public class GMeansOptions<T> : ClusteringOptions<T>
     /// </para>
     /// </remarks>
     public double SignificanceLevel { get; set; } = 0.0001;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }

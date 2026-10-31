@@ -100,6 +100,26 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _sharedFeatures = sharedFeatures;
         }
 
+        /// <summary>
+        /// Initializes a new instance of the MixedPolicy class from its options: both action sizes, both
+        /// exploration strategies, feature sharing and <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/>.
+        /// </summary>
+        /// <param name="discreteNetwork">Network producing the discrete action logits.</param>
+        /// <param name="continuousNetwork">Network producing the continuous action distribution.</param>
+        /// <param name="options">The policy options.</param>
+        public MixedPolicy(INeuralNetwork<T> discreteNetwork, INeuralNetwork<T> continuousNetwork, MixedPolicyOptions<T> options)
+            : this(
+                discreteNetwork,
+                continuousNetwork,
+                (options ?? throw new ArgumentNullException(nameof(options))).DiscreteActionSize,
+                options.ContinuousActionSize,
+                options.DiscreteExplorationStrategy,
+                options.ContinuousExplorationStrategy,
+                options.SharedFeatures,
+                RandomFromSeed(options.Seed))
+        {
+        }
+
         // The one-hot of the most probable discrete action.
         private Vector<T> OneHotArgMax(Vector<T> logits)
         {

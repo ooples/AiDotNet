@@ -81,12 +81,6 @@ public class SpectralOptions<T> : ClusteringOptions<T>
     /// </summary>
     /// <value>Assignment method. Default is KMeans.</value>
     public SpectralAssignment AssignLabels { get; set; } = SpectralAssignment.KMeans;
-
-    /// <summary>
-    /// Gets or sets the distance metric for building affinity matrix.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }
 
 /// <summary>

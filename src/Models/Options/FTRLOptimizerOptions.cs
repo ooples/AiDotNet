@@ -136,7 +136,7 @@ public class FTRLOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// model is training well but occasionally has dramatic shifts in performance, you might want to lower this
     /// value.</para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 0.1;
+    public override double MaxLearningRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the factor by which to increase the learning rate when progress is good.

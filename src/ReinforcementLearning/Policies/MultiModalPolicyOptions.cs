@@ -16,6 +16,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public int[] HiddenLayers { get; set; } = new int[] { 256, 256 };
         public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new NoExploration<T>();
-        public new int? Seed { get; set; } = null;
     }
 }

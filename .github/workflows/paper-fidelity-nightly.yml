@@ -17,11 +17,26 @@ name: Paper Fidelity (nightly)
 # the diff; NonDeterministic, UnknownOption and Error cases are never written to it.
 #
 # Informational, not a merge gate: a failed scheduled run opens (or comments on) a tracking issue, and a green
-# one closes it. workflow_dispatch takes a ref so the sweep can be run against a pull request's branch.
+# one closes it. workflow_dispatch takes a ref so the sweep can be run against a pull request's branch, but
+# only once this file is on the default branch: GitHub refuses to dispatch a workflow it does not know there.
+#
+# pull_request: a change to this lane - the workflow, its scripts, the harnesses whose outcomes it records,
+# the generator that emits the cases, or the baseline it regenerates - runs the full sweep on the pull request
+# itself, so the change is proven (and RuntimeFidelityBaseline.cs can be re-seeded from its report) before it
+# merges. Every other pull request is served by the impact-gated jobs in sonarcloud.yml.
 
 on:
   schedule:
     - cron: '30 7 * * *'   # 07:30 UTC, after the heavy-timeout (06:00) and census (06:00) lanes start
+  pull_request:
+    paths:
+      - '.github/workflows/paper-fidelity-nightly.yml'
+      - 'tools/PaperFidelity/**'
+      - 'tests/AiDotNet.Tests/ModelFamilyTests/Base/OptionSensitivityHarness.cs'
+      - 'tests/AiDotNet.Tests/ModelFamilyTests/Base/PaperDefaultsHarness.cs'
+      - 'tests/AiDotNet.Tests/ModelFamilyTests/Base/PaperFidelityResultLog.cs'
+      - 'tests/AiDotNet.Tests/ModelFamilyTests/Base/RuntimeFidelityBaseline.cs'
+      - 'src/AiDotNet.Generators/TestScaffoldGenerator.PaperFidelity.cs'
   workflow_dispatch:
     inputs:
       ref:

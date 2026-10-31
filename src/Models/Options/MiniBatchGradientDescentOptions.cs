@@ -146,7 +146,7 @@ public class MiniBatchGradientDescentOptions<T, TInput, TOutput> : GradientBased
     /// Note: This property overrides a similar setting in the parent class, which is why it has the 'new' keyword.
     /// </para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 0.1;
+    public override double MaxLearningRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the factor by which the learning rate is increased when the loss is improving.

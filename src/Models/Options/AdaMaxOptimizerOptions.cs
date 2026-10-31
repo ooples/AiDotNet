@@ -105,7 +105,7 @@ public class AdaMaxOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizer
     /// minimum value (0.00001) than the base optimizer because AdaMax can benefit from very fine adjustments
     /// in certain situations. Think of it as ensuring the algorithm never slows down too much to make progress.</para>
     /// </remarks>
-    public new double MinLearningRate { get; set; } = 1e-5;
+    public override double MinLearningRate { get; set; } = 1e-5;
 
     /// <summary>
     /// Gets or sets the maximum allowed learning rate, overriding the base class value with a value optimized for AdaMax.
@@ -117,5 +117,5 @@ public class AdaMaxOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizer
     /// to prevent the algorithm from taking steps that are too large, which could cause instability.
     /// Think of it as putting a speed limit to prevent the algorithm from "overshooting" the optimal solution.</para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 0.1;
+    public override double MaxLearningRate { get; set; } = 0.1;
 }

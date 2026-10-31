@@ -75,6 +75,22 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _useTanhSquashing = useTanhSquashing;
         }
 
+        /// <summary>
+        /// Initializes a new instance of the ContinuousPolicy class from its options: action size, exploration
+        /// strategy, tanh squashing and <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/>.
+        /// </summary>
+        /// <param name="policyNetwork">Network producing the mean and log standard deviation of each action.</param>
+        /// <param name="options">The policy options.</param>
+        public ContinuousPolicy(INeuralNetwork<T> policyNetwork, ContinuousPolicyOptions<T> options)
+            : this(
+                policyNetwork,
+                (options ?? throw new ArgumentNullException(nameof(options))).ActionSize,
+                options.ExplorationStrategy,
+                options.UseTanhSquashing,
+                RandomFromSeed(options.Seed))
+        {
+        }
+
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             // Get mean and log_std from network

@@ -72,12 +72,6 @@ public class HierarchicalOptions<T> : ClusteringOptions<T>
     public bool ComputeDistances { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the distance metric to use.
-    /// </summary>
-    /// <value>The distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
-
-    /// <summary>
     /// Gets or sets the connectivity constraint matrix.
     /// </summary>
     /// <value>

@@ -32,6 +32,15 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class MomentumOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>Initializes a new instance with the Momentum optimizer defaults.</summary>
+    public MomentumOptimizerOptions()
+    {
+        // Momentum adapts more gently than the base default (1.05 / 0.95): +2% while the loss improves,
+        // -2% while it worsens. Set on the inherited properties, which the optimizer base reads.
+        MomentumIncreaseFactor = 1.02;
+        MomentumDecreaseFactor = 0.98;
+    }
+
     /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
@@ -78,7 +87,7 @@ public class MomentumOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimiz
     /// Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.
     /// </para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 0.1;
+    public override double MaxLearningRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the factor by which the learning rate is increased when the loss is improving.
@@ -163,88 +172,4 @@ public class MomentumOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimiz
     /// </remarks>
     public double LearningRateDecreaseFactor { get; set; } = 0.95;
 
-    /// <summary>
-    /// Gets or sets the factor by which the momentum coefficient is increased when the loss is improving.
-    /// </summary>
-    /// <value>The momentum increase multiplier, defaulting to 1.02 (2% increase).</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter controls how the momentum coefficient is adjusted when optimization is making progress.
-    /// When the loss is decreasing, the momentum coefficient is multiplied by this factor, increasing the
-    /// influence of previous update directions. Higher momentum can help accelerate progress in consistent
-    /// directions and move through plateaus more efficiently. The 'new' keyword indicates this property
-    /// overrides a similar property in the base class.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls how much the algorithm increases its "memory"
-    /// of previous steps when things are going well.
-    /// 
-    /// In our rolling ball analogy:
-    /// - Momentum is like the ball's tendency to keep rolling in the same direction
-    /// - When we're making good progress, we might want to trust this momentum more
-    /// - This setting determines how much to increase that trust with each successful step
-    /// 
-    /// The default value of 1.02 means:
-    /// - Each time the model improves, the momentum coefficient increases by 2%
-    /// - This gradually gives more weight to the established direction of movement
-    /// 
-    /// Increasing momentum when progress is being made helps:
-    /// - Build up speed in productive directions
-    /// - Move through flat regions more quickly
-    /// - Potentially skip over small local minima
-    /// 
-    /// You might want to increase this value (like to 1.05) if:
-    /// - You want to accelerate training more aggressively
-    /// - Your optimization landscape has long, flat regions
-    /// 
-    /// You might want to decrease this value (like to 1.01) if:
-    /// - You want more conservative momentum adaptation
-    /// - You notice the algorithm tends to overshoot after periods of progress
-    /// 
-    /// Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.
-    /// </para>
-    /// </remarks>
-    public new double MomentumIncreaseFactor { get; set; } = 1.02;
-
-    /// <summary>
-    /// Gets or sets the factor by which the momentum coefficient is decreased when the loss is getting worse.
-    /// </summary>
-    /// <value>The momentum decrease multiplier, defaulting to 0.98 (2% decrease).</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter controls how the momentum coefficient is adjusted when optimization is facing challenges.
-    /// When the loss is increasing, the momentum coefficient is multiplied by this factor, reducing the
-    /// influence of previous update directions. Lower momentum can help the algorithm make more careful,
-    /// deliberate progress in complex or highly curved regions of the loss surface. The 'new' keyword indicates
-    /// this property overrides a similar property in the base class.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls how much the algorithm decreases its "memory"
-    /// of previous steps when it makes a mistake.
-    /// 
-    /// In our rolling ball analogy:
-    /// - If the ball is rolling in the wrong direction, its momentum is working against us
-    /// - We want to reduce this momentum to allow for changes in direction
-    /// - This setting determines how much to decrease that momentum after an unsuccessful step
-    /// 
-    /// The default value of 0.98 means:
-    /// - Each time the model gets worse, the momentum coefficient decreases by 2%
-    /// - This gradually reduces the influence of the established direction
-    /// 
-    /// Decreasing momentum when problems are encountered helps:
-    /// - Recover from overshooting or moving in unproductive directions
-    /// - Navigate complex, curved areas of the loss landscape
-    /// - Make more deliberate progress in tricky regions
-    /// 
-    /// You might want to decrease this value (like to 0.95) if:
-    /// - You want momentum to drop more quickly after mistakes
-    /// - The loss landscape has many sharp turns or narrow valleys
-    /// 
-    /// You might want to increase this value (like to 0.99) if:
-    /// - You want to preserve momentum more persistently
-    /// - The loss function is noisy and you don't want to overreact to small increases
-    /// - You're worried about getting stuck in local minima
-    /// 
-    /// Note: This property overrides a similar setting in the base class, which is why it has the 'new' keyword.
-    /// </para>
-    /// </remarks>
-    public new double MomentumDecreaseFactor { get; set; } = 0.98;
 }

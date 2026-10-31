@@ -67,10 +67,6 @@ public class TradingAgentOptions<T> : ModelOptions
         DiscountFactor = other.DiscountFactor;
         LossFunction = other.LossFunction;
         Seed = other.Seed;
-        // TradingAgentOptions<T>.Seed HIDES ModelOptions.Seed, and `: this()` leaves the base property
-        // null. Without this, a configured base seed is lost and GetOptions(), which returns
-        // ModelOptions, reports the default instead of what the caller configured.
-        ((ModelOptions)this).Seed = ((ModelOptions)other).Seed;
         BatchSize = other.BatchSize;
         ReplayBufferSize = other.ReplayBufferSize;
         TargetUpdateFrequency = other.TargetUpdateFrequency;
@@ -131,11 +127,6 @@ public class TradingAgentOptions<T> : ModelOptions
     /// Loss function for training the agent's neural networks.
     /// </summary>
     public ILossFunction<T>? LossFunction { get; set; }
-
-    /// <summary>
-    /// Random seed for reproducibility.
-    /// </summary>
-    public new int? Seed { get; set; }
 
     /// <summary>
     /// Batch size for training updates.

@@ -128,7 +128,7 @@ public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// extremely slow. The default value (0.000001) is very small and rarely needs adjustment. You might increase 
     /// this if the algorithm seems to be making very slow progress in later iterations.</para>
     /// </remarks>
-    public new double MinLearningRate { get; set; } = 1e-6;
+    public override double MinLearningRate { get; set; } = 1e-6;
 
     /// <summary>
     /// Gets or sets the maximum allowed learning rate during optimization.
@@ -144,7 +144,7 @@ public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// too aggressive, which could cause it to overshoot the optimal solution dramatically. The default value (10.0) 
     /// works well for most problems, but you might decrease it if you notice the algorithm becoming unstable.</para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 10.0;
+    public override double MaxLearningRate { get; set; } = 10.0;
 
     /// <summary>
     /// Gets or sets the factor by which to increase the learning rate when progress is good.

@@ -86,12 +86,6 @@ public class MeanShiftOptions<T> : ClusteringOptions<T>
     public int LeafSize { get; set; } = 30;
 
     /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
-
-    /// <summary>
     /// Gets or sets the number of parallel jobs.
     /// </summary>
     /// <value>Number of jobs. Default is 1.</value>

@@ -14,7 +14,7 @@ namespace AiDotNet.Generators;
 /// </remarks>
 internal static class OptionsFidelityBaselines
 {
-    /// <summary>ADNOPT001: options properties nothing in the library reads, 2206 entries, keyed DeclaringType.Property.</summary>
+    /// <summary>ADNOPT001: options properties nothing in the library reads, 2222 entries, keyed DeclaringType.Property.</summary>
     internal static readonly System.Collections.Generic.HashSet<string> UnreadOptions =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
@@ -317,8 +317,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.Clustering.Options.MeanShiftOptions<T>.NumJobs",
             "AiDotNet.Clustering.Options.MiniBatchKMeansOptions<T>.ReassignmentRatio",
             "AiDotNet.Clustering.Options.OPTICSOptions<T>.PredecessorCorrection",
-            "AiDotNet.Clustering.Options.OnlineKMeansOptions<T>.DistanceMetric",
-            "AiDotNet.Clustering.Options.SOMOptions<T>.DistanceMetric",
             "AiDotNet.Clustering.Options.SpectralOptions<T>.EigenSolver",
             "AiDotNet.MetaLearning.Options.ACLOptions<T, TInput, TOutput>.CheckpointFrequency",
             "AiDotNet.MetaLearning.Options.ACLOptions<T, TInput, TOutput>.EnableCheckpointing",
@@ -1626,6 +1624,24 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.PhysicsInformed.Interfaces.MultiScaleTrainingOptions<T>.ManualScaleWeights",
             "AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions<T>.MaxGradientNorm",
             "AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions<T>.UsePrioritizedReplay",
+            "AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>.HiddenLayers",
+            "AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>.LossFunction",
+            "AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>.StateSize",
+            "AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>.HiddenLayers",
+            "AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>.LossFunction",
+            "AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>.StateSize",
+            "AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.HiddenLayers",
+            "AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.LossFunction",
+            "AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.StateSize",
+            "AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>.HiddenLayers",
+            "AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>.LossFunction",
+            "AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>.StateSize",
+            "AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>.HiddenLayers",
+            "AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>.LossFunction",
+            "AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>.StateSize",
+            "AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>.HiddenLayers",
+            "AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>.LossFunction",
+            "AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>.StateSize",
             "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions.ModelPath",
             "AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions.MaxAudioLengthSeconds",
             "AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions.ModelPath",
@@ -2226,7 +2242,7 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.VisionLanguage.VideoLanguage.VideoLanguageOptions.SystemPrompt",
         };
 
-    /// <summary>ADNOPT002: options classes of paper-citing models with no [PaperDefault], 1248 entries, keyed by type.</summary>
+    /// <summary>ADNOPT002: options classes of paper-citing models with no [PaperDefault], 1254 entries, keyed by type.</summary>
     internal static readonly System.Collections.Generic.HashSet<string> OptionsWithoutPaperDefaults =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
@@ -2985,6 +3001,12 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.PhysicsInformed.Options.UniversalDifferentialEquationsOptions",
             "AiDotNet.PhysicsInformed.Options.VariationalPINNOptions",
             "AiDotNet.ProgramSynthesis.Options.NeuralProgramSynthesizerOptions",
+            "AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>",
+            "AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>",
+            "AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>",
+            "AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>",
+            "AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>",
+            "AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>",
             "AiDotNet.Safety.Adversarial.AdversarialImageEvaluatorOptions",
             "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions",
             "AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions",

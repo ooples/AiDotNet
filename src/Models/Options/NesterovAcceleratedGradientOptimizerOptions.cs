@@ -36,6 +36,15 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>Initializes a new instance with the NesterovAcceleratedGradient optimizer defaults.</summary>
+    public NesterovAcceleratedGradientOptimizerOptions()
+    {
+        // Momentum adapts more gently than the base default (1.05 / 0.95): +2% while the loss improves,
+        // -2% while it worsens. Set on the inherited properties, which the optimizer base reads.
+        MomentumIncreaseFactor = 1.02;
+        MomentumDecreaseFactor = 0.98;
+    }
+
     /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
@@ -128,86 +137,4 @@ public class NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> : G
     /// </remarks>
     public double LearningRateDecreaseFactor { get; set; } = 0.95;
 
-    /// <summary>
-    /// Gets or sets the factor by which the momentum is increased when the algorithm
-    /// is making good progress.
-    /// </summary>
-    /// <value>The momentum increase factor, defaulting to 1.02.</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter controls how the momentum coefficient increases during successful optimization
-    /// steps. In the Nesterov Accelerated Gradient method, momentum helps the algorithm maintain
-    /// velocity in consistent directions, accelerating convergence. A value of 1.02 allows the
-    /// momentum to build gradually (2% increase per successful iteration), providing stability
-    /// while still adapting to the optimization landscape. This parameter overrides the base
-    /// class implementation with behavior specific to NAG.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls how much the algorithm builds up
-    /// momentum when it's consistently moving in a good direction.
-    /// 
-    /// Think of momentum like rolling a ball downhill:
-    /// - As it rolls, it picks up speed
-    /// - This parameter controls how quickly it gains that speed
-    /// 
-    /// The default value of 1.02 means:
-    /// - When the model is improving with consecutive steps
-    /// - The momentum effect increases by 2% after each successful step
-    /// 
-    /// You might want a higher value (like 1.05) if:
-    /// - Your model seems to hesitate too much
-    /// - The error landscape has long, shallow slopes
-    /// - You want to make faster progress
-    /// 
-    /// You might want a lower value (closer to 1.0) if:
-    /// - Training seems to overshoot optimal values
-    /// - The model oscillates around good solutions
-    /// - You want more careful, controlled progress
-    /// 
-    /// Good momentum settings help the model learn faster by remembering the general
-    /// direction of improvement rather than zigzagging down the slope.
-    /// </para>
-    /// </remarks>
-    public new double MomentumIncreaseFactor { get; set; } = 1.02;
-
-    /// <summary>
-    /// Gets or sets the factor by which the momentum is decreased when the algorithm
-    /// is not making good progress.
-    /// </summary>
-    /// <value>The momentum decrease factor, defaulting to 0.98.</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter determines how quickly the momentum coefficient is reduced when the optimization
-    /// is not improving or is oscillating. When progress stalls, reducing momentum allows the algorithm
-    /// to be more responsive to local gradient information rather than continuing in potentially
-    /// unproductive directions. A value of 0.98 represents a modest 2% reduction in momentum per
-    /// unsuccessful iteration. This parameter overrides the base class implementation with behavior
-    /// specific to NAG.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls how quickly the algorithm slows down
-    /// (reduces momentum) when it's no longer making good progress.
-    /// 
-    /// Continuing with our rolling ball analogy:
-    /// - If the ball is rolling in the wrong direction or is about to go uphill
-    /// - You'd want it to slow down so it can change direction
-    /// - This parameter controls how quickly that happens
-    /// 
-    /// The default value of 0.98 means:
-    /// - When the model stops improving
-    /// - The momentum effect decreases by 2% after each unsuccessful step
-    /// 
-    /// You might want a lower value (like 0.9) if:
-    /// - Your model often overshoots good solutions
-    /// - Training shows oscillations or unstable behavior
-    /// - You want the ability to quickly change direction
-    /// 
-    /// You might want a higher value (closer to 1.0) if:
-    /// - The learning landscape has many small local minima to avoid
-    /// - You want to maintain direction through small bumps
-    /// - You're confident in the general direction of optimization
-    /// 
-    /// Properly reducing momentum helps the model navigate challenging parts of the
-    /// learning landscape without getting stuck in cycles or overshooting good solutions.
-    /// </para>
-    /// </remarks>
-    public new double MomentumDecreaseFactor { get; set; } = 0.98;
 }

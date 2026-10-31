@@ -185,41 +185,4 @@ public class ResidualBootstrapFitDetectorOptions : ModelOptions
     /// </para>
     /// </remarks>
     public double UnderfitThreshold { get; set; } = -1.96; // ~95% confidence level
-
-    /// <summary>
-    /// Gets or sets the random seed for the bootstrap sampling process.
-    /// </summary>
-    /// <value>A nullable integer, defaulting to null (no fixed seed).</value>
-    /// <remarks>
-    /// <para>
-    /// This property allows setting a specific seed value for the random number generator used in the bootstrap 
-    /// sampling process. Setting a fixed seed ensures that the random sampling is reproducible across different 
-    /// runs, which can be important for debugging, validation, or when comparing different models under identical 
-    /// conditions. When set to null (the default), the system will use a non-deterministic seed, resulting in 
-    /// different random samples each time the detector is run. This is generally preferred for production use to 
-    /// avoid any potential biases that might occur with a fixed seed, but makes exact reproduction of results 
-    /// more difficult.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls whether the random sampling is reproducible.
-    /// 
-    /// The bootstrap method relies on random sampling, but sometimes you want consistent results:
-    /// - Setting a seed value (any integer) makes the "random" sampling predictable
-    /// - The same seed will always produce the same sequence of random samples
-    /// - This is useful for debugging or when you need to reproduce exact results
-    /// 
-    /// The default value of null means:
-    /// - No fixed seed is used
-    /// - Each time you run the detector, you'll get slightly different results
-    /// - This is generally good for production use as it avoids any potential bias
-    /// 
-    /// When to set a specific seed value:
-    /// - During development and testing to get consistent results
-    /// - When comparing different models to ensure they're tested on the same samples
-    /// - When you need to reproduce exact results for verification
-    /// 
-    /// For example, if you're writing a research paper or technical report about your model,
-    /// you might set a seed value so others can reproduce your exact findings.
-    /// </para>
-    /// </remarks>
-    public new int? Seed { get; set; } = null;
 }

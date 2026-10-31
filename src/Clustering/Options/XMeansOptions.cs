@@ -54,12 +54,6 @@ public class XMeansOptions<T> : ClusteringOptions<T>
     /// </summary>
     /// <value>Criterion type. Default is BIC.</value>
     public InformationCriterion Criterion { get; set; } = InformationCriterion.BIC;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }
 
 /// <summary>

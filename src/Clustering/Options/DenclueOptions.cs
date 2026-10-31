@@ -80,10 +80,4 @@ public class DenclueOptions<T> : ClusteringOptions<T>
     /// </para>
     /// </remarks>
     public double AttractorMergeThreshold { get; set; } = 0.1;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }

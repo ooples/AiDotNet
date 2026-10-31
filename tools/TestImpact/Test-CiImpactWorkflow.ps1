@@ -193,7 +193,9 @@ $validationJobs = @(
     'test-net10-sharded',
     'test-regression-analysis',
     'size-check',
-    'ci-test-analysis'
+    'ci-test-analysis',
+    'paper-fidelity-plan',
+    'paper-fidelity'
 )
 $qualityJobs = @('codeql', 'sonarcloud')
 $expensiveJobs = @($validationJobs) + @($qualityJobs)

@@ -2822,6 +2822,8 @@ jobs:
       - test-regression-analysis
       - ci-test-analysis
       - size-check
+      - paper-fidelity-plan
+      - paper-fidelity
     steps:
       - name: Checkout gate policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -2843,6 +2845,10 @@ jobs:
             -VerdictEnforced '${{ needs.test-regression-analysis.outputs.verdict_enforced || 'false' }}' `
             -AggregateAnalysisResult '${{ needs.ci-test-analysis.result }}' `
             -SizeCheckResult '${{ needs.size-check.result }}' `
+            -RequiresPaperFidelity '${{ github.event_name == 'pull_request' }}' `
+            -PaperFidelityPlanResult '${{ needs.paper-fidelity-plan.result }}' `
+            -PaperFidelityMode '${{ needs.paper-fidelity-plan.outputs.mode }}' `
+            -PaperFidelityResult '${{ needs.paper-fidelity.result }}' `
             -SummaryFile $env:GITHUB_STEP_SUMMARY
 
   certify-expensive-validation:
@@ -2975,6 +2981,8 @@ jobs:
       - test-regression-analysis
       - ci-test-analysis
       - size-check
+      - paper-fidelity-plan
+      - paper-fidelity
       - promote-ci-test-analysis
       - sonarcloud
 

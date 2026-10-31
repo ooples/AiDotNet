@@ -316,6 +316,136 @@ public class PoliciesIntegrationTests
         Assert.Equal(1.5, options.MaxGradientNorm);
     }
 
+    // ===== Options constructors =====
+    // The policy options classes used to declare `new int? Seed`, hiding ModelOptions.Seed, and no policy read
+    // them at all. Each policy now has an options constructor that reads them, and the seed is set here through
+    // the inherited ModelOptions.Seed - the path a generic caller (cloning, AutoML) takes - so two identically
+    // configured policies must draw identical action sequences.
+
+    private const int OptionsSeed = 31;
+
+    [Fact(Timeout = 120000)]
+    public async Task DiscretePolicy_OptionsConstructor_ReadsActionSizeAndInheritedSeed()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, DiscreteActionSize);
+        DiscretePolicy<double> Build() => new(network, WithSeed(new DiscretePolicyOptions<double>
+        {
+            ActionSize = DiscreteActionSize,
+            ExplorationStrategy = new NoExploration<double>(),
+        }));
+
+        AssertSameSampledActions(Build, DiscreteActionSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousPolicy_OptionsConstructor_ReadsActionSizeAndInheritedSeed()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        ContinuousPolicy<double> Build() => new(network, WithSeed(new ContinuousPolicyOptions<double>
+        {
+            ActionSize = ContinuousActionSize,
+            ExplorationStrategy = new NoExploration<double>(),
+            UseTanhSquashing = true,
+        }));
+
+        AssertSameSampledActions(Build, ContinuousActionSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DeterministicPolicy_OptionsConstructor_ReadsActionSizeAndInheritedSeed()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize);
+        DeterministicPolicy<double> Build() => new(network, WithSeed(new DeterministicPolicyOptions<double>
+        {
+            ActionSize = ContinuousActionSize,
+            ExplorationStrategy = new NoExploration<double>(),
+        }));
+
+        AssertSameSampledActions(Build, ContinuousActionSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BetaPolicy_OptionsConstructor_ReadsActionSizeBoundsAndInheritedSeed()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        BetaPolicy<double> Build() => new(network, WithSeed(new BetaPolicyOptions<double>
+        {
+            ActionSize = ContinuousActionSize,
+            ExplorationStrategy = new NoExploration<double>(),
+            ActionMin = -2.0,
+            ActionMax = 2.0,
+        }));
+
+        var actions = AssertSameSampledActions(Build, ContinuousActionSize);
+        foreach (var action in actions)
+            AssertVectorInRange(action, 0, ContinuousActionSize, -2.0, 2.0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MixedPolicy_OptionsConstructor_ReadsActionSizesAndInheritedSeed()
+    {
+        await Task.Yield();
+        var discrete = CreateNetwork(StateSize, DiscreteActionSize);
+        var continuous = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        MixedPolicy<double> Build() => new(discrete, continuous, WithSeed(new MixedPolicyOptions<double>
+        {
+            DiscreteActionSize = DiscreteActionSize,
+            ContinuousActionSize = ContinuousActionSize,
+            DiscreteExplorationStrategy = new NoExploration<double>(),
+            ContinuousExplorationStrategy = new NoExploration<double>(),
+        }));
+
+        AssertSameSampledActions(Build, DiscreteActionSize + ContinuousActionSize);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MultiModalPolicy_OptionsConstructor_ReadsComponentsAndInheritedSeed()
+    {
+        await Task.Yield();
+        const int components = 2;
+        var network = CreateNetwork(StateSize, components * (1 + 2 * ContinuousActionSize));
+        MultiModalPolicy<double> Build() => new(network, WithSeed(new MultiModalPolicyOptions<double>
+        {
+            ActionSize = ContinuousActionSize,
+            NumComponents = components,
+            ExplorationStrategy = new NoExploration<double>(),
+        }));
+
+        AssertSameSampledActions(Build, ContinuousActionSize);
+    }
+
+    private static TOptions WithSeed<TOptions>(TOptions options) where TOptions : AiDotNet.Models.Options.ModelOptions
+    {
+        AiDotNet.Models.Options.ModelOptions inherited = options;
+        inherited.Seed = OptionsSeed;
+        return options;
+    }
+
+    private static List<Vector<double>> AssertSameSampledActions<TPolicy>(Func<TPolicy> build, int expectedLength)
+        where TPolicy : IDisposable, IPolicy<double>
+    {
+        var state = CreateState(StateSize, 0.25);
+        using var first = build();
+        using var second = build();
+        var actions = new List<Vector<double>>();
+        for (int step = 0; step < 6; step++)
+        {
+            var a = first.SelectAction(state, training: true);
+            var b = second.SelectAction(state, training: true);
+            Assert.Equal(expectedLength, a.Length);
+            Assert.Equal(a.Length, b.Length);
+            for (int i = 0; i < a.Length; i++)
+                Assert.Equal(a[i], b[i]);
+            actions.Add(a);
+        }
+
+        return actions;
+    }
+
     private static NeuralNetwork<double> CreateNetwork(int inputSize, int outputSize)
     {
         var architecture = new NeuralNetworkArchitecture<double>(
