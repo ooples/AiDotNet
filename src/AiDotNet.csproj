@@ -383,6 +383,19 @@
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\ftfy_tables.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.ftfy_tables.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\langdetect_profiles.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.langdetect_profiles.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\fireredtts_multilingual.tiktoken.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.fireredtts_multilingual.tiktoken.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\budoux_ja.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.budoux_ja.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\budoux_zh_hans.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.budoux_zh_hans.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\tojyutping_words.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.tojyutping_words.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pk2003_table.csv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pk2003_table.csv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gptsovits_ja_userdict.csv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gptsovits_ja_userdict.csv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gptsovits_engdict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gptsovits_engdict.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gptsovits_namedict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gptsovits_namedict.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wordsegment_unigrams.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wordsegment_unigrams.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wordsegment_bigrams.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wordsegment_bigrams.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gptsovits_pypinyin_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gptsovits_pypinyin_chars.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gptsovits_pypinyin_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gptsovits_pypinyin_phrases.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\gptsovits_chinese.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.gptsovits_chinese.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\opencc_s2tw.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.opencc_s2tw.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_zh_tn_tagger.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_zh_tn_tagger.fst.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_zh_tn_verbalizer.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_zh_tn_verbalizer.fst.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_en_tn_tagger.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_en_tn_tagger.fst.gz" />

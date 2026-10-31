@@ -48,6 +48,8 @@ public class WeightLoader
             ".safetensors" => LoadSafeTensors(filePath),
             ".npy" => LoadNumPySingle(filePath),
             ".npz" => LoadNumPyArchive(filePath),
+            // An ONNX model's initializers, with the weights PyTorch's exporter left unnamed named after their biases.
+            ".onnx" => OnnxWeightReader.Read(filePath).NameMatMulWeights(),
             // Hugging Face's pytorch_model.bin is a torch.save zip archive; other .bin files use the custom binary layout.
             ".bin" => IsZipArchive(filePath) ? LoadPyTorchWeights(filePath) : LoadBinaryWeights(filePath),
             // torch.save writes the same zip archive under any name: Amphion's Vevo saves its content tokenizer as .pkl,

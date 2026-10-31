@@ -49,6 +49,12 @@ internal static class ChineseText
 /// are jieba's own, exported by <c>tools/reference-data/mandarin_g2p_resources.py</c> and
 /// <c>melo_chinese_resources.py</c>.
 /// </summary>
+/// <remarks>
+/// jieba_fast 0.53 (GPT-SoVITS's segmenter; the same dictionaries) replaces <c>lcut</c>'s route and unknown-word HMM with
+/// C, which this class follows when asked (<c>jiebaFast</c>): '-' does not join a Han block, each position keeps at most
+/// 12 dictionary words, a tie in the route goes to the shorter word, and the HMM sums its terms in another order, keeps
+/// the first predecessor on a tie and ends on 'E' on a tie. Its <c>posseg</c> is jieba's Python, unchanged.
+/// </remarks>
 internal sealed class Jieba
 {
     private static readonly Lazy<Jieba> SharedInstance = new(() => new Jieba(), isThreadSafe: true);
@@ -115,20 +121,22 @@ internal sealed class Jieba
     }
 
     private static readonly Regex JiebaHan = new("([一-鿕a-zA-Z0-9+#&\\._%\\-]+)");
+    private static readonly Regex JiebaFastHan = new("([一-鿕a-zA-Z0-9+#&\\._%]+)");
     private static readonly Regex JiebaSkip = new("(\r\n|\\s)");
     private static readonly Regex HmmHan = new("([一-鿕]+)");
     private static readonly Regex HmmSkip = new("([a-zA-Z0-9]+(?:\\.\\d+)?%?)");
 
-    /// <summary>jieba's <c>lcut(text, cut_all=False)</c> (HMM on).</summary>
-    public List<string> Cut(string sentence)
+    /// <summary>jieba's <c>lcut(text, cut_all=False)</c> (HMM on), or jieba_fast's.</summary>
+    public List<string> Cut(string sentence, bool jiebaFast = false)
     {
         var words = new List<string>();
-        foreach (var block in JiebaHan.Split(sentence))
+        var han = jiebaFast ? JiebaFastHan : JiebaHan;
+        foreach (var block in han.Split(sentence))
         {
             if (block.Length == 0) continue;
-            if (JiebaHan.IsMatch(block) && JiebaHan.Match(block).Index == 0)
+            if (han.IsMatch(block) && han.Match(block).Index == 0)
             {
-                words.AddRange(CutDag(ChineseText.Codepoints(block)));
+                words.AddRange(CutDag(ChineseText.Codepoints(block), jiebaFast));
                 continue;
             }
             foreach (var x in JiebaSkip.Split(block))
@@ -143,10 +151,10 @@ internal sealed class Jieba
 
     /// <summary>jieba's <c>lcut_for_search(text)</c>: each word of <see cref="Cut"/>, preceded by its dictionary 2-grams
     /// (words over 2 characters) and 3-grams (over 3).</summary>
-    public List<string> CutForSearch(string sentence)
+    public List<string> CutForSearch(string sentence, bool jiebaFast = false)
     {
         var result = new List<string>();
-        foreach (var word in Cut(sentence))
+        foreach (var word in Cut(sentence, jiebaFast))
         {
             var w = ChineseText.Codepoints(word);
             if (w.Count > 2)
@@ -168,8 +176,9 @@ internal sealed class Jieba
 
     private long? Frequency(string word) => _frequency.TryGetValue(word, out long f) ? f : null;
 
-    // Tokenizer.get_DAG and calc: the maximum-probability route over the dictionary's words.
-    private (double Score, int End)[] Route(List<string> sentence)
+    // Tokenizer.get_DAG and calc: the maximum-probability route over the dictionary's words. jieba_fast's
+    // _get_DAG_and_calc keeps at most 12 words per position and takes the first (shortest) word on a tie.
+    private (double Score, int End)[] Route(List<string> sentence, bool jiebaFast = false)
     {
         int n = sentence.Count;
         string Slice(int from, int to) => string.Concat(sentence.GetRange(from, to - from));
@@ -180,7 +189,7 @@ internal sealed class Jieba
             var ends = new List<int>();
             int i = k;
             string fragment = sentence[k];
-            while (i < n && _frequency.TryGetValue(fragment, out long f))
+            while (i < n && _frequency.TryGetValue(fragment, out long f) && !(jiebaFast && ends.Count >= 12))
             {
                 if (f > 0) ends.Add(i);
                 i++;
@@ -194,12 +203,12 @@ internal sealed class Jieba
         route[n] = (0, 0);
         for (int idx = n - 1; idx >= 0; idx--)
         {
-            (double Score, int End) best = (double.NegativeInfinity, -1);
+            (double Score, int End) best = jiebaFast ? (int.MinValue, 0) : (double.NegativeInfinity, -1);
             foreach (int x in dag[idx])
             {
                 long f = Frequency(Slice(idx, x + 1)) ?? 0;
                 double score = Math.Log(f == 0 ? 1 : f) - _logTotal + route[x + 1].Score;
-                if (score > best.Score || (score == best.Score && x > best.End)) best = (score, x);
+                if (score > best.Score || (!jiebaFast && score == best.Score && x > best.End)) best = (score, x);
             }
             route[idx] = best;
         }
@@ -207,11 +216,11 @@ internal sealed class Jieba
     }
 
     // Tokenizer.__cut_DAG
-    private IEnumerable<string> CutDag(List<string> sentence)
+    private IEnumerable<string> CutDag(List<string> sentence, bool jiebaFast)
     {
         int n = sentence.Count;
         string Slice(int from, int to) => string.Concat(sentence.GetRange(from, to - from));
-        var route = Route(sentence);
+        var route = Route(sentence, jiebaFast);
         var buffer = new StringBuilder();
         int bufferCount = 0;
         IEnumerable<string> Flush()
@@ -220,7 +229,7 @@ internal sealed class Jieba
             string pending = buffer.ToString();
             if (bufferCount == 1) yield return pending;
             else if (Frequency(pending) is not > 0)
-                foreach (var t in FinalSegCut(pending)) yield return t;
+                foreach (var t in FinalSegCut(pending, jiebaFast)) yield return t;
             else
                 foreach (var c in ChineseText.Codepoints(pending)) yield return c;
             buffer.Clear();
@@ -246,14 +255,14 @@ internal sealed class Jieba
     }
 
     // finalseg.cut
-    private IEnumerable<string> FinalSegCut(string sentence)
+    private IEnumerable<string> FinalSegCut(string sentence, bool jiebaFast)
     {
         foreach (var block in HmmHan.Split(sentence))
         {
             if (block.Length == 0) continue;
             if (HmmHan.Match(block) is { Success: true, Index: 0 } m && m.Length == block.Length)
             {
-                foreach (var word in Viterbi(ChineseText.Codepoints(block))) yield return word;
+                foreach (var word in Viterbi(ChineseText.Codepoints(block), jiebaFast)) yield return word;
                 continue;
             }
             foreach (var x in HmmSkip.Split(block))
@@ -267,8 +276,10 @@ internal sealed class Jieba
         ['B'] = "ES", ['M'] = "MB", ['S'] = "SE", ['E'] = "BM",
     };
 
-    // finalseg.__cut: the B/M/E/S Viterbi path, then words from it.
-    private IEnumerable<string> Viterbi(List<string> observations)
+    // finalseg.__cut: the B/M/E/S Viterbi path, then words from it. jieba_fast's C _viterbi adds emission, previous score
+    // and transition in that order, keeps the first predecessor that strictly beats MIN_FLOAT (or, when none does,
+    // the larger state letter with a MIN_FLOAT score), and ends on 'S' only when it strictly beats 'E'.
+    private IEnumerable<string> Viterbi(List<string> observations, bool jiebaFast)
     {
         const string states = "BMES";
         double Emit(char state, string observation) =>
@@ -290,10 +301,23 @@ internal sealed class Jieba
             {
                 double emission = Emit(y, observations[t]);
                 (double Score, char State) best = (double.NegativeInfinity, '\0');
-                foreach (char y0 in PreviousStates[y])
+                if (jiebaFast)
                 {
-                    double score = probability[y0] + Transition(y0, y) + emission;
-                    if (score > best.Score || (score == best.Score && y0 > best.State)) best = (score, y0);
+                    best = (MinFloat, '\0');
+                    foreach (char y0 in PreviousStates[y])
+                    {
+                        double score = emission + probability[y0] + Transition(y0, y);
+                        if (score > best.Score) best = (score, y0);
+                    }
+                    if (best.State == '\0') best = (MinFloat, PreviousStates[y].Max());
+                }
+                else
+                {
+                    foreach (char y0 in PreviousStates[y])
+                    {
+                        double score = probability[y0] + Transition(y0, y) + emission;
+                        if (score > best.Score || (score == best.Score && y0 > best.State)) best = (score, y0);
+                    }
                 }
                 next[y] = best.Score;
                 nextPath[y] = new List<char>(path[best.State]) { y };
@@ -302,7 +326,9 @@ internal sealed class Jieba
             path = nextPath;
         }
         // max((V[-1][y], y) for y in "ES"): a tie goes to "S".
-        char last = probability['E'] > probability['S'] ? 'E' : 'S';
+        char last = jiebaFast
+            ? (probability['S'] > probability['E'] ? 'S' : 'E')
+            : (probability['E'] > probability['S'] ? 'E' : 'S');
         var positions = path[last];
         int begin = 0, nextIndex = 0;
         for (int i = 0; i < observations.Count; i++)
