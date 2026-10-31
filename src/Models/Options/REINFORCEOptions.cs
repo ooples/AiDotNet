@@ -44,6 +44,7 @@ public class REINFORCEOptions<T> : ModelOptions
     /// <summary>Hidden layer sizes for the policy network.</summary>
     public List<int> HiddenLayers { get; set; } = new List<int> { 32, 32 };
 
+    /// <summary>Creates options with the default values.</summary>
     public REINFORCEOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();

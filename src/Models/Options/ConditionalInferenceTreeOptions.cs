@@ -18,6 +18,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class ConditionalInferenceTreeOptions : DecisionTreeOptions
 {
+    /// <summary>Creates options with the default values.</summary>
     public ConditionalInferenceTreeOptions()
     {
         // Per Hothorn et al. 2006: conditional inference trees need a higher MinSamplesLeaf
@@ -25,6 +26,8 @@ public class ConditionalInferenceTreeOptions : DecisionTreeOptions
         MinSamplesLeaf = 5;
     }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public ConditionalInferenceTreeOptions(ConditionalInferenceTreeOptions other) : base()
     {
         Guard.NotNull(other);

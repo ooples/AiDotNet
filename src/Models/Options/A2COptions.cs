@@ -24,19 +24,32 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class A2COptions<T> : ModelOptions
 {
+    /// <summary>Number of features in one observation of the environment state.</summary>
     public int StateSize { get; set; }
+    /// <summary>Number of discrete actions, or the dimension of the action vector for a continuous action space.</summary>
     public int ActionSize { get; set; }
+    /// <summary>Whether the action space is continuous rather than discrete.</summary>
     public bool IsContinuous { get; set; } = false;
+    /// <summary>Learning rate of the policy network.</summary>
     public T PolicyLearningRate { get; set; }
+    /// <summary>Learning rate of the value network.</summary>
     public T ValueLearningRate { get; set; }
+    /// <summary>Discount factor (gamma) applied to future rewards.</summary>
     public T DiscountFactor { get; set; }
+    /// <summary>Weight of the entropy bonus in the objective, which encourages exploration.</summary>
     public T EntropyCoefficient { get; set; }
+    /// <summary>Weight of the value loss in the combined objective.</summary>
     public T ValueLossCoefficient { get; set; }
+    /// <summary>Number of environment steps collected before each update (the rollout length n of n-step A2C).</summary>
     public int StepsPerUpdate { get; set; } = 5;
+    /// <summary>Loss function used to train the value network.</summary>
     public ILossFunction<T> ValueLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
+    /// <summary>Hidden layer sizes of the policy network.</summary>
     public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 64, 64 };
+    /// <summary>Hidden layer sizes of the value network.</summary>
     public List<int> ValueHiddenLayers { get; set; } = new List<int> { 64, 64 };
 
+    /// <summary>Creates options with the default values.</summary>
     public A2COptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();

@@ -197,6 +197,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// </remarks>
     private int _maxTrainingTimeSeconds;
 
+    /// <summary>Wall-clock training budget in seconds.</summary>
     public int MaxTrainingTimeSeconds
     {
         get => _maxTrainingTimeSeconds;
@@ -247,6 +248,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// </remarks>
     private int _earlyStoppingPatience = 10;
 
+    /// <summary>Number of epochs without improvement after which training stops early.</summary>
     public int EarlyStoppingPatience
     {
         get => _earlyStoppingPatience;
@@ -272,6 +274,7 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// </remarks>
     private double _earlyStoppingMinDelta = 1e-4;
 
+    /// <summary>Smallest improvement in validation loss that counts as progress for early stopping.</summary>
     public double EarlyStoppingMinDelta
     {
         get => _earlyStoppingMinDelta;

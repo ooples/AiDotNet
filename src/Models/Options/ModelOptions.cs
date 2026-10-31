@@ -1,5 +1,6 @@
 namespace AiDotNet.Models.Options;
 
+/// <summary>Base class of every model's options: the settings shared by all models, such as the random seed.</summary>
 public abstract class ModelOptions
 {
     /// <summary>Initializes the shared model settings with their defaults.</summary>

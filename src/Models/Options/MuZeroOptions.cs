@@ -109,15 +109,23 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public int ActionSize { get; init; } = 2;
 
     // Network architecture
+    /// <summary>Size of the latent state the model plans in.</summary>
     public int LatentStateSize { get; init; } = 256;
+    /// <summary>Hidden layer sizes of the representation network (observation to latent state).</summary>
     public List<int> RepresentationLayers { get; init; } = new List<int> { 256, 256 };
+    /// <summary>Hidden layer sizes of the dynamics network (next latent state and reward).</summary>
     public List<int> DynamicsLayers { get; init; } = new List<int> { 256, 256 };
+    /// <summary>Hidden layer sizes of the prediction network (policy and value).</summary>
     public List<int> PredictionLayers { get; init; } = new List<int> { 256, 256 };
 
     // MCTS parameters
+    /// <summary>Number of Monte Carlo tree search simulations per action.</summary>
     public int NumSimulations { get; init; } = 50;
+    /// <summary>Exploration constant of the pUCT rule that balances prior and value during tree search.</summary>
     public double PUCTConstant { get; init; } = 1.25;
+    /// <summary>Concentration of the Dirichlet noise added to the root prior.</summary>
     public double RootDirichletAlpha { get; init; } = 0.3;
+    /// <summary>Fraction of the root prior replaced by Dirichlet noise during search, for exploration.</summary>
     public double RootExplorationFraction { get; init; } = 0.25;
 
     // Training parameters
@@ -125,11 +133,15 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     // use K=5). MuZeroAgent.Train unrolls the learned model K steps from a real trajectory window and
     // backpropagates one joint loss through the recurrence (#1756), so the paper default is honored.
     // (Supersedes the interim K=1 default from #1755, which existed only while K>1 was unimplemented.)
+    /// <summary>Number of steps (K) the dynamics network is unrolled during training.</summary>
     public int UnrollSteps { get; init; } = 5;
+    /// <summary>Number of steps (n) in the n-step bootstrapped value target.</summary>
     public int TDSteps { get; init; } = 10;
+    /// <summary>Prioritization exponent of the replay buffer: how strongly TD error shapes sampling (0 samples uniformly).</summary>
     public double PriorityAlpha { get; init; } = 1.0;
 
     // Value/Policy targets
+    /// <summary>Whether the dynamics network predicts the cumulative reward (value prefix) of an unrolled segment instead of each step's reward, as in EfficientZero.</summary>
     public bool UseValuePrefix { get; init; } = false;
 
     /// <summary>

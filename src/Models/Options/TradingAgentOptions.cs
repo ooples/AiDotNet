@@ -34,6 +34,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TradingAgentOptions<T> : ModelOptions
 {
+    /// <summary>Creates options with the default values.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public TradingAgentOptions()
     {

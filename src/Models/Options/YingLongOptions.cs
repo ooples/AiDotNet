@@ -16,8 +16,11 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class YingLongOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     public YingLongOptions() { }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public YingLongOptions(YingLongOptions<T> other)
         : base(other)
     {
@@ -43,14 +46,23 @@ public class YingLongOptions<T> : TimeSeriesRegressionOptions<T>
         TotalTrainingSteps = other.TotalTrainingSteps;
     }
 
+    /// <summary>Number of past time steps the model reads as context.</summary>
     public int ContextLength { get; set; } = 1024;
+    /// <summary>Number of future time steps to forecast.</summary>
     public int ForecastHorizon { get; set; } = 96;
+    /// <summary>Number of time steps in each patch the series is split into.</summary>
     public int PatchLength { get; set; } = 32;
+    /// <summary>Width of the model's hidden representations.</summary>
     public int HiddenDimension { get; set; } = 768;
+    /// <summary>Number of transformer layers.</summary>
     public int NumLayers { get; set; } = 12;
+    /// <summary>Number of attention heads.</summary>
     public int NumHeads { get; set; } = 12;
+    /// <summary>Width of the feed-forward layer inside each transformer block.</summary>
     public int IntermediateSize { get; set; } = 3072;
+    /// <summary>Dropout probability applied during training.</summary>
     public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Preset size of the foundation model.</summary>
     public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Base;
 
     /// <summary>Gets or sets the AdamW learning rate. The paper uses 1e-4.</summary>

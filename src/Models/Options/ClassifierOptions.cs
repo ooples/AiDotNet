@@ -69,7 +69,7 @@ public class ClassifierOptions<T> : ModelOptions
     ///
     /// With the default threshold of 0.5:
     /// - If P(positive) = 0.6 → Predict positive (0.6 > 0.5)
-    /// - If P(positive) = 0.4 → Predict negative (0.4 < 0.5)
+    /// - If P(positive) = 0.4 → Predict negative (0.4 &lt; 0.5)
     ///
     /// When to adjust the threshold:
     /// - Medical diagnosis: Lower threshold (0.3) to catch more potential cases

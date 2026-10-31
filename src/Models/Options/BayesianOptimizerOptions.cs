@@ -6,6 +6,8 @@ namespace AiDotNet.Models.Options;
 /// Configuration options for the Bayesian optimization algorithm.
 /// </summary>
 /// <typeparam name="T">The data type used by the kernel function.</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// <para>
 /// Bayesian optimization is a sequential design strategy for global optimization of black-box functions

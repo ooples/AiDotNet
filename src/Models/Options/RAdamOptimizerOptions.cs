@@ -128,7 +128,7 @@ public class RAdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// <value>The learning rate increase factor, defaulting to 1.05.</value>
     /// <remarks>
     /// <para>
-    /// Only consulted when <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.UseAdaptiveLearningRate"/>
+    /// Only consulted when <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.UseAdaptiveLearningRate"/>
     /// is enabled. This outer adaptation is an AiDotNet convenience shared by every gradient optimizer, not part
     /// of the RAdam paper.
     /// </para>
@@ -143,7 +143,7 @@ public class RAdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// <value>The learning rate decrease factor, defaulting to 0.95.</value>
     /// <remarks>
     /// <para>
-    /// Only consulted when <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.UseAdaptiveLearningRate"/>
+    /// Only consulted when <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.UseAdaptiveLearningRate"/>
     /// is enabled.
     /// </para>
     /// <para><b>For Beginners:</b> This is like slowing down when the path gets tricky. The default of 0.95 cuts

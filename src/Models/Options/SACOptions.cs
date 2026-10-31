@@ -153,6 +153,7 @@ public class SACOptions<T> : ModelOptions
     /// </summary>
     public List<int> QHiddenLayers { get; set; } = new List<int> { 256, 256 };
 
+    /// <summary>Creates options with the default values.</summary>
     public SACOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();

@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.VAE;
+﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Initialization;
@@ -18317,13 +18317,18 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>(numHeads, feedForwardDimension ?? (hiddenDimension * 4));
         }
 
-        // MLP head, matching the ViT/BERT readout (GELU projection -> output, no dropout). A ReLU
-        // projection + dropout here drove the output layer into a dead/bias-only state during
-        // training; the smooth GELU keeps the head's units alive so the projection stays
-        // input-sensitive. The head runs per feature-token (this family's readout convention —
-        // tape-safe sequence pooling is not available, so flatten/mean reductions break gradient
-        // flow). The final activation is task-dependent (GetTabularOutputActivation) — a hardcoded
-        // Softmax collapses a single-output regression head to a constant 1.0.
+        // One vector per sample before the MLP. The head used to run per feature-token, so the model returned
+        // [batch, features, classes] and could not train against a [batch, classes] target. The paper (Huang et
+        // al. 2020, section 2) concatenates the contextual embeddings instead; measured here, concatenation gives
+        // the head a features x hidden fan-in (1280 at the defaults) and the first Adam steps overshoot (loss
+        // 0.45 -> 2.94 before settling), while the token mean keeps the fan-in at hidden and converges smoothly
+        // (the FT-Transformer-style per-sample readout). Pooling with a single output trains normally.
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average);
+
+        // MLP head (GELU projection -> output, no dropout). A ReLU projection + dropout here drove the
+        // output layer into a dead/bias-only state during training; the smooth GELU keeps the head's units
+        // alive. The final activation is task-dependent (GetTabularOutputActivation) — a hardcoded Softmax
+        // collapses a single-output regression head to a constant 1.0.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
