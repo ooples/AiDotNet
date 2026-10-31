@@ -87,7 +87,7 @@ public class SPIRALPaperTests
         var audio = Voice(16000);
         double Loss() => model.PretrainingLoss(audio, Tensors.Helpers.RandomHelper.CreateSeededRandom(11));
         double before = Loss();
-        Assert.True(before > 0 && double.IsFinite(before), $"initial loss {before}");
+        Assert.True(before > 0 && !double.IsNaN(before) && !double.IsInfinity(before), $"initial loss {before}");
         var teacher = model.Teacher ?? throw new InvalidOperationException("the first loss builds the teacher");
         var network = model.Network ?? throw new InvalidOperationException("native model");
         // The teacher starts as the student.
