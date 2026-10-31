@@ -1,245 +1,69 @@
 using AiDotNet.Attributes;
+using AiDotNet.Audio.Codecs;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Tokenization.Algorithms;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.Latest;
 
-/// <summary>KaniTTS: Kani-TTS: Efficient Codec-Based TTS.</summary>
+
+/// <summary>
+/// KaniTTS (nineninesix.ai, 2025): text-to-speech as language modeling — an LFM2 language model reads the text and writes
+/// NVIDIA NanoCodec codes, four per frame at 12.5 frames a second, which NanoCodec's causal decoder turns into 22.05 kHz
+/// audio.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Kani-TTS: Efficient Codec-Based TTS" (-, 2025)</item></list></para><para><b>For Beginners:</b> KaniTTS: Kani-TTS: Efficient Codec-Based TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <remarks>
+/// <para>KaniTTS has no paper; its release is the reference: the prompt (start-of-human, the text, end-of-text,
+/// end-of-human), sampling and the speech extraction of the kani-tts 0.0.4 package, the streaming extraction of the basic
+/// example, and the fine-tuning pipeline's data format and recipe (KaniTTS-Finetune-pipeline). The language model is
+/// transformers' <c>Lfm2ForCausalLM</c> and the codec NeMo's <c>AudioCodecModel</c>, both ported.</para>
+/// <para><b>For Beginners:</b> KaniTTS treats speech as text a small language model can write: after the sentence it writes
+/// a stream of sound codes, and a codec turns those codes into audio. Multi-speaker checkpoints take a speaker's name.</para>
+/// </remarks>
 /// <example>
 /// <code>
-/// // Create a Kani-TTS model for efficient codec-based speech synthesis
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new KaniTTS&lt;double&gt;(architecture, "kanitts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new KaniTTS&lt;double&gt;(architecture, new KaniTTSOptions());
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+/// var model = new KaniTTS&lt;float&gt;(architecture, new KaniTTSOptions());
+/// model.LoadReferenceWeights("kani-tts-370m");                                   // model.safetensors, tokenizer.json, config.json
+/// model.LoadCodecWeights("nemo-nano-codec-22khz-0.6kbps-12.5fps.nemo");
+/// model.Speaker = "andrew";
+/// var audio = model.Synthesize("Hello, how are you doing today?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Kani TTS", "https://github.com/KaniTTS/KaniTTS")]
-public partial class KaniTTS<T> : TtsModelBase<T>, ICodecTts<T>
+[ResearchPaper("Kani TTS", "https://github.com/nineninesix-ai/kani-tts", Year = 2025, Authors = "nineninesix.ai")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.02,
+    MaxGradientNorm = 1, GradientAccumulationSteps = 4, Provenance = RecipeProvenance.ReleasedCode,
+    Source = "No paper. nineninesix-ai/KaniTTS-Finetune-pipeline config/experiments.yaml (the first experiment): rsLoRA of "
+             + "rank 16 (alpha 16, dropout 0.1) on q_proj, w1 and w2, trained by Hugging Face's Trainer with adamw_torch at "
+             + "5e-5, weight decay 0.02, a cosine schedule after a 10% warm-up, max_grad_norm 1, batch 1 with 4-step "
+             + "gradient accumulation; the loss on every token (labels = input_ids).")]
+public partial class KaniTTS<T> : KaniTTSBase<T>
 {
-    private readonly KaniTTSOptions _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public KaniTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        KaniTTSOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates an ONNX-backed KaniTTS for inference.</summary>
+    public KaniTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, KaniTTSOptions? options = null)
+        : base(architecture, modelPath, options ?? new KaniTTSOptions())
     {
-        _options = options ?? new KaniTTSOptions();
-        Options = _options;
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public KaniTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        KaniTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a native, trainable KaniTTS.</summary>
+    public KaniTTS(NeuralNetworkArchitecture<T> architecture, KaniTTSOptions? options = null)
+        : base(architecture, options ?? new KaniTTSOptions())
     {
-        _options = options ?? new KaniTTSOptions();
-        Options = _options;
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        InitializeLayers();
-    }
-
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public int NumCodebooks => _options.NumCodebooks;
-    public int CodebookSize => _options.CodebookSize;
-
-    /// <inheritdoc />
-    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
-    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
-    public int CodecFrameRate => _options.CodecFrameRate;
-
-    /// <summary>
-    /// Synthesizes speech from text.
-    /// Efficient lightweight single-codebook codec TTS for on-device deployment.
-    /// </summary>
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int cF = textLen * 3;
-        double[] tok = new double[cF];
-        double p = 0;
-        for (int f = 0; f < cF; f++)
-        {
-            int t = Math.Min(f * textLen / cF, textLen - 1);
-            tok[f] = Math.Tanh((text[t] % 128) / 128.0 * 0.7 + p * 0.2 + Math.Sin(f * 0.1) * 0.08);
-            p = tok[f];
-        }
-        int waveLen = cF * (SampleRate / _options.CodecFrameRate);
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, cF - 1);
-            waveform[i] = NumOps.FromDouble(Math.Tanh(tok[fr] * Math.Sin(i * 0.007) * 0.85));
-        }
-        return waveform;
-    }
-
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int frames = Math.Max(1, audio.Length / samplesPerFrame);
-        var tokens = new Tensor<T>([frames]);
-        for (int f = 0; f < frames; f++)
-        {
-            double sum = 0;
-            int start = f * samplesPerFrame;
-            int count = Math.Min(samplesPerFrame, audio.Length - start);
-            for (int s = 0; s < count; s++)
-                sum += NumOps.ToDouble(audio[start + s]);
-            double avg = sum / Math.Max(1, count);
-            int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1));
-            bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin));
-            tokens[f] = NumOps.FromDouble(bin);
-        }
-        return tokens;
-    }
-
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int waveLen = tokens.Length * samplesPerFrame;
-        var wave = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int f = Math.Min(i / samplesPerFrame, tokens.Length - 1);
-            double tokenVal = NumOps.ToDouble(tokens[f]);
-            double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0;
-            double phase = i * 2.0 * Math.PI * 200.0 / SampleRate;
-            wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
-        }
-        return wave;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
-    {
-        var m = new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "KaniTTS-Native" : "KaniTTS-ONNX",
-            Description = "KaniTTS TTS",
-            FeatureCount = _options.LLMDim,
-        };
-        m.AdditionalInfo["Architecture"] = "KaniTTS";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(KaniTTS<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
     }
 }

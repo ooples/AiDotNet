@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 
@@ -60,5 +61,40 @@ public class BatchNormalizationLayoutAndRecalibrationTests
                 for (int p = 0; p < 25; p++) { sum += input[(b * 4 + channel) * 25 + p]; count++; }
             Assert.Equal(sum / count, runningMean[channel], 9);
         }
+    }
+
+    [Fact]
+    public void Recalibration_MakesTheEvaluationForwardReproduceTheTrainingForward()
+    {
+        // The recalibrated statistics are the batch's own, biased variance included, so the eval-mode function on that
+        // batch is the one training optimized. Storing the unbiased m/(m-1) estimate here (as the momentum update does)
+        // perturbed every normalized feature by sqrt(m/(m-1)) and failed Non-Attentive Tacotron's training probes.
+        var layer = new BatchNormalizationLayer<double>(4);
+        var input = Ramp(1, 4, 2, 2);                       // four values per feature: the correction would be 4/3
+        layer.SetTrainingMode(true);
+        var training = layer.Forward(input);
+        layer.SetTrainingMode(false);
+        layer.OverwriteRunningStatistics = true;
+        try { layer.Forward(input); }
+        finally { layer.OverwriteRunningStatistics = false; }
+        var evaluation = layer.Forward(input);
+        for (int i = 0; i < training.Length; i++)
+            Assert.Equal(training[i], evaluation[i], 9);
+    }
+
+    [Fact]
+    public void Deserialization_RebuildsASizedLayer_WithItsDeclaredLayout()
+    {
+        // The metadata once held only epsilon and momentum: the rebuilt layer was lazy and Infer. A model restoring
+        // into its own sized ChannelsFirst layer then saw different construction state and replaced that layer, so a
+        // model holding it directly (CAM++'s encoder) ran its pre-restore weights.
+        var layer = new BatchNormalizationLayer<double>(4) { Layout = BatchNormDataLayout.ChannelsFirst };
+        var metadata = layer.GetMetadata().ToDictionary(pair => pair.Key, pair => (object)pair.Value);
+        var rebuilt = AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<double>(
+            typeof(BatchNormalizationLayer<>).FullName ?? nameof(BatchNormalizationLayer<double>), new[] { -1 }, new[] { -1 }, metadata);
+
+        var restored = Assert.IsType<BatchNormalizationLayer<double>>(rebuilt);
+        Assert.Equal(BatchNormDataLayout.ChannelsFirst, restored.Layout);
+        Assert.Equal(layer.ParameterCount, restored.ParameterCount);
     }
 }

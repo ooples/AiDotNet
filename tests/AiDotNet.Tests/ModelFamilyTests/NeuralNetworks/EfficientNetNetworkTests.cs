@@ -36,6 +36,11 @@ public class EfficientNetNetworkTests : NeuralNetworkModelTestBase<float>
     protected override int MoreDataLongIterations => 30;
     protected override double MoreDataTolerance => 0.5;
 
+    // EfficientNet trains with dropout before its classifier and stochastic depth in every residual block (Tan & Le
+    // 2019, Sec. 5.2), so its training loss is one random draw of the objective. Judge memorization on the evaluation
+    // loss, with BatchNorm recalibrated for the current weights.
+    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
         => EfficientNetNetwork<float>.ForTesting(numClasses: 1000);
 }

@@ -111,7 +111,7 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Per the paper (Tan et al., 2022):
     /// Adds large-scale pre-training, phoneme pre-training, differentiable duration modeling,
     /// and bidirectional prior/posterior modules to VITS for human-parity quality.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -119,15 +119,6 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
             return OnnxModel.Run(input);
         var output = Predict(input);
         return PostprocessAudio(output);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

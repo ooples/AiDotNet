@@ -78,4 +78,18 @@ public enum OptimizerKind
     /// with it.
     /// </remarks>
     ScheduleFreeAdamW,
+
+    /// <summary>D-Adaptation Adam: Adam whose step size is estimated from the iterates.</summary>
+    /// <remarks>
+    /// Defazio and Mishchenko 2023. MusicGen trains its 300M model with it (Copet et al. 2023, Sec. 3.1).
+    /// </remarks>
+    DAdaptAdam,
+
+    /// <summary>RAdam, Adam with a rectified adaptive learning rate (Liu et al. 2020).</summary>
+    /// <remarks>Parallel WaveGAN trains with it (Yamamoto et al. 2020, §4.1.2).</remarks>
+    RAdam,
+
+    /// <summary>ScaledAdam: Adam scaled by each tensor's rms, learning each tensor's scale (k2-fsa icefall).</summary>
+    /// <remarks>GPT-SoVITS trains its text-to-semantic model with it (AR/modules/optim.py).</remarks>
+    ScaledAdam,
 }

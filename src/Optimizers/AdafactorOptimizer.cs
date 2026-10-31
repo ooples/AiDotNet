@@ -83,15 +83,11 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
     /// </remarks>
     private double StepSize(int step, double parameterRms)
     {
-        if (!_options.UseRelativeStepSize)
-        {
-            return _options.InitialLearningRate > 0
-                ? _options.InitialLearningRate
-                : NumOps.ToDouble(CurrentLearningRate);
-        }
-
-        double relative = Math.Min(1e-2, 1.0 / Math.Sqrt(step));
-        return relative * Math.Max(_options.ParameterScaleFloor, parameterRms);
+        double rate = _options.UseRelativeStepSize
+            ? Math.Min(1e-2, 1.0 / Math.Sqrt(step))
+            : _options.InitialLearningRate > 0 ? _options.InitialLearningRate : NumOps.ToDouble(CurrentLearningRate);
+        bool scaleByParameters = _options.MultiplyByParameterScale ?? _options.UseRelativeStepSize;
+        return scaleByParameters ? rate * Math.Max(_options.ParameterScaleFloor, parameterRms) : rate;
     }
 
     private double Rms(ReadOnlySpan<T> values)
@@ -169,7 +165,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         // The reconstructed second moment for each element, however it was estimated.
         var estimate = new double[length];
 
-        if (IsFactorable(parameter._shape))
+        if (_options.Factored && IsFactorable(parameter._shape))
         {
             UpdateFactoredSecondMoment(
                 parameter, gradientSpan, estimate, length, beta2, epsilon);
@@ -192,6 +188,10 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
 
         double updateRms = Math.Sqrt(sumSquares / length);
         double scale = updateRms > clip && clip > 0 ? clip / updateRms : 1.0;
+        // The first moment averages the clipped update already multiplied by this step's size, as the reference
+        // implementations do (transformers' Adafactor: clip, multiply by lr, then average).
+        double alpha = StepSize(_step, Rms(parameterSpan));
+        for (int i = 0; i < length; i++) update[i] *= scale * alpha;
 
         if (keepMomentum)
         {
@@ -204,12 +204,10 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
             }
         }
 
-        double alpha = StepSize(_step, Rms(parameterSpan));
-
         for (int i = 0; i < length; i++)
         {
             double current = NumOps.ToDouble(parameterSpan[i]);
-            double next = current - alpha * scale * update[i];
+            double next = current - update[i];
 
             // Decoupled: applied to the weight, not folded into the gradient, so it does not
             // enter the second-moment estimate.
@@ -324,11 +322,18 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
 
         var span = parameters.AsSpan();
         double alpha = StepSize(_step, Rms(span));
+        for (int i = 0; i < parameters.Length; i++) update[i] *= scale * alpha;
+        if (!double.IsNaN(_options.Beta1))
+        {
+            if (_flatMomentum.Length != parameters.Length) _flatMomentum = new double[parameters.Length];
+            for (int i = 0; i < parameters.Length; i++)
+                update[i] = _flatMomentum[i] = _options.Beta1 * _flatMomentum[i] + (1 - _options.Beta1) * update[i];
+        }
 
         for (int i = 0; i < parameters.Length; i++)
         {
             double current = NumOps.ToDouble(parameters[i]);
-            double next = current - alpha * scale * update[i];
+            double next = current - update[i];
             if (applyWeightDecay) next -= alpha * decay * current;
             updated[i] = NumOps.FromDouble(next);
         }
@@ -337,6 +342,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
     }
 
     private double[] _flatState = [];
+    private double[] _flatMomentum = [];
 
     /// <inheritdoc />
     public override OptimizationResult<T, TInput, TOutput> Optimize(
@@ -354,6 +360,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         _full.Clear();
         _momentum.Clear();
         _flatState = [];
+        _flatMomentum = [];
         _step = 0;
         InitializeAdaptiveParameters();
 

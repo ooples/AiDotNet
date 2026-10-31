@@ -7,8 +7,8 @@ namespace AiDotNet.Attributes;
 /// <para>
 /// Papers overwhelmingly state more than one recipe. Of 122 surveyed, 25 give a different optimizer
 /// or rate per stage: LLaVA pre-trains at 2e-3 with a batch of 128 and fine-tunes at 2e-5 with 32;
-/// SpeechT5 pre-trains with warmup-then-linear-decay and fine-tunes with a triangular cyclical
-/// schedule; DocPedia peaks at 1e-3 then 1e-5. A single recipe per model cannot hold any of that,
+/// SpeechT5 pre-trains with warmup-then-linear-decay and fine-tunes text-to-speech with an
+/// inverse-square-root decay; DocPedia peaks at 1e-3 then 1e-5. A single recipe per model cannot hold any of that,
 /// and picking one silently discards the rest.
 /// </para>
 /// <para><b>For Beginners:</b> Large models are usually trained in stages — first on a huge generic

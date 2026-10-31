@@ -862,7 +862,7 @@ var result = await new AiModelBuilder<float, string, string>()
 - `AudioLDMModel`, `AudioLDM2Model`
 - `MusicGenModel`
 - `RiffusionModel`
-- `DiffWaveModel`
+- `DiffWave` (TextToSpeech.Vocoders: vocoding, unconditional and class-conditional)
 
 #### Video Generation
 - `StableVideoDiffusion`

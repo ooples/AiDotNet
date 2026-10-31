@@ -16,7 +16,7 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
 {
     // Diagnostic descriptors for Tier 2 component attribute pairing
     private static readonly DiagnosticDescriptor ComponentTypeMissingPipelineStage = new(
-        id: "AIDN060",
+        id: "AIDN108",
         title: "Component has [ComponentType] but is missing [PipelineStage]",
         messageFormat: "Component '{0}' has [ComponentType] but is missing [PipelineStage]. All components should declare which pipeline stage they operate in.",
         category: "AiDotNet.ComponentMetadata",
@@ -24,7 +24,7 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor PipelineStageMissingComponentType = new(
-        id: "AIDN061",
+        id: "AIDN109",
         title: "Component has [PipelineStage] but is missing [ComponentType]",
         messageFormat: "Component '{0}' has [PipelineStage] but is missing [ComponentType]. All pipeline components should declare their component type.",
         category: "AiDotNet.ComponentMetadata",

@@ -247,6 +247,14 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
     protected abstract List<Tensor<T>> Forward(Tensor<T> input);
 
     /// <summary>
+    /// The indices of <see cref="Forward"/> outputs that are data rather than predictions, such as the
+    /// proposal boxes a two-stage model's heads received. <see cref="Predict"/> carries them for
+    /// post-processing, but no gradient reaches them, so <see cref="Train"/> takes them out of its loss.
+    /// Empty by default.
+    /// </summary>
+    protected virtual IReadOnlyCollection<int> DataOutputIndices => Array.Empty<int>();
+
+    /// <summary>
     /// Predicts by running the forward pass and returning every raw head, flattened per image and
     /// concatenated, so a step trained against <see cref="Predict"/> reaches every head.
     /// </summary>
@@ -261,15 +269,16 @@ public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>,
 
     /// <summary>
     /// Runs one raw-output regression step against <see cref="Predict"/> (mean squared error, SGD on
-    /// every trainable tensor). A model's own objective, such as Mask R-CNN's multi-task loss, is
-    /// exposed through its typed training method.
+    /// every trainable tensor), with <see cref="DataOutputIndices"/> out of the loss. A model's own
+    /// objective, such as Mask R-CNN's multi-task loss, is exposed through its typed training method.
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
         RecordTrainingLoss(TensorModelTrainer<T>.Step(
-            this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict));
+            this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate),
+            x => CvTensorOps<T>.ConcatenateTrainableOutputs(Forward(x), DataOutputIndices, expectedOutput)));
     }
 
     /// <summary>

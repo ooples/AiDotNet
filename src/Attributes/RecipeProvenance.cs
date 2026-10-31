@@ -41,4 +41,24 @@ public enum RecipeProvenance
     /// in a reader's head, and the <c>Source</c> must name both ends of it.
     /// </remarks>
     DerivedFromCitedWork,
+
+    /// <summary>
+    /// The paper does not state this value and its authors released no code; it comes from a named public
+    /// reproduction.
+    /// </summary>
+    /// <remarks>
+    /// Used where no first-party source exists at all — SoundStorm gives no optimizer, and its training recipe is
+    /// lucidrains/soundstorm-pytorch's. The <c>Source</c> must name the reproduction and say the paper is silent, so
+    /// a later official release can replace it.
+    /// </remarks>
+    NamedReproduction,
+
+    /// <summary>
+    /// The paper does not state this value; the authors' released code and training configuration do.
+    /// </summary>
+    /// <remarks>
+    /// Used where the first-party source is the code — CosyVoice's paper names no optimizer, and its recipe is the
+    /// official repository's <c>train_conf</c>. The <c>Source</c> must name the file, and say the paper is silent.
+    /// </remarks>
+    ReleasedCode,
 }

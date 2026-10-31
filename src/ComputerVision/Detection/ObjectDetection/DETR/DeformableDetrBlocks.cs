@@ -396,12 +396,19 @@ internal static class DetrEmbeddings
     }
 
     /// <summary>
-    /// <c>gen_sineembed_for_position</c> for boxes (cx, cy, w, h) in [0, 1]: 128 features per coordinate with
-    /// temperature 10000, concatenated as (y, x, w, h) - 512 features per box.
+    /// <c>gen_sineembed_for_position</c> for boxes (cx, cy, w, h) in [0, 1]: <paramref name="featsPerCoordinate"/>
+    /// features per coordinate with temperature 10000, concatenated as (y, x, w, h).
     /// </summary>
-    public static double[] BoxSineEmbedding(double[] boxes, int count)
+    /// <remarks>
+    /// The reference hard-codes 128 because it assumes d_model = 256, so the 4 x 128 = 512 features feed a
+    /// query-position MLP of input width 2 x d_model. Passing d_model / 2 keeps that contract at any width; the
+    /// default of 128 is the paper's configuration and gives identical values.
+    /// </remarks>
+    public static double[] BoxSineEmbedding(double[] boxes, int count, int featsPerCoordinate = 128)
     {
-        const int feats = 128;
+        if (featsPerCoordinate <= 0 || featsPerCoordinate % 2 != 0)
+            throw new ArgumentOutOfRangeException(nameof(featsPerCoordinate), "Sine features come in sin/cos pairs; pass a positive even count.");
+        int feats = featsPerCoordinate;
         var result = new double[count * feats * 4];
         for (int b = 0; b < count; b++)
         {

@@ -112,6 +112,8 @@ public sealed class FinancialAgentReviewContractTests
     {
         var options = Options(Sac, 4, 3, seed: 6);
         options.HiddenLayers = new[] { 7, 5 };
+        // The 2018b variant, whose two Q-functions both have target clones.
+        ((FinancialSACAgentOptions<double>)options).Variant = AiDotNet.Enums.SacVariant.AutomaticTemperature;
         using var agent = Create(Sac, options);
         var critics = Networks(agent, Sac, 4, 3).Where(x => x.Role != FinancialNetworkRole.Policy).ToArray();
         Assert.Equal(4, critics.Length);

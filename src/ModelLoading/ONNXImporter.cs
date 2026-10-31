@@ -168,7 +168,7 @@ public class ONNXImporter<T>
 
                     case 2: // Length-delimited
                         var length = (int)ReadVarint(reader);
-                        if (fieldNumber == 1) // ModelProto.graph field
+                        if (fieldNumber == 7) // ModelProto.graph (onnx.proto: field 7; field 1 is the varint ir_version)
                         {
                             // Parse embedded graph message
                             var graphEnd = reader.BaseStream.Position + length;

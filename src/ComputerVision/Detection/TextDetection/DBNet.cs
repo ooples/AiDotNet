@@ -65,8 +65,8 @@ public partial class DBNet<T> : TextDetectorBase<T>
         _hiddenDim = GetHiddenDim(options.Size);
         _k = k;
 
-        // ResNet backbone
-        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+        // ResNet backbone: DB-ResNet-50 by default, DB-ResNet-18 (also in the paper) when the options say so.
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetBackboneSelection.Resolve(options.Backbone) });
 
         // Feature pyramid (the paper's FPN, mmocr FPNC): the fused map has _hiddenDim channels at 1/4
         // resolution - 256 at the default size, as in the paper.
@@ -157,7 +157,12 @@ public partial class DBNet<T> : TextDetectorBase<T>
         var probabilityLoss = WeightedMean(bce, HardNegativeWeights(bce, kernelT, maskT, 3.0));
         var thresholdLoss = WeightedMean(Engine.TensorAbs(Engine.TensorSubtract(thresh, borderT)), borderMaskT);
         var binaryLoss = DiceLoss(binary, kernelT, maskT);
-        return Engine.TensorAdd(Engine.TensorAdd(probabilityLoss, binaryLoss), Engine.TensorMultiplyScalar(thresholdLoss, NumOps.FromDouble(10.0)));
+        // One shape for the three terms: the reductions above return rank 0 or [1] depending on the path, and adding a
+        // rank-0 term to a [1] term broadcasts forward but hands the rank-0 input a [1] gradient in backward, which
+        // failed the step ("Tensor shapes must match. Got [] and [1]").
+        Tensor<T> Scalar(Tensor<T> t) => Engine.Reshape(t, new[] { 1 });
+        return Engine.TensorAdd(Engine.TensorAdd(Scalar(probabilityLoss), Scalar(binaryLoss)),
+            Engine.TensorMultiplyScalar(Scalar(thresholdLoss), NumOps.FromDouble(10.0)));
     }
 
     /// <summary>

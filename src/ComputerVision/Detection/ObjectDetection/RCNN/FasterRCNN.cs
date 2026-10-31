@@ -145,6 +145,11 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         };
     }
 
+    /// <summary>Output 2, the proposal boxes the detection head classified, is data: training cannot change it.</summary>
+    protected override IReadOnlyCollection<int> DataOutputIndices => ProposalBoxesOutput;
+
+    private static readonly int[] ProposalBoxesOutput = { 2 };
+
     /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input) => ForwardDetection(input, null, out _);
 

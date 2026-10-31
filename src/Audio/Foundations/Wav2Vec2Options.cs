@@ -48,11 +48,46 @@ public class Wav2Vec2Options : ModelOptions
     /// <summary>Gets or sets the CNN feature encoder output dimension.</summary>
     public int FeatureEncoderDim { get; set; } = 512;
 
-    /// <summary>Gets or sets the number of quantization codebooks for contrastive learning.</summary>
+    /// <summary>Gets or sets whether the network is the LARGE-LV60 form: layer norm in every feature-encoder layer and
+    /// pre-norm ("stable layer norm") Transformer layers.</summary>
+    public bool StableLayerNorm { get; set; }
+
+    #endregion
+
+    #region Pre-training
+
+    /// <summary>Gets or sets the number of quantization codebooks, G (2).</summary>
     public int NumQuantizationGroups { get; set; } = 2;
 
-    /// <summary>Gets or sets the quantization codebook size.</summary>
+    /// <summary>Gets or sets the number of entries per codebook, V (320).</summary>
     public int QuantizationCodebookSize { get; set; } = 320;
+
+    /// <summary>Gets or sets the quantized vector's width, d (256; the codebook entries are d/G wide).</summary>
+    public int CodevectorDim { get; set; } = 256;
+
+    /// <summary>Gets or sets the width the context and quantized vectors are projected to (256 BASE, 768 LARGE).</summary>
+    public int ProjectedCodevectorDim { get; set; } = 256;
+
+    /// <summary>Gets or sets the number of distractors per masked step, K (100).</summary>
+    public int NumNegatives { get; set; } = 100;
+
+    /// <summary>Gets or sets the contrastive temperature κ (0.1).</summary>
+    public double ContrastiveTemperature { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the diversity loss weight α (0.1).</summary>
+    public double DiversityWeight { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the weight of the L2 penalty on the feature encoder's output (10).</summary>
+    public double FeaturePenaltyWeight { get; set; } = 10.0;
+
+    /// <summary>Gets or sets the factor on the feature encoder's gradients in pre-training (0.1).</summary>
+    public double FeatureGradientScale { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the probability a frame starts a masked span (0.065) of <see cref="MaskLength"/> frames.</summary>
+    public double MaskProbability { get; set; } = 0.065;
+
+    /// <summary>Gets or sets the masked span length M (10).</summary>
+    public int MaskLength { get; set; } = 10;
 
     #endregion
 
@@ -68,14 +103,49 @@ public class Wav2Vec2Options : ModelOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 5e-5;
+    /// <summary>Gets or sets the learning rate used when no paper recipe applies.</summary>
+    public double LearningRate { get; set; } = 5e-4;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
+    /// <summary>Gets or sets the Transformer dropout and the dropout at the feature encoder's output (0.1).</summary>
     public double DropoutRate { get; set; } = 0.1;
 
-    /// <summary>Gets or sets the contrastive loss temperature.</summary>
-    public double ContrastiveTemperature { get; set; } = 0.1;
+    /// <summary>Gets or sets the probability of skipping a Transformer layer in training (0.05 BASE, 0.2 LARGE).</summary>
+    public double LayerDrop { get; set; } = 0.05;
 
     #endregion
+
+    /// <summary>The network these options describe.</summary>
+    internal Wav2Vec2Configuration ToConfiguration() => new()
+    {
+        ConvDims = Enumerable.Repeat(FeatureEncoderDim, 7).ToArray(),
+        HiddenSize = HiddenDim,
+        Layers = NumLayers,
+        Heads = NumAttentionHeads,
+        IntermediateSize = FeedForwardDim,
+        LayerNormFeatureEncoder = StableLayerNorm,
+        StableLayerNorm = StableLayerNorm,
+        ConvBias = StableLayerNorm,
+        FeatureProjectionDropout = DropoutRate,
+        HiddenDropout = DropoutRate,
+        AttentionDropout = DropoutRate,
+        ActivationDropout = 0.0,
+        LayerDrop = LayerDrop,
+        MaskTimeProbability = MaskProbability,
+        MaskTimeLength = MaskLength,
+    };
+
+    /// <summary>The pre-training objective these options describe.</summary>
+    internal Wav2Vec2PretrainingConfiguration ToPretrainingConfiguration() => new()
+    {
+        Groups = NumQuantizationGroups,
+        EntriesPerGroup = QuantizationCodebookSize,
+        CodevectorDim = CodevectorDim,
+        ProjectedDim = ProjectedCodevectorDim,
+        Negatives = NumNegatives,
+        LogitTemperature = ContrastiveTemperature,
+        DiversityWeight = DiversityWeight,
+        FeaturePenaltyWeight = FeaturePenaltyWeight,
+        MaskProbability = MaskProbability,
+        FeatureGradientScale = FeatureGradientScale,
+    };
 }

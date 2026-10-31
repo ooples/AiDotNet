@@ -1,276 +1,64 @@
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
-/// <summary>FishSpeechV15: Fish Speech V1.5: Improved Multilingual TTS.</summary>
+/// <summary>
+/// Fish Speech 1.5 (Liao et al. 2024, "Fish-Speech: Leveraging Large Language Models for Advanced Multilingual
+/// Text-to-Speech Synthesis"): a Dual-AR transformer — a slow transformer over text and semantic tokens, a fast transformer
+/// over each frame's eight codebooks — speaking Firefly-GAN's grouped-FSQ codes, which Firefly-GAN turns into 44.1 kHz
+/// audio.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Fish Speech V1.5: Improved Multilingual TTS" (Fish Audio Team, 2025)</item></list></para><para><b>For Beginners:</b> FishSpeechV15: Fish Speech V1.5: Improved Multilingual TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <remarks>
+/// <para>The paper leaves the sizes and the sequence format to the release (fish-speech v1.5.1 and the
+/// <c>fishaudio/fish-speech-1.5</c> checkpoint), whose code fills the gaps: each frame is the token
+/// <c>&lt;|semantic:c0|&gt;</c> with all eight codes' embeddings added, prompts open with the system message "Speak out the
+/// provided text." when references are given, and the training sample is that conversation with the speech scored from
+/// <c>&lt;|voice|&gt;</c> on. Training follows the paper's recipe by default; DPO, which the paper names as its last stage
+/// without details, is standard DPO (<see cref="FishSpeechBase{T}.TrainPreference"/>), and the release's reference-free
+/// variant is <see cref="FishSpeechBase{T}.TrainPreferenceReferenceFree"/>.</para>
+/// <para><b>For Beginners:</b> Fish Speech reads text and writes speech one short frame at a time, like a language model
+/// writing words. Give it a few seconds of someone speaking (and what they said) and it speaks new text in that voice.</para>
+/// </remarks>
 /// <example>
 /// <code>
-/// // Create a Fish Speech V1.5 model for improved multilingual TTS
-/// // with enhanced codec language modeling and zero-shot capabilities
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new FishSpeechV15&lt;double&gt;(architecture, "fishspeechv15.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new FishSpeechV15&lt;double&gt;(architecture, new FishSpeechV15Options());
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);
+/// var model = new FishSpeechV15&lt;float&gt;(architecture, new FishSpeechV15Options());
+/// model.LoadReferenceWeights("fish-speech-1.5");      // model.pth, the Firefly-GAN generator, tokenizer.tiktoken
+/// model.Voice = model.CreateVoice(reference, referenceRate, "What the reference says.");
+/// var speech = model.Synthesize("Text to speak in that voice.");   // 44.1 kHz
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper(
-    "Fish Speech: Leveraging Large Language Models for Advanced Multilingual Text-to-Speech Synthesis",
-    "https://arxiv.org/abs/2411.01156",
-    Year = 2024,
-    Authors = "Fish Audio"
-)]
-public partial class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
+[ResearchPaper("Fish-Speech: Leveraging Large Language Models for Advanced Multilingual Text-to-Speech Synthesis", "https://arxiv.org/abs/2411.01156",
+    Year = 2024, Authors = "Shijia Liao, Yuxuan Wang, Tianyu Li, Yifan Cheng, Ruoyi Zhang, Rongzhi Zhou, Yijin Xing")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-8, WeightDecay = 0.01,
+    Source = "Appendix A: AdamW (β1 0.9, β2 0.98, ε 1e-8) at 5e-4, weight decay 0.01, 1M-token batches for 500K steps, cosine decay "
+             + "after 2K warm-up steps to a final ratio of 0.1. The release's lit_module exempts the token embeddings and the norms from "
+             + "decay; its gradient clipping at 1.0 is kept.")]
+[PaperOptimizer(OptimizerKind.AdamW, Variant = nameof(FishSpeechRecipe.ReleaseFineTune), LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.95,
+    Epsilon = 1e-5, WeightDecay = 0.0, MaxGradientNorm = 1.0, Provenance = RecipeProvenance.ReleasedCode,
+    Source = "fish-speech v1.5.1 fish_speech/configs/text2semantic_finetune.yaml: AdamW at 1e-4, betas (0.9, 0.95), eps 1e-5, no weight "
+             + "decay, LambdaLR constant after 10 warm-up steps, gradient norm clipped at 1.0, 10,000 steps.")]
+public class FishSpeechV15<T> : FishSpeechBase<T>
 {
-    private readonly FishSpeechV15Options _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-    private int _encoderLayerEnd;
-
-    public FishSpeechV15(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        FishSpeechV15Options? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates a native, trainable Fish Speech 1.5.</summary>
+    public FishSpeechV15(NeuralNetworkArchitecture<T> architecture, FishSpeechV15Options? options = null)
+        : base(architecture, options ?? new FishSpeechV15Options(), FishSpeechVersion.V15)
     {
-        _options = options ?? new FishSpeechV15Options();
-        Options = _options;
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public FishSpeechV15(
-        NeuralNetworkArchitecture<T> architecture,
-        FishSpeechV15Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates an ONNX-backed Fish Speech 1.5 for inference.</summary>
+    public FishSpeechV15(NeuralNetworkArchitecture<T> architecture, string modelPath, FishSpeechV15Options? options = null)
+        : base(architecture, modelPath, options ?? new FishSpeechV15Options(), FishSpeechVersion.V15)
     {
-        _options = options ?? new FishSpeechV15Options();
-        Options = _options;
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        InitializeLayers();
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public int NumCodebooks => _options.NumCodebooks;
-    public int CodebookSize => _options.CodebookSize;
-
-    /// <inheritdoc />
-    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
-    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
-    public int CodecFrameRate => _options.CodecFrameRate;
-
-    /// <summary>
-    /// Synthesizes speech from text.
-    /// Per Fish Audio (2025): Dual-AR (slow semantic + fast acoustic) with VQGAN decoder.
-    /// </summary>
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int sF = textLen * 3;
-        double[] slowAR = new double[sF];
-        double p = 0;
-        for (int f = 0; f < sF; f++)
-        {
-            int t = Math.Min(f * textLen / sF, textLen - 1);
-            slowAR[f] = Math.Tanh(
-                (text[t] % 128) / 128.0 * 0.65 + p * 0.28 + Math.Sin(f * 0.11) * 0.07
-            );
-            p = slowAR[f];
-        }
-        int aF = sF * 2;
-        double[] fastAR = new double[aF];
-        for (int f = 0; f < aF; f++)
-        {
-            int si = Math.Min(f / 2, sF - 1);
-            fastAR[f] = Math.Tanh(
-                slowAR[si] * 0.8
-                    + Math.Sin(f * 0.15) * 0.1
-                    + Math.Cos(f * 0.23) * 0.05
-                    + (f > 0 ? fastAR[f - 1] * 0.15 : 0)
-            );
-        }
-        int waveLen = aF * (SampleRate / (_options.CodecFrameRate * 2));
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i * _options.CodecFrameRate * 2 / SampleRate, aF - 1);
-            waveform[i] = NumOps.FromDouble(Math.Tanh(fastAR[fr] * Math.Sin(i * 0.006) * 0.9));
-        }
-        return waveform;
-    }
-
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int frames = Math.Max(1, audio.Length / samplesPerFrame);
-        var tokens = new Tensor<T>([frames]);
-        for (int f = 0; f < frames; f++)
-        {
-            double sum = 0;
-            int start = f * samplesPerFrame;
-            int count = Math.Min(samplesPerFrame, audio.Length - start);
-            for (int s = 0; s < count; s++)
-                sum += NumOps.ToDouble(audio[start + s]);
-            double avg = sum / Math.Max(1, count);
-            int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1));
-            bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin));
-            tokens[f] = NumOps.FromDouble(bin);
-        }
-        return tokens;
-    }
-
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int waveLen = tokens.Length * samplesPerFrame;
-        var wave = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int f = Math.Min(i / samplesPerFrame, tokens.Length - 1);
-            double tokenVal = NumOps.ToDouble(tokens[f]);
-            double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0;
-            double phase = i * 2.0 * Math.PI * 200.0 / SampleRate;
-            wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
-        }
-        return wave;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-        ComputeEncoderDecoderBoundary();
-    }
-
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int total = Layers.Count;
-        _encoderLayerEnd =
-            total > 4 ? total / 3
-            : total > 0 ? 1
-            : 0;
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
-    {
-        var m = new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "FishSpeechV15-Native" : "FishSpeechV15-ONNX",
-            Description = "FishSpeechV15 TTS",
-            FeatureCount = _options.LLMDim,
-        };
-        m.AdditionalInfo["Architecture"] = "FishSpeechV15";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = _options.LLMDim;
-        m.AdditionalInfo["SampleRate"] = _options.SampleRate;
-        m.AdditionalInfo["MelChannels"] = _options.MelChannels;
-        m.AdditionalInfo["HopSize"] = _options.HopSize;
-        return m;
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(FishSpeechV15<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    private protected override string ModelName => "FishSpeechV15";
 }

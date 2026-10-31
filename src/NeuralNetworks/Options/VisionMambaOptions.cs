@@ -29,10 +29,9 @@ public class VisionMambaOptions : SequenceModelOptions
         PatchSize = 16;
         Channels = 3;
         ModelDimension = 192;
-        NumLayers = 4;
+        NumLayers = 24;
         NumClasses = 10;
         StateDimension = 16;
-        ScanPattern = VisionScanPattern.Bidirectional;
     }
 
 
@@ -62,9 +61,16 @@ public class VisionMambaOptions : SequenceModelOptions
     public int NumClasses { get; set; }
 
     /// <summary>
-    /// Gets or sets the scan pattern.
+    /// Gets or sets the patch stride; unset means the patch size (non-overlapping patches, the standard Vim models).
+    /// The overlapping "stride 8" models use half the patch size.
     /// </summary>
-    public VisionScanPattern ScanPattern { get; set; }
+    public int? Stride { get; set; }
+
+    /// <summary>The stride in effect: <see cref="Stride"/>, or the patch size when it is unset.</summary>
+    internal int EffectiveStride => Stride ?? PatchSize;
+
+    /// <summary>Gets or sets the stochastic-depth rate (the official default). Default: <c>0.1</c>.</summary>
+    public double DropPathRate { get; set; } = 0.1;
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
@@ -77,6 +83,7 @@ public class VisionMambaOptions : SequenceModelOptions
         // This is an image classifier, not a tokenizer-backed language model. The inherited
         // vocabulary/context settings are deliberately irrelevant to its construction.
         Require(PatchSize, nameof(PatchSize));
+        if (Stride is { } stride) Require(stride, nameof(Stride));
         ValidateImageDimension(ImageHeight, nameof(ImageHeight));
         ValidateImageDimension(ImageWidth, nameof(ImageWidth));
         Require(Channels, nameof(Channels));
@@ -89,11 +96,11 @@ public class VisionMambaOptions : SequenceModelOptions
     private void ValidateImageDimension(int dimension, string propertyName)
     {
         Require(dimension, propertyName);
-        if (dimension % PatchSize != 0)
+        if (dimension < PatchSize || (dimension - PatchSize) % EffectiveStride != 0)
         {
             throw new ArgumentException(
-                $"{GetType().Name}.{propertyName} ({dimension}) must be evenly divisible by " +
-                $"{GetType().Name}.{nameof(PatchSize)} ({PatchSize}).",
+                $"{GetType().Name}.{propertyName} ({dimension}) must hold a whole number of " +
+                $"{GetType().Name}.{nameof(PatchSize)} ({PatchSize}) patches at {GetType().Name}.{nameof(Stride)} ({EffectiveStride}).",
                 OptionsParameterName);
         }
     }

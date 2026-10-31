@@ -148,6 +148,7 @@ public class BarkOptions : CodecTtsOptions
         Semantic = other.Semantic.Copy();
         Coarse = other.Coarse.Copy();
         Fine = other.Fine.Copy();
+        SamplingSeed = other.SamplingSeed;
         SemanticVocabularySize = other.SemanticVocabularySize;
         TextEncodingOffset = other.TextEncodingOffset;
         SemanticPadTokenId = other.SemanticPadTokenId;
@@ -232,6 +233,13 @@ public class BarkOptions : CodecTtsOptions
 
     /// <summary>Maximum semantic tokens generated for one request.</summary>
     public int MaxSemanticNewTokens { get; set; } = 768;
+
+    /// <summary>
+    /// The seed of the generator each generation draws its samples from (one generator per request, shared by its
+    /// stages), so the same text and options synthesize the same audio. A stage's own
+    /// <see cref="AiDotNet.NeuralNetworks.Generation.SamplingOptions.Seed"/> takes precedence for that stage.
+    /// </summary>
+    public int SamplingSeed { get; set; } = 1234;
 
     /// <summary>Use incremental KV-cached decoding for causal stages.</summary>
     public bool UseKeyValueCache { get; set; } = true;

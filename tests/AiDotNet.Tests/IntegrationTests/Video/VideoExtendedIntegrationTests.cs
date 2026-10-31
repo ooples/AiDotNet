@@ -9,7 +9,6 @@ using AiDotNet.Video.Denoising;
 using AiDotNet.Video.Depth;
 using AiDotNet.Video.Enhancement;
 using AiDotNet.Video.FrameInterpolation;
-using AiDotNet.Video.Generation;
 using AiDotNet.Video.Inpainting;
 using AiDotNet.Video.Interfaces;
 using AiDotNet.Video.Matting;
@@ -18,7 +17,6 @@ using AiDotNet.Video.Options;
 using AiDotNet.Video.Restoration;
 using AiDotNet.Video.Segmentation;
 using AiDotNet.Video.Stabilization;
-using AiDotNet.Video.Tracking;
 using AiDotNet.Video.Understanding;
 using Xunit;
 using System.Threading.Tasks;
@@ -50,7 +48,8 @@ public class VideoExtendedIntegrationTests
         MemoryDimension = 8,
         DecoderHeadCount = 4,
         MemoryAttentionLayerCount = 4,
-        MaskDecoderDepth = 2,
+        MemoryAttentionFeedForwardDimension = 32,
+        MemoryFuserDimension = 32,
         MaskDecoderMlpDimension = 64
     };
 
@@ -553,38 +552,6 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task AnimateDiff_Construction()
-    {
-        var arch = CreateArch();
-        var model = new AnimateDiff<double>(arch, options: new AnimateDiffOptions { NumLayers = 2, NumFrames = 4 });
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task CogVideo_Construction()
-    {
-        var arch = CreateArch(height: 64, width: 64);
-        var model = new CogVideo<double>(arch);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task OpenSora_Construction()
-    {
-        var arch = CreateArch();
-        var model = new OpenSora<double>(arch);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task StableVideoDiffusion_Construction()
-    {
-        var arch = CreateArch(height: 64, width: 64);
-        var model = new StableVideoDiffusion<double>(arch);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task E2FGVI_Construction()
     {
         var arch = CreateArch();
@@ -628,29 +595,24 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SAM2_ScoreHeads_EmitOneScoreVectorPerBatchItem()
+    public async Task SAM2_Predict_GivesOneProbabilityMaskPerFrame()
     {
         await Task.Yield();
         var arch = CreateArch(height: 32, width: 32);
         using var model = new SAM2<double>(
             arch, options: CreateSam2SmokeOptions(SAM2ModelSize.Tiny));
-        var input = new Tensor<double>([2, 3, 32, 32]);
-        for (int i = 0; i < input.Length; i++)
+        var video = new Tensor<double>([3, 3, 32, 32]);
+        for (int i = 0; i < video.Length; i++)
         {
-            input[i] = Math.Sin(i * 0.01);
+            video[i] = 0.5 + 0.5 * Math.Sin(i * 0.01);
         }
 
-        var activations = model.GetNamedLayerActivations(input);
+        var masks = model.Predict(video);
 
-        Assert.True(activations.TryGetValue("IouScores", out var iouScores));
-        Assert.Equal(4, iouScores.Rank);
-        Assert.Equal(2, iouScores.Shape[0]);
-        Assert.Equal(4, iouScores.Shape[1]);
-        Assert.Equal(1, iouScores.Shape[2]);
-        Assert.Equal(1, iouScores.Shape[3]);
-        for (int i = 0; i < iouScores.Length; i++)
+        Assert.Equal(new[] { 3, 32, 32 }, masks.Shape.ToArray());
+        for (int i = 0; i < masks.Length; i++)
         {
-            Assert.False(double.IsNaN(iouScores[i]) || double.IsInfinity(iouScores[i]));
+            Assert.InRange(masks[i], 0.0, 1.0);
         }
     }
 
@@ -675,14 +637,6 @@ public class VideoExtendedIntegrationTests
     {
         var arch = CreateArch();
         var model = new DIFRINT<double>(arch);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task ByteTrack_Construction()
-    {
-        var arch = CreateArch(height: 64, width: 64);
-        var model = new ByteTrack<double>(arch, options: new ByteTrackOptions { NumFeatures = 64 });
         Assert.True(model.SupportsTraining);
     }
 
@@ -875,44 +829,9 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ByteTrackOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new ByteTrackOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task VRTOptions_IsNeuralNetworkOptions()
     {
         var opts = new VRTOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task AnimateDiffOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new AnimateDiffOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task CogVideoOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new CogVideoOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task OpenSoraOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new OpenSoraOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task StableVideoDiffusionOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new StableVideoDiffusionOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 

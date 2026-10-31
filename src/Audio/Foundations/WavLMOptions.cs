@@ -51,7 +51,24 @@ public class WavLMOptions : ModelOptions
     public int FeatureEncoderDim { get; set; } = 512;
 
     /// <summary>Gets or sets whether to use gated relative position bias.</summary>
+    /// <remarks>WavLM's network is defined by this bias (Chen et al. 2022, section III-B), so it must stay true; false is
+    /// rejected when the model is built.</remarks>
     public bool UseGatedRelativePositionBias { get; set; } = true;
+
+    /// <summary>
+    /// Whether to build WavLM-Large's layout: a layer-norm feature encoder and a stable (pre-norm) Transformer. False
+    /// (the default) is WavLM base / base-plus's: group norm on the first feature-encoder layer and a post-norm Transformer.
+    /// </summary>
+    public bool StableLayerNorm { get; set; }
+
+    /// <summary>Probability of skipping each Transformer layer after the first during training (microsoft/wavlm-base-plus: 0.05).</summary>
+    public double LayerDrop { get; set; } = 0.05;
+
+    /// <summary>SpecAugment time-mask probability during training (microsoft/wavlm-base-plus: 0.05).</summary>
+    public double MaskTimeProbability { get; set; } = 0.05;
+
+    /// <summary>Dropout inside each feed-forward block (microsoft/wavlm-base-plus: 0.0).</summary>
+    public double ActivationDropout { get; set; }
 
     #endregion
 
@@ -74,4 +91,21 @@ public class WavLMOptions : ModelOptions
     public double DropoutRate { get; set; } = 0.1;
 
     #endregion
+
+    // The WavLM network these options describe, as transformers' WavLMModel builds it.
+    internal WavLmConfiguration ToConfiguration() => new()
+    {
+        ConvDims = Enumerable.Repeat(FeatureEncoderDim, 7).ToArray(),
+        HiddenSize = HiddenDim,
+        Layers = NumLayers,
+        Heads = NumAttentionHeads,
+        IntermediateSize = FeedForwardDim,
+        LayerNormFeatureEncoder = StableLayerNorm,
+        StableLayerNorm = StableLayerNorm,
+        UseMaskEmbedding = true,
+    };
+
+    // Train-mode dropout, LayerDrop and SpecAugment time masking, drawn from the given generator.
+    internal WavLmRegularization ToRegularization(Random random)
+        => new(random, DropoutRate, DropoutRate, ActivationDropout, DropoutRate, LayerDrop, MaskTimeProbability);
 }

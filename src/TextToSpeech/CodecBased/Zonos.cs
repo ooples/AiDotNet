@@ -1,265 +1,276 @@
 using AiDotNet.Attributes;
+using AiDotNet.Audio.Codecs;
+using AiDotNet.Audio.Effects;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
-/// <summary>Zonos: zero-shot TTS with conditioning for speaker, emotion, and quality.</summary>
+/// <summary>
+/// Zonos, Zyphra's text-to-speech model (2025): a prefix of conditioning tokens — the text's eSpeak phonemes, a speaker
+/// embedding, and targets for emotion, pitch variation, speaking rate, bandwidth and language — followed by DAC's nine
+/// codebooks, delayed one step each, predicted autoregressively by a Transformer or a hybrid of Mamba2 and attention layers,
+/// under classifier-free guidance; DAC decodes the codes to 44.1 kHz audio.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Zonos: Open-weight zero-shot TTS" (Zyphra, 2025)</item></list></para><para><b>For Beginners:</b> Zonos: zero-shot TTS with conditioning for speaker, emotion, and quality.. This model converts text input into speech audio output.</para></remarks>
+/// <remarks>
+/// <para>Zyphra released code and weights with a blog post, not a paper (Zyphra/Zonos; <c>Zyphra/Zonos-v0.1-transformer</c>,
+/// <c>Zyphra/Zonos-v0.1-hybrid</c>, <c>Zyphra/Zonos-v0.1-speaker-embedding</c>). The blog fixes the design: eSpeak
+/// phonemization, a prefix of conditioning embeddings, DAC tokens in Parler-TTS's delay pattern merged into one embedding per
+/// step and predicted by nine heads, a simple autoregressive objective. The release gives the rest: the conditioners, the
+/// backbones, guidance against a text-only prefix, min-p sampling with a repetition penalty, and the end-of-audio countdown
+/// over the delayed codebooks.</para>
+/// <para>Voice cloning uses the release's speaker model (a ResNet-293 with attentive statistics pooling and an LDA to 128
+/// dimensions) on the reference recording; see <see cref="SpeakerEmbedding"/>.</para>
+/// <para><b>For Beginners:</b> Zonos reads text aloud in a voice you choose from a few seconds of someone speaking, and lets
+/// you steer the emotion, pitch variation and speed.</para>
+/// </remarks>
 /// <example>
 /// <code>
-/// // Create a Zonos model for open-weight zero-shot TTS
-/// // with controllable speaker, emotion, and quality conditioning
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Zonos&lt;double&gt;(architecture, "zonos.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Zonos&lt;double&gt;(architecture, new ZonosOptions());
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+/// var model = new Zonos&lt;float&gt;(architecture, new ZonosOptions());
+/// model.LoadReferenceWeights("Zonos-v0.1-transformer/model.safetensors");
+/// model.Codec.LoadPretrainedWeights("dac_44khz/model.safetensors");
+/// model.LoadSpeakerModel("Zonos-v0.1-speaker-embedding");
+/// var speaker = model.SpeakerEmbedding(recording, 44100);
+/// var audio = model.Generate("Hello, world!", speaker);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Zyphra Zonos: Zero-Shot TTS", "https://github.com/Zyphra/Zonos")]
+[ResearchPaper("Beta release of Zonos-v0.1", "https://www.zyphra.com/post/beta-release-of-zonos-v0-1", Year = 2025, Authors = "Zyphra")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.0,
+    Source = "Zyphra published no training recipe or code; the blog says only that Zonos learns a simple autoregressive "
+             + "objective. Training uses the Hugging Face Trainer's defaults, as for the other released-code models here: AdamW "
+             + "at 5e-5 with betas (0.9, 0.999), eps 1e-8, no weight decay, a linear decay to 0 without warm-up, gradient norm "
+             + "clipped to 1.0.")]
 public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ZonosOptions _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
+    private readonly bool _useNativeMode;
     private bool _disposed;
-    private int _encoderLayerEnd;
 
-    public Zonos(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        ZonosOptions? options = null
-    )
+    private ZonosNetwork<T>? _network;
+    private ZonosPrefixConditioner<T>? _conditioner;
+    private AudioCodecLayer<T>? _codec;
+    private ZonosSpeakerEncoder<T>? _speakerEncoder;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly List<LayerBase<T>> _modelLayers = new();
+
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>The languages Zonos accepts (eSpeak codes); a language's id is its index.</summary>
+    public static IReadOnlyList<string> Languages { get; } = new[]
+    {
+        "af", "am", "an", "ar", "as", "az", "ba", "bg", "bn", "bpy", "bs", "ca", "cmn",
+        "cs", "cy", "da", "de", "el", "en-029", "en-gb", "en-gb-scotland", "en-gb-x-gbclan",
+        "en-gb-x-gbcwmd", "en-gb-x-rp", "en-us", "eo", "es", "es-419", "et", "eu", "fa",
+        "fa-latn", "fi", "fr-be", "fr-ch", "fr-fr", "ga", "gd", "gn", "grc", "gu", "hak",
+        "hi", "hr", "ht", "hu", "hy", "hyw", "ia", "id", "is", "it", "ja", "jbo", "ka",
+        "kk", "kl", "kn", "ko", "kok", "ku", "ky", "la", "lfn", "lt", "lv", "mi", "mk",
+        "ml", "mr", "ms", "mt", "my", "nb", "nci", "ne", "nl", "om", "or", "pa", "pap",
+        "pl", "pt", "pt-br", "py", "quc", "ro", "ru", "ru-lv", "sd", "shn", "si", "sk",
+        "sl", "sq", "sr", "sv", "sw", "ta", "te", "tn", "tr", "tt", "ur", "uz", "vi",
+        "vi-vn-x-central", "vi-vn-x-south", "yue",
+    };
+
+    /// <summary>Creates an ONNX-backed Zonos for inference.</summary>
+    public Zonos(NeuralNetworkArchitecture<T> architecture, string modelPath, ZonosOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new ZonosOptions();
         Options = _options;
         _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        ConfigureBase();
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         InitializeLayers();
     }
 
-    public Zonos(
-        NeuralNetworkArchitecture<T> architecture,
-        ZonosOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
+    /// <summary>Creates a native, trainable Zonos.</summary>
+    public Zonos(NeuralNetworkArchitecture<T> architecture, ZonosOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new ZonosOptions();
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
-            });
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
+        ConfigureBase();
         InitializeLayers();
     }
 
+    private void ConfigureBase()
+    {
+        var o = _options;
+        if (o.Codec is null) throw new ArgumentException("Zonos needs its codec's options.", nameof(o.Codec));
+        if (o.EndToken != o.Codec.CodebookSize || o.MaskToken != o.Codec.CodebookSize + 1)
+            throw new ArgumentException($"Zonos's end and mask tokens follow the codec's {o.Codec.CodebookSize} codes.");
+        if (o.CfgScale == 1.0) throw new ArgumentOutOfRangeException(nameof(o.CfgScale), o.CfgScale, "The release generates with guidance only (a scale other than 1).");
+        if (o.Temperature < 0) throw new ArgumentOutOfRangeException(nameof(o.Temperature), o.Temperature, "The temperature is 0 (greedy) or positive.");
+        if (o.ConditionerDropout < 0 || o.ConditionerDropout >= 1) throw new ArgumentOutOfRangeException(nameof(o.ConditionerDropout), o.ConditionerDropout, "Dropout lies in [0, 1).");
+        if (!Languages.Contains(o.Language)) throw new ArgumentException($"'{o.Language}' is not one of Zonos's languages.", nameof(o.Language));
+        if (o.Conditioners is null || o.Conditioners.Count == 0 || o.Conditioners[0].Kind != ZonosConditionerKind.EspeakPhonemes)
+            throw new ArgumentException("Zonos's first conditioner reads the phonemes.", nameof(o.Conditioners));
+        base.SampleRate = o.SampleRate;
+        base.HopSize = o.Codec.EncoderRates.Aggregate(1, (a, b) => a * b);
+        base.HiddenDim = o.HiddenDim;
+        // Hugging Face's Trainer clips the gradient norm (max_grad_norm), which the optimizer does here.
+        MaxGradNorm = NumOps.Zero;
+    }
+
     int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public int NumCodebooks => _options.NumCodebooks;
-    public int CodebookSize => _options.CodebookSize;
-    public int CodecFrameRate => _options.CodecFrameRate;
-
-    /// <summary>Synthesizes speech. Zonos: text + speaker/emotion conditioning -> backbone transformer -> DAC decoder -> waveform.</summary>
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // Zonos: Zonal TTS with code-level disentanglement (Zyphra 2025)
-        // Disentangled zone encoding: content, speaker, prosody zones
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int codecFrames = textLen * 3;
-        double[] content = new double[codecFrames];
-        double[] prosodyZone = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++)
-        {
-            int ci = Math.Min(f * textLen / codecFrames, textLen - 1);
-            content[f] = (text[ci] % 128) / 128.0;
-            prosodyZone[f] = 0.5 + Math.Sin(f * 0.04) * 0.3;
-        }
-        // Zone fusion and codec generation
-        double[] fused = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++)
-            fused[f] = Math.Tanh(content[f] * 0.7 + prosodyZone[f] * 0.3);
-        int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1);
-            waveform[i] = NumOps.FromDouble(
-                fused[fr] * Math.Sin(i * 2.0 * Math.PI * 182 / SampleRate) * 0.74
-            );
-        }
-        return waveform;
-    }
-
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int frames = Math.Max(1, audio.Length / samplesPerFrame);
-        var tokens = new Tensor<T>([frames]);
-        for (int f = 0; f < frames; f++)
-        {
-            double sum = 0;
-            int start = f * samplesPerFrame;
-            int count = Math.Min(samplesPerFrame, audio.Length - start);
-            for (int s = 0; s < count; s++)
-                sum += NumOps.ToDouble(audio[start + s]);
-            double avg = sum / Math.Max(1, count);
-            int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1));
-            bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin));
-            tokens[f] = NumOps.FromDouble(bin);
-        }
-        return tokens;
-    }
-
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int waveLen = tokens.Length * samplesPerFrame;
-        var wave = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int f = Math.Min(i / samplesPerFrame, tokens.Length - 1);
-            double tokenVal = NumOps.ToDouble(tokens[f]);
-            double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0;
-            double phase = i * 2.0 * Math.PI * 200.0 / SampleRate;
-            wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
-        }
-        return wave;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-        ComputeEncoderDecoderBoundary();
-    }
-
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int total = Layers.Count;
-        _encoderLayerEnd =
-            total > 4 ? total / 3
-            : total > 0 ? 1
-            : 0;
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
+    public int MaxTextLength => _options.MaxTextLength;
+
+    /// <inheritdoc />
+    public int NumCodebooks => _options.Codebooks;
+
+    /// <inheritdoc />
+    public int CodebookSize => _options.Codec.CodebookSize;
+
+    /// <inheritdoc />
+    public int CodecFrameRate => (int)Math.Round(_options.SampleRate / (double)HopSize);
+
+    /// <inheritdoc />
+    /// <remarks>Zonos trains on a recording (44.1 kHz) or its DAC codes (<see cref="TtsTrainingSample{T}.CodecTokens"/>,
+    /// <c>[frames, 9]</c>) with its text (<see cref="TtsTrainingSample{T}.Text"/>, or phoneme ids in
+    /// <see cref="TtsTrainingSample{T}.Tokens"/>) and, when the speaker model is loaded, the speaker of its recording.</remarks>
+    protected override TtsSupervision RequiredSupervision => TtsSupervision.CodecTokens;
+
+    /// <inheritdoc />
+    public override bool TrainsOnSampleObjective => true;
+
+    /// <inheritdoc />
+    public override int CodecTokenCodebooks => _options.Codebooks;
+
+    /// <inheritdoc />
+    public override int CodecTokenVocabulary => _options.Codec.CodebookSize;
+
+    private bool HasPaperLayers => _network is not null;
+    private InvalidOperationException NotNative() => new($"{GetType().Name}'s networks exist in native mode only.");
+
+    internal ZonosNetwork<T> Network => _network ?? throw NotNative();
+    internal ZonosPrefixConditioner<T> Conditioner => _conditioner ?? throw NotNative();
+
+    /// <summary>The DAC codec whose codes Zonos predicts (load <c>descript/dac_44khz</c> with
+    /// <see cref="DAC{T}.LoadPretrainedWeights"/>).</summary>
+    public DAC<T> Codec => (DAC<T>?)_codec?.Codec ?? throw NotNative();
+
+    internal ZonosConfiguration NetworkConfiguration() => new()
     {
-        var m = new ModelMetadata<T>
+        Hidden = _options.HiddenDim, Layers = _options.Layers, AttentionLayers = _options.AttentionLayers, Heads = _options.Heads,
+        KeyValueHeads = _options.KeyValueHeads, AttentionIntermediate = _options.AttentionIntermediate, MambaIntermediate = _options.MambaIntermediate,
+        RotaryDim = _options.RotaryDim, RotaryInterleaved = _options.RotaryInterleaved, NormEpsilon = _options.NormEpsilon,
+        StateDim = _options.StateDim, ConvWidth = _options.ConvWidth, Expand = _options.Expand, MambaHeadDim = _options.MambaHeadDim,
+        Groups = _options.Groups, ChunkSize = _options.ChunkSize, Codebooks = _options.Codebooks,
+        CodeVocab = _options.Codec.CodebookSize + 2, HeadVocab = _options.Codec.CodebookSize + 1,
+    };
+
+    /// <inheritdoc />
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) =>
+        HasPaperLayers ? LayerInputDomain.Indices(4 + ZonosPrefixConditioner<T>.Symbols.Length) : base.GetInputDomain(inputShape);
+
+    /// <inheritdoc />
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Name = _useNativeMode ? "Zonos-Native" : "Zonos-ONNX",
-            Description =
-                "Zonos: zero-shot TTS with conditioning for speaker, emotion, and quality.",
-            FeatureCount = _options.LLMDim,
-        };
-        m.AdditionalInfo["Architecture"] = "Zonos";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
+            AddUnsplitLayers(Architecture.Layers);
+            return;
+        }
+        var o = _options;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed);
+        _network = new ZonosNetwork<T>(Engine, _modelLayers, NetworkConfiguration());
+        _conditioner = new ZonosPrefixConditioner<T>(Engine, _modelLayers, o.Conditioners, o.HiddenDim, random);
+        InitializeLikeReference(random);
+
+        // The codec (pretrained, frozen) only encodes prompts and training audio and decodes the output.
+        var codecOptions = (DACOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.Codec);
+        codecOptions.IncludeDiscriminators = false;
+        var codec = new DAC<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1)
+            { RandomSeed = Architecture.RandomSeed }, codecOptions);
+        if (((IAudioCodec<T>)codec).SampleRate != o.SampleRate)
+            throw new ArgumentException($"Zonos's {o.SampleRate} Hz audio must be its codec's ({((IAudioCodec<T>)codec).SampleRate} Hz).");
+        if (codec.QuantizersForBandwidth(codecOptions.TargetBandwidthKbps) != o.Codebooks)
+            throw new ArgumentException($"Zonos predicts {o.Codebooks} codebooks; the codec's bandwidth gives {codec.QuantizersForBandwidth(codecOptions.TargetBandwidthKbps)}.");
+        _codec = new AudioCodecLayer<T>(codec);
+        AddUnsplitLayers(_modelLayers.Cast<ILayer<T>>().ToList());
+        ComponentLayers.Add(_codec);
     }
 
+    // The release builds its modules with PyTorch's defaults: nn.Linear's kaiming-uniform weights and uniform biases
+    // (±1/√fan-in), nn.Embedding N(0, 1), LayerNorm 1 and 0, the learned unconditional vectors 0, and mamba_ssm's Mamba2
+    // initialization (dt_bias the inverse softplus of a log-uniform step in [0.001, 0.1], A_log the log of U(1, 16), D 1,
+    // the gated norm's weight 1, the convolution PyTorch's default).
+    private void InitializeLikeReference(Random random)
+    {
+        var c = Network.Configuration;
+        double Uniform(double bound) => bound * (2 * random.NextDouble() - 1);
+        double[] Fill(int count, Func<double> draw) => Enumerable.Range(0, count).Select(_ => draw()).ToArray();
+        Network.LoadTorchWeights((name, shape) =>
+        {
+            int count = shape.Aggregate(1, (a, s) => a * s);
+            if (name.EndsWith("norm.weight", StringComparison.Ordinal) || name.EndsWith("norm2.weight", StringComparison.Ordinal)
+                || name.EndsWith("norm_f.weight", StringComparison.Ordinal) || name.EndsWith(".D", StringComparison.Ordinal))
+                return Enumerable.Repeat(1.0, count).ToArray();
+            if (name.EndsWith("conv1d.bias", StringComparison.Ordinal)) return Fill(count, () => Uniform(1.0 / Math.Sqrt(c.ConvWidth)));
+            if (name.EndsWith(".bias", StringComparison.Ordinal)) return new double[count];
+            if (name.StartsWith("embeddings.", StringComparison.Ordinal)) return TorchParameters.Gaussian<double>(random, count, 1.0).ToArray();
+            if (name.EndsWith("A_log", StringComparison.Ordinal)) return Fill(count, () => Math.Log(1 + 15 * random.NextDouble()));
+            if (name.EndsWith("dt_bias", StringComparison.Ordinal))
+                return Fill(count, () =>
+                {
+                    double dt = Math.Max(Math.Exp(random.NextDouble() * (Math.Log(0.1) - Math.Log(0.001)) + Math.Log(0.001)), 1e-4);
+                    return dt + Math.Log(-(Math.Exp(-dt) - 1));
+                });
+            // Linear weights [out, in] and the depthwise convolution [channels, 1, width]: ±1/√fan-in.
+            int fanIn = shape.Length == 3 ? shape[1] * shape[2] : shape[^1];
+            return Fill(count, () => Uniform(1.0 / Math.Sqrt(fanIn)));
+        });
+        Conditioner.InitializeLikeReference(random);
+    }
 
+    // ---------------------------------------------------------------- housekeeping
 
+    /// <inheritdoc />
+    protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Zonos-Native" : "Zonos-ONNX",
+            Description = "Zonos: Zyphra's conditioned text-to-speech over delayed DAC codes with a Transformer or Mamba2 hybrid backbone (2025)",
+            FeatureCount = _options.HiddenDim,
+        };
+        metadata.AdditionalInfo["Architecture"] = "Zonos";
+        metadata.AdditionalInfo["Backbone"] = _options.Backbone.ToString();
+        metadata.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
 
     private void ThrowIfDisposed()
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(Zonos<T>));
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Zonos<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
-        if (_disposed)
-            return;
+        if (_disposed) return;
         _disposed = true;
         base.Dispose(disposing);
     }

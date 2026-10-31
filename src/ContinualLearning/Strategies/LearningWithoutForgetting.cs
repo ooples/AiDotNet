@@ -50,7 +50,8 @@ public class LwFOptions<T>
     public int? WarmupEpochs { get; set; }
 
     /// <summary>
-    /// Gets or sets the distillation loss type.
+    /// Gets or sets the distillation loss type (SoftCrossEntropy: the paper's L_old = −Σ y'_o log ŷ'_o of the
+    /// temperature-softened recorded and current outputs, Li and Hoiem 2017, Eqs. 2–4).
     /// </summary>
     public DistillationLossType? LossType { get; set; }
 
@@ -185,7 +186,7 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         _distillationWeight = NumOps.FromDouble(opts.DistillationWeight ?? 1.0);
         _useWarmup = opts.UseWarmup ?? false;
         _warmupEpochs = opts.WarmupEpochs ?? 5;
-        _lossType = opts.LossType ?? DistillationLossType.KLDivergence;
+        _lossType = opts.LossType ?? DistillationLossType.SoftCrossEntropy;
         _useFeatureDistillation = opts.UseFeatureDistillation ?? false;
 
         _totalDistillationLoss = NumOps.Zero;
@@ -248,7 +249,7 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
     }
 
     /// <inheritdoc/>
-    public override Vector<T> AdjustGradients(Vector<T> gradients)
+    public override Vector<T> AdjustGradients(IFullModel<T, TInput, TOutput> model, Vector<T> gradients)
     {
         // LwF doesn't adjust gradients directly
         // The distillation loss contributes gradients through backpropagation
@@ -407,6 +408,60 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         var forward = ComputeKLDivergence(teacherLogits, studentLogits);
         var backward = ComputeKLDivergence(studentLogits, teacherLogits);
         return NumOps.Divide(NumOps.Add(forward, backward), NumOps.FromDouble(2.0));
+    }
+
+    /// <summary>
+    /// The distillation loss as a differentiable objective: the configured loss between the current outputs
+    /// (<c>predicted</c>) and the recorded outputs of the original network (<c>target</c>), times the effective
+    /// distillation weight. A trainer takes the model's gradient of it to add L_old's gradient to the update.
+    /// </summary>
+    public ILossFunction<T> DistillationLoss => _distillationLoss ??= new DistillationObjective(this);
+
+    private ILossFunction<T>? _distillationLoss;
+
+    private sealed class DistillationObjective : AiDotNet.LossFunctions.LossFunctionBase<T>
+    {
+        private readonly LearningWithoutForgetting<T, TInput, TOutput> _owner;
+
+        public DistillationObjective(LearningWithoutForgetting<T, TInput, TOutput> owner) => _owner = owner;
+
+        public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
+        {
+            T loss = _owner._lossType switch
+            {
+                DistillationLossType.MSE => _owner.ComputeMSELoss(actual, predicted),
+                DistillationLossType.SoftCrossEntropy => _owner.ComputeSoftCrossEntropy(actual, predicted),
+                DistillationLossType.SymmetricKL => _owner.ComputeSymmetricKL(actual, predicted),
+                _ => _owner.ComputeKLDivergence(actual, predicted),
+            };
+            return NumOps.Multiply(loss, _owner.GetEffectiveDistillationWeight());
+        }
+
+        public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+        {
+            double t = Convert.ToDouble(_owner._temperature);
+            var invT = NumOps.FromDouble(1.0 / t);
+            int axis = predicted.Shape.Length - 1;
+            var allAxes = Enumerable.Range(0, predicted.Shape.Length).ToArray();
+            var student = Engine.TensorMultiplyScalar(predicted, invT);
+            var teacher = Engine.TensorMultiplyScalar(target, invT);
+            Tensor<T> Kl(Tensor<T> p, Tensor<T> q)                                      // Σ softmax(p) (log softmax(p) − log softmax(q)) · T²
+                => Engine.TensorMultiplyScalar(
+                    Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorSoftmax(p, axis),
+                        Engine.TensorSubtract(Engine.TensorLogSoftmax(p, axis), Engine.TensorLogSoftmax(q, axis))), allAxes, keepDims: false),
+                    NumOps.FromDouble(t * t));
+            Tensor<T> loss = _owner._lossType switch
+            {
+                DistillationLossType.SoftCrossEntropy => Engine.TensorNegate(Engine.ReduceSum(
+                    Engine.TensorMultiply(Engine.TensorSoftmax(teacher, axis), Engine.TensorLogSoftmax(student, axis)), allAxes, keepDims: false)),
+                DistillationLossType.MSE => Engine.ReduceMean(Engine.TensorMultiply(
+                    Engine.TensorSubtract(Engine.TensorSoftmax(teacher, axis), Engine.TensorSoftmax(student, axis)),
+                    Engine.TensorSubtract(Engine.TensorSoftmax(teacher, axis), Engine.TensorSoftmax(student, axis))), allAxes, keepDims: false),
+                DistillationLossType.SymmetricKL => Engine.TensorMultiplyScalar(Engine.TensorAdd(Kl(teacher, student), Kl(student, teacher)), NumOps.FromDouble(0.5)),
+                _ => Kl(teacher, student),
+            };
+            return Engine.TensorMultiplyScalar(loss, _owner.GetEffectiveDistillationWeight());
+        }
     }
 
     /// <summary>

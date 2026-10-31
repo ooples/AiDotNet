@@ -43,13 +43,27 @@ public class WeightLoader
 
         return extension switch
         {
-            ".pt" or ".pth" => LoadPyTorchWeights(filePath),
+            // Lightning and NeMo save .ckpt files with torch.save, the same format.
+            ".pt" or ".pth" or ".ckpt" => LoadPyTorchWeights(filePath),
             ".safetensors" => LoadSafeTensors(filePath),
             ".npy" => LoadNumPySingle(filePath),
             ".npz" => LoadNumPyArchive(filePath),
-            ".bin" => LoadBinaryWeights(filePath),
-            _ => throw new NotSupportedException($"Unsupported weight file format: {extension}")
+            // An ONNX model's initializers, with the weights PyTorch's exporter left unnamed named after their biases.
+            ".onnx" => OnnxWeightReader.Read(filePath).NameMatMulWeights(),
+            // Hugging Face's pytorch_model.bin is a torch.save zip archive; other .bin files use the custom binary layout.
+            ".bin" => IsZipArchive(filePath) ? LoadPyTorchWeights(filePath) : LoadBinaryWeights(filePath),
+            // torch.save writes the same zip archive under any name: Amphion's Vevo saves its content tokenizer as .pkl,
+            // fairseq's speech-resynthesis vocoders as g_00500000.
+            _ when IsZipArchive(filePath) => LoadPyTorchWeights(filePath),
+            _ => throw new NotSupportedException($"Unsupported weight file format: {(extension.Length == 0 ? "a file with no extension that is not a torch.save archive" : extension)}")
         };
+    }
+
+    private static bool IsZipArchive(string filePath)
+    {
+        using var stream = File.OpenRead(filePath);
+        var magic = new byte[4];
+        return stream.Read(magic, 0, 4) == 4 && magic[0] == (byte)'P' && magic[1] == (byte)'K' && magic[2] == 3 && magic[3] == 4;
     }
 
     /// <summary>
@@ -78,89 +92,156 @@ public class WeightLoader
     }
 
     /// <summary>
-    /// Loads PyTorch weights from modern ZIP-based format.
+    /// Loads PyTorch weights from the ZIP-based format of <c>torch.save</c> (PyTorch 1.6+).
     /// </summary>
+    /// <remarks>
+    /// The archive holds <c>&lt;name&gt;/data.pkl</c>, a pickle of the state dictionary whose tensors reference storages by key
+    /// through persistent ids <c>('storage', storage type, key, location, numel)</c>, and one raw storage per key in
+    /// <c>&lt;name&gt;/data/&lt;key&gt;</c>. Each tensor is a view (<c>_rebuild_tensor_v2(storage, offset, size, stride, …)</c>)
+    /// into its storage, so it is materialized through its own offset and strides; several tensors may share a storage.
+    /// Nested dictionaries (a checkpoint holding <c>{"state_dict": …}</c>) are flattened with dotted names.
+    /// </remarks>
     private Dictionary<string, Tensor<float>> LoadPyTorchZipFormat(string filePath)
     {
         var weights = new Dictionary<string, Tensor<float>>();
-
         using var archive = System.IO.Compression.ZipFile.OpenRead(filePath);
+        var pklEntry = archive.Entries.FirstOrDefault(e => e.FullName.EndsWith("data.pkl", StringComparison.Ordinal))
+            ?? throw new InvalidDataException("No data.pkl found in the PyTorch archive.");
+        string prefix = pklEntry.FullName.Substring(0, pklEntry.FullName.Length - "data.pkl".Length);
 
-        // Find the data.pkl file which contains the state dict structure
-        var pklEntry = archive.Entries.FirstOrDefault(e => e.Name.EndsWith(".pkl") || e.Name == "data.pkl");
-        if (pklEntry == null)
+        object? root;
+        using (var pklStream = pklEntry.Open())
+        using (var buffer = new MemoryStream())
         {
-            throw new InvalidDataException("No pickle file found in PyTorch archive");
+            pklStream.CopyTo(buffer);
+            buffer.Position = 0;
+            using var reader = new BinaryReader(buffer);
+            root = new PickleParser(reader).Parse();
         }
 
-        // Parse pickle to get tensor metadata
-        using var pklStream = pklEntry.Open();
-        var tensorMetadata = ParsePickleMetadata(pklStream);
-
-        // Load tensor data from data/ folder
-        foreach (var entry in archive.Entries)
+        var tensors = new List<(string Name, TensorData Data)>();
+        CollectTensors(root, string.Empty, tensors);
+        var storages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var (name, data) in tensors)
         {
-            if (entry.FullName.StartsWith("data/") && !entry.FullName.EndsWith("/"))
+            if (!storages.TryGetValue(data.StorageKey, out var bytes))
             {
-                string tensorKey = Path.GetFileNameWithoutExtension(entry.Name);
-
+                var entry = archive.GetEntry(prefix + "data/" + data.StorageKey)
+                    ?? throw new InvalidDataException($"The PyTorch archive has no storage '{data.StorageKey}' for tensor '{name}'.");
                 using var dataStream = entry.Open();
                 using var memStream = new MemoryStream();
                 dataStream.CopyTo(memStream);
-                byte[] tensorBytes = memStream.ToArray();
-
-                if (tensorMetadata.TryGetValue(tensorKey, out var meta))
-                {
-                    var tensor = ParseTensorData(tensorBytes, meta.Shape, meta.DType);
-                    if (tensor != null && !string.IsNullOrEmpty(meta.Name))
-                    {
-                        weights[meta.Name] = tensor;
-                    }
-                }
+                bytes = memStream.ToArray();
+                storages[data.StorageKey] = bytes;
             }
+            weights[name] = MaterializeStrided(bytes, data);
         }
-
         return weights;
     }
 
-    /// <summary>
-    /// Loads PyTorch weights from legacy pickle format.
-    /// </summary>
-    private Dictionary<string, Tensor<float>> LoadPyTorchPickleFormat(Stream stream, BinaryReader reader)
+    // Every tensor of a (possibly nested) state dictionary, with dotted names; a file holding one bare tensor
+    // (torch.save(tensor)) gives it under the empty name.
+    private static void CollectTensors(object? node, string prefix, List<(string Name, TensorData Data)> tensors)
     {
-        var weights = new Dictionary<string, Tensor<float>>();
-
-        // Read pickle protocol header
-        byte proto = reader.ReadByte();
-        if (proto != 0x80) // PROTO opcode
+        if (node is TensorData bare && prefix.Length == 0)
         {
-            stream.Position = 0;
+            tensors.Add((string.Empty, bare));
+            return;
         }
-        else
+        if (node is not Dictionary<string, object?> dict) return;
+        foreach (var kvp in dict)
         {
-            byte version = reader.ReadByte();
+            string name = prefix.Length == 0 ? kvp.Key : prefix + "." + kvp.Key;
+            if (kvp.Value is TensorData data) tensors.Add((name, data));
+            else CollectTensors(kvp.Value, name, tensors);
         }
+    }
 
-        // Parse pickle stream
-        var pickleParser = new PickleParser(reader);
-        var stateDict = pickleParser.Parse();
-
-        // Convert parsed objects to tensors
-        if (stateDict is Dictionary<string, object> dict)
+    // A tensor read from its storage through its offset and strides (elements, row-major logical order).
+    private Tensor<float> MaterializeStrided(byte[] storage, TensorData data)
+    {
+        int rank = data.Shape.Length, count = 1;
+        foreach (int d in data.Shape) count *= d;
+        int elementSize = GetDTypeSize(data.DType);
+        var stride = data.Stride.Length == rank ? data.Stride : ContiguousStrides(data.Shape);
+        var values = new float[count];
+        var index = new int[rank];
+        for (int i = 0; i < count; i++)
         {
-            foreach (var kvp in dict)
+            long element = data.StorageOffset;
+            for (int k = 0; k < rank; k++) element += (long)index[k] * stride[k];
+            values[i] = ReadElement(storage, (int)(element * elementSize), data.DType);
+            for (int k = rank - 1; k >= 0; k--)
             {
-                if (kvp.Value is TensorData tensorData)
-                {
-                    var tensor = CreateTensorFromData(tensorData);
-                    if (tensor != null)
-                    {
-                        weights[kvp.Key] = tensor;
-                    }
-                }
+                if (++index[k] < data.Shape[k]) break;
+                index[k] = 0;
             }
         }
+        return new Tensor<float>(rank == 0 ? new[] { 1 } : data.Shape, new Vector<float>(values));
+    }
 
+    private static int[] ContiguousStrides(int[] shape)
+    {
+        var stride = new int[shape.Length];
+        int running = 1;
+        for (int k = shape.Length - 1; k >= 0; k--)
+        {
+            stride[k] = running;
+            running *= shape[k];
+        }
+        return stride;
+    }
+
+    private float ReadElement(byte[] storage, int offset, string dtype) => dtype switch
+    {
+        "float32" => BitConverter.ToSingle(storage, offset),
+        "float64" => (float)BitConverter.ToDouble(storage, offset),
+        "float16" => HalfToFloat(storage, offset),
+        "bfloat16" => BFloat16ToFloat(storage, offset),
+        "int64" => BitConverter.ToInt64(storage, offset),
+        "int32" => BitConverter.ToInt32(storage, offset),
+        "int16" => BitConverter.ToInt16(storage, offset),
+        "int8" => (sbyte)storage[offset],
+        "uint8" => storage[offset],
+        "bool" => storage[offset] != 0 ? 1f : 0f,
+        _ => throw new NotSupportedException($"Unsupported PyTorch storage type '{dtype}'."),
+    };
+
+    /// <summary>
+    /// Loads PyTorch weights from the legacy (pre-1.6, non-ZIP) format of <c>torch.save</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>torch.serialization._legacy_save</c> writes five pickles (the magic number, the protocol version, the system
+    /// information, the object with storages as persistent ids, and the sorted storage keys) and then, for each key in that
+    /// order, the storage's element count (int64) and its raw bytes. Tensors are views into the storages, as in the ZIP
+    /// format, and nested dictionaries are flattened with dotted names.
+    /// </remarks>
+    private Dictionary<string, Tensor<float>> LoadPyTorchPickleFormat(Stream stream, BinaryReader reader)
+    {
+        stream.Position = 0;
+        new PickleParser(reader).Parse();                      // magic number
+        new PickleParser(reader).Parse();                      // protocol version
+        new PickleParser(reader).Parse();                      // system information
+        var root = new PickleParser(reader).Parse();
+        var keys = new PickleParser(reader).Parse() as System.Collections.IEnumerable
+            ?? throw new InvalidDataException("The legacy PyTorch file has no storage key list.");
+        var tensors = new List<(string Name, TensorData Data)>();
+        CollectTensors(root, string.Empty, tensors);
+        var sizes = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (_, data) in tensors) sizes[data.StorageKey] = GetDTypeSize(data.DType);
+        var storages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var keyObject in keys)
+        {
+            string key = keyObject?.ToString() ?? throw new InvalidDataException("A null storage key.");
+            long count = reader.ReadInt64();
+            if (!sizes.TryGetValue(key, out int elementSize))
+                throw new InvalidDataException($"The legacy PyTorch file's storage '{key}' has no tensor to give its type.");
+            storages[key] = reader.ReadBytes(checked((int)(count * elementSize)));
+        }
+        var weights = new Dictionary<string, Tensor<float>>();
+        foreach (var (name, data) in tensors)
+            weights[name] = MaterializeStrided(storages.TryGetValue(data.StorageKey, out var bytes) ? bytes
+                : throw new InvalidDataException($"The legacy PyTorch file has no storage '{data.StorageKey}' for tensor '{name}'."), data);
         return weights;
     }
 
@@ -492,56 +573,6 @@ public class WeightLoader
 
         return (shape, dtype, fortranOrder);
     }
-
-    /// <summary>
-    /// Parses pickle metadata to extract tensor information.
-    /// </summary>
-    private Dictionary<string, TensorMetadata> ParsePickleMetadata(Stream stream)
-    {
-        var metadata = new Dictionary<string, TensorMetadata>();
-
-        using var reader = new BinaryReader(stream);
-        var parser = new PickleParser(reader);
-        var result = parser.Parse();
-
-        // Extract tensor metadata from parsed pickle
-        if (result is Dictionary<string, object> dict)
-        {
-            int index = 0;
-            foreach (var kvp in dict)
-            {
-                if (kvp.Value is TensorData tensorData)
-                {
-                    metadata[index.ToString()] = new TensorMetadata
-                    {
-                        Name = kvp.Key,
-                        Shape = tensorData.Shape,
-                        DType = tensorData.DType
-                    };
-                    index++;
-                }
-            }
-        }
-
-        return metadata;
-    }
-
-    private Tensor<float>? CreateTensorFromData(TensorData data)
-    {
-        if (data.Data == null || data.Shape == null)
-        {
-            return null;
-        }
-
-        return ParseTensorData(data.Data.ToArray(), data.Shape, data.DType);
-    }
-
-    private class TensorMetadata
-    {
-        public string Name { get; set; } = string.Empty;
-        public int[] Shape { get; set; } = Array.Empty<int>();
-        public string DType { get; set; } = "float32";
-    }
 }
 
 /// <summary>
@@ -563,6 +594,21 @@ public class TensorData
     /// The raw byte data of the tensor.
     /// </summary>
     public byte[] Data { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// The key of the storage the tensor views (PyTorch archives keep one file per storage).
+    /// </summary>
+    public string StorageKey { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The tensor's first element within its storage, in elements.
+    /// </summary>
+    public long StorageOffset { get; set; }
+
+    /// <summary>
+    /// The tensor's strides within its storage, in elements (empty: contiguous).
+    /// </summary>
+    public int[] Stride { get; set; } = Array.Empty<int>();
 }
 
 /// <summary>
@@ -1065,7 +1111,10 @@ internal class PickleParser
                 {
                     Shape = shape,
                     DType = storageRef.DType,
-                    Data = storageRef.Data ?? Array.Empty<byte>()
+                    Data = storageRef.Data ?? Array.Empty<byte>(),
+                    StorageKey = storageRef.Key,
+                    StorageOffset = Convert.ToInt64(storageOffset ?? 0),
+                    Stride = stride is object?[] strides ? strides.Select(v => Convert.ToInt32(v)).ToArray() : Array.Empty<int>(),
                 };
             }
         }
@@ -1103,13 +1152,13 @@ internal class PickleParser
 
     private object? HandlePersistentId(object? pid)
     {
-        // Persistent IDs in PyTorch point to tensor storage
+        // Persistent IDs in PyTorch point to tensor storage: ('storage', storage_type, key, location, numel).
         if (pid is object?[] pidArray && pidArray.Length >= 5)
         {
-            // (storage_type, key, location, size, ...)
-            var storageType = pidArray[0];
-            var key = pidArray[1]?.ToString();
-            var size = pidArray[3];
+            bool tagged = pidArray[0] is string tag && tag == "storage";
+            var storageType = tagged ? pidArray[1] : pidArray[0];
+            var key = (tagged ? pidArray[2] : pidArray[1])?.ToString();
+            var size = tagged ? pidArray[4] : pidArray[3];
 
             string dtype = "float32";
             if (storageType is GlobalRef gref)
@@ -1122,6 +1171,10 @@ internal class PickleParser
                     "BFloat16Storage" => "bfloat16",
                     "IntStorage" => "int32",
                     "LongStorage" => "int64",
+                    "ShortStorage" => "int16",
+                    "CharStorage" => "int8",
+                    "ByteStorage" => "uint8",
+                    "BoolStorage" => "bool",
                     _ => "float32"
                 };
             }

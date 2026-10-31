@@ -467,7 +467,7 @@ public class ConfigurationIntegrationTests
         Assert.Equal(224, config.InputWidth);
         Assert.Equal(3, config.InputChannels);
         Assert.True(config.IncludeClassifier);
-        Assert.True(config.ZeroInitResidual);
+        Assert.False(config.ZeroInitResidual); // off in the paper and torchvision
         Assert.False(config.UseAutodiff);
     }
 

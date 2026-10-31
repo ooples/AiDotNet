@@ -13,7 +13,7 @@ internal static class AutoformerProfile
         Console.WriteLine("=== Autoformer profile (test-shape: TrainLength=100, AutoformerModelTests opts) ===");
         var opts = new AutoformerOptions<double>
         {
-            LookbackWindow = 40,
+            LookbackWindow = 40, LabelLength = 20,
             ForecastHorizon = 10,
             NumEncoderLayers = 1,
             NumDecoderLayers = 1,

@@ -97,7 +97,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     /// text+speaker conditioning embeddings → first-stage causal transformer → second-stage
     /// non-causal transformer → HiFi-GAN vocoder → waveform (metavoiceio/metavoice-src).
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
@@ -158,7 +158,8 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
             double posPhase = (s + 1.0) / (seq + 1.0);
             for (int c = 0; c < condDim; c++)
             {
-                double freq = 1.0 / Math.Pow(10000.0, (double)(c - c % 2) / condDim);   // 2*(c/2): the sin/cos pair index
+                int pair = c / 2;   // sin and cos of one frequency share an index
+                double freq = 1.0 / Math.Pow(10000.0, 2.0 * pair / condDim);
                 double tokEmb = Math.Sin(token * (c + 1)) * 0.5;
                 double posEmb = ((c & 1) == 0 ? Math.Sin(posPhase / freq) : Math.Cos(posPhase / freq)) * 0.5;
                 double spkEmb = speakerEmbedding is not null
@@ -177,15 +178,6 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         for (int i = 0; i < audio.Length; i++)
             waveform[i] = audio[i];
         return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

@@ -252,9 +252,10 @@ public class FinanceSearchSpaceIntegrationTests
 
         var samplesRange = searchSpace["NumSamples"];
         Assert.Equal(ParameterType.Integer, samplesRange.Type);
-        Assert.Equal(50.0, ToDouble((samplesRange.MinValue ?? throw new InvalidOperationException("samplesRange.MinValue is null where it is required."))));
-        Assert.Equal(200.0, ToDouble((samplesRange.MaxValue ?? throw new InvalidOperationException("samplesRange.MaxValue is null where it is required."))));
-        Assert.Equal(100.0, ToDouble((samplesRange.DefaultValue ?? throw new InvalidOperationException("samplesRange.DefaultValue is null where it is required."))));
+            Assert.Equal(50.0, ToDouble((samplesRange.MinValue ?? throw new InvalidOperationException("samplesRange.MinValue is null where it is required."))));
+            Assert.Equal(400.0, ToDouble((samplesRange.MaxValue ?? throw new InvalidOperationException("samplesRange.MaxValue is null where it is required."))));
+            // The paper draws 200 sample paths (appendix).
+            Assert.Equal(200.0, ToDouble((samplesRange.DefaultValue ?? throw new InvalidOperationException("samplesRange.DefaultValue is null where it is required."))));
     }
 
     [Fact(Timeout = 120000)]

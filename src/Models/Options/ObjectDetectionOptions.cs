@@ -229,7 +229,11 @@ public enum BackboneType
     /// <summary>EfficientNetB0 - Efficient neural network baseline.</summary>
     EfficientNetB0,
     /// <summary>EfficientNetB4 - Larger EfficientNet variant.</summary>
-    EfficientNetB4
+    EfficientNetB4,
+    /// <summary>ResNet18 - 18-layer residual network (BasicBlock); DBNet's DB-ResNet-18 configuration.</summary>
+    ResNet18,
+    /// <summary>ResNet34 - 34-layer residual network (BasicBlock).</summary>
+    ResNet34
 }
 
 /// <summary>

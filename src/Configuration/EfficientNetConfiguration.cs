@@ -49,6 +49,12 @@ public class EfficientNetConfiguration
     public double? CustomDepthMultiplier { get; }
 
     /// <summary>
+    /// The stochastic-depth rate of the last MBConv block: block i of n drops its residual branch with probability
+    /// rate·i/n during training (Tan &amp; Le 2019, Sec. 5.2: survival probability 0.8).
+    /// </summary>
+    public double DropConnectRate { get; init; } = 0.2;
+
+    /// <summary>
     /// Gets the computed input shape as [channels, height, width].
     /// </summary>
     public int[] InputShape => [InputChannels, GetInputHeight(), GetInputWidth()];

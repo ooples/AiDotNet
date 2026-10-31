@@ -1,0 +1,29 @@
+torch==2.14.1+cpu
+transformers==5.18.0
+safetensors==0.8.0
+speechtokenizer==1.0.1
+beartype==0.22.9
+einops==0.8.2
+tensorboard==2.21.0
+librosa==1.0.0
+pyworld==0.3.5
+scipy==1.17.1
+numpy==2.5.3
+matplotlib==3.11.2
+tqdm==4.70.1
+torchaudio==2.11.0+cpu
+# ChatTTS (chattts_reference.py): vector-quantize-pytorch as of ChatTTS's release (May 2024); later releases change FSQ.
+vector-quantize-pytorch==1.14.24
+einx==0.4.3
+vocos==0.1.0
+pybase16384==0.3.9
+# CosyVoice's flow estimator (cosyvoice_decoder_reference.py): Matcha-TTS's components need diffusers' Attention and LoRACompatibleLinear (removed in later releases) and lucidrains' conformer.
+diffusers==0.30.3
+conformer==0.3.2
+omegaconf==2.3.0
+# Whisper's multilingual text tokenizer (whisper_tiktoken_reference.py), CosyVoice's text front end; installed --no-deps.
+openai-whisper==20250625
+tiktoken==0.9.0
+# CosyVoice's text front end (cosyvoice_frontend_reference.py): CosyVoice's pin.
+inflect==7.3.1
+# Qwen2.5 tokenizer files for qwen2_tokenizer_reference.py: huggingface.co/Qwen/Qwen2.5-0.5B (tokenizer.json, vocab.json, merges.txt).

@@ -1196,7 +1196,7 @@ public static class DeserializationHelper
             // TransformerDecoderLayer(int numHeads, int feedForwardDim,
             //                          int sequenceLength = 512,
             //                          IActivationFunction<T>? ffnActivation = null,
-            //                          bool causal = false)
+            //                          double dropoutRate = 0.0, bool causal = true)
             // _embeddingSize is resolved lazily from input.Shape[^1] on first Forward
             // (or eagerly via ResolveFromShape after this method returns).
             int embeddingSize = inputShape[^1];
@@ -1226,24 +1226,26 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType);
 
-            // The [LayerState] key is the parameter name. A model saved before the flag existed has no entry and
-            // was built bidirectional, which is the constructor default.
-            bool? parsedCausal = TryGetBool(additionalParams, "causal");
-            if (additionalParams is not null && additionalParams.ContainsKey("causal") && !parsedCausal.HasValue)
+            // The generated [LayerState] bag writes the parameter names ("dropoutRate", "causal"); GetMetadata also
+            // writes "DropoutRate" and "Causal". A model saved before the causal flag existed has neither and was
+            // built bidirectional (the self-attention was unmasked), so a missing flag restores it that way.
+            string causalKey = additionalParams is not null && additionalParams.ContainsKey("causal") ? "causal" : "Causal";
+            bool? parsedCausal = TryGetBool(additionalParams, causalKey);
+            if (additionalParams is not null && additionalParams.ContainsKey(causalKey) && !parsedCausal.HasValue)
             {
                 throw new InvalidOperationException(
-                    $"TransformerDecoderLayer has invalid 'causal' metadata '{additionalParams["causal"]}'; expected true or false.");
+                    $"TransformerDecoderLayer has invalid '{causalKey}' metadata '{additionalParams[causalKey]}'; expected true or false.");
             }
 
             bool causal = parsedCausal ?? false;
-
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType, typeof(bool) });
+            double dropoutRate = TryGetDouble(additionalParams, "dropoutRate") ?? TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType, typeof(double), typeof(bool) });
             if (ctor is null)
             {
                 throw new MissingLayerCtorException(
-                    "Cannot find TransformerDecoderLayer constructor with (int numHeads, int feedForwardDim, int sequenceLength, IActivationFunction<T>?, bool causal).");
+                    "Cannot find TransformerDecoderLayer constructor with (int numHeads, int feedForwardDim, int sequenceLength, IActivationFunction<T>?, double dropoutRate, bool causal).");
             }
-            instance = ctor.Invoke(new object?[] { numHeads, feedForwardDim, sequenceLength, activation, causal });
+            instance = ctor.Invoke(new object?[] { numHeads, feedForwardDim, sequenceLength, activation, dropoutRate, causal });
         }
         else if (genericDef == typeof(SelfAttentionLayer<>))
         {
@@ -3888,9 +3890,10 @@ public static class DeserializationHelper
         int attentionGroupSize = TryGetInt(additionalParams, "AttentionGroupSize") ?? 1;
         double ropeTheta = TryGetDouble(additionalParams, "RopeTheta") ?? 10000.0;
         int maxSeq = TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
+        int attentionChunkSize = TryGetInt(additionalParams, "AttentionChunkSize") ?? 0;
 
         return new ConformerBlockLayer<T>(
-            modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq, attentionGroupSize);
+            modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq, attentionGroupSize, attentionChunkSize);
     }
 
     /// <summary>Reconstructs a paper-faithful Vocos generator from serialized layer metadata.</summary>
@@ -4478,6 +4481,20 @@ public static class DeserializationHelper
         if (layer is MultiHeadAttentionLayer<T> attention)
         {
             RestoreMultiHeadAttentionConfiguration(attention, additionalParams);
+            return;
+        }
+
+        // A declared rank-3 layout ([B, C, T] versus [C, H, W]). Data written before the layout was
+        // persisted has none and keeps the default, Infer.
+        if (layer is BatchNormalizationLayer<T> batchNorm)
+        {
+            string? layout = TryGetString(additionalParams, "Layout");
+            if (!string.IsNullOrEmpty(layout))
+            {
+                if (!Enum.TryParse<BatchNormDataLayout>(layout, ignoreCase: false, out var parsed))
+                    throw new InvalidOperationException($"BatchNormalizationLayer persisted an unknown layout '{layout}'.");
+                batchNorm.Layout = parsed;
+            }
             return;
         }
 

@@ -122,7 +122,7 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
     public bool HasMoreChunks => _streamPosition < _streamText.Length;
 
     /// Synthesizes speech using StepAudio's neural codec language model pipeline.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(text))
@@ -187,16 +187,6 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
             return trimmed;
         }
         return audio;
-    }
-
-    /// <summary>Converts text to normalized character embeddings (char/128.0). Uses character-level encoding as the default; model-specific BPE/SentencePiece tokenization applies when corresponding weights are loaded.</summary>
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

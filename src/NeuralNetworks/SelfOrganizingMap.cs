@@ -63,13 +63,6 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;
 
-    // Cached fixed-shape ones tensors reused by ComputeSquaredDistances / UpdateWeights. Their shapes
-    // depend only on the neuron count (_mapWidth*_mapHeight) and _inputDimension, which are fixed after
-    // construction, so the hot train/predict path reuses them instead of rebuilding a fresh tensor with a
-    // scalar fill loop on every call (#1789 review). Rebuilt lazily if the shape ever changes (e.g. after
-    // deserialization resets the dimensions).
-    private Tensor<T>? _onesColumn;   // [numNeurons, 1]
-    private Tensor<T>? _onesRow;      // [1, inputDimension]
 
     private int _mapWidth;
     private int _mapHeight;
@@ -189,106 +182,11 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
         }
     }
 
-    /// <summary>
-    /// Finds the Best Matching Unit — the neuron whose prototype has minimum squared Euclidean distance
-    /// to <paramref name="input"/> — using vectorized engine ops: d_n = sum_j (W[n,j] - x_j)^2.
-    /// </summary>
-    private int FindBestMatchingUnit(Tensor<T> input)
-    {
-        var distances = ComputeSquaredDistances(input); // [numNeurons]
-        int bmu = 0;
-        T minDistance = distances[0];
-        for (int i = 1; i < distances.Length; i++)
-        {
-            if (NumOps.LessThan(distances[i], minDistance))
-            {
-                minDistance = distances[i];
-                bmu = i;
-            }
-        }
-        return bmu;
-    }
+    /// <summary>The shared map over this model's codebook, with SOM_PAK's schedules over <c>TotalEpochs</c> steps.</summary>
+    private SelfOrganizingMapCore<T> Map() => new(new SelfOrganizingMapConfiguration(
+        _mapWidth, _mapHeight, _inputDimension, _totalEpochs, _options.InitialLearningRate, _options.InitialRadius), _weights);
 
-    /// <summary>
-    /// Squared Euclidean distance from <paramref name="input"/> (shape [D]) to every neuron prototype,
-    /// returned as a [numNeurons] tensor. Broadcasts the input across neurons via a ones-column matmul
-    /// (the codebase's standard row-broadcast), then reduces the squared difference over the feature axis.
-    /// </summary>
-    /// <summary>A cached [numNeurons, 1] all-ones column (built once, reused across calls).</summary>
-    private Tensor<T> OnesColumn()
-    {
-        int n = _mapWidth * _mapHeight;
-        if (_onesColumn is null || _onesColumn.Shape[0] != n)
-        {
-            var t = new Tensor<T>(new[] { n, 1 });
-            for (int i = 0; i < n; i++) t[i, 0] = NumOps.One;
-            _onesColumn = t;
-        }
-        return _onesColumn;
-    }
-
-    /// <summary>A cached [1, inputDimension] all-ones row (built once, reused across calls).</summary>
-    private Tensor<T> OnesRow()
-    {
-        int d = _inputDimension;
-        if (_onesRow is null || _onesRow.Shape[1] != d)
-        {
-            var t = new Tensor<T>(new[] { 1, d });
-            for (int j = 0; j < d; j++) t[0, j] = NumOps.One;
-            _onesRow = t;
-        }
-        return _onesRow;
-    }
-
-    private Tensor<T> ComputeSquaredDistances(Tensor<T> input)
-    {
-        int d = _inputDimension;
-
-        var inputRow = input.Reshape(new[] { 1, d });                 // [1, D]
-        var onesColumn = OnesColumn();                                 // [N, 1] (cached)
-
-        var tiledInput = Engine.TensorMatMul(onesColumn, inputRow);    // [N, D]
-        var diff = Engine.TensorSubtract(_weights, tiledInput);        // [N, D]
-        var squared = Engine.TensorMultiply(diff, diff);               // [N, D]
-        return Engine.ReduceSum(squared, new[] { 1 }, keepDims: false); // [N]
-    }
-
-    /// <summary>
-    /// Moves the BMU and its grid neighbours toward the input:
-    /// W[n] += lr * h(n) * (x - W[n]), where h(n) is the Gaussian neighbourhood influence of neuron n
-    /// relative to the BMU. The update and its published derivative share one row-major pass.
-    /// </summary>
-    private void UpdateWeights(Tensor<T> input, int bmu, T learningRate, T radius)
-    {
-        int n = _mapWidth * _mapHeight;
-        int d = _inputDimension;
-        int bmuX = bmu % _mapWidth;
-        int bmuY = bmu / _mapWidth;
-        double radiusD = Convert.ToDouble(radius);
-        var published = new Vector<T>(n * d);
-
-        // Competitive learning descends the neighbourhood-weighted codebook objective.
-        for (int i = 0; i < n; i++)
-        {
-            int x = i % _mapWidth;
-            int y = i / _mapWidth;
-            double gridDist = Math.Sqrt((x - bmuX) * (x - bmuX) + (y - bmuY) * (y - bmuY));
-            T influence = radiusD > 0.0 && gridDist < radiusD
-                ? NumOps.FromDouble(Math.Exp(-(gridDist * gridDist) / (2.0 * radiusD * radiusD)))
-                : NumOps.Zero;
-
-            for (int j = 0; j < d; j++)
-            {
-                int offset = i * d + j;
-                T gradient = NumOps.Multiply(influence, NumOps.Subtract(_weights[i, j], input[j]));
-                published[offset] = gradient;
-                _weights[i, j] = NumOps.Subtract(
-                    _weights[i, j], NumOps.Multiply(learningRate, gradient));
-            }
-        }
-
-        PublishFlatParameterGradients(published);
-    }
+    private int FindBestMatchingUnit(Tensor<T> input) => Map().BestMatchingUnit(input.AsSpan());
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -306,8 +204,7 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
         // identity passthrough trivially changes when the input is scaled. The invariant was
         // satisfied for the wrong reason.
         //
-        // Engine acceleration is not lost. The distance computation that actually dominates BMU
-        // selection already runs through vectorized engine ops in ComputeSquaredDistances.
+        // The best-matching unit is the shared map's nearest codebook vector.
         var flatInput = input.Rank == 1 ? input : input.Reshape(new[] { input.Length });
         if (flatInput.Length != _inputDimension)
             throw new ArgumentException($"Input must have {_inputDimension} elements, but got {flatInput.Length}");
@@ -327,31 +224,24 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
         if (flatInput.Length != _inputDimension)
             throw new ArgumentException($"Input must have {_inputDimension} elements, but got {flatInput.Length}");
 
-        // SOM training is unsupervised — expectedOutput is unused.
-        int bmu = FindBestMatchingUnit(flatInput);
-
-        T learningRate = CalculateLearningRate(NumOps.FromDouble(0.1), _currentEpoch, _totalEpochs);
-        T radius = CalculateRadius(
-            NumOps.FromDouble(Math.Max(_mapWidth, _mapHeight) / 2.0),
-            _currentEpoch,
-            NumOps.FromDouble(_totalEpochs / Math.Log(_mapWidth * _mapHeight)));
-
-        UpdateWeights(flatInput, bmu, learningRate, radius);
+        // SOM training is unsupervised — expectedOutput is unused. One step of the shared map, which moves every neuron
+        // toward the input by α(t)·h·(x − w); the direction h·(w − x) is the gradient it descended.
+        var (bmu, direction) = Map().Step(flatInput.AsSpan(), _currentEpoch);
+        PublishFlatParameterGradients(direction);
 
         // Quantization error (distance to the BMU prototype) as the reported loss.
-        var distances = ComputeSquaredDistances(flatInput);
-        LastLoss = NumOps.Sqrt(distances[bmu]);
-
+        double error = 0;
+        var prototype = _weights.AsSpan().Slice(bmu * _inputDimension, _inputDimension);
+        for (int j = 0; j < _inputDimension; j++)
+        {
+            double diff = NumOps.ToDouble(flatInput[j]) - NumOps.ToDouble(prototype[j]);
+            error += diff * diff;
+        }
+        LastLoss = NumOps.FromDouble(Math.Sqrt(error));
         _currentEpoch++;
 
         return true;
     }
-
-    private T CalculateLearningRate(T initialLearningRate, int currentEpoch, int totalEpochs)
-        => NumOps.Multiply(initialLearningRate, NumOps.Exp(NumOps.Negate(NumOps.FromDouble(currentEpoch / (double)totalEpochs))));
-
-    private T CalculateRadius(T initialRadius, int currentEpoch, T timeConstant)
-        => NumOps.Multiply(initialRadius, NumOps.Exp(NumOps.Negate(NumOps.Divide(NumOps.FromDouble(currentEpoch), timeConstant))));
 
     // UpdateParameters was overridden here to write the codebook back element by element, with its
     // own length check. The base distributes over the same declared tensor -- see

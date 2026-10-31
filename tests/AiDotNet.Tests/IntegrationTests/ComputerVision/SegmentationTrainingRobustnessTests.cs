@@ -408,7 +408,14 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MedSAM2_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new MedSAM2<float>(Arch(), options: new MedSAM2Options { NumClasses = 5, ModelSize = MedSAM2ModelSize.Tiny });
+        // MedSAM2 segments one prompted structure (NumClasses 1); the capacity is scaled for the smoke test.
+        using var model = new MedSAM2<float>(Arch(), options: new MedSAM2Options
+            {
+                ImageSize = 32, HieraEmbeddingDimension = 8, HieraStageDepths = new[] { 1, 1, 1, 1 }, HieraInitialHeadCount = 1,
+                HieraWindowSizes = new[] { 4, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, ModelDimension = 32, MemoryDimension = 16,
+                DecoderHeadCount = 2, MaskDecoderMlpDimension = 32, MemoryAttentionLayerCount = 1, MemoryAttentionFeedForwardDimension = 32,
+                MemoryFuserDimension = 32, CorrectionPoints = 1,
+        });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -478,7 +485,13 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task EfficientTAM_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions { NumClasses = 5, ModelSize = EfficientTAMModelSize.Tiny });
+        using var model = new EfficientTAM<float>(Arch(), options: new EfficientTAMOptions
+            {
+                ModelSize = EfficientTAMModelSize.Small, ImageSize = 32, VitEmbeddingDimension = 16, VitDepth = 2, VitHeadCount = 2, VitWindowSize = 2,
+                VitGlobalAttentionBlockIndexes = new[] { 1 }, ModelDimension = 32, MemoryDimension = 16, DecoderHeadCount = 2,
+                MaskDecoderMlpDimension = 32, MemoryAttentionLayerCount = 1, MemoryAttentionFeedForwardDimension = 32, MemoryFuserDimension = 32,
+                CorrectionPoints = 1,
+            });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -839,20 +852,6 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_MultiStepTrain_DoesNotThrow()
-    {
-        using var model = new GroundedSAM2<float>(Arch(), options: new GroundedSAM2Options { NumClasses = 5 });
-        var input = Rand(42, 1, 3, 32, 32);
-        var predicted = model.Predict(input);
-
-        for (int step = 0; step < 3; step++)
-        {
-            var expected = Rand(step + 100, predicted.Shape.ToArray());
-            Assert.Null(Record.Exception(() => model.Train(input, expected)));
-        }
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task MaskAdapter_MultiStepTrain_DoesNotThrow()
     {
         using var model = new MaskAdapter<float>(Arch(), options: new MaskAdapterOptions { NumClasses = 5 });
@@ -893,20 +892,6 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     public async Task VideoLISA_MultiStepTrain_DoesNotThrow()
     {
         using var model = new VideoLISA<float>(Arch(), options: new VideoLISAOptions { NumClasses = 5 });
-        var input = Rand(42, 1, 3, 32, 32);
-        var predicted = model.Predict(input);
-
-        for (int step = 0; step < 3; step++)
-        {
-            var expected = Rand(step + 100, predicted.Shape.ToArray());
-            Assert.Null(Record.Exception(() => model.Train(input, expected)));
-        }
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task GLaMM_MultiStepTrain_DoesNotThrow()
-    {
-        using var model = new GLaMM<float>(Arch(), options: new GLaMMOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 

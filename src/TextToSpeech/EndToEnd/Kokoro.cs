@@ -147,7 +147,7 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// generates frequency-domain features (magnitude and phase), and finally the ISTFTNet converts
     /// these back to a time-domain audio waveform using the inverse Short-Time Fourier Transform.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -243,16 +243,6 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
                 waveform[i] = NumOps.FromDouble(NumOps.ToDouble(waveform[i]) / maxVal);
 
         return waveform;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     /// <inheritdoc />

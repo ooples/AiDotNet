@@ -1,0 +1,329 @@
+PUNCT		 	'	 
+PUNCT		 - 		 
+PUNCT		 		< >
+PUNCT		-		<->
+PUNCT	. 	' S		Z
+PUNCT	#:.E 	' S		Z
+PUNCT	# 	' S		Z
+PUNCT		' 		 
+PUNCT		,		<,>
+PUNCT		.		<.>
+PUNCT		?		<?>
+A		A	 	AX
+A	 	ARE	 	AA R
+A	 	AR	O	AX R
+A		AR	#	EH R
+A	 ^	AS	#	EY S
+A		A	WA	AX
+A		AW		AO
+A	 :	ANY		EH N IY
+A		A	^+#	EY
+A	#:	ALLY		AX L IY
+A	 	AL	#	AX L
+A		AGAIN		AX G EH N
+A	#:	AG	E	IH JH
+A		A	^+:#	AE
+A	 :	A	^+ 	EY
+A		A	^%	EY
+A	 	ARR		AX R
+A		ARR		AE R
+A	 :	AR	 	AA R
+A		AR	 	ER
+A		AR		AA R
+A		AIR		EH R
+A		AI		EY
+A		AY		EY
+A		AU		AO
+A	#:	AL	 	AX L
+A	#:	ALS	 	AX L Z
+A		ALK		AO K
+A		AL	^	AO L
+A	 :	ABLE		EY B AX L
+A		ABLE		AX B AX L
+A		ANG	+	EY N JH
+A		A		AE
+B	 	BE	^#	B IH
+B		BEING		B IY IH NX
+B	 	BOTH	 	B OW TH
+B	 	BUS	#	B IH Z
+B		BUIL		B IH L
+B		B		B
+C	 	CH	^	K
+C	^E	CH		K
+C		CH		CH
+C	 S	CI	#	S AY
+C		CI	A	SH
+C		CI	O	SH
+C		CI	EN	SH
+C		C	+	S
+C		CK		K
+C		COM	%	K AH M
+C		C		K
+D	#:	DED	 	D IH D
+D	.E	D	 	D
+D	#^:E	D	 	T
+D	 	DE	^#	D IH
+D	 	DO	 	D UW
+D	 	DOES		D AH Z
+D	 	DOING		D UW IH NX
+D	 	DOW		D AW
+D		DU	A	JH UW
+D		D		D
+E	#:	E	 	 
+E	' ^:	E	 	 
+E	 :	E	 	IY
+E	#	ED	 	D
+E	#:	E	D 	 
+E		EV	ER	EH V
+E		E	^%	IY
+E		ERI	#	IY R IY
+E		ERI		EH R IH
+E	#:	ER	#	ER
+E		ER	#	EH R
+E		ER		ER
+E	 	EVEN		IY V EH N
+E	#:	E	W	 
+E	@	EW		UW
+E		EW		Y UW
+E		E	O	IY
+E	#:&	ES	 	IH Z
+E	#:	E	S 	 
+E	#:	ELY	 	L IY
+E	#:	EMENT		M EH N T
+E		EFUL		F UH L
+E		EE		IY
+E		EARN		ER N
+E	 	EAR	^	ER
+E		EAD		EH D
+E	#:	EA	 	IY AX
+E		EA	SU	EH
+E		EA		IY
+E		EIGH		EY
+E		EI		IY
+E	 	EYE		AY
+E		EY		IY
+E		EU		Y UW
+E		E		EH
+F		FUL		F UH L
+F		F		F
+G		GIV		G IH V
+G	 	G	I^	G
+G		GE	T	G EH
+G	SU	GGES		G JH EH S
+G		GG		G
+G	 B#	G		G
+G		G	+	JH
+G		GREAT		G R EY T
+G	#	GH		 
+G		G		G
+H	 	HAV		HH AE V
+H	 	HERE		HH IY R
+H	 	HOUR		AW ER
+H		HOW		HH AW
+H		H	#	HH
+H		H		 
+I	 	IN		IH N
+I	 	I	 	AY
+I		IN	D	AY N
+I		IER		IY ER
+I	#:R	IED	 	IY D
+I		IED	 	AY D
+I		IEN		IY EH N
+I		IE	T	AY EH
+I	 :	I	%	AY
+I		I	%	IY
+I		IE		IY
+I		I	^+:#	IH
+I		IR	#	AY R
+I		IZ	%	AY Z
+I		IS	%	AY Z
+I		I	D%	AY
+I	+^	I	^+	IH
+I		I	T%	AY
+I	#^:	I	^+	IH
+I		I	^+	AY
+I		IR		ER
+I		IGH		AY
+I		ILD		AY L D
+I		IGN	 	AY N
+I		IGN	^	AY N
+I		IGN	%	AY N
+I		IQUE		IY K
+I		I		IH
+J		J		JH
+K	 	K	N	 
+K		K		K
+L		LO	C#	L OW
+L	L	L		 
+L	#^:	L	%	AX L
+L		LEAD		L IY D
+L		L		L
+M		MOV		M UW V
+M		M		M
+N	E	NG	+	N JH
+N		NG	R	NX G
+N		NG	#	NX G
+N		NGL	%	NX G AX L
+N		NG		NX
+N		NK		NX K
+N	 	NOW	 	N AW
+N		N		N
+O		OF	 	AX V
+O		OROUGH		ER OW
+O	#:	OR	 	ER
+O	#:	ORS	 	ER Z
+O		OR		AO R
+O	 	ONE		W AH N
+O		OW		OW
+O	 	OVER		OW V ER
+O		OV		AH V
+O		O	^%	OW
+O		O	^EN	OW
+O		O	^I#	OW
+O		OL	D	OW L
+O		OUGHT		AO T
+O		OUGH		AH F
+O	 	OU		AW
+O	H	OU	S#	AW
+O		OUS		AX S
+O		OUR		AO R
+O		OULD		UH D
+O	^	OU	^L	AH
+O		OUP		UW P
+O		OU		AW
+O		OY		OY
+O		OING		OW IH NX
+O		OI		OY
+O		OOR		AO R
+O		OOK		UH K
+O		OOD		UH D
+O		OO		UW
+O		O	E	OW
+O		O	 	OW
+O		OA		OW
+O	 	ONLY		OW N L IY
+O	 	ONCE		W AH N S
+O		ON ' T		OW N T
+O	C	O	N	AA
+O		O	NG	AO
+O	 ^:	O	N	AH
+O	I	ON		AX N
+O	#:	ON	 	AX N
+O	#^	ON		AX N
+O		O	ST 	OW
+O		OF	^	AO F
+O		OTHER		AH DH ER
+O		OSS	 	AO S
+O	#^:	OM		AH M
+O		O		AA
+P		PH		F
+P		PEOP		P IY P
+P		POW		P AW
+P		PUT	 	P UH T
+P		P		P
+Q		QUAR		K W AO R
+Q		QU		K W
+Q		Q		K
+R	 	RE	^#	R IY
+R		R		R
+S		SH		SH
+S	#	SION		ZH AX N
+S		SOME		S AH M
+S	#	SUR	#	ZH ER
+S		SUR	#	SH ER
+S	#	SU	#	ZH UW
+S	#	SSU	#	SH UW
+S	#	SED	 	Z D
+S	#	S	#	Z
+S		SAID		S EH D
+S	^	SION		SH AX N
+S		S	S	 
+S	.	S	 	Z
+S	#:.E	S	 	Z
+S	#^:##	S	 	Z
+S	#^:#	S	 	S
+S	U	S	 	S
+S	 :#	S	 	Z
+S	 	SCH		S K
+S		S	C+	 
+S	#	SM		Z M
+S	#	SN	 '	Z AX N
+S		S		S
+T	 	THE	 	DH AX
+T		TO	 	T UW
+T		THAT	 	DH AE T
+T	 	THIS	 	DH IH S
+T	 	THEY		DH EY
+T	 	THERE		DH EH R
+T		THER		DH ER
+T		THEIR		DH EH R
+T	 	THAN	 	DH AE N
+T	 	THEM	 	DH EH M
+T		THESE	 	DH IY Z
+T	 	THEN		DH EH N
+T		THROUGH		TH R UW
+T		THOSE		DH OW Z
+T		THOUGH	 	DH OW
+T	 	THUS		DH AH S
+T		TH		TH
+T	#:	TED	 	T IH D
+T	S	TI	#N	CH
+T		TI	O	SH
+T		TI	A	SH
+T		TIEN		SH AX N
+T		TUR	#	CH ER
+T		TU	A	CH UW
+T	 	TWO		T UW
+T		T		T
+U	 	UN	I	Y UW N
+U	 	UN		AH N
+U	 	UPON		AX P AO N
+U	@	UR	#	UH R
+U		UR	#	Y UH R
+U		UR		ER
+U		U	^ 	AH
+U		U	^^	AH
+U		UY		AY
+U	 G	U	#	 
+U	G	U	%	 
+U	G	U	#	W
+U	#N	U		Y UW
+U	@	U		UW
+U		U		Y UW
+V		VIEW		V Y UW
+V		V		V
+W	 	WERE		W ER
+W		WA	S	W AA
+W		WA	T	W AA
+W		WHERE		WH EH R
+W		WHAT		WH AA T
+W		WHOL		HH OW L
+W		WHO		HH UW
+W		WH		WH
+W		WAR		W AO R
+W		WOR	^	W ER
+W		WR		R
+W		W		W
+X		X		K S
+Y		YOUNG		Y AH NX
+Y	 	YOU		Y UW
+Y	 	YES		Y EH S
+Y	 	Y		Y
+Y	#^:	Y	 	IY
+Y	#^:	Y	I	IY
+Y	 :	Y	 	AY
+Y	 :	Y	#	AY
+Y	 :	Y	^+:#	IH
+Y	 :	Y	^#	AY
+Y		Y		IH
+Z		Z		Z
+NUMBER		0		Z IH R OW
+NUMBER		1		W AH N
+NUMBER		2		T UW
+NUMBER		3		TH R IY
+NUMBER		4		F OW R
+NUMBER		5		F AY V
+NUMBER		6		S IH K S
+NUMBER		7		S EH V AX N
+NUMBER		8		EY T
+NUMBER		9		N AY N
