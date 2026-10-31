@@ -366,4 +366,37 @@ public class ConformerFamilyPaperTests
         for (int step = 0; step < 30; step++) model.Train(audio, target);
         Assert.True(Loss() < 0.5 * before, $"transducer loss {before} -> {Loss()}");
     }
+
+    private static StreamingZipformerOptions TinyZipformer() => new()
+    {
+        NumMels = 16, NumLayersPerStack = new[] { 1, 1, 1 }, Downsampling = new[] { 1, 2, 1 }, FeedForwardDims = new[] { 16, 16, 16 },
+        NumHeads = new[] { 2, 2, 2 }, EncoderDims = new[] { 8, 16, 12 }, ConvKernels = new[] { 3, 3, 3 }, QueryHeadDim = 4, ValueHeadDim = 2,
+        PosHeadDim = 2, PosDim = 8, EmbedChannels = new[] { 2, 4, 4 }, DecoderDim = 8, JoinerDim = 8, ChunkSize = 0, VocabSize = 8,
+        FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, Seed = 5,
+    };
+
+    [Fact(Timeout = 300000)]
+    public async Task Zipformer_RunsItsFrameRates_AndTrains()
+    {
+        await Task.Yield();
+        var d = new StreamingZipformerOptions();
+        // icefall LibriSpeech: blocks 2,2,3,4,3,2; widths 192..512; downsampling 1,2,4,8,4,2; 500 tokens.
+        Assert.Equal(new[] { 2, 2, 3, 4, 3, 2 }, d.NumLayersPerStack);
+        Assert.Equal(new[] { 192, 256, 384, 512, 384, 256 }, d.EncoderDims);
+        Assert.Equal(new[] { 1, 2, 4, 8, 4, 2 }, d.Downsampling);
+        Assert.Equal((500, 512, 2), (d.VocabSize, d.DecoderDim, d.ContextSize));
+        using var model = new StreamingZipformer<double>(Architecture(), TinyZipformer());
+        var network = model.Network ?? throw new InvalidOperationException("native model");
+        var audio = Voice(8000, 180);
+        var encoded = network.Encode(network.Features(audio.ToArray()), training: false);
+        // 51 frames: Conv-Embed (T - 7) / 2 = 22 frames at 50 Hz, then the output downsampling to 11 at 25 Hz; the output
+        // width is the widest stack's (16), assembled from the last stack (12) and the wider middle one.
+        Assert.Equal(new[] { 11, 16 }, encoded.Shape.ToArray());
+        var labels = new[] { 3, 5, 2 };
+        var target = new Tensor<double>(new[] { 3 }, new Vector<double>(labels.Select(l => (double)l).ToArray()));
+        double Loss() => network.TransducerLoss(network.Encode(network.Features(audio.ToArray()), training: false), labels)[0];
+        double before = Loss();
+        for (int step = 0; step < 30; step++) model.Train(audio, target);
+        Assert.True(Loss() < 0.5 * before, $"transducer loss {before} -> {Loss()}");
+    }
 }

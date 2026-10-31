@@ -5915,7 +5915,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName is "FunASRNano" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR"
-                    or "StreamingZipformer"
                 && model.TypeParameterCount == 1)
             {
                 // These ASR encoders have already exhausted the first two timeout rungs:
@@ -5928,8 +5927,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "FunASRNano" => "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions",
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
-                    "SpeakerDiarizedASR" => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
-                    _ => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
+                    _ => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
@@ -6704,6 +6702,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // handful of conformance steps, so training cannot move the model. 100 reaches a
                     // normal Adam rate (~2e-3) by step 6; the paper default stays on the options.
                     "DropoutRate = 0.0, UseLayerNormalization = true, WarmupSteps = 100 })";
+            }
+            else if (model.ClassName == "StreamingZipformer" && model.TypeParameterCount == 1)
+            {
+                // icefall's Zipformer reduced to two stacks (widths 8 and 16, downsampling 1 and 2, one block each), Conv-Embed
+                // of 2, 4 and 4 channels, an 8-wide decoder and joiner and a 16-token vocabulary, streaming in 4-frame chunks.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions { NumMels = 32, " +
+                    "NumLayersPerStack = new[] { 1, 1 }, Downsampling = new[] { 1, 2 }, FeedForwardDims = new[] { 16, 16 }, " +
+                    "NumHeads = new[] { 2, 2 }, EncoderDims = new[] { 8, 16 }, ConvKernels = new[] { 3, 3 }, QueryHeadDim = 4, " +
+                    "ValueHeadDim = 2, PosHeadDim = 2, PosDim = 8, EmbedChannels = new[] { 2, 4, 4 }, DecoderDim = 8, JoinerDim = 8, " +
+                    "ChunkSize = 4, LeftContextFrames = 8, VocabSize = 16, MaxAudioLengthSeconds = 1, FrequencyMasks = 0, TimeMasks = 0 })";
             }
             else if (model.ClassName == "EmformerRNNT" && model.TypeParameterCount == 1)
             {
@@ -16875,7 +16887,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName is "ConformerCTC" or "ConformerTransducer" or "StreamingConformer" or "Branchformer" or "EBranchformer"
                 or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
-                or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation" or "EmformerRNNT"
+                or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation" or "EmformerRNNT" or "StreamingZipformer"
                      || (model.ClassName == "Conformer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 // Conformer reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
