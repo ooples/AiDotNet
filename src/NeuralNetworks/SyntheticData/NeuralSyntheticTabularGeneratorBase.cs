@@ -31,6 +31,13 @@ public abstract class NeuralSyntheticTabularGeneratorBase<T> : NeuralNetworkBase
     }
 
     /// <summary>
+    /// No generator declares gradient objectives: declared objectives run before the learning rule, so one here
+    /// (TableGAN's empty list did) would replace the generator's own step below with something else, or with nothing.
+    /// </summary>
+    protected sealed override IReadOnlyList<AiDotNet.Training.TrainingObjective<T>>? DefineTrainingObjectives(
+        Tensor<T> input, Tensor<T> target) => null;
+
+    /// <summary>
     /// One training call is one step of the model's own objective -- a GAN's critic and generator steps, a VAE's ELBO
     /// step, a diffusion model's denoising step -- on the batch of real data in <paramref name="target"/>, the way
     /// <c>Fit</c> takes it on every batch. The supervised step (the generator's output against the target) is no

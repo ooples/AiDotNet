@@ -5816,12 +5816,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     currentShape = outShape;
                     if (outShape.Length >= 2) lastGoodShape = outShape;
                 }
-                else if (FillUnknownAxes(outShape, tryShape) is { } filled)
+                else if ((FillUnknownAxes(outShape, tryShape) ?? FillUnknownAxes(outShape, lastGoodShape)) is { } filled)
                 {
                     // A layer that declares a data-dependent axis (a Conformer block's [-1, features]) still fixed
                     // the rest. Skipping it left the walk on the shape before the block, and the next layer that
                     // needs a full shape resolved against a stale one: EfficientConformer's second frame splicing
                     // took the first's [32, 64] output for its [32, 32] input and reported [16, 128] for [16, 64].
+                    // The unknown axes come from the layer's input; when that has lower rank (a dense layer before
+                    // the block declares only its features, dropping the time axis), from the last full-rank shape.
                     currentShape = filled;
                     if (filled.Length >= 2) lastGoodShape = filled;
                 }
