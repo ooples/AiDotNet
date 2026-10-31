@@ -113,6 +113,30 @@ internal sealed class GptSoVitsCfmSynthesizer<T>
         return Features(quantized, text, ge, speed, length, false, null);
     }
 
+    /// <summary>The rate of the audio the reference mel is computed from: 24 kHz for v3, 32 kHz after.</summary>
+    public int MelSampleRate => Configuration.Version == "v3" ? 24000 : 32000;
+
+    /// <summary>The vocoder's output rate: 24 kHz for v3 (BigVGAN), 48 kHz after (the HiFi-GAN vocoder).</summary>
+    public int OutputSampleRate => Configuration.Version == "v3" ? 24000 : 48000;
+
+    /// <summary>
+    /// The normalized mel <c>[1, 100, T]</c> of reference audio <c>[samples]</c> at <see cref="MelSampleRate"/>
+    /// (<c>mel_fn</c> for v3: n_fft 1024, hop 256; <c>mel_fn_v4</c> after: n_fft 1280, hop 320; no centring, librosa's
+    /// float32 Slaney filterbank, then <c>norm_spec</c>).
+    /// </summary>
+    public Tensor<T> ReferenceMel(Tensor<T> audio) => ReferenceMel(_engine, Configuration.Version, audio);
+
+    internal static Tensor<T> ReferenceMel(IEngine engine, string version, Tensor<T> audio)
+    {
+        bool v3 = version == "v3";
+        int rate = v3 ? 24000 : 32000, fft = v3 ? 1024 : 1280, hop = v3 ? 256 : 320;
+        var mel = new AiDotNet.TextToSpeech.Vocoders.DifferentiableMel<T>(engine, rate, fft, hop, fft, 100, 0, rate / 2.0, singlePrecisionBasis: true);
+        var rows = mel.LogMel(mel.Magnitude(engine.Reshape(audio, new[] { audio.Length }), 1e-8));
+        var channelsFirst = engine.Reshape(engine.TensorTranspose(rows), new[] { 1, rows.Shape[1], rows.Shape[0] });
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorAddScalar(channelsFirst, NumOps.FromDouble(-SpecMin)),
+            NumOps.FromDouble(2 / (SpecMax - SpecMin))), NumOps.FromDouble(-1));
+    }
+
     /// <summary><c>norm_spec</c>: log-mel to [−1, 1].</summary>
     public Tensor<T> Normalize(Tensor<T> mel) =>
         _engine.TensorAddScalar(_engine.TensorMultiplyScalar(_engine.TensorAddScalar(mel, NumOps.FromDouble(-SpecMin)), NumOps.FromDouble(2 / (SpecMax - SpecMin))),
