@@ -38,41 +38,6 @@ public class AudioPaperTrainingRecipeTests
     }
 
     [Fact]
-    public void KyutaiMoshi_DefaultOptimizerMatchesOfficialFineTuningRecipe()
-    {
-        var options = new KyutaiMoshiOptions
-        {
-            EncoderDim = 4,
-            NumEncoderLayers = 1,
-            NumAttentionHeads = 1,
-            NumMels = 4,
-            VocabSize = 4,
-            DropoutRate = 0.0,
-        };
-        using var model = new KyutaiMoshi<double>(CreateArchitecture(), options);
-
-        var field = typeof(KyutaiMoshi<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
-        var optimizer = Assert.IsType<AdamWOptimizer<double, Tensor<double>, Tensor<double>>>(field?.GetValue(model));
-        var optimizerOptions = Assert.IsType<AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
-        var scheduler = Assert.IsType<OneCycleLRScheduler>(optimizerOptions.LearningRateScheduler);
-
-        Assert.Equal(options.LearningRate, scheduler.MaxLearningRate, 15);
-        Assert.Equal(options.TotalTrainingSteps, scheduler.TotalSteps);
-        Assert.Equal(options.WarmupFraction, scheduler.PctStart, 15);
-        Assert.Equal(0.9, optimizerOptions.Beta1, 12);
-        Assert.Equal(0.95, optimizerOptions.Beta2, 12);
-        Assert.Equal(1e-8, optimizerOptions.Epsilon, 15);
-        Assert.Equal(options.WeightDecay, optimizerOptions.WeightDecay, 12);
-        Assert.True(optimizerOptions.EnableGradientClipping);
-        Assert.Equal(options.MaxGradientNorm, optimizerOptions.MaxGradientNorm, 12);
-        Assert.False(optimizerOptions.UseAdaptiveLearningRate);
-        Assert.False(optimizerOptions.UseAdaptiveBetas);
-        Assert.False(optimizerOptions.UseAMSGrad);
-        Assert.Equal(SchedulerStepMode.StepPerBatch, optimizerOptions.SchedulerStepMode);
-        Assert.Equal(scheduler.CurrentLearningRate, optimizerOptions.InitialLearningRate, 15);
-    }
-
-    [Fact]
     public void KeywordSpotting_DefaultNetworkAndOptimizerMatchDeepKwsPaper()
     {
         var architecture = CreateArchitecture();

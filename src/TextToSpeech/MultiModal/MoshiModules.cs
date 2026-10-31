@@ -80,6 +80,10 @@ internal sealed class MoshiTransformer<T>
     public MoshiTransformerConfiguration Configuration { get; }
     public List<Layer> Layers { get; } = new();
 
+    /// <summary>Every layer the Transformer owns.</summary>
+    public IEnumerable<LayerBase<T>> AllLayers => Layers.SelectMany(l => new LayerBase<T>[] { l.Norm1, l.Norm2 }
+        .Concat(l.InProj).Concat(l.OutProj).Concat(l.GateIn).Concat(l.GateOut));
+
     private void Fill(BiasFreeLinearLayer<T> holder, double value)
     {
         var w = holder.Weights;

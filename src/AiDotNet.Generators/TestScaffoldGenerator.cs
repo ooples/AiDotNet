@@ -411,6 +411,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             { "AudioPaLM", "AiDotNet.TextToSpeech.MultiModal." },
             // SpeechGPT's speech recognizer (SpeechRecognition.LLMIntegrated) is the TTS model's task variant.
             { "SpeechGPT", "AiDotNet.TextToSpeech.MultiModal." },
+            // Moshi's speech recognizer (SpeechRecognition.Streaming) is the TTS model's task variant.
+            { "Moshi", "AiDotNet.TextToSpeech.MultiModal." },
             // Three-way: also VisionLanguage.Encoders.SAM, and a Bioinformatics SAM (Significance
             // Analysis of Microarrays) that shares only the acronym.
             { "SAM", "AiDotNet.ComputerVision.Segmentation.Foundation." },
@@ -973,7 +975,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // CI-smoke fixture would have to shrink the architecture past recognizability; deferred to the nightly
         // HeavyTimeout lane where they run full-scale. Families: CLIP dual-encoders (MetaCLIP, LLM2CLIP,
         // MedCLIP), SAM segmentation (MedSAM, MedSAM2, MaskAdapter), forecasting foundations (MOIRAI), speech
-        // /audio LMs (MMS, KyutaiMoshi, MARS5TTS, MinMo), state-space LM (Mamba2), and the
+        // /audio LMs (MMS, MARS5TTS, MinMo), state-space LM (Mamba2), and the
         // mixture-of-Gaussians generative net (MoG). Paper defaults intact + customizable.
         "MARS5TTS", "MinMo",
         // #1789 J-M mid-tier classes that still OOM or time out on the forward/training even at <float>
@@ -1621,15 +1623,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // critically, opts this AudioNN fixture into the existing 1-vs-2 smoke iteration cap below.
         // Production defaults and user options are unchanged.
         "CodeSwitchingASR",
-        // KyutaiMoshi (SpeechRecognition/Streaming): an audio-branch streaming speech model whose
-        // <double> per-step forward+backward is multi-second (its own Training_ShouldReduceLoss and
-        // DifferentInputs_AfterTraining run 28-40 s each), so the 250-iter MoreData and multi-step
-        // memorization invariants overran the 120 s / 180 s gates solo (both reported "Test execution
-        // timed out"). Same remedy as ConvTransformer above: <float> plus the audio branch's
-        // auto-emitted smoke-iteration caps fit them to budget while preserving the self-relative
-        // training invariants. (GraFPrint hits the same timeout but is categorized GraphNetwork/
-        // EmbeddingModel, not audio, so its caps come from HeavyTrainingTimeoutClassNames instead.)
-        "KyutaiMoshi",
         // NeMoCitrinet: paper-faithful Citrinet-512 (Majumdar et al., 2021) — 23 residual mega-blocks
         // of time-channel separable convs + squeeze-excitation at 512 channels. Same deep-CTC-ASR
         // footprint rationale as the Conformer/CTC family above: <float> halves the per-step
@@ -1842,10 +1835,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // The public-options fixture below retains all three streams.
         "BLIP3",
         "CosyVoice2", "CosyVoice3", "CosyVoiceClone", "AdaSpeech2", "BEATs",
-        // Moshi is another foundation-scale codec LM (1024-wide, 12 decoder
-        // layers). The Generated J-M runner fell from 12 GB available memory
-        // to about 250 MB while its full-scale <double> fixture was active.
-        "Moshi",
         // TimeLLM's Generated T-Z fixture diverges during its short training
         // probe at double precision. Keep it explicitly in the FP32 roster even
         // when the temporary shard-wide resource rule is eventually removed.
@@ -8044,17 +8033,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0, ActivationDropout = 0.0, " +
                     "FeatureProjectionDropout = 0.0, FinalDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0 })";
             }
-            else if (model.ClassName == "KyutaiMoshi" && model.TypeParameterCount == 1)
-            {
-                // KyutaiMoshi (Kyutai 2024): streaming speech-text model — production 512-d / 24-layer encoder
-                // OOMs the runner. Exercise the streaming encoder + head at bounded scale (#1789).
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.Streaming.KyutaiMoshiOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, VocabSize = 64 })";
-            }
             else if (model.ClassName == "MedSAM" && model.TypeParameterCount == 1)
             {
                 // MedSAM (Ma et al. 2024): SAM ViT-B encoder + prompt encoder + mask decoder — production runs
@@ -11109,17 +11087,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.TextToSpeech.MultiModal.", System.StringComparison.Ordinal))
             {
-                // The full 1024-wide, 12-layer <double> fixture exhausted the
-                // Generated J-M runner. Float first, then reduce only this
-                // generated fixture through the model's public options.
-                pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.TextToSpeech.MultiModal.MoshiOptions { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
-                    "NumCodebooks = 2, CodebookSize = 16, DropoutRate = 0.0 })";
+                // Moshi is the RQ-Transformer over Helium text and Mimi codes. The fixture builds a 16-wide Temporal and
+                // Depth Transformer, a tiny Mimi whose codebooks are k-means-initialized on a tone, and the SpiritLM
+                // fixture's SentencePiece model as the text vocabulary.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.MoshiFixture.Tts<double>()";
             }
             else if (model.ClassName == "KaniTTS" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.Latest.", System.StringComparison.Ordinal))

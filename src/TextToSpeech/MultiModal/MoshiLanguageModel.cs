@@ -89,6 +89,11 @@ internal sealed class MoshiLanguageModel<T>
     public MoshiTransformer<T> Depth { get; }
     public BiasFreeLinearLayer<T>[] Heads { get; }
 
+    /// <summary>The Depth Transformer's layers with its input projections, embeddings and heads (their own learning
+    /// rate in Table 1).</summary>
+    public IEnumerable<LayerBase<T>> DepthLayers() =>
+        DepthIn.Cast<LayerBase<T>>().Append(DepthTextEmbedding).Concat(DepthEmbeddings).Concat(Depth.AllLayers).Concat(Heads);
+
     /// <summary>torch's <c>trunc_normal_</c> at ±3 std, by rejection.</summary>
     internal static double TruncatedNormal(Random random, double std)
     {
