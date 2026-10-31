@@ -5917,7 +5917,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName is "FunASRNano" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR"
-                    or "StreamingZipformer" or "TDTDecoder"
+                    or "StreamingZipformer"
                 && model.TypeParameterCount == 1)
             {
                 // These ASR encoders have already exhausted the first two timeout rungs:
@@ -5931,8 +5931,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     "SpeakerDiarizedASR" => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
-                    "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
-                    _ => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions"
+                    _ => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
@@ -9613,7 +9612,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "options: new AiDotNet.Video.Options.TimeSformerOptions { NumClasses = 4, EmbedDim = 64, NumHeads = 4, NumLayers = 2, NumFrames = 4, PatchSize = 8 }" + ")";
             }
             else if ((model.ClassName is "ConformerCTC" or "ConformerTransducer" or "StreamingConformer" or "Branchformer" or "EBranchformer"
-                      or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit"
+                      or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
+                      or "ESPnetASR" or "SpeechBrain" or "OWSM"
                       || (model.ClassName == "Conformer" && typeName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
                      && model.TypeParameterCount == 1)
             {
@@ -9625,19 +9625,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 {
                     "Conformer" => "AiDotNet.Audio.SpeechRecognition.ConformerOptions",
                     "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
-                    "FastEmit" => "AiDotNet.SpeechRecognition.Streaming.FastEmitOptions",
+                    "FastEmit" or "TDTDecoder" => $"AiDotNet.SpeechRecognition.Streaming.{model.ClassName}Options",
+                    "ESPnetASR" or "SpeechBrain" => $"AiDotNet.SpeechRecognition.Robust.{model.ClassName}Options",
+                    "OWSM" => "AiDotNet.SpeechRecognition.Multilingual.OWSMOptions",
                     "InterCTC" or "SelfConditionedCTC" => $"AiDotNet.SpeechRecognition.CTCVariants.{model.ClassName}Options",
-                    "ParakeetCTC" or "ParakeetRNNT" => $"AiDotNet.SpeechRecognition.NeMo.{model.ClassName}Options",
+                    "ParakeetCTC" or "ParakeetRNNT" or "ParakeetTDT" => $"AiDotNet.SpeechRecognition.NeMo.{model.ClassName}Options",
                     _ => $"AiDotNet.SpeechRecognition.ConformerFamily.{model.ClassName}Options",
                 };
                 string decoderOptions = model.ClassName switch
                 {
                     "ConformerCTC" => string.Empty,
-                    "Branchformer" or "EBranchformer" => "CgmlpDim = 32, ",
+                    // One decoder layer for the joint CTC/attention models.
+                    "Branchformer" or "EBranchformer" or "OWSM" => "CgmlpDim = 32, AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
+                    "ESPnetASR" or "SpeechBrain" => "AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
                     // Two layers, so the intermediate CTC loss reads the first.
                     "InterCTC" or "SelfConditionedCTC" => "NumEncoderLayers = 2, IntermediateCtcLayers = new[] { 1 }, ",
                     "ParakeetCTC" => "SubsamplingChannels = 8, ",
-                    "ParakeetRNNT" => "SubsamplingChannels = 8, PredictionDim = 16, JointDim = 16, ",
+                    "ParakeetRNNT" or "ParakeetTDT" => "SubsamplingChannels = 8, PredictionDim = 16, JointDim = 16, ",
                     _ => "PredictionDim = 16, JointDim = 16, ",
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
@@ -9943,19 +9947,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // WarmupSteps: the paper's 5000-step ramp leaves the rate near 1e-8 for the
                     // memorization probe's two steps; a short ramp reaches the recipe's 1e-4.
                     "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16, " + SmokeWarmupSteps + " })";
-            }
-            else if (model.ClassName == "OWSM" && model.TypeParameterCount == 1)
-            {
-                // Preserve OWSM's paper-aligned production defaults while exercising
-                // its public Conformer sizing controls within the CI runner budget.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.Multilingual.OWSMOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
             }
             else if (model.ClassName == "Paraformer" && model.TypeParameterCount == 1)
             {
@@ -10313,19 +10304,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumMelBands = 16, NumClasses = 4, EmbeddingDim = 16, DropoutRate = 0.0, HeadDropoutRate = 0.0, " +
                     "LearningRate = 1e-6, EnableGradientClipping = true, MaxGradientNorm = 1.0 }) " +
                     "{ StreamingTraining = AiDotNet.Enums.StreamingTrainingMode.ForceOn }";
-            }
-            else if (model.ClassName == "ParakeetTDT" && model.TypeParameterCount == 1)
-            {
-                // Retain the released 1.1B defaults in production while exercising every
-                // native transducer stage through the public options surface at runner scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.NeMo.ParakeetTDTOptions { EncoderDim = 32, " +
-                    "PredictionDim = 32, JointDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, " +
-                    "FeedForwardDim = 128, NumMels = 32, VocabSize = 4, MaxTextLength = 8, " +
-                    "DropoutRate = 0.0, MaxDurationTokens = 2 })";
             }
             else if (model.ClassName == "WavLMSER" && model.TypeParameterCount == 1)
             {
@@ -10709,21 +10687,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     $"new {qwenOptionsType} {{ EncoderDim = 32, " +
                     "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 64, VocabSize = 64 })";
-            }
-            else if (model.ClassName == "ESPnetASR" && model.TypeParameterCount == 1)
-            {
-                // ESPnetASR's default Conformer/CTC fixture (512-wide, 12 layers,
-                // 5000-way vocabulary over a 30-second feature window) makes the
-                // generic MoreData probe exceed the CPU timeout. Exercise the same
-                // acoustic encoder -> CTC/attention head topology at CI scale only.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.Robust.ESPnetASROptions { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, MaxTextLength = 8, " +
-                    "DropoutRate = 0.0, Language = \"en\" })";
             }
             else if (model.ClassName == "AVHuBERT" && model.TypeParameterCount == 1)
             {
@@ -16927,12 +16890,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 16 };");
             }
             else if (model.ClassName is "ConformerCTC" or "ConformerTransducer" or "StreamingConformer" or "Branchformer" or "EBranchformer"
-                or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit"
+                or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
+                or "ESPnetASR" or "SpeechBrain" or "OWSM"
                      || (model.ClassName == "Conformer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 // Conformer reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
-                sb.AppendLine(model.ClassName is "ParakeetCTC" or "ParakeetRNNT"
+                sb.AppendLine(model.ClassName is "ParakeetCTC" or "ParakeetRNNT" or "ParakeetTDT"
                     ? "    protected override int[] OutputShape => new[] { 3, 16 };"   // Fast Conformer: 8x, 3 frames of 80 ms
                     : "    protected override int[] OutputShape => new[] { 4, 16 };");
             }

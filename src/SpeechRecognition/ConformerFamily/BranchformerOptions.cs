@@ -33,6 +33,11 @@ public class BranchformerOptions : ModelOptions
         ConvKernel = other.ConvKernel;
         RopeTheta = other.RopeTheta;
         CgmlpDim = other.CgmlpDim;
+        AttentionDecoderLayers = other.AttentionDecoderLayers;
+        AttentionDecoderFeedForward = other.AttentionDecoderFeedForward;
+        CtcWeight = other.CtcWeight;
+        LabelSmoothing = other.LabelSmoothing;
+        MaxTextLength = other.MaxTextLength;
         FrequencyMasks = other.FrequencyMasks;
         FrequencyMaskWidth = other.FrequencyMaskWidth;
         TimeMasks = other.TimeMasks;
@@ -75,6 +80,21 @@ public class BranchformerOptions : ModelOptions
     /// <summary>Hidden units of the convolutional gating MLP (its gating unit splits them in half).</summary>
     public int CgmlpDim { get; set; } = 3072;
 
+    /// <summary>Transformer decoder layers trained jointly with the CTC layer.</summary>
+    public int AttentionDecoderLayers { get; set; } = 6;
+
+    /// <summary>Feed-forward units of each decoder layer.</summary>
+    public int AttentionDecoderFeedForward { get; set; } = 2048;
+
+    /// <summary>Weight w of the CTC loss in the joint objective w L_CTC + (1 - w) L_attention.</summary>
+    public double CtcWeight { get; set; } = 0.3;
+
+    /// <summary>Label smoothing of the decoder's cross-entropy.</summary>
+    public double LabelSmoothing { get; set; } = 0.1;
+
+    /// <summary>Most tokens a transcription decodes.</summary>
+    public int MaxTextLength { get; set; } = 256;
+
     /// <summary>SpecAugment frequency masks (section 3.1: 2).</summary>
     public int FrequencyMasks { get; set; } = 2;
 
@@ -88,7 +108,7 @@ public class BranchformerOptions : ModelOptions
     public double TimeMaskRatio { get; set; } = 0.05;
 
     /// <summary>Output vocabulary size, blank (token 0) included.</summary>
-    public int VocabSize { get; set; } = 34;
+    public int VocabSize { get; set; } = 5000;
 
     /// <summary>The text of each token; tokens past the list decode as Unicode code points, and tokens in angle brackets
     /// decode to nothing.</summary>
@@ -107,7 +127,7 @@ public class BranchformerOptions : ModelOptions
     {
         SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
         NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, ConvKernel = ConvKernel, RopeTheta = RopeTheta,
-        Block = ConformerAsrBlock.Branchformer, CgmlpDim = CgmlpDim, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
+        Block = ConformerAsrBlock.Branchformer, CgmlpDim = CgmlpDim, AttentionDecoderLayers = AttentionDecoderLayers, AttentionDecoderFeedForward = AttentionDecoderFeedForward, CtcWeight = CtcWeight, LabelSmoothing = LabelSmoothing, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
         VocabSize = VocabSize,
     };
 }
