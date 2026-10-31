@@ -146,7 +146,7 @@ public class BESTRQPaperTests
         var labels = network.Quantize(network.Features(Samples(audio)));
         double Loss() => model.PretrainingLoss(audio, Tensors.Helpers.RandomHelper.CreateSeededRandom(11));
         double before = Loss();
-        Assert.True(before > 0 && double.IsFinite(before), $"initial loss {before}");
+        Assert.True(before > 0 && !double.IsNaN(before) && !double.IsInfinity(before), $"initial loss {before}");
         for (int step = 0; step < 40; step++) model.Pretrain(audio);
         double after = Loss();
         Assert.True(after < 0.7 * before, $"masked-prediction loss {before} -> {after}");
