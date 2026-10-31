@@ -17,14 +17,23 @@ namespace AiDotNet.TextToSpeech.FrontEnd;
 /// </remarks>
 internal sealed class G2pKk
 {
-    private static readonly Lazy<G2pKk> SharedInstance = new(() => new G2pKk(), isThreadSafe: true);
+    private static readonly Lazy<G2pKk> SharedInstance = new(() => new G2pKk("g2pkk012_table.csv.gz", linkAcrossSpaces: true), isThreadSafe: true);
+    private static readonly Lazy<G2pKk> G2pk2Instance = new(() => new G2pKk("g2pk2003_table.csv.gz", linkAcrossSpaces: false), isThreadSafe: true);
     private readonly List<(string From, string To)> _idioms = new();
     private readonly List<(Regex Pattern, string Replacement)> _table = new();
+    private readonly bool _linkAcrossSpaces;
 
     public static G2pKk Default => SharedInstance.Value;
 
-    private G2pKk()
+    /// <summary>
+    /// g2pk2 0.0.3 (GPT-SoVITS's Korean G2P): g2pkk with two cells of its coda-onset table corrected (ᆰ before ᄏ, ᆻ
+    /// before ᄑ) and the linking of a coda to an ᄋ onset across a space (link3) commented out.
+    /// </summary>
+    public static G2pKk G2pk2 => G2pk2Instance.Value;
+
+    private G2pKk(string table, bool linkAcrossSpaces)
     {
+        _linkAcrossSpaces = linkAcrossSpaces;
         foreach (var raw in ChineseText.ReadLines("g2pkk012_idioms.txt.gz"))
         {
             string line = PythonText.Strip(raw.Split('#')[0]);
@@ -33,7 +42,7 @@ internal sealed class G2pKk
             if (parts.Length != 2) throw new InvalidOperationException($"idioms.txt line '{line}' does not split in two.");
             _idioms.Add((parts[0], parts[1]));
         }
-        var lines = ChineseText.ReadLines("g2pkk012_table.csv.gz").ToList();
+        var lines = ChineseText.ReadLines(table).ToList();
         var onsets = lines[0].Split(',');
         foreach (var line in lines.Skip(1))
         {
@@ -382,7 +391,7 @@ internal sealed class G2pKk
         return inp;
     }
 
-    private static string Link(string inp)
+    private string Link(string inp)
     {
         string[] codas = { "ᆨ", "ᆩ", "ᆫ", "ᆮ", "ᆯ", "ᆷ", "ᆸ", "ᆺ", "ᆻ", "ᆽ", "ᆾ", "ᆿ", "ᇀ", "ᇁ" };
         string[] onsets = { "ᄀ", "ᄁ", "ᄂ", "ᄃ", "ᄅ", "ᄆ", "ᄇ", "ᄉ", "ᄊ", "ᄌ", "ᄎ", "ᄏ", "ᄐ", "ᄑ" };
@@ -390,8 +399,11 @@ internal sealed class G2pKk
             { ("ᆪᄋ", "ᆨᄊ"), ("ᆬᄋ", "ᆫᄌ"), ("ᆰᄋ", "ᆯᄀ"), ("ᆱᄋ", "ᆯᄆ"), ("ᆲᄋ", "ᆯᄇ"), ("ᆳᄋ", "ᆯᄊ"), ("ᆴᄋ", "ᆯᄐ"), ("ᆵᄋ", "ᆯᄑ"), ("ᆹᄋ", "ᆸᄊ") };
         for (int i = 0; i < codas.Length; i++) inp = inp.Replace(codas[i] + "ᄋ", onsets[i]);          // link1
         foreach (var (from, to) in link2) inp = inp.Replace(from, to);                                 // link2
-        for (int i = 0; i < codas.Length; i++) inp = inp.Replace(codas[i] + " ᄋ", " " + onsets[i]);   // link3
-        foreach (var (from, to) in link2) inp = inp.Replace(from.Insert(1, " "), to.Insert(1, " "));
+        if (_linkAcrossSpaces)
+        {
+            for (int i = 0; i < codas.Length; i++) inp = inp.Replace(codas[i] + " ᄋ", " " + onsets[i]);   // link3
+            foreach (var (from, to) in link2) inp = inp.Replace(from.Insert(1, " "), to.Insert(1, " "));
+        }
         foreach (var (from, to) in new[] { ("ᇂᄋ", "ᄋ"), ("ᆭᄋ", "ᄂ"), ("ᆶᄋ", "ᄅ") }) inp = inp.Replace(from, to);   // link4
         return inp;
     }

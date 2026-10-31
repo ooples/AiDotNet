@@ -43,6 +43,19 @@ internal static class PythonText
         return true;
     }
 
+    /// <summary><c>str.isupper</c>: at least one cased character, and none of them lower or title case.</summary>
+    public static bool IsUpper(string s)
+    {
+        bool cased = false;
+        foreach (char c in s)
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category is UnicodeCategory.LowercaseLetter or UnicodeCategory.TitlecaseLetter) return false;
+            if (category == UnicodeCategory.UppercaseLetter) cased = true;
+        }
+        return cased;
+    }
+
     /// <summary>
     /// <c>str.lower</c>: invariant lowercasing plus Unicode's special casing Python applies (İ becomes i + combining dot,
     /// and a capital sigma ending a word becomes final sigma).

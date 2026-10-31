@@ -17,7 +17,7 @@ internal sealed class GptSoVitsChineseFrontEnd
     public static GptSoVitsChineseFrontEnd Default => SharedInstance.Value;
 
     /// <summary>text/symbols.py's punctuation.</summary>
-    internal static readonly string[] Punctuation = { "!", "?", "…", ",", ".", "-" };
+    internal static readonly string[] Punctuation = { "!", "?", "\u2026", ",", ".", "-" };
 
     private readonly GptSoVitsChineseData _data = GptSoVitsChineseData.Instance;
     private readonly GptSoVitsPinyin _pinyin = GptSoVitsPinyin.Default;
@@ -30,18 +30,18 @@ internal sealed class GptSoVitsChineseFrontEnd
 
     private static readonly (string From, string To)[] Replacements =
     {
-        ("：", ","), ("；", ","), ("，", ","), ("。", "."), ("！", "!"), ("？", "?"), ("\n", "."), ("·", ","),
-        ("、", ","), ("...", "…"), ("$", "."), ("/", ","), ("—", "-"), ("~", "…"), ("～", "…"),
+        ("\uff1a", ","), ("\uff1b", ","), ("\uff0c", ","), ("\u3002", "."), ("\uff01", "!"), ("\uff1f", "?"), ("\n", "."), ("\u00b7", ","),
+        ("\u3001", ","), ("...", "\u2026"), ("$", "."), ("/", ","), ("\u2014", "-"), ("~", "\u2026"), ("\uff5e", "\u2026"),
     };
 
     private static readonly Regex ReplacementPattern = new(string.Join("|", Replacements.Select(r => Regex.Escape(r.From))));
-    private static readonly Regex Outside = new("[^一-龥!?…,.\\-]+");
-    private static readonly Regex RepeatedPunctuation = new("([!?…,.\\-])([!?…,.\\-])+");
+    private static readonly Regex Outside = new("[^\u4e00-\u9fa5!?\u2026,.\\-]+");
+    private static readonly Regex RepeatedPunctuation = new("([!?\u2026,.\\-])([!?\u2026,.\\-])+");
 
     /// <summary><c>replace_punctuation</c>.</summary>
     internal static string ReplacePunctuation(string text)
     {
-        text = text.Replace("嗯", "恩").Replace("呣", "母");
+        text = text.Replace("\u55ef", "\u6069").Replace("\u5463", "\u6bcd");
         text = ReplacementPattern.Replace(text, m => Replacements.First(r => r.From == m.Value).To);
         return Outside.Replace(text, "");
     }
@@ -55,7 +55,7 @@ internal sealed class GptSoVitsChineseFrontEnd
 
     // ------------------------------------------------------------------ g2p
 
-    private static readonly Regex SentenceSplit = new("(?<=[!?…,.\\-])\\s*");
+    private static readonly Regex SentenceSplit = new("(?<=[!?\u2026,.\\-])\\s*");
     private static readonly Regex Latin = new("[a-zA-Z]+");
 
     /// <summary>
@@ -163,7 +163,7 @@ internal sealed class GptSoVitsChineseFrontEnd
     {
         var chars = ChineseText.Codepoints(word);
         for (int i = 0; i < finals.Count; i++)
-            if (i == finals.Count - 1 && chars[i] == "儿" && finals[i] == "er1") finals[i] = "er2";
+            if (i == finals.Count - 1 && chars[i] == "\u513f" && finals[i] == "er1") finals[i] = "er2";
         if (!_data.MustErhua.Contains(word) && (_data.NotErhua.Contains(word) || pos == "a" || pos == "j" || pos == "nr"))
             return (initials, finals);
         if (finals.Count != chars.Count) return (initials, finals);
@@ -173,7 +173,7 @@ internal sealed class GptSoVitsChineseFrontEnd
         for (int i = 0; i < finals.Count; i++)
         {
             string phn = finals[i];
-            if (i == finals.Count - 1 && chars[i] == "儿" && (phn == "er2" || phn == "er5") && !_data.NotErhua.Contains(lastTwo) && newFinals.Count > 0)
+            if (i == finals.Count - 1 && chars[i] == "\u513f" && (phn == "er2" || phn == "er5") && !_data.NotErhua.Contains(lastTwo) && newFinals.Count > 0)
             {
                 string previous = newFinals[newFinals.Count - 1];
                 phn = "er" + previous[previous.Length - 1];
@@ -270,15 +270,15 @@ internal sealed class GptSoVitsChineseFrontEnd
         string last = "";
         foreach (var (w, pos) in seg)
         {
-            string word = last == "不" ? last + w : w;
-            if (word != "不") result.Add((word, pos));
+            string word = last == "\u4e0d" ? last + w : w;
+            if (word != "\u4e0d") result.Add((word, pos));
             last = word;
         }
-        if (last == "不") result.Add((last, "d"));
+        if (last == "\u4e0d") result.Add((last, "d"));
         return result;
     }
 
-    // _merge_yi: "v 一 v" (the left word as merged so far) into one word, then a lone "一" onto the word after it.
+    // _merge_yi: "v \u4e00 v" (the left word as merged so far) into one word, then a lone "\u4e00" onto the word after it.
     private static List<(string Word, string Pos)> MergeYi(List<(string Word, string Pos)> seg)
     {
         var merged = new List<(string Word, string Pos)>();
@@ -286,12 +286,12 @@ internal sealed class GptSoVitsChineseFrontEnd
         while (i < seg.Count)
         {
             var (word, pos) = seg[i];
-            if (i - 1 >= 0 && word == "一" && i + 1 < seg.Count)
+            if (i - 1 >= 0 && word == "\u4e00" && i + 1 < seg.Count)
             {
                 var last = merged.Count > 0 ? merged[merged.Count - 1] : seg[i - 1];
                 if (last.Word == seg[i + 1].Word && last.Pos == "v" && seg[i + 1].Pos == "v")
                 {
-                    merged[merged.Count - 1] = (last.Word + "一" + seg[i + 1].Word, last.Pos);
+                    merged[merged.Count - 1] = (last.Word + "\u4e00" + seg[i + 1].Word, last.Pos);
                     i += 2;
                     continue;
                 }
@@ -302,7 +302,7 @@ internal sealed class GptSoVitsChineseFrontEnd
         var result = new List<(string Word, string Pos)>();
         foreach (var (word, pos) in merged)
         {
-            if (result.Count > 0 && result[result.Count - 1].Word == "一")
+            if (result.Count > 0 && result[result.Count - 1].Word == "\u4e00")
                 result[result.Count - 1] = (result[result.Count - 1].Word + word, result[result.Count - 1].Pos);
             else
                 result.Add((word, pos));
@@ -381,7 +381,7 @@ internal sealed class GptSoVitsChineseFrontEnd
         for (int i = 0; i < seg.Count; i++)
         {
             var (word, pos) = seg[i];
-            if (i - 1 >= 0 && word == "儿" && seg[i - 1].Word != "#")
+            if (i - 1 >= 0 && word == "\u513f" && seg[i - 1].Word != "#")
                 result[result.Count - 1] = (result[result.Count - 1].Word + word, result[result.Count - 1].Pos);
             else
                 result.Add((word, pos));
@@ -401,25 +401,25 @@ internal sealed class GptSoVitsChineseFrontEnd
     private static List<string> BuSandhi(string word, List<string> finals)
     {
         var c = Chars(word);
-        if (c.Count == 3 && c[1] == "不") finals[1] = WithTone(finals[1], '5');
+        if (c.Count == 3 && c[1] == "\u4e0d") finals[1] = WithTone(finals[1], '5');
         else
             for (int i = 0; i < c.Count; i++)
-                if (c[i] == "不" && i + 1 < c.Count && Last(finals[i + 1]) == '4') finals[i] = WithTone(finals[i], '2');
+                if (c[i] == "\u4e0d" && i + 1 < c.Count && Last(finals[i + 1]) == '4') finals[i] = WithTone(finals[i], '2');
         return finals;
     }
 
-    private const string SandhiPunctuation = "：，；。？！“”‘’':,;.?!";
+    private const string SandhiPunctuation = "\uff1a\uff0c\uff1b\u3002\uff1f\uff01\u201c\u201d\u2018\u2019':,;.?!";
 
     private List<string> YiSandhi(string word, List<string> finals)
     {
         var c = Chars(word);
-        if (c.Contains("一") && c.Where(x => x != "一").All(IsNumeric)) return finals;
-        if (c.Count == 3 && c[1] == "一" && c[0] == c[2]) finals[1] = WithTone(finals[1], '5');
-        else if (word.StartsWith("第一", StringComparison.Ordinal)) finals[1] = WithTone(finals[1], '1');
+        if (c.Contains("\u4e00") && c.Where(x => x != "\u4e00").All(IsNumeric)) return finals;
+        if (c.Count == 3 && c[1] == "\u4e00" && c[0] == c[2]) finals[1] = WithTone(finals[1], '5');
+        else if (word.StartsWith("\u7b2c\u4e00", StringComparison.Ordinal)) finals[1] = WithTone(finals[1], '1');
         else
             for (int i = 0; i < c.Count; i++)
             {
-                if (c[i] != "一" || i + 1 >= c.Count) continue;
+                if (c[i] != "\u4e00" || i + 1 >= c.Count) continue;
                 if (Last(finals[i + 1]) == '4') finals[i] = WithTone(finals[i], '2');
                 else if (!SandhiPunctuation.Contains(c[i + 1])) finals[i] = WithTone(finals[i], '4');
             }
@@ -437,7 +437,7 @@ internal sealed class GptSoVitsChineseFrontEnd
         return new List<string> { word.Substring(0, word.Length - first.Length), first };
     }
 
-    private const string NeutralParticles = "吧呢哈啊呐噻嘛吖嗨呐哦哒额滴哩哟喽啰耶喔诶";
+    private const string NeutralParticles = "\u5427\u5462\u54c8\u554a\u5450\u567b\u561b\u5416\u55e8\u5450\u54e6\u54d2\u989d\u6ef4\u54e9\u54df\u55bd\u5570\u8036\u5594\u8bf6";
 
     private List<string> NeutralSandhi(string word, string pos, List<string> finals)
     {
@@ -445,21 +445,21 @@ internal sealed class GptSoVitsChineseFrontEnd
         for (int j = 0; j < c.Count; j++)
             if (j - 1 >= 0 && c[j] == c[j - 1] && "nva".IndexOf(pos[0]) >= 0 && !_data.MustNotNeutral.Contains(word))
                 finals[j] = WithTone(finals[j], '5');
-        int ge = c.IndexOf("个");
+        int ge = c.IndexOf("\u4e2a");
         string last = c.Count > 0 ? c[c.Count - 1] : "";
         string lastTwo = c.Count >= 2 ? c[c.Count - 2] + c[c.Count - 1] : word;
         int final = finals.Count - 1;
         if (c.Count >= 1 && NeutralParticles.Contains(last)) finals[final] = WithTone(finals[final], '5');
-        else if (c.Count >= 1 && "的地得".Contains(last)) finals[final] = WithTone(finals[final], '5');
-        else if (c.Count == 1 && "了着过".Contains(word) && (pos == "ul" || pos == "uz" || pos == "ug"))
+        else if (c.Count >= 1 && "\u7684\u5730\u5f97".Contains(last)) finals[final] = WithTone(finals[final], '5');
+        else if (c.Count == 1 && "\u4e86\u7740\u8fc7".Contains(word) && (pos == "ul" || pos == "uz" || pos == "ug"))
             finals[final] = WithTone(finals[final], '5');
-        else if (c.Count > 1 && "们子".Contains(last) && (pos == "r" || pos == "n") && !_data.MustNotNeutral.Contains(word))
+        else if (c.Count > 1 && "\u4eec\u5b50".Contains(last) && (pos == "r" || pos == "n") && !_data.MustNotNeutral.Contains(word))
             finals[final] = WithTone(finals[final], '5');
-        else if (c.Count > 1 && "上下里".Contains(last) && (pos == "s" || pos == "l" || pos == "f"))
+        else if (c.Count > 1 && "\u4e0a\u4e0b\u91cc".Contains(last) && (pos == "s" || pos == "l" || pos == "f"))
             finals[final] = WithTone(finals[final], '5');
-        else if (c.Count > 1 && "来去".Contains(last) && "上下进出回过起开".Contains(c[c.Count - 2]))
+        else if (c.Count > 1 && "\u6765\u53bb".Contains(last) && "\u4e0a\u4e0b\u8fdb\u51fa\u56de\u8fc7\u8d77\u5f00".Contains(c[c.Count - 2]))
             finals[final] = WithTone(finals[final], '5');
-        else if ((ge >= 1 && (IsNumeric(c[ge - 1]) || "几有两半多各整每做是".Contains(c[ge - 1]))) || word == "个")
+        else if ((ge >= 1 && (IsNumeric(c[ge - 1]) || "\u51e0\u6709\u4e24\u534a\u591a\u5404\u6574\u6bcf\u505a\u662f".Contains(c[ge - 1]))) || word == "\u4e2a")
             finals[ge] = WithTone(finals[ge], '5');
         else if (_data.MustNeutral.Contains(word) || _data.MustNeutral.Contains(lastTwo))
             finals[final] = WithTone(finals[final], '5');
