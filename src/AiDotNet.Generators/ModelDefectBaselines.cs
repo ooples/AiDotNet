@@ -154,8 +154,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.SpeechRecognition.Specialized.MedicalASR<T>",
             "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASR<T>",
             "AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>",
-            "AiDotNet.SpeechRecognition.Streaming.EmformerRNNT<T>",
-            "AiDotNet.SpeechRecognition.Streaming.StreamingZipformer<T>",
             "AiDotNet.TextToSpeech.Classic.AdaSpeech<T>",
             "AiDotNet.TextToSpeech.Classic.AlignTTS<T>",
             "AiDotNet.TextToSpeech.Classic.FastSpeech<T>",

@@ -6707,19 +6707,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "EmformerRNNT" && model.TypeParameterCount == 1)
             {
-                // These streaming transducers retain their released 512-wide, 18/20-layer
-                // defaults. Exercise the complete Conformer -> prediction -> joint path at
-                // a bounded configuration through each model's public options.
-                pinInitSeed = true;
-                string optionsType = "EmformerRNNTOptions";
+                // torchaudio's Emformer RNN-T at width 16 (4 x 4 stacked frames), one layer, 8-frame segments with a 4-frame
+                // look-ahead, a one-layer 8-unit prediction network and a 16-token vocabulary.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    $"new AiDotNet.SpeechRecognition.Streaming.{optionsType} {{ EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 8, DropoutRate = 0.0 }, " +
-                    $"optimizer: {smokeAdamWOptimizer})";
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Streaming.EmformerRNNTOptions { NumMels = 32, TimeReductionInputDim = 4, " +
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, SegmentLength = 8, RightContextLength = 4, " +
+                    "LeftContextLength = 2, EncodingDim = 16, SymbolEmbeddingDim = 8, NumLstmLayers = 1, VocabSize = 16, " +
+                    "MaxAudioLengthSeconds = 1, FrequencyMasks = 0, TimeMasks = 0 })";
             }
             else if (model.ClassName == "ECAPATDNNLanguageIdentifier" && model.TypeParameterCount == 1)
             {
@@ -16878,7 +16875,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName is "ConformerCTC" or "ConformerTransducer" or "StreamingConformer" or "Branchformer" or "EBranchformer"
                 or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
-                or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation"
+                or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation" or "EmformerRNNT"
                      || (model.ClassName == "Conformer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 // Conformer reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.

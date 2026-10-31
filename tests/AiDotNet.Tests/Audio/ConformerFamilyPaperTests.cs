@@ -333,4 +333,37 @@ public class ConformerFamilyPaperTests
         Assert.True(frames[0] < frames[1] && frames[1] < frames[2], string.Join(",", frames));
         Assert.True(confidence <= 0 && !double.IsNaN(confidence), $"confidence {confidence}");
     }
+
+    [Fact(Timeout = 300000)]
+    public async Task Emformer_SeesOnlyItsLookAhead_AndTrains()
+    {
+        await Task.Yield();
+        var d = new EmformerRNNTOptions();
+        // torchaudio emformer_rnnt_base: 20 layers, width 128 x 4, 8 heads, 2048 units, segments 16, look-ahead 4, left 30.
+        Assert.Equal((20, 512, 8, 2048, 16, 4, 30, 1024), (d.NumEncoderLayers, d.TimeReductionInputDim * d.TimeReductionStride, d.NumAttentionHeads, d.FeedForwardDim, d.SegmentLength, d.RightContextLength, d.LeftContextLength, d.EncodingDim));
+        using var model = new EmformerRNNT<double>(Architecture(), new EmformerRNNTOptions
+        {
+            NumMels = 16, TimeReductionInputDim = 4, NumEncoderLayers = 2, NumAttentionHeads = 2, FeedForwardDim = 16, SegmentLength = 8,
+            RightContextLength = 4, LeftContextLength = 2, EncodingDim = 16, SymbolEmbeddingDim = 8, NumLstmLayers = 1, VocabSize = 8,
+            FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, Seed = 5,
+        });
+        var network = model.Network ?? throw new InvalidOperationException("native model");
+        var features = network.Features(Voice(8000, 180).ToArray());
+        var changed = (double[,])features.Clone();
+        // Segments are 2 reduced frames (8 input frames) with 1 frame of look-ahead; changing input frames 24 on (reduced 6 on)
+        // reaches segment 2 (reduced 4-5) through its look-ahead, but nothing reaches segments 0 and 1 (reduced 0-3).
+        for (int t = 24; t < changed.GetLength(0); t++)
+            for (int b = 0; b < changed.GetLength(1); b++) changed[t, b] += 2.0;
+        var a = network.Encode(features, training: false);
+        var c = network.Encode(changed, training: false);
+        for (int t = 0; t < 4; t++)
+            for (int k = 0; k < 16; k++) Assert.Equal(a[t, k], c[t, k], 10);
+        var labels = new[] { 3, 5, 2 };
+        var target = new Tensor<double>(new[] { 3 }, new Vector<double>(labels.Select(l => (double)l).ToArray()));
+        var audio = Voice(8000, 180);
+        double Loss() => network.TransducerLoss(network.Encode(network.Features(audio.ToArray()), training: false), labels)[0];
+        double before = Loss();
+        for (int step = 0; step < 30; step++) model.Train(audio, target);
+        Assert.True(Loss() < 0.5 * before, $"transducer loss {before} -> {Loss()}");
+    }
 }
