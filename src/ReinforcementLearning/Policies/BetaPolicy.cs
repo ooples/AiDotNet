@@ -84,11 +84,13 @@ namespace AiDotNet.ReinforcementLearning.Policies
             Guard.NotNull(explorationStrategy);
             if (actionSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(actionSize), actionSize, "The action size must be positive.");
+            // The range must be finite too: actions are actionMin + sample * (actionMax - actionMin), and two finite
+            // bounds such as -MaxValue and MaxValue overflow that difference to infinity.
             if (double.IsNaN(actionMin) || double.IsInfinity(actionMin) || double.IsNaN(actionMax) || double.IsInfinity(actionMax)
-                || actionMax <= actionMin)
+                || actionMax <= actionMin || double.IsInfinity(actionMax - actionMin))
             {
                 throw new ArgumentException(
-                    $"The action bounds must be finite with actionMax > actionMin (got [{actionMin}, {actionMax}]).",
+                    $"The action bounds must be finite with actionMax > actionMin and a finite range (got [{actionMin}, {actionMax}]).",
                     nameof(actionMax));
             }
             _explorationStrategy = explorationStrategy;

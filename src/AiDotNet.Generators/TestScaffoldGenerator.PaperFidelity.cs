@@ -107,31 +107,13 @@ public partial class TestScaffoldGenerator
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The class name of a <c>*PaperTests</c> class that can actually run a test: public, not abstract, with at least
-    /// one <c>[Fact]</c>/<c>[Theory]</c>/<c>[SkippableFact]</c>/<c>[SkippableTheory]</c> method whose attribute carries
-    /// no constant <c>Skip</c> reason. An abstract or always-skipped class proves nothing about the paper, so it must
-    /// not clear ADNGEN003. Null otherwise.
+    /// The class name of a <c>*PaperTests</c> class that can actually run a test (see
+    /// <see cref="PaperTestDetection.HasRunnableTest"/>); null otherwise, so it does not clear ADNGEN003.
     /// </summary>
-    private static string? GetRunnablePaperTestClassName(GeneratorSyntaxContext ctx)
-    {
-        if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is not INamedTypeSymbol type) return null;
-        if (type.IsAbstract || type.DeclaredAccessibility != Accessibility.Public) return null;
-
-        foreach (var method in type.GetMembers().OfType<IMethodSymbol>())
-        {
-            foreach (var attribute in method.GetAttributes())
-            {
-                string? name = attribute.AttributeClass?.Name;
-                if (name is not ("FactAttribute" or "TheoryAttribute" or "SkippableFactAttribute" or "SkippableTheoryAttribute"))
-                    continue;
-                bool staticallySkipped = attribute.NamedArguments.Any(argument =>
-                    argument.Key == "Skip" && argument.Value.Value is string reason && reason.Length > 0);
-                if (!staticallySkipped) return type.Name;
-            }
-        }
-
-        return null;
-    }
+    private static string? GetRunnablePaperTestClassName(GeneratorSyntaxContext ctx) =>
+        ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol type && PaperTestDetection.HasRunnableTest(type)
+            ? type.Name
+            : null;
 
     /// <summary>A class named <c>*PaperTests</c> with at least one xUnit test method.</summary>
     private static bool IsPaperTestCandidate(SyntaxNode node)

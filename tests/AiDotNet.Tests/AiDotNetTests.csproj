@@ -85,6 +85,7 @@
     <!-- Shared generator helpers (MetadataNameOf / ResolveSourceType). The generator sources below
          are compiled directly into this assembly, so their shared dependency must come with them. -->
     <Compile Include="..\..\src\AiDotNet.Generators\GeneratorHelpers.cs" Link="Generators\GeneratorHelpers.cs" />
+    <Compile Include="..\..\src\AiDotNet.Generators\PaperTestDetection.cs" Link="Generators\PaperTestDetection.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\ModelMetadataValidationGenerator.cs" Link="Generators\ModelMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\ComponentMetadataValidationGenerator.cs" Link="Generators\ComponentMetadataValidationGenerator.cs" />
     <Compile Include="..\..\src\AiDotNet.Generators\TensorPortContractGenerator.cs" Link="Generators\TensorPortContractGenerator.cs" />

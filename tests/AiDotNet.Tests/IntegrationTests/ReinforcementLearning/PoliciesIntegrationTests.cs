@@ -401,6 +401,39 @@ public class PoliciesIntegrationTests
         Assert.Equal(ContinuousActionSize, action.Length);
     }
 
+    // Ornstein-Uhlenbeck noise carries state from one action to the next. Two policies built from one options
+    // instance must each start from their own: with one shared noise, the second policy's first action would continue
+    // the first policy's noise path instead of starting it afresh.
+    [Fact(Timeout = 120000)]
+    public async Task DeterministicPolicyOptions_DefaultExploration_IsNotSharedBetweenPolicies()
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize);
+        var options = new DeterministicPolicyOptions<double> { ActionSize = ContinuousActionSize, UseTanhSquashing = false };
+        AiDotNet.Models.Options.ModelOptions inherited = options;
+        inherited.Seed = OptionsSeed;
+        Assert.NotSame(options.ExplorationStrategy, options.ExplorationStrategy);
+
+        var state = CreateState(StateSize, 0.25);
+        using var first = new DeterministicPolicy<double>(network, options);
+        using var second = new DeterministicPolicy<double>(network, options);
+        var firstAction = first.SelectAction(state, training: true);
+        for (int step = 0; step < 4; step++) first.SelectAction(state, training: true);
+        var secondAction = second.SelectAction(state, training: true);
+        for (int i = 0; i < firstAction.Length; i++) Assert.Equal(firstAction[i], secondAction[i]);
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(-double.MaxValue, double.MaxValue)]
+    [InlineData(-1e308, 1e308)]
+    public async Task BetaPolicy_RejectsBoundsWhoseRangeOverflows(double actionMin, double actionMax)
+    {
+        await Task.Yield();
+        var network = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        Assert.Throws<ArgumentException>(() => new BetaPolicy<double>(
+            network, ContinuousActionSize, new NoExploration<double>(), actionMin, actionMax));
+    }
+
     [Fact(Timeout = 120000)]
     public async Task BetaPolicy_OptionsConstructor_ReadsActionSizeBoundsAndInheritedSeed()
     {

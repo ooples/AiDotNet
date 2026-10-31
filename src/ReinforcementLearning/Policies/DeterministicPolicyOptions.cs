@@ -17,13 +17,14 @@ namespace AiDotNet.ReinforcementLearning.Policies
         private IExplorationStrategy<T>? _explorationStrategy;
 
         /// <summary>
-        /// The exploration strategy. Unless one is assigned, it is Ornstein-Uhlenbeck noise sized to
-        /// <see cref="ActionSize"/> (1 while that is unset), created when first read, so setting ActionSize after
-        /// construction still gives noise of the right size.
+        /// The exploration strategy. Unless one is assigned, every read returns NEW Ornstein-Uhlenbeck noise sized to
+        /// <see cref="ActionSize"/> (1 while that is unset): the noise carries state, so two policies built from one
+        /// options instance must each get their own, and setting ActionSize after construction still gives noise of
+        /// the right size. An assigned strategy is returned as is.
         /// </summary>
         public IExplorationStrategy<T> ExplorationStrategy
         {
-            get => _explorationStrategy ??= new OrnsteinUhlenbeckNoise<T>(actionSize: Math.Max(1, ActionSize));
+            get => _explorationStrategy ?? new OrnsteinUhlenbeckNoise<T>(actionSize: Math.Max(1, ActionSize));
             set => _explorationStrategy = value ?? throw new ArgumentNullException(nameof(value));
         }
         public bool UseTanhSquashing { get; set; } = true;
