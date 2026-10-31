@@ -43,8 +43,12 @@ public class DreamerOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The only inherited default changed here is <c>BatchSize</c>: the paper trains on batches of
-    /// B = 50 sequences ("We draw batches of 50 sequences of length 50", Appendix A).
+    /// Two inherited defaults change here. <c>BatchSize</c> is 50 because the paper trains on batches of
+    /// B = 50 sequences ("We draw batches of 50 sequences of length 50", Appendix A). <c>LearningRate</c> is
+    /// 6e-4 because it is the world model's rate in this agent. The action and value models have their own
+    /// rates, <see cref="ActorLearningRate"/> and <see cref="ValueLearningRate"/>, each 8e-5 ("learning rates
+    /// of 6 x 10^-4 for the world model, 8 x 10^-5 for the value model, and 8 x 10^-5 for the action model",
+    /// Appendix A).
     /// </para>
     /// <para><b>For Beginners:</b> Creating the options with <c>new DreamerOptions&lt;T&gt;()</c> gives you the
     /// settings the paper used on the DeepMind Control Suite; you normally only need to set the observation
@@ -52,8 +56,43 @@ public class DreamerOptions<T> : ReinforcementLearningOptions<T>
     /// </remarks>
     public DreamerOptions()
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         BatchSize = 50;
+        LearningRate = numOps.FromDouble(6e-4);
+        ActorLearningRate = numOps.FromDouble(8e-5);
+        ValueLearningRate = numOps.FromDouble(8e-5);
     }
+
+    /// <summary>
+    /// Gets the Adam learning rate of the action model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Appendix A trains the action model with Adam at 8 x 10^-5, a smaller rate than the world model's 6 x 10^-4
+    /// (the inherited <c>LearningRate</c>, which sets the rate of every world-model network: encoder, RSSM,
+    /// observation, reward and discount models). This rate reaches the action model only when
+    /// <see cref="OptimizerFactory"/> is <c>null</c>; a factory supplies its own optimizer settings.
+    /// </para>
+    /// <para><b>For Beginners:</b> How big a step the policy (the part that picks actions) takes each update. The
+    /// paper keeps it much smaller than the world model's step so the policy changes slowly while the model it
+    /// imagines with is still being learned.</para>
+    /// </remarks>
+    /// <value>A positive, finite value; default 8e-5.</value>
+    public T ActorLearningRate { get; init; }
+
+    /// <summary>
+    /// Gets the Adam learning rate of the value model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Appendix A trains the value model with Adam at 8 x 10^-5. This rate reaches the value model only when
+    /// <see cref="OptimizerFactory"/> is <c>null</c>; a factory supplies its own optimizer settings.
+    /// </para>
+    /// <para><b>For Beginners:</b> How big a step the value model (the part that predicts how much future reward a
+    /// state is worth) takes each update.</para>
+    /// </remarks>
+    /// <value>A positive, finite value; default 8e-5.</value>
+    public T ValueLearningRate { get; init; }
 
     /// <summary>
     /// Gets the width of each observation vector the agent receives.
@@ -270,9 +309,10 @@ public class DreamerOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// When this is <c>null</c>, each network trains with Adam (β1 0.9, β2 0.999, ε 1e-8) at the agent's
-    /// <c>LearningRate</c>, with each step's gradient rescaled to a global norm of at most 100 ("scale down
-    /// gradient norms that exceed 100", Appendix A).
+    /// When this is <c>null</c>, each network trains with Adam (β1 0.9, β2 0.999, ε 1e-8): the world-model
+    /// networks at <c>LearningRate</c>, the action model at <see cref="ActorLearningRate"/> and the value model at
+    /// <see cref="ValueLearningRate"/>, with each step's gradient rescaled to a global norm of at most 100 ("scale
+    /// down gradient norms that exceed 100", Appendix A).
     /// </para>
     /// <para>
     /// The agent invokes the factory once for every network it builds, so the factory must create a new
@@ -285,7 +325,7 @@ public class DreamerOptions<T> : ReinforcementLearningOptions<T>
     /// different optimizer or its settings. Return a new optimizer from every call.
     /// </para>
     /// </remarks>
-    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for Adam at the
-    /// agent's <c>LearningRate</c>.</value>
+    /// <value>A delegate that returns a new optimizer on each call, or <c>null</c> (the default) for Adam at each
+    /// model group's learning rate.</value>
     public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

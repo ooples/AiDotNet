@@ -28,7 +28,9 @@ public class DreamerPaperTests
         double lambda = 0.95,
         int batchLength = 10,
         int deterministicSize = 12,
-        int stochasticSize = 4)
+        int stochasticSize = 4,
+        double actorLearningRate = 8e-5,
+        double valueLearningRate = 8e-5)
         => new DreamerOptions<double>
         {
             ObservationSize = ObservationSize,
@@ -46,6 +48,8 @@ public class DreamerPaperTests
             ContinueScale = continueScale,
             Lambda = lambda,
             LearningRate = 3e-3,
+            ActorLearningRate = actorLearningRate,
+            ValueLearningRate = valueLearningRate,
             Seed = 17,
         };
 
@@ -126,10 +130,10 @@ public class DreamerPaperTests
         }
 
         var kl = agent.GaussianKl(Matrix1(qMean), Matrix1(qStd), Matrix1(pMean), Matrix1(pStd)).ToVector();
-        Assert.Equal(expected, kl[0], 10);
+        Assert.Equal(expected, kl[0], 1e-10);
 
         var self = agent.GaussianKl(Matrix1(qMean), Matrix1(qStd), Matrix1(qMean), Matrix1(qStd)).ToVector();
-        Assert.Equal(0.0, self[0], 12);
+        Assert.Equal(0.0, self[0], 1e-12);
     }
 
     [Theory]
@@ -172,10 +176,10 @@ public class DreamerPaperTests
             double expected = 0.0;
             for (int n = 1; n <= horizon - 1; n++) expected += (1.0 - lambda) * Math.Pow(lambda, n - 1) * NStep(tau, n);
             expected += Math.Pow(lambda, horizon - 1) * NStep(tau, horizon);
-            Assert.Equal(expected, returns[tau].ToVector()[0], 10);
+            Assert.Equal(expected, returns[tau].ToVector()[0], 1e-10);
         }
 
-        Assert.Equal(v[horizon], returns[horizon].ToVector()[0], 12);
+        Assert.Equal(v[horizon], returns[horizon].ToVector()[0], 1e-12);
     }
 
     [Fact]
@@ -189,11 +193,11 @@ public class DreamerPaperTests
 
         // lambda = 0: the one-step estimate r_t + gamma v(s_{t+1}).
         var oneStep = agent.ComputeLambdaReturns(rewards, values, discounts, 0.0);
-        Assert.Equal(1.0 + gamma * 20.0, oneStep[0].ToVector()[0], 12);
+        Assert.Equal(1.0 + gamma * 20.0, oneStep[0].ToVector()[0], 1e-12);
 
         // lambda = 1: rewards to the horizon plus the bootstrap, V_N^H (Equation 5 with k = H).
         var full = agent.ComputeLambdaReturns(rewards, values, discounts, 1.0);
-        Assert.Equal(1.0 + gamma * 2.0 + gamma * gamma * 40.0, full[0].ToVector()[0], 12);
+        Assert.Equal(1.0 + gamma * 2.0 + gamma * gamma * 40.0, full[0].ToVector()[0], 1e-12);
     }
 
     [Fact]
@@ -397,6 +401,60 @@ public class DreamerPaperTests
         Assert.Equal(3.0, options.FreeNats);
         Assert.Equal(1.0, options.RewardScale);
         Assert.Equal(10.0, options.ContinueScale);
+        // Appendix A: 6e-4 for the world model, 8e-5 for the value and action models.
+        Assert.Equal(6e-4, options.LearningRate);
+        Assert.Equal(8e-5, options.ActorLearningRate);
+        Assert.Equal(8e-5, options.ValueLearningRate);
+    }
+
+    /// <summary>
+    /// One agent per rate, identical except for <paramref name="model"/>'s learning rate, trained on the same data:
+    /// the displacement of every network on the second update (the first sizes the lazy layers), and every network's
+    /// parameters after the first update.
+    /// </summary>
+    private static (double[] Displacement, double[][] AfterFirst) TrainWithRate(int model, double rate)
+    {
+        var options = model == ActorNetwork
+            ? SmallOptions(actorLearningRate: rate)
+            : SmallOptions(valueLearningRate: rate);
+        var agent = new DreamerAgent<double>(options);
+        Feed(agent, 120, 20);
+        agent.Train();
+        var afterFirst = new double[11][];
+        for (int i = 0; i < afterFirst.Length; i++) afterFirst[i] = NetworkParameters(agent, i);
+        agent.Train();
+        var displacement = new double[afterFirst.Length];
+        for (int i = 0; i < afterFirst.Length; i++)
+        {
+            var after = NetworkParameters(agent, i);
+            double sum = 0.0;
+            for (int j = 0; j < after.Length; j++) sum += (after[j] - afterFirst[i][j]) * (after[j] - afterFirst[i][j]);
+            displacement[i] = Math.Sqrt(sum);
+        }
+        return (displacement, afterFirst);
+    }
+
+    [Theory]
+    [InlineData(ActorNetwork)]
+    [InlineData(ValueNetwork)]
+    public void ActorAndValueLearningRates_EachDriveOnlyTheirOwnModel(int model)
+    {
+        var fast = TrainWithRate(model, 1e-3);
+        var slow = TrainWithRate(model, 1e-9);
+
+        // An Adam step moves each weight by about its rate, so a rate a million times larger must move the model
+        // about that much further. A model that ignored its option would train at the same rate in both agents.
+        Assert.True(fast.Displacement[model] > 1e3 * slow.Displacement[model],
+            $"Network {model} moved {fast.Displacement[model]} at rate 1e-3 and {slow.Displacement[model]} at 1e-9.");
+
+        // The rate is that model's alone: after the first update every other network is bit-identical. (The world
+        // model trains before behaviour, and the value targets are formed before the action model steps.)
+        for (int i = 0; i < 11; i++)
+        {
+            if (i == model) continue;
+            Assert.Equal(0.0, MaxAbsDifference(fast.AfterFirst[i], slow.AfterFirst[i]));
+        }
+        Assert.True(MaxAbsDifference(fast.AfterFirst[model], slow.AfterFirst[model]) > 0.0);
     }
 
     public static IEnumerable<object[]> InvalidOptions()
@@ -411,6 +469,9 @@ public class DreamerPaperTests
         yield return new object[] { new DreamerOptions<double> { ObservationSize = 4, ActionSize = 2, RewardScale = double.NaN } };
         yield return new object[] { new DreamerOptions<double> { ObservationSize = 4, ActionSize = 2, ContinueScale = double.PositiveInfinity } };
         yield return new object[] { new DreamerOptions<double> { ObservationSize = 4, ActionSize = 2, Lambda = 1.5 } };
+        yield return new object[] { new DreamerOptions<double> { ObservationSize = 4, ActionSize = 2, ActorLearningRate = 0.0 } };
+        yield return new object[] { new DreamerOptions<double> { ObservationSize = 4, ActionSize = 2, ValueLearningRate = -1e-4 } };
+        yield return new object[] { new DreamerOptions<double> { ObservationSize = 4, ActionSize = 2, ActorLearningRate = double.NaN } };
     }
 
     [Theory]

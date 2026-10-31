@@ -202,17 +202,20 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Appendix A: "implement all other functions as three dense layers of size 300 with ELU activations";
         // the RSSM's internal layers use the deterministic width, as PlaNet's RSSM (hidden = deter = 200) does.
-        _encoderNetwork = BuildNetwork(0, observation, hidden, hiddenLayers: 2, hiddenWidth: hidden, outputIsElu: true);
-        _transitionInputNetwork = BuildNetwork(1, stochastic + action, deterministic, hiddenLayers: 0, hiddenWidth: 0, outputIsElu: true);
-        _gruGateNetwork = BuildNetwork(2, 2 * deterministic, 2 * deterministic, hiddenLayers: 0, hiddenWidth: 0, outputIsElu: false);
-        _gruCandidateNetwork = BuildNetwork(3, 2 * deterministic, deterministic, hiddenLayers: 0, hiddenWidth: 0, outputIsElu: false);
-        _priorNetwork = BuildNetwork(4, deterministic, 2 * stochastic, hiddenLayers: 1, hiddenWidth: deterministic, outputIsElu: false);
-        _posteriorNetwork = BuildNetwork(5, deterministic + hidden, 2 * stochastic, hiddenLayers: 1, hiddenWidth: deterministic, outputIsElu: false);
-        _observationNetwork = BuildNetwork(6, feature, observation, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
-        _rewardNetwork = BuildNetwork(7, feature, 1, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
-        _continueNetwork = BuildNetwork(8, feature, 1, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
-        _actorNetwork = BuildNetwork(9, feature, 2 * action, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
-        _valueNetwork = BuildNetwork(10, feature, 1, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
+        // Appendix A also gives "learning rates of 6 x 10^-4 for the world model, 8 x 10^-5 for the value model, and
+        // 8 x 10^-5 for the action model": every world-model network at LearningRate, the action and value models at
+        // their own.
+        _encoderNetwork = BuildNetwork(0, LearningRate, observation, hidden, hiddenLayers: 2, hiddenWidth: hidden, outputIsElu: true);
+        _transitionInputNetwork = BuildNetwork(1, LearningRate, stochastic + action, deterministic, hiddenLayers: 0, hiddenWidth: 0, outputIsElu: true);
+        _gruGateNetwork = BuildNetwork(2, LearningRate, 2 * deterministic, 2 * deterministic, hiddenLayers: 0, hiddenWidth: 0, outputIsElu: false);
+        _gruCandidateNetwork = BuildNetwork(3, LearningRate, 2 * deterministic, deterministic, hiddenLayers: 0, hiddenWidth: 0, outputIsElu: false);
+        _priorNetwork = BuildNetwork(4, LearningRate, deterministic, 2 * stochastic, hiddenLayers: 1, hiddenWidth: deterministic, outputIsElu: false);
+        _posteriorNetwork = BuildNetwork(5, LearningRate, deterministic + hidden, 2 * stochastic, hiddenLayers: 1, hiddenWidth: deterministic, outputIsElu: false);
+        _observationNetwork = BuildNetwork(6, LearningRate, feature, observation, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
+        _rewardNetwork = BuildNetwork(7, LearningRate, feature, 1, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
+        _continueNetwork = BuildNetwork(8, LearningRate, feature, 1, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
+        _actorNetwork = BuildNetwork(9, _options.ActorLearningRate, feature, 2 * action, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
+        _valueNetwork = BuildNetwork(10, _options.ValueLearningRate, feature, 1, hiddenLayers: 3, hiddenWidth: hidden, outputIsElu: false);
 
         Networks.Add(_encoderNetwork);
         Networks.Add(_transitionInputNetwork);
@@ -249,6 +252,8 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         RequireNonNegative(options.FreeNats, nameof(options.FreeNats));
         RequireNonNegative(options.RewardScale, nameof(options.RewardScale));
         RequireNonNegative(options.ContinueScale, nameof(options.ContinueScale));
+        RequirePositiveRate(options.ActorLearningRate, nameof(options.ActorLearningRate));
+        RequirePositiveRate(options.ValueLearningRate, nameof(options.ValueLearningRate));
         if (double.IsNaN(options.Lambda) || options.Lambda < 0.0 || options.Lambda > 1.0)
         {
             throw new ArgumentOutOfRangeException(nameof(options.Lambda), options.Lambda,
@@ -262,6 +267,13 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             throw new ArgumentOutOfRangeException(name, value, $"{name} must be positive.");
     }
 
+    private static void RequirePositiveRate(T value, string name)
+    {
+        double rate = MathHelper.GetNumericOperations<T>().ToDouble(value);
+        if (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0.0)
+            throw new ArgumentOutOfRangeException(name, rate, $"{name} must be positive and finite.");
+    }
+
     private static void RequireNonNegative(double value, string name)
     {
         if (double.IsNaN(value) || double.IsInfinity(value) || value < 0.0)
@@ -272,7 +284,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// Builds one dense network: <paramref name="hiddenLayers"/> ELU layers of <paramref name="hiddenWidth"/> units, then
     /// an output layer of <paramref name="outputSize"/> units that is ELU (an embedding) or linear (a distribution head).
     /// </summary>
-    private NeuralNetwork<T> BuildNetwork(int networkIndex, int inputSize, int outputSize, int hiddenLayers, int hiddenWidth, bool outputIsElu)
+    private NeuralNetwork<T> BuildNetwork(int networkIndex, T learningRate, int inputSize, int outputSize, int hiddenLayers, int hiddenWidth, bool outputIsElu)
     {
         // Explicit layers handed to the architecture, so NeuralNetwork does not prepend its own default stack.
         var layers = new List<ILayer<T>>();
@@ -303,7 +315,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers);
         return new NeuralNetwork<T>(
             architecture,
-            _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate, MaxGradientNorm),
+            _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(learningRate, MaxGradientNorm),
             new MeanSquaredErrorLoss<T>());
     }
 
