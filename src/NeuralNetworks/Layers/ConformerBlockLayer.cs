@@ -94,6 +94,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _convKernelSize;
     private readonly int _attentionGroupSize;
     private readonly int _attentionChunkSize;
+    private readonly bool _causal;
 
     // Macaron feed-forward #1 (half-step residual).
     private readonly LayerNormalizationLayer<T> _ffn1Norm;
@@ -152,7 +153,8 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         [LayerState] double ropeTheta = 10000.0,
         [LayerState] int maxSequenceLength = 2048,
         [LayerState] int attentionGroupSize = 1,
-        [LayerState] int attentionChunkSize = 0)
+        [LayerState] int attentionChunkSize = 0,
+        [LayerState] bool causal = false)
         : base(new[] { -1, modelDim }, new[] { -1, modelDim })
     {
         _maxSequenceLength = maxSequenceLength;
@@ -172,6 +174,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         _convKernelSize = convKernelSize;
         _attentionGroupSize = attentionGroupSize;
         _attentionChunkSize = attentionChunkSize;
+        _causal = causal;
         _half = NumOps.FromDouble(0.5);
 
         var swish = (Interfaces.IActivationFunction<T>)new SwishActivation<T>();
@@ -198,13 +201,16 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         // "Relative Attention: N") leaves position to the convolution module.
         if (ropeTheta > 0)
             _attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSequenceLength);
+        // A streaming block sees no future frames: attention is masked to the left context and the depthwise convolution
+        // is padded on the left only (causal convolution).
+        _attention.UseCausalMask = causal;
 
         // --- Convolution module (paper §2.2) ---
         // Pointwise conv to 2*dim so the GLU can gate one half with the other, then a depthwise
         // conv over time, normalization, Swish, and a pointwise conv back to dim.
         _convNorm = new LayerNormalizationLayer<T>(modelDim);
         _convPointwiseExpand = new Conv1DLayer<T>(inputChannels: modelDim, outputChannels: modelDim * 2, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identity);
-        _convDepthwise = new DepthwiseConv1DLayer<T>(modelDim, convKernelSize, multiplier: 1, stride: 1, padding: convKernelSize / 2, activation: identity);
+        _convDepthwise = new DepthwiseConv1DLayer<T>(modelDim, convKernelSize, multiplier: 1, stride: 1, padding: causal ? 0 : convKernelSize / 2, activation: identity);
         // BatchNorm, exactly as the paper specifies (§2.2). This is NOT interchangeable with LayerNorm
         // here: LayerNorm normalizes per time position, and its 1/std backward blows up when the
         // convolution output at a position is near-degenerate — substituting it made the first Adam
@@ -302,7 +308,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         var gated = Engine.TensorMultiply(gateA, Engine.Sigmoid(gateB));   // GLU: a ⊙ σ(b)
 
         // Depthwise conv over time, then normalization + Swish (paper order), then pointwise back.
-        var depthwise = _convDepthwise.Forward(gated);             // [B, D, T]
+        var depthwise = _convDepthwise.Forward(_causal ? Engine.TensorConstantPad(gated, new[] { _convKernelSize - 1, 0 }, NumOps.Zero) : gated);   // [B, D, T]
 
         // Normalize per time position: transpose to [B, T, D] so LayerNorm acts on the feature axis.
         var normedTd = _convInnerNorm.Forward(Engine.TensorPermute(depthwise, new[] { 0, 2, 1 }));
@@ -362,6 +368,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         metadata["ConvKernelSize"] = _convKernelSize.ToString(ci);
         metadata["AttentionGroupSize"] = _attentionGroupSize.ToString(ci);
         metadata["AttentionChunkSize"] = _attentionChunkSize.ToString(ci);
+        metadata["Causal"] = _causal.ToString(ci);
         // A block built without a positional encoding (ropeTheta <= 0, w2v-BERT) leaves the attention at its default
         // theta; persisting that rebuilt the block WITH rotary encoding, so its construction state no longer matched,
         // the clone could not restore it in place, and the model kept running its untrained constructor block.
