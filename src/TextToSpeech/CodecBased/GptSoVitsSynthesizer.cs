@@ -9,7 +9,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>The sizes of GPT-SoVITS's SoVITS synthesizer (the s2 config's <c>model</c>; <c>SynthesizerTrn</c>).</summary>
 internal sealed record GptSoVitsSynthesizerConfiguration
 {
-    /// <summary>v1, v2, v2Pro or v2ProPlus.</summary>
+    /// <summary>v1, v2, v2Pro or v2ProPlus (the GAN synthesizer); v3, v4, v5dev or v5turbo (the flow-matching one).</summary>
     public string Version { get; init; } = "v2ProPlus";
 
     public int SpecChannels { get; init; } = 1025;
@@ -50,18 +50,25 @@ internal sealed record GptSoVitsSynthesizerConfiguration
 
     public bool IsV2Pro => Version is "v2Pro" or "v2ProPlus";
 
+    /// <summary>Whether the version synthesizes mels by conditional flow matching (<c>SynthesizerTrnV3</c>).</summary>
+    public bool IsCfm => Version is "v3" or "v4" or "v5dev" or "v5turbo";
+
+    /// <summary>V5 (<c>CFMV5</c>): no step embedding, rolling-tail chunks.</summary>
+    public bool IsV5 => Version is "v5dev" or "v5turbo";
+
     /// <summary>The reference spectrogram rows the style encoder reads (all for v1, the first 704 after).</summary>
     public int ReferenceChannels => Version == "v1" ? SpecChannels : 704;
 
-    /// <summary>The release's s2 configurations: s2.json for v1, v2 and v2Pro (the latter two with gin 512), and
-    /// s2v2ProPlus.json.</summary>
+    /// <summary>The release's s2 configurations: s2.json for v1, v2, v2Pro (with gin 512) and the flow-matching versions,
+    /// and s2v2ProPlus.json.</summary>
     public static GptSoVitsSynthesizerConfiguration For(string version) => version switch
     {
         "v1" => new() { Version = "v1", Dropout = 0.1, UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 }, Gin = 512, Symbols = 322 },
         "v2" => new() { Version = "v2", Dropout = 0.1, UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 }, Gin = 512 },
         "v2Pro" => new() { Version = "v2Pro", Dropout = 0.1, UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 }, Gin = 512 },
         "v2ProPlus" => new(),
-        _ => throw new ArgumentException($"SoVITS's GAN synthesizer covers v1, v2, v2Pro and v2ProPlus, not {version}.", nameof(version)),
+        "v3" or "v4" or "v5dev" or "v5turbo" => new() { Version = version, Dropout = 0.1, UpsampleInitialChannels = 512, UpsampleKernels = new[] { 16, 16, 8, 2, 2 }, Gin = 512 },
+        _ => throw new ArgumentException($"GPT-SoVITS has no SoVITS version {version}.", nameof(version)),
     };
 }
 
@@ -412,24 +419,14 @@ internal sealed class GptSoVitsSynthesizer<T>
         _engine = engine;
         Configuration = configuration;
         var c = configuration;
+        if (c.IsCfm) throw new ArgumentException($"{c.Version} synthesizes by flow matching (GptSoVitsCfmSynthesizer).", nameof(configuration));
         int h = c.Hidden;
         SslProjection = new NormedConv1DLayer<T>(c.SslDim, c.SslDim, c.SemanticRate25Hz ? 2 : 1, c.SemanticRate25Hz ? 2 : 1, 1, 1, 0, false,
             ConvolutionNormalization.None);
         layers.Add(SslProjection);
         Quantizer = new GptSoVitsQuantizer<T>(engine, c.SslDim, c.Bins, random);
-        // TextEncoder
-        TextSslProjection = MeloOps.Conv(layers, c.SslDim, h, 1);
-        EncoderSsl = new MeloAttentionEncoder<T>(engine, layers, h, c.Filter, c.Heads, c.Layers / 2, c.Kernel, c.Dropout, 0);
-        EncoderText = new MeloAttentionEncoder<T>(engine, layers, h, c.Filter, c.Heads, c.Layers, c.Kernel, c.Dropout, 0);
-        TextEmbedding = IndexTtsOps.Embedding(layers, random, c.Symbols, h, 1.0);
-        int mrte = c.MrteChannels;
-        if (!c.IsV2Pro && c.Gin != mrte) throw new ArgumentException("MRTE adds the style vector, so its width must equal gin before v2Pro.", nameof(configuration));
-        MrteContent = MeloOps.Conv(layers, h, mrte, 1);
-        MrteText = MeloOps.Conv(layers, h, mrte, 1);
-        MrteAttention = new GptSoVitsCrossAttention<T>(engine, layers, mrte, mrte, 4);
-        MrtePost = MeloOps.Conv(layers, mrte, h, 1);
-        Encoder2 = new MeloAttentionEncoder<T>(engine, layers, h, c.Filter, c.Heads, c.Layers / 2, c.Kernel, c.Dropout, 0);
-        PriorProjection = MeloOps.Conv(layers, h, 2 * c.InterChannels, 1);
+        if (!c.IsV2Pro && c.Gin != c.MrteChannels) throw new ArgumentException("MRTE adds the style vector, so its width must equal gin before v2Pro.", nameof(configuration));
+        TextEncoder = new GptSoVitsTextEncoder<T>(engine, layers, c, random);
         // Flow: four mean-only couplings (kernel 5, dilation 1, four WaveNet layers) with flips.
         int half = c.InterChannels / 2;
         for (int i = 0; i < 4; i++)
@@ -456,16 +453,7 @@ internal sealed class GptSoVitsSynthesizer<T>
     public GptSoVitsSynthesizerConfiguration Configuration { get; }
     public NormedConv1DLayer<T> SslProjection { get; }
     public GptSoVitsQuantizer<T> Quantizer { get; }
-    public NormedConv1DLayer<T> TextSslProjection { get; }
-    public MeloAttentionEncoder<T> EncoderSsl { get; }
-    public MeloAttentionEncoder<T> EncoderText { get; }
-    public TiedEmbeddingLayer<T> TextEmbedding { get; }
-    public NormedConv1DLayer<T> MrteContent { get; }
-    public NormedConv1DLayer<T> MrteText { get; }
-    public GptSoVitsCrossAttention<T> MrteAttention { get; }
-    public NormedConv1DLayer<T> MrtePost { get; }
-    public MeloAttentionEncoder<T> Encoder2 { get; }
-    public NormedConv1DLayer<T> PriorProjection { get; }
+    public GptSoVitsTextEncoder<T> TextEncoder { get; }
     public HiFiGanGenerator<T> Generator { get; }
     public MeloPosteriorEncoder<T> Posterior { get; }
     public GptSoVitsMelStyleEncoder<T> ReferenceEncoder { get; }
@@ -475,9 +463,7 @@ internal sealed class GptSoVitsSynthesizer<T>
 
     /// <summary>The text encoder's parameters' layers (text_embedding, encoder_text, MRTE), which s2 trains at a lower
     /// learning rate (<c>text_low_lr_rate</c>).</summary>
-    public IEnumerable<LayerBase<T>> LowRateLayers =>
-        new LayerBase<T>[] { TextEmbedding, MrteContent, MrteText, MrteAttention.Query, MrteAttention.Key, MrteAttention.Value, MrteAttention.Output, MrtePost }
-            .Concat(EncoderText.Blocks.SelectMany(b => new LayerBase<T>[] { b.Query, b.Key, b.Value, b.Output, b.RelativeKeys, b.RelativeValues, b.Norm1, b.Ffn1, b.Ffn2, b.Norm2 }));
+    public IEnumerable<LayerBase<T>> LowRateLayers => TextEncoder.LowRateLayers;
 
     /// <summary>
     /// The style vector <c>[1, gin, 1]</c> of a reference spectrogram <c>[1, 1025, T]</c> (its first 704 rows after v1), plus
@@ -515,7 +501,7 @@ internal sealed class GptSoVitsSynthesizer<T>
         int t = quantized.Shape[2];
         var index = new Tensor<int>(new[] { 2 * t });
         for (int i = 0; i < 2 * t; i++) index[i] = i / 2;
-        return TimeSelect(quantized, index);
+        return GptSoVitsTextEncoder<T>.TimeSelect(_engine, quantized, index);
     }
 
     /// <summary>The semantic codes of SSL features <c>[1, 768, T]</c> (<c>extract_latent</c>).</summary>
@@ -529,53 +515,8 @@ internal sealed class GptSoVitsSynthesizer<T>
     public (Tensor<T> Mean, Tensor<T> LogScale) Encode(Tensor<T> quantized, IReadOnlyList<int> text, Tensor<T> ge, double speed = 1.0,
         bool training = false, Random? random = null)
     {
-        var c = Configuration;
-        random ??= new Random(0);
-        if (text.Any(id => id < 0 || id >= c.Symbols)) throw new ArgumentOutOfRangeException(nameof(text), $"Phone ids lie in [0, {c.Symbols}).");
-        var y = TextSslProjection.Forward(quantized);
-        y = EncoderSsl.Forward(y, null, training, random);
-        var t = _engine.Reshape(_engine.TensorTranspose(TextEmbedding.Forward(IndexTtsOps.Ids<T>(text))), new[] { 1, c.Hidden, text.Count });
-        t = EncoderText.Forward(t, null, training, random);
-        // MRTE: cross-attention of the SSL features to the text, plus the features and the style vector.
-        var content = MrteContent.Forward(y);
-        var mixed = _engine.TensorAdd(_engine.TensorAdd(MrteAttention.Forward(content, MrteText.Forward(t)), content),
-            MeloOps.OverTime(_engine, MrteStyle(ge), content.Shape[2]));
-        y = MrtePost.Forward(mixed);
-        y = Encoder2.Forward(y, null, training, random);
-        if (speed != 1.0) y = LinearResize(y, (int)(y.Shape[2] / speed) + 1);
-        var stats = PriorProjection.Forward(y);
-        return (MeloOps.Channels(_engine, stats, 0, c.InterChannels), MeloOps.Channels(_engine, stats, c.InterChannels, c.InterChannels));
-    }
-
-    // x[:, :, index] for [1, C, T] (the engine selects along an axis of a matrix).
-    private Tensor<T> TimeSelect(Tensor<T> x, Tensor<int> index)
-    {
-        int channels = x.Shape[1];
-        var selected = _engine.TensorIndexSelect(_engine.Reshape(x, new[] { channels, x.Shape[2] }), index, 1);
-        return _engine.Reshape(selected, new[] { 1, channels, index.Length });
-    }
-
-    // F.interpolate(mode="linear", align_corners=False) along time.
-    private Tensor<T> LinearResize(Tensor<T> x, int size)
-    {
-        int t = x.Shape[2];
-        var lower = new Tensor<int>(new[] { size });
-        var upper = new Tensor<int>(new[] { size });
-        var weight = new Tensor<T>(new[] { 1, 1, size });
-        double scale = (double)t / size;
-        for (int i = 0; i < size; i++)
-        {
-            double source = Math.Max((i + 0.5) * scale - 0.5, 0);
-            int l = Math.Min((int)Math.Floor(source), t - 1);
-            int u = Math.Min(l + 1, t - 1);
-            lower[i] = l;
-            upper[i] = u;
-            weight[0, 0, i] = NumOps.FromDouble(source - l);
-        }
-        var w = _engine.TensorBroadcastTo(weight, new[] { 1, x.Shape[1], size });
-        var a = TimeSelect(x, lower);
-        var b = TimeSelect(x, upper);
-        return _engine.TensorAdd(a, _engine.TensorMultiply(_engine.TensorSubtract(b, a), w));
+        var (_, mean, logs) = TextEncoder.Encode(quantized, text, MrteStyle(ge), speed, training, random);
+        return (mean, logs);
     }
 
     /// <summary>The flow (<c>ResidualCouplingBlock</c>) forward, or reversed.</summary>
@@ -677,16 +618,7 @@ internal sealed class GptSoVitsSynthesizer<T>
         double[] Require(string name) => read(name) ?? throw new KeyNotFoundException($"The SoVITS checkpoint has no '{name}'.");
         MeloOps.LoadConv(Require, SslProjection, "ssl_proj");
         Quantizer.Load(read, "quantizer.vq.layers.0._codebook.");
-        MeloOps.LoadConv(Require, TextSslProjection, "enc_p.ssl_proj");
-        EncoderSsl.LoadTorch(_engine, Require, "enc_p.encoder_ssl.");
-        EncoderText.LoadTorch(_engine, Require, "enc_p.encoder_text.");
-        TextEmbedding.LoadLeadingRows(Require("enc_p.text_embedding.weight"));
-        MeloOps.LoadConv(Require, MrteContent, "enc_p.mrte.c_pre");
-        MeloOps.LoadConv(Require, MrteText, "enc_p.mrte.text_pre");
-        MrteAttention.Load(Require, "enc_p.mrte.cross_attention.");
-        MeloOps.LoadConv(Require, MrtePost, "enc_p.mrte.c_post");
-        Encoder2.LoadTorch(_engine, Require, "enc_p.encoder2.");
-        MeloOps.LoadConv(Require, PriorProjection, "enc_p.proj");
+        TextEncoder.Load(Require, "enc_p.");
         for (int i = 0; i < _couplings.Count; i++)
         {
             var (pre, net, post) = _couplings[i];
@@ -703,5 +635,121 @@ internal sealed class GptSoVitsSynthesizer<T>
             TorchParameters.Linear(Prelu!, 1, c.Gin, Require("prelu.weight"));
             MeloOps.LoadLinear(_engine, Require, GeTo512!, c.Gin, c.MrteChannels, "ge_to512");
         }
+    }
+}
+
+/// <summary>
+/// GPT-SoVITS's text encoder (<c>module/models.py</c> <c>TextEncoder</c>): the quantized SSL features through a 1×1
+/// projection and a Transformer, the phones through an embedding and a Transformer, MRTE's cross-attention of the features
+/// to the phones plus the features and the style vector, a third Transformer, the speed's linear resampling, and the
+/// projection to the prior's mean and log-scale.
+/// </summary>
+internal sealed class GptSoVitsTextEncoder<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IEngine _engine;
+    private readonly int _hidden, _inter, _symbols;
+
+    public GptSoVitsTextEncoder(IEngine engine, List<LayerBase<T>> layers, GptSoVitsSynthesizerConfiguration c, Random random)
+    {
+        _engine = engine;
+        _hidden = c.Hidden;
+        _inter = c.InterChannels;
+        _symbols = c.Symbols;
+        int h = c.Hidden, mrte = c.MrteChannels;
+        SslProjection = MeloOps.Conv(layers, c.SslDim, h, 1);
+        EncoderSsl = new MeloAttentionEncoder<T>(engine, layers, h, c.Filter, c.Heads, c.Layers / 2, c.Kernel, c.Dropout, 0);
+        EncoderText = new MeloAttentionEncoder<T>(engine, layers, h, c.Filter, c.Heads, c.Layers, c.Kernel, c.Dropout, 0);
+        Embedding = IndexTtsOps.Embedding(layers, random, c.Symbols, h, 1.0);
+        MrteContent = MeloOps.Conv(layers, h, mrte, 1);
+        MrteText = MeloOps.Conv(layers, h, mrte, 1);
+        MrteAttention = new GptSoVitsCrossAttention<T>(engine, layers, mrte, mrte, 4);
+        MrtePost = MeloOps.Conv(layers, mrte, h, 1);
+        Encoder2 = new MeloAttentionEncoder<T>(engine, layers, h, c.Filter, c.Heads, c.Layers / 2, c.Kernel, c.Dropout, 0);
+        Projection = MeloOps.Conv(layers, h, 2 * c.InterChannels, 1);
+    }
+
+    public NormedConv1DLayer<T> SslProjection { get; }
+    public MeloAttentionEncoder<T> EncoderSsl { get; }
+    public MeloAttentionEncoder<T> EncoderText { get; }
+    public TiedEmbeddingLayer<T> Embedding { get; }
+    public NormedConv1DLayer<T> MrteContent { get; }
+    public NormedConv1DLayer<T> MrteText { get; }
+    public GptSoVitsCrossAttention<T> MrteAttention { get; }
+    public NormedConv1DLayer<T> MrtePost { get; }
+    public MeloAttentionEncoder<T> Encoder2 { get; }
+    public NormedConv1DLayer<T> Projection { get; }
+
+    /// <summary>The layers s2 trains at <c>text_low_lr_rate</c>: text_embedding, encoder_text and MRTE.</summary>
+    public IEnumerable<LayerBase<T>> LowRateLayers =>
+        new LayerBase<T>[] { Embedding, MrteContent, MrteText, MrteAttention.Query, MrteAttention.Key, MrteAttention.Value, MrteAttention.Output, MrtePost }
+            .Concat(EncoderText.Blocks.SelectMany(b => new LayerBase<T>[] { b.Query, b.Key, b.Value, b.Output, b.RelativeKeys, b.RelativeValues, b.Norm1, b.Ffn1, b.Ffn2, b.Norm2 }));
+
+    /// <summary>
+    /// <c>TextEncoder.forward</c> of quantized features <c>[1, ssl, T]</c> and phone ids with MRTE's style vector
+    /// <c>[1, mrte, 1]</c>: the hidden state (<c>y</c>, resampled to <c>⌊T/speed⌋ + 1</c> frames when the speed is not 1)
+    /// and the prior's mean and log-scale.
+    /// </summary>
+    public (Tensor<T> Hidden, Tensor<T> Mean, Tensor<T> LogScale) Encode(Tensor<T> quantized, IReadOnlyList<int> text, Tensor<T> mrteStyle,
+        double speed = 1.0, bool training = false, Random? random = null)
+    {
+        random ??= new Random(0);
+        if (text.Any(id => id < 0 || id >= _symbols)) throw new ArgumentOutOfRangeException(nameof(text), $"Phone ids lie in [0, {_symbols}).");
+        var y = EncoderSsl.Forward(SslProjection.Forward(quantized), null, training, random);
+        var t = _engine.Reshape(_engine.TensorTranspose(Embedding.Forward(IndexTtsOps.Ids<T>(text))), new[] { 1, _hidden, text.Count });
+        t = EncoderText.Forward(t, null, training, random);
+        var content = MrteContent.Forward(y);
+        var mixed = _engine.TensorAdd(_engine.TensorAdd(MrteAttention.Forward(content, MrteText.Forward(t)), content),
+            MeloOps.OverTime(_engine, mrteStyle, content.Shape[2]));
+        y = Encoder2.Forward(MrtePost.Forward(mixed), null, training, random);
+        if (speed != 1.0) y = LinearResize(_engine, y, (int)(y.Shape[2] / speed) + 1);
+        var stats = Projection.Forward(y);
+        return (y, MeloOps.Channels(_engine, stats, 0, _inter), MeloOps.Channels(_engine, stats, _inter, _inter));
+    }
+
+    /// <summary><c>x[:, :, index]</c> for <c>[1, C, T]</c>.</summary>
+    internal static Tensor<T> TimeSelect(IEngine engine, Tensor<T> x, Tensor<int> index)
+    {
+        int channels = x.Shape[1];
+        var selected = engine.TensorIndexSelect(engine.Reshape(x, new[] { channels, x.Shape[2] }), index, 1);
+        return engine.Reshape(selected, new[] { 1, channels, index.Length });
+    }
+
+    /// <summary><c>F.interpolate(mode="linear", align_corners=False)</c> along time.</summary>
+    internal static Tensor<T> LinearResize(IEngine engine, Tensor<T> x, int size)
+    {
+        int t = x.Shape[2];
+        var lower = new Tensor<int>(new[] { size });
+        var upper = new Tensor<int>(new[] { size });
+        var weight = new Tensor<T>(new[] { 1, 1, size });
+        double scale = (double)t / size;
+        for (int i = 0; i < size; i++)
+        {
+            double source = Math.Max((i + 0.5) * scale - 0.5, 0);
+            int l = Math.Min((int)Math.Floor(source), t - 1);
+            int u = Math.Min(l + 1, t - 1);
+            lower[i] = l;
+            upper[i] = u;
+            weight[0, 0, i] = NumOps.FromDouble(source - l);
+        }
+        var w = engine.TensorBroadcastTo(weight, new[] { 1, x.Shape[1], size });
+        var a = TimeSelect(engine, x, lower);
+        var b = TimeSelect(engine, x, upper);
+        return engine.TensorAdd(a, engine.TensorMultiply(engine.TensorSubtract(b, a), w));
+    }
+
+    /// <summary>Loads <c>enc_p.*</c> (names after the prefix).</summary>
+    public void Load(Func<string, double[]> read, string prefix)
+    {
+        MeloOps.LoadConv(read, SslProjection, prefix + "ssl_proj");
+        EncoderSsl.LoadTorch(_engine, read, prefix + "encoder_ssl.");
+        EncoderText.LoadTorch(_engine, read, prefix + "encoder_text.");
+        Embedding.LoadLeadingRows(read(prefix + "text_embedding.weight"));
+        MeloOps.LoadConv(read, MrteContent, prefix + "mrte.c_pre");
+        MeloOps.LoadConv(read, MrteText, prefix + "mrte.text_pre");
+        MrteAttention.Load(read, prefix + "mrte.cross_attention.");
+        MeloOps.LoadConv(read, MrtePost, prefix + "mrte.c_post");
+        Encoder2.LoadTorch(_engine, read, prefix + "encoder2.");
+        MeloOps.LoadConv(read, Projection, prefix + "proj");
     }
 }
