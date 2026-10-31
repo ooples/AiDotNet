@@ -10,6 +10,9 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// (Eq. 5), the language model's stages and Mimi's adversarial training.</summary>
 public class MoshiTaskTests
 {
+    // double.IsFinite is not on .NET Framework.
+    private static bool Finite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);
+
     [Fact(Timeout = 120000)]
     public async Task TextStream_FollowsEquation5()
     {
@@ -101,10 +104,10 @@ public class MoshiTaskTests
             };
             double first = model.TrainConversation(conversation);
             double text = model.TrainText("the cat sat on the mat");
-            Assert.True(double.IsFinite(text));
+            Assert.True(Finite(text));
             double last = first;
             for (int i = 0; i < 4; i++) last = model.TrainConversation(conversation);
-            Assert.True(double.IsFinite(first) && double.IsFinite(last), $"{stage}: {first} → {last}");
+            Assert.True(Finite(first) && Finite(last), $"{stage}: {first} → {last}");
             if (stage == MoshiTrainingStage.PreTraining) Assert.True(last < first, $"{stage}: {first} → {last}");
         }
     }
@@ -122,7 +125,7 @@ public class MoshiTaskTests
         {
             var augmented = model.Core.AugmentUser(user, moshi, noise, new Random(seed));
             Assert.Equal(user.Length, augmented.Length);
-            Assert.All(augmented, v => Assert.True(double.IsFinite(v)));
+            Assert.All(augmented, v => Assert.True(Finite(v)));
             if (!augmented.SequenceEqual(user)) changed++;
         }
         // P(no augmentation) = 0.5 · 0.7 · 0.7 ≈ 0.25.
@@ -139,9 +142,9 @@ public class MoshiTaskTests
         var audio = MoshiFixture.Tones<double>(1.0);
         var before = model.EncodeToTokens(audio).ToArray();
         double loss = model.TrainMimi(audio);
-        Assert.True(double.IsFinite(loss));
+        Assert.True(Finite(loss));
         loss = model.TrainMimi(audio);
-        Assert.True(double.IsFinite(loss));
+        Assert.True(Finite(loss));
         model.ApplyMimiWeightAverage();
         Assert.Equal(before.Length, model.EncodeToTokens(audio).Length);
     }
