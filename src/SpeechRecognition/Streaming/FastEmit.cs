@@ -47,7 +47,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
                 Source = "Yu et al. 2021, Sec. 4: training uses the Adam optimizer, with 80-channel "
                         + "filterbank features and SpecAugment for data augmentation. The paper states "
                         + "no learning rate, batch size or schedule, so none is declared.")]
-public partial class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />
     /// <remarks>The output vocabulary, blank (0) included.</remarks>
@@ -223,6 +223,29 @@ public partial class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
         }, _optimizer);
         return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes (the transducer loss), on unaugmented features in inference
+    /// mode, averaged over the batch.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        double total = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            var features = network.Features(Samples(input, r * samples, samples));
+            total += NumOps.ToDouble(network.TransducerLoss(network.Encode(features, training: false), Labels(row))[0]);
+        }
+        return NumOps.FromDouble(total / rows);
     }
 
     /// <inheritdoc />

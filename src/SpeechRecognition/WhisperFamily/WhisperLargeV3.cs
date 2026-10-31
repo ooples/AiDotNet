@@ -50,7 +50,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
                 WarmupSteps = 2048, PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
                 MinLearningRate = 0, MaxGradientNorm = 1.0, ReferenceBatchSize = 256,
                 Source = "Radford et al. 2022, Table 17 (Appendix F): AdamW, beta1 0.9, beta2 0.98, eps 1e-6, weight decay 0.1, 2048 warmup updates, linear decay, max grad norm 1.0, batch size 256. No learning rate is declared because Table 19 states one per model size and this type does not select one.")]
-public partial class WhisperLargeV3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class WhisperLargeV3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />
     /// <remarks>The decoder's vocabulary: <c>Predict</c> returns one distribution over it per start token.</remarks>
@@ -183,6 +183,30 @@ public partial class WhisperLargeV3<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
             return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
         }, _optimizer);
         return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The teacher-forced transcript cross-entropy <see cref="TryApplyLearningRule"/> minimizes, averaged over the
+    /// batch.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var whisper = _whisper ?? throw new NotSupportedException("The objective is defined on the native Whisper network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        string language = _options.Language ?? "en";
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        double total = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            var audio = rows == 1 ? input : Engine.TensorSlice(input, new[] { r, 0 }, new[] { 1, samples });
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            total += NumOps.ToDouble(whisper.TranscriptLoss(whisper.Window(Samples(audio)), whisper.TranscriptTokens(row), language)[0]);
+        }
+        return NumOps.FromDouble(total / rows);
     }
 
     /// <inheritdoc />

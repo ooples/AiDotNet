@@ -98,4 +98,63 @@ public class TransducerLossTests
                 if (u < 2) Assert.Equal(1.01 * plain[t, u, labels[u]], fastEmit[t, u, labels[u]], 12);
             }
     }
+
+    // TDT paths: at (t, u) a blank with duration d >= 1 moves to (t + d, u), a label with any duration to (t + d, u + 1);
+    // reaching frame T by a blank with every label emitted completes the sequence.
+    private static double TdtBruteForce(Tensor<double> lattice, int vocabulary, int[] durations, int[] labels, int t, int u)
+    {
+        int frames = lattice.Shape[0];
+        double total = 0;
+        for (int i = 0; i < durations.Length; i++)
+        {
+            int d = durations[i], to = t + d;
+            double pd = Math.Exp(lattice[t, u, vocabulary + i]);
+            if (d > 0 && to == frames && u == labels.Length) total += Math.Exp(lattice[t, u, 0]) * pd;
+            if (d > 0 && to < frames) total += Math.Exp(lattice[t, u, 0]) * pd * TdtBruteForce(lattice, vocabulary, durations, labels, to, u);
+            if (u < labels.Length && to < frames) total += Math.Exp(lattice[t, u, labels[u]]) * pd * TdtBruteForce(lattice, vocabulary, durations, labels, to, u + 1);
+        }
+        return total;
+    }
+
+    private static Tensor<double> TdtLattice(int frames, int width, int vocabulary, int durations, int seed)
+    {
+        var tokens = LogSoftmaxLattice(frames, width, vocabulary, seed);
+        var lengths = LogSoftmaxLattice(frames, width, durations, seed + 1);
+        var lattice = new Tensor<double>(new[] { frames, width, vocabulary + durations });
+        for (int t = 0; t < frames; t++)
+            for (int u = 0; u < width; u++)
+            {
+                for (int k = 0; k < vocabulary; k++) lattice[t, u, k] = tokens[t, u, k];
+                for (int k = 0; k < durations; k++) lattice[t, u, vocabulary + k] = lengths[t, u, k];
+            }
+        return lattice;
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task TokenAndDuration_IsTheNegativeLogOfEveryPath_AndItsGradientMatchesFiniteDifferences()
+    {
+        await Task.Yield();
+        var engine = new CpuEngine();
+        var labels = new[] { 2, 1 };
+        var durations = new[] { 0, 1, 2 };
+        var lattice = TdtLattice(4, labels.Length + 1, 4, durations.Length, seed: 17);
+        Tensor<double> grad;
+        double loss;
+        using (var tape = new GradientTape<double>())
+        {
+            var value = TransducerLoss.ComputeTokenAndDuration(engine, lattice, 4, durations, labels, 0);
+            loss = value[0];
+            grad = tape.ComputeGradients(value, new[] { lattice })[lattice];
+        }
+        Assert.Equal(-Math.Log(TdtBruteForce(lattice, 4, durations, labels, 0, 0)), loss, 10);
+        const double h = 1e-6;
+        for (int i = 0; i < lattice.Length; i++)
+        {
+            var plus = lattice.Clone(); plus.Data.Span[i] += h;
+            var minus = lattice.Clone(); minus.Data.Span[i] -= h;
+            double numeric = (TransducerLoss.ComputeTokenAndDuration(engine, plus, 4, durations, labels, 0)[0]
+                - TransducerLoss.ComputeTokenAndDuration(engine, minus, 4, durations, labels, 0)[0]) / (2 * h);
+            Assert.Equal(numeric, grad.Data.Span[i], 6);
+        }
+    }
 }
