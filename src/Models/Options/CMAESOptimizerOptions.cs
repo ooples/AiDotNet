@@ -28,6 +28,16 @@ public class CMAESOptimizerOptions<T, TInput, TOutput> : GeneticAlgorithmOptimiz
         MaxGenerations = 100;
     }
 
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public CMAESOptimizerOptions(CMAESOptimizerOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        InitialStepSize = other.InitialStepSize;
+        StopTolerance = other.StopTolerance;
+    }
+
 
     /// <summary>
     /// Gets or sets the initial step size that controls how far the algorithm explores from the starting point.

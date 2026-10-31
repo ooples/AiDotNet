@@ -48,6 +48,30 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
         MaxMutationRate = 0.5;
     }
 
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public TabuSearchOptions(TabuSearchOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        TabuListSize = other.TabuListSize;
+        NeighborhoodSize = other.NeighborhoodSize;
+        PerturbationFactor = other.PerturbationFactor;
+        MinFeatureRatio = other.MinFeatureRatio;
+        MaxFeatureRatio = other.MaxFeatureRatio;
+        InitialTabuListSize = other.InitialTabuListSize;
+        InitialNeighborhoodSize = other.InitialNeighborhoodSize;
+        InitialMutationRate = other.InitialMutationRate;
+        TabuListSizeDecay = other.TabuListSizeDecay;
+        TabuListSizeIncrease = other.TabuListSizeIncrease;
+        MinTabuListSize = other.MinTabuListSize;
+        MaxTabuListSize = other.MaxTabuListSize;
+        NeighborhoodSizeDecay = other.NeighborhoodSizeDecay;
+        NeighborhoodSizeIncrease = other.NeighborhoodSizeIncrease;
+        MinNeighborhoodSize = other.MinNeighborhoodSize;
+        MaxNeighborhoodSize = other.MaxNeighborhoodSize;
+    }
+
     /// <summary>
     /// Gets or sets the size of the tabu list.
     /// </summary>

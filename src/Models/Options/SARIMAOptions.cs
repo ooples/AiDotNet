@@ -49,6 +49,22 @@ public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
         SeasonalPeriod = 12;
     }
 
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public SARIMAOptions(SARIMAOptions<T> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        P = other.P;
+        D = other.D;
+        Q = other.Q;
+        SeasonalP = other.SeasonalP;
+        SeasonalD = other.SeasonalD;
+        SeasonalQ = other.SeasonalQ;
+        MaxIterations = other.MaxIterations;
+        Tolerance = other.Tolerance;
+    }
+
     /// <summary>
     /// Gets or sets the autoregressive order (p) of the non-seasonal component.
     /// </summary>

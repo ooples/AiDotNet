@@ -52,15 +52,7 @@ if ($ClassListFile) {
 }
 else {
     Write-Host "--- discovering $category test classes ---"
-    $listed = @(& dotnet test $project -c Release --framework $framework --no-build --no-restore `
-        --filter "Category=$category" --list-tests 2>&1 | ForEach-Object { [string] $_ })
-    if ($LASTEXITCODE -ne 0) {
-        $listed | Select-Object -Last 40 | ForEach-Object { Write-Host $_ }
-        throw "dotnet test --list-tests exited $LASTEXITCODE"
-    }
-    $all = @(ConvertFrom-PaperFidelityTestListing -Lines $listed)
-    # Discovering nothing would "pass" by running nothing.
-    if ($all.Count -eq 0) { throw "no $category test classes were discovered" }
+    $all = @(Find-PaperFidelityClasses)
     Write-Host "--- $($all.Count) class(es) discovered ---"
 }
 
@@ -99,9 +91,23 @@ for ($i = 0; $i -lt $classes.Count; $i += $ChunkSize) {
         --results-directory $resultsRoot
     $exit = $LASTEXITCODE
     Write-Host '::endgroup::'
+    # A filter that matches no test exits 0 too. Count the TRX's total (not 'executed': a chunk of skipped cases
+    # legitimately executes none) and treat zero as a failure, so a renamed trait or class cannot pass silently.
+    if ($exit -eq 0) {
+        $trx = Join-Path $resultsRoot "$label.trx"
+        $total = 0
+        if (Test-Path $trx) {
+            $counters = ([xml](Get-Content -Raw $trx)).TestRun.ResultSummary.Counters
+            if ($counters) { $total = [int]$counters.total }
+        }
+        if ($total -eq 0) {
+            Write-Host "::error::$label matched no paper-fidelity test (filter: $filter)"
+            $exit = 3
+        }
+    }
     $seconds = [int]((Get-Date) - $started).TotalSeconds
     # 124: timeout stopped the chunk at its cap; 137: SIGKILL (the kill-after escalation or the OOM killer).
-    $described = switch ($exit) { 0 { '0' } 124 { "timeout after $ChunkCapMinutes min" } 137 { 'SIGKILL (timeout escalation or OOM)' } default { [string] $exit } }
+    $described = switch ($exit) { 0 { '0' } 3 { 'no tests matched' } 124 { "timeout after $ChunkCapMinutes min" } 137 { 'SIGKILL (timeout escalation or OOM)' } default { [string] $exit } }
     if ($exit -ne 0) { $failed++ }
     $rows.Add([pscustomobject]@{ chunk = $label; classes = $chunk; exit = $described; seconds = $seconds })
     Write-Host "$label -> exit $described in ${seconds}s"

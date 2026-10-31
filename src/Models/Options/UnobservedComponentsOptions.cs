@@ -45,6 +45,22 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
         SeasonalPeriod = 1;
     }
 
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public UnobservedComponentsOptions(UnobservedComponentsOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        MaxIterations = other.MaxIterations;
+        OptimizeParameters = other.OptimizeParameters;
+        Optimizer = other.Optimizer;
+        IncludeCycle = other.IncludeCycle;
+        CycleLambda = other.CycleLambda;
+        CycleMinPeriod = other.CycleMinPeriod;
+        CycleMaxPeriod = other.CycleMaxPeriod;
+        Decomposition = other.Decomposition;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of iterations for the estimation algorithm.
     /// </summary>

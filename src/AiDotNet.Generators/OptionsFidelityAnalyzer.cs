@@ -193,6 +193,24 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
     /// and runtime checks always agree on which class "the model's options" is.
     /// </remarks>
     internal static INamedTypeSymbol? FindDeclaredOptionsType(INamedTypeSymbol model, INamedTypeSymbol modelOptions)
+        => FindDeclaredOptionsType(model, candidate => DerivesFrom(candidate, modelOptions));
+
+    /// <summary>
+    /// The same rule, matching <c>ModelOptions</c> by its metadata name, for callers that see AiDotNet as a
+    /// referenced assembly rather than as source (the test scaffold generator).
+    /// </summary>
+    internal static INamedTypeSymbol? FindDeclaredOptionsType(INamedTypeSymbol model)
+        => FindDeclaredOptionsType(model, candidate =>
+        {
+            for (INamedTypeSymbol? walk = candidate; walk is not null; walk = walk.BaseType)
+            {
+                if (walk.ToDisplayString() == ModelOptionsMetadataName) return true;
+            }
+
+            return false;
+        });
+
+    private static INamedTypeSymbol? FindDeclaredOptionsType(INamedTypeSymbol model, Func<INamedTypeSymbol, bool> isOptions)
     {
         foreach (var constructor in model.InstanceConstructors
                      .Where(c => c.DeclaredAccessibility == Accessibility.Public)
@@ -200,7 +218,7 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
         {
             foreach (var parameter in constructor.Parameters)
             {
-                if (parameter.Type is INamedTypeSymbol candidate && DerivesFrom(candidate, modelOptions))
+                if (parameter.Type is INamedTypeSymbol candidate && isOptions(candidate))
                     return candidate;
             }
         }
