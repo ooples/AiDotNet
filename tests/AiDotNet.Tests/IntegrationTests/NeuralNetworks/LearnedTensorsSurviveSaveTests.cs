@@ -259,7 +259,10 @@ public class LearnedTensorsSurviveSaveTests
         "MesaNet" => (() => new MesaNetLayer<double>(4, 8, 4), [1, 4, 8]),
         "TTT" => (() => new TTTLayer<double>(4, 8, 4), [1, 4, 8]),
         "S4D" => (() => new S4DLayer<double>(4, 4, 4), [1, 4, 4]),
-        "Mamba" => (() => new MambaBlock<double>(4, 4, 4, 2, 2), [1, 4, 4]),
+        // dt drawn from [0.05, 0.1]: A enters the output through exp(dt*A) acting on a state that is itself
+        // O(dt), so its influence scales with dt^2. The default range reaches dt = 0.001, where an unseeded
+        // draw left _aLog's whole effect near 1e-13 and the sensitivity guard failed on the draw, not the layer.
+        "Mamba" => (() => new MambaBlock<double>(4, 4, 4, 2, 2, deltaMin: 0.05, deltaMax: 0.1), [1, 4, 4]),
         _ => throw new ArgumentOutOfRangeException(nameof(name), name, "unknown layer"),
     };
 }
