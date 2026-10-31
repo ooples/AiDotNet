@@ -94,6 +94,7 @@ internal sealed class MeCab
     }
 
     private readonly Lexicon _system;
+    private readonly List<Lexicon> _user = new();
     private readonly Lexicon _unknown;
     private readonly (int Token, int Count)[] _unknownTokens;
     private readonly int _leftSize;
@@ -161,6 +162,123 @@ internal sealed class MeCab
     {
         if (directory is null) throw new ArgumentNullException(nameof(directory));
         return new MeCab(directory, fromDirectory: true);
+    }
+
+    /// <summary>
+    /// <see cref="Open"/> with a user dictionary (<c>mecab -u</c>), compiled from its CSV source as
+    /// <c>mecab-dict-index -u</c> compiles it: each line's surface, left and right context ids, cost and feature (MeCab's
+    /// <c>tokenizeCSV</c> into five fields, the feature the rest of the line), the entries stably sorted by surface bytes.
+    /// Its words join the system dictionary's at each position, after them.
+    /// </summary>
+    public static MeCab Open(string directory, IEnumerable<string> userDictionaryCsv)
+    {
+        if (userDictionaryCsv is null) throw new ArgumentNullException(nameof(userDictionaryCsv));
+        var mecab = Open(directory);
+        mecab._user.Add(mecab.CompileUserDictionary(userDictionaryCsv));
+        return mecab;
+    }
+
+    // MeCab's tokenizeCSV(line, col, max): fields split at commas after skipping leading blanks, a quoted field unquoted
+    // ("" for a quote); the last field is the rest of the line as written.
+    private static List<string> TokenizeCsv(string line, int max)
+    {
+        var fields = new List<string>();
+        int at = 0;
+        while (at < line.Length)
+        {
+            while (at < line.Length && (line[at] == ' ' || line[at] == '\t')) at++;
+            if (max == 1)
+            {
+                fields.Add(line.Substring(at));
+                break;
+            }
+            string field;
+            if (at < line.Length && line[at] == '"')
+            {
+                var value = new StringBuilder();
+                at++;
+                for (; at < line.Length; at++)
+                {
+                    if (line[at] == '"')
+                    {
+                        at++;
+                        if (at >= line.Length || line[at] != '"') break;
+                    }
+                    value.Append(line[at]);
+                }
+                int comma = line.IndexOf(',', Math.Min(at, line.Length));
+                at = comma < 0 ? line.Length : comma;
+                field = value.ToString();
+            }
+            else
+            {
+                int comma = line.IndexOf(',', at);
+                int end = comma < 0 ? line.Length : comma;
+                field = line.Substring(at, end - at);
+                at = end;
+            }
+            fields.Add(field);
+            max--;
+            at++;
+        }
+        return fields;
+    }
+
+    // mecab's toInt: atoi, or INT_MAX for an empty field.
+    private static int ToInt(string field)
+    {
+        if (field.Length == 0) return int.MaxValue;
+        int at = 0;
+        while (at < field.Length && char.IsWhiteSpace(field[at])) at++;
+        bool negative = false;
+        if (at < field.Length && (field[at] == '+' || field[at] == '-')) negative = field[at++] == '-';
+        long value = 0;
+        while (at < field.Length && field[at] >= '0' && field[at] <= '9' && value <= int.MaxValue) value = value * 10 + (field[at++] - '0');
+        return (int)(negative ? -value : value);
+    }
+
+    private Lexicon CompileUserDictionary(IEnumerable<string> lines)
+    {
+        var entries = new List<(string Key, ushort Left, ushort Right, short Cost, string Feature)>();
+        int rightSize = _matrix.Length / _leftSize;
+        foreach (var line in lines)
+        {
+            var col = TokenizeCsv(line, 5);
+            if (col.Count != 5) throw new InvalidDataException($"format error: {line}");
+            int lid = ToInt(col[1]), rid = ToInt(col[2]), cost = ToInt(col[3]);
+            // An empty cost or context id needs the dictionary's rewrite rules and feature model, which a compiled
+            // dictionary directory does not carry; every entry GPT-SoVITS's user dictionary writes has them.
+            if (cost == int.MaxValue || lid == int.MaxValue || rid == int.MaxValue || lid < 0 || rid < 0)
+                throw new InvalidDataException($"A user dictionary entry without its cost or context ids is not supported: {line}");
+            if (lid >= _leftSize || rid >= rightSize) throw new InvalidDataException($"invalid ids are found lid={lid} rid={rid}");
+            if (col[0].Length == 0) continue;
+            entries.Add((Latin1(Encoding.UTF8.GetBytes(col[0])), (ushort)lid, (ushort)rid, (short)cost, col[4]));
+        }
+        var sorted = entries.OrderBy(e => e.Key, StringComparer.Ordinal).ToList();
+        var lexicon = new Lexicon
+        {
+            Left = sorted.Select(e => e.Left).ToArray(),
+            Right = sorted.Select(e => e.Right).ToArray(),
+            Cost = sorted.Select(e => e.Cost).ToArray(),
+            Feature = new uint[sorted.Count],
+        };
+        var features = new List<byte>();
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            lexicon.Feature[i] = (uint)features.Count;
+            features.AddRange(Encoding.UTF8.GetBytes(sorted[i].Feature));
+            features.Add(0);
+        }
+        lexicon.Features = features.ToArray();
+        for (int i = 0; i < sorted.Count;)
+        {
+            int j = i;
+            while (j < sorted.Count && sorted[j].Key == sorted[i].Key) j++;
+            lexicon.Keys[sorted[i].Key] = (i << 8) + (j - i);
+            lexicon.MaxKeyLength = Math.Max(lexicon.MaxKeyLength, sorted[i].Key.Length);
+            i = j;
+        }
+        return lexicon;
     }
 
     private MeCab(string directory, bool fromDirectory)
@@ -336,20 +454,24 @@ internal sealed class MeCab
 
         // commonPrefixSearch: every dictionary key the bytes from begin2 start with, shortest first (a zero length
         // reads up to the buffer's NUL, which is at the end of the text).
-        var matches = new List<(int Value, int Length)>();
-        _system.CommonPrefixSearch(s, begin2, end - begin2, matches);
-        foreach (var (value, length) in matches)
+        // Tokenizer::lookup: the system dictionary's words, then each user dictionary's.
+        foreach (var dictionary in new[] { _system }.Concat(_user))
         {
-            int token = value >> 8, count = value & 0xff;
-            for (int j = 0; j < count; j++)
-                result = new Node
-                {
-                    Surface = begin2, Length = length, RLength = begin2 - begin + length, Left = _system.Left[token + j],
-                    Right = _system.Right[token + j], WordCost = _system.Cost[token + j], BNext = result,
-                    PosId = _system.PosId.Length > 0 ? _system.PosId[token + j] : 0,
-                    Tag = _system.Tag.Length > 0 ? _system.Tag[token + j] : -1,
-                    Source = _system, Token = token + j,
-                };
+            var matches = new List<(int Value, int Length)>();
+            dictionary.CommonPrefixSearch(s, begin2, end - begin2, matches);
+            foreach (var (value, length) in matches)
+            {
+                int token = value >> 8, count = value & 0xff;
+                for (int j = 0; j < count; j++)
+                    result = new Node
+                    {
+                        Surface = begin2, Length = length, RLength = begin2 - begin + length, Left = dictionary.Left[token + j],
+                        Right = dictionary.Right[token + j], WordCost = dictionary.Cost[token + j], BNext = result,
+                        PosId = dictionary.PosId.Length > 0 ? dictionary.PosId[token + j] : 0,
+                        Tag = dictionary.Tag.Length > 0 ? dictionary.Tag[token + j] : -1,
+                        Source = dictionary, Token = token + j,
+                    };
+            }
         }
         if (result is not null && !Invoke(cinfo)) return result;
 

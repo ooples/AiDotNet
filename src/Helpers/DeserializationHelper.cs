@@ -3890,9 +3890,10 @@ public static class DeserializationHelper
         int attentionGroupSize = TryGetInt(additionalParams, "AttentionGroupSize") ?? 1;
         double ropeTheta = TryGetDouble(additionalParams, "RopeTheta") ?? 10000.0;
         int maxSeq = TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? 2048;
+        int attentionChunkSize = TryGetInt(additionalParams, "AttentionChunkSize") ?? 0;
 
         return new ConformerBlockLayer<T>(
-            modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq, attentionGroupSize);
+            modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq, attentionGroupSize, attentionChunkSize);
     }
 
     /// <summary>Reconstructs a paper-faithful Vocos generator from serialized layer metadata.</summary>
