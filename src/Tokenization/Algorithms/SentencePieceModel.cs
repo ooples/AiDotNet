@@ -114,8 +114,6 @@ public sealed class SentencePieceModel
             throw new NotSupportedException($"Only unigram, BPE and character SentencePiece models are supported (model_type {modelType}).");
         if (modelType == 4 && (byteFallback || pieces.Any(p => p.Type == ByteType)))
             throw new NotSupportedException("Character SentencePiece models with byte fallback are not supported.");
-        if (modelType == 1 && (byteFallback || pieces.Any(p => p.Type == ByteType)))
-            throw new NotSupportedException("Unigram SentencePiece models with byte fallback are not supported.");
         _bpe = modelType == 2;
         _character = modelType == 4;
         _byteFallback = byteFallback;
@@ -256,7 +254,24 @@ public sealed class SentencePieceModel
         for (int e = n; e > 0; e = bestStart[e])
             result.Add((normalized.Substring(starts[bestStart[e]], starts[e] - starts[bestStart[e]]), bestId[e]));
         result.Reverse();
-        return MergeUnknown(result);
+        return ByteFallback(MergeUnknown(result));
+    }
+
+    // SentencePieceProcessor's byte fallback: an unknown piece becomes the <0xXX> pieces of its UTF-8 bytes.
+    private List<(string Piece, int Id)> ByteFallback(List<(string Piece, int Id)> pieces)
+    {
+        if (!_byteFallback || pieces.All(p => p.Id != UnknownId)) return pieces;
+        var result = new List<(string Piece, int Id)>();
+        foreach (var piece in pieces)
+        {
+            if (piece.Id != UnknownId) { result.Add(piece); continue; }
+            foreach (byte b in Encoding.UTF8.GetBytes(piece.Piece))
+            {
+                string bytePiece = $"<0x{b:X2}>";
+                result.Add((bytePiece, PieceToId(bytePiece)));
+            }
+        }
+        return result;
     }
 
     // Runs of unknown pieces are merged into one.

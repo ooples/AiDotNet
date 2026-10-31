@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -7,31 +9,43 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.SpeechRecognition.Foundation;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.SpeechRecognition.Multilingual;
 
 /// <summary>
-/// Chirp: Google's production multilingual ASR
+/// Chirp: Google Cloud's first-generation Chirp recognizer, the 2B-parameter Universal Speech Model (USM) with a CTC
+/// layer, served through Speech-to-Text V2.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Model: "Chirp" (Google Cloud Speech-to-Text V2, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> Chirp is Google's production multilingual ASR model based on the USM architecture, deployed in Google Cloud Speech-to-Text V2. It supports 100+ languages and dialects with a single model. The model uses USM's universal encoder with optimized servi...</para>
+/// <list type="bullet"><item>Paper: "Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages" (Zhang et al., Google, 2023)</item>
+/// <item>Model: "Chirp" (Google Cloud Speech-to-Text V2, 2023), which Google describes as its 2B-parameter USM</item></list></para>
+/// <para><b>For Beginners:</b> Chirp is the speech model Google serves in its cloud for 100+ languages. It listens to
+/// 16 kHz audio turned into a 128-band spectrogram, encodes it with a large Conformer, and outputs for every 40 ms frame a
+/// probability for each token; collapsing repeats and blanks gives the transcript.</para>
 /// <para>
-/// Chirp is Google's production multilingual ASR model based on the USM architecture, deployed in Google Cloud Speech-to-Text V2. It supports 100+ languages and dialects with a single model. The model uses USM's universal encoder with optimized serving infrastructure for low-latency production deployment. Chirp achieves significant WER reductions over the previous V1 system across all supported languages.
+/// Google publishes no separate Chirp paper: the deployed model is USM. This class is therefore USM-CTC: the paper's
+/// Conformer-2B (Table 2: 32 layers, 1536 wide, 16 heads, kernel 5) over 128-dimensional log-mel features (section 2.7)
+/// with BEST-RQ's 4x convolutional reduction, 8-second chunk-wise attention (section 2.4) and a CTC layer. Pre-training
+/// (<see cref="Pretrain"/>) is BEST-RQ with the 16-codebook multi-softmax loss (sections 2.2.1 and 2.7). The paper's
+/// Conformer uses relative attention; this one uses rotary position encoding, the relative scheme
+/// <see cref="AiDotNet.NeuralNetworks.Layers.ConformerBlockLayer{T}"/> provides.
+/// The MOST speech-text stage and noisy student training of the USM paper are data procedures outside the network.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Chirp model for production multilingual ASR (100+ languages)
+/// // Create a Chirp recognizer
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
-///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 /// var model = new Chirp&lt;double&gt;(architecture);
 ///
-/// // Or load a pre-trained ONNX model for Google USM-based ASR
+/// // Or load an exported ONNX model
 /// var onnxModel = new Chirp&lt;double&gt;(architecture, "chirp.onnx");
 /// </code>
 /// </example>
@@ -39,24 +53,40 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2202.01855",
+    "Chirp is Google's deployment of USM (Zhang et al. 2023), which pre-trains its Conformer encoder with "
+    + "BEST-RQ, so it runs on the BEST-RQ network at USM's size, codebook count and chunk-wise attention.")]
 public partial class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>The CTC layer's width: the pre-training softmax layers over the codebooks are used only by <see cref="Pretrain"/>.</remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly ChirpOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _suppliedOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _pretrainingOptimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private BestRqNetwork<T>? _network;
+    private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
+    internal BestRqNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public Chirp(NeuralNetworkArchitecture<T> architecture, string modelPath, ChirpOptions? options = null) : base(architecture) { _options = options ?? new ChirpOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
-    public Chirp(NeuralNetworkArchitecture<T> architecture, ChirpOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ChirpOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
+    public Chirp(NeuralNetworkArchitecture<T> architecture, string modelPath, ChirpOptions? options = null) : base(architecture) { _options = options ?? new ChirpOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = 0; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl", "pl", "sv" }; InitializeLayers(); }
+    public Chirp(NeuralNetworkArchitecture<T> architecture, ChirpOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ChirpOptions(); Options = _options; _useNativeMode = true; _suppliedOptimizer = optimizer; _optimizer = optimizer
+        // The paper states no optimizer settings (section 2.7 gives only separate encoder and decoder optimizers).
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = 0; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl", "pl", "sv" }; InitializeLayers(); }
 
     /// <summary>
-    /// Transcribes audio using Chirp's production-optimized USM encoder.
-    /// Per Google (2023): the USM-based encoder processes speech for 100+ languages,
-    /// optimized for low-latency production serving with CTC decoding.
+    /// Transcribes audio: the encoder, projection and CTC layer give per-frame distributions, decoded greedily.
     /// </summary>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
@@ -64,15 +94,7 @@ public partial class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var features = PreprocessAudio(audio);
         Tensor<T> logits;
 
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            logits = OnnxEncoder.Run(features);
-        }
-        else
-        {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
-        }
+        logits = Logits(features, training: false);
 
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
@@ -89,55 +111,106 @@ public partial class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Chirp does not support streaming.");
 
-    // Chirp is Google's USM-based ASR stack, and USM's encoder is a CONFORMER with relative attention
-    // (Zhang et al. 2023, arXiv:2303.01037 §2.1; block per Gulati et al. 2020 Eq. 1). It previously
-    // built CreateDefaultProprietaryASRLayers, whose MHA->LN->FFN->FFN->LN blocks carry NO residual
-    // path: with no gradient highway the encoder cannot descend, which is why
-    // LossStrictlyDecreasesOnMemorizationTask failed. Note the earlier "fix" of pointing it at
-    // CreateDefaultConformerLayers was wrong twice over — that factory is a residual pre-LN
-    // TRANSFORMER with no convolution module (its own comment concedes as much) and it leads with
-    // BatchNorm, which broke Chirp's Clone/determinism invariants. CreateDefaultUSMConformerLayers
-    // uses real ConformerBlockLayer blocks: macaron half-step FFNs, relative-attention MHSA, and the
-    // paper's convolution module. The generic builder is untouched for the undisclosed
-    // proprietary-API models that share it; Chirp has a published architecture.
-    // PAPER ACCURACY (tracked, deliberately not switched yet): Chirp is Google's USM stack and USM's
-    // encoder is a CONFORMER with relative attention (Zhang et al. 2023, arXiv:2303.01037 §2.1; block
-    // per Gulati et al. 2020 Eq. 1). The factory used below is NOT that — it emits residual-free
-    // MHA->LN->FFN->FFN->LN blocks with no convolution module. The paper-accurate encoder now exists as
-    // LayerHelper<T>.CreateDefaultUSMConformerLayers (real ConformerBlockLayer blocks: macaron
-    // half-step FFNs, relative-attention MHSA, and the paper's pointwise->GLU->depthwise->BatchNorm->
-    // Swish->pointwise convolution module), and the block passes its own layer invariants — but the
-    // GENERATED model suite reaches NaN on the first Adam step through it (parameter L2 34.4358 ->
-    // NaN), so switching turns this model's 1 failure into 6. Kept on the existing builder until that
-    // is resolved, rather than regressing the shard.
-    //
-    // Narrowed down, for whoever picks this up: the block's own math is NOT the problem. A standalone
-    // harness that builds this exact model (EncoderDim 32, 2 blocks, ConvKernelSize 3) and runs one
-    // eager Train step is finite and stable at BOTH double and float, reproducing the same pre-step
-    // parameter L2 (34.4358) the test reports — so init and forward agree with the failing fixture and
-    // only the UPDATE diverges. The remaining suspect is therefore the fused/compiled training path
-    // (CompiledTapeTrainingStep) rather than the layer: it is what the generated suite exercises and
-    // what the eager harness bypasses. Swapping the conv module's BatchNorm for LayerNorm changes
-    // nothing (identical pre-step L2, identical failure), so normalization choice is ruled out.
-    //
-    // Its actual test failure (LossStrictlyDecreasesOnMemorizationTask) was NOT the architecture: it
-    // was SCALE. The production defaults (1024-wide, 12 blocks, 32000-way head) cannot memorize the
-    // probe within the generated iteration budget, so the loss never descended. The CI-smoke
-    // constructor added in the test scaffold exercises the same topology at bounded width/depth, where
-    // it trains correctly — 26/26, and the class went from ~8 minutes to 13 seconds.
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultProprietaryASRLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        _network = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // USM's network: Conformer-2B over normalized 128-bin log-mel features with chunk-wise attention, BEST-RQ's
+        // quantizers with the multi-softmax loss, and a projection + CTC layer (Zhang et al. 2023). It used to be a generic
+        // template whose blocks had no convolution module.
+        var layers = new List<LayerBase<T>>();
+        _network = new BestRqNetwork<T>(Engine, layers, _options.ToConfiguration(), Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42));
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        Layers.AddRange(layers);
+    }
+
+    // Chirp reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_network is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private double[] Samples(Tensor<T> waveform, int offset, int count)
+    {
+        var samples = new double[count];
+        var span = waveform.Data.Span;
+        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
+        return samples;
+    }
+
+    // CTC logits [frames, vocab] for a waveform [S], or [batch, frames, vocab] for [batch, S].
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        if (input.Rank == 1) return _network.CtcLogits(_network.Encode(_network.Features(Samples(input, 0, input.Length)), training));
+        int rows = input.Shape[0], samples = input.Length / rows;
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+            outputs[r] = _network.CtcLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
+        return Engine.TensorStack(outputs, 0);
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    /// <summary>
+    /// The BEST-RQ pre-training loss of waveforms <c>[S]</c> or <c>[batch, S]</c> with the multi-softmax of Zhang et al.
+    /// 2023 (section 2.2.1), averaged over the batch: the encoder sees the input with spans replaced by noise, and each
+    /// softmax layer predicts, at every masked frame, the label its fixed random-projection quantizer gives the unmasked
+    /// input; the codebooks are weighted equally.
+    /// </summary>
+    /// <param name="audio">The waveforms.</param>
+    /// <param name="random">The mask and noise draws; the model's own generator when null.</param>
+    public T PretrainingLoss(Tensor<T> audio, Random? random = null)
+    {
+        ThrowIfDisposed();
+        using var _ = new NoGradScope<T>();
+        return PretrainingLossTensor(audio, training: false, random ?? _random)[0];
+    }
+
+    private Tensor<T> PretrainingLossTensor(Tensor<T> audio, bool training, Random random)
+    {
+        var network = _network ?? throw new InvalidOperationException("Pre-training runs on the native Chirp network.");
+        int rows = audio.Rank == 1 ? 1 : audio.Shape[0], samples = audio.Length / rows;
+        Tensor<T>? total = null;
+        for (int r = 0; r < rows; r++)
+        {
+            var loss = network.PretrainingLoss(Samples(audio, r * samples, samples), training, random);
+            total = total is null ? loss : Engine.TensorAdd(total, loss);
+        }
+        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(audio)), NumOps.FromDouble(1.0 / rows));
+    }
+
+    /// <summary>One BEST-RQ pre-training step (section 2.2) on waveforms <c>[S]</c> or <c>[batch, S]</c>.</summary>
+    /// <param name="audio">The unlabeled waveforms.</param>
+    /// <returns>The step's loss.</returns>
+    public T Pretrain(Tensor<T> audio)
+    {
+        ThrowIfDisposed();
+        if (_network is null) throw new NotSupportedException("Pre-training runs on the native Chirp network.");
+        // A caller's optimizer serves both phases; the paper states no pre-training optimizer.
+        _pretrainingOptimizer ??= _suppliedOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        return TrainWithCustomLoss(audio, _ => PretrainingLossTensor(audio, training: true, _random), _pretrainingOptimizer);
+    }
+
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Chirp-Native" : "Chirp-ONNX", Description = "Chirp: Google Cloud production multilingual ASR (2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Chirp-Native" : "Chirp-ONNX", Description = "Chirp: Google Cloud's USM-CTC recognizer, a BEST-RQ pre-trained Conformer-2B (Google, 2023)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 
 
