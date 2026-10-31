@@ -501,7 +501,7 @@ public static class AudioHelper<T>
         ResampleSinc(engine, audio, from, to, lowpassFilterWidth, rolloff, beta);
 
     // The modified Bessel function of the first kind of order 0, by its power series (|x| up to ~700 converges in double).
-    private static double BesselI0(double x)
+    internal static double BesselI0(double x)
     {
         double sum = 1, term = 1, quarter = x * x / 4;
         for (int k = 1; k < 500; k++)
