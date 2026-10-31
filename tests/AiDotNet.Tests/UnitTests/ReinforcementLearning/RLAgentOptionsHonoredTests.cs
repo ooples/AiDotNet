@@ -242,7 +242,8 @@ public class RLAgentOptionsHonoredTests
 
     private static MuZeroAgent<double> SmallMuZero(
         double dirichletAlpha, double fraction,
-        Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>? optimizerFactory = null) =>
+        Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>? optimizerFactory = null,
+        bool usePrioritizedReplay = true) =>
         new MuZeroAgent<double>(new MuZeroOptions<double>
         {
             OptimizerFactory = optimizerFactory,
@@ -257,8 +258,40 @@ public class RLAgentOptionsHonoredTests
             BatchSize = 4,
             UnrollSteps = 2,
             TDSteps = 2,
+            UsePrioritizedReplay = usePrioritizedReplay,
             Seed = 29,
         });
+
+    // MuZero samples by priority (Appendix G), so that is its default; UsePrioritizedReplay = false must give uniform
+    // windows with unit importance weights. Before, the agent always sampled by priority and ignored the option.
+    [Fact]
+    public void MuZero_UsePrioritizedReplay_SelectsPriorityOrUniformSampling()
+    {
+        Assert.True(new MuZeroOptions<double>().UsePrioritizedReplay);
+
+        // All the priority mass is on slot 2.
+        var scaled = new[] { 0.0, 0.0, 1.0, 0.0 };
+        var cumulative = new[] { 0.0, 0.0, 1.0, 1.0 };
+
+        var prioritized = SmallMuZero(0.3, 0.25);
+        for (int i = 0; i < 50; i++)
+        {
+            var (slot, weight) = prioritized.DrawReplaySlot(cumulative, scaled);
+            Assert.Equal(2, slot);
+            Assert.Equal(1.0 / 4.0, weight, 12);
+        }
+
+        var uniform = SmallMuZero(0.3, 0.25, usePrioritizedReplay: false);
+        var seen = new HashSet<int>();
+        for (int i = 0; i < 200; i++)
+        {
+            var (slot, weight) = uniform.DrawReplaySlot(cumulative, scaled);
+            Assert.InRange(slot, 0, 3);
+            Assert.Equal(1.0, weight);
+            seen.Add(slot);
+        }
+        Assert.Equal(4, seen.Count);
+    }
 
     [Fact]
     public void MuZero_RootNoiseFollowsDirichletAlphaAndExplorationFraction()

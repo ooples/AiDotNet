@@ -674,6 +674,15 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         return (index, 1.0 / (count * probability));
     }
 
+    /// <summary>
+    /// Draws the start slot of one training window: by priority when <c>UsePrioritizedReplay</c> is set (the paper's
+    /// default), otherwise uniformly over the stored slots with unit importance weight.
+    /// </summary>
+    internal (int Slot, double Weight) DrawReplaySlot(double[] cumulative, double[] scaled)
+        => _options.UsePrioritizedReplay
+            ? SamplePrioritizedSlot(cumulative, scaled)
+            : (Random.Next(cumulative.Length), 1.0);
+
     public override T Train()
     {
         // Need at least one real transition (o_0, a_0, r_0, o_1) to unroll from. A single Experience
@@ -736,7 +745,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
         for (int b = 0; b < batchSize; b++)
         {
-            var (slot, weight) = SamplePrioritizedSlot(cumulative, scaledPriorities);
+            var (slot, weight) = DrawReplaySlot(cumulative, scaledPriorities);
             var seq = _replayBuffer.SequenceFromSlot(slot, unroll + 1);
             if (seq.Count < 1) continue;
             sequences.Add(seq);

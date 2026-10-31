@@ -38,6 +38,8 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     public MuZeroOptions()
     {
+        // MuZero samples its replay by priority (Schrittwieser et al. 2020, Appendix G: alpha = beta = 1).
+        UsePrioritizedReplay = true;
     }
 
     /// <summary>
@@ -128,8 +130,9 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     /// <para>
     /// While acting in training, MuZero samples the action from p(a) = N(a)^(1/T) / sum_b N(b)^(1/T) over the
     /// root's visit counts N (Schrittwieser et al. 2020, Appendix D). The paper's Atari schedule uses T = 1, then
-    /// 0.5, then 0.25 as training proceeds; set this between calls to follow such a schedule. T = 0 picks the most
-    /// visited action. Inference (<c>training: false</c>) always takes the policy's most likely action.
+    /// 0.5, then 0.25 as training proceeds. The value is fixed for the agent's lifetime (the options are
+    /// init-only), so following such a schedule means building the agent for each stage with that stage's value and
+    /// carrying the trained parameters over. T = 0 picks the most visited action. Inference (<c>training: false</c>) always takes the policy's most likely action.
     /// </para>
     /// <para><b>For Beginners:</b> After the search, the agent knows how often it explored each action. A
     /// temperature of 1 picks actions in proportion to those counts, which keeps exploring; smaller values favour the
