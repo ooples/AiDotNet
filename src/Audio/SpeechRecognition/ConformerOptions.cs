@@ -1,169 +1,123 @@
-﻿using AiDotNet.Models.Options;
+using AiDotNet.Audio.Foundations;
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.SpeechRecognition;
 
-/// <summary>
-/// Configuration options for the Conformer speech recognition model.
-/// </summary>
+/// <summary>Options for Conformer.</summary>
 /// <remarks>
-/// <para>
-/// The Conformer (Gulati et al., 2020, Google) combines convolution and self-attention to
-/// capture both local and global audio dependencies. It achieves state-of-the-art on
-/// LibriSpeech (WER 1.9%/3.9% test-clean/other with LM) and is now the dominant encoder
-/// architecture for production ASR systems (used in Google, NVIDIA NeMo, etc.).
-/// </para>
-/// <para>
-/// <b>For Beginners:</b> The Conformer is the go-to architecture for modern speech recognition.
-/// It outperforms both pure Transformer and pure CNN encoders by using the best of both:
-/// - Convolution captures local patterns like phonemes (individual sounds)
-/// - Self-attention captures long-range context (e.g., sentence-level meaning)
-/// The result is an encoder that understands both fine-grained and global speech patterns.
-/// </para>
+/// <para>The defaults: 16 Conformer blocks, width 256, 4 heads, a 32-wide depthwise kernel, a 640-unit single-layer LSTM prediction network and a 640-wide joint network.</para>
+/// <para><b>For Beginners:</b> These options set the size of the Conformer encoder and decoder, the feature front end and
+/// the training augmentation.</para>
 /// </remarks>
 public class ConformerOptions : ModelOptions
 {
-    /// <summary>Initializes a Conformer configuration with paper-default settings.</summary>
-    public ConformerOptions()
-    {
-    }
+    /// <summary>Initializes a new instance with default values.</summary>
+    public ConformerOptions() { }
 
-    /// <summary>Initializes a new instance by deep-copying all Conformer settings.</summary>
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public ConformerOptions(ConformerOptions other)
     {
-        if (other is null) throw new ArgumentNullException(nameof(other));
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
 
-        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
-        // below; Seed is not declared here, so it was silently dropped and a copied configuration
-        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
-        // the most to diagnose, because the two configurations compare equal on everything visible.
-        Seed = other.Seed;
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
-        Variant = other.Variant;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        FeedForwardExpansionFactor = other.FeedForwardExpansionFactor;
-        ConvKernelSize = other.ConvKernelSize;
-        NumMels = other.NumMels;
-        SubsamplingFactor = other.SubsamplingFactor;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        ConvKernel = other.ConvKernel;
+        RopeTheta = other.RopeTheta;
+        PredictionDim = other.PredictionDim;
+        PredictionLayers = other.PredictionLayers;
+        JointDim = other.JointDim;
+        FrequencyMasks = other.FrequencyMasks;
+        FrequencyMaskWidth = other.FrequencyMaskWidth;
+        TimeMasks = other.TimeMasks;
+        TimeMaskRatio = other.TimeMaskRatio;
         VocabSize = other.VocabSize;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
-        LabelSmoothing = other.LabelSmoothing;
-        WarmupSteps = other.WarmupSteps;
-        Vocabulary = [.. other.Vocabulary];
-        Language = other.Language;
     }
 
-    #region Audio
-
-    /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>
+    /// <summary>Audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 16000;
 
-    /// <summary>Gets or sets the maximum audio length in seconds.</summary>
+    /// <summary>Longest audio a transcription covers, in seconds; longer input is truncated.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
 
-    #endregion
-
-    #region Architecture
-
-    /// <summary>Gets or sets the model variant ("small", "medium", "large").</summary>
-    /// <remarks>
-    /// <para>
-    /// - "small": 16 layers, 256 dim (fast, good for edge/streaming)
-    /// - "medium": 18 layers, 512 dim (balanced)
-    /// - "large": 18 layers, 512 dim, 8 heads (best accuracy)
-    /// </para>
-    /// </remarks>
-    public string Variant { get; set; } = "medium";
-
-    /// <summary>Gets or sets the encoder hidden dimension.</summary>
-    public int EncoderDim { get; set; } = 512;
-
-    /// <summary>Gets or sets the number of Conformer encoder layers.</summary>
-    public int NumEncoderLayers { get; set; } = 18;
-
-    /// <summary>Gets or sets the number of attention heads.</summary>
-    public int NumAttentionHeads { get; set; } = 8;
-
-    /// <summary>Gets or sets the feed-forward expansion factor.</summary>
-    /// <remarks>
-    /// The feed-forward dimension is <c>EncoderDim * FeedForwardExpansionFactor</c>.
-    /// Conformer uses half-step residual (the feed-forward output is scaled by 0.5).
-    /// </remarks>
-    public int FeedForwardExpansionFactor { get; set; } = 4;
-
-    /// <summary>Gets or sets the convolution kernel size in the Conformer block.</summary>
-    /// <remarks>
-    /// The depthwise convolution in the convolution module captures local context.
-    /// Kernel size 31 covers roughly 310 ms of audio at the typical 10 ms frame stride,
-    /// which spans a phoneme or short syllable.
-    /// </remarks>
-    public int ConvKernelSize { get; set; } = 31;
-
-    /// <summary>Gets or sets the number of mel-spectrogram frequency bins.</summary>
+    /// <summary>Log-mel bins (section 3.1: 80-channel filterbanks over 25 ms windows with a 10 ms stride).</summary>
     public int NumMels { get; set; } = 80;
 
-    /// <summary>Gets or sets the subsampling factor for the encoder front-end.</summary>
-    /// <remarks>
-    /// Conv-subsampling typically uses stride-2 convolution twice to reduce the frame rate
-    /// by 4x (from 10 ms to 40 ms). This reduces compute in the encoder layers.
-    /// </remarks>
-    public int SubsamplingFactor { get; set; } = 4;
+    /// <summary>Conformer width.</summary>
+    public int EncoderDim { get; set; } = 256;
 
-    /// <summary>Gets or sets the vocabulary size for the CTC output head.</summary>
-    public int VocabSize { get; set; } = 5000;
+    /// <summary>Conformer blocks.</summary>
+    public int NumEncoderLayers { get; set; } = 16;
 
-    #endregion
+    /// <summary>Attention heads per block.</summary>
+    public int NumAttentionHeads { get; set; } = 4;
 
-    #region Model Loading
+    /// <summary>Expansion of each half-step feed-forward module (section 2.3: 4).</summary>
+    public int FeedForwardMultiplier { get; set; } = 4;
 
-    /// <summary>Gets or sets the path to the ONNX model file.</summary>
-    public string? ModelPath { get; set; }
+    /// <summary>Depthwise convolution kernel (Table 1: 32).</summary>
+    public int ConvKernel { get; set; } = 32;
 
-    /// <summary>Gets or sets the ONNX runtime options.</summary>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Rotary base of the attention's relative position encoding, standing in for the paper's relative
+    /// sinusoidal encoding (section 2.1).</summary>
+    public double RopeTheta { get; set; } = 10000.0;
 
-    #endregion
+    /// <summary>LSTM units of the prediction network (section 3.1: a single-layer LSTM of 640 units for Conformer M and L,
+    /// 320 for S).</summary>
+    public int PredictionDim { get; set; } = 640;
 
-    #region Training
+    /// <summary>LSTM layers of the prediction network (section 3.1: 1).</summary>
+    public int PredictionLayers { get; set; } = 1;
 
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 1e-3;
+    /// <summary>Width of the joint network.</summary>
+    public int JointDim { get; set; } = 640;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.1;
+    /// <summary>SpecAugment frequency masks (section 3.1: 2).</summary>
+    public int FrequencyMasks { get; set; } = 2;
 
-    /// <summary>Gets or sets the label smoothing factor for CTC loss.</summary>
-    public double LabelSmoothing { get; set; } = 0.1;
+    /// <summary>Largest frequency mask, in mel bins (section 3.1: F = 27).</summary>
+    public int FrequencyMaskWidth { get; set; } = 27;
 
-    /// <summary>Gets or sets the warmup steps for the Noam learning-rate schedule.</summary>
-    public int WarmupSteps { get; set; } = 25000;
+    /// <summary>SpecAugment time masks (section 3.1: 10).</summary>
+    public int TimeMasks { get; set; } = 10;
 
-    #endregion
+    /// <summary>Largest time mask as a fraction of the utterance (section 3.1: pS = 0.05).</summary>
+    public double TimeMaskRatio { get; set; } = 0.05;
 
-    #region Decoding
+    /// <summary>Output vocabulary size, blank (token 0) included.</summary>
+    public int VocabSize { get; set; } = 34;
 
-    /// <summary>Gets or sets the CTC vocabulary (characters or BPE tokens).</summary>
-    public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
+    /// <summary>The text of each token; tokens past the list decode as Unicode code points, and tokens in angle brackets
+    /// decode to nothing.</summary>
+    public string[] Vocabulary { get; set; } = { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
 
-    /// <summary>Gets or sets the default language code.</summary>
+    /// <summary>Language reported for transcriptions.</summary>
     public string Language { get; set; } = "en";
 
-    private static string[] GetDefaultVocabulary()
-    {
-        return new[]
-        {
-            "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|",
-            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
-            "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
-            "u", "v", "w", "x", "y", "z", "'", " "
-        };
-    }
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
+    public string? ModelPath { get; set; }
 
-    #endregion
+    /// <summary>ONNX runtime options.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    internal ConformerAsrConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
+        NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, ConvKernel = ConvKernel, RopeTheta = RopeTheta,
+        Decoder = ConformerAsrDecoder.Transducer, PredictionDim = PredictionDim, PredictionLayers = PredictionLayers, JointDim = JointDim,
+        FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
+        VocabSize = VocabSize,
+    };
 }
