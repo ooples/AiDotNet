@@ -1,17 +1,14 @@
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
 
-/// <summary>
-/// Configuration options for the E-Branchformer (Enhanced Branchformer) speech recognition model.
-/// </summary>
+/// <summary>Options for E-Branchformer.</summary>
 /// <remarks>
-/// <para>
-/// E-Branchformer (Kim et al., 2022) improves on Branchformer with an enhanced merge module
-/// that uses depthwise convolution for better local-global fusion, achieving SOTA on LibriSpeech
-/// (WER 2.1%/4.2% test-clean/other) with the ESPnet toolkit.
-/// </para>
+/// <para>The defaults: 17 Conformer blocks, width 512, 8 heads, a 31-wide depthwise kernel and a CTC layer.</para>
+/// <para><b>For Beginners:</b> These options set the size of the Conformer encoder, the feature front end and
+/// the training augmentation.</para>
 /// </remarks>
 public class EBranchformerOptions : ModelOptions
 {
@@ -28,40 +25,93 @@ public class EBranchformerOptions : ModelOptions
 
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        ConvKernel = other.ConvKernel;
+        RopeTheta = other.RopeTheta;
         CgmlpDim = other.CgmlpDim;
-        MergeDim = other.MergeDim;
-        NumMels = other.NumMels;
+        MergeKernel = other.MergeKernel;
+        FrequencyMasks = other.FrequencyMasks;
+        FrequencyMaskWidth = other.FrequencyMaskWidth;
+        TimeMasks = other.TimeMasks;
+        TimeMaskRatio = other.TimeMaskRatio;
         VocabSize = other.VocabSize;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        Language = other.Language;
-        Vocabulary = other.Vocabulary;
     }
 
+    /// <summary>Audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 16000;
-    public int MaxAudioLengthSeconds { get; set; } = 30;
-    public int EncoderDim { get; set; } = 512;
-    public int NumEncoderLayers { get; set; } = 12;
-    public int NumAttentionHeads { get; set; } = 8;
-    public int CgmlpDim { get; set; } = 3072;
-    public int MergeDim { get; set; } = 1024;
-    public int NumMels { get; set; } = 80;
-    public int VocabSize { get; set; } = 5000;
-    public string? ModelPath { get; set; }
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
-    public double DropoutRate { get; set; } = 0.1;
-    public string Language { get; set; } = "en";
-    public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
 
-    private static string[] GetDefaultVocabulary() => new[]
+    /// <summary>Longest audio a transcription covers, in seconds; longer input is truncated.</summary>
+    public int MaxAudioLengthSeconds { get; set; } = 30;
+
+    /// <summary>Log-mel bins (section 3.1: 80-channel filterbanks over 25 ms windows with a 10 ms stride).</summary>
+    public int NumMels { get; set; } = 80;
+
+    /// <summary>Conformer width.</summary>
+    public int EncoderDim { get; set; } = 512;
+
+    /// <summary>Conformer blocks.</summary>
+    public int NumEncoderLayers { get; set; } = 17;
+
+    /// <summary>Attention heads per block.</summary>
+    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Expansion of each half-step feed-forward module (section 2.3: 4).</summary>
+    public int FeedForwardMultiplier { get; set; } = 4;
+
+    /// <summary>Depthwise convolution kernel (Table 1: 32).</summary>
+    public int ConvKernel { get; set; } = 31;
+
+    /// <summary>Rotary base of the attention's relative position encoding, standing in for the paper's relative
+    /// sinusoidal encoding (section 2.1).</summary>
+    public double RopeTheta { get; set; } = 10000.0;
+
+    /// <summary>Hidden units of the convolutional gating MLP (its gating unit splits them in half).</summary>
+    public int CgmlpDim { get; set; } = 3072;
+
+    /// <summary>Depthwise kernel of the merge convolution (section 3.2: 31).</summary>
+    public int MergeKernel { get; set; } = 31;
+
+    /// <summary>SpecAugment frequency masks (section 3.1: 2).</summary>
+    public int FrequencyMasks { get; set; } = 2;
+
+    /// <summary>Largest frequency mask, in mel bins (section 3.1: F = 27).</summary>
+    public int FrequencyMaskWidth { get; set; } = 27;
+
+    /// <summary>SpecAugment time masks (section 3.1: 10).</summary>
+    public int TimeMasks { get; set; } = 10;
+
+    /// <summary>Largest time mask as a fraction of the utterance (section 3.1: pS = 0.05).</summary>
+    public double TimeMaskRatio { get; set; } = 0.05;
+
+    /// <summary>Output vocabulary size, blank (token 0) included.</summary>
+    public int VocabSize { get; set; } = 34;
+
+    /// <summary>The text of each token; tokens past the list decode as Unicode code points, and tokens in angle brackets
+    /// decode to nothing.</summary>
+    public string[] Vocabulary { get; set; } = { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Language reported for transcriptions.</summary>
+    public string Language { get; set; } = "en";
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    internal ConformerAsrConfiguration ToConfiguration() => new()
     {
-        "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|",
-        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
-        "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
-        "u", "v", "w", "x", "y", "z", "'", " "
+        SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
+        NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, ConvKernel = ConvKernel, RopeTheta = RopeTheta,
+        Block = ConformerAsrBlock.EBranchformer, CgmlpDim = CgmlpDim, MergeKernel = MergeKernel, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
+        VocabSize = VocabSize,
     };
 }

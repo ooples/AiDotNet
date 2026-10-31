@@ -5,6 +5,8 @@ using AiDotNet.Audio.SpeechRecognition;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.SpeechRecognition.ConformerFamily;
+using AiDotNet.SpeechRecognition.CTCVariants;
+using AiDotNet.SpeechRecognition.NeMo;
 using AiDotNet.SpeechRecognition.Streaming;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -109,5 +111,115 @@ public class ConformerFamilyPaperTests
         await Task.Yield();
         Assert.Equal(10, new StreamingConformerOptions().AttentionChunkSize);
         Assert.Equal(10, new StreamingConformerOptions().ToConfiguration().AttentionChunkSize);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BranchformerDefaults_AreTheLibriSpeechModels()
+    {
+        await Task.Yield();
+        var b = new BranchformerOptions();
+        Assert.Equal((18, 512, 8, 3072, 31), (b.NumEncoderLayers, b.EncoderDim, b.NumAttentionHeads, b.CgmlpDim, b.ConvKernel));
+        // E-Branchformer-L (Kim et al. 2022, Table 1): 17 blocks, width 512, 8 heads, 3072 cgMLP units, 2048 FFN units.
+        var e = new EBranchformerOptions();
+        Assert.Equal((17, 512, 8, 3072, 2048, 31), (e.NumEncoderLayers, e.EncoderDim, e.NumAttentionHeads, e.CgmlpDim, e.EncoderDim * e.FeedForwardMultiplier, e.MergeKernel));
+    }
+
+    [Theory(Timeout = 300000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BranchformerTraining_LowersTheCtcLoss(bool enhanced)
+    {
+        await Task.Yield();
+        var audio = Voice(8000, 180);
+        var labels = new[] { 3, 5, 2 };
+        var target = new Tensor<double>(new[] { 3 }, new Vector<double>(labels.Select(l => (double)l).ToArray()));
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<double> model = enhanced
+            ? new EBranchformer<double>(Architecture(), new EBranchformerOptions { EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, MergeKernel = 3, CgmlpDim = 32, NumMels = 16, VocabSize = 8, FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, Seed = 5 })
+            : new Branchformer<double>(Architecture(), new BranchformerOptions { EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, CgmlpDim = 32, NumMels = 16, VocabSize = 8, FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, Seed = 5 });
+        using (model)
+        {
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            double Loss()
+            {
+                var logits = model.Predict(audio);
+                return engine.TensorCTCLoss(engine.Reshape(engine.TensorLogSoftmax(logits, axis: -1), new[] { logits.Shape[0], 1, 8 }),
+                    new Tensor<int>(labels, new[] { 3 }), new[] { logits.Shape[0] }, new[] { 3 }, 0)[0];
+            }
+            double before = Loss();
+            for (int step = 0; step < 30; step++) model.Train(audio, target);
+            double after = Loss();
+            Assert.True(after < 0.5 * before, $"CTC loss {before} -> {after}");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FastConformer_SubsamplesEightTimes()
+    {
+        await Task.Yield();
+        var o = new ParakeetCTCOptions();
+        Assert.Equal((24, 1024, 8, 9, 256, 1024), (o.NumEncoderLayers, o.EncoderDim, o.NumAttentionHeads, o.ConvKernel, o.SubsamplingChannels, o.VocabSize));
+        using var model = new ParakeetCTC<double>(Architecture(), new ParakeetCTCOptions
+        {
+            EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, NumMels = 16, SubsamplingChannels = 4,
+            VocabSize = 8, FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, Seed = 5,
+        });
+        // 51 10 ms frames through three stride-2 convolutions with padding 1: 26, 13, 7 frames of 80 ms.
+        Assert.Equal(new[] { 7, 8 }, model.Predict(Voice(8000, 180)).Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task FastEmit_IsCausal_SoLaterAudioLeavesEarlierFramesUnchanged()
+    {
+        await Task.Yield();
+        Assert.Equal((0.004, 16, 256), (new FastEmitOptions().FastEmitLambda, new FastEmitOptions().NumEncoderLayers, new FastEmitOptions().EncoderDim));
+        using var model = new FastEmit<double>(Architecture(), new FastEmitOptions
+        {
+            EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, NumMels = 16, PredictionDim = 8, JointDim = 8,
+            VocabSize = 8, FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, Seed = 5,
+        });
+        var network = model.Network ?? throw new InvalidOperationException("native model");
+        var features = network.Features(Voice(8000, 180).ToArray());
+        var changed = (double[,])features.Clone();
+        for (int t = 40; t < changed.GetLength(0); t++)
+            for (int b = 0; b < changed.GetLength(1); b++) changed[t, b] += 3.0;
+        var a = network.Encode(features, training: false);
+        var c = network.Encode(changed, training: false);
+        // Feature frames 40 on reach encoder frames from (40 - 3) / 4 = 9 on through the subsampling's receptive field; the
+        // causal blocks carry nothing back to frames 0 to 7.
+        for (int t = 0; t < 8; t++)
+            for (int k = 0; k < 16; k++) Assert.Equal(a[t, k], c[t, k], 10);
+    }
+
+    [Theory(Timeout = 300000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IntermediateCtc_TrainsAndMixesTheLosses(bool selfConditioned)
+    {
+        await Task.Yield();
+        var interDefaults = new InterCTCOptions();
+        Assert.Equal((12, 0.3), (interDefaults.NumEncoderLayers, interDefaults.IntermediateCtcWeight));
+        Assert.Equal(new[] { 6 }, interDefaults.IntermediateCtcLayers);
+        var selfDefaults = new SelfConditionedCTCOptions();
+        Assert.Equal((18, 0.5), (selfDefaults.NumEncoderLayers, selfDefaults.IntermediateCtcWeight));
+        Assert.Equal(new[] { 3, 6, 9, 12, 15 }, selfDefaults.IntermediateCtcLayers);
+        var audio = Voice(8000, 180);
+        var labels = new[] { 3, 5, 2 };
+        var target = new Tensor<double>(new[] { 3 }, new Vector<double>(labels.Select(l => (double)l).ToArray()));
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<double> model = selfConditioned
+            ? new SelfConditionedCTC<double>(Architecture(), new SelfConditionedCTCOptions { EncoderDim = 16, NumEncoderLayers = 2, IntermediateCtcLayers = new[] { 1 }, NumAttentionHeads = 2, NumMels = 16, VocabSize = 8, FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, Seed = 5 })
+            : new InterCTC<double>(Architecture(), new InterCTCOptions { EncoderDim = 16, NumEncoderLayers = 2, IntermediateCtcLayers = new[] { 1 }, NumAttentionHeads = 2, NumMels = 16, VocabSize = 8, FrequencyMasks = 0, TimeMasks = 0, MaxAudioLengthSeconds = 1, Seed = 5 });
+        using (model)
+        {
+            var network = selfConditioned ? ((SelfConditionedCTC<double>)model).Network : ((InterCTC<double>)model).Network;
+            if (network is null) throw new InvalidOperationException("native model");
+            var features = network.Features(audio.ToArray());
+            double Loss() => network.CtcTrainingLoss(features, labels, training: false)[0];
+            var (output, intermediates) = network.EncodeWithIntermediates(features, training: false);
+            double mixed = Loss(), final = network.CtcLoss(network.CtcLogits(output), labels)[0], inter = network.CtcLoss(intermediates[0], labels)[0];
+            double w = selfConditioned ? 0.5 : 0.3;
+            Assert.Equal((1 - w) * final + w * inter, mixed, 8);
+            for (int step = 0; step < 30; step++) model.Train(audio, target);
+            Assert.True(Loss() < 0.5 * mixed, $"mixed CTC loss {mixed} -> {Loss()}");
+        }
     }
 }
