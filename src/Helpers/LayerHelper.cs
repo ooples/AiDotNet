@@ -18323,7 +18323,7 @@ public static partial class LayerHelper<T>
         // the head a features x hidden fan-in (1280 at the defaults) and the first Adam steps overshoot (loss
         // 0.45 -> 2.94 before settling), while the token mean keeps the fan-in at hidden and converges smoothly
         // (the FT-Transformer-style per-sample readout). Pooling with a single output trains normally.
-        yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average);
 
         // MLP head (GELU projection -> output, no dropout). A ReLU projection + dropout here drove the
         // output layer into a dead/bias-only state during training; the smooth GELU keeps the head's units
