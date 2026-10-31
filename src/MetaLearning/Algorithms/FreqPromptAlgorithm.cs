@@ -85,7 +85,8 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     public FreqPromptAlgorithm(FreqPromptOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         if (options.NumFreqComponents <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "NumFreqComponents must be positive.");
@@ -138,6 +139,7 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Project gradient onto basis vectors to get coefficient gradients
+                var stepGradient = new double[coeffs.Length];
                 for (int k = 0; k < _numComponents; k++)
                 {
                     double gradC = 0;
@@ -146,8 +148,9 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 
                     // Add frequency-dependent regularization (_freqWeights already encodes HighFreqPenalty)
                     double reg = _freqWeights[k] * coeffs[k];
-                    coeffs[k] -= _algoOptions.InnerLearningRate * (gradC + reg);
+                    stepGradient[k] = gradC + reg;
                 }
+                ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Evaluate with adapted prompt
@@ -163,7 +166,7 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            var newBaseParams = ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate);
+            var newBaseParams = ApplyOuterGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate);
             ParamModel.SetParameters(newBaseParams);
         }
 
@@ -189,14 +192,16 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
             ParamModel.SetParameters(effectiveParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
+            var stepGradient = new double[coeffs.Length];
             for (int k = 0; k < _numComponents; k++)
             {
                 double gradC = 0;
                 for (int d = 0; d < _paramDim; d++)
                     gradC += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_promptBasis[k * _paramDim + d]);
                 double reg = _freqWeights[k] * coeffs[k];
-                coeffs[k] -= _algoOptions.InnerLearningRate * (gradC + reg);
+                stepGradient[k] = gradC + reg;
             }
+            ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
 
         var adaptedParams = ComputeEffectiveParams(baseParams, coeffs);
@@ -241,6 +246,7 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
                 ParamModel.SetParameters(effectiveParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
+                var stepGradient = new double[coeffs.Length];
                 for (int k = 0; k < _numComponents; k++)
                 {
                     double gradC = 0;
@@ -249,8 +255,9 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 
                     // Match MetaTrain: include frequency-dependent regularization
                     double reg = _freqWeights[k] * coeffs[k];
-                    coeffs[k] -= _algoOptions.InnerLearningRate * (gradC + reg);
+                    stepGradient[k] = gradC + reg;
                 }
+                ApplyInnerGradientsInPlace(coeffs, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
             var finalParams = ComputeEffectiveParams(baseParams, coeffs);

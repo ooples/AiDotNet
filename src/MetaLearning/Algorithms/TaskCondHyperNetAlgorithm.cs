@@ -121,7 +121,7 @@ public partial class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearner
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -163,7 +163,7 @@ public partial class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearner
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);
@@ -227,7 +227,7 @@ public partial class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearner
             {
                 ParamModel.SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                ap = ApplyGradients(ap, g, _algoOptions.InnerLearningRate);
+                ap = ApplyInnerGradients(ap, g, _algoOptions.InnerLearningRate, step == 0);
             }
             ParamModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));

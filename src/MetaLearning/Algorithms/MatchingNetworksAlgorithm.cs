@@ -114,7 +114,8 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            null) // Matching Networks doesn't use inner optimizer
+            null,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _matchingOptions = options;
 
@@ -184,10 +185,11 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
         }
 
         double beta = _matchingOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_kernelWeights.Length > 0) _kernelWeights = ApplyGradients(_kernelWeights, kernelGradient, beta);
-        if (_supportContextWeights.Length > 0) _supportContextWeights = ApplyGradients(_supportContextWeights, supportGradient, beta);
-        if (_queryContextWeights.Length > 0) _queryContextWeights = ApplyGradients(_queryContextWeights, queryGradient, beta);
+        var updated = ApplyOuterGradients(beta, (body, bodyGradient), (_kernelWeights, kernelGradient), (_supportContextWeights, supportGradient), (_queryContextWeights, queryGradient));
+        ParamModel.SetParameters(updated[0]);
+        _kernelWeights = updated[1];
+        _supportContextWeights = updated[2];
+        _queryContextWeights = updated[3];
 
         return NumOps.Divide(totalLoss, batchSize);
     }

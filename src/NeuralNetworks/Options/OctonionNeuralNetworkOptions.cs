@@ -39,6 +39,8 @@ public class OctonionNeuralNetworkOptions : ModelHyperparameterOptions
         MaxGradNorm = double.MaxValue;
     }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public OctonionNeuralNetworkOptions(OctonionNeuralNetworkOptions other)
     {
         if (other is null)

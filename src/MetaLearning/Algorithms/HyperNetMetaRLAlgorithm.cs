@@ -136,7 +136,7 @@ public partial class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
             {
                 ParamModel.SetParameters(taskParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                taskParams = ApplyGradients(taskParams, grad, _algoOptions.InnerLearningRate);
+                taskParams = ApplyInnerGradients(taskParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             ParamModel.SetParameters(taskParams);
@@ -177,7 +177,7 @@ public partial class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
         {
             ParamModel.SetParameters(taskParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            taskParams = ApplyGradients(taskParams, grad, _algoOptions.InnerLearningRate);
+            taskParams = ApplyInnerGradients(taskParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);
@@ -237,7 +237,7 @@ public partial class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
             {
                 ParamModel.SetParameters(tp);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                tp = ApplyGradients(tp, g, _algoOptions.InnerLearningRate);
+                tp = ApplyInnerGradients(tp, g, _algoOptions.InnerLearningRate, step == 0);
             }
             ParamModel.SetParameters(tp);
             double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));

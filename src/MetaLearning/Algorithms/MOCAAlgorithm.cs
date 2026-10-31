@@ -111,7 +111,7 @@ public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             {
                 ParamModel.SetParameters(adaptedOriginal);
                 lastGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedOriginal = ApplyGradients(adaptedOriginal, lastGrad, _algoOptions.InnerLearningRate);
+                adaptedOriginal = ApplyInnerGradients(adaptedOriginal, lastGrad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Update gradient history
@@ -146,7 +146,7 @@ public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
                     // Create complementary perturbation orthogonal to gradient
                     var augGrad = CreateAugmentedGradient(grad);
-                    adaptedAug = ApplyGradients(adaptedAug, augGrad, _algoOptions.InnerLearningRate);
+                    adaptedAug = ApplyInnerGradients(adaptedAug, augGrad, _algoOptions.InnerLearningRate, step == 0);
                 }
 
                 ParamModel.SetParameters(adaptedAug);
@@ -184,7 +184,7 @@ public partial class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);

@@ -86,42 +86,19 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// </summary>
-    /// <value>Default: null (uses model's default loss function if available).</value>
-    /// <remarks>
-    /// <para>
-    /// The loss function is used both in the inner loop (task adaptation) and
-    /// outer loop (meta-optimization) to guide the learning of per-parameter optimizers.
-    /// </para>
-    /// </remarks>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for meta-parameter updates (outer loop).
+    /// Must stay null: this algorithm's meta-update is part of the method rather than a plain gradient step, so a
+    /// supplied optimizer is rejected when the learner is built.
     /// </summary>
-    /// <value>Default: null (uses built-in Adam optimizer with OuterLearningRate).</value>
-    /// <remarks>
-    /// <para>
-    /// This optimizer updates the learned per-parameter learning rates, momentums,
-    /// and directions. Adam is typically used as it handles the sparse gradients
-    /// from per-parameter optimization well.
-    /// </para>
-    /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner-loop adaptation.
+    /// Must stay null: Meta-SGD's inner update is its learned per-parameter rule, so a supplied optimizer is
+    /// rejected when the learner is built.
     /// </summary>
-    /// <value>Default: null (uses the learned per-parameter optimizer).</value>
-    /// <remarks>
-    /// <para>
-    /// In Meta-SGD, this is typically not used directly because the per-parameter
-    /// optimizer with learned coefficients replaces standard optimization.
-    /// This is provided for compatibility with the base interface.
-    /// </para>
-    /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 
     /// <summary>

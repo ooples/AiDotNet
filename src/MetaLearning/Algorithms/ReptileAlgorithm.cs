@@ -212,17 +212,28 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         }
 
         // Update meta-parameters using interpolation
-        // theta_new = theta_old + (OuterLearningRate * Interpolation) * average_update
+        // theta_new = theta_old + (OuterLearningRate * Interpolation) * average_update, which is an SGD step on the
+        // "gradient" theta_old - phi. Nichol et al. (2018, section 3) feed that same vector to Adam, so a supplied
+        // meta-optimizer takes it instead. The optimizer steps at its own rate, so Interpolation then scales the
+        // displacement it produces, keeping Interpolation = 0 a no-op and 1 the full step.
         var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        var updatedMetaParams = new Vector<T>(currentMetaParams.Length);
-        T stepSize = NumOps.FromDouble(_reptileOptions.OuterLearningRate * _reptileOptions.Interpolation);
-
-        for (int i = 0; i < currentMetaParams.Length; i++)
+        var direction = Engine.Multiply(accumulatedUpdates, NumOps.FromDouble(-1.0));
+        Vector<T> updatedMetaParams;
+        if (MetaOptimizer is null)
         {
-            updatedMetaParams[i] = NumOps.Add(
-                currentMetaParams[i],
-                NumOps.Multiply(stepSize, accumulatedUpdates[i])
-            );
+            updatedMetaParams = ApplyOuterGradients(currentMetaParams, direction,
+                _reptileOptions.OuterLearningRate * _reptileOptions.Interpolation);
+        }
+        else if (_reptileOptions.Interpolation == 0)
+        {
+            updatedMetaParams = currentMetaParams;
+        }
+        else
+        {
+            var stepped = ApplyOuterGradients(currentMetaParams, direction, _reptileOptions.OuterLearningRate);
+            var displacement = Engine.Subtract(stepped, currentMetaParams);
+            updatedMetaParams = Engine.Add(currentMetaParams,
+                Engine.Multiply(displacement, NumOps.FromDouble(_reptileOptions.Interpolation)));
         }
 
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
@@ -297,7 +308,7 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
             // Apply gradients with inner learning rate
-            parameters = ApplyGradients(parameters, gradients, _reptileOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, gradients, _reptileOptions.InnerLearningRate, step == 0);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 

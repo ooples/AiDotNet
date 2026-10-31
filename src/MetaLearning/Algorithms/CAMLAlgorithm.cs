@@ -107,7 +107,8 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         : base(
             options.MetaModel,
             options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _camlOptions = options;
         InitializeContextModule();
@@ -151,7 +152,7 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
             ParamModel.SetParameters(initParams);
             var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(initParams, avgGrad, _camlOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(initParams, avgGrad, _camlOptions.OuterLearningRate));
         }
 
         // Update context module via SPSA

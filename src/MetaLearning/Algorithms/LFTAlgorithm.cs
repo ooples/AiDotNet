@@ -149,7 +149,8 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public LFTAlgorithm(LFTOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         if (options.FeatureDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "FeatureDimension (channel count C) must be positive.");
@@ -250,11 +251,7 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                     ParamModel.SetParameters(adaptedParams);
                     var grad = ClipGradients(
                         ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput, headLoss));
-                    for (int d = 0; d < _paramDim; d++)
-                    {
-                        adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                            NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
-                    }
+                    adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
                 }
 
                 ParamModel.SetParameters(adaptedParams);
@@ -567,11 +564,7 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(
                 ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput, headLoss));
-            for (int d = 0; d < _paramDim; d++)
-            {
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
-            }
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
 
             // The head steps on the same support set, by the same closed-form rule meta-training uses.
             var features = EncodeWithOptionalTransform(task.SupportInput);

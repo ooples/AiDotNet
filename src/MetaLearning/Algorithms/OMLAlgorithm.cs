@@ -65,7 +65,8 @@ public partial class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public OMLAlgorithm(OMLOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
@@ -93,9 +94,7 @@ public partial class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Only update PLN parameters (RLN stays frozen in inner loop)
-                for (int d = _plnStart; d < _paramDim; d++)
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
+                StepPredictionNetwork(adaptedParams, grad, step == 0);
             }
 
             ParamModel.SetParameters(adaptedParams);
@@ -154,12 +153,29 @@ public partial class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
-            for (int d = _plnStart; d < _paramDim; d++)
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
+            StepPredictionNetwork(adaptedParams, grad, step == 0);
         }
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+    }
+
+    /// <summary>
+    /// One inner step on the prediction network's parameters only (the representation network stays frozen), in place.
+    /// </summary>
+    private void StepPredictionNetwork(Vector<T> adaptedParams, Vector<T> grad, bool firstStep)
+    {
+        int count = _paramDim - _plnStart;
+        var parameters = new Vector<T>(count);
+        var gradients = new Vector<T>(count);
+        for (int i = 0; i < count; i++)
+        {
+            parameters[i] = adaptedParams[_plnStart + i];
+            gradients[i] = grad[_plnStart + i];
+        }
+
+        var updated = ApplyInnerGradients(parameters, gradients, _algoOptions.InnerLearningRate, firstStep);
+        for (int i = 0; i < count; i++)
+            adaptedParams[_plnStart + i] = updated[i];
     }
 }

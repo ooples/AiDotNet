@@ -167,7 +167,11 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            // The warp is a learned per-coordinate gradient scale, which an adaptive inner optimizer such as Adam
+            // divides back out: the warp would stop shaping adaptation and its finite-difference gradient would go to
+            // zero. So the inner steps stay plain SGD; a meta-optimizer still takes the outer step.
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _warpOptions = options;
         _warpLayerParams = new List<Vector<T>>();
@@ -270,7 +274,7 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 var warpedGradients = ApplyWarpLayers(rawGradients);
                 warpedGradients = ClipGradients(warpedGradients);
 
-                taskParams = ApplyGradients(taskParams, warpedGradients, _warpOptions.InnerLearningRate);
+                taskParams = ApplyInnerGradients(taskParams, warpedGradients, _warpOptions.InnerLearningRate, step == 0);
                 ParamModel.SetParameters(taskParams);
             }
 
@@ -295,7 +299,7 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         if (metaGradients.Count > 0)
         {
             var avgMetaGrad = AverageVectors(metaGradients);
-            var updatedParams = ApplyGradients(initParams, avgMetaGrad, _warpOptions.OuterLearningRate);
+            var updatedParams = ApplyOuterGradients(initParams, avgMetaGrad, _warpOptions.OuterLearningRate);
             ParamModel.SetParameters(updatedParams);
         }
 
@@ -355,7 +359,7 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             var warpedGradients = ApplyWarpLayers(rawGradients);
             warpedGradients = ClipGradients(warpedGradients);
 
-            adaptedParams = ApplyGradients(adaptedParams, warpedGradients, _warpOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, warpedGradients, _warpOptions.InnerLearningRate, step == 0);
             taskParameters.SetParameters(adaptedParams);
         }
 
@@ -495,7 +499,7 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             var rawGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
             var warpedGrad = ApplyWarpLayers(rawGrad);
-            taskParams = ApplyGradients(taskParams, warpedGrad, _warpOptions.InnerLearningRate);
+            taskParams = ApplyInnerGradients(taskParams, warpedGrad, _warpOptions.InnerLearningRate, step == 0);
             ParamModel.SetParameters(taskParams);
         }
 

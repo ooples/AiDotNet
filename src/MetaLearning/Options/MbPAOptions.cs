@@ -148,18 +148,28 @@ public class MbPAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.LossFunction"/>
+    /// <summary>Loss function for meta-training; null uses the default regression loss. Inner adaptation trains the output head through its own head loss (MbPAHeadLoss), not this one.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaOptimizer"/>
+    /// <summary>
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerOptimizer"/>
+    /// <summary>
+    /// Must stay null: this algorithm takes no plain gradient inner step (it adapts without one, or by its own
+    /// update rule), so a supplied optimizer is rejected when the learner is built.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.DataLoader"/>
+    /// <summary>Episodic data loader that supplies the meta-training tasks; null when tasks are passed to training directly.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
+    /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
+    /// <param name="metaModel">The model whose parameters are meta-learned.</param>
     public MbPAOptions(IFullModel<T, TInput, TOutput> metaModel)
     { Guard.NotNull(metaModel); MetaModel = metaModel; }
 
+    /// <inheritdoc/>
     public bool IsValid() =>
         MetaModel != null &&
         LocalLearningRate > 0 &&
@@ -174,6 +184,7 @@ public class MbPAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
         OuterLearningRate > 0 &&
         MetaBatchSize > 0;
 
+    /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new MbPAOptions<T, TInput, TOutput>(MetaModel)
     {
         LossFunction = LossFunction, MetaOptimizer = MetaOptimizer, InnerOptimizer = InnerOptimizer,

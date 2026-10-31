@@ -94,7 +94,7 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             {
                 ParamModel.SetParameters(adaptedParams);
                 lastGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, lastGrad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, lastGrad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             if (lastGrad != null)
@@ -133,7 +133,7 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                             lambda * NumOps.ToDouble(taskGradients[i][d])
                           + (1.0 - lambda) * NumOps.ToDouble(taskGradients[j][d]));
 
-                    adaptedParams = ApplyGradients(adaptedParams, interpGrad, _algoOptions.InnerLearningRate);
+                    adaptedParams = ApplyInnerGradients(adaptedParams, interpGrad, _algoOptions.InnerLearningRate, step == 0);
                 }
 
                 // Evaluate synthetic task using a randomly selected real task's query set
@@ -171,7 +171,7 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);

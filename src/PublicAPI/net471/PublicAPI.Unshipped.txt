@@ -1,0 +1,36 @@
+#nullable enable
+*REMOVED*const System.Runtime.CompilerServices.MethodImplOptionsEx.AggressiveOptimization = (System.Runtime.CompilerServices.MethodImplOptions)512 -> System.Runtime.CompilerServices.MethodImplOptions
+*REMOVED*static System.Collections.Generic.DictionaryExtensions.GetValueOrDefault<TKey, TValue>(this System.Collections.Generic.Dictionary<TKey, TValue>! dictionary, TKey key) -> TValue?
+*REMOVED*static System.Collections.Generic.DictionaryExtensions.GetValueOrDefault<TKey, TValue>(this System.Collections.Generic.Dictionary<TKey, TValue>! dictionary, TKey key, TValue defaultValue) -> TValue
+*REMOVED*static System.Collections.Generic.DictionaryExtensions.GetValueOrDefault<TKey, TValue>(this System.Collections.Generic.IDictionary<TKey, TValue>! dictionary, TKey key) -> TValue?
+*REMOVED*static System.Collections.Generic.DictionaryExtensions.GetValueOrDefault<TKey, TValue>(this System.Collections.Generic.IDictionary<TKey, TValue>! dictionary, TKey key, TValue defaultValue) -> TValue
+*REMOVED*static System.Collections.Generic.EnumerableExtensions.ToHashSet<T>(this System.Collections.Generic.IEnumerable<T>! source) -> System.Collections.Generic.HashSet<T>!
+*REMOVED*static System.Collections.Generic.EnumerableExtensions.ToHashSet<T>(this System.Collections.Generic.IEnumerable<T>! source, System.Collections.Generic.IEqualityComparer<T>? comparer) -> System.Collections.Generic.HashSet<T>!
+*REMOVED*static System.Collections.Generic.KeyValuePairExtensions.Deconstruct<TKey, TValue>(this System.Collections.Generic.KeyValuePair<TKey, TValue> kvp, out TKey key, out TValue value) -> void
+*REMOVED*System.Collections.Generic.DictionaryExtensions
+*REMOVED*System.Collections.Generic.EnumerableExtensions
+*REMOVED*System.Collections.Generic.KeyValuePairExtensions
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.Clear() -> void
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.Count.get -> int
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.Dequeue() -> TElement
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.Enqueue(TElement element, TPriority priority) -> void
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.EnsureCapacity(int capacity) -> void
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.Peek() -> TElement
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.PriorityQueue() -> void
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.PriorityQueue(int initialCapacity) -> void
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.PriorityQueue(int initialCapacity, System.Collections.Generic.IComparer<TPriority>! comparer) -> void
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.PriorityQueue(System.Collections.Generic.IComparer<TPriority>! comparer) -> void
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.TryDequeue(out TElement element, out TPriority priority) -> bool
+*REMOVED*System.Collections.Generic.PriorityQueue<TElement, TPriority>.TryPeek(out TElement element, out TPriority priority) -> bool
+*REMOVED*System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute
+*REMOVED*System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute.MaybeNullWhenAttribute(bool returnValue) -> void
+*REMOVED*System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute.ReturnValue.get -> bool
+*REMOVED*System.Diagnostics.CodeAnalysis.MemberNotNullAttribute
+*REMOVED*System.Diagnostics.CodeAnalysis.MemberNotNullAttribute.MemberNotNullAttribute(params string![]! members) -> void
+*REMOVED*System.Diagnostics.CodeAnalysis.MemberNotNullAttribute.MemberNotNullAttribute(string! member) -> void
+*REMOVED*System.Diagnostics.CodeAnalysis.MemberNotNullAttribute.Members.get -> string![]!
+*REMOVED*System.Diagnostics.CodeAnalysis.NotNullWhenAttribute
+*REMOVED*System.Diagnostics.CodeAnalysis.NotNullWhenAttribute.NotNullWhenAttribute(bool returnValue) -> void
+*REMOVED*System.Diagnostics.CodeAnalysis.NotNullWhenAttribute.ReturnValue.get -> bool
+*REMOVED*System.Runtime.CompilerServices.MethodImplOptionsEx

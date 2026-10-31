@@ -99,7 +99,8 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.None)
     {
         if (!options.IsValid())
             throw new ArgumentException("AWGIM configuration is invalid. Check all parameters.", nameof(options));

@@ -1,0 +1,176 @@
+#nullable enable
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.AverageRelativeError.get -> double
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.AverageRelativeError.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.ComparisonResult() -> void
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.Errors.get -> System.Collections.Generic.List<string!>!
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.Errors.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.FailedElements.get -> int
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.FailedElements.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.MaxRelativeError.get -> double
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.MaxRelativeError.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.Passed.get -> bool
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.Passed.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.TotalElementsChecked.get -> int
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.TotalElementsChecked.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.Defaults
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.TensorOperationsVerification() -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.TensorOperationsVerification(AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig! config) -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.AbsoluteTolerance.get -> double
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.AbsoluteTolerance.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.Epsilon.get -> double
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.Epsilon.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.RandomSeed.get -> int
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.RandomSeed.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.RelativeTolerance.get -> double
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.RelativeTolerance.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.Verbose.get -> bool
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.Verbose.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationConfig.VerificationConfig() -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.AllPassed.get -> bool
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.FailedOperations.get -> System.Collections.Generic.List<string!>!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.MaxRelativeError.get -> double
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.MaxRelativeError.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.Results.get -> System.Collections.Generic.Dictionary<string!, AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!>!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.TotalElementsChecked.get -> int
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.TotalElementsChecked.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.TotalFailedElements.get -> int
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.TotalFailedElements.set -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.VerificationSummary() -> void
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyAdd(int[]? inputShape = null) -> (AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!, AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!)
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyAllOperations() -> AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyBinaryOperation(System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>! operation, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input1, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input2, string! operationName) -> (AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult! grad1Result, AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult! grad2Result)
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyElementwiseDivide(int[]? inputShape = null) -> (AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!, AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!)
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyElementwiseMultiply(int[]? inputShape = null) -> (AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!, AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!)
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyExp(int[]? inputShape = null) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyLeakyReLU(int[]? inputShape = null, double alpha = 0.01) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyLog(int[]? inputShape = null) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyNegate(int[]? inputShape = null) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyReLU(int[]? inputShape = null) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifySigmoid(int[]? inputShape = null) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifySqrt(int[]? inputShape = null) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifySquare(int[]? inputShape = null) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifySubtract(int[]? inputShape = null) -> (AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!, AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!)
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyTanh(int[]? inputShape = null) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerifyUnaryOperation(System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>! operation, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, string! operationName) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*AiDotNet.Autodiff.Testing.TensorOperationsVerificationExtensions
+*REMOVED*AiDotNet.Diffusion.Memory.ActivationPool<T>
+*REMOVED*AiDotNet.Diffusion.Memory.ActivationPool<T>.ActivationPool(long maxMemoryMB = 4096) -> void
+*REMOVED*AiDotNet.Diffusion.Memory.ActivationPool<T>.Clear() -> void
+*REMOVED*AiDotNet.Diffusion.Memory.ActivationPool<T>.Dispose() -> void
+*REMOVED*AiDotNet.Diffusion.Memory.ActivationPool<T>.GetMemoryUsage() -> long
+*REMOVED*AiDotNet.Diffusion.Memory.ActivationPool<T>.Rent(int[]! shape) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Diffusion.Memory.ActivationPool<T>.Return(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> void
+*REMOVED*AiDotNet.Diffusion.Memory.ActivationPool<T>.Stats.get -> AiDotNet.Diffusion.Memory.ActivationPoolStats!
+*REMOVED*AiDotNet.Memory.InferenceContext<T>.InferenceContext(AiDotNet.Memory.TensorPool<T>? pool = null, int maxPoolSizeMB = 256) -> void
+*REMOVED*AiDotNet.Memory.InferenceContext<T>.Pool.get -> AiDotNet.Memory.TensorPool<T>!
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>.BeginForward(int batchSize, int seqLen = 1) -> void
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>.DeclareSequence(int index, params int[]! shapeSuffix) -> void
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>.DeclareTimestep(int index, params int[]! shapeSuffix) -> void
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>.EndForward() -> void
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>.LayerWorkspace(int timestepCount, int sequenceCount) -> void
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>.Sequence(int index) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>.Timestep(int index) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Memory.LayerWorkspace<T>.TotalPreAllocated.get -> int
+*REMOVED*AiDotNet.Memory.PooledTensor<T>.PooledTensor(AiDotNet.Memory.TensorPool<T>! pool, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> void
+*REMOVED*AiDotNet.Memory.TensorPool<T>
+*REMOVED*AiDotNet.Memory.TensorPool<T>.Clear() -> void
+*REMOVED*AiDotNet.Memory.TensorPool<T>.CurrentMemoryBytes.get -> long
+*REMOVED*AiDotNet.Memory.TensorPool<T>.CurrentPoolSizeBytes.get -> long
+*REMOVED*AiDotNet.Memory.TensorPool<T>.Dispose() -> void
+*REMOVED*AiDotNet.Memory.TensorPool<T>.GetStatistics() -> AiDotNet.Memory.PoolStatistics!
+*REMOVED*AiDotNet.Memory.TensorPool<T>.MaxPoolSizeBytes.get -> long
+*REMOVED*AiDotNet.Memory.TensorPool<T>.Options.get -> AiDotNet.Memory.PoolingOptions!
+*REMOVED*AiDotNet.Memory.TensorPool<T>.Rent(int[]! shape) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Memory.TensorPool<T>.RentMemory(int elementCount) -> System.Buffers.IMemoryOwner<T>!
+*REMOVED*AiDotNet.Memory.TensorPool<T>.RentPooled(int[]! shape) -> AiDotNet.Memory.PooledTensor<T>!
+*REMOVED*AiDotNet.Memory.TensorPool<T>.Return(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> void
+*REMOVED*AiDotNet.Memory.TensorPool<T>.TensorPool() -> void
+*REMOVED*AiDotNet.Memory.TensorPool<T>.TensorPool(AiDotNet.Memory.PoolingOptions! options) -> void
+*REMOVED*AiDotNet.Memory.TensorPool<T>.TensorPool(int maxPoolSizeMB) -> void
+*REMOVED*AiDotNet.Memory.TensorPool<T>.TotalPooledTensors.get -> int
+*REMOVED*AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.MetaLearnerBase(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! metaModel, AiDotNet.Interfaces.ILossFunction<T>! lossFunction, AiDotNet.Interfaces.IMetaLearnerOptions<T>! options, AiDotNet.Interfaces.IEpisodicDataLoader<T, TInput, TOutput>? dataLoader = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.LayerBase<T>.Workspace.get -> AiDotNet.Memory.LayerWorkspace<T>?
+*REMOVED*AiDotNet.NeuralNetworks.Layers.LayerBase<T>.Workspace.set -> void
+*REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>
+*REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>.Dispose() -> void
+*REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>.Invalidate() -> void
+*REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>.MultiSlotFusedStep(object! owner) -> void
+*REMOVED*AiDotNet.Training.MultiSlotFusedStep<T>.TryStep(System.Func<System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>! parameterProvider, System.Action? zeroGradAction, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! freshSlotData, System.Func<System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! forward, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! computeLoss, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! optimizer, out T lossValue) -> bool
+*REMOVED*System.ArrayPolyfill
+*REMOVED*System.IO.FilePolyfill
+*REMOVED*System.MathPolyfill
+*REMOVED*const AiDotNet.Autodiff.Testing.NumericalGradient<T>.Defaults.AbsoluteTolerance = 1E-06 -> double
+*REMOVED*const AiDotNet.Autodiff.Testing.NumericalGradient<T>.Defaults.Epsilon = 1E-05 -> double
+*REMOVED*const AiDotNet.Autodiff.Testing.NumericalGradient<T>.Defaults.RelativeTolerance = 0.0001 -> double
+*REMOVED*override AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.ToString() -> string!
+*REMOVED*override AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary.ToString() -> string!
+*REMOVED*static AiDotNet.Autodiff.Testing.NumericalGradient<T>.Compare(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actual, double relativeTolerance = 0.0001, double absoluteTolerance = 1E-06) -> AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult!
+*REMOVED*static AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComputeForBinaryOperation(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input1, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input2, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputGradient, System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>! operation, double epsilon = 1E-05) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! grad1, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! grad2)
+*REMOVED*static AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComputeForOperation(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputValue, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputGradient, System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>! operation, double epsilon = 1E-05) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*static AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComputeForScalarFunction(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, T>! scalarFunction, double epsilon = 1E-05) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*static AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComputeForTensorFunction(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputGradient, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! tensorFunction, double epsilon = 1E-05) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*static AiDotNet.Autodiff.Testing.TensorOperationsVerificationExtensions.RunAndPrint<T>(this AiDotNet.Autodiff.Testing.TensorOperationsVerification<T>.VerificationSummary! summary) -> void
+*REMOVED*static System.ArrayPolyfill.Fill<T>(T[]! array, T value) -> void
+*REMOVED*static System.ArrayPolyfill.Fill<T>(T[]! array, T value, int startIndex, int count) -> void
+*REMOVED*static System.IO.FilePolyfill.ReadAllBytesAsync(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+*REMOVED*static System.IO.FilePolyfill.ReadAllLinesAsync(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string![]!>!
+*REMOVED*static System.IO.FilePolyfill.ReadAllTextAsync(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+*REMOVED*static System.IO.FilePolyfill.WriteAllLinesAsync(string! path, System.Collections.Generic.IEnumerable<string!>! contents, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+*REMOVED*static System.IO.FilePolyfill.WriteAllTextAsync(string! path, string! contents, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+*REMOVED*static System.MathPolyfill.Clamp(double value, double min, double max) -> double
+*REMOVED*static System.MathPolyfill.Clamp(float value, float min, float max) -> float
+*REMOVED*static System.MathPolyfill.Clamp(int value, int min, int max) -> int
+*REMOVED*static System.MathPolyfill.Log2(double value) -> double
+AiDotNet.Memory.InferenceContext<T>.InferenceContext() -> void
+AiDotNet.Memory.InferenceContext<T>.InferenceContext(int maxPoolSizeMB) -> void
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients, double innerLearningRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients, double innerLearningRate, bool firstStep) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradients(double innerLearningRate, params (AiDotNet.Tensors.LinearAlgebra.Vector<T>! Parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! Gradients)[]! groups) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>![]!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyInnerGradientsInPlace(double[]! parameters, double[]! gradients, double innerLearningRate, bool firstStep) -> void
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyOuterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients, double outerLearningRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.ApplyOuterGradients(double outerLearningRate, params (AiDotNet.Tensors.LinearAlgebra.Vector<T>! Parameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! Gradients)[]! groups) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>![]!
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.MetaLearnerBase(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! metaModel, AiDotNet.Interfaces.ILossFunction<T>! lossFunction, AiDotNet.Interfaces.IMetaLearnerOptions<T>! options, AiDotNet.Interfaces.IEpisodicDataLoader<T, TInput, TOutput>? dataLoader = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null, AiDotNet.MetaLearning.MetaLearnerOptimizerUse optimizerUse = AiDotNet.MetaLearning.MetaLearnerOptimizerUse.InnerAndOuter) -> void
+AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.RequirePlainSgdInnerSteps(bool required, string! configuration) -> void
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse.Inner = 2 -> AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse.InnerAndOuter = AiDotNet.MetaLearning.MetaLearnerOptimizerUse.Outer | AiDotNet.MetaLearning.MetaLearnerOptimizerUse.Inner -> AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse.None = 0 -> AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.MetaLearning.MetaLearnerOptimizerUse.Outer = 1 -> AiDotNet.MetaLearning.MetaLearnerOptimizerUse
+AiDotNet.Models.Parameters.ResizableTensorFieldParameterSource<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+AiDotNet.Models.Parameters.TensorFieldParameterSource<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.AutoML.AutoMLModelBase<T, TInput, TOutput>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.AutoML.AutoMLModelBase<T, TInput, TOutput>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.CausalInference.CausalModelBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.CausalInference.CausalModelBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.CausalInference.CausalModelBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.Classification.ClassifierBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.Classification.ClassifierBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.Classification.ClassifierBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.Classification.MultiLabel.MultiLabelClassifierBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.Classification.MultiLabel.MultiLabelClassifierBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.Classification.MultiLabel.MultiLabelClassifierBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.Clustering.Base.ClusteringBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.Clustering.Base.ClusteringBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.Clustering.Base.ClusteringBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.Diffusion.DiffusionModelBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.Diffusion.VAE.VAEModelBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.Models.ModelBase<T, TInput, TOutput>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.Models.ModelWrapperBase<T, TInput, TOutput>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.Models.ModelWrapperBase<T, TInput, TOutput>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.OnlineLearning.OnlineLearningModelBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.OnlineLearning.OnlineLearningModelBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.OnlineLearning.OnlineLearningModelBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningAgentBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningAgentBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.SurvivalAnalysis.SurvivalModelBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.SurvivalAnalysis.SurvivalModelBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.SurvivalAnalysis.SurvivalModelBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
+virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void

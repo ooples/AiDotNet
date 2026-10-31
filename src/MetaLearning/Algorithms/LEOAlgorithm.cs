@@ -135,7 +135,8 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _leoOptions = options;
         if (!options.IsValid())
@@ -221,12 +222,15 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
 
         double beta = _leoOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, gradients[0], beta));
-        _encoderWeights = ApplyGradients(_encoderWeights, gradients[1], beta);
-        if (_relationWeights.Length > 0) _relationWeights = ApplyGradients(_relationWeights, gradients[2], beta);
-        _decoderWeights = ApplyGradients(_decoderWeights, gradients[3], beta);
-        _latentRates = ApplyGradients(_latentRates, gradients[4], beta);
-        _fineTuningRates = ApplyGradients(_fineTuningRates, gradients[5], beta);
+        var updated = ApplyOuterGradients(beta, (body, gradients[0]), (_encoderWeights, gradients[1]),
+            (_relationWeights, gradients[2]), (_decoderWeights, gradients[3]), (_latentRates, gradients[4]),
+            (_fineTuningRates, gradients[5]));
+        ParamModel.SetParameters(updated[0]);
+        _encoderWeights = updated[1];
+        _relationWeights = updated[2];
+        _decoderWeights = updated[3];
+        _latentRates = updated[4];
+        _fineTuningRates = updated[5];
 
         return NumOps.Divide(total, batchSize);
     }

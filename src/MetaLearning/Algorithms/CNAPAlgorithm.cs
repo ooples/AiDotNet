@@ -126,7 +126,8 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _cnapOptions = options;
 
@@ -269,17 +270,17 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         }
 
         // Update encoder and adaptation network weights
-        _encoderWeights = ApplyGradients(_encoderWeights, accumulatedEncoderGradients, _cnapOptions.OuterLearningRate);
-        _adaptationNetworkWeights = ApplyGradients(_adaptationNetworkWeights, accumulatedAdaptationGradients, _cnapOptions.OuterLearningRate);
-
         // Also update base model if gradients are available
         var baseModelGradients = ComputeBaseModelGradients(taskBatch);
-        if (baseModelGradients != null)
-        {
-            var currentParams = ParamModel.GetParameters();
-            var updatedParams = ApplyGradients(currentParams, baseModelGradients, _cnapOptions.OuterLearningRate);
-            ParamModel.SetParameters(updatedParams);
-        }
+        var baseModelParams = baseModelGradients is null ? new Vector<T>(0) : ParamModel.GetParameters();
+        var updated = ApplyOuterGradients(_cnapOptions.OuterLearningRate,
+            (_encoderWeights, accumulatedEncoderGradients),
+            (_adaptationNetworkWeights, accumulatedAdaptationGradients),
+            (baseModelParams, baseModelGradients ?? new Vector<T>(0)));
+        _encoderWeights = updated[0];
+        _adaptationNetworkWeights = updated[1];
+        if (baseModelGradients is not null)
+            ParamModel.SetParameters(updated[2]);
 
         return NumOps.Divide(totalLoss, batchSizeT);
     }

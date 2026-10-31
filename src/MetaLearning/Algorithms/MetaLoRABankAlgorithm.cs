@@ -89,7 +89,8 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     public MetaLoRABankAlgorithm(MetaLoRABankOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
@@ -152,11 +153,13 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                 var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Compute gradient w.r.t. each gating weight
+                var stepGradient = new double[currentWeights.Length];
                 for (int k = 0; k < selectedIndices.Length; k++)
                 {
                     double gradW = ComputeModuleGradient(fullGrad, selectedIndices[k]);
-                    currentWeights[k] -= _algoOptions.InnerLearningRate * gradW;
+                    stepGradient[k] = gradW;
                 }
+                ApplyInnerGradientsInPlace(currentWeights, stepGradient, _algoOptions.InnerLearningRate, step == 0);
 
                 // Re-normalize weights to sum to 1
                 NormalizeWeights(currentWeights);
@@ -182,7 +185,7 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            ParamModel.SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            ParamModel.SetParameters(ApplyOuterGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update module bank and gating network via SPSA
@@ -213,11 +216,13 @@ public partial class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             ParamModel.SetParameters(adaptedParams);
 
             var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+            var stepGradient = new double[currentWeights.Length];
             for (int k = 0; k < selectedIndices.Length; k++)
             {
                 double gradW = ComputeModuleGradient(fullGrad, selectedIndices[k]);
-                currentWeights[k] -= _algoOptions.InnerLearningRate * gradW;
+                stepGradient[k] = gradW;
             }
+            ApplyInnerGradientsInPlace(currentWeights, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             NormalizeWeights(currentWeights);
         }
 

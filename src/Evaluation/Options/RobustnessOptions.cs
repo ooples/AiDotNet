@@ -196,7 +196,7 @@ public enum AdversarialAttackMethod
     BIM = 2,
 
     /// <summary>
-    /// Carlini & Wagner L2 attack - strongest but slowest.
+    /// Carlini &amp; Wagner L2 attack - strongest but slowest.
     /// </summary>
     CW = 3,
 

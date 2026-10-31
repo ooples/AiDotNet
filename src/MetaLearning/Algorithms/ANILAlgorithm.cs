@@ -112,6 +112,7 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options.InnerOptimizer)
     {
         _anilOptions = options;
+        RequirePlainSgdInnerSteps(!options.UseFirstOrder, "second-order meta-gradients through the head's inner steps");
         if (options.NumClasses <= 0)
             throw new ArgumentException("NumClasses must be positive.", nameof(options));
         if (options.FeatureDimension <= 0)
@@ -180,10 +181,11 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 headBiasGradient = ClipGradients(headBiasGradient, _anilOptions.GradientClipThreshold.Value);
         }
 
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, _anilOptions.OuterLearningRate));
-        _headWeights = ApplyGradients(_headWeights, headWeightGradient, _anilOptions.OuterLearningRate);
-        if (_headBias.Length > 0)
-            _headBias = ApplyGradients(_headBias, headBiasGradient, _anilOptions.OuterLearningRate);
+        var updated = ApplyOuterGradients(_anilOptions.OuterLearningRate,
+            (body, bodyGradient), (_headWeights, headWeightGradient), (_headBias, headBiasGradient));
+        ParamModel.SetParameters(updated[0]);
+        _headWeights = updated[1];
+        _headBias = updated[2];
 
         return NumOps.Divide(totalLoss, batchSize);
     }
@@ -420,8 +422,9 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             if (record) trace.Add((weights, bias));
             var (_, weightGradient, biasGradient) = HeadLossAndGradient(
                 supportEmbeddings, supportLabels, weights, bias, regularize: true);
-            weights = ApplyGradients(weights, weightGradient, _anilOptions.InnerLearningRate);
-            if (bias.Length > 0) bias = ApplyGradients(bias, biasGradient, _anilOptions.InnerLearningRate);
+            var adapted = ApplyInnerGradients(_anilOptions.InnerLearningRate, (weights, weightGradient), (bias, biasGradient));
+            weights = adapted[0];
+            bias = adapted[1];
         }
 
         return (weights, bias, trace);

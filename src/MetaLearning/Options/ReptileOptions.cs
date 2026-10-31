@@ -42,29 +42,28 @@ public class ReptileOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// </summary>
-    /// <value>Default: null (uses model's default loss function if available).</value>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
     /// Gets or sets the optimizer for meta-parameter updates (outer loop).
     /// </summary>
-    /// <value>Default: null (Reptile uses simple interpolation, not optimizer-based updates).</value>
+    /// <value>Default: null (the plain interpolation step theta += OuterLearningRate * Interpolation * (phi - theta)).</value>
     /// <remarks>
     /// <para>
-    /// Note: Reptile typically doesn't use an optimizer for outer-loop updates.
-    /// Instead, it uses a simple interpolation step. This is provided for compatibility
-    /// with the base interface but is not used in standard Reptile.
+    /// When set, the optimizer takes the step on the "gradient" theta - phi, as Nichol et al. (2018, section 3)
+    /// do with Adam, at its own learning rate; <see cref="Interpolation"/> then scales the displacement it
+    /// produces (0 leaves the meta-parameters unchanged). Its state is kept across meta-iterations. It must not be
+    /// the same instance as <see cref="InnerOptimizer"/>.
     /// </para>
     /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner-loop adaptation.
+    /// Optimizer for task adaptation. When set, it takes each inner step at its own learning rate (so
+    /// <see cref="InnerLearningRate"/> no longer applies) and is reset at the start of every adaptation; null uses
+    /// plain SGD at <see cref="InnerLearningRate"/>.
     /// </summary>
-    /// <value>Default: null (uses built-in SGD optimizer with InnerLearningRate).</value>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 
     /// <summary>
