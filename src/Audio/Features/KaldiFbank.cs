@@ -114,7 +114,11 @@ internal sealed class KaldiFbank<T>
     public int Frames(int samples) => samples < WindowSize ? 0 : 1 + (samples - WindowSize) / FrameShift;
 
     /// <summary>The log filterbank energies <c>[frames, MelBins]</c> of a waveform <c>[samples]</c>.</summary>
-    public Tensor<T> Forward(Tensor<T> waveform)
+    public Tensor<T> Forward(Tensor<T> waveform) => Forward(waveform, 0.0, null);
+
+    /// <summary>The features with Kaldi's dither: each framed window gets Gaussian noise of amplitude
+    /// <paramref name="dither"/> from <paramref name="random"/> before the DC removal (torchaudio's <c>dither</c>).</summary>
+    public Tensor<T> Forward(Tensor<T> waveform, double dither, Random? random)
     {
         int length = waveform.Length, frames = Frames(length), n = WindowSize;
         if (frames == 0) throw new ArgumentException($"The waveform has {length} samples, fewer than one {n}-sample frame.", nameof(waveform));
@@ -123,6 +127,14 @@ internal sealed class KaldiFbank<T>
             for (int i = 0; i < n; i++)
                 index[f * n + i] = f * FrameShift + i;
         var framed = _engine.Reshape(_engine.TensorIndexSelect(_engine.Reshape(waveform, new[] { length, 1 }), index, 0), new[] { frames, n });
+        if (dither > 0)
+        {
+            var rng = random ?? throw new ArgumentNullException(nameof(random), "Dither needs a generator.");
+            var noise = new Tensor<T>(new[] { frames, n });
+            for (int i = 0; i < noise.Length; i++)
+                noise.SetFlat(i, NumOps.FromDouble(dither * Math.Sqrt(-2.0 * Math.Log(1.0 - rng.NextDouble())) * Math.Cos(2.0 * Math.PI * rng.NextDouble())));
+            framed = _engine.TensorAdd(framed, noise);
+        }
         var re = _engine.TensorMatMul(framed, _real);
         var im = _engine.TensorMatMul(framed, _imaginary);
         var power = _engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im));
