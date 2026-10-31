@@ -503,7 +503,8 @@ public class RLAgentOptionsHonoredTests
             {
                 ObservationSize = StateSize,
                 ActionSize = 2,
-                LatentSize = 6,
+                DeterministicSize = 6,
+                StochasticSize = 3,
                 HiddenSize = 8,
                 ImaginationHorizon = 2,
                 BatchSize = 8,
@@ -535,25 +536,75 @@ public class RLAgentOptionsHonoredTests
         });
     }
 
-    // Without a factory the networks train with Adam at LearningRate; before, they fell back to the network's own
-    // default optimizer and LearningRate reached none of them.
-    [Fact]
-    public void Dreamer_WithoutAFactory_TrainsAtTheConfiguredLearningRate()
+    /// <summary>The three model groups of Dreamer, by network index: Appendix A gives each its own Adam rate.</summary>
+    public enum DreamerModelGroup
     {
-        AssertOptimizerDrivesTraining("Dreamer", rate =>
+        /// <summary>Encoder, RSSM, observation, reward and discount models (indices 0-8), at <c>LearningRate</c>.</summary>
+        WorldModel,
+        /// <summary>The action model (index 9), at <c>ActorLearningRate</c>.</summary>
+        Actor,
+        /// <summary>The value model (index 10), at <c>ValueLearningRate</c>.</summary>
+        Value,
+    }
+
+    private static int[] DreamerGroupNetworks(DreamerModelGroup group) => group switch
+    {
+        DreamerModelGroup.WorldModel => new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 },
+        DreamerModelGroup.Actor => new[] { 9 },
+        _ => new[] { 10 },
+    };
+
+    /// <summary>How far the second update moves the given networks (the first sizes the lazy layers).</summary>
+    private static double SecondUpdateDisplacement(DeepReinforcementLearningAgentBase<double> agent, Action feed, int[] networks)
+    {
+        double[] Snapshot()
+        {
+            var all = agent.GetNetworks();
+            return networks.SelectMany(i => { var p = all[i].GetParameters(); return Enumerable.Range(0, p.Length).Select(j => p[j]); }).ToArray();
+        }
+
+        feed();
+        agent.Train();
+        var before = Snapshot();
+        feed();
+        agent.Train();
+        var after = Snapshot();
+
+        Assert.Equal(before.Length, after.Length);
+        double sum = 0.0;
+        for (int i = 0; i < before.Length; i++) sum += (after[i] - before[i]) * (after[i] - before[i]);
+        return Math.Sqrt(sum);
+    }
+
+    // Without a factory each model group trains with Adam at its own option: LearningRate for the world model,
+    // ActorLearningRate for the action model and ValueLearningRate for the value model (Appendix A: 6e-4, 8e-5 and
+    // 8e-5). Only the group under test changes rate between the two runs, and only that group's networks are
+    // measured, so a group that ignored its option (training at another group's rate, or at a network default)
+    // moves about equally in both runs and fails the 1e3 ratio.
+    [Theory]
+    [InlineData(DreamerModelGroup.WorldModel)]
+    [InlineData(DreamerModelGroup.Actor)]
+    [InlineData(DreamerModelGroup.Value)]
+    public void Dreamer_WithoutAFactory_TrainsEachModelGroupAtItsOwnLearningRate(DreamerModelGroup group)
+    {
+        const double Fixed = 1e-4;
+        AssertOptimizerDrivesTraining($"Dreamer {group}", rate =>
         {
             var agent = new DreamerAgent<double>(new DreamerOptions<double>
             {
                 ObservationSize = StateSize,
                 ActionSize = 2,
-                LatentSize = 6,
+                DeterministicSize = 6,
+                StochasticSize = 3,
                 HiddenSize = 8,
                 ImaginationHorizon = 2,
                 BatchSize = 8,
                 ReplayBufferSize = 64,
-                LearningRate = rate,
+                LearningRate = group == DreamerModelGroup.WorldModel ? rate : Fixed,
+                ActorLearningRate = group == DreamerModelGroup.Actor ? rate : Fixed,
+                ValueLearningRate = group == DreamerModelGroup.Value ? rate : Fixed,
             });
-            return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 53));
+            return SecondUpdateDisplacement(agent, Feed(agent, 8, 2, seed: 53), DreamerGroupNetworks(group));
         });
     }
 
@@ -667,7 +718,8 @@ public class RLAgentOptionsHonoredTests
         {
             ObservationSize = StateSize,
             ActionSize = 2,
-            LatentSize = 6,
+            DeterministicSize = 6,
+            StochasticSize = 3,
             HiddenSize = 8,
             OptimizerFactory = factory.Create,
         });

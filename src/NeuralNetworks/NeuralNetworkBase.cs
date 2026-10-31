@@ -14170,6 +14170,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Each member then publishes and steps exactly its own share with its own optimizer, since
     /// members may train at different rates: StyleGAN's mapping network learns 100 times slower.
     /// </para>
+    /// <para>
+    /// A positive <c>groupMaxGradientNorm</c> clips the members as one group before any of them steps: the joint
+    /// gradient of all members is rescaled to at most that global L2 norm, as TensorFlow's
+    /// <c>clip_by_global_norm</c> over one optimizer's whole variable set does (Dreamer clips its world model this
+    /// way). This is not the same as each member's optimizer clipping its own share, which bounds every member
+    /// separately and lets the group's joint step grow with the number of members.
+    /// </para>
     /// </remarks>
     /// <param name="tape">The open tape on which every member's forward was recorded.</param>
     /// <param name="lossTensor">The scalar loss recorded on <paramref name="tape"/>.</param>
@@ -14184,16 +14191,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         => StepOnTape(tape, lossTensor, new[] { (network, optimizer) });
 
     /// <inheritdoc cref="StepOnTape(GradientTape{T}, Tensor{T}, NeuralNetworkBase{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>
+    /// <param name="groupMaxGradientNorm">When positive, the largest global L2 norm of the members' joint gradient;
+    /// zero (the default) leaves the gradient as the tape computed it.</param>
     internal static T StepOnTape(
         GradientTape<T> tape,
         Tensor<T> lossTensor,
-        IReadOnlyList<(NeuralNetworkBase<T> Network, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer)> members)
+        IReadOnlyList<(NeuralNetworkBase<T> Network, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer)> members,
+        double groupMaxGradientNorm = 0.0)
     {
         if (tape is null) throw new ArgumentNullException(nameof(tape));
         if (lossTensor is null) throw new ArgumentNullException(nameof(lossTensor));
         if (members is null) throw new ArgumentNullException(nameof(members));
         if (members.Count == 0)
             throw new ArgumentException("At least one network must be trained by the step.", nameof(members));
+        if (double.IsNaN(groupMaxGradientNorm) || double.IsInfinity(groupMaxGradientNorm) || groupMaxGradientNorm < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(groupMaxGradientNorm), groupMaxGradientNorm,
+                "A group gradient-norm bound must be finite and non-negative (zero disables it).");
+        }
 
         var sentinels = new List<TrainSentinel>(members.Count);
         try
@@ -14219,6 +14234,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             var gradients = tape.ComputeGradients(lossTensor, union, false);
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : members[0].Network.NumOps.Zero;
+
+            if (groupMaxGradientNorm > 0.0)
+            {
+                // One norm over every member's parameters, then one scale applied to all of them in place, so each
+                // member's optimizer below steps on its share of the jointly clipped gradient.
+                var groupGradients = new Dictionary<Tensor<T>, Tensor<T>>(
+                    AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var parameter in union)
+                {
+                    if (gradients.TryGetValue(parameter, out var gradient)) groupGradients[parameter] = gradient;
+                }
+                Training.TapeTrainingStepper<T>.ClipByGlobalNorm(groupGradients, groupMaxGradientNorm);
+            }
 
             for (int i = 0; i < members.Count; i++)
             {

@@ -461,7 +461,8 @@ public class DeepAgentsIntegrationTests
         {
             ObservationSize = ContinuousStateSize,
             ActionSize = ContinuousActionSize,
-            LatentSize = 4,
+            DeterministicSize = 4,
+            StochasticSize = 2,
             HiddenSize = 4,
             BatchSize = 1,
             ReplayBufferSize = 4,

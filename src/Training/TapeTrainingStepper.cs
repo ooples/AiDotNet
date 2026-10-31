@@ -562,7 +562,7 @@ internal sealed class TapeTrainingStepper<T>
     }
 
     // PyTorch clip_grad_norm_ on the engine: scale every gradient by max / (norm + 1e-6) when the norm exceeds max.
-    private static void ClipByGlobalNorm(Dictionary<Tensor<T>, Tensor<T>> gradients, double maxNorm)
+    internal static void ClipByGlobalNorm(Dictionary<Tensor<T>, Tensor<T>> gradients, double maxNorm)
     {
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
