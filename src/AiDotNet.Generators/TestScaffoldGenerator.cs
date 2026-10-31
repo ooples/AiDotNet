@@ -10813,20 +10813,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "AVHuBERT" && model.TypeParameterCount == 1)
             {
-                // AV-HuBERT's production defaults retain the paper's HuBERT-base
-                // encoder (768 hidden, 12 residual transformer layers, 12 heads)
-                // and a 5,000-way CTC projection. FP32 and smoke iteration caps
-                // alone still leave enough weights plus tape gradients and 8-bit
-                // Adam state to exceed a 16 GB runner during repeated training.
-                // Exercise the same feature projection -> residual transformer ->
-                // CTC topology through public options at CI scale only.
+                // AV-HuBERT's defaults are the BASE model (12 layers, 768 wide, ResNet-18 lip encoder). The fixture is the
+                // same audio encoder, fusion, pre-norm Transformer and CTC projection at width 32 with one layer; the
+                // generated invariants drive the audio stream, as Predict does.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.Robust.AVHuBERTOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 8, DropoutRate = 0.0 })";
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 64, FinalDim = 16, NumClusters = 8, " +
+                    "VocabSize = 16, MaxTextLength = 8, DropoutRate = 0.0, LayerDrop = 0.0, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Chirp2" && model.TypeParameterCount == 1)
             {
@@ -17031,6 +17027,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // overstates recurrent work while violating the public streaming input contract.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 512 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
+            }
+            else if (model.ClassName == "AVHuBERT")
+            {
+                // AV-HuBERT's audio stream: 0.2 s at 16 kHz is 21 filterbank frames, 5 stacked 25 Hz frames.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 5, 16 };");
             }
             else if (model.ClassName == "SPIRAL")
             {

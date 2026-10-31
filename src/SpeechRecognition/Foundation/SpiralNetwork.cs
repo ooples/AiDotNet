@@ -51,8 +51,9 @@ internal sealed record SpiralConfiguration
 /// <remarks>
 /// The input is 128-bin log-mel at a 10 ms stride (section 4.2); the blocks reduce it to 40 ms and then 80 ms frames.
 /// Layer details the paper leaves open follow the authors' released configuration (huawei-noah/Speech-Backbones):
-/// "same" padding for the convolutions, no ReLU after the kernel-1 convolution closing each block, pre-norm Transformer
-/// layers with GELU, and 128-tap positional convolutions in 16 groups. Its layers are added to the given list.
+/// "same" padding for the convolutions, no ReLU after the kernel-1 convolution closing each block, and fairseq's pre-norm
+/// wav2vec 2.0 Transformer (<see cref="PreNormTransformerEncoder{T}"/>) with 128-tap positional convolutions in 16 groups.
+/// Its layers are added to the given list.
 /// </remarks>
 internal sealed class SpiralNetwork<T>
 {
@@ -63,12 +64,7 @@ internal sealed class SpiralNetwork<T>
 
     internal sealed record Convolution(DenseLayer<T> Map, LayerNormalizationLayer<T> Norm, int Kernel, int Stride, bool Relu);
 
-    internal sealed record TransformerLayer(LayerNormalizationLayer<T> AttentionNorm, DenseLayer<T> Query, DenseLayer<T> Key,
-        DenseLayer<T> Value, DenseLayer<T> Output, LayerNormalizationLayer<T> FeedForwardNorm, DenseLayer<T> Intermediate,
-        DenseLayer<T> FeedForwardOutput);
-
-    internal sealed record Block(List<Convolution> Convolutions, Wav2Vec2PositionalConvLayer<T> PositionalConv,
-        List<TransformerLayer> Layers, LayerNormalizationLayer<T> FinalNorm, int Heads, double LayerDrop);
+    internal sealed record Block(List<Convolution> Convolutions, PreNormTransformerEncoder<T> Transformer, double LayerDrop);
 
     internal sealed record PredictorConvolution(DenseLayer<T> Map, BatchNormalizationLayer<T> Norm);
 
@@ -95,16 +91,9 @@ internal sealed class SpiralNetwork<T>
                 convs.Add(new Convolution(Linear(channels), Own(new LayerNormalizationLayer<T>(channels)), kernel, stride,
                     Relu: i < convolutions.Length - 1));
             }
-            int width = convolutions[^1].Channels;
-            if (width % heads != 0) throw new ArgumentException($"The width {width} must divide into {heads} heads.", nameof(configuration));
-            if (width % _c.PositionalConvGroups != 0)
-                throw new ArgumentException($"The width {width} must divide into {_c.PositionalConvGroups} positional groups.", nameof(configuration));
-            var positional = Own(new Wav2Vec2PositionalConvLayer<T>(width, _c.PositionalConvKernel, _c.PositionalConvGroups));
-            var transformer = new List<TransformerLayer>();
-            for (int i = 0; i < count; i++)
-                transformer.Add(new TransformerLayer(Own(new LayerNormalizationLayer<T>(width)), Linear(width), Linear(width), Linear(width),
-                    Linear(width), Own(new LayerNormalizationLayer<T>(width)), Linear(feedForward), Linear(width)));
-            return new Block(convs, positional, transformer, Own(new LayerNormalizationLayer<T>(width)), heads, layerDrop);
+            var transformer = new PreNormTransformerEncoder<T>(_engine, layers, convolutions[^1].Channels, count, heads, feedForward,
+                _c.PositionalConvKernel, _c.PositionalConvGroups);
+            return new Block(convs, transformer, layerDrop);
         }
 
         First = Build(_c.FirstConvolutions, _c.FirstLayers, _c.FirstHeads, _c.FirstFeedForward, _c.FirstLayerDrop);
@@ -119,35 +108,11 @@ internal sealed class SpiralNetwork<T>
         ClassifierOutput = Linear(_c.VocabSize);
     }
 
-    /// <summary>
-    /// Initializes the weight-normalized positional convolutions as fairseq's wav2vec 2.0 does: v ~ N(0, 2·√(1/(K·C))),
-    /// g = ‖v‖ per tap, zero bias. Left at zero, w = g·v/‖v‖ is 0/0.
-    /// </summary>
+    /// <summary>Initializes both blocks' weight-normalized position convolutions as fairseq does.</summary>
     public void InitializePositionalConvolutions(Random random)
     {
-        foreach (var block in new[] { First, Second })
-        {
-            var (v, g, b) = block.PositionalConv.WeightNormParameters;
-            int channels = v.Shape[0], perGroup = v.Shape[1], kernel = v.Shape[2];
-            double std = 2 * Math.Sqrt(1.0 / ((double)kernel * channels));
-            var direction = new double[v.Length];
-            for (int i = 0; i < direction.Length; i++)
-            {
-                double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                direction[i] = std * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-                v[i] = NumOps.FromDouble(direction[i]);
-            }
-            for (int t = 0; t < kernel; t++)
-            {
-                double sum = 0;
-                for (int o = 0; o < channels * perGroup; o++) sum += direction[o * kernel + t] * direction[o * kernel + t];
-                g[t] = NumOps.FromDouble(Math.Sqrt(sum));
-            }
-            for (int i = 0; i < b.Length; i++) b[i] = NumOps.Zero;
-            _engine.InvalidatePersistentTensor(v);
-            _engine.InvalidatePersistentTensor(g);
-            _engine.InvalidatePersistentTensor(b);
-        }
+        First.Transformer.InitializePositionalConvolution(random);
+        Second.Transformer.InitializePositionalConvolution(random);
     }
 
     public Block First { get; }
@@ -242,12 +207,7 @@ internal sealed class SpiralNetwork<T>
             x = ConvBlock(conv, x);
             if (conv.Relu) x = Drop(x, _c.Dropout, training, random);
         }
-        int length = x.Shape[0], width = x.Shape[1];
-        var positional = _engine.Reshape(block.PositionalConv.Forward(_engine.Reshape(x, new[] { 1, length, width })), new[] { length, width });
-        x = Drop(_engine.TensorAdd(x, ActivationHelper.ExactGelu(positional, _engine)), _c.Dropout, training, random);
-        foreach (var layer in block.Layers)
-            if (!(training && random.NextDouble() < block.LayerDrop)) x = EncodeLayer(layer, block.Heads, x, training, random);
-        return block.FinalNorm.Forward(x);
+        return block.Transformer.Forward(x, training, random, _c.Dropout, _c.Dropout, block.LayerDrop);
     }
 
     // A strided "same" convolution on [L, Cin] (TensorFlow padding: ⌈L/stride⌉ outputs, the padding split with the extra
@@ -282,23 +242,6 @@ internal sealed class SpiralNetwork<T>
         var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
         for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
         return _engine.TensorMultiply(x, mask);
-    }
-
-    private Tensor<T> EncodeLayer(TransformerLayer l, int heads, Tensor<T> x, bool training, Random random)
-    {
-        int length = x.Shape[0], width = x.Shape[1], e = width / heads;
-        var normed = l.AttentionNorm.Forward(x);
-        Tensor<T> Split(DenseLayer<T> projection) =>
-            _engine.TensorPermute(_engine.Reshape(projection.Forward(normed), new[] { length, heads, e }), new[] { 1, 0, 2 });
-        var q = Split(l.Query);
-        var k = Split(l.Key);
-        var v = Split(l.Value);
-        var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })), NumOps.FromDouble(1.0 / Math.Sqrt(e)));
-        var weights = Drop(_engine.Softmax(scores, axis: 2), _c.Dropout, training, random);
-        var context = _engine.Reshape(_engine.TensorPermute(_engine.BatchMatMul(weights, v), new[] { 1, 0, 2 }), new[] { length, width });
-        x = _engine.TensorAdd(x, Drop(l.Output.Forward(context), _c.Dropout, training, random));
-        var hidden = Drop(ActivationHelper.ExactGelu(l.Intermediate.Forward(l.FeedForwardNorm.Forward(x)), _engine), _c.Dropout, training, random);
-        return _engine.TensorAdd(x, Drop(l.FeedForwardOutput.Forward(hidden), _c.Dropout, training, random));
     }
 
     /// <summary>
