@@ -58,6 +58,10 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Diarization is Hard: Some Experiences and Lessons Learned for the JHU Team in the Inaugural DIHARD Challenge", "https://www.isca-archive.org/interspeech_2018/sell18_interspeech.html", Year = 2018, Authors = "Sell et al.")]
+[ArchitectureFromPaper("https://doi.org/10.1109/ICASSP.2018.8461375",
+    "The JHU DIHARD system embeds 1.5-second windows every 0.75 seconds with x-vectors (Snyder et al. 2018) and clusters them "
+    + "agglomeratively, so the diarizer runs the x-vector network of its embedding extractor.")]
     [ResearchPaper("Speaker Diarization: A Review of Recent Research", "https://doi.org/10.1109/TASLP.2012.2209910")]
 public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
 {
@@ -276,12 +280,10 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultSpeakerEmbeddingLayers(
-                numMels: 40, // MFCC coefficients
-                hiddenDim: 512,
-                embeddingDim: EmbeddingDimension,
-                numLayers: 3,
-                dropoutRate: 0.1));
+            // The diarizer's network is the x-vector network its extractor embeds windows with: the same layer
+            // instances, so training, serialization and the embeddings all use one set of weights. It used to build a
+            // second, generic stack that Diarize never ran.
+            Layers.AddRange(_embeddingExtractor.Layers);
         }
     }
 
@@ -603,6 +605,7 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         if (wasTraining) SetTrainingMode(false);
         try
         {
+            if (Architecture.Layers is null || Architecture.Layers.Count == 0) return _embeddingExtractor.Predict(input);
             var current = input;
             foreach (var layer in Layers)
             {
