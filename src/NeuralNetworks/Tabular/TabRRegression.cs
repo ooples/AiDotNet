@@ -58,12 +58,6 @@ public class TabRRegression<T> : TabRBase<T>
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _backboneOutputCache;
-    [Scratch]
-    private Tensor<T>? _predictionsCache;
-
     /// <summary>
     /// Gets the output dimension.
     /// </summary>
@@ -104,10 +98,8 @@ public class TabRRegression<T> : TabRBase<T>
     public Tensor<T> Forward(Tensor<T> features, Vector<int>? excludeIndices = null)
     {
         var backboneOutput = ForwardBackbone(features, excludeIndices);
-        _backboneOutputCache = backboneOutput;
 
         var predictions = _regressionHead.Forward(backboneOutput);
-        _predictionsCache = predictions;
 
         return predictions;
     }
@@ -335,8 +327,6 @@ public class TabRRegression<T> : TabRBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _backboneOutputCache = null;
-        _predictionsCache = null;
         _regressionHead.ResetState();
     }
 }

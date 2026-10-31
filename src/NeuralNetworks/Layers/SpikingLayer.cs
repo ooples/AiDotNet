@@ -256,44 +256,9 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biasGradients;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the input to the layer during the forward pass, which is needed during the backward pass
-    /// to compute gradients. It is cleared when ResetState() is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the layer's short-term memory of what input it received.
-    /// 
-    /// During training, the layer needs to remember what input it processed so that it can
-    /// properly calculate how to improve. This temporary storage is cleared between batches
-    /// or when you explicitly reset the layer.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Stores the output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the output from the layer during the forward pass, which is needed during the backward pass
-    /// to compute gradients. It is cleared when ResetState() is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the layer's memory of what output it produced.
-    /// 
-    /// The layer needs to remember what spikes it generated so that during training it can
-    /// understand how changes to its parameters affect the overall network performance.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Current membrane potential for each output neuron.
@@ -804,9 +769,6 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
-        // Store the input for backward pass
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Flatten input to 1D tensor for processing
         // Supports any-rank tensors by computing total element count for last dimension
         Tensor<T> inputFlat;
@@ -843,9 +805,6 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
 
         // Process with the appropriate neuron model (all tensor-based)
         var output = ProcessSpikes(inputFlat);
-
-        // Store for backward pass
-        _lastOutput = output;
 
         // Restore original shape structure if needed
         // SpikingLayer outputs 1D tensor (spike train), so shape restoration is minimal
@@ -1492,10 +1451,6 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
                 _hGate.Fill(NumOps.FromDouble(0.60));
             }
         }
-
-        // Clear cached values
-        _lastInput = null;
-        _lastOutput = null;
 
         // Reset gradient accumulators using Tensor<T>
         _weightGradients = new Tensor<T>([_weights.Shape[0], _weights.Shape[1]]);

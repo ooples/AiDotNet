@@ -375,9 +375,7 @@ public partial class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudMode
         // Forward through all layers
         for (int i = 0; i < Layers.Count; i++)
         {
-            _layerInputs[i] = x;
             x = Layers[i].Forward(x);
-            _layerOutputs[i] = x;
 
             // Capture global features after max pooling
             if (Layers[i] is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
@@ -1040,8 +1038,6 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     private readonly List<ILayer<T>> _branchLayers = [];
-    [Scratch]
-    private Tensor<T>? _lastInput;
     private int[]? _centroidIndices;
     [Scratch]
     private Tensor<T>? _lastCentroidPositions;
@@ -1187,7 +1183,6 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException($"Input must have shape [N, {_inputChannels}].", nameof(input));
         }
 
-        _lastInput = input;
         int numPoints = input.Shape[0];
         if (numPoints == 0)
         {
@@ -1243,7 +1238,6 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
     // slice. That is the base implementation, restated.
     public override void ResetState()
     {
-        _lastInput = null;
         _centroidIndices = null;
         _lastCentroidPositions = null;
 

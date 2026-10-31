@@ -57,14 +57,6 @@ public class TabMClassifier<T> : TabMBase<T>
     private readonly int _numClasses;
     private readonly BatchEnsembleLayer<T> _classificationHead;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _backboneOutputCache;
-    [Scratch]
-    private Tensor<T>? _logitsCache;
-    [Scratch]
-    private Tensor<T>? _probabilitiesCache;
-
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
@@ -115,11 +107,9 @@ public class TabMClassifier<T> : TabMBase<T>
     {
         // Forward through backbone
         var backboneOutput = ForwardBackbone(features);
-        _backboneOutputCache = backboneOutput;
 
         // Forward through classification head
         var logits = _classificationHead.Forward(backboneOutput);
-        _logitsCache = logits;
 
         return logits;
     }
@@ -138,7 +128,6 @@ public class TabMClassifier<T> : TabMBase<T>
 
         // Apply softmax
         var probabilities = ApplySoftmax(avgLogits);
-        _probabilitiesCache = probabilities;
 
         return probabilities;
     }
@@ -336,9 +325,6 @@ public class TabMClassifier<T> : TabMBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _backboneOutputCache = null;
-        _logitsCache = null;
-        _probabilitiesCache = null;
         _classificationHead.ResetGradients();
     }
 }

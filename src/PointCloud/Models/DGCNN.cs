@@ -367,9 +367,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         int startIdx = _edgeConvLayers.Count;
         for (int i = startIdx; i < Layers.Count; i++)
         {
-            _layerInputs[i] = x;
             x = Layers[i].Forward(x);
-            _layerOutputs[i] = x;
 
             // Capture global features after max pooling
             if (Layers[i] is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
@@ -631,8 +629,6 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
     private readonly int _k; // Number of nearest neighbors
     private readonly PointConvolutionLayer<T> _mlp;
     private readonly BatchNormalizationLayer<T> _bn;
-    [Scratch]
-    private Tensor<T>? _lastInput;
     private int[,]? _knnIndices; // Store k-NN indices for backward pass
     private int[,]? _maxIndices; // Store max neighbor indices for backward pass
 
@@ -661,7 +657,6 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
         int numPoints = input.Shape[0];
 
         // Build k-NN graph based on current features
@@ -834,7 +829,6 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
 
     public override void ResetState()
     {
-        _lastInput = null;
         _knnIndices = null;
         _maxIndices = null;
         _mlp.ResetState();

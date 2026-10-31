@@ -61,12 +61,6 @@ public partial class GhostBatchNormalization<T>
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _betaGrad;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
-    private Tensor<T>? _normalizedCache;
-
     // Training vs inference mode. Propagated by the owning composite layer
     // (FeatureTransformerLayer / AttentiveTransformerLayer) so eval uses running stats.
     private bool _isTraining = true;
@@ -161,7 +155,6 @@ public partial class GhostBatchNormalization<T>
         }
 
         var engine = AiDotNetEngine.Current;
-        _inputCache = input;
 
         // Choose normalization statistics. Batch statistics need >= 2 samples to be
         // meaningful; with a single sample (common at inference and in the invariant
@@ -222,8 +215,6 @@ public partial class GhostBatchNormalization<T>
             var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, eps));
             normalized = engine.TensorDivide(centered, std);
         }
-
-        _normalizedCache = normalized;
 
         // Scale/shift by the learnable gamma/beta.
         var gammaRow = Tensor<T>.FromVector(_gamma).Reshape(new[] { 1, _numFeatures });

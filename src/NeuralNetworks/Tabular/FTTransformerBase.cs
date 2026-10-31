@@ -88,12 +88,6 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
     /// </summary>
     protected readonly int NumCategoricalFeatures;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _tokenizedCache;
-    [Scratch]
-    private readonly List<Tensor<T>> _layerOutputsCache;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -225,9 +219,6 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
         // Final layer normalization
         FinalLayerNorm = new LayerNormalizationLayer<T>(
             Options.EmbeddingDimension, Options.LayerNormEpsilon);
-
-        // Initialize cache
-        _layerOutputsCache = new List<Tensor<T>>();
     }
 
     /// <summary>
@@ -249,20 +240,15 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
     /// </remarks>
     protected Tensor<T> ForwardBackbone(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
-        // Clear cache
-        _layerOutputsCache.Clear();
-
         // Step 1: Tokenize features
         // Input: [batch, num_features]
         // Output: [batch, seq_len, embed_dim] where seq_len = 1 (CLS) + num_features
         var tokenized = Tokenizer.Forward(numericalFeatures, categoricalIndices);
-        _tokenizedCache = tokenized;
 
         // Step 2: Pass through transformer encoder layers
         var hidden = tokenized;
         foreach (var layer in EncoderLayers)
         {
-            _layerOutputsCache.Add(hidden);
             hidden = layer.Forward(hidden);
         }
 
@@ -452,9 +438,6 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _tokenizedCache = null;
-        _layerOutputsCache.Clear();
-
         Tokenizer.ResetGradients();
 
         foreach (var layer in EncoderLayers)

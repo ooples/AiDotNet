@@ -56,7 +56,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
 
         return new[] { new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)) };
     }
-    private int _lastSequenceLength;
     private int[]? _originalShape;
 
     /// <summary>
@@ -94,21 +93,18 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
         if (rank == 1)
         {
             // Already a 1D vector, just pass through
-            _lastSequenceLength = 1;
             return input;
         }
         else if (rank == 2)
         {
             // Shape: [seqLen, features] -> [features]
             int seqLen = input.Shape[0];
-            _lastSequenceLength = seqLen;
             return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
         else if (rank == 3)
         {
             // Shape: [seqLen, batch, features] -> [batch, features]
             int seqLen = input.Shape[0];
-            _lastSequenceLength = seqLen;
             return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
         else
@@ -118,7 +114,6 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
             // into a new Tensor detaches the result from an active gradient tape and
             // silently turns every upstream recurrent gradient into zero.
             int seqLen = input.Shape[0];
-            _lastSequenceLength = seqLen;
             return Engine.TensorSliceAxis(input, axis: 0, index: seqLen - 1);
         }
     }
@@ -130,6 +125,5 @@ public partial class SequenceLastLayer<T> : LayerBase<T>, IShapeContract
     {
         // No state to reset (except cached shape for backward pass)
         _originalShape = null;
-        _lastSequenceLength = 0;
     }
 }

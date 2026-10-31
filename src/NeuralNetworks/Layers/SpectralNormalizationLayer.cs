@@ -115,18 +115,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     private readonly T _epsilon;
 
     /// <summary>
-    /// Cached input from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached output from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Original weights stored during Forward, to be restored after Backward.
     /// </summary>
     [AiDotNet.Attributes.Scratch]
@@ -335,8 +323,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // The normalization runs on the inner layer's LIVE weight tensor and the quotient is bound
         // back in its place, which is how PyTorch's spectral_norm parametrization works. The previous
         // form copied the weights into a Vector, divided the numbers with NumOps and wrote them back
@@ -345,9 +331,7 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         // it. It also meant the layer mutated the module it wraps.
         if (_innerLayer is not LayerBase<T> innerBase)
         {
-            var passthrough = _innerLayer.Forward(input);
-            _lastOutput = passthrough;
-            return passthrough;
+            return _innerLayer.Forward(input);
         }
 
         // A lazy Dense/Convolution layer may expose a rank-two placeholder whose first dimension is
@@ -382,9 +366,7 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
 
         if (weightIndex < 0)
         {
-            var unnormalized = _innerLayer.Forward(input);
-            _lastOutput = unnormalized;
-            return unnormalized;
+            return _innerLayer.Forward(input);
         }
 
         var weight = tensors[weightIndex];
@@ -428,8 +410,7 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         innerBase.SetTrainableParameters(rebound);
         try
         {
-            _lastOutput = _innerLayer.Forward(input);
-            return _lastOutput;
+            return _innerLayer.Forward(input);
         }
         finally
         {
@@ -498,8 +479,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         RestoreOriginalWeights();
         _innerLayer.ResetState();
     }

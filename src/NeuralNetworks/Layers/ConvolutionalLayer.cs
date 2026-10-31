@@ -372,11 +372,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _kernelsGradient;
 
     /// <summary>
-    /// Gradient of the biases computed during backpropagation via autodiff.
-    /// </summary>
-    [Scratch]
-
-    /// <summary>
     /// Input shape the fast-route verification was performed for, or <c>null</c> if never verified.
     /// </summary>
     /// <remarks>

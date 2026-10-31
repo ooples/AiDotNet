@@ -511,8 +511,8 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 // `input.Length` / `inputSpan[pos + k]`, and allocates its result as
 // `new Tensor<T>(new[] { _outputChannels })`.
 //
-// The convolution positions never reach the output. `numPositions` is computed, ReLU'd into
-// _lastPreActivations for the backward pass, and then AVERAGED AWAY inside the same loop
+// The convolution positions never reach the output. `numPositions` is computed, ReLU'd, and then
+// AVERAGED AWAY inside the same loop
 // (`outputSpan[outChannel] = channelSum * 1/numPositions`) - the global average pooling the summary
 // mentions. So there is no window relation to declare here; the window is entirely internal.
 [TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input,
@@ -554,13 +554,6 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biases;   // [outputChannels]
 
-    // Cached state for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastPreActivations;  // [outputChannels, numPositions] before ReLU
-    private int _lastNumPositions;
-
     // Stored gradients for UpdateParameters
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _kernelGradients;
@@ -601,17 +594,12 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
         var output = new Tensor<T>(new[] { _outputChannels });
         int numPositions = Math.Max(1, input.Length - _kernelSize + 1);
-        _lastNumPositions = numPositions;
-
-        // Cache pre-activations for backward
-        _lastPreActivations = new Tensor<T>(new[] { _outputChannels, numPositions });
 
         // Hot loop bypasses the deferred-materializer monitor by reading
         // _kernels / _biases / input through .Data.Span and writing
-        // _lastPreActivations / output through .Data.Span. Profiling on
+        // output through .Data.Span. Profiling on
         // PR #1184 showed every per-element tensor[i] access acquired the
         // materializer's monitor — for DeepANT (50 epochs * 4 batches *
         // 32 samples * outChannels * numPositions * kernelSize), this
@@ -619,7 +607,6 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
         var kernelsSpan = _kernels.Data.Span;
         var biasesSpan = _biases.Data.Span;
         var inputSpan = input.Data.Span;
-        var preActSpan = _lastPreActivations.Data.Span;
         var outputSpan = output.Data.Span;
         int inputLen = input.Length;
         double invPositions = 1.0 / numPositions;
@@ -630,7 +617,6 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
             T channelSum = NumOps.Zero;
             T bias = biasesSpan[outChannel];
             int kernelBase = outChannel * _kernelSize;
-            int preActBase = outChannel * numPositions;
 
             for (int pos = 0; pos < numPositions; pos++)
             {
@@ -641,7 +627,6 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
                     positionSum = NumOps.Add(positionSum, NumOps.Multiply(kernelsSpan[kernelBase + k], inputSpan[pos + k]));
                 }
 
-                preActSpan[preActBase + pos] = positionSum;
                 if (NumOps.GreaterThan(positionSum, NumOps.Zero))
                     channelSum = NumOps.Add(channelSum, positionSum);
             }
@@ -663,8 +648,6 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastPreActivations = null;
         _kernelGradients = null;
         _biasGradients = null;
     }

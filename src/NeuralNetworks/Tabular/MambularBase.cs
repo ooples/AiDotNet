@@ -59,12 +59,6 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
     protected int MLPOutputDimension { get; }
 
-    // Caches
-    [Scratch]
-    private Tensor<T>? _embeddedFeaturesCache;
-    [Scratch]
-    private Tensor<T>? _mambaOutputCache;
-
     /// <summary>Built once on first parameter access, then reused.</summary>
     private ParameterComponentRegistry<T>? _parameterRegistry;
 
@@ -268,7 +262,6 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
 
         // Embed features
         var embedded = EmbedFeatures(numericalFeatures, categoricalIndices);
-        _embeddedFeaturesCache = embedded;
 
         // Forward direction
         var forward = embedded;
@@ -320,8 +313,6 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
             }
         }
 
-        _mambaOutputCache = combined;
-
         // MLP head
         var mlpOutput = combined;
         foreach (var layer in _mlpLayers)
@@ -370,9 +361,6 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _embeddedFeaturesCache = null;
-        _mambaOutputCache = null;
-
         foreach (var block in _mambaBlocks)
         {
             block.ResetState();

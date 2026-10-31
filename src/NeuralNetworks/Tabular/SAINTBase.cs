@@ -59,16 +59,6 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
     protected int MLPOutputDimension { get; }
 
-    // Caches for backward pass
-    [Scratch]
-    private Tensor<T>? _embeddedFeaturesCache;
-    [Scratch]
-    private List<Tensor<T>>? _columnAttentionOutputsCache;
-    [Scratch]
-    private List<Tensor<T>>? _rowAttentionOutputsCache;
-    [Scratch]
-    private Tensor<T>? _mlpOutputCache;
-
     /// <summary>Built once on first parameter access, then reused.</summary>
     private ParameterComponentRegistry<T>? _parameterRegistry;
 
@@ -327,12 +317,9 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
     protected Tensor<T> ForwardBackbone(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
         int batchSize = numericalFeatures.Shape[0];
-        _columnAttentionOutputsCache = [];
-        _rowAttentionOutputsCache = [];
 
         // Embed features
         var embedded = EmbedFeatures(numericalFeatures, categoricalIndices);
-        _embeddedFeaturesCache = embedded;
 
         var current = embedded;
 
@@ -352,7 +339,6 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
             }
 
             var colAttnOutput = ApplyColumnAttention(_columnAttentionLayers[layer], colAttnInput, batchSize);
-            _columnAttentionOutputsCache.Add(colAttnOutput);
 
             // Residual connection
             current = AddTensors(current, colAttnOutput);
@@ -372,7 +358,6 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
                 }
 
                 var rowAttnOutput = ApplyRowAttention(_rowAttentionLayers[layer], rowAttnInput, batchSize);
-                _rowAttentionOutputsCache.Add(rowAttnOutput);
 
                 // Residual connection
                 current = AddTensors(current, rowAttnOutput);
@@ -418,7 +403,6 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
             mlpOutput = mlpLayer.Forward(mlpOutput);
         }
 
-        _mlpOutputCache = mlpOutput;
         return mlpOutput;
     }
 
@@ -589,11 +573,6 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _embeddedFeaturesCache = null;
-        _columnAttentionOutputsCache = null;
-        _rowAttentionOutputsCache = null;
-        _mlpOutputCache = null;
-
         _numericalEmbedding.ResetState();
 
         foreach (var layer in _columnAttentionLayers)

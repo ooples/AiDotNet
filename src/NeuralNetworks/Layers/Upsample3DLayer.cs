@@ -147,11 +147,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
 
     #region Private Fields
 
-    /// <summary>
-    /// The input tensor from the last forward pass, cached for backward computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
     private int[]? _originalInputShape;
 
     #endregion
@@ -297,7 +292,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
         int rank = input.Rank;
 
@@ -364,7 +358,6 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
     }
 
     #endregion

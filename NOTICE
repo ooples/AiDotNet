@@ -1,7 +1,7 @@
 AiDotNet
-Copyright 2024 Ooples Finance
+Copyright (C) 2024-2026 CrowdTrainer LLC
 
-This product includes software developed at Ooples Finance (https://github.com/ooples).
+This product includes software developed at CrowdTrainer LLC (https://github.com/ooples).
 
 --------------------------------------------------------------------------------
 LICENSING NOTICE
@@ -48,7 +48,7 @@ RELATED PROJECTS
 --------------------------------------------------------------------------------
 
 The AiDotNet csproj declares InternalsVisibleTo for the following private
-projects maintained by Ooples Finance. These are NOT part of the publicly
+projects maintained by CrowdTrainer LLC. These are NOT part of the publicly
 distributed AiDotNet package and are not covered by this NOTICE. Their access
 to AiDotNet internals is governed by the BSL 1.1 commercial-tier terms.
 

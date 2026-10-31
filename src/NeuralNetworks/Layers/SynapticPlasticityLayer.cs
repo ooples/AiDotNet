@@ -520,9 +520,15 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
             ? input
             : Engine.Reshape(input, [input.Length]);
 
-        // Store for STDP learning
-        _lastInput = inputFlat;
-        _lastOutput = inputFlat; // Pass-through layer
+        // Store for STDP learning. The rule runs in UpdateParameters, which only a training pass
+        // reaches, so an inference forward has nothing to record. This is learning-rule state rather
+        // than a backward cache, so it is not gated on ShouldCacheForBackward: that is false under a
+        // recording tape, and the STDP update still needs the spikes then.
+        if (IsTrainingMode && !InferenceMode.IsActive)
+        {
+            _lastInput = inputFlat;
+            _lastOutput = inputFlat; // Pass-through layer
+        }
 
         return input;
     }

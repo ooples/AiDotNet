@@ -1,4 +1,5 @@
 using AiDotNet.Extensions;
+using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.Prototypes;
 
@@ -104,20 +105,21 @@ public class SimpleNeuralNetwork<T>
             throw new ArgumentException($"Expected input size {_inputSize}, got {input.Length}");
         }
 
-        _lastInput = input;
-
         // Input → Hidden: z_h = W_ih @ input + b_h
         var hiddenPreActivation = MatrixVectorMultiply(_weightsInputHidden, input, _hiddenSize, _inputSize);
         hiddenPreActivation = hiddenPreActivation.Add(_biasHidden);
 
         // ReLU activation: hidden = max(0, z_h)
-        _lastHidden = ApplyReLU(hiddenPreActivation);
+        var hidden = ApplyReLU(hiddenPreActivation);
 
         // Hidden → Output: output = W_ho @ hidden + b_o
-        var output = MatrixVectorMultiply(_weightsHiddenOutput, _lastHidden, _outputSize, _hiddenSize);
+        var output = MatrixVectorMultiply(_weightsHiddenOutput, hidden, _outputSize, _hiddenSize);
         output = output.Add(_biasOutput);
 
-        _lastOutput = output;
+        // Read only by Backward.
+        ManualBackwardCache<T>.SaveForBackward(ref _lastInput, input);
+        ManualBackwardCache<T>.SaveForBackward(ref _lastHidden, hidden);
+        ManualBackwardCache<T>.SaveForBackward(ref _lastOutput, output);
         return output;
     }
 
