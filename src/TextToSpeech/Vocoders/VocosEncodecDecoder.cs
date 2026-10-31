@@ -73,8 +73,9 @@ internal sealed class VocosEncodecDecoder<T>
     }
 
     /// <summary>The waveform <c>[frames · hop]</c> of codes <c>[codebooks, frames]</c> (codes_to_features, then decode at
-    /// that bandwidth).</summary>
-    public Tensor<T> Decode(int[,] codes)
+    /// that bandwidth, or at <paramref name="bandwidthId"/>'s: MARS5 decodes 6 kbps codes at the 3 kbps class, which
+    /// smooths the output).</summary>
+    public Tensor<T> Decode(int[,] codes, int? bandwidthId = null)
     {
         int codebooks = codes.GetLength(0), frames = codes.GetLength(1);
         if (codebooks > Configuration.MaxCodebooks)
@@ -86,7 +87,10 @@ internal sealed class VocosEncodecDecoder<T>
         var vectors = _engine.Reshape(Codebooks.Forward(ids), new[] { codebooks, frames, Configuration.LatentDim });
         var summed = _engine.ReduceSum(vectors, new[] { 0 }, keepDims: false);                                     // [F, latent]
         var features = _engine.Reshape(_engine.TensorTranspose(summed), new[] { 1, Configuration.LatentDim, frames });
-        var audio = _generator.Forward(features, BandwidthId(codebooks));
+        int bandwidth = bandwidthId ?? BandwidthId(codebooks);
+        if (bandwidth < 0 || bandwidth >= Configuration.Bandwidths.Length)
+            throw new ArgumentOutOfRangeException(nameof(bandwidthId), $"Vocos has {Configuration.Bandwidths.Length} bandwidth classes.");
+        var audio = _generator.Forward(features, bandwidth);
         return _engine.Reshape(audio, new[] { audio.Length });
     }
 
