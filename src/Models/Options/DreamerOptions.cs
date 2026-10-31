@@ -311,8 +311,14 @@ public class DreamerOptions<T> : ReinforcementLearningOptions<T>
     /// <para>
     /// When this is <c>null</c>, each network trains with Adam (β1 0.9, β2 0.999, ε 1e-8): the world-model
     /// networks at <c>LearningRate</c>, the action model at <see cref="ActorLearningRate"/> and the value model at
-    /// <see cref="ValueLearningRate"/>, with each step's gradient rescaled to a global norm of at most 100 ("scale
-    /// down gradient norms that exceed 100", Appendix A).
+    /// <see cref="ValueLearningRate"/>.
+    /// </para>
+    /// <para>
+    /// Gradients are rescaled to a global norm of at most 100 ("scale down gradient norms that exceed 100",
+    /// Appendix A) per model group, as the authors' implementation clips each of its three optimizers' variable
+    /// sets. The world model's networks are clipped together as one group on every step, whichever optimizer they
+    /// use. The action and value models are each a group of one network, clipped by their default optimizer; an
+    /// optimizer from this factory decides their clipping itself.
     /// </para>
     /// <para>
     /// The agent invokes the factory once for every network it builds, so the factory must create a new

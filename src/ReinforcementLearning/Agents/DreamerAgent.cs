@@ -114,7 +114,11 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <summary>"executing the predicted mode action with Normal(0, 0.3) exploration noise" (Appendix A).</summary>
     private const double ExplorationStd = 0.3;
 
-    /// <summary>"scale down gradient norms that exceed 100" (Appendix A).</summary>
+    /// <summary>
+    /// "scale down gradient norms that exceed 100" (Appendix A), per model group: the authors' implementation clips
+    /// the global norm of each optimizer's variable set, and it has three optimizers, so the world model's networks
+    /// are clipped together as one group, and the action and value models each on their own.
+    /// </summary>
     private const double MaxGradientNorm = 100.0;
 
     // Deterministic base seed for each network's lazy weight initialisation when the options carry no Seed, so a
@@ -280,6 +284,17 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             throw new ArgumentOutOfRangeException(name, value, $"{name} must be finite and non-negative.");
     }
 
+    /// <summary>The index of the action model in <c>Networks</c>; every world-model network precedes it.</summary>
+    private const int ActorNetworkIndex = 9;
+
+    /// <summary>
+    /// The clip a network's default optimizer applies to its own gradient. The action and value models are each a
+    /// group of one network, so that clip is their group clip. The world model's networks get none: they are
+    /// clipped jointly in <see cref="TrainWorldModel"/>, and clipping them again one by one would be a second,
+    /// per-network bound the authors' implementation does not have.
+    /// </summary>
+    private static double? OwnGradientClip(int networkIndex) => networkIndex >= ActorNetworkIndex ? MaxGradientNorm : null;
+
     /// <summary>
     /// Builds one dense network: <paramref name="hiddenLayers"/> ELU layers of <paramref name="hiddenWidth"/> units, then
     /// an output layer of <paramref name="outputSize"/> units that is ELU (an embedding) or linear (a distribution head).
@@ -315,7 +330,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers);
         return new NeuralNetwork<T>(
             architecture,
-            _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(learningRate, MaxGradientNorm),
+            _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(learningRate, OwnGradientClip(networkIndex)),
             new MeanSquaredErrorLoss<T>());
     }
 
@@ -599,7 +614,8 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (predictDiscount) members.Add((_continueNetwork, null));
 
         _lastWorldModelTerms = new WorldModelTerms(reconstruction[0], rewardLoss[0], divergence[0], continueValue, total[0]);
-        T loss = NeuralNetworkBase<T>.StepOnTape(tape, total, members);
+        // The world model is one group under one global-norm clip (Appendix A), whatever optimizer each network has.
+        T loss = NeuralNetworkBase<T>.StepOnTape(tape, total, members, MaxGradientNorm);
 
         // Imagination starts from every posterior state, with gradients stopped (Section 3: "Imagined trajectories
         // start at the true model states s_t of observation sequences drawn from the agent's past experience").

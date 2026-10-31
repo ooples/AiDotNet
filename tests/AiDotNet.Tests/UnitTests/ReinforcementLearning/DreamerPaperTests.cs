@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.Agents.Dreamer;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Tensors.Helpers;
@@ -30,7 +34,8 @@ public class DreamerPaperTests
         int deterministicSize = 12,
         int stochasticSize = 4,
         double actorLearningRate = 8e-5,
-        double valueLearningRate = 8e-5)
+        double valueLearningRate = 8e-5,
+        Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>? optimizerFactory = null)
         => new DreamerOptions<double>
         {
             ObservationSize = ObservationSize,
@@ -50,6 +55,7 @@ public class DreamerPaperTests
             LearningRate = 3e-3,
             ActorLearningRate = actorLearningRate,
             ValueLearningRate = valueLearningRate,
+            OptimizerFactory = optimizerFactory,
             Seed = 17,
         };
 
@@ -455,6 +461,53 @@ public class DreamerPaperTests
             Assert.Equal(0.0, MaxAbsDifference(fast.AfterFirst[i], slow.AfterFirst[i]));
         }
         Assert.True(MaxAbsDifference(fast.AfterFirst[model], slow.AfterFirst[model]) > 0.0);
+    }
+
+    /// <summary>Plain SGD, p -= lr * g: no momentum, no regularization, no clipping of its own.</summary>
+    private static IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> PlainSgd(double rate) =>
+        new GradientDescentOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new GradientDescentOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = rate,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
+                RegularizationOptions = new RegularizationOptions { Type = RegularizationType.None, Strength = 0.0 },
+            });
+
+    [Fact]
+    public void GradientClipping_BoundsTheWorldModelAsOneGroup()
+    {
+        // Appendix A clips gradient norms at 100, and the authors' implementation clips each optimizer's whole
+        // variable set, so the world model's networks share ONE norm. With plain SGD the world model's step is then
+        // exactly lr * 100 in total whenever the joint gradient exceeds 100, which a large reward weight guarantees.
+        // Clipping each network on its own bounds every network separately instead: the joint step is then
+        // lr * sqrt(sum_i min(|g_i|, 100)^2), which is larger as soon as two networks receive gradient (and is the
+        // unclipped lr * |g| when each network alone stays under 100 while their joint norm does not).
+        const double Rate = 1e-4;
+        var agent = new DreamerAgent<double>(SmallOptions(rewardScale: 1e4, optimizerFactory: () => PlainSgd(Rate)));
+        Feed(agent, 120, 20);
+        agent.Train();   // sizes the lazy layers
+
+        var worldModel = new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+        var before = new double[worldModel.Length][];
+        for (int k = 0; k < worldModel.Length; k++) before[k] = NetworkParameters(agent, worldModel[k]);
+        agent.Train();
+
+        double total = 0.0;
+        int moved = 0;
+        for (int k = 0; k < worldModel.Length; k++)
+        {
+            var after = NetworkParameters(agent, worldModel[k]);
+            double own = 0.0;
+            for (int j = 0; j < after.Length; j++) own += (after[j] - before[k][j]) * (after[j] - before[k][j]);
+            total += own;
+            if (own > 0.0) moved++;
+        }
+        total = Math.Sqrt(total);
+
+        Assert.True(moved >= 2, $"Only {moved} world-model network(s) received gradient, so the test cannot tell a group clip from a per-network one.");
+        Assert.True(Math.Abs(total - Rate * 100.0) <= 1e-6 * Rate * 100.0,
+            $"The world model moved {total} on one SGD step at lr {Rate}; one group clipped at norm 100 moves exactly {Rate * 100.0}.");
     }
 
     public static IEnumerable<object[]> InvalidOptions()
