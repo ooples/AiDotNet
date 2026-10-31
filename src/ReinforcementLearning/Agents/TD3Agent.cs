@@ -111,7 +111,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _options = options;
         Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        _random = Random;
         _stepCount = 0;
         _updateCount = 0;
 

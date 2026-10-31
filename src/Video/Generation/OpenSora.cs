@@ -403,7 +403,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         // This used to compute the loss and a gradient by hand, never backpropagate it, and then call
         // UpdateParameters with a hard-coded rate on every layer, so the model never trained. It now runs on the
         // tape like every other network, with the base training loop's optimizer and loss.
-        var random = RandomHelper.CreateSecureRandom();
+        var random = ModelRandom;
         int timestep = random.Next(_numInferenceSteps);
         double alphaCumprod = _alphasCumprod[timestep];
         var noise = InitializeLatents(input._shape, random);

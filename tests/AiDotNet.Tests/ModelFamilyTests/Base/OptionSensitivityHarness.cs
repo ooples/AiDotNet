@@ -60,16 +60,29 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
     /// Applied to both the control and the perturbed options copy before the perturbation, for
     /// gates that would otherwise keep a few training steps from reaching an update (an RL warmup).
     /// </param>
+    /// <param name="describe">
+    /// The observation broken into named parts (the output, each layer's parameters), in a fixed order. Used only to
+    /// name what differs when two identical builds disagree, so a NonDeterministic verdict points at its source.
+    /// </param>
+    /// <param name="prepareModel">
+    /// The fixture's post-construction wiring, applied to every rebuilt model: setup the factory performs on the
+    /// instance after its constructor (a graph model's synthetic adjacency) is not part of the clone plan, so the
+    /// rebuild would otherwise drop it.
+    /// </param>
     public OptionSensitivityProbe(
         Func<TModel> create,
         Func<TModel, long> observe,
         Action<TModel>? train,
-        Action<ModelOptions>? prepareOptions = null)
+        Action<ModelOptions>? prepareOptions = null,
+        Func<TModel, IReadOnlyList<KeyValuePair<string, long>>>? describe = null,
+        Action<TModel>? prepareModel = null)
     {
         Create = create ?? throw new ArgumentNullException(nameof(create));
         Observe = observe ?? throw new ArgumentNullException(nameof(observe));
         Train = train;
         PrepareOptions = prepareOptions;
+        Describe = describe;
+        PrepareModel = prepareModel;
     }
 
     /// <summary>The fixture's factory.</summary>
@@ -83,6 +96,12 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
 
     /// <summary>The options preparation shared by control and perturbed builds.</summary>
     public Action<ModelOptions>? PrepareOptions { get; }
+
+    /// <summary>The observation as named parts, or null when the family does not break it down.</summary>
+    public Func<TModel, IReadOnlyList<KeyValuePair<string, long>>>? Describe { get; }
+
+    /// <summary>The fixture's post-construction wiring, re-applied to each rebuilt model.</summary>
+    public Action<TModel>? PrepareModel { get; }
 }
 
 /// <summary>The result of measuring one option on one model.</summary>
@@ -436,7 +455,7 @@ public static class OptionSensitivityHarness
             if (a != b)
             {
                 result.Failure = "Two identical, identically seeded builds already differ before training, so no difference can be "
-                    + "attributed to an option.";
+                    + "attributed to an option." + DescribeDifference(probe, first, second);
                 result.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
                 return result;
             }
@@ -462,7 +481,7 @@ public static class OptionSensitivityHarness
             if (trainedA != trainedB)
             {
                 result.Failure = "Two identical, identically seeded builds diverge during the fixed training steps, so a "
-                    + "training-time difference cannot be attributed to an option.";
+                    + "training-time difference cannot be attributed to an option." + DescribeDifference(probe, first, second);
                 result.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
                 return result;
             }
@@ -474,6 +493,34 @@ public static class OptionSensitivityHarness
         {
             (first as IDisposable)?.Dispose();
             (second as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Names the parts of the observation on which two builds disagree (at most five), or an empty string when the
+    /// probe has no breakdown or the breakdown itself throws.
+    /// </summary>
+    private static string DescribeDifference<TModel>(OptionSensitivityProbe<TModel> probe, TModel first, TModel second)
+        where TModel : class
+    {
+        if (probe.Describe is null) return string.Empty;
+        try
+        {
+            var a = probe.Describe(first);
+            var b = probe.Describe(second);
+            if (a.Count != b.Count)
+                return $" The builds have different structures ({a.Count} against {b.Count} observed parts).";
+            var differing = new List<string>();
+            for (int i = 0; i < a.Count; i++)
+                if (a[i].Value != b[i].Value) differing.Add(a[i].Key);
+            if (differing.Count == 0) return string.Empty;
+            string shown = string.Join(", ", differing.Take(5));
+            string more = differing.Count > 5 ? $" and {differing.Count - 5} more" : string.Empty;
+            return $" Differing: {shown}{more} ({differing.Count} of {a.Count} parts).";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return string.Empty;
         }
     }
 
@@ -494,7 +541,9 @@ public static class OptionSensitivityHarness
             PinSeed(copy);
             mutate?.Invoke(copy);
             ReplaceReferences(shell, held, copy);
-            return Seeded(() => (TModel)CloneEngine.CopyConfiguration(shell));
+            var rebuilt = Seeded(() => (TModel)CloneEngine.CopyConfiguration(shell));
+            probe.PrepareModel?.Invoke(rebuilt);
+            return rebuilt;
         }
         finally
         {

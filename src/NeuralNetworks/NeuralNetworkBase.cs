@@ -420,6 +420,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected static Random Random => RandomHelper.ThreadSafeRandom;
 
     /// <summary>
+    /// This model's own random stream, for draws a model makes itself rather than through a layer (a Gaussian
+    /// cloud's colours, densification jitter, sampling noise): seeded from the architecture's
+    /// <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/>, else the options seed, else the ambient construction
+    /// seed, else secure entropy.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Random"/> is the process-shared stream, so two identically seeded models drawing from it differ.
+    /// Use this one in instance code.
+    /// </remarks>
+    protected Random ModelRandom => _modelRandom ??= AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(Architecture?.RandomSeed);
+
+    private Random? _modelRandom;
+
+    /// <summary>
     /// The loss function used to calculate error during training.
     /// </summary>
     /// <remarks>
@@ -743,6 +757,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // training-determinism bug). Inert when no seed was requested (production
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
+        _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(architecture.RandomSeed);
         SeedCallerBuiltLayers();
         RecordConstructionScope();
         // Most models keep their options in a field of their own and expose them only through GetOptions(), which
@@ -7724,6 +7739,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 return;
             _optionsSeed = null;
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
+            _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(Architecture?.RandomSeed);
             SeedCallerBuiltLayers();
             RecordConstructionScope();
             return;
@@ -7731,6 +7747,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
+        _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(value);
         SeedCallerBuiltLayers();
         RecordConstructionScope();
     }

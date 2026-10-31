@@ -112,12 +112,12 @@ public partial class TabNet<T> : RiskModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(
             architecture,
-            options?.NumFeatures ?? 50,
+            (options ?? DefaultOptionsFor<TabNetOptions<T>>(architecture)).NumFeatures,
             options?.ConfidenceLevel ?? 0.95,
             options?.TimeHorizon ?? 1,
             lossFunction)
     {
-        _options = options ?? new TabNetOptions<T>();
+        _options = options ?? DefaultOptionsFor<TabNetOptions<T>>(architecture);
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? CreatePaperOptimizer();
@@ -157,11 +157,11 @@ public partial class TabNet<T> : RiskModelBase<T>
         : base(
             architecture,
             onnxModelPath,
-            options?.NumFeatures ?? 50,
+            (options ?? DefaultOptionsFor<TabNetOptions<T>>(architecture)).NumFeatures,
             options?.ConfidenceLevel ?? 0.95,
             options?.TimeHorizon ?? 1)
     {
-        _options = options ?? new TabNetOptions<T>();
+        _options = options ?? DefaultOptionsFor<TabNetOptions<T>>(architecture);
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? CreatePaperOptimizer();
