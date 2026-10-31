@@ -330,19 +330,9 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
                 if (syntaxProvider.TryValidate(program.Language, program.SourceCode) is { } parsed)
                     return parsed;
             }
-            catch (DllNotFoundException)
-            {
-                return ValidateGenericSource(program.SourceCode);
-            }
-            catch (BadImageFormatException)
-            {
-                return ValidateGenericSource(program.SourceCode);
-            }
-            catch (InvalidOperationException)
-            {
-                return ValidateGenericSource(program.SourceCode);
-            }
-            catch (ArgumentException)
+            // Only a grammar library that cannot load falls back, under the same rule the tokenization pipeline uses
+            // (wrapped type-initializer failures included). A provider's own parse or argument errors surface.
+            catch (Exception ex) when (Tokenization.CodeTokenizationPipeline.IsNativeLoadFailure(ex))
             {
                 return ValidateGenericSource(program.SourceCode);
             }

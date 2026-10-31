@@ -123,12 +123,16 @@ public class ModelStartupService : IHostedService
     private void LogCpuInferenceThreadRecommendation()
     {
         string? requested = Environment.GetEnvironmentVariable("AIDOTNET_CPU_THREADS");
+        // CpuParallelSettings honours the variable only when it is a positive integer; anything else falls back to the
+        // physical core count, so the label follows the same rule.
+        bool honoured = int.TryParse(requested, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int requestedThreads) && requestedThreads > 0;
         int effective = AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism;
         _logger.LogInformation(
             "CPU inference: kernels use {Threads} thread(s) on a {Cores}-logical-core host ({Source}). Set AIDOTNET_CPU_THREADS " +
             "before launch to change it.",
             effective, Environment.ProcessorCount,
-            string.IsNullOrWhiteSpace(requested) ? "physical core count" : "AIDOTNET_CPU_THREADS");
+            honoured ? "AIDOTNET_CPU_THREADS" : "physical core count");
     }
 
     /// <summary>

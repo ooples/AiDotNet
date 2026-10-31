@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Safety.Watermarking;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety;
@@ -269,6 +270,50 @@ public class SafetyPipeline<T>
 
         sw.Stop();
         return SafetyReport.FromFindings(allFindings, modulesRun, sw.Elapsed.TotalMilliseconds);
+    }
+
+    /// <summary>
+    /// Returns <paramref name="image"/> marked by the pipeline's keyed image watermarker.
+    /// </summary>
+    /// <param name="image">The generated image to mark (CHW or HWC format).</param>
+    /// <returns>The watermarked image.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No image watermarker is registered, or every registered one uses the published public key.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// <see cref="EvaluateImage"/> only looks for marks; this is the call that embeds one. The first registered
+    /// <see cref="IImageWatermarker{T}"/> holding a secret key embeds the mark. <see cref="SafetyPipelineFactory{T}"/>
+    /// registers one with <see cref="WatermarkConfig.ImageWatermarkKey"/> when
+    /// <see cref="WatermarkConfig.ImageWatermarking"/> is on. Watermarkers on the public key may stay registered for
+    /// detection; they are never used to embed, because anyone can forge their marks.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> EmbedImageWatermark(Tensor<T> image)
+    {
+        if (image == null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+
+        bool sawPublicKey = false;
+        foreach (var module in _modules)
+        {
+            if (module is not IImageWatermarker<T> watermarker) continue;
+            if (module is ImageWatermarkerBase<T> { UsesPublicKey: true })
+            {
+                sawPublicKey = true;
+                continue;
+            }
+
+            return watermarker.EmbedWatermark(image);
+        }
+
+        throw new InvalidOperationException(sawPublicKey
+            ? "Every registered image watermarker uses the published public watermark key, whose marks anyone can " +
+              "forge. Set Watermarking.ImageWatermarkKey to a secret key of your own to embed watermarks."
+            : "The safety pipeline has no image watermarker to embed with. Enable Watermarking.ImageWatermarking " +
+              "with Watermarking.ImageWatermarkKey, or register an image watermarker constructed with a secret key.");
     }
 
     /// <summary>

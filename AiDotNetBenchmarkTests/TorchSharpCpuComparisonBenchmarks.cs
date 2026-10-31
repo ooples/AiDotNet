@@ -54,7 +54,7 @@ public class TorchSharpCpuComparisonBenchmarks
         torch.set_grad_enabled(false);
         _torchDevice = torch.CPU;
         Console.WriteLine("TorchSharp device: CPU (forced)");
-        Console.WriteLine($"AiDotNet CPU GEMM: managed kernels, {AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism} threads");
+        Console.WriteLine($"AiDotNet CPU GEMM: CpuEngine.TensorMatMul (oneDNN or managed kernels), {AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism} threads");
 
         foreach (var size in MatrixSizes)
         {

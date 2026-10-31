@@ -2045,6 +2045,42 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Watermarks a generated image with the configured secret key when image watermarking is enabled.
+    /// </summary>
+    /// <param name="image">The generated image (CHW or HWC format).</param>
+    /// <returns>
+    /// The watermarked image, or <paramref name="image"/> unchanged when no safety pipeline is configured or
+    /// <c>Watermarking.ImageWatermarking</c> is off.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <see cref="EvaluateImageSafety"/> only checks an image; it never marks one. Call this on every image the model
+    /// produces before handing it out, so the mark can later be detected with the same
+    /// <c>Watermarking.ImageWatermarkKey</c>.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> a watermark is an invisible signature that proves an image came from your model:
+    /// <code>
+    /// var published = result.WatermarkGeneratedImage(generatedImage);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Tensor<T> WatermarkGeneratedImage(Tensor<T> image)
+    {
+        if (image == null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+
+        if (SafetyPipeline == null || !SafetyPipeline.Config.Watermarking.EffectiveImageWatermarking)
+        {
+            return image;
+        }
+
+        return SafetyPipeline.EmbedImageWatermark(image);
+    }
+
+    /// <summary>
     /// Evaluates audio content for safety using the configured safety pipeline.
     /// </summary>
     /// <param name="audioSamples">The audio samples to evaluate.</param>
@@ -2334,17 +2370,33 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         if (EnsureModel is AiDotNet.TimeSeries.TimeSeriesModelBase<T> timeSeriesModel)
         {
-            var forecast = timeSeriesModel.Predict(lookback, horizon);
-
-            // Apply the SAME denormalization + postprocessing tail as Predict(TInput) so a configured target
-            // scaler / postprocessing pipeline is honored — otherwise this overload silently returns forecasts
-            // on the model's normalized scale, inconsistent with Predict(TInput). Those transforms are typed on
-            // TOutput; a time-series result has TOutput == Vector<T> (feature matrix -> target vector), so route
-            // the forecast through them only in that case (else there is nothing configured to apply).
-            if (typeof(TOutput) == typeof(Vector<T>) && forecast is TOutput forecastAsOutput
-                && DenormalizeForecast(forecastAsOutput) is Vector<T> denormalizedVector)
+            if (lookback is null)
             {
-                return denormalizedVector;
+                throw new ArgumentNullException(nameof(lookback));
+            }
+
+            // The lookback continues the target series unless the model is genuinely multivariate, in which case
+            // target scaling (fitted to the target alone) covers neither the lookback nor the forecast.
+            bool forecastsTarget = timeSeriesModel is not IMultivariateForecastModel<T> { VariableCount: > 1 };
+
+            // The model was trained on the scaled target, so a lookback given in the target's original units is
+            // scaled the same way before it reaches the model. The target transforms are typed on TOutput; a
+            // time-series result has TOutput == Vector<T> (feature matrix -> target vector), so they apply only then.
+            var modelLookback = lookback;
+            if (forecastsTarget && PreprocessingInfo?.IsTargetFitted == true && PreprocessingInfo.TargetPipeline is { } targetPipeline
+                && lookback is TOutput lookbackAsOutput
+                && targetPipeline.Transform(lookbackAsOutput) is Vector<T> scaledLookback)
+            {
+                modelLookback = scaledLookback;
+            }
+
+            var forecast = timeSeriesModel.Predict(modelLookback, horizon);
+
+            // Apply the SAME denormalization + postprocessing tail as Predict(TInput), so the forecast comes back in
+            // the target's original units rather than on the model's normalized scale.
+            if (forecast is TOutput forecastAsOutput && FinishForecast(forecastAsOutput, forecastsTarget) is Vector<T> finished)
+            {
+                return finished;
             }
 
             return forecast;
@@ -2506,6 +2558,30 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return denormalized;
     }
 
+    /// <summary>
+    /// The tail of a forecast: a forecast of the target is denormalized and postprocessed (see
+    /// <see cref="DenormalizeForecast"/>); a multivariate model's forecast of its feature series is returned as is,
+    /// and refused when a postprocessing pipeline is configured, since that pipeline was built for the target and
+    /// silently skipping it would hand back results the caller believes were postprocessed.
+    /// </summary>
+    private TOutput FinishForecast(TOutput forecast, bool forecastsTarget)
+    {
+        if (forecastsTarget)
+        {
+            return DenormalizeForecast(forecast);
+        }
+
+        if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "A postprocessing pipeline is configured, but this multivariate model forecasts its feature series, " +
+                "which the pipeline (built for the target) does not apply to. Remove the postprocessing pipeline, or " +
+                "use a model that forecasts the target.");
+        }
+
+        return forecast;
+    }
+
     private static Vector<T> FlattenRowMajor(Matrix<T> source)
     {
         var flat = new Vector<T>(source.Rows * source.Columns);
@@ -2564,7 +2640,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // prediction path does, so forecasts come back in the target's original units. A genuinely multivariate
             // model forecasts the feature series instead, which the target scaler was never fitted to.
             var forecast = ForecastWithTimeSeriesModelInternal(timeSeriesModel, newData, out bool forecastsTarget);
-            return forecastsTarget ? DenormalizeForecast(forecast) : forecast;
+            return FinishForecast(forecast, forecastsTarget);
         }
 
         // Bridge builder-configured JIT compilation flags into this thread's

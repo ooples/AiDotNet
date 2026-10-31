@@ -488,7 +488,8 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                 numDecoderLayers: _numDecoderLayers,
                 numHeads: _numHeads,
                 dropoutRate: 0.0,
-                vocabSize: phonemeVocabSize));
+                vocabSize: phonemeVocabSize,
+                maxSequenceLength: _maxPhonemeLength));
         }
     }
 

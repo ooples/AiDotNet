@@ -73,6 +73,12 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
     protected readonly double WatermarkStrength;
 
     /// <summary>
+    /// Whether the watermarker uses the published <see cref="PublicKey"/>. Marks made with it prove nothing, since
+    /// anyone can reproduce them, so <see cref="SafetyPipeline{T}.EmbedImageWatermark"/> never embeds with one.
+    /// </summary>
+    public bool UsesPublicKey { get; }
+
+    /// <summary>
     /// Initializes the image watermarker base.
     /// </summary>
     /// <param name="watermarkStrength">Embedding strength relative to the spread of the host coefficients.</param>
@@ -85,6 +91,7 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
             throw new ArgumentException("A watermark key must not be empty or whitespace; pass null for the public key.", nameof(key));
         WatermarkStrength = watermarkStrength;
         _keyBytes = Encoding.UTF8.GetBytes(key ?? PublicKey);
+        UsesPublicKey = key is null || string.Equals(key, PublicKey, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -180,9 +187,11 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
     }
 
     /// <inheritdoc />
-    /// <remarks>An image larger than <see cref="MaxPixels"/> is not examined and scores 0 (no evidence).</remarks>
+    /// <remarks>An image larger than <see cref="MaxPixels"/>, or an empty one, is not examined and scores 0 (no evidence).</remarks>
     public double DetectWatermark(Tensor<T> image)
     {
+        // An empty image carries no mark: no evidence, like an oversized one, rather than an exception.
+        if (image is { Length: 0 }) return 0;
         var (channels, height, width) = ImageDimensions(image);
         if ((long)height * width > MaxPixels) return 0;
         if (SmallestTileCoefficients(height, width) < MinimumCoefficients) return 0;
@@ -363,6 +372,10 @@ public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImage
                 $"Expected an image of shape [H, W], [C, H, W] or [1, C, H, W]; got [{string.Join(", ", s.ToArray())}].",
                 nameof(image)),
         };
+        // A zero-sized axis would reach the tiling below as a division by zero rows or columns.
+        if (channels <= 0 || height <= 0 || width <= 0)
+            throw new ArgumentException(
+                $"Every image dimension must be positive; got [{string.Join(", ", s.ToArray())}].", nameof(image));
         return (channels, height, width);
     }
 

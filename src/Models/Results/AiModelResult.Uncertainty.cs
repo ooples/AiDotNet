@@ -167,6 +167,10 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </para>
     /// <para><b>For Beginners:</b> A normal prediction gives you one answer. This also tells you how much to trust
     /// it: a large variance means the model is unsure, which is a signal to review the case or gather more data.
+    /// A zero variance does not by itself mean the model is confident. Conformal prediction reports its uncertainty as
+    /// an interval or, for classification, a set of possible classes, and can return zero variance alongside a wide
+    /// interval or a large set; zero variance is also what you get when no uncertainty method was available. Check
+    /// the method actually used and its interval or set, not only the variance.
     /// </para>
     /// </remarks>
     public UncertaintyPredictionResult<T, TOutput> PredictWithUncertainty(TInput newData, int? numSamples = null)

@@ -22,8 +22,14 @@ public class ProgramSynthesisOptions
     /// <c>TreeSitterCodeSyntaxProvider</c> from the opt-in <c>AiDotNet.CodeAnalysis.TreeSitter</c> package.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> leave it null to use generic structural checks (and no syntax trees); set it to get
-    /// precise validation for the languages the provider supports.
+    /// <para>
+    /// Precedence: a provider set here wins. When this is <c>null</c>, a provider configured by an earlier program
+    /// synthesis configuration on the same builder is kept; failing that, a provider the host registered process-wide
+    /// (<c>CodeSyntaxProviders.Provider</c>, which AiDotNet.Serving sets to the TreeSitter provider) is used. Only when
+    /// none of these exists does validation fall back to generic structural checks, with no syntax tree.
+    /// </para>
+    /// <para><b>For Beginners:</b> set it to get precise validation for the languages the provider supports. Leaving it
+    /// null does not always mean generic checks: an earlier setting or the host's provider may still be used.</para>
     /// </remarks>
     public AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? SyntaxProvider { get; set; }
 

@@ -35200,7 +35200,8 @@ public static partial class LayerHelper<T>
         int numDecoderLayers = 4,
         int numHeads = 2,
         double dropoutRate = 0.1,
-        int vocabSize = 256)
+        int vocabSize = 256,
+        int maxSequenceLength = 1000)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -35213,6 +35214,12 @@ public static partial class LayerHelper<T>
         // tokens — without this layer, the test's raw mel-spec / token-ID
         // input fails the first MHA's hidden-dim contract.
         yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+
+        // Self-attention is order-blind, so FastSpeech adds sinusoidal positional encodings to the phoneme embeddings
+        // before the encoder (Ren et al. 2019, Fig. 1; Vaswani et al. 2017, Sec. 3.5). Without them the encoder sees a
+        // bag of phonemes and the spectrogram cannot follow the text order. maxSequenceLength is the longest input
+        // (1000 in the FastSpeech 2 reference configuration's max_seq_len).
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, encoderDim);
 
         // === Text Encoder (FFT blocks; Li et al. 2019 §3, FastSpeech Ren et al.
         // 2019 §3.1) ===
@@ -35235,6 +35242,8 @@ public static partial class LayerHelper<T>
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
 
         // === Mel Decoder (FFT blocks; residual Pre-LN, as above) ===
+        // The decoder's input gets its own positional encodings (Ren et al. 2019, Fig. 1).
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerEncoderBlock<T>(

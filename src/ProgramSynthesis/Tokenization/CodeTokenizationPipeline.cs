@@ -92,7 +92,12 @@ public sealed class CodeTokenizationPipeline : ICodeTokenizationPipeline
         return result;
     }
 
-    private static bool IsNativeLoadFailure(Exception ex) =>
+    /// <summary>
+    /// True when a syntax provider failed because its native grammar library could not load (missing, wrong
+    /// architecture, missing entry point), including a failure wrapped by a type initializer. Only these warrant a
+    /// fallback to generic handling; a parser's own errors are real failures.
+    /// </summary>
+    internal static bool IsNativeLoadFailure(Exception ex) =>
         ex is DllNotFoundException or BadImageFormatException or EntryPointNotFoundException
         || (ex is TypeInitializationException { InnerException: { } inner } && IsNativeLoadFailure(inner));
 

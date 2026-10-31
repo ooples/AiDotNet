@@ -898,6 +898,20 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public ProgramSynthesisServingClientOptions? ProgramSynthesisServingClientOptions { get; set; }
 
     /// <summary>The parser configured through <c>ProgramSynthesisOptions.SyntaxProvider</c>, or null for none.</summary>
+    /// <value>
+    /// The syntax provider the builder carried over from <c>ProgramSynthesisOptions.SyntaxProvider</c>; <c>null</c> when
+    /// none was configured.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// The result hands it to program synthesis, which parses generated code with it to validate syntax. When it is
+    /// <c>null</c>, a provider registered by the host (for example the TreeSitter add-on that AiDotNet.Serving
+    /// registers) is used if there is one; otherwise validation falls back to generic structural checks with no
+    /// syntax tree.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the tool that reads generated code and checks it is well-formed. You set
+    /// it on the program synthesis options when building; the result just keeps the one you chose.</para>
+    /// </remarks>
     internal AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? CodeSyntaxProvider { get; set; }
 
     // ============================================================================

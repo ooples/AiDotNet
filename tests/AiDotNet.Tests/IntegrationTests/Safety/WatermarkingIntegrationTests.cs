@@ -103,6 +103,17 @@ public class WatermarkingIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ImageWatermarker_ZeroSizedImage_IsRejectedOnEmbed_AndScoresZeroOnDetect()
+    {
+        await Task.Yield();
+        var watermarker = new ImageWatermarker<double>();
+        var empty = new Tensor<double>(new[] { 3, 0, 16 });
+
+        Assert.Throws<System.ArgumentException>(() => watermarker.EmbedWatermark(empty));
+        Assert.Equal(0.0, watermarker.DetectWatermark(empty));
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task ImageWatermarker_NonFinitePixels_AreNoEvidence()
     {
         await Task.Yield();
@@ -175,6 +186,29 @@ public class WatermarkingIntegrationTests
         var error = Assert.Throws<ArgumentException>(() => weak.EmbedWatermark(image));
         Assert.Contains("expected detection z", error.Message);
         Assert.True(new InvisibleImageWatermarker<double>().DetectWatermark(new InvisibleImageWatermarker<double>().EmbedWatermark(image)) >= 0.9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SafetyPipeline_EmbedsGeneratedImages_WithTheConfiguredSecretKey()
+    {
+        await Task.Yield();
+        const string secret = "embed-path-test-image-key";
+        var config = new AiDotNet.Safety.SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = secret } };
+        var pipeline = AiDotNet.Safety.SafetyPipelineFactory<double>.Create(config);
+        var image = CreateRandomImageTensor(3, 64, 64);
+
+        var marked = pipeline.EmbedImageWatermark(image);
+
+        // The mark is the configured key's: a detector holding it finds the mark, one on the public key does not.
+        Assert.True(new ImageWatermarker<double>(key: secret).DetectWatermark(marked) >= 0.9);
+        Assert.True(new ImageWatermarker<double>().DetectWatermark(marked) < 0.5);
+        Assert.False(new ImageWatermarker<double>(key: secret).UsesPublicKey);
+        Assert.True(new ImageWatermarker<double>(key: ImageWatermarkerBase<double>.PublicKey).UsesPublicKey);
+
+        // A pipeline holding only public-key watermarkers detects but refuses to embed; one with none refuses too.
+        var publicOnly = new AiDotNet.Safety.SafetyPipeline<double>().AddModule(new ImageWatermarker<double>());
+        Assert.Contains("public watermark key", Assert.Throws<InvalidOperationException>(() => publicOnly.EmbedImageWatermark(image)).Message);
+        Assert.Throws<InvalidOperationException>(() => new AiDotNet.Safety.SafetyPipeline<double>().EmbedImageWatermark(image));
     }
 
     private sealed class SmallLimitWatermarker : ImageWatermarker<double>
