@@ -21,7 +21,6 @@ public class TD3Options<T> : ReinforcementLearningOptions<T>
     public double TargetNoiseClip { get; init; } = 0.5;
     public List<int> ActorHiddenLayers { get; init; } = new List<int> { 256, 256 };
     public List<int> CriticHiddenLayers { get; init; } = new List<int> { 256, 256 };
-    public new int WarmupSteps { get; init; } = 25000;
 
     public TD3Options()
     {
@@ -29,5 +28,8 @@ public class TD3Options<T> : ReinforcementLearningOptions<T>
         ActorLearningRate = numOps.FromDouble(0.001);
         CriticLearningRate = numOps.FromDouble(0.001);
         TargetUpdateTau = numOps.FromDouble(0.005);
+        // Fujimoto et al. 2018: 25,000 random-action steps before learning starts. Set on the inherited
+        // WarmupSteps, which ReinforcementLearningAgentBase reads.
+        WarmupSteps = 25000;
     }
 }

@@ -39,6 +39,15 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         /// <summary>
+        /// The random number generator an options-configured policy uses: seeded from
+        /// <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/> when it is set, otherwise null so the
+        /// base constructor falls back to a secure random source.
+        /// </summary>
+        /// <param name="seed">The options' seed.</param>
+        protected static Random? RandomFromSeed(int? seed) =>
+            seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : null;
+
+        /// <summary>
         /// Selects an action given the current state.
         /// </summary>
         /// <param name="state">The current state observation.</param>

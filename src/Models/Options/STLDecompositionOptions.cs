@@ -39,47 +39,13 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class STLDecompositionOptions<T> : TimeSeriesRegressionOptions<T>
 {
-    /// <summary>
-    /// Gets or sets the number of time points in one seasonal cycle.
-    /// </summary>
-    /// <value>A positive integer, defaulting to 12 (monthly seasonality).</value>
-    /// <remarks>
-    /// <para>
-    /// This property specifies the number of time points that make up one complete seasonal cycle in the data. 
-    /// It represents the periodicity of the seasonal pattern. The default value of 12 is appropriate for monthly 
-    /// data with yearly seasonality, which is common in many business and economic applications. Other common 
-    /// values include 4 for quarterly data with yearly seasonality, 7 for daily data with weekly seasonality, 
-    /// or 24 for hourly data with daily seasonality. This property overrides the SeasonalPeriod property 
-    /// inherited from the base class to provide a more appropriate default value for STL decomposition. The 
-    /// correct specification of the seasonal period is crucial for the algorithm to properly identify and 
-    /// extract the seasonal component.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting defines how long one complete seasonal cycle is in your data.
-    /// 
-    /// The seasonal period tells the algorithm:
-    /// - How many data points make up one complete cycle
-    /// - What pattern to look for when extracting seasonality
-    /// 
-    /// The default value of 12 means:
-    /// - The algorithm expects a pattern that repeats every 12 data points
-    /// - This is perfect for monthly data with a yearly seasonal pattern
-    /// 
-    /// Common values include:
-    /// - 12: Monthly data with yearly seasonality
-    /// - 4: Quarterly data with yearly seasonality
-    /// - 7: Daily data with weekly seasonality
-    /// - 24: Hourly data with daily seasonality
-    /// - 365: Daily data with yearly seasonality
-    /// 
-    /// When to adjust this value:
-    /// - Change it to match the natural cycle in your data
-    /// - Must be set correctly for the decomposition to work properly
-    /// 
-    /// For example, if analyzing hourly website traffic, you might set this to 24 to
-    /// capture the daily pattern of activity.
-    /// </para>
-    /// </remarks>
-    public new int SeasonalPeriod { get; set; } = 12;
+    /// <summary>Initializes a new instance with the STLDecomposition defaults.</summary>
+    public STLDecompositionOptions()
+    {
+        // Monthly seasonality.
+        SeasonalPeriod = 12;
+    }
+
 
     /// <summary>
     /// Gets or sets the degree of the polynomial used in the seasonal LOESS smoothing.

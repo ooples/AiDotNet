@@ -67,6 +67,21 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _actionSize = actionSize;
         }
 
+        /// <summary>
+        /// Initializes a new instance of the DiscretePolicy class from its options: action count, exploration
+        /// strategy and <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/>.
+        /// </summary>
+        /// <param name="policyNetwork">Network producing one logit per action.</param>
+        /// <param name="options">The policy options.</param>
+        public DiscretePolicy(INeuralNetwork<T> policyNetwork, DiscretePolicyOptions<T> options)
+            : this(
+                policyNetwork,
+                (options ?? throw new ArgumentNullException(nameof(options))).ActionSize,
+                options.ExplorationStrategy,
+                RandomFromSeed(options.Seed))
+        {
+        }
+
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             // Get action probabilities from network

@@ -64,12 +64,6 @@ public class COPKMeansOptions<T> : ClusteringOptions<T>
     /// </para>
     /// </remarks>
     public bool UseTransitiveClosure { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }
 
 /// <summary>
@@ -126,10 +120,4 @@ public class SeededKMeansOptions<T> : ClusteringOptions<T>
     /// </para>
     /// </remarks>
     public bool ConstrainSeeds { get; set; }
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }

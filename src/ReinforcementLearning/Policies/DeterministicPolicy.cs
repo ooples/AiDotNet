@@ -81,6 +81,22 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         /// <summary>
+        /// Initializes a new instance of the DeterministicPolicy class from its options: action size, exploration
+        /// strategy, tanh squashing and <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/>.
+        /// </summary>
+        /// <param name="policyNetwork">Network mapping a state to its action.</param>
+        /// <param name="options">The policy options.</param>
+        public DeterministicPolicy(INeuralNetwork<T> policyNetwork, DeterministicPolicyOptions<T> options)
+            : this(
+                policyNetwork,
+                (options ?? throw new ArgumentNullException(nameof(options))).ActionSize,
+                options.ExplorationStrategy,
+                options.UseTanhSquashing,
+                RandomFromSeed(options.Seed))
+        {
+        }
+
+        /// <summary>
         /// Selects a deterministic action from the policy network.
         /// </summary>
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)

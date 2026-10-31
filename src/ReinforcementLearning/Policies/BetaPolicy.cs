@@ -89,6 +89,23 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         /// <summary>
+        /// Initializes a new instance of the BetaPolicy class from its options: action size, exploration
+        /// strategy, action bounds and <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/>.
+        /// </summary>
+        /// <param name="policyNetwork">Network producing alpha and beta for each action dimension.</param>
+        /// <param name="options">The policy options.</param>
+        public BetaPolicy(INeuralNetwork<T> policyNetwork, BetaPolicyOptions<T> options)
+            : this(
+                policyNetwork,
+                (options ?? throw new ArgumentNullException(nameof(options))).ActionSize,
+                options.ExplorationStrategy,
+                options.ActionMin,
+                options.ActionMax,
+                RandomFromSeed(options.Seed))
+        {
+        }
+
+        /// <summary>
         /// Selects an action by sampling from Beta distributions.
         /// </summary>
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)

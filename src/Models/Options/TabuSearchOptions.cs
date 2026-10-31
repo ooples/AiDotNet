@@ -38,6 +38,16 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>Initializes a new instance with the TabuSearch defaults.</summary>
+    public TabuSearchOptions()
+    {
+        // Tabu search perturbs more than a genetic algorithm: mutation rate 0.1, adapted within
+        // [0.01, 0.5].
+        MutationRate = 0.1;
+        MinMutationRate = 0.01;
+        MaxMutationRate = 0.5;
+    }
+
     /// <summary>
     /// Gets or sets the size of the tabu list.
     /// </summary>
@@ -156,47 +166,6 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
     /// </para>
     /// </remarks>
     public double PerturbationFactor { get; set; } = 0.1;
-
-    /// <summary>
-    /// Gets or sets the probability of mutation in the search process.
-    /// </summary>
-    /// <value>A double value between 0 and 1, defaulting to 0.1.</value>
-    /// <remarks>
-    /// <para>
-    /// This property specifies the probability of applying random mutations to solutions during the search process. 
-    /// Mutations introduce random changes to solutions, helping to maintain diversity and explore new regions of 
-    /// the search space. A higher mutation rate increases exploration but might disrupt good solutions, while a 
-    /// lower rate preserves good solutions but might lead to premature convergence. The default value of 0.1 (10%) 
-    /// provides a moderate mutation rate suitable for many applications, balancing exploration and exploitation. 
-    /// This property overrides the MutationRate property inherited from the base class to provide a more appropriate 
-    /// default value for Tabu Search. The optimal value depends on the complexity of the problem and the desired 
-    /// balance between exploring new solutions and refining existing ones.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting controls how often random changes are introduced to solutions.
-    /// 
-    /// The mutation rate:
-    /// - Determines the probability of making random changes to solutions
-    /// - Helps the algorithm explore new areas and maintain diversity
-    /// - Prevents the search from becoming too focused on a single region
-    /// 
-    /// The default value of 0.1 means:
-    /// - There's a 10% chance of applying a random mutation to a solution
-    /// - This provides a good balance between exploration and stability for many problems
-    /// 
-    /// Think of it like this:
-    /// - Higher values (e.g., 0.3): More exploration, more diversity, but may disrupt good solutions
-    /// - Lower values (e.g., 0.05): More stability, better refinement of good solutions, but may get stuck
-    /// 
-    /// When to adjust this value:
-    /// - Increase it when the algorithm seems to be converging too quickly to suboptimal solutions
-    /// - Decrease it when good solutions are being found but need refinement
-    /// - This setting overrides the value inherited from the base class
-    /// 
-    /// For example, in a complex optimization problem with many local optima,
-    /// you might increase this to 0.2 to encourage more exploration.
-    /// </para>
-    /// </remarks>
-    public new double MutationRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the minimum ratio of features to consider in the search.
@@ -397,86 +366,6 @@ public class TabuSearchOptions<T, TInput, TOutput> : GeneticAlgorithmOptimizerOp
     /// </para>
     /// </remarks>
     public double InitialMutationRate { get; set; } = 0.1;
-
-    /// <summary>
-    /// Gets or sets the minimum mutation rate.
-    /// </summary>
-    /// <value>A double value between 0 and 1, defaulting to 0.01.</value>
-    /// <remarks>
-    /// <para>
-    /// This property specifies the lower bound for the mutation rate when using adaptive mutation rates. It ensures 
-    /// that the mutation rate doesn't become too small, which would limit the algorithm's ability to explore new 
-    /// regions of the search space. The default value of 0.01 (1%) provides a small but non-negligible minimum 
-    /// mutation rate, ensuring some level of exploration is maintained throughout the search. This property overrides 
-    /// the MinMutationRate property inherited from the base class to provide a more appropriate default value for 
-    /// Tabu Search. The optimal value depends on the complexity of the problem and the minimum level of exploration 
-    /// desired even in the exploitation phases of the search.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting sets a lower limit on how often random changes are introduced to solutions.
-    /// 
-    /// The minimum mutation rate:
-    /// - Ensures the mutation rate doesn't drop too low during adaptive adjustments
-    /// - Maintains some level of exploration even in later stages
-    /// - Prevents the search from becoming too focused and getting stuck
-    /// 
-    /// The default value of 0.01 means:
-    /// - The mutation rate will never drop below 1%
-    /// - This ensures at least some exploration continues throughout the search
-    /// 
-    /// Think of it like this:
-    /// - Higher values (e.g., 0.05): More guaranteed exploration, less chance of getting stuck
-    /// - Lower values (e.g., 0.001): More potential for fine-tuning, but higher risk of getting stuck
-    /// 
-    /// When to adjust this value:
-    /// - Increase it for problems with many local optima where exploration is always important
-    /// - Decrease it when fine-tuning solutions is more important than exploration
-    /// - This setting overrides the value inherited from the base class
-    /// 
-    /// For example, in a deceptive optimization problem where local optima are far from the global optimum,
-    /// you might increase this to 0.05 to ensure continued exploration.
-    /// </para>
-    /// </remarks>
-    public new double MinMutationRate { get; set; } = 0.01;
-
-    /// <summary>
-    /// Gets or sets the maximum mutation rate.
-    /// </summary>
-    /// <value>A double value between 0 and 1, defaulting to 0.5.</value>
-    /// <remarks>
-    /// <para>
-    /// This property specifies the upper bound for the mutation rate when using adaptive mutation rates. It ensures 
-    /// that the mutation rate doesn't become too large, which would make the search too random and disrupt good 
-    /// solutions excessively. The default value of 0.5 (50%) provides a relatively high maximum mutation rate, 
-    /// allowing for significant exploration when needed but preventing the search from becoming completely random. 
-    /// This property overrides the MaxMutationRate property inherited from the base class to provide a more 
-    /// appropriate default value for Tabu Search. The optimal value depends on the complexity of the problem and 
-    /// the maximum level of exploration desired even in the most exploratory phases of the search.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting sets an upper limit on how often random changes are introduced to solutions.
-    /// 
-    /// The maximum mutation rate:
-    /// - Ensures the mutation rate doesn't rise too high during adaptive adjustments
-    /// - Prevents the search from becoming too random
-    /// - Maintains some level of stability even in exploratory phases
-    /// 
-    /// The default value of 0.5 means:
-    /// - The mutation rate will never exceed 50%
-    /// - This prevents excessive randomness while still allowing significant exploration
-    /// 
-    /// Think of it like this:
-    /// - Higher values (e.g., 0.7): Allows more aggressive exploration when needed
-    /// - Lower values (e.g., 0.3): Maintains more stability, less disruption to good solutions
-    /// 
-    /// When to adjust this value:
-    /// - Increase it for very difficult problems where aggressive exploration is sometimes needed
-    /// - Decrease it when stability is important and good solutions should be preserved
-    /// - This setting overrides the value inherited from the base class
-    /// 
-    /// For example, in a highly multimodal function with many deceptive local optima,
-    /// you might increase this to 0.7 to allow more aggressive exploration when needed.
-    /// </para>
-    /// </remarks>
-    public new double MaxMutationRate { get; set; } = 0.5;
 
     /// <summary>
     /// Gets or sets the decay factor for the tabu list size.

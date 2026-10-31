@@ -17,6 +17,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new NoExploration<T>();
         public double ActionMin { get; set; } = 0.0;
         public double ActionMax { get; set; } = 1.0;
-        public new int? Seed { get; set; } = null;
     }
 }

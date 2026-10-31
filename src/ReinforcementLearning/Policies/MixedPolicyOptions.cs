@@ -18,6 +18,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public IExplorationStrategy<T> DiscreteExplorationStrategy { get; set; } = new EpsilonGreedyExploration<T>();
         public IExplorationStrategy<T> ContinuousExplorationStrategy { get; set; } = new GaussianNoiseExploration<T>();
         public bool SharedFeatures { get; set; } = false;
-        public new int? Seed { get; set; } = null;
     }
 }

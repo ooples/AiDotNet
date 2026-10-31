@@ -59,12 +59,6 @@ public class KMedoidsOptions<T> : ClusteringOptions<T>
     /// </summary>
     /// <value>Algorithm variant. Default is PAM.</value>
     public KMedoidsAlgorithm Algorithm { get; set; } = KMedoidsAlgorithm.PAM;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }
 
 /// <summary>

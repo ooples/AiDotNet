@@ -16,6 +16,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new OrnsteinUhlenbeckNoise<T>(actionSize: 1);
         public bool UseTanhSquashing { get; set; } = true;
-        public new int? Seed { get; set; } = null;
     }
 }
