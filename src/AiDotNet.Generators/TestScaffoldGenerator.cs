@@ -6445,18 +6445,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "GPTSoVITS" && model.TypeParameterCount == 1)
             {
-                // Preserve the GPT encoder/AR-codec topology through public options while avoiding
-                // a second 12-layer, 512-wide training graph in every generated invariant. The
-                // reference defaults remain on GPTSoVITSOptions for production callers.
-                pinInitSeed = true;
+                // GPT-SoVITS is the semantic GPT, the v2ProPlus SoVITS synthesizer with its discriminators, chinese-hubert,
+                // chinese-roberta and ERes2NetV2; keep every one at width 8-32 with one or two layers (the generator still
+                // hopping 640 samples). English text needs no downloaded front end; generation stops after 50 tokens
+                // (MaxSeconds 1). s1 steps on every sample (no accumulation) at 1e-2 so fifteen steps descend.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 4, " +
-                    "NumCodebooks = 1, CodebookSize = 64, MaxCodecFrames = 16, DropoutRate = 0.0 }, " +
-                    $"{conservativeSmokeAdamWOptimizer})";
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions { " +
+                    "HiddenDim = 16, NumHeads = 2, T2SLayers = 1, SemanticCodebookSize = 32, " +
+                    "InterChannels = 8, SynthesizerHidden = 16, SynthesizerFilter = 32, SynthesizerHeads = 2, SynthesizerLayers = 2, " +
+                    "StyleChannels = 16, MrteChannels = 16, StyleHidden = 16, UpsampleInitialChannels = 32, " +
+                    "ResblockKernels = new[] { 3 }, ResblockDilations = new[] { new[] { 1, 3, 5 } }, " +
+                    "HubertHidden = 16, HubertLayers = 1, HubertHeads = 2, HubertIntermediate = 32, HubertConvDims = new[] { 8, 8, 8, 8, 8, 8, 8 }, " +
+                    "HubertPositionKernel = 8, HubertPositionGroups = 2, BertHidden = 16, BertLayers = 3, BertHeads = 2, BertIntermediate = 32, " +
+                    "SpeakerChannels = 8, SpeakerBlocks = new[] { 1, 1, 1, 1 }, " +
+                    "TextLanguage = AiDotNet.TextToSpeech.FrontEnd.GptSoVitsTextLanguage.English, " +
+                    "PromptLanguage = AiDotNet.TextToSpeech.FrontEnd.GptSoVitsTextLanguage.English, MaxSeconds = 1, T2SAccumulation = 1 })";
             }
             else if (model.ClassName == "IART" && model.TypeParameterCount == 1)
             {
@@ -16482,6 +16488,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "GPTSoVITS")
+                {
+                    // GPT-SoVITS reads a sentence's phone ids and trains on a 32 kHz recording: eight ids, and 12800 samples (0.4 s:
+                    // 20 spectrogram frames, 10 semantic tokens). Generation samples its tokens, so the probes compare the training
+                    // objective at a fixed draw, which reads the phones.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 12800 };");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "IndexTTS2")
                 {
                     // IndexTTS2 reads a text's token ids and trains on a 22.05 kHz recording: eight ids, and 8820 samples (0.4 s:
@@ -16717,7 +16738,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
@@ -22156,7 +22177,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "GPTSoVITS" or "Bark" or "BarkModel"
+        return className is "Bark" or "BarkModel"
             or "UniAudio" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
@@ -22169,7 +22190,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Codec-logit output width of a codec-LM model's final projection
-    /// (<c>NumCodebooks * CodebookSize</c>). GPT-SoVITS: 1 codebook x 1024.
+    /// (<c>NumCodebooks * CodebookSize</c>).
     /// </summary>
     private static int CodecLMOutputDim(string className)
     {
@@ -22190,7 +22211,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "UniAudio" => 32,
             "XTTSv2" => 16,
             "XTTSv2Clone" => 1024,
-            "GPTSoVITS" => 1024,
             _ => 1024,
         };
     }
