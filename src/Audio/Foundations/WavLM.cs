@@ -67,10 +67,9 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
     /// <inheritdoc />
     /// <remarks>
     /// Measured: <c>PredictCore</c> folds <c>Layers</c> and <c>PostprocessOutput</c> is the identity.
-    /// <c>CreateDefaultFoundationModelLayers</c> ends with the last
-    /// <c>TransformerEncoderBlock&lt;T&gt;(hiddenDim, ...)</c> and adds no head, so Predict returns
-    /// hidden states at <c>_options.HiddenDim</c> - <c>FeatureEncoderDim</c> is the CNN front-end
-    /// width, projected to <c>HiddenDim</c> before the encoder runs.
+    /// <see cref="WavLmNetwork{T}"/> ends with the Transformer encoder and adds no head, so Predict
+    /// returns hidden states at <c>_options.HiddenDim</c> - <c>FeatureEncoderDim</c> is the
+    /// convolutional feature encoder's width, projected to <c>HiddenDim</c> before the encoder runs.
     /// </remarks>
     protected override int OutputFeatureWidth => _options.HiddenDim;
 
