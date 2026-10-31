@@ -6,6 +6,34 @@ using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SpeechRecognition.Foundation;
 
+/// <summary>A BEST-RQ network's shape: the feature front end, the Conformer encoder, the quantizers and the masking.</summary>
+internal sealed record BestRqConfiguration
+{
+    public int SampleRate { get; init; } = 16000;
+    public int NumMels { get; init; } = 80;
+    public int WindowLength { get; init; } = 400;
+    public int HopLength { get; init; } = 160;
+    public double LogMelFloor { get; init; } = 1e-6;
+    public int EncoderDim { get; init; } = 1024;
+    public int NumEncoderLayers { get; init; } = 24;
+    public int NumAttentionHeads { get; init; } = 8;
+    public int FeedForwardMultiplier { get; init; } = 4;
+    public int ConvKernel { get; init; } = 5;
+    /// <summary>Rotary base for the attention's relative positions; zero for none (Conformer XL).</summary>
+    public double RopeTheta { get; init; }
+    /// <summary>Encoder frames per attention chunk; zero attends over the whole sequence.</summary>
+    public int AttentionChunkSize { get; init; }
+    public int CodebookSize { get; init; } = 8192;
+    public int CodeDim { get; init; } = 16;
+    /// <summary>Independent quantizers, each with its own softmax layer (USM's multi-softmax; BEST-RQ uses one).</summary>
+    public int NumCodebooks { get; init; } = 1;
+    public int StackedFrames { get; init; } = 4;
+    public double MaskProbability { get; init; } = 0.01;
+    public int MaskLength { get; init; } = 40;
+    public double MaskNoiseStd { get; init; } = 0.1;
+    public int VocabSize { get; init; } = 1024;
+}
+
 /// <summary>
 /// The BEST-RQ network (Chiu et al. 2022): Conformer XL (Zhang et al. 2020, Table 1) over normalized log-mel features,
 /// the fixed random-projection quantizer that gives the masked-prediction targets (section 3.1), the pre-training
@@ -16,20 +44,22 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// reduction, then a linear layer and a stack of Conformer blocks without relative positional embedding (Zhang et al.
 /// 2020, section 2.1). The paper fine-tunes with an RNN-T decoder; this class puts a CTC layer on the projection instead.
 /// Its layers are added to the owner's list; the quantizer's matrix and codebook are not layers, since they are fixed.
+/// Google USM (Zhang et al. 2023) builds on the same network with relative attention, chunk-wise attention and several
+/// codebooks, which the configuration expresses.
 /// </remarks>
 internal sealed class BestRqNetwork<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
-    private readonly BESTRQOptions _o;
+    private readonly BestRqConfiguration _o;
     private readonly MelSpectrogram<T> _mel;
     private readonly int _subsampledBins;
-    // The quantizer (section 3.1): A is CodeDim × (NumMels · StackedFrames), Xavier-initialized; the codebook's entries
-    // are standard normal and stored l2-normalized, since Equation 1 only compares normalized vectors.
-    private readonly double[,] _projection;
-    private readonly double[,] _codebook;
+    // The quantizers (section 3.1): each A is CodeDim × (NumMels · StackedFrames), Xavier-initialized; each codebook's
+    // entries are standard normal and stored l2-normalized, since Equation 1 only compares normalized vectors.
+    private readonly double[][,] _projections;
+    private readonly double[][,] _codebooks;
 
-    public BestRqNetwork(IEngine engine, List<LayerBase<T>> layers, BESTRQOptions options, Random quantizerRandom)
+    public BestRqNetwork(IEngine engine, List<LayerBase<T>> layers, BestRqConfiguration options, Random quantizerRandom)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _o = options ?? throw new ArgumentNullException(nameof(options));
@@ -41,6 +71,7 @@ internal sealed class BestRqNetwork<T>
         }
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
         int d = _o.EncoderDim;
+        if (_o.NumCodebooks <= 0) throw new ArgumentException("At least one codebook is needed.", nameof(options));
         if (d % _o.NumAttentionHeads != 0)
             throw new ArgumentException($"EncoderDim {d} must divide into {_o.NumAttentionHeads} heads.", nameof(options));
         _mel = new MelSpectrogram<T>(sampleRate: _o.SampleRate, nMels: _o.NumMels, nFft: _o.WindowLength,
@@ -52,29 +83,37 @@ internal sealed class BestRqNetwork<T>
         if (_subsampledBins <= 0) throw new ArgumentException("Too few mel bins for two stride-2 3×3 convolutions.", nameof(options));
         InputProjection = Own(new DenseLayer<T>(d, identity));
         for (int i = 0; i < _o.NumEncoderLayers; i++)
-            Blocks.Add(Own(new ConformerBlockLayer<T>(d, _o.NumAttentionHeads, _o.FeedForwardMultiplier, _o.ConvKernel, ropeTheta: 0)));
-        PretrainingHead = Own(new DenseLayer<T>(_o.CodebookSize, identity));
+            Blocks.Add(Own(new ConformerBlockLayer<T>(d, _o.NumAttentionHeads, _o.FeedForwardMultiplier, _o.ConvKernel,
+                ropeTheta: _o.RopeTheta, attentionChunkSize: _o.AttentionChunkSize)));
+        for (int n = 0; n < _o.NumCodebooks; n++) PretrainingHeads.Add(Own(new DenseLayer<T>(_o.CodebookSize, identity)));
         FineTuningProjection = Own(new DenseLayer<T>(d, identity));
         CtcHead = Own(new DenseLayer<T>(_o.VocabSize, identity));
 
         int inputs = _o.NumMels * _o.StackedFrames, h = _o.CodeDim;
         double bound = Math.Sqrt(6.0 / (inputs + h));
-        _projection = new double[h, inputs];
-        for (int r = 0; r < h; r++)
-            for (int c = 0; c < inputs; c++)
-                _projection[r, c] = (2 * quantizerRandom.NextDouble() - 1) * bound;
-        _codebook = new double[_o.CodebookSize, h];
-        for (int k = 0; k < _o.CodebookSize; k++)
+        _projections = new double[_o.NumCodebooks][,];
+        _codebooks = new double[_o.NumCodebooks][,];
+        for (int n = 0; n < _o.NumCodebooks; n++)
         {
-            double norm = 0;
-            for (int c = 0; c < h; c++)
+            var projection = new double[h, inputs];
+            for (int r = 0; r < h; r++)
+                for (int c = 0; c < inputs; c++)
+                    projection[r, c] = (2 * quantizerRandom.NextDouble() - 1) * bound;
+            var codebook = new double[_o.CodebookSize, h];
+            for (int k = 0; k < _o.CodebookSize; k++)
             {
-                double u1 = 1.0 - quantizerRandom.NextDouble(), u2 = quantizerRandom.NextDouble();
-                _codebook[k, c] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-                norm += _codebook[k, c] * _codebook[k, c];
+                double norm = 0;
+                for (int c = 0; c < h; c++)
+                {
+                    double u1 = 1.0 - quantizerRandom.NextDouble(), u2 = quantizerRandom.NextDouble();
+                    codebook[k, c] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+                    norm += codebook[k, c] * codebook[k, c];
+                }
+                norm = Math.Sqrt(norm);
+                for (int c = 0; c < h; c++) codebook[k, c] /= norm;
             }
-            norm = Math.Sqrt(norm);
-            for (int c = 0; c < h; c++) _codebook[k, c] /= norm;
+            _projections[n] = projection;
+            _codebooks[n] = codebook;
         }
     }
 
@@ -84,7 +123,8 @@ internal sealed class BestRqNetwork<T>
     public Conv2DLayer<T> SecondConv { get; }
     public DenseLayer<T> InputProjection { get; }
     public List<ConformerBlockLayer<T>> Blocks { get; } = new();
-    public DenseLayer<T> PretrainingHead { get; }
+    /// <summary>One pre-training softmax layer per codebook.</summary>
+    public List<DenseLayer<T>> PretrainingHeads { get; } = new();
     public DenseLayer<T> FineTuningProjection { get; }
     public DenseLayer<T> CtcHead { get; }
 
@@ -119,12 +159,14 @@ internal sealed class BestRqNetwork<T>
     }
 
     /// <summary>
-    /// The quantized label of every encoder frame (Equation 1): each group of <see cref="BESTRQOptions.StackedFrames"/>
-    /// input frames, stacked, is projected by A, and the label is the index of the nearest codebook entry after both are
-    /// l2-normalized. Frames past the last full group are not labelled.
+    /// The quantized label of every encoder frame (Equation 1) from quantizer <paramref name="codebook"/>: each group of
+    /// <see cref="BestRqConfiguration.StackedFrames"/> input frames, stacked, is projected by A, and the label is the index
+    /// of the nearest codebook entry after both are l2-normalized. Frames past the last full group are not labelled.
     /// </summary>
-    public int[] Quantize(double[,] features)
+    public int[] Quantize(double[,] features, int codebook = 0)
     {
+        var a = _projections[codebook];
+        var entries = _codebooks[codebook];
         int frames = features.GetLength(0), bins = features.GetLength(1), stack = _o.StackedFrames, h = _o.CodeDim;
         var labels = new int[frames / stack];
         var projected = new double[h];
@@ -136,7 +178,7 @@ internal sealed class BestRqNetwork<T>
                 double sum = 0;
                 for (int s = 0; s < stack; s++)
                     for (int b = 0; b < bins; b++)
-                        sum += _projection[r, s * bins + b] * features[g * stack + s, b];
+                        sum += a[r, s * bins + b] * features[g * stack + s, b];
                 projected[r] = sum;
                 norm += sum * sum;
             }
@@ -148,7 +190,7 @@ internal sealed class BestRqNetwork<T>
                 double distance = 0;
                 for (int r = 0; r < h; r++)
                 {
-                    double diff = _codebook[k, r] - (norm > 0 ? projected[r] / norm : 0.0);
+                    double diff = entries[k, r] - (norm > 0 ? projected[r] / norm : 0.0);
                     distance += diff * diff;
                 }
                 if (distance < bestDistance)
@@ -163,9 +205,9 @@ internal sealed class BestRqNetwork<T>
     }
 
     /// <summary>
-    /// Masks the input frames (section 3): every frame starts a span of <see cref="BESTRQOptions.MaskLength"/> frames with
-    /// probability <see cref="BESTRQOptions.MaskProbability"/>, spans may overlap, and masked frames are replaced by
-    /// N(0, <see cref="BESTRQOptions.MaskNoiseStd"/>²) noise. Returns the masked features and the mask.
+    /// Masks the input frames (section 3): every frame starts a span of <see cref="BestRqConfiguration.MaskLength"/> frames with
+    /// probability <see cref="BestRqConfiguration.MaskProbability"/>, spans may overlap, and masked frames are replaced by
+    /// N(0, <see cref="BestRqConfiguration.MaskNoiseStd"/>²) noise. Returns the masked features and the mask.
     /// </summary>
     public (double[,] Features, bool[] Mask) MaskInput(double[,] features, Random random)
     {
@@ -213,28 +255,37 @@ internal sealed class BestRqNetwork<T>
     public Tensor<T> CtcLogits(Tensor<T> encoded) => CtcHead.Forward(FineTuningProjection.Forward(encoded));
 
     /// <summary>
-    /// The pre-training loss of one waveform (section 3.2): the cross-entropy of the softmax layer's prediction of the
-    /// quantized label at every encoder frame whose input frames were masked, averaged over those frames. The labels come
-    /// from the unmasked features; the encoder sees the masked ones. Zero when nothing is masked.
+    /// The pre-training loss of one waveform (section 3.2): the cross-entropy of each softmax layer's prediction of its
+    /// quantizer's label at every encoder frame whose input frames were masked, averaged over those frames and, with
+    /// several codebooks, weighted equally across them (USM, section 2.2.1). The labels come from the unmasked features;
+    /// the encoder sees the masked ones. Zero when nothing is masked.
     /// </summary>
     public Tensor<T> PretrainingLoss(IReadOnlyList<double> waveform, bool training, Random random)
     {
         var features = Features(waveform);
-        var labels = Quantize(features);
         var (masked, mask) = MaskInput(features, random);
-        var logits = PretrainingHead.Forward(Encode(masked, training));                                       // [L, codes]
-        int length = Math.Min(logits.Shape[0], labels.Length), stack = _o.StackedFrames;
-        var weights = new Tensor<T>(logits._shape);
+        var encoded = Encode(masked, training);
+        Tensor<T>? total = null;
         int count = 0;
-        for (int g = 0; g < length; g++)
+        for (int n = 0; n < _o.NumCodebooks; n++)
         {
-            bool any = false;
-            for (int s = 0; s < stack; s++) any |= mask[g * stack + s];
-            if (!any) continue;
-            weights[g, labels[g]] = NumOps.FromDouble(-1.0);
-            count++;
+            var labels = Quantize(features, n);
+            var logits = PretrainingHeads[n].Forward(encoded);                                                // [L, codes]
+            int length = Math.Min(logits.Shape[0], labels.Length), stack = _o.StackedFrames;
+            var weights = new Tensor<T>(logits._shape);
+            count = 0;
+            for (int g = 0; g < length; g++)
+            {
+                bool any = false;
+                for (int s = 0; s < stack; s++) any |= mask[g * stack + s];
+                if (!any) continue;
+                weights[g, labels[g]] = NumOps.FromDouble(-1.0);
+                count++;
+            }
+            var term = _engine.ReduceSum(_engine.TensorMultiply(_engine.TensorLogSoftmax(logits, axis: -1), weights), new[] { 0, 1 }, keepDims: false);
+            total = total is null ? term : _engine.TensorAdd(total, term);
         }
-        var total = _engine.ReduceSum(_engine.TensorMultiply(_engine.TensorLogSoftmax(logits, axis: -1), weights), new[] { 0, 1 }, keepDims: false);
-        return count == 0 ? total : _engine.TensorMultiplyScalar(total, NumOps.FromDouble(1.0 / count));
+        var sum = total ?? throw new InvalidOperationException("No codebooks.");
+        return count == 0 ? sum : _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / (count * _o.NumCodebooks)));
     }
 }

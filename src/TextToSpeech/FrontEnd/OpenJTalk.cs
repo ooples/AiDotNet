@@ -25,6 +25,18 @@ internal sealed class OpenJTalk
         _mecab = MeCab.Open(dictionaryDirectory);
     }
 
+    /// <summary>
+    /// The dictionary in <paramref name="dictionaryDirectory"/> with a user dictionary from its CSV source, as pyopenjtalk
+    /// 0.4.1's <c>mecab_dict_index</c> then <c>update_global_jtalk_with_user_dict</c> load it (<c>mecab -u</c>).
+    /// </summary>
+    public OpenJTalk(string dictionaryDirectory, IEnumerable<string> userDictionaryCsv)
+    {
+        if (string.IsNullOrEmpty(dictionaryDirectory)) throw new ArgumentException("The Open JTalk dictionary directory is required.", nameof(dictionaryDirectory));
+        if (!File.Exists(Path.Combine(dictionaryDirectory, "sys.dic")))
+            throw new FileNotFoundException($"No Open JTalk dictionary (sys.dic) in {dictionaryDirectory}; use open_jtalk_dic_utf_8-1.11.");
+        _mecab = MeCab.Open(dictionaryDirectory, userDictionaryCsv);
+    }
+
     /// <summary><c>run_frontend(text)</c>: the words with their readings, pronunciations, accents and chain flags.</summary>
     public List<NjdFeature> RunFrontend(string text)
     {
