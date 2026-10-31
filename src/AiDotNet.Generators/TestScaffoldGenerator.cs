@@ -1545,7 +1545,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "SpikingFullSubNet",  // spiking speech enhancement — Clone / DifferentInputs timeout
         "Qwen3VL",            // instruction-tuned VLM — TrainingError / GradientFlow timeout
         "SimMTM",             // masked time-series foundation model — DifferentInputs / Predict timeout
-        "StepAudio",          // multimodal TTS — Training_ShouldReduceLoss timeout
         "SEEM",               // segment-everything transformer — GradientFlow timeout
         "RVRT",               // recurrent video restoration transformer — LossStrictlyDecreases / ScaledInput timeout
         "Squeezeformer",      // Conformer-variant ASR — Training_ShouldReduceLoss 180 s timeout
@@ -10072,20 +10071,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "StepAudio" && model.TypeParameterCount == 1)
             {
-                // StepAudio (Step-Audio codec-LM TTS) defaults to a foundation-scale CodecLM — LLMDim 1024,
-                // 12 LLM + 6 text-encoder layers, and an 8x1024 = 8192-entry codebook vocabulary. Lazily
-                // allocating that stack's weights OutOfMemory-crashes the 16 GB runner before a single
-                // forward runs (Output_ShouldBeNonEmpty etc. all threw OOM). Build the SAME architecture
-                // (text encoder -> codec-LM transformer -> reconstruction/forecast heads) at CI-smoke
-                // width/depth/vocab via a small StepAudioOptions; only the scale shrinks. The native-training
-                // ctor's InitializeLayers reads these option dims, so this is the single point that controls
-                // model size. numHeads (2) divides LLMDim (32).
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 64, outputSize: 64), " +
-                    "new AiDotNet.TextToSpeech.MultiModal.StepAudioOptions { TextEncoderDim = 32, LLMDim = 32, " +
-                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
+                // Step-Audio is the dual-codebook tokenizer (a streaming Paraformer and S3 v1), two Step-1 decoders (chat
+                // and TTS) over Step-1's real tokenizer, and CosyVoice's flow and HiFT. The fixture builds every part 16
+                // wide with one block each and gives the TTS a prompt speaker.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.StepAudioFixture.Tts<double>()";
             }
             else if (model.ClassName == "SpeechGPT" && model.TypeParameterCount == 1 &&
                      model.FullyQualifiedName.IndexOf("AiDotNet.TextToSpeech.MultiModal.", System.StringComparison.Ordinal) >= 0)
