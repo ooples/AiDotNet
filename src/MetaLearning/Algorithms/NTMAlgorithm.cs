@@ -175,7 +175,8 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _ntmOptions = options;
 
@@ -517,7 +518,7 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
 
         // Update parameters using learning rate
-        var updatedParams = ApplyGradients(controllerParams, gradients, _options.OuterLearningRate);
+        var updatedParams = ApplyOuterGradients(controllerParams, gradients, _options.OuterLearningRate);
 
         // Apply updated parameters to controller
         SetControllerParameters(updatedParams);

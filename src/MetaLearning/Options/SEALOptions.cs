@@ -58,34 +58,22 @@ public class SEALOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// </summary>
-    /// <value>Default: null (uses model's default loss function if available).</value>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for meta-parameter updates (outer loop).
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
     /// </summary>
-    /// <value>Default: null (uses built-in Adam optimizer with OuterLearningRate).</value>
-    /// <remarks>
-    /// <para>
-    /// The meta-optimizer updates the initial model parameters based on performance
-    /// across all tasks in the meta-batch. Adam is recommended for stable convergence.
-    /// </para>
-    /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner-loop adaptation.
+    /// Optimizer for task adaptation. When set, it takes each inner step at its own learning rate (so
+    /// <see cref="InnerLearningRate"/> no longer applies) and is reset at the start of every adaptation; null uses
+    /// plain SGD at <see cref="InnerLearningRate"/>.
+    /// It is rejected when the configuration uses adaptive per-parameter inner learning rates, which assumes plain SGD inner steps.
     /// </summary>
-    /// <value>Default: null (uses built-in SGD optimizer with InnerLearningRate).</value>
-    /// <remarks>
-    /// <para>
-    /// The inner optimizer performs task-specific adaptation on the support set.
-    /// SGD is typically used for simplicity and computational efficiency.
-    /// </para>
-    /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 
     /// <summary>

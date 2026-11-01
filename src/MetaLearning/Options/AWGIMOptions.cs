@@ -44,7 +44,7 @@ public class AWGIMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
 
     #region Standard meta-learning components
 
-    /// <summary>Gets or sets the classification loss. Default: cross-entropy over logits.</summary>
+    /// <summary>Loss function for meta-training; null uses cross-entropy over logits.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>Not used: AWGIM runs its own AdamW meta-update (see <see cref="OuterLearningRate"/>).</summary>
