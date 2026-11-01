@@ -6801,6 +6801,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLayers = 1, NumAttentionHeads = 2, IntermediateSize = 32, FeatureEncoderDim = 16, " +
                     "HiddenDropout = 0.0, FeatureProjectionDropout = 0.0 })";
             }
+            else if (model.ClassName is "SpeakerEmbeddingExtractor" or "SpeakerVerifier" or "SpeakerDiarizer"
+                && model.TypeParameterCount == 1)
+            {
+                // The x-vector network (Snyder et al. 2018) reads time-major [B, frames, 24] filterbank features: 24 is
+                // its first TDNN layer's channel count, so the fixture feeds 64 frames of 24 coefficients. Widths are
+                // bounded through the public options; the verifier and diarizer build the same extractor inside.
+                string speakerOptions = model.ClassName switch
+                {
+                    "SpeakerEmbeddingExtractor" => "new AiDotNet.Audio.Speaker.SpeakerEmbeddingOptions { " +
+                        "EmbeddingDimension = 16, HiddenDim = 16, PoolingDim = 32 }",
+                    "SpeakerVerifier" => "new AiDotNet.Audio.Speaker.SpeakerVerifierOptions { " +
+                        "EmbeddingDimension = 16, HiddenDim = 16 }",
+                    _ => "new AiDotNet.Audio.Speaker.SpeakerDiarizerOptions { EmbeddingDimension = 16 }",
+                };
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
+                    "inputHeight: 64, inputWidth: 24, inputDepth: 1, outputSize: 16), " +
+                    $"options: {speakerOptions})";
+            }
             else if (model.ClassName == "ECAPATDNNSpeaker" && model.TypeParameterCount == 1)
             {
                 // Keep all five ECAPA-TDNN/Res2Net/SE stages while bounding channel
@@ -17244,9 +17265,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
             }
 
-            // ECAPATDNNSpeaker takes time-major [B, frames, mels] features: the mel axis is its first
-            // convolution's channel count, fixed by the weights, so the variable length is axis 1.
-            if (model.ClassName is "ECAPATDNNSpeaker" or "CAMPlusPlus")
+            // ECAPATDNNSpeaker and the x-vector models take time-major [B, frames, mels] features: the mel
+            // axis is their first convolution's channel count, fixed by the weights, so the variable length
+            // is axis 1.
+            if (model.ClassName is "ECAPATDNNSpeaker" or "CAMPlusPlus" or "SpeakerEmbeddingExtractor" or "SpeakerVerifier"
+                or "SpeakerDiarizer")
             {
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }

@@ -450,7 +450,8 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(16000, options.SampleRate);
         Assert.Equal(1.5, options.WindowDurationSeconds, Tolerance);
         Assert.Equal(0.75, options.HopDurationSeconds, Tolerance);
-        Assert.Equal(256, options.EmbeddingDimension);
+        // The diarizer embeds windows with the 512-dim x-vector of Snyder et al. 2018 (Sell et al. 2018 recipe).
+        Assert.Equal(512, options.EmbeddingDimension);
         Assert.Equal(0.65, options.ClusteringThreshold, Tolerance);
         Assert.Equal(0.5, options.MinTurnDuration, Tolerance);
         Assert.Null(options.MaxSpeakers);
@@ -484,10 +485,11 @@ public class AudioExtendedIntegrationTests
     {
         var options = new SpeakerEmbeddingOptions();
         Assert.Equal(16000, options.SampleRate);
-        Assert.Equal(512, options.FftSize);
+        // Snyder et al. 2018, section 3.2 and Table 1: 25 ms frames every 10 ms, 24 filterbanks, 512-dim x-vectors.
+        Assert.Equal(400, options.FftSize);
         Assert.Equal(160, options.HopLength);
-        Assert.Equal(40, options.NumMfcc);
-        Assert.Equal(256, options.EmbeddingDimension);
+        Assert.Equal(24, options.NumMfcc);
+        Assert.Equal(512, options.EmbeddingDimension);
         Assert.NotNull(options.OnnxOptions);
     }
 

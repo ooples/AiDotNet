@@ -15,7 +15,7 @@ namespace AiDotNet.Audio.Speaker;
 /// <b>#2090 note.</b> <see cref="FftSize"/>, <see cref="HopLength"/> and <see cref="NumMfcc"/>
 /// were declared here before but never reached the MFCC front end, which always built itself
 /// from its own defaults. They are now passed through, so changing them changes what the model
-/// computes. The values are unchanged, so existing behaviour is unchanged.
+/// computes.
 /// </para>
 /// </remarks>
 public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
@@ -33,8 +33,6 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
         HopLength = 160;
         NumMfcc = 24;
         MinimumDurationSeconds = 0.5;
-        MaxFrames = 1000;
-        DropoutRate = 0.0;
     }
 
     /// <summary>Initializes a new instance by copying another instance.</summary>
@@ -54,8 +52,6 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
         HopLength = other.HopLength;
         NumMfcc = other.NumMfcc;
         MinimumDurationSeconds = other.MinimumDurationSeconds;
-        MaxFrames = other.MaxFrames;
-        DropoutRate = other.DropoutRate;
         OnnxOptions = other.OnnxOptions;
         MaxGradNorm = other.MaxGradNorm;
         PoolingDim = other.PoolingDim;
@@ -64,7 +60,7 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
     }
 
     /// <summary>
-    /// Gets or sets the FFT window size, in samples, used by the MFCC front end. Default: 512.
+    /// Gets or sets the FFT window size, in samples, used by the MFCC front end. Default: 400 — 25 ms at 16 kHz.
     /// </summary>
     public int FftSize { get; set; }
 
@@ -75,7 +71,7 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
     public int HopLength { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of MFCC coefficients per frame. Default: 40.
+    /// Gets or sets the number of MFCC coefficients per frame. Default: 24.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> How many numbers summarise each short slice of audio. This is
@@ -88,24 +84,6 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
     /// Gets or sets the shortest recording, in seconds, the model will accept. Default: 0.5.
     /// </summary>
     public double MinimumDurationSeconds { get; set; }
-
-    /// <summary>
-    /// Gets or sets the longest input, in frames, the layers are built to handle. Default: 1000 —
-    /// 10 seconds at the default hop length.
-    /// </summary>
-    public int MaxFrames { get; set; }
-
-    /// <summary>
-    /// Gets or sets the dropout rate used in the encoder. Default: 0.0.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The x-vector network of Snyder et al. (2018) uses no dropout in its frame-level stack, so
-    /// zero is the published setting rather than an unset value, and it is deliberately not
-    /// required positive.
-    /// </para>
-    /// </remarks>
-    public double DropoutRate { get; set; }
 
     /// <summary>
     /// Gets or sets the ONNX runtime options used when <see cref="ModelPath"/> is supplied.
@@ -124,11 +102,6 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
 
     /// <summary>Throws if a value this model requires has been left unset or is not positive.</summary>
     /// <exception cref="ArgumentException">Thrown when a required value is zero or negative.</exception>
-    /// <remarks>
-    /// <para>
-    /// <see cref="DropoutRate"/> is not checked: zero is its published value.
-    /// </para>
-    /// </remarks>
     public void Validate()
     {
         ValidateCore();
@@ -136,6 +109,5 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
         Require(HopLength, nameof(HopLength));
         Require(NumMfcc, nameof(NumMfcc));
         Require(MinimumDurationSeconds, nameof(MinimumDurationSeconds));
-        Require(MaxFrames, nameof(MaxFrames));
     }
 }

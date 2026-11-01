@@ -287,6 +287,16 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
         }
     }
 
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // The shared x-vector layers only make sense through the extractor's feature layout and statistics pooling, as
+        // PredictCore already runs them; a raw traversal fed the frame axis to the first TDNN layer as its channels.
+        if (Architecture.Layers is null || Architecture.Layers.Count == 0)
+            return _embeddingExtractor.ForwardForTraining(input);
+        return base.ForwardForTraining(input);
+    }
+
     #endregion
 
     #region ISpeakerDiarizer Implementation
