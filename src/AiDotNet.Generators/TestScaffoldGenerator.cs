@@ -13353,17 +13353,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "FloRNN" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Denoising.", System.StringComparison.Ordinal))
             {
-                // The parameterless native constructor keeps the paper-scale
-                // 64-channel recurrent stack and its 2e-4 learning rate. The
-                // generated one-sample regression probe is unstable at that
-                // scale, so exercise the same flow-guided recurrent topology
-                // through a bounded public-options fixture.
+                // Both recurrent modules, the look-ahead splat/warp path and the frozen flow estimator at
+                // reduced width and depth (the paper: 64 channels, 15 residual blocks, look-ahead 3).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 2, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.FloRNNOptions { NumFeatures = 8, NumRecurrentLayers = 1, " +
-                    "HiddenDim = 8, NumFlowScales = 1, LearningRate = 1e-5, DropoutRate = 0.0 })";
+                    "new AiDotNet.Video.Options.FloRNNOptions { NumFeatures = 8, NumResBlocks = 1, ForwardCount = 1, " +
+                    "FlowPyramidLevels = 3 })";
             }
             else if (model.ClassName == "AnomalyTransformerDetector" && model.TypeParameterCount == 1)
             {
@@ -18710,14 +18707,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"            tensor[i] = {(useFloat ? "(float)" : string.Empty)}System.Math.Sin((i + 1) * (value + 0.5) * 2.0);");
             sb.AppendLine("        return tensor;");
             sb.AppendLine("    }");
-        }
-
-        if (model.ClassName == "FloRNN")
-        {
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-            sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-            sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
         }
 
         if (model.ClassName == "DCCRN")
