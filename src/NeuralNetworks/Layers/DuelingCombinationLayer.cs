@@ -105,21 +105,8 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     protected override bool ParametersAreConstructionSized => true;
 
     /// <summary>
-    /// Initializes a new dueling combination head.
-    /// </summary>
-    /// <param name="featureDim">
-    /// Trunk output feature dimension (the per-sample width of the input).
-    /// Both heads share this input dimensionality.
-    /// </param>
-    /// <param name="actionSize">Number of discrete actions (advantage-head output width).</param>
-    /// <param name="seed">Optional RNG seed for weight initialisation.</param>
-    public DuelingCombinationLayer(int featureDim, int actionSize, int? seed = null)
-        : this(featureDim, actionSize, 1, Array.Empty<int>(), Array.Empty<int>(), seed)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a dueling head with hidden stream layers and, for a distributional agent, one value per atom.
+    /// Initializes a dueling head: by default one Q-value per action with linear value and advantage heads, and
+    /// optionally hidden stream layers and, for a distributional agent, one value per atom.
     /// </summary>
     /// <param name="featureDim">Trunk output feature dimension (the per-sample width of the input).</param>
     /// <param name="actionSize">Number of discrete actions.</param>
@@ -127,18 +114,22 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     /// Support atoms per action: 1 for a Q-value head; the categorical support size for a distributional one
     /// (Hessel et al. 2018, Sec. 3). The output has <c>actionSize * numAtoms</c> values, action-major.
     /// </param>
-    /// <param name="valueHiddenWidths">Widths of the value stream's hidden ReLU layers, in order; empty for none.</param>
-    /// <param name="advantageHiddenWidths">Widths of the advantage stream's hidden ReLU layers; empty for none.</param>
-    /// <param name="seed">RNG seed for weight initialisation, or <c>null</c> for an unseeded one. Required on this
-    /// overload (no default) so it does not compete with the two-stream-free overload for optional arguments.</param>
+    /// <param name="valueHiddenWidths">
+    /// Widths of the value stream's hidden ReLU layers, in order; null or empty for a value head straight off the
+    /// trunk.
+    /// </param>
+    /// <param name="advantageHiddenWidths">
+    /// Widths of the advantage stream's hidden ReLU layers; null or empty for an advantage head straight off the trunk.
+    /// </param>
+    /// <param name="seed">RNG seed for weight initialisation, or <c>null</c> for an unseeded one.</param>
     /// <remarks>
     /// With atoms, V(s) has one output per atom and the advantage mean is taken over actions separately for each
     /// atom: logit(s, a, z) = V(s, z) + A(s, a, z) − mean_a' A(s, a', z) (Hessel et al. 2018, Sec. 3). A scalar V,
     /// or a mean over every (action, atom) logit, adds the same constant to all of an action's logits, which
     /// the per-action softmax over atoms cancels, so the value stream would receive no gradient.
     /// </remarks>
-    public DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms, int[] valueHiddenWidths,
-        int[] advantageHiddenWidths, int? seed)
+    public DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms = 1, int[]? valueHiddenWidths = null,
+        int[]? advantageHiddenWidths = null, int? seed = null)
         : base(
             inputShape: [-1],
             outputShape: [actionSize * numAtoms],
@@ -147,8 +138,8 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
         if (featureDim <= 0) throw new ArgumentOutOfRangeException(nameof(featureDim));
         if (actionSize <= 0) throw new ArgumentOutOfRangeException(nameof(actionSize));
         if (numAtoms <= 0) throw new ArgumentOutOfRangeException(nameof(numAtoms));
-        Guard.NotNull(valueHiddenWidths);
-        Guard.NotNull(advantageHiddenWidths);
+        valueHiddenWidths ??= Array.Empty<int>();
+        advantageHiddenWidths ??= Array.Empty<int>();
         if (valueHiddenWidths.Any(w => w <= 0) || advantageHiddenWidths.Any(w => w <= 0))
             throw new ArgumentOutOfRangeException(nameof(valueHiddenWidths), "Every stream width must be positive.");
 

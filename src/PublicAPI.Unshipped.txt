@@ -295,7 +295,6 @@ AiDotNet.Models.Options.WorldModelsOptions<T>.OptimizerFactory.get -> System.Fun
 AiDotNet.Models.Options.WorldModelsOptions<T>.OptimizerFactory.init -> void
 AiDotNet.Models.Options.WorldModelsOptions<T>.RNNSequenceLength.get -> int
 AiDotNet.Models.Options.WorldModelsOptions<T>.RNNSequenceLength.init -> void
-AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms, int[]! valueHiddenWidths, int[]! advantageHiddenWidths, int? seed) -> void
 AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.AttentionDropoutRate.get -> double
 AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.ConfigureAttentionDropout(double dropoutRate) -> AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>!
 AiDotNet.Optimizers.CMAESGeneration<T>
@@ -491,3 +490,5 @@ virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(stri
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
 *REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.get -> bool
 *REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.init -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int? seed = null) -> void
+AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms = 1, int[]? valueHiddenWidths = null, int[]? advantageHiddenWidths = null, int? seed = null) -> void
