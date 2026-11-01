@@ -452,6 +452,7 @@
 	  <EmbeddedResource Include="Tokenization\Resources\llama3-merges.txt.gz" LogicalName="AiDotNet.Tokenization.llama3-merges.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\llama3-special-tokens.json.gz" LogicalName="AiDotNet.Tokenization.llama3-special-tokens.json.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\granite3-tokenizer.json.gz" LogicalName="AiDotNet.Tokenization.granite3-tokenizer.json.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\phi4-tokenizer.json.gz" LogicalName="AiDotNet.Tokenization.phi4-tokenizer.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\nrl_rules.tsv" LogicalName="AiDotNet.TextToSpeech.FrontEnd.nrl_rules.tsv" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_dict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_dict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_hmm.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_hmm.json.gz" />

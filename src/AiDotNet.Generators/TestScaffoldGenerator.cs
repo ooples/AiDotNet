@@ -9879,19 +9879,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Phi4Audio" && model.TypeParameterCount == 1)
             {
-                // Phi-4 Audio keeps its production 512-wide, 12-layer speech encoder and
-                // 32k-token output vocabulary by default. The FP32 generated fixture still
-                // climbed past 10 GiB without completing its next invariant. Exercise the
-                // same mel projection -> transformer -> language head through public options
-                // at CI-smoke width, depth, vocabulary, and context.
+                // Phi-4-multimodal's conformer encoder (width 16, one block, 4-channel subsampling), its projector and a
+                // one-layer Phi-4-Mini at width 16 (a rotary share of 0.75 turns 6 of each head's 8 dimensions; no
+                // LongRoPE, whose factors fit a head of 128) with the fused speech LoRA and a 16-token vocabulary, which
+                // has no chat prompt text. Production defaults are the released Phi-4-multimodal-instruct.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.LLMIntegrated.Phi4AudioOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "NumMels = 16, EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, EncoderFeedForwardDim = 24, " +
+                    "SubsamplingChannels = 4, RelativeBiasMaxDistance = 8, LlmDim = 16, LlmFeedForwardDim = 32, NumLlmLayers = 1, " +
+                    "NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, UseLongRope = false, VocabSize = 16, LoraRank = 2, LoraAlpha = 4, " +
+                    "LoraDropout = 0, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Piper" && model.TypeParameterCount == 1)
             {
@@ -16800,6 +16800,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // real 16x128 frame embeddings and failed. Declare the shapes the architecture implies.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16, 32 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16, 32 };");
+            }
+            else if (model.ClassName == "Phi4Audio")
+            {
+                // Phi-4-multimodal reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
             else if (model.ClassName == "GraniteSpeech")
             {

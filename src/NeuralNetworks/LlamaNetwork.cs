@@ -115,6 +115,29 @@ internal sealed record LlamaConfiguration
     /// <summary>Granite's divisor of the logits (<c>logits_scaling</c>; 1 for LLaMA).</summary>
     public double LogitsScaling { get; init; } = 1;
 
+    /// <summary>Phi-3's <c>partial_rotary_factor</c>: the share of each head's leading dimensions the rotary embedding
+    /// turns (1 for LLaMA); the rest pass through.</summary>
+    public double PartialRotaryFactor { get; init; } = 1;
+
+    /// <summary>Phi-3's LongRoPE (<c>rope_scaling.type = "longrope"</c>): per-frequency divisors of the inverse
+    /// frequencies for sequences up to <see cref="RopeOriginalMaxPositions"/>; null for none.</summary>
+    public double[]? LongRopeShortFactors { get; init; }
+
+    /// <summary>LongRoPE's divisors for sequences longer than <see cref="RopeOriginalMaxPositions"/>.</summary>
+    public double[]? LongRopeLongFactors { get; init; }
+
+    /// <summary>LongRoPE's extended context (<c>max_position_embeddings</c>), which sets its scale on cos and sin,
+    /// √(1 + ln(max / original) / ln(original)).</summary>
+    public int LongRopeMaxPositions { get; init; }
+
+    /// <summary>Phi-3's fused projections under LoRA (peft on <c>qkv_proj</c> and <c>gate_up_proj</c>): one adapter
+    /// whose A is shared by the query, key and value (and one by the gate and up projections), instead of one adapter
+    /// each.</summary>
+    public bool FusedLora { get; init; }
+
+    /// <summary>The rotary dimensions of each head.</summary>
+    internal int RotaryDim => (int)(ResolvedHeadDim * PartialRotaryFactor);
+
     /// <summary>The resolved head width.</summary>
     internal int ResolvedHeadDim => HeadDim > 0 ? HeadDim : Hidden / Heads;
 }
@@ -164,7 +187,12 @@ internal sealed class LlamaNetwork<T>
         public Lora? DownLora { get; init; }
 
         /// <summary>Every LoRA branch of the layer.</summary>
-        public IEnumerable<Lora> Loras => new[] { QueryLora, KeyLora, ValueLora, OutputLora, GateLora, UpLora, DownLora }.OfType<Lora>();
+        /// <summary>The fused query-key-value adapter of <see cref="LlamaConfiguration.FusedLora"/>; its B rows are the
+        /// query's, then the key's, then the value's.</summary>
+        public Lora? QkvLora { get; init; }
+        /// <summary>The fused gate-up adapter of <see cref="LlamaConfiguration.FusedLora"/>; gate rows, then up rows.</summary>
+        public Lora? GateUpLora { get; init; }
+        public IEnumerable<Lora> Loras => new[] { QueryLora, KeyLora, ValueLora, QkvLora, OutputLora, GateLora, UpLora, GateUpLora, DownLora }.OfType<Lora>();
     }
 
     /// <summary>A LoRA branch: down projection A, up projection B, and dropout on its input.</summary>
@@ -177,7 +205,11 @@ internal sealed class LlamaNetwork<T>
         var c = configuration;
         if ((c.HeadDim <= 0 && c.Hidden % c.Heads != 0) || c.Heads % c.KeyValueHeads != 0)
             throw new ArgumentException("The width must divide by the heads, and the heads by the key-value heads.", nameof(configuration));
-        if (!c.SqrtAlibi && c.ResolvedHeadDim % 2 != 0) throw new ArgumentException("Rotary embeddings need an even head width.", nameof(configuration));
+        if (!c.SqrtAlibi && (c.RotaryDim % 2 != 0 || c.RotaryDim <= 0 || c.RotaryDim > c.ResolvedHeadDim))
+            throw new ArgumentException("Rotary embeddings need an even number of the head's dimensions.", nameof(configuration));
+        if ((c.LongRopeShortFactors is not null && c.LongRopeShortFactors.Length != c.RotaryDim / 2)
+            || (c.LongRopeLongFactors is not null && c.LongRopeLongFactors.Length != c.RotaryDim / 2))
+            throw new ArgumentException("LongRoPE needs one factor per rotary frequency.", nameof(configuration));
         if (c.TieWordEmbeddings && (c.VocabSize <= 0 || !c.IncludeHead))
             throw new ArgumentException("A tied head needs a token table and a head.", nameof(configuration));
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T>
@@ -202,15 +234,22 @@ internal sealed class LlamaNetwork<T>
         }
         if (c.VocabSize < 0) throw new ArgumentOutOfRangeException(nameof(configuration), "The vocabulary is 0 (none) or positive.");
         Embeddings = c.VocabSize > 0 ? Values(c.VocabSize * c.Hidden) : null;
+        if (c.FusedLora && (c.LoraTargets & (LlamaLoraTargets.Query | LlamaLoraTargets.Key | LlamaLoraTargets.Value)) is not
+                (LlamaLoraTargets.None or (LlamaLoraTargets.Query | LlamaLoraTargets.Key | LlamaLoraTargets.Value)))
+            throw new ArgumentException("A fused qkv adapter covers the query, key and value together.", nameof(configuration));
+        if (c.FusedLora && (c.LoraTargets & (LlamaLoraTargets.Gate | LlamaLoraTargets.Up)) is not
+                (LlamaLoraTargets.None or (LlamaLoraTargets.Gate | LlamaLoraTargets.Up)))
+            throw new ArgumentException("A fused gate_up adapter covers the gate and up projections together.", nameof(configuration));
         for (int i = 0; i < c.Layers; i++)
         {
             var input = Values(c.Hidden);
             var query = Linear(c.Hidden, qd);
-            var queryLora = Adapter(LlamaLoraTargets.Query, qd);
             var key = Linear(c.Hidden, kv);
-            var keyLora = Adapter(LlamaLoraTargets.Key, kv);
             var value = Linear(c.Hidden, kv);
-            var valueLora = Adapter(LlamaLoraTargets.Value, kv);
+            var qkvLora = c.FusedLora ? Adapter(LlamaLoraTargets.Query, qd + 2 * kv) : null;
+            var queryLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Query, qd);
+            var keyLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Key, kv);
+            var valueLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Value, kv);
             var queryBias = c.AttentionBias ? Values(qd) : null;
             var keyBias = c.AttentionBias ? Values(kv) : null;
             var valueBias = c.AttentionBias ? Values(kv) : null;
@@ -220,15 +259,17 @@ internal sealed class LlamaNetwork<T>
             var keyNorm = c.QueryKeyNorm ? Values(hd) : null;
             var postNorm = Values(c.Hidden);
             var gate = Linear(c.Hidden, c.Intermediate);
-            var gateLora = Adapter(LlamaLoraTargets.Gate, c.Intermediate);
             var up = Linear(c.Hidden, c.Intermediate);
-            var upLora = Adapter(LlamaLoraTargets.Up, c.Intermediate);
+            var gateUpLora = c.FusedLora ? Adapter(LlamaLoraTargets.Gate, 2 * c.Intermediate) : null;
+            var gateLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Gate, c.Intermediate);
+            var upLora = c.FusedLora ? null : Adapter(LlamaLoraTargets.Up, c.Intermediate);
             var down = Linear(c.Intermediate, c.Hidden);
             var downLora = Adapter(LlamaLoraTargets.Down, c.Hidden, c.Intermediate);
             Layers.Add(new Layer(input, query, key, value, output, postNorm, gate, up, down, queryLora, valueLora)
             {
                 QueryBias = queryBias, KeyBias = keyBias, ValueBias = valueBias, QueryNorm = queryNorm, KeyNorm = keyNorm,
                 KeyLora = keyLora, OutputLora = outputLora, GateLora = gateLora, UpLora = upLora, DownLora = downLora,
+                QkvLora = qkvLora, GateUpLora = gateUpLora,
             });
         }
         FinalNorm = c.IncludeFinalNorm ? Values(c.Hidden) : null;
@@ -355,7 +396,7 @@ internal sealed class LlamaNetwork<T>
         bool lastLogitsOnly)
     {
         var c = Configuration;
-        int b = embeddings.Shape[0], l = embeddings.Shape[1], hd = c.ResolvedHeadDim, half = hd / 2;
+        int b = embeddings.Shape[0], l = embeddings.Shape[1], rd = c.RotaryDim, half = rd / 2;
         int past = cache?.Length ?? 0, total = past + l;
         if (positionIds is null)
         {
@@ -364,16 +405,17 @@ internal sealed class LlamaNetwork<T>
         }
 
         // Rotary tables per (batch, position): cos and sin of position times the inverse frequencies, repeated for both halves.
-        var frequencies = InverseFrequencies();
-        var cos = new Tensor<T>(new[] { b, 1, l, hd });
-        var sin = new Tensor<T>(new[] { b, 1, l, hd });
+        var frequencies = InverseFrequencies(total);
+        double attentionScale = LongRopeScale();
+        var cos = new Tensor<T>(new[] { b, 1, l, rd });
+        var sin = new Tensor<T>(new[] { b, 1, l, rd });
         for (int i = 0; i < b; i++)
             for (int j = 0; j < l; j++)
                 for (int k = 0; k < half; k++)
                 {
                     double angle = positionIds[i, j] * frequencies[k];
-                    cos[i, 0, j, k] = cos[i, 0, j, k + half] = NumOps.FromDouble(Math.Cos(angle));
-                    sin[i, 0, j, k] = sin[i, 0, j, k + half] = NumOps.FromDouble(Math.Sin(angle));
+                    cos[i, 0, j, k] = cos[i, 0, j, k + half] = NumOps.FromDouble(attentionScale * Math.Cos(angle));
+                    sin[i, 0, j, k] = sin[i, 0, j, k + half] = NumOps.FromDouble(attentionScale * Math.Sin(angle));
                 }
 
         // Causal mask plus key padding, as torch.finfo(dtype).min added to the scores; with ALiBi, per head.
@@ -404,12 +446,15 @@ internal sealed class LlamaNetwork<T>
     /// <summary>The rotary inverse frequencies, with Llama 3's scaling when it is set (Hugging Face's
     /// <c>_compute_llama3_parameters</c>: long wavelengths divided by the factor, short ones kept, the band between
     /// interpolated).</summary>
-    internal double[] InverseFrequencies()
+    /// <param name="sequenceLength">Positions in the sequence; LongRoPE switches to its long factors past the original
+    /// context.</param>
+    internal double[] InverseFrequencies(int sequenceLength = 0)
     {
         var c = Configuration;
-        int hd = c.ResolvedHeadDim, half = hd / 2;
+        int rd = c.RotaryDim, half = rd / 2;
         var frequencies = new double[half];
-        for (int k = 0; k < half; k++) frequencies[k] = 1.0 / Math.Pow(c.RopeTheta, 2.0 * k / hd);
+        var factors = sequenceLength > c.RopeOriginalMaxPositions && c.LongRopeLongFactors is not null ? c.LongRopeLongFactors : c.LongRopeShortFactors;
+        for (int k = 0; k < half; k++) frequencies[k] = 1.0 / ((factors?[k] ?? 1.0) * Math.Pow(c.RopeTheta, 2.0 * k / rd));
         if (c.RopeScalingFactor <= 0) return frequencies;
         double lowWavelength = c.RopeOriginalMaxPositions / c.RopeLowFrequencyFactor;
         double highWavelength = c.RopeOriginalMaxPositions / c.RopeHighFrequencyFactor;
@@ -425,6 +470,15 @@ internal sealed class LlamaNetwork<T>
             frequencies[k] = scaled;
         }
         return frequencies;
+    }
+
+    // LongRoPE's scale on cos and sin: √(1 + ln(s) / ln(original)) for the context extension s, 1 without one.
+    private double LongRopeScale()
+    {
+        var c = Configuration;
+        if (c.LongRopeShortFactors is null && c.LongRopeLongFactors is null) return 1.0;
+        double scale = (double)c.LongRopeMaxPositions / c.RopeOriginalMaxPositions;
+        return scale <= 1.0 ? 1.0 : Math.Sqrt(1 + Math.Log(scale) / Math.Log(c.RopeOriginalMaxPositions));
     }
 
     /// <summary><see cref="Forward"/> for a decoder with a head: the hidden states and the logits, never null.</summary>
@@ -451,13 +505,18 @@ internal sealed class LlamaNetwork<T>
     private Tensor<T> Rotate(Tensor<T> x, Tensor<T> cos, Tensor<T> sin)
     {
         if (Configuration.SqrtAlibi) return x;
-        var shape = x.Shape.ToArray();
-        int hd = shape[3], half = hd / 2;
-        var first = _engine.TensorSlice(x, new[] { 0, 0, 0, 0 }, new[] { shape[0], shape[1], shape[2], half });
-        var second = _engine.TensorSlice(x, new[] { 0, 0, 0, half }, new[] { shape[0], shape[1], shape[2], half });
+        var shape = x.Shape;
+        int hd = shape[3], rd = cos.Shape[3], half = rd / 2;
+        // Phi-3's partial rotary embedding turns the leading rd dimensions and passes the rest.
+        var turned = rd == hd ? x : _engine.TensorSlice(x, new[] { 0, 0, 0, 0 }, new[] { shape[0], shape[1], shape[2], rd });
+        var turnedShape = new[] { shape[0], shape[1], shape[2], rd };
+        var first = _engine.TensorSlice(turned, new[] { 0, 0, 0, 0 }, new[] { shape[0], shape[1], shape[2], half });
+        var second = _engine.TensorSlice(turned, new[] { 0, 0, 0, half }, new[] { shape[0], shape[1], shape[2], half });
         var rotated = _engine.TensorConcatenate(new[] { _engine.TensorNegate(second), first }, 3);
-        return _engine.TensorAdd(_engine.TensorMultiply(x, _engine.TensorBroadcastTo(cos, shape)),
-            _engine.TensorMultiply(rotated, _engine.TensorBroadcastTo(sin, shape)));
+        var result = _engine.TensorAdd(_engine.TensorMultiply(turned, _engine.TensorBroadcastTo(cos, turnedShape)),
+            _engine.TensorMultiply(rotated, _engine.TensorBroadcastTo(sin, turnedShape)));
+        if (rd == hd) return result;
+        return _engine.TensorConcatenate(new[] { result, _engine.TensorSlice(x, new[] { 0, 0, 0, rd }, new[] { shape[0], shape[1], shape[2], hd - rd }) }, 3);
     }
 
     private Tensor<T> Run(Layer layer, Tensor<T> x, Tensor<T> cos, Tensor<T> sin, Tensor<T> bias, LlamaCache<T>? cache, int index)
@@ -491,9 +550,30 @@ internal sealed class LlamaNetwork<T>
             if (norm is not null) split = RmsNorm(norm, split);
             return _engine.TensorPermute(split, new[] { 0, 2, 1, 3 });
         }
-        var q = Rotate(Heads(Project(layer.Query, layer.QueryLora, layer.QueryBias), c.Heads, layer.QueryNorm), cos, sin);
-        var k = Rotate(Heads(Project(layer.Key, layer.KeyLora, layer.KeyBias), c.KeyValueHeads, layer.KeyNorm), cos, sin);
-        var v = Heads(Project(layer.Value, layer.ValueLora, layer.ValueBias), c.KeyValueHeads, null);
+        // A fused adapter's update, split along its output rows: (alpha / r) B A dropout(input), rows [offset, offset + count).
+        Tensor<T>[]? Fused(Lora? lora, Tensor<T> input, params int[] widths)
+        {
+            if (lora is null) return null;
+            var dropped = lora.Dropout is null ? input : lora.Dropout.Forward(input);
+            var update = _engine.TensorMultiplyScalar(Rows(lora.B, Rows(lora.A, dropped)), NumOps.FromDouble(c.LoraAlpha / c.LoraRank));
+            var shape = update.Shape.ToArray();
+            var parts = new Tensor<T>[widths.Length];
+            for (int p = 0, offset = 0; p < widths.Length; offset += widths[p], p++)
+            {
+                var start = new int[shape.Length];
+                start[^1] = offset;
+                var size = (int[])shape.Clone();
+                size[^1] = widths[p];
+                parts[p] = _engine.TensorSlice(update, start, size);
+            }
+            return parts;
+        }
+        int qWidth = c.Heads * hd, kvWidth = c.KeyValueHeads * hd;
+        var qkv = Fused(layer.QkvLora, normed, qWidth, kvWidth, kvWidth);
+        Tensor<T> WithFused(Tensor<T> y, int part) => qkv is null ? y : _engine.TensorAdd(y, qkv[part]);
+        var q = Rotate(Heads(WithFused(Project(layer.Query, layer.QueryLora, layer.QueryBias), 0), c.Heads, layer.QueryNorm), cos, sin);
+        var k = Rotate(Heads(WithFused(Project(layer.Key, layer.KeyLora, layer.KeyBias), 1), c.KeyValueHeads, layer.KeyNorm), cos, sin);
+        var v = Heads(WithFused(Project(layer.Value, layer.ValueLora, layer.ValueBias), 2), c.KeyValueHeads, null);
         if (cache is not null)
         {
             if (cache.Layers[index] is { } held)
@@ -523,7 +603,15 @@ internal sealed class LlamaNetwork<T>
         Tensor<T> Residual(Tensor<T> block) => c.ResidualMultiplier == 1 ? block : _engine.TensorMultiplyScalar(block, NumOps.FromDouble(c.ResidualMultiplier));
         x = _engine.TensorAdd(x, Residual(Adapted(layer.Output, layer.OutputLora, context)));
         var post = RmsNorm(layer.PostNorm, x);
-        var gated = _engine.TensorMultiply(_engine.Swish(Adapted(layer.Gate, layer.GateLora, post)), Adapted(layer.Up, layer.UpLora, post));
+        var gateUp = Fused(layer.GateUpLora, post, c.Intermediate, c.Intermediate);
+        var gatePath = Adapted(layer.Gate, layer.GateLora, post);
+        var upPath = Adapted(layer.Up, layer.UpLora, post);
+        if (gateUp is not null)
+        {
+            gatePath = _engine.TensorAdd(gatePath, gateUp[0]);
+            upPath = _engine.TensorAdd(upPath, gateUp[1]);
+        }
+        var gated = _engine.TensorMultiply(_engine.Swish(gatePath), upPath);
         return _engine.TensorAdd(x, Residual(Adapted(layer.Down, layer.DownLora, gated)));
     }
 
@@ -587,6 +675,8 @@ internal sealed class LlamaNetwork<T>
             Branch(layer.GateLora, "mlp.gate_proj", h, c.Intermediate);
             Branch(layer.UpLora, "mlp.up_proj", h, c.Intermediate);
             Branch(layer.DownLora, "mlp.down_proj", c.Intermediate, h);
+            Branch(layer.QkvLora, "self_attn.qkv_proj", h, qd + 2 * kv);
+            Branch(layer.GateUpLora, "mlp.gate_up_proj", h, 2 * c.Intermediate);
         }
         if (FinalNorm is not null) Vector(FinalNorm, $"{prefix}norm.weight", new[] { h });
         if (LmHead is not null) Linear(LmHead, headName, h, c.VocabSize);
