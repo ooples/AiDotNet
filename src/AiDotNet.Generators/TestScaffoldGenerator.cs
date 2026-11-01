@@ -5929,7 +5929,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "LlmIntermediateDim = 32, VocabSize = 16, LoraRank = 2, CtcDecoderDim = 16, CtcFeedForwardDim = 32, " +
                     "NumCtcDecoderLayers = 1, CtcVocabSize = 16, MaxTextLength = 4 })";
             }
-            else if (model.ClassName is "RobustConformer" or "SALM"
+            else if (model.ClassName == "SALM" && model.TypeParameterCount == 1)
+            {
+                // SALM's Fast Conformer encoder and Conformer modality adapter (width 16, one block each, 4-channel
+                // subsampling, so 32x in all), and a one-layer Megatron GPT at width 16 (LayerNorm, rotary embeddings on
+                // half of each head, fused qkv LoRA) with a 16-token vocabulary, which has no prompt text; no warm-up, so
+                // the short training invariants see the learning rate. Production defaults are the paper's.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions { " +
+                    "NumMels = 16, EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, SubsamplingChannels = 4, " +
+                    "AdapterDim = 16, NumAdapterLayers = 1, NumAdapterHeads = 2, LlmDim = 16, LlmFeedForwardDim = 32, NumLlmLayers = 1, " +
+                    "NumLlmAttentionHeads = 2, VocabSize = 16, LoraRank = 2, LoraAlpha = 2, WarmupSteps = 0, MaxTextLength = 4, " +
+                    "MaxAudioLengthSeconds = 1 })";
+            }
+            else if (model.ClassName is "RobustConformer"
                     or "SpeakerDiarizedASR"
                 && model.TypeParameterCount == 1)
             {
@@ -5941,7 +5957,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string optionsType = model.ClassName switch
                 {
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
-                    "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     _ => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
@@ -16800,6 +16815,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // real 16x128 frame embeddings and failed. Declare the shapes the architecture implies.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16, 32 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16, 32 };");
+            }
+            else if (model.ClassName == "SALM")
+            {
+                // SALM reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
             else if (model.ClassName == "Phi4Audio")
             {

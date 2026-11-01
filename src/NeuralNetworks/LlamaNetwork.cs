@@ -86,6 +86,10 @@ internal sealed record LlamaConfiguration
     /// <c>LlamaDecoderLayer</c>s, as LLaMA-Omni's CTC speech decoder is.</summary>
     public bool IncludeFinalNorm { get; init; } = true;
 
+    /// <summary>Megatron GPT's LayerNorm (centred on the mean, with a bias) in place of RMSNorm before each block and at
+    /// the end; <see cref="RmsEpsilon"/> is its epsilon.</summary>
+    public bool LayerNorm { get; init; }
+
     /// <summary>Llama 3's rotary frequency scaling (<c>rope_type = "llama3"</c>): the factor, 0 for none.</summary>
     public double RopeScalingFactor { get; init; }
 
@@ -178,6 +182,10 @@ internal sealed class LlamaNetwork<T>
         public BiasFreeLinearLayer<T>? QueryNorm { get; init; }
         public BiasFreeLinearLayer<T>? KeyNorm { get; init; }
 
+        /// <summary>The block LayerNorms' biases, null without <see cref="LlamaConfiguration.LayerNorm"/>.</summary>
+        public BiasFreeLinearLayer<T>? InputNormBias { get; init; }
+        public BiasFreeLinearLayer<T>? PostNormBias { get; init; }
+
         /// <summary>The LoRA branches on the other projections, null unless <see cref="LlamaConfiguration.LoraTargets"/>
         /// names them.</summary>
         public Lora? KeyLora { get; init; }
@@ -243,6 +251,7 @@ internal sealed class LlamaNetwork<T>
         for (int i = 0; i < c.Layers; i++)
         {
             var input = Values(c.Hidden);
+            var inputBias = c.LayerNorm ? Values(c.Hidden) : null;
             var query = Linear(c.Hidden, qd);
             var key = Linear(c.Hidden, kv);
             var value = Linear(c.Hidden, kv);
@@ -258,6 +267,7 @@ internal sealed class LlamaNetwork<T>
             var queryNorm = c.QueryKeyNorm ? Values(hd) : null;
             var keyNorm = c.QueryKeyNorm ? Values(hd) : null;
             var postNorm = Values(c.Hidden);
+            var postBias = c.LayerNorm ? Values(c.Hidden) : null;
             var gate = Linear(c.Hidden, c.Intermediate);
             var up = Linear(c.Hidden, c.Intermediate);
             var gateUpLora = c.FusedLora ? Adapter(LlamaLoraTargets.Gate, 2 * c.Intermediate) : null;
@@ -269,10 +279,11 @@ internal sealed class LlamaNetwork<T>
             {
                 QueryBias = queryBias, KeyBias = keyBias, ValueBias = valueBias, QueryNorm = queryNorm, KeyNorm = keyNorm,
                 KeyLora = keyLora, OutputLora = outputLora, GateLora = gateLora, UpLora = upLora, DownLora = downLora,
-                QkvLora = qkvLora, GateUpLora = gateUpLora,
+                QkvLora = qkvLora, GateUpLora = gateUpLora, InputNormBias = inputBias, PostNormBias = postBias,
             });
         }
         FinalNorm = c.IncludeFinalNorm ? Values(c.Hidden) : null;
+        FinalNormBias = c.IncludeFinalNorm && c.LayerNorm ? Values(c.Hidden) : null;
         LmHead = c.VocabSize > 0 && c.IncludeHead && !c.TieWordEmbeddings ? Linear(c.Hidden, c.VocabSize) : null;
     }
 
@@ -300,6 +311,9 @@ internal sealed class LlamaNetwork<T>
 
     /// <summary>The final RMSNorm; null without <see cref="LlamaConfiguration.IncludeFinalNorm"/>.</summary>
     public BiasFreeLinearLayer<T>? FinalNorm { get; }
+
+    /// <summary>The final LayerNorm's bias; null without <see cref="LlamaConfiguration.LayerNorm"/>.</summary>
+    public BiasFreeLinearLayer<T>? FinalNormBias { get; }
 
     /// <summary>The language-model head's own weights; null for a bare decoder or a head tied to the token table.</summary>
     public BiasFreeLinearLayer<T>? LmHead { get; }
@@ -365,6 +379,21 @@ internal sealed class LlamaNetwork<T>
     }
 
     /// <summary>RMSNorm: <c>w · x / sqrt(mean(x²) + ε)</c> over the last axis.</summary>
+    // A block or final norm: RMSNorm, or LayerNorm when it has a bias.
+    private Tensor<T> Norm(BiasFreeLinearLayer<T> weight, BiasFreeLinearLayer<T>? bias, Tensor<T> x)
+    {
+        if (bias is null) return RmsNorm(weight, x);
+        var shape = x._shape;
+        int rank = shape.Length;
+        var centred = _engine.TensorSubtract(x, _engine.TensorBroadcastTo(_engine.ReduceMean(x, new[] { rank - 1 }, true), shape));
+        var variance = _engine.ReduceMean(_engine.TensorMultiply(centred, centred), new[] { rank - 1 }, true);
+        var inverse = _engine.TensorPower(_engine.TensorAddScalar(variance, NumOps.FromDouble(Configuration.RmsEpsilon)), NumOps.FromDouble(-0.5));
+        var row = Enumerable.Repeat(1, rank - 1).Concat(new[] { shape[rank - 1] }).ToArray();
+        var w = _engine.TensorBroadcastTo(_engine.Reshape(Value(weight), row), shape);
+        var b = _engine.TensorBroadcastTo(_engine.Reshape(Value(bias), row), shape);
+        return _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorMultiply(centred, _engine.TensorBroadcastTo(inverse, shape)), w), b);
+    }
+
     private Tensor<T> RmsNorm(BiasFreeLinearLayer<T> weight, Tensor<T> x)
     {
         var shape = x._shape;
@@ -438,7 +467,7 @@ internal sealed class LlamaNetwork<T>
         var x = c.EmbeddingMultiplier == 1 ? embeddings : _engine.TensorMultiplyScalar(embeddings, NumOps.FromDouble(c.EmbeddingMultiplier));
         for (int i = 0; i < Layers.Count; i++) x = Run(Layers[i], x, cos, sin, bias, cache, i);
         if (cache is not null) cache.Length = total;
-        var hidden = FinalNorm is null ? x : RmsNorm(FinalNorm, x);
+        var hidden = FinalNorm is null ? x : Norm(FinalNorm, FinalNormBias, x);
         var read = lastLogitsOnly ? _engine.TensorSlice(hidden, new[] { 0, l - 1, 0 }, new[] { b, 1, c.Hidden }) : hidden;
         return (hidden, Head(read));
     }
@@ -523,7 +552,7 @@ internal sealed class LlamaNetwork<T>
     {
         var c = Configuration;
         int b = x.Shape[0], l = x.Shape[1], hd = c.ResolvedHeadDim, groups = c.Heads / c.KeyValueHeads;
-        var normed = RmsNorm(layer.InputNorm, x);
+        var normed = Norm(layer.InputNorm, layer.InputNormBias, x);
         // A projection of `input` plus peft's LoRA update: W x + (alpha / r) B A dropout(x).
         Tensor<T> Adapted(BiasFreeLinearLayer<T> projection, Lora? lora, Tensor<T> input)
         {
@@ -602,7 +631,7 @@ internal sealed class LlamaNetwork<T>
             new[] { 0, 2, 1, 3 }), new[] { b, l, c.Heads * hd });
         Tensor<T> Residual(Tensor<T> block) => c.ResidualMultiplier == 1 ? block : _engine.TensorMultiplyScalar(block, NumOps.FromDouble(c.ResidualMultiplier));
         x = _engine.TensorAdd(x, Residual(Adapted(layer.Output, layer.OutputLora, context)));
-        var post = RmsNorm(layer.PostNorm, x);
+        var post = Norm(layer.PostNorm, layer.PostNormBias, x);
         var gateUp = Fused(layer.GateUpLora, post, c.Intermediate, c.Intermediate);
         var gatePath = Adapted(layer.Gate, layer.GateLora, post);
         var upPath = Adapted(layer.Up, layer.UpLora, post);
@@ -651,6 +680,8 @@ internal sealed class LlamaNetwork<T>
             if (layer.KeyBias is not null) Vector(layer.KeyBias, $"{n}.self_attn.k_proj.bias", new[] { kv });
             if (layer.ValueBias is not null) Vector(layer.ValueBias, $"{n}.self_attn.v_proj.bias", new[] { kv });
             Vector(layer.PostNorm, $"{n}.post_attention_layernorm.weight", new[] { h });
+            if (layer.InputNormBias is not null) Vector(layer.InputNormBias, $"{n}.input_layernorm.bias", new[] { h });
+            if (layer.PostNormBias is not null) Vector(layer.PostNormBias, $"{n}.post_attention_layernorm.bias", new[] { h });
             Linear(layer.Gate, $"{n}.mlp.gate_proj.weight", h, c.Intermediate);
             Linear(layer.Up, $"{n}.mlp.up_proj.weight", h, c.Intermediate);
             Linear(layer.Down, $"{n}.mlp.down_proj.weight", c.Intermediate, h);
@@ -679,6 +710,7 @@ internal sealed class LlamaNetwork<T>
             Branch(layer.GateUpLora, "mlp.gate_up_proj", h, 2 * c.Intermediate);
         }
         if (FinalNorm is not null) Vector(FinalNorm, $"{prefix}norm.weight", new[] { h });
+        if (FinalNormBias is not null) Vector(FinalNormBias, $"{prefix}norm.bias", new[] { h });
         if (LmHead is not null) Linear(LmHead, headName, h, c.VocabSize);
     }
 

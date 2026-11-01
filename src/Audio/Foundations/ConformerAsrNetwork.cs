@@ -70,6 +70,10 @@ internal enum ConformerAsrSubsampling
     /// and padding 1.</summary>
     DepthwiseStriding8x,
 
+    /// <summary>The same striding at 4x (NeMo's dw_striding with subsampling_factor 4): the 3x3 stride-2 convolution and
+    /// one depthwise-separable stride-2 stage.</summary>
+    DepthwiseStriding4x,
+
     /// <summary>Moonshine's stem over the raw waveform (Jeffries et al. 2024, Figure 3): a width-127 stride-64 convolution
     /// with tanh and group normalization, a width-7 stride-3 convolution with GELU and a width-3 stride-2 convolution with
     /// GELU, 384x in all.</summary>
@@ -235,9 +239,13 @@ internal sealed class ConformerAsrNetwork<T>
         {
             int c = _o.SubsamplingChannels;
             FirstConv = Own(new Conv2DLayer<T>(1, c, 3, 3, 2, 2, 1, 1));
-            DepthwiseStages.Add(Own(new DepthwiseSeparableConvolutionalLayer<T>(c, 3, stride: 2, padding: 1, activation: (IActivationFunction<T>)new ReLUActivation<T>())));
-            DepthwiseStages.Add(Own(new DepthwiseSeparableConvolutionalLayer<T>(c, 3, stride: 2, padding: 1, activation: (IActivationFunction<T>)new ReLUActivation<T>())));
-            _subsampledBins = Padded(Padded(Padded(_o.NumMels)));
+            int stages = _o.Subsampling == ConformerAsrSubsampling.DepthwiseStriding4x ? 1 : 2;
+            _subsampledBins = Padded(_o.NumMels);
+            for (int s = 0; s < stages; s++)
+            {
+                DepthwiseStages.Add(Own(new DepthwiseSeparableConvolutionalLayer<T>(c, 3, stride: 2, padding: 1, activation: (IActivationFunction<T>)new ReLUActivation<T>())));
+                _subsampledBins = Padded(_subsampledBins);
+            }
             _channels = c;
         }
         if (_subsampledBins <= 0) throw new ArgumentException("Too few mel bins for two stride-2 3x3 convolutions.", nameof(options));
@@ -649,17 +657,30 @@ internal sealed class ConformerAsrNetwork<T>
     /// <summary>The encoder output <c>[L, EncoderDim]</c> of features <c>[frames, bins]</c>.</summary>
     public Tensor<T> Encode(double[,] features, bool training) => EncodeWithIntermediates(features, training).Output;
 
+    /// <summary>The encoder output <c>[L, EncoderDim]</c> of a feature tensor <c>[frames, bins]</c>, on the gradient tape:
+    /// a modality adapter reads another encoder's output this way.</summary>
+    public Tensor<T> Encode(Tensor<T> features, bool training) => EncodeWithIntermediates(features, training).Output;
+
     /// <summary>The encoder output and the CTC logits of each intermediate CTC layer, in order.</summary>
     public (Tensor<T> Output, List<Tensor<T>> IntermediateLogits) EncodeWithIntermediates(double[,] features, bool training)
     {
+        int frames = features.GetLength(0), bins = features.GetLength(1);
+        var tensor = new Tensor<T>(new[] { frames, bins });
+        for (int t = 0; t < frames; t++)
+            for (int b = 0; b < bins; b++) tensor[t, b] = NumOps.FromDouble(features[t, b]);
+        return EncodeWithIntermediates(tensor, training);
+    }
+
+    /// <summary>The encoder output and the CTC logits of each intermediate CTC layer for features <c>[frames, bins]</c>.</summary>
+    public (Tensor<T> Output, List<Tensor<T>> IntermediateLogits) EncodeWithIntermediates(Tensor<T> features, bool training)
+    {
         var intermediates = new List<Tensor<T>>();
-        int frames = features.GetLength(0), bins = features.GetLength(1), d = _o.EncoderDim;
+        int frames = features.Shape[0], bins = features.Shape[1], d = _o.EncoderDim;
         Tensor<T> h;
         int length;
         if (InputProjection is null)
         {
-            var wave = new Tensor<T>(new[] { 1, 1, frames });
-            for (int t = 0; t < frames; t++) wave[0, 0, t] = NumOps.FromDouble(features[t, 0]);
+            var wave = _engine.Reshape(_engine.TensorSlice(features, new[] { 0, 0 }, new[] { frames, 1 }), new[] { 1, 1, frames });
             var y = StemConvs[0].Forward(wave);
             // Group normalization reads rank 4 as [batch, channels, height, width].
             if (StemNorm is not null) y = _engine.Reshape(StemNorm.Forward(_engine.Reshape(y, new[] { 1, y.Shape[1], y.Shape[2], 1 })), new[] { 1, y.Shape[1], y.Shape[2] });
@@ -670,9 +691,7 @@ internal sealed class ConformerAsrNetwork<T>
         }
         else
         {
-            var mel = new Tensor<T>(new[] { 1, 1, frames, bins });
-            for (int t = 0; t < frames; t++)
-                for (int b = 0; b < bins; b++) mel[0, 0, t, b] = NumOps.FromDouble(features[t, b]);
+            var mel = _engine.Reshape(features, new[] { 1, 1, frames, bins });
             Tensor<T> x;
             if (VggConvs.Count > 0)
             {
