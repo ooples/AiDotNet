@@ -186,7 +186,7 @@ public static class OptionSensitivityHarness
         catch (Exception ex)
         {
             PaperFidelityResultLog.Record(PaperFidelityCheck.OptionSensitivity, fixtureType, null, option,
-                PaperFidelityResultLog.ErrorOutcome, $"{ex.GetType().Name}: {ex.Message}");
+                PaperFidelityResultLog.ErrorOutcome, $"{Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}");
             throw;
         }
 

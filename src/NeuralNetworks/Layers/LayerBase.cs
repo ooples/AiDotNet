@@ -8694,6 +8694,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // composite has one consistent state immediately.
         subLayer.SetTrainingMode(IsTrainingMode);
 
+        // A child a lazy composite creates after construction (BottleneckBlock's projection shortcut, built on the
+        // first Forward) is outside every seed scope and missed PropagateSeedToSubLayers, so it initialised from the
+        // process-shared stream and two identically seeded models differed in exactly those layers. An unseeded child
+        // of a seeded parent takes the seed PropagateSeedToSubLayers hands the child at its registration position. A
+        // child that already has a seed keeps it, so eagerly built children are unchanged.
+        if (RandomSeed is int parentSeed && subLayer is LayerBase<T> lateChild && lateChild.RandomSeed is null)
+        {
+            var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(parentSeed);
+            int childSeed = 0;
+            for (int i = 0; i < _registeredSubLayers.Count; i++)
+                childSeed = subSeedRng.Next();
+            lateChild.AssignInheritedSeed(childSeed);
+        }
+
         // Sub-layer's ParameterCount contributes to ours; invalidate the
         // cache so the next query picks up the addition.
         _cachedParameterCount = -1;

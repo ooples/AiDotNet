@@ -170,7 +170,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, Random.Next());
     }
 
     public override Vector<T> SelectAction(Vector<T> observation, bool training = true)

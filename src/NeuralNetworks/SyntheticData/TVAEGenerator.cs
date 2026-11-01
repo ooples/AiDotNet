@@ -181,9 +181,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
                 }));
 
         int? seed = _options.Seed;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(seed);
 
         InitializeLayers();
     }

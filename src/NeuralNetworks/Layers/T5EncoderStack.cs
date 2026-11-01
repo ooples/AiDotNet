@@ -85,8 +85,8 @@ public partial class T5EncoderStack<T> : LayerBase<T>, IShapeContract
         _maxDistance = maxDistance;
         _shareRelativeBias = shareRelativeBias;
         _seed = seed;
-        var random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
+        var random = (seed ?? RandomSeed).HasValue
+            ? RandomHelper.CreateSeededRandom((seed ?? RandomSeed).GetValueOrDefault())
             : RandomHelper.CreateSecureRandom();
 
         if (shareRelativeBias)

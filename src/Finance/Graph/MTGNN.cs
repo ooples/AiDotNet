@@ -285,6 +285,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         _useSubgraphSampling = _options.UseSubgraphSampling;
         _subgraphSize = _options.SubgraphSize;
 
+        GraphAdjacency.RequireNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
         _predefinedAdjacency = predefinedAdjacency;
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
@@ -336,6 +337,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         _useSubgraphSampling = _options.UseSubgraphSampling;
         _subgraphSize = _options.SubgraphSize;
 
+        GraphAdjacency.RequireNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
         _predefinedAdjacency = predefinedAdjacency;
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 

@@ -123,7 +123,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
                 Epsilon = 1e-8
             }));
         _stepCount = 0;
-        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, Random.Next());
         _perAgentRewards = new Dictionary<int, List<T>>();
 
         // Initialize networks directly in constructor
@@ -220,7 +220,7 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, Random.Next());
     }
 
     /// <summary>

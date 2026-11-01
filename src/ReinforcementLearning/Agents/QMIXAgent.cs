@@ -115,7 +115,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             Epsilon = 1e-8
         });
         _epsilon = options.EpsilonStart;
-        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, Random.Next());
         _stepCount = 0;
 
         InitializeNetworks();
@@ -233,7 +233,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     private void InitializeReplayBuffer()
     {
-        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, Random.Next());
     }
 
     /// <summary>

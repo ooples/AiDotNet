@@ -412,12 +412,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected Dictionary<int, Tensor<T>> _layerOutputs = new Dictionary<int, Tensor<T>>();
 
     /// <summary>
-    /// Gets the thread-safe random number generator for initialization.
+    /// Gets this model's random stream; the same stream as <see cref="ModelRandom"/>.
     /// </summary>
     /// <remarks>
-    /// Uses the centralized RandomHelper which is thread-safe and avoids creating multiple instances per thread.
+    /// This was once the process-shared stream, which made every model drawing from it irreproducible even under an
+    /// explicit seed. It is per-model and not thread-safe: draw from it on the calling thread, never inside a
+    /// parallel loop.
     /// </remarks>
-    protected static Random Random => RandomHelper.ThreadSafeRandom;
+    protected Random Random => ModelRandom;
 
     /// <summary>
     /// This model's own random stream, for draws a model makes itself rather than through a layer (a Gaussian

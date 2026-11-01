@@ -115,8 +115,8 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
         _advantageWeights = new Tensor<T>([featureDim, actionSize]);
         _advantageBias = new Tensor<T>([actionSize]);
 
-        var rng = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
+        var rng = (seed ?? RandomSeed).HasValue
+            ? RandomHelper.CreateSeededRandom((seed ?? RandomSeed).GetValueOrDefault())
             : RandomHelper.CreateSecureRandom();
 
         // Glorot-uniform initialisation, separate range per head:

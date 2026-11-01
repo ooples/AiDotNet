@@ -7706,7 +7706,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             for (int i = 0; i < layered.Layers.Count; i++)
             {
                 var layerParameters = layered.Layers[i].GetParameters();
-                parts.Add(new($"layer {i} ({layered.Layers[i].GetType().Name})",
+                // The seed is in the name, so a differing layer also says whether it had one: "seed none" is a layer
+                // that initialised from the process-shared stream.
+                string seed = layered.Layers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> seeded
+                    ? seeded.RandomSeed?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"
+                    : "n/a";
+                parts.Add(new($"layer {i} ({layered.Layers[i].GetType().Name}, seed {seed})",
                     OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, layerParameters.Length).Select(j => ConvertToDouble(layerParameters[j])))));
             }
         }

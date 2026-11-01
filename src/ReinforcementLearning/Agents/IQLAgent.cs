@@ -211,7 +211,7 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private void InitializeBuffer()
     {
-        _offlineBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.BufferSize);
+        _offlineBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.BufferSize, Random.Next());
     }
 
     /// <summary>

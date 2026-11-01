@@ -142,7 +142,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         _rnnHiddenState = new Vector<T>(_options.RNNHiddenSize);
 
         // Initialize replay buffer
-        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize);
+        _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.ReplayBufferSize, Random.Next());
 
         // Add all networks to Networks list for parameter access
         Networks.Add(_vaeEncoder);
