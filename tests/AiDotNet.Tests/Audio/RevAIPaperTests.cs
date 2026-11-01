@@ -77,7 +77,7 @@ public class RevAIPaperTests
             return total / input.Length;
         }
 
-        double forward = Directional(labels, reverse: false), backward = Directional(labels.Reverse().ToArray(), reverse: true);
+        double forward = Directional(labels, reverse: false), backward = Directional(Enumerable.Reverse(labels).ToArray(), reverse: true);
         Assert.NotEqual(forward, backward, 6);
         Assert.Equal(0.7 * forward + 0.3 * backward, network.AttentionLoss(encoded, labels)[0], 9);
     }

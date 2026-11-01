@@ -19,15 +19,15 @@ internal sealed class Ns2TransformerEncoder<T>
     private readonly NaturalSpeech2Positions _positions;
 
     public Ns2TransformerEncoder(IEngine engine, List<LayerBase<T>> layers, Random random, int vocab, int dim, int heads, int filter, int kernel,
-        int count, double dropout, bool styleAdaptive, NaturalSpeech2Positions positions)
+        int count, double dropout, bool styleAdaptive, NaturalSpeech2Positions positions, double embeddingStd = 1e-5)
     {
         if (kernel % 2 == 0) throw new ArgumentException("The feed-forward convolution's kernel must be odd (padding kernel / 2 keeps the length).");
         _engine = engine;
         _dim = dim;
         _dropout = dropout;
         _positions = positions;
-        // Amphion draws the phoneme embedding with a standard deviation of 1e-5.
-        if (vocab > 0) Embedding = IndexTtsOps.Embedding(layers, random, vocab, dim, 1e-5);
+        // Amphion's NaturalSpeech 2 draws the phoneme embedding with a standard deviation of 1e-5.
+        if (vocab > 0) Embedding = IndexTtsOps.Embedding(layers, random, vocab, dim, embeddingStd);
         for (int i = 0; i < count; i++)
             Blocks.Add(new Block(
                 new Ns2Norm<T>(engine, layers, random, dim, styleAdaptive),
