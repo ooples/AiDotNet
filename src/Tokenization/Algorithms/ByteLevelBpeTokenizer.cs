@@ -25,8 +25,13 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly Dictionary<string, int> _added = new(StringComparer.Ordinal);
         private readonly HashSet<string> _special = new(StringComparer.Ordinal);
         private readonly Dictionary<char, List<string>> _addedByFirst = new();
+        // Added tokens that absorb the whitespace before (lstrip) or after (rstrip) them.
+        private readonly HashSet<string> _leftStripped;
+        private readonly HashSet<string> _rightStripped;
         private readonly Dictionary<int, string> _tokens = new();
         private readonly Regex _split;
+        // A Split with behavior Removed and invert (o200k's): the matches are the pieces and the text between them is dropped.
+        private readonly bool _dropUnmatched;
         private readonly bool _nfc;
         private readonly bool _ignoreMerges;
         // Pre-tokenizers before the regular expression, in order: Digits (individual) and Punctuation, each isolating.
@@ -39,8 +44,12 @@ namespace AiDotNet.Tokenization.Algorithms
 
         public ByteLevelBpeTokenizer(Dictionary<string, int> vocabulary, Dictionary<string, int> merges,
             IEnumerable<(string Content, int Id, bool Special)> addedTokens, string? splitPattern, bool nfc, bool ignoreMerges,
-            int[]? templatePrefix = null, int[]? templateSuffix = null, IEnumerable<string>? isolators = null)
+            int[]? templatePrefix = null, int[]? templateSuffix = null, IEnumerable<string>? isolators = null,
+            IEnumerable<string>? leftStripped = null, IEnumerable<string>? rightStripped = null, bool dropUnmatched = false)
         {
+            _dropUnmatched = dropUnmatched;
+            _leftStripped = new HashSet<string>(leftStripped ?? Array.Empty<string>(), StringComparer.Ordinal);
+            _rightStripped = new HashSet<string>(rightStripped ?? Array.Empty<string>(), StringComparer.Ordinal);
             _isolators = (isolators ?? Array.Empty<string>()).ToArray();
             _templatePrefix = templatePrefix ?? Array.Empty<int>();
             _templateSuffix = templateSuffix ?? Array.Empty<int>();
@@ -57,7 +66,7 @@ namespace AiDotNet.Tokenization.Algorithms
                 list.Add(content);
             }
             foreach (var list in _addedByFirst.Values) list.Sort((a, b) => b.Length.CompareTo(a.Length));
-            _split = new Regex(splitPattern ?? Gpt2Pattern, RegexOptions.CultureInvariant);
+            _split = new Regex(splitPattern ?? Gpt2Pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(5));
             _nfc = nfc;
             _ignoreMerges = ignoreMerges;
             _charToByte = _byteToChar.ToDictionary(p => p.Value, p => p.Key);
@@ -101,13 +110,19 @@ namespace AiDotNet.Tokenization.Algorithms
                 if ((string?)n["type"] == "NFC") nfc = true;
                 else throw new NotSupportedException($"Normalizer {(string?)n["type"]} is not supported.");
             }
+            bool dropUnmatched = false;
             var added = new List<(string, int, bool)>();
+            var leftStripped = new List<string>();
+            var rightStripped = new List<string>();
             foreach (var token in (JArray?)root["added_tokens"] ?? new JArray())
             {
                 // A normalized added token is matched in the normalized text, which is the text itself without a normalizer.
-                if (((bool?)token["normalized"] == true && nfc) || (bool?)token["lstrip"] == true || (bool?)token["rstrip"] == true || (bool?)token["single_word"] == true)
-                    throw new NotSupportedException($"Added token '{(string?)token["content"]}' uses normalization or stripping, which this reader does not support.");
-                added.Add(((string)token["content"]!, (int)token["id"]!, (bool?)token["special"] ?? false));
+                if (((bool?)token["normalized"] == true && nfc) || (bool?)token["single_word"] == true)
+                    throw new NotSupportedException($"Added token '{(string?)token["content"]}' uses normalization or single_word, which this reader does not support.");
+                string content = (string)token["content"]!;
+                added.Add((content, (int)token["id"]!, (bool?)token["special"] ?? false));
+                if ((bool?)token["lstrip"] == true) leftStripped.Add(content);
+                if ((bool?)token["rstrip"] == true) rightStripped.Add(content);
             }
             string? pattern = null;
             var pre = root["pre_tokenizer"] as JObject;
@@ -117,8 +132,11 @@ namespace AiDotNet.Tokenization.Algorithms
                 switch ((string?)step["type"])
                 {
                     case "Split":
-                        if ((string?)step["behavior"] != "Isolated" || (bool?)step["invert"] == true)
-                            throw new NotSupportedException("Only an isolated, non-inverted Split is supported.");
+                        string? behavior = (string?)step["behavior"];
+                        bool invert = (bool?)step["invert"] == true;
+                        if (behavior == "Removed" && invert) dropUnmatched = true;
+                        else if (behavior != "Isolated" || invert)
+                            throw new NotSupportedException("Only an isolated Split, or a removed and inverted one, is supported.");
                         pattern = (string?)step["pattern"]?["Regex"] ?? throw new NotSupportedException("Only a regular-expression Split is supported.");
                         break;
                     case "Digits":
@@ -166,7 +184,8 @@ namespace AiDotNet.Tokenization.Algorithms
                         throw new NotSupportedException($"Post-processor {(string?)processor["type"]} is not supported.");
                 }
             }
-            return new ByteLevelBpeTokenizer(vocabulary, merges, added, pattern, nfc, ignoreMerges, prefix.ToArray(), suffix.ToArray(), isolators);
+            return new ByteLevelBpeTokenizer(vocabulary, merges, added, pattern, nfc, ignoreMerges, prefix.ToArray(), suffix.ToArray(), isolators,
+                leftStripped, rightStripped, dropUnmatched);
         }
 
         /// <summary>The largest token id plus one.</summary>
@@ -204,9 +223,15 @@ namespace AiDotNet.Tokenization.Algorithms
                     position++;
                     continue;
                 }
-                EncodeOrdinary(text.Substring(start, position - start), ids);
+                // tokenizers' AddedToken lstrip and rstrip: the token takes the whitespace beside it with it.
+                int before = position;
+                if (_leftStripped.Contains(found))
+                    while (before > start && char.IsWhiteSpace(text[before - 1])) before--;
+                EncodeOrdinary(text.Substring(start, before - start), ids);
                 ids.Add(_added[found]);
                 position += found.Length;
+                if (_rightStripped.Contains(found))
+                    while (position < text.Length && char.IsWhiteSpace(text[position])) position++;
                 start = position;
             }
             EncodeOrdinary(text.Substring(start), ids);
@@ -291,11 +316,11 @@ namespace AiDotNet.Tokenization.Algorithms
             foreach (Match match in _split.Matches(text))
             {
                 if (match.Length == 0) continue;
-                if (match.Index > position) ids.AddRange(_cache.GetOrAdd(text.Substring(position, match.Index - position), Bpe));
+                if (match.Index > position && !_dropUnmatched) ids.AddRange(_cache.GetOrAdd(text.Substring(position, match.Index - position), Bpe));
                 ids.AddRange(_cache.GetOrAdd(match.Value, Bpe));
                 position = match.Index + match.Length;
             }
-            if (position < text.Length) ids.AddRange(_cache.GetOrAdd(text.Substring(position), Bpe));
+            if (position < text.Length && !_dropUnmatched) ids.AddRange(_cache.GetOrAdd(text.Substring(position), Bpe));
         }
 
         private int[] Bpe(string piece)

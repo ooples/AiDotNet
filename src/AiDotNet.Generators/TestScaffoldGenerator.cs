@@ -1963,7 +1963,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "BiomedParse", "DKM", "EVACLIP", "SeedTTSClone", "VoxtLM",
         // The completed N-P shard added two resource-heavy failures. OWLv2's paper-scale ViT-L
         // memorization probe showed a first-step warm-up rise while repeatedly driving available
-        // memory below 1 GB. NemotronSpeech's first 24-layer encoder + 32-layer LLM forward consumed
+        // memory below 1 GB. NemotronSpeech's former 24-layer encoder + 32-layer LLM forward consumed
         // essentially the entire 16 GB runner and triggered shutdown. Apply the required precision
         // mitigation first; production defaults/options remain unchanged.
         "OWLv2", "NemotronSpeech",
@@ -5913,7 +5913,39 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ProjectionDim = 16, PredictorChannels = 16, ClassifierChannels = 16, VocabSize = 16, " +
                     "MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
-            else if (model.ClassName is "FunASRNano" or "RobustConformer" or "SALM"
+            else if (model.ClassName == "FunASRNano" && model.TypeParameterCount == 1)
+            {
+                // Fun-ASR-nano's SenseVoice-Small encoder, adaptor, Qwen3 decoder (with LoRA) and CTC decoder at width 16,
+                // one layer each, over 16-band filterbanks; a 16-token vocabulary, which has no ChatML prompt text.
+                // Production defaults are the release's (Qwen3-0.6B).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions { NumMels = 16, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumTpEncoderLayers = 1, NumAttentionHeads = 2, EncoderFeedForwardDim = 32, " +
+                    "FsmnKernelSize = 3, AdaptorFeedForwardDim = 32, NumAdaptorLayers = 1, AdaptorHeads = 2, " +
+                    "LlmHiddenDim = 16, NumLlmLayers = 1, LlmHeads = 2, LlmKeyValueHeads = 1, LlmHeadDim = 8, " +
+                    "LlmIntermediateDim = 32, VocabSize = 16, LoraRank = 2, CtcDecoderDim = 16, CtcFeedForwardDim = 32, " +
+                    "NumCtcDecoderLayers = 1, CtcVocabSize = 16, MaxTextLength = 4 })";
+            }
+            else if (model.ClassName == "SALM" && model.TypeParameterCount == 1)
+            {
+                // SALM's Fast Conformer encoder and Conformer modality adapter (width 16, one block each, 4-channel
+                // subsampling, so 32x in all), and a one-layer Megatron GPT at width 16 (LayerNorm, rotary embeddings on
+                // half of each head, fused qkv LoRA) with a 16-token vocabulary, which has no prompt text; no warm-up, so
+                // the short training invariants see the learning rate. Production defaults are the paper's.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions { " +
+                    "NumMels = 16, EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, SubsamplingChannels = 4, " +
+                    "AdapterDim = 16, NumAdapterLayers = 1, NumAdapterHeads = 2, LlmDim = 16, LlmFeedForwardDim = 32, NumLlmLayers = 1, " +
+                    "NumLlmAttentionHeads = 2, VocabSize = 16, LoraRank = 2, LoraAlpha = 2, WarmupSteps = 0, MaxTextLength = 4, " +
+                    "MaxAudioLengthSeconds = 1 })";
+            }
+            else if (model.ClassName is "RobustConformer"
                     or "SpeakerDiarizedASR"
                 && model.TypeParameterCount == 1)
             {
@@ -5924,9 +5956,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // topology while exercising it at a bounded public-options scale.
                 string optionsType = model.ClassName switch
                 {
-                    "FunASRNano" => "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions",
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
-                    "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     _ => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
@@ -6089,17 +6119,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 && typeName.StartsWith(
                     "AiDotNet.SpeechRecognition.Specialized.", System.StringComparison.Ordinal))
             {
-                // VoxtLM's production checkpoint configuration is a 12-layer,
-                // 512-wide decoder with a 32K token head. Exercise the same
-                // speech projection -> decoder -> token-head path at bounded
-                // public-options scale so the complete class fits the shard.
+                // VoxtLM-k50 small's speech tokenizer (HuBERT read at a layer, then k-means) and Transformer LM, at
+                // width 16 with one layer each, 8 speech units and 8 text tokens (a 23-token joint vocabulary).
+                // Production defaults are the paper's. Dropout is off so the invariants compare deterministic losses.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputSize: 32, outputSize: 16), " +
-                    "new AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 4, NumMels = 32, VocabSize = 16, " +
-                    "MaxTextLength = 8, DropoutRate = 0.0, LearningRate = 1e-4 })";
+                    "inputSize: 3200, outputSize: 23), " +
+                    "new AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions { NumSpeechUnits = 8, TextVocabSize = 8, " +
+                    "EmbeddingDim = 16, ModelDim = 16, NumLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, DropoutRate = 0.0, " +
+                    "HubertWidth = 16, HubertLayer = 1, HubertHeads = 2, HubertIntermediate = 32, HubertConvChannels = 16, " +
+                    "MaxTextLength = 8, MaxAudioLengthSeconds = 1, WarmupSteps = 1, Seed = 5 })";
             }
             else if (model.ClassName == "Zipformer" && model.TypeParameterCount == 1
                 && typeName.StartsWith(
@@ -8566,23 +8596,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal))
             {
-                // FireRedASR-LLM-L uses the paper's 1280-wide/16-layer FireRed encoder and the
-                // complete Qwen2-7B-Instruct decoder by default. That research-scale default must
-                // remain intact, but constructing it for a CPU unit-test invariant is neither a
-                // useful correctness probe nor feasible on the 16 GB runner. Exercise the same
-                // encoder -> adapter -> LLM -> vocabulary-head path at smoke scale through the
-                // public options object. FireRedASRLLM is also in Fp32TestClassNames, so this
-                // expression is precision-rewritten to <float> after generation.
+                // FireRedASR-LLM's Conformer encoder (width 16, one block, 32 mel bins), its two-frame adapter, and a
+                // one-layer Qwen2 decoder at width 16 with LoRA on every projection and a 16-token vocabulary, which has
+                // no ChatML prompt text. Production defaults are FireRedASR-LLM-L's (Qwen2-7B-Instruct).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASRLLMOptions { " +
-                    "EncoderDim = 32, EncoderFeedForwardDim = 128, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, AdapterDim = 32, NumAdapterLayers = 1, " +
-                    "LlmDim = 32, LlmFeedForwardDim = 128, NumLlmLayers = 1, " +
-                    "NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 8, UseQwen2Decoder = false, DropoutRate = 0.0 })";
+                    "EncoderDim = 16, EncoderFeedForwardDim = 64, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, " +
+                    "NumMels = 32, LlmDim = 16, LlmFeedForwardDim = 32, NumLlmLayers = 1, NumLlmAttentionHeads = 2, " +
+                    "NumLlmKvHeads = 1, VocabSize = 16, LoraRank = 2, LoraDropout = 0.0, MaxTextLength = 4, " +
+                    "MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "NBEATSFinance" && model.TypeParameterCount == 1)
             {
@@ -9555,20 +9580,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "GraniteSpeech" && model.TypeParameterCount == 1)
             {
-                // Granite Speech keeps IBM's paper-scale 512-wide, 12-layer encoder and
-                // 32,000-token output head in production. Even after the required FP32
-                // mitigation and two-step training caps, that generated fixture consumes
-                // several minutes and multiple gigabytes per class. Exercise the same
-                // speech encoder -> adapter -> token-head topology through its public
-                // options at runner-safe scale; production defaults remain unchanged.
+                // Granite-speech's conformer CTC encoder (width 16, two blocks so the self-conditioned middle layer
+                // exists, attention blocks of 8 frames), a one-layer window Q-Former at width 16 and a one-layer Granite
+                // decoder at width 16 with LoRA on q and v and a 16-token vocabulary, which has no chat prompt text.
+                // A width-16 tied head cannot lift logits divided by 16, so the fixture leaves them unscaled and warms
+                // up for 2 steps. Production defaults are granite-speech-3.3-8b's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.LLMIntegrated.GraniteSpeechOptions { " +
-                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "NumMels = 16, EncoderDim = 16, NumEncoderLayers = 2, NumAttentionHeads = 2, EncoderHeadDim = 8, " +
+                    "AttentionContextSize = 8, MaxRelativePosition = 8, ConvKernel = 3, CtcVocabSize = 8, ProjectorDim = 16, " +
+                    "NumProjectorLayers = 1, NumProjectorHeads = 2, ProjectorFeedForwardDim = 32, LlmDim = 16, " +
+                    "LlmFeedForwardDim = 32, NumLlmLayers = 1, NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, VocabSize = 16, " +
+                    "LoraRank = 2, LogitsScaling = 1, WarmupSteps = 2, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "ImageBindNeuralNetwork" && model.TypeParameterCount == 1)
             {
@@ -9590,18 +9616,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "NemotronSpeech" && model.TypeParameterCount == 1)
             {
-                // Nemotron-Speech keeps NVIDIA's paper-scale 1024/2048-wide, 24+32-layer,
-                // 65,536-token defaults in production. The generated invariant fixture exercises
-                // the same Fast-Conformer -> adapter -> Nemotron decoder architecture through the
-                // public options object at a scale that remains resident on a 16 GB CPU runner.
+                // Nemotron Speech Streaming: the release's cache-aware Fast Conformer (causal subsampling and
+                // convolutions, chunked attention with left context) and RNN-T decoder, at width 16 with one block,
+                // a two-frame chunk and one chunk of left context over a 16-token vocabulary. Production defaults are
+                // the release's. SpecAugment is off so the invariants compare training losses, not masks.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.NeMo.NemotronSpeechOptions { " +
-                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 64, DecoderDim = 64, " +
-                    "NumEncoderLayers = 2, NumDecoderLayers = 2, NumAttentionHeads = 4, " +
-                    "NumMels = 32, VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, NumMels = 32, SubsamplingChannels = 8, " +
+                    "LookaheadFrames = 1, LeftContextFrames = 2, PredictionDim = 16, PredictionLayers = 1, JointDim = 16, VocabSize = 16, " +
+                    "MaxAudioLengthSeconds = 1, FrequencyMasks = 0, TimeMasks = 0 })";
             }
             else if (model.ClassName == "TimeSformer" && model.TypeParameterCount == 1)
             {
@@ -9868,19 +9894,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Phi4Audio" && model.TypeParameterCount == 1)
             {
-                // Phi-4 Audio keeps its production 512-wide, 12-layer speech encoder and
-                // 32k-token output vocabulary by default. The FP32 generated fixture still
-                // climbed past 10 GiB without completing its next invariant. Exercise the
-                // same mel projection -> transformer -> language head through public options
-                // at CI-smoke width, depth, vocabulary, and context.
+                // Phi-4-multimodal's conformer encoder (width 16, one block, 4-channel subsampling), its projector and a
+                // one-layer Phi-4-Mini at width 16 (a rotary share of 0.75 turns 6 of each head's 8 dimensions; no
+                // LongRoPE, whose factors fit a head of 128) with the fused speech LoRA and a 16-token vocabulary, which
+                // has no chat prompt text. Production defaults are the released Phi-4-multimodal-instruct.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.LLMIntegrated.Phi4AudioOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "NumMels = 16, EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, EncoderFeedForwardDim = 24, " +
+                    "SubsamplingChannels = 4, RelativeBiasMaxDistance = 8, LlmDim = 16, LlmFeedForwardDim = 32, NumLlmLayers = 1, " +
+                    "NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, UseLongRope = false, VocabSize = 16, LoraRank = 2, LoraAlpha = 4, " +
+                    "LoraDropout = 0, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Piper" && model.TypeParameterCount == 1)
             {
@@ -10433,18 +10459,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "SeedASR" && model.TypeParameterCount == 1)
             {
-                // Seed-ASR retains its large multilingual encoder/LLM defaults in production.
-                // Its paper-scale generated MoreData probe exceeded the CPU timeout. Exercise
-                // the same mel projection -> encoder -> LLM adapter -> token head through the
-                // complete public options surface at CI-smoke scale.
+                // Seed-ASR's LUISE Conformer (width 16, one block, kernel 3) at 40 ms, the four-frame converter and a
+                // one-layer decoder at width 16 with a 16-token vocabulary; 0.5 s of audio gives the converter two
+                // tokens. Production defaults are the paper's (and its unpublished sizes as SeedASROptions documents).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.LLMIntegrated.SeedASROptions { MaxAudioLengthSeconds = 1, " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, " +
-                    "VocabSize = 4, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\", " +
-                    "LearningRate = 1e-4, WeightDecay = 0.01 })";
+                    "inputSize: 8000, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.SeedASROptions { NumMels = 16, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, LlmDim = 16, LlmFeedForwardDim = 32, " +
+                    "NumLlmLayers = 1, NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, VocabSize = 16, MaxTextLength = 4, " +
+                    "MaxAudioLengthSeconds = 1, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "SenseVoice" && model.TypeParameterCount == 1)
             {
@@ -10605,63 +10630,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // vs string modelPath), so any fix must disambiguate on the containing namespace.
             else if (model.ClassName == "SenseVoiceLarge" && model.TypeParameterCount == 1)
             {
-                // SenseVoice-Large retains the paper-scale 1024-wide, 50-layer encoder and
-                // 25,000-entry vocabulary as its production default. The generated FP32 fixture
-                // still consumed about 10 GB and timed out in metadata and training invariants.
-                // Exercise the same mel projection -> Paraformer encoder -> CTC head topology at
-                // CI-smoke scale through public options. Production defaults and customization
-                // remain unchanged; NumMels=64 matches the generated [1,64,32] audio fixture.
+                // The Whisper-large-geometry encoder-decoder at width 16 with one encoder and one decoder layer, the
+                // 30-second 80-band window and a 16-token vocabulary (five special tokens at its top). Production
+                // defaults are the large geometry.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.AlibabaASR.SenseVoiceLargeOptions { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, DecoderDim = 32, NumDecoderLayers = 1, FeedForwardDim = 64, " +
-                    // SenseVoice-Large is an autoregressive encoder-decoder (arXiv:2407.04051);
-                    // the paper describes no CIF stage for either SenseVoice variant. This
-                    // fixture previously forced UseCifAlignment = true, which both diverged from
-                    // the paper and put a CIF layer in the graph.
-                    // UseCifAlignment = false, matching the sibling SenseVoice fixture directly above.
-                    // With CIF on, Predict re-aligns the encoder output through continuous
-                    // integrate-and-fire while the training forward does not, so the two paths emit
-                    // different sequences — and Training_ShouldReduceLoss (which measures
-                    // MeasureLoss(Predict(input), target), and this family's loss IS
-                    // MeanSquaredErrorLoss via AudioNeuralNetworkBase) was scoring a quantity the
-                    // optimizer never descends. Measured: initial = 0.943767 -> final = 0.956849 at
-                    // LearningRate 1e-4 and 0.944680 at 2e-5 — i.e. lowering the rate only shrank the
-                    // step, it never turned the sign, which is the signature of measuring the wrong
-                    // forward rather than of an over-rate. LossStrictlyDecreasesOnMemorizationTask
-                    // passes throughout because it reads GetLastLoss (the training forward).
-                    "UseCifAlignment = false, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
-                    // 2e-5 is the fine-tuning rate the sibling SenseVoice fixture already uses for the
-                    // same Paraformer encoder; SenseVoice-Large's optimizer IS wired correctly (AdamW
-                    // built from _options.LearningRate and handed to TrainWithTape), so this is the
-                    // rate that actually trains. Configured through the PUBLIC options exactly as the
-                    // width/depth reduction above is; the production default (1e-4) is unchanged and
-                    // no assertion, threshold or iteration count is relaxed.
-                    "DropoutRate = 0.0, Language = \"en\", LearningRate = 2e-5, WeightDecay = 0.01 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.SenseVoiceLargeOptions { NumMels = 80, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, VocabSize = 16, MaxTextLength = 4 })";
             }
             else if ((model.ClassName == "Qwen3ASR" || model.ClassName == "Qwen3ASRSmall")
                      && model.TypeParameterCount == 1)
             {
-                // Qwen3-ASR and Qwen3-ASR-Small (Alibaba 2025) retain their production defaults of,
-                // respectively, 1024-wide/24-layer and 512-wide/12-layer encoders with a 151,936-entry
-                // vocabulary. At those scales the generated CPU training invariants exceed 120 seconds
-                // (and the full model can exhaust the 16 GB runner). Exercise the same mel encoder ->
-                // LLM-integrated transformer -> CTC vocabulary-head topology at CI scale through each
-                // model's public options. This changes only generated tests; paper defaults and every
-                // customization point remain intact. NumMels=64 matches the generated [1,64,32] input,
-                // and NumAttentionHeads=2 divides EncoderDim=32. Both classes are floatified afterwards.
+                // Qwen3-ASR-1.7B and -0.6B: the AuT encoder (80-band Whisper log-mel, 4-channel convolutions, width 16,
+                // one layer) and a one-layer Qwen3 decoder at width 16 with a 16-token vocabulary, which has no ChatML
+                // prompt text. Production defaults are the releases'.
                 string qwenOptionsType = model.ClassName == "Qwen3ASR"
                     ? "AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions"
                     : "AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmallOptions";
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    $"new {qwenOptionsType} {{ EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 64, VocabSize = 64 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    $"new {qwenOptionsType} {{ NumMels = 80, EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, EncoderFeedForwardDim = 32, DownsampleChannels = 4, LlmHiddenDim = 16, " +
+                    "NumLlmLayers = 1, LlmHeads = 2, LlmKeyValueHeads = 1, LlmHeadDim = 8, LlmIntermediateDim = 32, " +
+                    "VocabSize = 16, MaxTextLength = 4 })";
             }
             else if (model.ClassName == "AVHuBERT" && model.TypeParameterCount == 1)
             {
@@ -12134,23 +12129,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "CanaryQwen" && model.TypeParameterCount == 1)
             {
-                // CanaryQwen (NVIDIA, 2025): multilingual ASR + translation with a Qwen-2.5 LLM decoder,
-                // built via CreateDefaultLLMASRLayers. Its paper defaults (EncoderDim=1024/24 layers,
-                // DecoderDim=1536/28 layers, VocabSize=151936) make even a SINGLE forward multi-minute:
-                // the final Dense(151936) output head alone is ~15 GFLOPs at seq 64, so every invariant
-                // (including single-forward BatchConsistency / determinism) overran the 120 s gate. Build
-                // the SAME architecture (audio front-end -> residual encoder blocks -> adapter -> LLM
-                // decoder blocks -> vocab head) at CI-smoke scale, mirroring the CSM / XTTSv2 codec-LM
-                // reductions: 64-wide, 2+2 layers, 4 heads, a 64-way vocab head. The Canary-Qwen
-                // structure is preserved; only width/depth/vocab shrink. Architecture matches the
-                // isAudio branch's [1,64,32] InputShape so lazy shapes resolve consistently.
+                // Canary-Qwen's Fast Conformer encoder (width 16, one block, 4-channel subsampling), its projection and a
+                // one-layer Qwen3 at width 16 (head width 8, query-key norm, tied head, LoRA on q and v) with a 16-token
+                // vocabulary, which has no chat prompt text; no warm-up, so the short training invariants see the
+                // learning rate. Production defaults are nvidia/canary-qwen-2.5b's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.NeMo.CanaryQwenOptions { EncoderDim = 32, " +
-                    "DecoderDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumAttentionHeads = 4, " +
-                    "NumMels = 32, VocabSize = 64, DropoutRate = 0.0 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.NeMo.CanaryQwenOptions { NumMels = 16, EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, ConvKernel = 3, SubsamplingChannels = 4, DecoderDim = 16, DecoderFeedForwardDim = 32, " +
+                    "NumDecoderLayers = 1, NumDecoderHeads = 2, NumDecoderKvHeads = 1, DecoderHeadDim = 8, VocabSize = 16, " +
+                    "LoraRank = 2, LoraAlpha = 4, LoraDropout = 0, WarmupSteps = 0, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Data2Vec2" && model.TypeParameterCount == 1)
             {
@@ -12248,15 +12238,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "OLMoASR" && model.TypeParameterCount == 1)
             {
-                // OLMoASR (LLM-integrated ASR). Defaults (EncoderDim=512, 12 layers, VocabSize=32000) make
-                // each CPU training step multi-second → 200-iter MoreData timed out (120 s). Build the SAME
-                // architecture at CI-smoke width/depth/vocab.
+                // OLMoASR's Whisper encoder-decoder at width 16 with one encoder and one decoder layer, the 30-second
+                // 80-band window and a 16-token vocabulary (three special tokens at its top). Production defaults are
+                // OLMoASR-large.en-v2's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.LLMIntegrated.OLMoASROptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, VocabSize = 64, NumMels = 32 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.OLMoASROptions { ModelDim = 16, NumAttentionHeads = 2, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, VocabSize = 16, MaxTextLength = 4 })";
             }
             else if (model.ClassName == "SambaASR" && model.TypeParameterCount == 1)
             {
@@ -16828,25 +16818,51 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16, 32 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16, 32 };");
             }
+            else if (model.ClassName == "SeedASR")
+            {
+                // Seed-ASR reads waveforms (0.5 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8000 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "CanaryQwen")
+            {
+                // Canary-Qwen reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "SALM")
+            {
+                // SALM reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "Phi4Audio")
+            {
+                // Phi-4-multimodal reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
             else if (model.ClassName == "GraniteSpeech")
             {
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 64 };");
-                sb.AppendLine("    protected override int TrainingIterations => 2;");
-                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-                sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
-                sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+                // Granite-speech reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "VoxtLM")
+            {
+                // VoxtLM reads waveforms (0.2 s, 9 HuBERT frames) and returns the logits of the transcript's first token.
+                // HuBERT Base group-normalizes its first convolution, so a recording scaled 10x gives the same units by
+                // design and the scaled-input invariant does not apply.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 23 };");
+                sb.AppendLine("    protected override bool ScaledInputInvariantApplicable => false;");
             }
             else if (model.ClassName == "NemotronSpeech")
             {
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 64 };");
-                sb.AppendLine("    protected override int TrainingIterations => 2;");
-                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+                // Nemotron Speech reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, and causal 8x subsampling
+                // (each stage n/2 + 1) leaves 4 encoder frames of 80 ms over its 16 tokens.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 16 };");
             }
             else if (model.ClassName is "DistilWhisper" or "FasterWhisper" or "KotobaWhisper"
                 or "WhisperLargeV3" or "WhisperLargeV3Turbo" or "WhisperLive" or "WhisperX"
@@ -16861,6 +16877,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 || (model.ClassName == "FireRedASR" && model.FullyQualifiedName.StartsWith("AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal)))
             {
                 // Moonshine reads waveforms (0.2 s) and returns the decoder's logits for the first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "OLMoASR")
+            {
+                // OLMoASR reads waveforms (0.2 s, padded to its 30-second window) and returns the decoder's logits over
+                // start of transcript and no timestamps.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 16 };");
+            }
+            else if (model.ClassName == "SenseVoiceLarge")
+            {
+                // SenseVoice-Large reads waveforms (0.2 s, padded to its 30-second window) and returns the decoder's
+                // logits over the start of transcript and the LID task token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 16 };");
+            }
+            else if (model.ClassName == "FireRedASRLLM")
+            {
+                // FireRedASR-LLM reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName is "Qwen3ASR" or "Qwen3ASRSmall")
+            {
+                // Qwen3-ASR reads waveforms (0.2 s) and returns the decoder's logits for the answer's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "FunASRNano")
+            {
+                // Fun-ASR-nano reads waveforms (0.2 s) and returns the LLM's logits for the answer's first token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
@@ -16997,13 +17045,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // temporal video). Observed: net471 passes at 1e-4, net10.0's
                 // different float/SIMD trajectory lands at ~8e-3 — purely numeric,
                 // not a correctness regression.
-                sb.AppendLine(model.ClassName == "FireRedASRLLM"
-                    ? "    protected override double MoreDataTolerance => 0.75;"
-                    : model.ClassName is "FastEmit" or "EmformerRNNT"
-                        ? "    protected override double MoreDataTolerance => 0.0001;"
-                        : "    protected override double MoreDataTolerance => 0.5;");
-                if (model.ClassName == "FireRedASRLLM")
-                    sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.25;");
+                sb.AppendLine(model.ClassName is "FastEmit" or "EmformerRNNT"
+                    ? "    protected override double MoreDataTolerance => 0.0001;"
+                    : "    protected override double MoreDataTolerance => 0.5;");
 
                 // GraFPrint (graph-fingerprint embedding): passes SOLO (25/25) but its 50+200-iteration
                 // MoreData probe runs near the 120 s edge and tips over it under the loaded Gen G-I
