@@ -49,6 +49,13 @@ namespace AiDotNet.TextToSpeech.Latest;
              + "alpha_lr_ratio 1.5 times the rate without weight decay; the loss on every token but the speaker slot.")]
 public partial class KaniTTS2<T> : KaniTTSBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public KaniTTS2(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (KaniTTS2Options?)null)
+    {
+    }
+
+
     private readonly List<LayerBase<T>> _embedderLayers = new();
     private KaniSpeakerEmbedder<T>? _embedder;
 
@@ -59,7 +66,7 @@ public partial class KaniTTS2<T> : KaniTTSBase<T>
     }
 
     /// <summary>Creates a native, trainable KaniTTS 2.</summary>
-    public KaniTTS2(NeuralNetworkArchitecture<T> architecture, KaniTTS2Options? options = null)
+    public KaniTTS2(NeuralNetworkArchitecture<T> architecture, KaniTTS2Options? options)
         : base(architecture, options ?? new KaniTTS2Options())
     {
     }

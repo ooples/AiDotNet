@@ -69,6 +69,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
                         + "at s2.json's 1e-4, ExponentialLR 0.999875 per epoch.")]
 public partial class GPTSoVITS<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public GPTSoVITS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (GPTSoVITSOptions?)null)
+    {
+    }
+
+
     private readonly GPTSoVITSOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -112,7 +119,7 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable GPT-SoVITS.</summary>
-    public GPTSoVITS(NeuralNetworkArchitecture<T> architecture, GPTSoVITSOptions? options = null)
+    public GPTSoVITS(NeuralNetworkArchitecture<T> architecture, GPTSoVITSOptions? options)
         : base(architecture)
     {
         _options = options ?? new GPTSoVITSOptions();

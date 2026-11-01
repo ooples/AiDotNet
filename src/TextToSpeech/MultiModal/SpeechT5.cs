@@ -70,6 +70,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
                         + "the first 10k steps and decayed in an inverse square root manner for the rest.")]
 public partial class SpeechT5<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SpeechT5(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (SpeechT5Options?)null)
+    {
+    }
+
+
     private readonly SpeechT5Options _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -104,7 +111,7 @@ public partial class SpeechT5<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable SpeechT5.</summary>
-    public SpeechT5(NeuralNetworkArchitecture<T> architecture, SpeechT5Options? options = null)
+    public SpeechT5(NeuralNetworkArchitecture<T> architecture, SpeechT5Options? options)
         : base(architecture)
     {
         _options = options ?? new SpeechT5Options();

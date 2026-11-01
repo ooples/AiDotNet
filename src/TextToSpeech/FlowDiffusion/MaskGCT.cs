@@ -66,6 +66,13 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
                         + "declared here as Noam.")]
 public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public MaskGCT(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (MaskGCTOptions?)null)
+    {
+    }
+
+
     private readonly MaskGCTOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -107,7 +114,7 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable MaskGCT.</summary>
-    public MaskGCT(NeuralNetworkArchitecture<T> architecture, MaskGCTOptions? options = null)
+    public MaskGCT(NeuralNetworkArchitecture<T> architecture, MaskGCTOptions? options)
         : base(architecture)
     {
         _options = options ?? new MaskGCTOptions();

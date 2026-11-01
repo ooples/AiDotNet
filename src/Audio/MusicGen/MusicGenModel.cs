@@ -63,6 +63,19 @@ namespace AiDotNet.Audio.MusicGen;
 public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>, IPaperOptimizerVariant,
     ITrainingObjectiveProvider<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public int[,] GenerateCodes(Tensor<T>? tokens, int frames, int seed)
+        => GenerateCodes(tokens, frames, seed, (double?)null, (int[,]?)null);
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public int[,] GenerateCodes(Tensor<T>? tokens, int frames, int seed, double? guidanceScale)
+        => GenerateCodes(tokens, frames, seed, guidanceScale, (int[,]?)null);
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public int[,] GenerateCodes(Tensor<T>? tokens, int frames, int seed, int[,]? prompt)
+        => GenerateCodes(tokens, frames, seed, (double?)null, prompt);
+
+
     private readonly MusicGenOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _suppliedOptimizer;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _paperOptimizer;
@@ -558,7 +571,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
     /// <summary>Generates codes <c>[codebooks, frames]</c> for token ids (empty for unconditional generation),
     /// continuing an optional prompt of codes <c>[codebooks, prompt frames]</c>.</summary>
-    public int[,] GenerateCodes(Tensor<T>? tokens, int frames, int seed, double? guidanceScale = null, int[,]? prompt = null)
+    public int[,] GenerateCodes(Tensor<T>? tokens, int frames, int seed, double? guidanceScale, int[,]? prompt)
         => GenerateCodes(tokens, null, frames, seed, guidanceScale, prompt);
 
     /// <summary>Generates codes conditioned on token ids and, for a melody model, a melody waveform.</summary>

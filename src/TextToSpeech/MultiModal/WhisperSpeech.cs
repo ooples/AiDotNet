@@ -47,6 +47,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
                         + "T2S 1.5e-3 / clip 0.2 / wd 0.1 / warmup 4000, S2A 3e-3 / 2 / 1e-3 / 2000, VQ 9e-4 / 2 / 1e-3 / 850.")]
 public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public WhisperSpeech(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (WhisperSpeechOptions?)null)
+    {
+    }
+
+
     private readonly WhisperSpeechOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -71,7 +78,7 @@ public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates WhisperSpeech with its networks (randomly initialized).</summary>
-    public WhisperSpeech(NeuralNetworkArchitecture<T> architecture, WhisperSpeechOptions? options = null)
+    public WhisperSpeech(NeuralNetworkArchitecture<T> architecture, WhisperSpeechOptions? options)
         : base(architecture)
     {
         _options = options ?? new WhisperSpeechOptions();

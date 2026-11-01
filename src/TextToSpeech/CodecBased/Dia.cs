@@ -56,6 +56,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
              + "1e-8, no weight decay, a linear decay to 0 without warm-up, gradient norm clipped to 1.0.")]
 public partial class Dia<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Dia(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (DiaOptions?)null)
+    {
+    }
+
+
     private readonly DiaOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -83,7 +90,7 @@ public partial class Dia<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable Dia.</summary>
-    public Dia(NeuralNetworkArchitecture<T> architecture, DiaOptions? options = null)
+    public Dia(NeuralNetworkArchitecture<T> architecture, DiaOptions? options)
         : base(architecture)
     {
         _options = options ?? new DiaOptions();

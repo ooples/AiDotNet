@@ -24,6 +24,11 @@ namespace AiDotNet.Helpers;
 /// <typeparam name="T">The numeric type for tensor values.</typeparam>
 public static class AudioHelper<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public static AudioLoadResult LoadWav(Stream stream)
+        => LoadWav(stream, true);
+
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -120,7 +125,7 @@ public static class AudioHelper<T>
     /// <param name="stream">The stream positioned at the RIFF header; it is left open.</param>
     /// <param name="normalize">Whether to normalize to [-1, 1].</param>
     /// <returns>Audio tensor and metadata.</returns>
-    public static AudioLoadResult LoadWav(Stream stream, bool normalize = true)
+    public static AudioLoadResult LoadWav(Stream stream, bool normalize)
     {
         if (stream is null) throw new ArgumentNullException(nameof(stream));
         using var reader = new BinaryReader(stream, Encoding.ASCII, leaveOpen: true);

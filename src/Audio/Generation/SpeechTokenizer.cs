@@ -48,6 +48,31 @@ namespace AiDotNet.Audio.Generation;
     Year = 2024, Authors = "Zhang et al.")]
 public partial class SpeechTokenizer<T> : NeuralAudioCodecBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SpeechTokenizer(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (SpeechTokenizerOptions?)null, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SpeechTokenizer(NeuralNetworkArchitecture<T> architecture, SpeechTokenizerOptions? options)
+        : this(architecture, options, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SpeechTokenizer(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, (SpeechTokenizerOptions?)null, optimizer)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SpeechTokenizer(NeuralNetworkArchitecture<T> architecture, string modelPath)
+        : this(architecture, modelPath, (SpeechTokenizerOptions?)null)
+    {
+    }
+
+
     private SeanetEncoder<T>? _encoder;
     private SeanetDecoder<T>? _decoder;
     private ResidualVectorQuantizerLayer<T>? _quantizer;
@@ -58,14 +83,13 @@ public partial class SpeechTokenizer<T> : NeuralAudioCodecBase<T>
     private Tensor<T>? _teacher;
 
     /// <summary>Creates a SpeechTokenizer that runs an exported ONNX graph.</summary>
-    public SpeechTokenizer(NeuralNetworkArchitecture<T> architecture, string modelPath, SpeechTokenizerOptions? options = null)
+    public SpeechTokenizer(NeuralNetworkArchitecture<T> architecture, string modelPath, SpeechTokenizerOptions? options)
         : base(architecture, modelPath, options ?? new SpeechTokenizerOptions())
     {
     }
 
     /// <summary>Creates a trainable SpeechTokenizer.</summary>
-    public SpeechTokenizer(NeuralNetworkArchitecture<T> architecture, SpeechTokenizerOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public SpeechTokenizer(NeuralNetworkArchitecture<T> architecture, SpeechTokenizerOptions? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture, options ?? new SpeechTokenizerOptions(), optimizer)
     {
     }

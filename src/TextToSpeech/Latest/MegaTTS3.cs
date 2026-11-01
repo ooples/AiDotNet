@@ -60,6 +60,13 @@ namespace AiDotNet.TextToSpeech.Latest;
              + "paper gives the batch as 10K latent frames per GPU rather than as a count of examples.")]
 public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public MegaTTS3(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (MegaTTS3Options?)null)
+    {
+    }
+
+
     private readonly MegaTTS3Options _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -95,7 +102,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>Creates a native, trainable MegaTTS 3.</summary>
-    public MegaTTS3(NeuralNetworkArchitecture<T> architecture, MegaTTS3Options? options = null)
+    public MegaTTS3(NeuralNetworkArchitecture<T> architecture, MegaTTS3Options? options)
         : base(architecture)
     {
         _options = options ?? new MegaTTS3Options();

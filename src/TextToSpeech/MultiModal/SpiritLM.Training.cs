@@ -14,6 +14,19 @@ public readonly record struct SpiritLmWord(string Text, double Start, double End
 
 public partial class SpiritLM<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public T TrainVocoder(Tensor<T> recording)
+        => TrainVocoder(recording, 0, (int?)null);
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public T TrainVocoder(Tensor<T> recording, int speaker)
+        => TrainVocoder(recording, speaker, (int?)null);
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public T TrainVocoder(Tensor<T> recording, int? style)
+        => TrainVocoder(recording, 0, style);
+
+
     private readonly Dictionary<string, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>> _optimizers = new();
     private Random? _trainingRandom;
     private string _trainedGroup = "language model";
@@ -225,7 +238,7 @@ public partial class SpiritLM<T>
     /// (×45) and duration losses. Needs <see cref="SpiritLMOptions.IncludeVocoderDiscriminators"/>. Returns the vocoder's
     /// loss.
     /// </summary>
-    public T TrainVocoder(Tensor<T> recording, int speaker = 0, int? style = null)
+    public T TrainVocoder(Tensor<T> recording, int speaker, int? style)
     {
         ThrowIfDisposed();
         if (recording is null) throw new ArgumentNullException(nameof(recording));

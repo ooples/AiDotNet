@@ -80,6 +80,13 @@ public sealed class LlamaOmniResponse<T>
                         + "the release's Hugging Face Trainer default, AdamW (0.9, 0.999), no weight decay, clipping at 1.0.")]
 public partial class LlamaOmni<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public LlamaOmni(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (LlamaOmniOptions?)null)
+    {
+    }
+
+
     private readonly LlamaOmniOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -115,7 +122,7 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable LLaMA-Omni.</summary>
-    public LlamaOmni(NeuralNetworkArchitecture<T> architecture, LlamaOmniOptions? options = null)
+    public LlamaOmni(NeuralNetworkArchitecture<T> architecture, LlamaOmniOptions? options)
         : base(architecture)
     {
         _options = options ?? new LlamaOmniOptions();

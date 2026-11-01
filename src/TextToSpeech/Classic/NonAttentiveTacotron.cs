@@ -56,6 +56,31 @@ namespace AiDotNet.TextToSpeech.Classic;
                 Source = "Shen et al. 2020, Appendix A, Table 6: Adam(0.9, 0.999, 1e-6) at a learning rate of 0.001, with a linear rampup over 4K steps then halving every 50K steps; L2 regularization 1e-6.")]
 public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (NonAttentiveTacotronOptions?)null, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, NonAttentiveTacotronOptions? options)
+        : this(architecture, options, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, (NonAttentiveTacotronOptions?)null, optimizer)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, string modelPath)
+        : this(architecture, modelPath, (NonAttentiveTacotronOptions?)null)
+    {
+    }
+
+
     private readonly NonAttentiveTacotronOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -76,7 +101,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
     private DenseLayer<T>? _frameProjection;
     private ConvBatchNormStackLayer<T>? _postnet;
 
-    public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, string modelPath, NonAttentiveTacotronOptions? options = null)
+    public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, string modelPath, NonAttentiveTacotronOptions? options)
         : base(architecture)
     {
         _options = options ?? new NonAttentiveTacotronOptions();
@@ -95,10 +120,7 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
         InitializeLayers();
     }
 
-    public NonAttentiveTacotron(
-        NeuralNetworkArchitecture<T> architecture,
-        NonAttentiveTacotronOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public NonAttentiveTacotron(NeuralNetworkArchitecture<T> architecture, NonAttentiveTacotronOptions? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
         _options = options ?? new NonAttentiveTacotronOptions();

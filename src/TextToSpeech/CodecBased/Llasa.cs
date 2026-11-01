@@ -65,6 +65,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
              + "defaults, gradient norm clipped to 1.0. No batch size is declared: the paper gives it as 2 million tokens.")]
 public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Llasa(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (LlasaOptions?)null)
+    {
+    }
+
+
     private readonly LlasaOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -95,7 +102,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable Llasa.</summary>
-    public Llasa(NeuralNetworkArchitecture<T> architecture, LlasaOptions? options = null)
+    public Llasa(NeuralNetworkArchitecture<T> architecture, LlasaOptions? options)
         : base(architecture)
     {
         _options = options ?? new LlasaOptions();

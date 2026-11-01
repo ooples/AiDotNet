@@ -46,10 +46,20 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Epsilon = 1e-5, WeightDecay = 0.0, MaxGradientNorm = 1.0, Provenance = RecipeProvenance.ReleasedCode,
     Source = "fish-speech v1.5.1 fish_speech/configs/text2semantic_finetune.yaml: AdamW at 1e-4, betas (0.9, 0.95), eps 1e-5, no weight "
              + "decay, LambdaLR constant after 10 warm-up steps, gradient norm clipped at 1.0, 10,000 steps.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0022", Justification =
+    "FishSpeechBase restricts direct construction to the built-in versions. Its protected members only override " +
+    "the existing TtsModelBase extension points; the public Fish Speech models intentionally remain inheritable.")]
 public class FishSpeechV15<T> : FishSpeechBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public FishSpeechV15(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (FishSpeechV15Options?)null)
+    {
+    }
+
+
     /// <summary>Creates a native, trainable Fish Speech 1.5.</summary>
-    public FishSpeechV15(NeuralNetworkArchitecture<T> architecture, FishSpeechV15Options? options = null)
+    public FishSpeechV15(NeuralNetworkArchitecture<T> architecture, FishSpeechV15Options? options)
         : base(architecture, options ?? new FishSpeechV15Options(), FishSpeechVersion.V15)
     {
     }

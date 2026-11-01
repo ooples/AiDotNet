@@ -86,6 +86,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Source = "DAC's discriminator recipe, as for the codec.")]
 public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public FireRedTTS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (FireRedTTSOptions?)null)
+    {
+    }
+
+
     private readonly FireRedTTSOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -130,7 +137,7 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable FireRedTTS.</summary>
-    public FireRedTTS(NeuralNetworkArchitecture<T> architecture, FireRedTTSOptions? options = null)
+    public FireRedTTS(NeuralNetworkArchitecture<T> architecture, FireRedTTSOptions? options)
         : base(architecture)
     {
         _options = options ?? new FireRedTTSOptions();

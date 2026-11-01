@@ -87,6 +87,13 @@ public sealed class SpiritLmContent<T>
                         + "AdamW (0.8, 0.99) at 2e-4, decayed by 0.999 per epoch, for the vocoder and the pitch VQ-VAE.")]
 public partial class SpiritLM<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SpiritLM(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (SpiritLMOptions?)null)
+    {
+    }
+
+
     private readonly SpiritLMOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -127,7 +134,7 @@ public partial class SpiritLM<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable SpiritLM.</summary>
-    public SpiritLM(NeuralNetworkArchitecture<T> architecture, SpiritLMOptions? options = null)
+    public SpiritLM(NeuralNetworkArchitecture<T> architecture, SpiritLMOptions? options)
         : base(architecture)
     {
         _options = options ?? new SpiritLMOptions();

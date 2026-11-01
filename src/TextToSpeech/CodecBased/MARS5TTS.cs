@@ -58,6 +58,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
                         + "iterations, betas (0.8, 0.99), weight decay 0.002, grad clip 1, T 200, batch 16 with 2 accumulation steps.")]
 public partial class MARS5TTS<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public MARS5TTS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (MARS5TTSOptions?)null)
+    {
+    }
+
     private readonly MARS5TTSOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -90,7 +96,7 @@ public partial class MARS5TTS<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable MARS5.</summary>
-    public MARS5TTS(NeuralNetworkArchitecture<T> architecture, MARS5TTSOptions? options = null)
+    public MARS5TTS(NeuralNetworkArchitecture<T> architecture, MARS5TTSOptions? options)
         : base(architecture)
     {
         _options = options ?? new MARS5TTSOptions();

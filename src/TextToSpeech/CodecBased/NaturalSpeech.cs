@@ -56,6 +56,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
                 Source = "Tan et al. 2022, Training Details: AdamW with beta1 0.8, beta2 0.99, initial learning rate 2e-4, decayed by 0.999875 each epoch, for the generator and the discriminators.")]
 public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public NaturalSpeech(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (NaturalSpeechOptions?)null)
+    {
+    }
+
+
     private readonly NaturalSpeechOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -92,7 +99,7 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>Creates a native, trainable NaturalSpeech.</summary>
-    public NaturalSpeech(NeuralNetworkArchitecture<T> architecture, NaturalSpeechOptions? options = null)
+    public NaturalSpeech(NeuralNetworkArchitecture<T> architecture, NaturalSpeechOptions? options)
         : base(architecture)
     {
         _options = options ?? new NaturalSpeechOptions();

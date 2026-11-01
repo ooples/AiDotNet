@@ -52,6 +52,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
                         + "80 steps, at 1e-6 decaying by cosine to 2e-7.")]
 public partial class StepAudio<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public StepAudio(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (StepAudioOptions?)null)
+    {
+    }
+
+
     private readonly StepAudioOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -76,7 +83,7 @@ public partial class StepAudio<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates Step-Audio with its networks (randomly initialized).</summary>
-    public StepAudio(NeuralNetworkArchitecture<T> architecture, StepAudioOptions? options = null)
+    public StepAudio(NeuralNetworkArchitecture<T> architecture, StepAudioOptions? options)
         : base(architecture)
     {
         _options = options ?? new StepAudioOptions();

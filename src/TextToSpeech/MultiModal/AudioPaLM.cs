@@ -69,6 +69,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
                         + "Adafactor's relative step rule down.")]
 public partial class AudioPaLM<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public AudioPaLM(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (AudioPaLMOptions?)null)
+    {
+    }
+
+
     private readonly AudioPaLMOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -93,7 +100,7 @@ public partial class AudioPaLM<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable AudioPaLM.</summary>
-    public AudioPaLM(NeuralNetworkArchitecture<T> architecture, AudioPaLMOptions? options = null)
+    public AudioPaLM(NeuralNetworkArchitecture<T> architecture, AudioPaLMOptions? options)
         : base(architecture)
     {
         _options = options ?? new AudioPaLMOptions();

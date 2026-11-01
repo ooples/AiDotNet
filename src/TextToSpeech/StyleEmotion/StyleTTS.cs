@@ -60,6 +60,13 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     Source = "Section III-B (every module, the discriminator included, trains with the same AdamW).")]
 public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public StyleTTS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (StyleTTSOptions?)null)
+    {
+    }
+
+
     private readonly StyleTTSOptions _options;
     private readonly bool _useNativeMode;
     private readonly Random _trainingRandom;
@@ -103,7 +110,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     }
 
     /// <summary>Creates a native, trainable StyleTTS.</summary>
-    public StyleTTS(NeuralNetworkArchitecture<T> architecture, StyleTTSOptions? options = null)
+    public StyleTTS(NeuralNetworkArchitecture<T> architecture, StyleTTSOptions? options)
         : base(architecture)
     {
         _options = options ?? new StyleTTSOptions();

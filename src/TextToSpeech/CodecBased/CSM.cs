@@ -81,6 +81,13 @@ internal readonly record struct CsmFrame(int Text, int[]? Codes);
              + "decay, a linear decay to 0 without warm-up, gradient norm clipped to 1.0.")]
 public partial class CSM<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public CSM(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (CSMOptions?)null)
+    {
+    }
+
+
     private readonly CSMOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -120,7 +127,7 @@ public partial class CSM<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable CSM.</summary>
-    public CSM(NeuralNetworkArchitecture<T> architecture, CSMOptions? options = null)
+    public CSM(NeuralNetworkArchitecture<T> architecture, CSMOptions? options)
         : base(architecture)
     {
         _options = options ?? new CSMOptions();

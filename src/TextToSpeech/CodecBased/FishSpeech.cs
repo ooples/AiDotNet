@@ -43,10 +43,20 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     WeightDecay = 0.01,
     Source = "Appendix A: AdamW (β1 0.9, β2 0.98, ε 1e-8) at 5e-4, weight decay 0.01, 500K steps, cosine decay after 2K warm-up steps "
              + "to a final ratio of 0.1.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("ApiDesign", "RS0022", Justification =
+    "FishSpeechBase restricts direct construction to the built-in versions. Its protected members only override " +
+    "the existing TtsModelBase extension points; the public Fish Speech models intentionally remain inheritable.")]
 public class FishSpeech<T> : FishSpeechBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public FishSpeech(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (FishSpeechOptions?)null)
+    {
+    }
+
+
     /// <summary>Creates a native, trainable Fish Speech 1.4.</summary>
-    public FishSpeech(NeuralNetworkArchitecture<T> architecture, FishSpeechOptions? options = null)
+    public FishSpeech(NeuralNetworkArchitecture<T> architecture, FishSpeechOptions? options)
         : base(architecture, options ?? new FishSpeechOptions(), FishSpeechVersion.V14)
     {
     }

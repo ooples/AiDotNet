@@ -55,6 +55,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
              + "0.01 x text CE + 1.0 x mel CE.")]
 public partial class IndexTTS<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public IndexTTS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (IndexTTSOptions?)null)
+    {
+    }
+
+
     private readonly IndexTTSOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -88,7 +95,7 @@ public partial class IndexTTS<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable IndexTTS.</summary>
-    public IndexTTS(NeuralNetworkArchitecture<T> architecture, IndexTTSOptions? options = null)
+    public IndexTTS(NeuralNetworkArchitecture<T> architecture, IndexTTSOptions? options)
         : base(architecture)
     {
         _options = options ?? new IndexTTSOptions();

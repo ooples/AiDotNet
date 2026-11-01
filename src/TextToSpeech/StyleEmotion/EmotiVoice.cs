@@ -53,6 +53,13 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     Source = "train_am_vocoder_joint.py: the discriminator's Adam has the generator's settings.")]
 public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public EmotiVoice(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (EmotiVoiceOptions?)null)
+    {
+    }
+
+
     private readonly EmotiVoiceOptions _options;
     private readonly bool _useNativeMode;
     private readonly Random _trainingRandom;
@@ -105,7 +112,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>Creates a native, trainable EmotiVoice.</summary>
-    public EmotiVoice(NeuralNetworkArchitecture<T> architecture, EmotiVoiceOptions? options = null)
+    public EmotiVoice(NeuralNetworkArchitecture<T> architecture, EmotiVoiceOptions? options)
         : base(architecture)
     {
         _options = options ?? new EmotiVoiceOptions();

@@ -82,6 +82,13 @@ public sealed class SpeechGptResponse<T>
                         + "the generator and the discriminators, decayed by 0.999 per epoch.")]
 public partial class SpeechGPT<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SpeechGPT(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (SpeechGPTOptions?)null)
+    {
+    }
+
+
     private readonly SpeechGPTOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -111,7 +118,7 @@ public partial class SpeechGPT<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable SpeechGPT.</summary>
-    public SpeechGPT(NeuralNetworkArchitecture<T> architecture, SpeechGPTOptions? options = null)
+    public SpeechGPT(NeuralNetworkArchitecture<T> architecture, SpeechGPTOptions? options)
         : base(architecture)
     {
         _options = options ?? new SpeechGPTOptions();

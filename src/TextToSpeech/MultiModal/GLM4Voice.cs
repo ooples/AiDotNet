@@ -90,6 +90,12 @@ public sealed class GlmVoiceReply<T>
         + "2,500 warmup steps then inverse-square-root decay, clipping at 5.")]
 public partial class GLM4Voice<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public GLM4Voice(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (GLM4VoiceOptions?)null)
+    {
+    }
+
     private readonly GLM4VoiceOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -125,7 +131,7 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable GLM-4-Voice.</summary>
-    public GLM4Voice(NeuralNetworkArchitecture<T> architecture, GLM4VoiceOptions? options = null)
+    public GLM4Voice(NeuralNetworkArchitecture<T> architecture, GLM4VoiceOptions? options)
         : base(architecture)
     {
         _options = options ?? new GLM4VoiceOptions();

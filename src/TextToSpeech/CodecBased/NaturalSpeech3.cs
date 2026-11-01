@@ -60,6 +60,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
                         + "with Adam at 2e-4, betas 0.5/0.9 (App. B.1).")]
 public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public NaturalSpeech3(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (NaturalSpeech3Options?)null)
+    {
+    }
+
+
     private readonly NaturalSpeech3Options _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -91,7 +98,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>Creates a native, trainable NaturalSpeech 3.</summary>
-    public NaturalSpeech3(NeuralNetworkArchitecture<T> architecture, NaturalSpeech3Options? options = null)
+    public NaturalSpeech3(NeuralNetworkArchitecture<T> architecture, NaturalSpeech3Options? options)
         : base(architecture)
     {
         _options = options ?? new NaturalSpeech3Options();

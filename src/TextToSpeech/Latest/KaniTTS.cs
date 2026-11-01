@@ -55,6 +55,13 @@ namespace AiDotNet.TextToSpeech.Latest;
              + "gradient accumulation; the loss on every token (labels = input_ids).")]
 public partial class KaniTTS<T> : KaniTTSBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public KaniTTS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (KaniTTSOptions?)null)
+    {
+    }
+
+
     /// <summary>Creates an ONNX-backed KaniTTS for inference.</summary>
     public KaniTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, KaniTTSOptions? options = null)
         : base(architecture, modelPath, options ?? new KaniTTSOptions())
@@ -62,7 +69,7 @@ public partial class KaniTTS<T> : KaniTTSBase<T>
     }
 
     /// <summary>Creates a native, trainable KaniTTS.</summary>
-    public KaniTTS(NeuralNetworkArchitecture<T> architecture, KaniTTSOptions? options = null)
+    public KaniTTS(NeuralNetworkArchitecture<T> architecture, KaniTTSOptions? options)
         : base(architecture, options ?? new KaniTTSOptions())
     {
     }

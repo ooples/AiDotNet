@@ -62,6 +62,31 @@ namespace AiDotNet.Audio.Foundations;
 [StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width)]
 public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>, ITrainingObjectiveProvider<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public W2vBert(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (W2vBertOptions?)null, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public W2vBert(NeuralNetworkArchitecture<T> architecture, W2vBertOptions? options)
+        : this(architecture, options, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public W2vBert(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, (W2vBertOptions?)null, optimizer)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public W2vBert(NeuralNetworkArchitecture<T> architecture, string modelPath)
+        : this(architecture, modelPath, (W2vBertOptions?)null)
+    {
+    }
+
+
     private readonly W2vBertOptions _options;
     private readonly bool _useNativeMode;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -106,7 +131,7 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     public int NumLayers => _options.ContrastiveLayers + _options.MaskedLayers;
 
     /// <summary>Creates an ONNX-backed w2v-BERT for inference.</summary>
-    public W2vBert(NeuralNetworkArchitecture<T> architecture, string modelPath, W2vBertOptions? options = null)
+    public W2vBert(NeuralNetworkArchitecture<T> architecture, string modelPath, W2vBertOptions? options)
         : base(architecture)
     {
         _options = options ?? new W2vBertOptions();
@@ -121,8 +146,7 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     }
 
     /// <summary>Creates a native, trainable w2v-BERT.</summary>
-    public W2vBert(NeuralNetworkArchitecture<T> architecture, W2vBertOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public W2vBert(NeuralNetworkArchitecture<T> architecture, W2vBertOptions? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
         _options = options ?? new W2vBertOptions();

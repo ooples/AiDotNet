@@ -107,6 +107,31 @@ public enum PhemeTrainingStage
              + "PyTorch's default 0.01.")]
 public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Pheme(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (PhemeOptions?)null, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Pheme(NeuralNetworkArchitecture<T> architecture, PhemeOptions? options)
+        : this(architecture, options, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Pheme(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, (PhemeOptions?)null, optimizer)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Pheme(NeuralNetworkArchitecture<T> architecture, string modelPath)
+        : this(architecture, modelPath, (PhemeOptions?)null)
+    {
+    }
+
+
     private const int PadToken = 0, BeginToken = 1, EndToken = 2, Speaker1Token = 3;
     private const int SpeakerEmbeddingDim = 512;
 
@@ -139,7 +164,7 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     private AudioCodecLayer<T>? _codec;
 
     /// <summary>Creates an ONNX-backed Pheme for inference.</summary>
-    public Pheme(NeuralNetworkArchitecture<T> architecture, string modelPath, PhemeOptions? options = null)
+    public Pheme(NeuralNetworkArchitecture<T> architecture, string modelPath, PhemeOptions? options)
         : base(architecture)
     {
         _options = options ?? new PhemeOptions();
@@ -158,8 +183,7 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     }
 
     /// <summary>Creates a native, trainable Pheme.</summary>
-    public Pheme(NeuralNetworkArchitecture<T> architecture, PhemeOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public Pheme(NeuralNetworkArchitecture<T> architecture, PhemeOptions? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
         _options = options ?? new PhemeOptions();

@@ -61,6 +61,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
                         + "which follows SoundStream, not to this model.")]
 public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public NaturalSpeech2(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (NaturalSpeech2Options?)null)
+    {
+    }
+
+
     private readonly NaturalSpeech2Options _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -90,7 +97,7 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>Creates a native, trainable NaturalSpeech 2.</summary>
-    public NaturalSpeech2(NeuralNetworkArchitecture<T> architecture, NaturalSpeech2Options? options = null)
+    public NaturalSpeech2(NeuralNetworkArchitecture<T> architecture, NaturalSpeech2Options? options)
         : base(architecture)
     {
         _options = options ?? new NaturalSpeech2Options();

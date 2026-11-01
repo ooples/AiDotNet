@@ -68,6 +68,13 @@ namespace AiDotNet.TextToSpeech.Latest;
                         + "an initial learning rate of 2e-4 on 8 A100 GPUs.")]
 public partial class IndexTTS2<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public IndexTTS2(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (IndexTTS2Options?)null)
+    {
+    }
+
+
     private readonly IndexTTS2Options _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -114,7 +121,7 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable IndexTTS2.</summary>
-    public IndexTTS2(NeuralNetworkArchitecture<T> architecture, IndexTTS2Options? options = null)
+    public IndexTTS2(NeuralNetworkArchitecture<T> architecture, IndexTTS2Options? options)
         : base(architecture)
     {
         _options = options ?? new IndexTTS2Options();

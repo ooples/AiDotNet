@@ -57,6 +57,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
              + "clipped at 1) and 7.5e-5 for the flow (clipped at 0.2), transformers' inverse-square-root schedule after 32,000 warm-up steps.")]
 public partial class Vevo<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Vevo(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (VevoOptions?)null)
+    {
+    }
+
+
     private readonly VevoOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -96,7 +103,7 @@ public partial class Vevo<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates a native, trainable Vevo.</summary>
-    public Vevo(NeuralNetworkArchitecture<T> architecture, VevoOptions? options = null)
+    public Vevo(NeuralNetworkArchitecture<T> architecture, VevoOptions? options)
         : base(architecture)
     {
         _options = options ?? new VevoOptions();

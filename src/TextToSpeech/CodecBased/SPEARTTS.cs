@@ -91,6 +91,49 @@ public enum SPEARTTSTrainingStage
     Source = "Kharitonov et al. 2023, Sec. 7.3: the optimizer and the learning rate schedule of S2 are the same as for S1.")]
 public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (SPEARTTSOptions?)null, (W2vBert<T>?)null, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, SPEARTTSOptions? options)
+        : this(architecture, options, (W2vBert<T>?)null, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, W2vBert<T>? semanticTokenizer)
+        : this(architecture, (SPEARTTSOptions?)null, semanticTokenizer, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, SPEARTTSOptions? options, W2vBert<T>? semanticTokenizer)
+        : this(architecture, options, semanticTokenizer, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, (SPEARTTSOptions?)null, (W2vBert<T>?)null, optimizer)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, SPEARTTSOptions? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, options, (W2vBert<T>?)null, optimizer)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, W2vBert<T>? semanticTokenizer, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, (SPEARTTSOptions?)null, semanticTokenizer, optimizer)
+    {
+    }
+
+
     // S1's vocabulary: <pad> 0 (also the decoder's start), </s> 1, the phonemes, then the semantic tokens.
     private const int PadToken = 0, EndToken = 1, PhonemeOffset = 2;
 
@@ -136,8 +179,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// <param name="semanticTokenizer">A pre-trained w2v-BERT with a fitted semantic tokenizer, for voice prompts and
     /// training utterances given as audio. Optional: without it, pass semantic tokens yourself.</param>
     /// <param name="optimizer">An optimizer for every stage instead of the per-stage Adafactor.</param>
-    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, SPEARTTSOptions? options = null,
-        W2vBert<T>? semanticTokenizer = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, SPEARTTSOptions? options, W2vBert<T>? semanticTokenizer, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
         _options = options ?? new SPEARTTSOptions();

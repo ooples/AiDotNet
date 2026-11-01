@@ -61,6 +61,13 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     Source = "Section IV-A (every module trains with the same AdamW).")]
 public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public StyleTTSZS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (StyleTTSZSOptions?)null)
+    {
+    }
+
+
     private readonly StyleTTSZSOptions _options;
     private readonly bool _useNativeMode;
     private readonly Random _trainingRandom;
@@ -113,7 +120,7 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>Creates a native, trainable StyleTTS-ZS.</summary>
-    public StyleTTSZS(NeuralNetworkArchitecture<T> architecture, StyleTTSZSOptions? options = null)
+    public StyleTTSZS(NeuralNetworkArchitecture<T> architecture, StyleTTSZSOptions? options)
         : base(architecture)
     {
         _options = options ?? new StyleTTSZSOptions();

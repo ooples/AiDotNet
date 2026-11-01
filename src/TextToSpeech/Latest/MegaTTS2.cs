@@ -78,6 +78,13 @@ namespace AiDotNet.TextToSpeech.Latest;
              + "synta.yaml trains it with AdamW at 1e-4 (betas 0.9, 0.98, eps 1e-6, weight decay 0), halved every 40000 steps.")]
 public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public MegaTTS2(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (MegaTTS2Options?)null)
+    {
+    }
+
+
     private readonly MegaTTS2Options _options;
     private readonly bool _useNativeMode;
     private readonly string[] _vocabulary;
@@ -111,7 +118,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>Creates a native, trainable Mega-TTS 2.</summary>
-    public MegaTTS2(NeuralNetworkArchitecture<T> architecture, MegaTTS2Options? options = null)
+    public MegaTTS2(NeuralNetworkArchitecture<T> architecture, MegaTTS2Options? options)
         : base(architecture)
     {
         _options = options ?? new MegaTTS2Options();

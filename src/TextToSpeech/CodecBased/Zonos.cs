@@ -55,6 +55,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
              + "clipped to 1.0.")]
 public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Zonos(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (ZonosOptions?)null)
+    {
+    }
+
+
     private readonly ZonosOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -99,7 +106,7 @@ public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable Zonos.</summary>
-    public Zonos(NeuralNetworkArchitecture<T> architecture, ZonosOptions? options = null)
+    public Zonos(NeuralNetworkArchitecture<T> architecture, ZonosOptions? options)
         : base(architecture)
     {
         _options = options ?? new ZonosOptions();

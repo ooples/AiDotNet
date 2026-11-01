@@ -56,6 +56,13 @@ namespace AiDotNet.TextToSpeech.Latest;
              + "and the loss on the completion only.")]
 public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public OuteTTS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (OuteTTSOptions?)null)
+    {
+    }
+
+
     private readonly OuteTTSOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -91,7 +98,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable OuteTTS.</summary>
-    public OuteTTS(NeuralNetworkArchitecture<T> architecture, OuteTTSOptions? options = null)
+    public OuteTTS(NeuralNetworkArchitecture<T> architecture, OuteTTSOptions? options)
         : base(architecture)
     {
         _options = options ?? new OuteTTSOptions(); Options = _options;

@@ -43,6 +43,25 @@ namespace AiDotNet.TextToSpeech.Vocoders;
                         + "decayed by 0.999 every epoch, batch 16.")]
 public partial class APNet2<T> : AmplitudePhaseVocoderBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public APNet2(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (APNet2Options?)null, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public APNet2(NeuralNetworkArchitecture<T> architecture, APNet2Options? options)
+        : this(architecture, options, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public APNet2(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, (APNet2Options?)null, optimizer)
+    {
+    }
+
+
     private ConvNeXtV2Predictor<T>? _amplitude;
     private ConvNeXtV2Predictor<T>? _phase;
     private HiFiGanDiscriminators<T>? _periods;
@@ -55,8 +74,7 @@ public partial class APNet2<T> : AmplitudePhaseVocoderBase<T>
     }
 
     /// <summary>Creates a trainable APNet2.</summary>
-    public APNet2(NeuralNetworkArchitecture<T> architecture, APNet2Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public APNet2(NeuralNetworkArchitecture<T> architecture, APNet2Options? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture, options ?? new APNet2Options(), optimizer, options?.SamplingSeed ?? 0)
     {
     }

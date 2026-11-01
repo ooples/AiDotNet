@@ -50,6 +50,31 @@ namespace AiDotNet.Audio.Fingerprinting;
 [TaskVariantOf(typeof(AST<>), "audio fingerprinting with the clip representation")]
 public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public ASTModel(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (ASTOptions?)null, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public ASTModel(NeuralNetworkArchitecture<T> architecture, ASTOptions? options)
+        : this(architecture, options, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)null)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public ASTModel(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, (ASTOptions?)null, optimizer)
+    {
+    }
+
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public ASTModel(NeuralNetworkArchitecture<T> architecture, string modelPath)
+        : this(architecture, modelPath, (ASTOptions?)null)
+    {
+    }
+
+
     /// <inheritdoc />
     /// <remarks>Predict returns one sigmoid probability per label.</remarks>
     protected override int OutputFeatureWidth => _labels.Length;
@@ -81,10 +106,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
 
     /// <summary>Initializes AST in ONNX inference mode, for a graph returning the clip representation
     /// <c>[batch, EmbeddingDim]</c> from the official input <c>[batch, TargetLength, NumMels]</c>.</summary>
-    public ASTModel(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        ASTOptions? options = null)
+    public ASTModel(NeuralNetworkArchitecture<T> architecture, string modelPath, ASTOptions? options)
         : base(architecture)
     {
         if (string.IsNullOrWhiteSpace(modelPath))
@@ -103,10 +125,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     }
 
     /// <summary>Initializes AST in native training / inference mode.</summary>
-    public ASTModel(
-        NeuralNetworkArchitecture<T> architecture,
-        ASTOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    public ASTModel(NeuralNetworkArchitecture<T> architecture, ASTOptions? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ASTOptions();

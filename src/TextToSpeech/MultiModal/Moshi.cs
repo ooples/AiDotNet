@@ -61,6 +61,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
                         + "Transformers only, and an exponential moving average of the weights at 0.99.")]
 public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public Moshi(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (MoshiOptions?)null)
+    {
+    }
+
+
     private readonly MoshiOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -89,7 +96,7 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates Moshi with its networks (randomly initialized as the release initializes them).</summary>
-    public Moshi(NeuralNetworkArchitecture<T> architecture, MoshiOptions? options = null)
+    public Moshi(NeuralNetworkArchitecture<T> architecture, MoshiOptions? options)
         : base(architecture)
     {
         _options = options ?? new MoshiOptions();

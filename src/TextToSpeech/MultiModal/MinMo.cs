@@ -47,6 +47,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
                         + "FunASR LLM-ASR trains with AdamW; the rate (5e-5) and clipping (1.0) are not stated.")]
 public partial class MinMo<T> : TtsModelBase<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public MinMo(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (MinMoOptions?)null)
+    {
+    }
+
+
     private readonly MinMoOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -75,7 +82,7 @@ public partial class MinMo<T> : TtsModelBase<T>
     }
 
     /// <summary>Creates MinMo with its networks (randomly initialized).</summary>
-    public MinMo(NeuralNetworkArchitecture<T> architecture, MinMoOptions? options = null)
+    public MinMo(NeuralNetworkArchitecture<T> architecture, MinMoOptions? options)
         : base(architecture)
     {
         _options = options ?? new MinMoOptions();

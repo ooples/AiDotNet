@@ -53,6 +53,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
              + "decay without warm-up, gradient norm clipped to 1.0, and the loss on every token (labels = input_ids).")]
 public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
+    /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
+    public OrpheusTTS(NeuralNetworkArchitecture<T> architecture)
+        : this(architecture, (OrpheusTTSOptions?)null)
+    {
+    }
+
+
     private readonly OrpheusTTSOptions _options;
     private readonly bool _useNativeMode;
     private bool _disposed;
@@ -83,7 +90,7 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable Orpheus.</summary>
-    public OrpheusTTS(NeuralNetworkArchitecture<T> architecture, OrpheusTTSOptions? options = null)
+    public OrpheusTTS(NeuralNetworkArchitecture<T> architecture, OrpheusTTSOptions? options)
         : base(architecture)
     {
         _options = options ?? new OrpheusTTSOptions();
