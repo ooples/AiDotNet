@@ -282,7 +282,7 @@ public partial class AnomalyDetectorLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInputShape = input._shape;
+        SaveForBackward(ref _lastInputShape, input._shape);
         int rank = input.Shape.Length;
         int featureSize = input.Shape[^1];
         if (featureSize % 2 != 0)

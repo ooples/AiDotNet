@@ -71,10 +71,6 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _outputBias;
 
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
     private int _currentPosition;
 
     private readonly FlashAttentionConfig _flashConfig;
@@ -267,19 +263,14 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
-
         if (!InferenceMode || Kernel == null)
         {
-            var statelessOutput = ForwardStateless(input);
-            _lastOutput = statelessOutput;
-            return statelessOutput;
+            return ForwardStateless(input);
         }
 
         // Single-sequence legacy path: use the instance's SequenceId/position and advance it.
         var legacyOutput = ComputePagedAttention(input, new[] { SequenceId }, new[] { _currentPosition }, rowLengths: null);
         _currentPosition += input.Shape[1];
-        _lastOutput = legacyOutput;
         return legacyOutput;
     }
 
@@ -293,7 +284,7 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
         }
 
         // Concurrency-safe: sequence id + start position come from the per-call context; no shared
-        // instance fields are mutated (no _currentPosition/_lastInput/_lastOutput writes), so many
+        // instance fields are mutated (no _currentPosition writes), so many
         // sequences can drive one shared layer + KV cache at once, isolated by sequence id.
         // Batched context: batch row b belongs to SequenceIds[b] at Positions[b] (one batched decode step
         // across many sequences); otherwise a single sequence occupies the whole (batch=1) input.
@@ -1119,8 +1110,6 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _currentPosition = 0;
         _ropeLayer?.ResetState();
         _alibiLayer?.ResetState();

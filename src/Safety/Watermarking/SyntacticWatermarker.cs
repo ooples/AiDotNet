@@ -5,149 +5,85 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Safety.Watermarking;
 
 /// <summary>
-/// Text watermarker that embeds watermarks through syntactic structure rearrangement.
+/// Keyed form-transformation text watermark: at every negation or pronoun-auxiliary pair that can be written either
+/// in full or contracted ("do not" / "don't", "they are" / "they're"), the key and the preceding word choose the form.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Encodes watermark bits through syntactic choices: active vs passive voice, clause
-/// ordering, comma placement patterns, and sentence structure variations. Detection
-/// analyzes the statistical distribution of syntactic patterns against expected distributions.
+/// Natural-language watermarking by meaning-preserving transformations was introduced by Atallah et al. (2001), who
+/// applied transformations to parse trees. This watermarker uses one transformation that needs no parser:
+/// contraction and expansion. Only unambiguous pairs are used ("it's" is left alone, since it may stand for "it is"
+/// or "it has"). Embedding and detection follow <see cref="KeyedSubstitutionWatermarker{T}"/>: the keyed choice at
+/// each site, and a z-test on how many sites agree with it.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> This watermarker changes the structure of sentences without
-/// changing their meaning. For example, "The dog bit the man" vs "The man was bitten
-/// by the dog" both mean the same thing but encode different watermark bits.
+/// Embedding changes the register of a text slightly, since it mixes contracted and full forms. Conversational and
+/// technical prose usually offers several sites per hundred words; 36 distinct sites reach full confidence.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> many phrases can be written two ways, "do not" or "don't". This watermarker picks one way at
+/// each place using the secret key. Text marked with your key always matches the key's picks; other text matches only
+/// about half the time.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.AnomalyDetection)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("A Watermark for Large Language Models",
-    "https://arxiv.org/abs/2301.10226",
-    Year = 2023,
-    Authors = "John Kirchenbauer, Jonas Geiping, Yuxin Wen, et al.")]
-public class SyntacticWatermarker<T> : TextWatermarkerBase<T>
+[ResearchPaper("Natural Language Watermarking: Design, Analysis, and a Proof-of-Concept Implementation",
+    "https://doi.org/10.1007/3-540-45496-9_14",
+    Year = 2001,
+    Authors = "Mikhail J. Atallah, Victor Raskin, Michael Crogan, Christian Hempelmann, Florian Kerschbaum, Dina Mohamed, Sanket Naik")]
+public class SyntacticWatermarker<T> : KeyedSubstitutionWatermarker<T>
 {
-    // Structural patterns that encode bits
-    private static readonly string[] ActivePatterns = { " is ", " are ", " was ", " were ", " has ", " have " };
-    private static readonly string[] PassiveIndicators = { " by the ", " by a ", " been ", " being " };
-    private static readonly string[] ConjunctionBefore = { ", and ", ", but ", ", or ", ", yet " };
-    private static readonly string[] ConjunctionAfter = { " and ", " but ", " or ", " yet " };
+    /// <summary>The contraction pairs used as substitution sites.</summary>
+    public static IReadOnlyList<IReadOnlyList<string>> ContractionGroups { get; } = new IReadOnlyList<string>[]
+    {
+        new[] { "do not", "don't" },
+        new[] { "does not", "doesn't" },
+        new[] { "did not", "didn't" },
+        new[] { "is not", "isn't" },
+        new[] { "are not", "aren't" },
+        new[] { "was not", "wasn't" },
+        new[] { "were not", "weren't" },
+        new[] { "cannot", "can't" },
+        new[] { "will not", "won't" },
+        new[] { "would not", "wouldn't" },
+        new[] { "should not", "shouldn't" },
+        new[] { "could not", "couldn't" },
+        new[] { "has not", "hasn't" },
+        new[] { "have not", "haven't" },
+        new[] { "had not", "hadn't" },
+        new[] { "must not", "mustn't" },
+        new[] { "i am", "i'm" },
+        new[] { "you are", "you're" },
+        new[] { "we are", "we're" },
+        new[] { "they are", "they're" },
+        new[] { "i will", "i'll" },
+        new[] { "you will", "you'll" },
+        new[] { "we will", "we'll" },
+        new[] { "they will", "they'll" },
+    };
 
     /// <inheritdoc />
     public override string ModuleName => "SyntacticWatermarker";
 
+    /// <inheritdoc />
+    protected override string WatermarkDescription => "Keyed contraction watermark";
+
+    /// <inheritdoc />
+    protected override int SeedSalt => 0x53594E31; // "SYN1"
+
     /// <summary>
-    /// Initializes a new syntactic watermarker.
+    /// Initializes a new syntactic (contraction) watermarker.
     /// </summary>
-    /// <param name="watermarkStrength">Unused for syntactic approach; retained for API consistency.</param>
-    public SyntacticWatermarker(double watermarkStrength = 0.5) : base(watermarkStrength) { }
-
-    /// <inheritdoc />
-    public override double DetectWatermark(string text)
+    /// <param name="watermarkStrength">Validated and kept for the shared API; every site is embedded.</param>
+    /// <param name="key">The secret key; <c>null</c> uses the published <see cref="WatermarkKey.Public"/> key.</param>
+    public SyntacticWatermarker(double watermarkStrength = 0.5, string? key = null)
+        : base(ContractionGroups, watermarkStrength, key)
     {
-        if (string.IsNullOrWhiteSpace(text) || text.Length < 50) return 0;
-
-        string lower = text.ToLowerInvariant();
-
-        // Analyze passive vs active voice ratio
-        int activeCount = 0;
-        int passiveCount = 0;
-
-        foreach (string p in ActivePatterns)
-        {
-            int idx = 0;
-            while ((idx = lower.IndexOf(p, idx, StringComparison.Ordinal)) >= 0)
-            {
-                activeCount++;
-                idx += p.Length;
-            }
-        }
-
-        foreach (string p in PassiveIndicators)
-        {
-            int idx = 0;
-            while ((idx = lower.IndexOf(p, idx, StringComparison.Ordinal)) >= 0)
-            {
-                passiveCount++;
-                idx += p.Length;
-            }
-        }
-
-        // Analyze conjunction placement (comma-before vs no comma)
-        int commaConj = 0;
-        int noCommaConj = 0;
-
-        foreach (string p in ConjunctionBefore)
-        {
-            int idx = 0;
-            while ((idx = lower.IndexOf(p, idx, StringComparison.Ordinal)) >= 0)
-            {
-                commaConj++;
-                idx += p.Length;
-            }
-        }
-
-        foreach (string p in ConjunctionAfter)
-        {
-            int idx = 0;
-            while ((idx = lower.IndexOf(p, idx, StringComparison.Ordinal)) >= 0)
-            {
-                noCommaConj++;
-                idx += p.Length;
-            }
-        }
-
-        // Compute deviation from natural distribution
-        int totalVoice = activeCount + passiveCount;
-        int totalConj = commaConj + noCommaConj;
-
-        if (totalVoice < 3 && totalConj < 3) return 0;
-
-        double voiceDeviation = 0;
-        if (totalVoice >= 3)
-        {
-            // Natural English: ~85% active, ~15% passive
-            double passiveRate = (double)passiveCount / totalVoice;
-            voiceDeviation = Math.Abs(passiveRate - 0.15) / 0.3;
-        }
-
-        double conjDeviation = 0;
-        if (totalConj >= 3)
-        {
-            // Natural: ~40% comma-before, ~60% without comma
-            double commaRate = (double)commaConj / totalConj;
-            conjDeviation = Math.Abs(commaRate - 0.4) / 0.3;
-        }
-
-        double combined = Math.Max(voiceDeviation, conjDeviation);
-        return Math.Max(0, Math.Min(1.0, combined));
-    }
-
-    /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> EvaluateText(string text)
-    {
-        var findings = new List<SafetyFinding>();
-        double score = DetectWatermark(text);
-
-        if (score >= 0.4)
-        {
-            findings.Add(new SafetyFinding
-            {
-                Category = SafetyCategory.Watermarked,
-                Severity = SafetySeverity.Info,
-                Confidence = score,
-                Description = $"Syntactic watermark pattern detected (confidence: {score:F3}). " +
-                              "Unusual voice/structure distribution consistent with syntactic watermarking.",
-                RecommendedAction = SafetyAction.Log,
-                SourceModule = ModuleName
-            });
-        }
-
-        return findings;
     }
 }

@@ -182,21 +182,6 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly int _outputSpatialSize;
 
-    /// <summary>
-    /// Cached input for the backward pass.
-    /// </summary>
-    /// <remarks>
-    /// The per-stage intermediates this class used to cache alongside it (post-quant, input-conv,
-    /// mid-block, per-up-block, norm and SiLU outputs) were WRITE-ONLY: nothing in this type, in any
-    /// derived type, or in generated code ever read them, and this decoder has no manual Backward.
-    /// They held every activation of the pass alive to the end of it, so peak memory was
-    /// O(sum of all activations) rather than O(max live set) — measured at 656MB still live after a
-    /// forward that allocated 746MB on a 5MB model, and 49GB before OutOfMemoryException at the
-    /// paper-default 512x512 fp64 size. Autodiff captures its own graph and does not read these.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
@@ -400,7 +385,6 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
     /// <returns>Decoded image [batch, outputChannels, H*f, W*f] where f is upsample factor.</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
         return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));
     }
 
@@ -447,7 +431,6 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
         Tensor<T> input,
         System.Threading.CancellationToken cancellationToken = default)
     {
-        _lastInput = input;
         return EnsureCompileHost().PredictAsync(
             input, _compileStructureVersion, () => ForwardEager(input), cancellationToken);
     }
@@ -560,8 +543,6 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-
         _postQuantConv.ResetState();
         _inputConv.ResetState();
         foreach (var block in _midBlocks)

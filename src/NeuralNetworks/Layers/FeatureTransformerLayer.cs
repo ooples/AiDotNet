@@ -95,11 +95,6 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<FullyConnectedLayer<T>> _stepFCLayers;
     private readonly List<GhostBatchNormalization<T>> _stepBNLayers;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _inputCache;
-    private readonly List<Tensor<T>> _intermediateOutputs = [];
-
     // Cached constant 0/1 selection matrices for the GLU column split (see ApplyGLU). They depend
     // only on the input width, so they're built once and reused across forward passes instead of
     // being reallocated + refilled (O(dim^2)) every call.
@@ -303,8 +298,6 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>The transformed output tensor of shape [batch_size, output_dim].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _inputCache = input;
-        _intermediateOutputs.Clear();
 
         var current = input;
 
@@ -323,7 +316,6 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
                 gluOutput = Engine.TensorMultiplyScalar(gluOutput, NumOps.FromDouble(Math.Sqrt(0.5)));
             }
 
-            _intermediateOutputs.Add(gluOutput);
             current = gluOutput;
         }
 
@@ -341,7 +333,6 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
                 gluOutput = Engine.TensorMultiplyScalar(gluOutput, NumOps.FromDouble(Math.Sqrt(0.5)));
             }
 
-            _intermediateOutputs.Add(gluOutput);
             current = gluOutput;
         }
 
@@ -389,8 +380,6 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _inputCache = null;
-        _intermediateOutputs.Clear();
         foreach (var fc in _sharedFCLayers) fc.ResetState();
         foreach (var fc in _stepFCLayers) fc.ResetState();
     }

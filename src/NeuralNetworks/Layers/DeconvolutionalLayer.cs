@@ -100,48 +100,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biases;
 
     /// <summary>
-    /// Stored input data from the most recent forward pass, used for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// During the backward pass (training), the layer needs access to the input data from the forward
-    /// pass to calculate the gradients for the kernels. This tensor stores that input data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the network's "short-term memory" of what it just saw.
-    /// 
-    /// The layer remembers:
-    /// - The last data it processed
-    /// - So it can figure out how to improve when learning
-    /// 
-    /// This is similar to remembering what ingredients you used in a recipe,
-    /// so you can adjust them if the dish didn't turn out perfectly.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stored output data from the most recent forward pass, used for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// During the backward pass (training), the layer needs access to the output data from the forward
-    /// pass to calculate the gradients for the activation function. This tensor stores that output data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the network's memory of what result it produced.
-    /// 
-    /// The layer remembers:
-    /// - What output it generated for the last input
-    /// - So it can calculate how to improve
-    /// 
-    /// This allows the network to compare what it created with the expected result
-    /// and adjust its internal values to make better outputs next time.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Calculated gradients for the kernels during the backward pass.
     /// </summary>
     /// <remarks>
@@ -627,8 +585,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         if (IsInferringShapes) return ShapeInferenceOutput(input);
 
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Get the fused activation type for optimal GPU/CPU performance
         var fusedActivation = GetFusedActivationType();
 
@@ -648,12 +604,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> result = fusedActivation == FusedActivationType.None
             ? ApplyActivation(fused)
             : fused;
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
 
         return result;
     }
@@ -753,8 +703,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
         _kernelsGradient = null;
         _biasesGradient = null;
 
