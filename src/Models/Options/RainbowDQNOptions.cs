@@ -79,7 +79,10 @@ public class RainbowDQNOptions<T> : ReinforcementLearningOptions<T>
     public double VMax { get; init; } = 10.0;
 
     // Noisy networks parameters
-    /// <summary>Initial noise scale (sigma_0) of the noisy linear layers.</summary>
+    /// <summary>
+    /// Initial noise scale sigma_0 of the factorised noisy layer (Fortunato et al. 2018, section 3.2): each noise weight
+    /// starts at sigma_0 / sqrt(p) for a layer with p inputs.
+    /// </summary>
     public double NoisyNetSigma { get; init; } = 0.5;
 
     /// <summary>

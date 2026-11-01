@@ -34,7 +34,10 @@ public class CQLOptions<T> : ModelOptions
     public int ActionSize { get; set; }
     /// <summary>Learning rate of the policy network.</summary>
     public T PolicyLearningRate { get; set; }
-    /// <summary>Learning rate of the Q-network.</summary>
+    /// <summary>
+    /// Learning rate of the Q-networks; with <see cref="CQLLagrange"/> it is also the Adam step size of the
+    /// conservative multiplier (log alpha') that dual ascent tunes toward <see cref="CQLTargetActionGap"/>.
+    /// </summary>
     public T QLearningRate { get; set; }
     /// <summary>Learning rate used when tuning the entropy temperature.</summary>
     public T AlphaLearningRate { get; set; }

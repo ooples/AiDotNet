@@ -158,7 +158,10 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public int UnrollSteps { get; init; } = 5;
     /// <summary>Number of steps (n) in the n-step bootstrapped value target.</summary>
     public int TDSteps { get; init; } = 10;
-    /// <summary>Prioritization exponent of the replay buffer: how strongly TD error shapes sampling (0 samples uniformly).</summary>
+    /// <summary>
+    /// Prioritization exponent of the replay buffer: a window is drawn with probability proportional to p^alpha, where
+    /// p = |v(o0) - z0| is the gap between the predicted root value and its n-step target (0 samples uniformly).
+    /// </summary>
     public double PriorityAlpha { get; init; } = 1.0;
 
     /// <summary>
