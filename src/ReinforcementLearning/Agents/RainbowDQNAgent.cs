@@ -204,7 +204,8 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         layerList.Add(new DuelingCombinationLayer<T>(trunkHidden, _options.ActionSize,
             _options.UseDistributional ? _options.NumAtoms : 1,
             (_options.ValueStreamLayers ?? new List<int>()).ToArray(),
-            (_options.AdvantageStreamLayers ?? new List<int>()).ToArray()));
+            (_options.AdvantageStreamLayers ?? new List<int>()).ToArray(),
+            _options.Seed));
         IEnumerable<ILayer<T>> layers = layerList;
 
         var finalArchitecture = new NeuralNetworkArchitecture<T>(

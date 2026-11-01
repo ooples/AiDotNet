@@ -129,7 +129,8 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     /// </param>
     /// <param name="valueHiddenWidths">Widths of the value stream's hidden ReLU layers, in order; empty for none.</param>
     /// <param name="advantageHiddenWidths">Widths of the advantage stream's hidden ReLU layers; empty for none.</param>
-    /// <param name="seed">Optional RNG seed for weight initialisation.</param>
+    /// <param name="seed">RNG seed for weight initialisation, or <c>null</c> for an unseeded one. Required on this
+    /// overload (no default) so it does not compete with the two-stream-free overload for optional arguments.</param>
     /// <remarks>
     /// With atoms, V(s) has one output per atom and the advantage mean is taken over actions separately for each
     /// atom: logit(s, a, z) = V(s, z) + A(s, a, z) − mean_a' A(s, a', z) (Hessel et al. 2018, Sec. 3). A scalar V,
@@ -137,7 +138,7 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     /// the per-action softmax over atoms cancels, so the value stream would receive no gradient.
     /// </remarks>
     public DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms, int[] valueHiddenWidths,
-        int[] advantageHiddenWidths, int? seed = null)
+        int[] advantageHiddenWidths, int? seed)
         : base(
             inputShape: [-1],
             outputShape: [actionSize * numAtoms],
