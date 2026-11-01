@@ -121,7 +121,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.NeuralNetworks.SyntheticData.PATEGANGenerator<T>",
             "AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>",
             "AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>",
-            "AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASR<T>",
             "AiDotNet.SpeechRecognition.Specialized.MedicalASR<T>",
             "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASR<T>",
             "AiDotNet.TextToSpeech.Classic.AdaSpeech<T>",

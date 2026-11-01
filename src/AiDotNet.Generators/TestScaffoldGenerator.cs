@@ -10566,18 +10566,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // 512-wide encoder over a 15,000-entry vocabulary. Exercise the same
                 // mel -> encoder -> vocabulary topology at CI-smoke scale through public
                 // options; production keeps its paper-scale defaults.
+                // Zeng et al.'s ESPnet model (VGG2L, BLSTM encoder, location-aware LSTM decoder, CTC, LID decoder) with
+                // one 16-unit BLSTM layer over 0.2 s of waveform (6 encoder frames) and a 15-token inventory plus the
+                // boundary. Production defaults are section 4.3's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
-                    // The hybrid CTC/attention rebuild (#51) adds an attention decoder and an LID
-                    // head alongside the CTC head. DecoderDim must be bounded here too — it
-                    // defaults to the paper's 320, which would dwarf the 32-wide smoke encoder.
-                    "DecoderDim = 32, NumDecoderLayers = 1, " +
-                    "DropoutRate = 0.0 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions { " +
+                    "MaxAudioLengthSeconds = 1, EncoderDim = 16, NumEncoderLayers = 1, EncoderProjection = 16, NumMels = 16, " +
+                    "VocabSize = 15, MaxTextLength = 8, DecoderDim = 16, AttentionDim = 16, AttentionConvChannels = 2, " +
+                    "AttentionConvFilters = 3, Seed = 5 })";
             }
             else if (model.ClassName == "AudioSep" && model.TypeParameterCount == 1)
             {
@@ -16844,6 +16843,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Granite-speech reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "CodeSwitchingASR")
+            {
+                // CodeSwitchingASR reads waveforms: 0.2 s is 21 log-mel frames, 6 after VGG2L's ceil-mode pooling, over
+                // its 16 CTC outputs (15 tokens and the boundary).
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 6, 16 };");
             }
             else if (model.ClassName == "RobustConformer")
             {
