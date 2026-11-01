@@ -8173,6 +8173,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions { NumClasses = 4 })";
             }
+            else if (model.ClassName == "AudioEventDetector" && model.TypeParameterCount == 1)
+            {
+                // Hershey et al.'s audio ResNet (stride-1 7x7 stem, padded 3x3 max pooling, bottleneck stages, global
+                // average pooling, a sigmoid unit per label) at 4 base channels and one bottleneck per stage over a
+                // 32 x 16 patch and four labels. Production defaults are ResNet-50 over 96 x 64 patches.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiLabelClassification, " +
+                    "inputHeight: 32, inputWidth: 16, outputSize: 4), " +
+                    "new AiDotNet.Audio.Classification.AudioEventDetectorOptions { NumMels = 16, PatchFrames = 32, " +
+                    "BaseChannels = 4, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "CustomLabels = new[] { \"Speech\", \"Music\", \"Dog\", \"Siren\" }, Seed = 5 })";
+            }
             else if (model.ClassName == "MedicalASR" && model.TypeParameterCount == 1)
             {
                 // Chiu et al.'s LAS (bidirectional LSTM encoder, multi-headed attention, LSTM speller) with one 8-unit
@@ -16845,6 +16858,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Granite-speech reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "AudioEventDetector")
+            {
+                // One log-mel patch (32 frames of 16 bins) in, one presence probability per label out.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 32, 16 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
             }
             else if (model.ClassName == "MedicalASR")
             {
