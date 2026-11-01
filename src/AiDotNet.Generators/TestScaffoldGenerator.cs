@@ -8601,6 +8601,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "EmbeddingDimension = 16, FeedForwardDimension = 32, NumLayers = 1, " +
                     "NumHeads = 2, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "OCTGANGenerator" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.NeuralNetworks.SyntheticData.", System.StringComparison.Ordinal))
+            {
+                // OCT-GAN's generator ODE maps p(0) = z (+) c onto a vector of the same width (Kim et al. 2021,
+                // Eq. 11), so its eight FC layers are sized by the input width up front. The generic
+                // one-dimensional scaffold feeds 16 features while the parameterless constructor advertises
+                // inputSize=128; make the fixture consistent through the public architecture/options surface.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
+                    "inputSize: 16, outputSize: 16), " +
+                    "new AiDotNet.Models.Options.OCTGANOptions<double> { " +
+                    "EmbeddingDimension = 16, GeneratorDimensions = new[] { 32, 32 }, " +
+                    "DiscriminatorDimensions = new[] { 16, 16 }, OdeSolverSteps = 1 })";
+            }
+            else if (model.ClassName == "PATEGANGenerator" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.NeuralNetworks.SyntheticData.", System.StringComparison.Ordinal))
+            {
+                // PATE-GAN's generator reads z ~ Unif([0, 1]^d) and writes d values (Jordon et al. 2019, section
+                // 4.2.2), with explicitly sized layers. The generic one-dimensional scaffold feeds 16 features while
+                // the parameterless constructor advertises inputSize=10; declare a consistent 16-wide fixture.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 16, outputSize: 16))";
+            }
             else if (model.ClassName == "FireRedASR" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal))

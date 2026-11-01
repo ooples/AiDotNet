@@ -112,8 +112,6 @@ internal static class ModelDefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> UndeclaredSharedFactoryModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "AiDotNet.NeuralNetworks.SyntheticData.OCTGANGenerator<T>",
-            "AiDotNet.NeuralNetworks.SyntheticData.PATEGANGenerator<T>",
             "AiDotNet.TextToSpeech.Classic.AdaSpeech<T>",
             "AiDotNet.TextToSpeech.Classic.AlignTTS<T>",
             "AiDotNet.TextToSpeech.Classic.FastSpeech<T>",
