@@ -56,13 +56,22 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly ConcurrentDictionary<string, int[]> _cache = new(StringComparer.Ordinal);
 
         /// <summary>The tokenizer with Qwen's added tokens and then <paramref name="extraTokens"/> (new ones only).</summary>
-        public QwenTokenizer(IEnumerable<string> extraTokens)
+        public QwenTokenizer(IEnumerable<string> extraTokens) : this(QwenAddedTokens, extraTokens)
+        {
+        }
+
+        /// <summary>Qwen2's tokenizer (Qwen2-7B-Instruct's three added tokens: end of text, start and end of a message)
+        /// and then <paramref name="extraTokens"/> (new ones only), as a Qwen2-based model's
+        /// <c>add_special_tokens</c> extends it.</summary>
+        public static QwenTokenizer Qwen2(IEnumerable<string> extraTokens) => new(QwenAddedTokens.Take(3), extraTokens);
+
+        private QwenTokenizer(IEnumerable<string> addedTokens, IEnumerable<string>? extraTokens)
         {
             var released = Released.Value;
             _vocabulary = released.Vocabulary;
             _merges = released.Merges;
             int next = _vocabulary.Count;
-            foreach (var token in QwenAddedTokens.Concat(extraTokens ?? Array.Empty<string>()))
+            foreach (var token in addedTokens.Concat(extraTokens ?? Array.Empty<string>()))
                 if (!_added.ContainsKey(token)) _added[token] = next++;
             _tokens = new string[next];
             foreach (var pair in _vocabulary) _tokens[pair.Value] = pair.Key;

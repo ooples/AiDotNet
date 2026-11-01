@@ -65,10 +65,7 @@ internal sealed class FunAsrNanoNetwork<T>
     public List<LayerBase<T>> CtcLayers { get; } = new();
 
     /// <summary>The LoRA branches' layers on the LLM's query and value projections.</summary>
-    public IEnumerable<LayerBase<T>> LoraLayers => Llm.Layers
-        .SelectMany(l => new[] { l.QueryLora, l.ValueLora })
-        .Where(a => a is not null)
-        .SelectMany(a => a is null ? Array.Empty<LayerBase<T>>() : new LayerBase<T>[] { a.A, a.B });
+    public IEnumerable<LayerBase<T>> LoraLayers => Llm.LoraLayers;
 
     /// <summary>Whether the vocabulary covers Qwen3's, so the prompt is ChatML text; a smaller vocabulary has no prompt
     /// text, and its last token closes the answer.</summary>

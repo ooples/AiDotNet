@@ -4,6 +4,31 @@ using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks;
 
+/// <summary>The projections of a <see cref="LlamaNetwork{T}"/> layer that carry LoRA branches (peft's
+/// <c>target_modules</c>).</summary>
+[Flags]
+internal enum LlamaLoraTargets
+{
+    /// <summary>No projection.</summary>
+    None = 0,
+    /// <summary><c>q_proj</c>.</summary>
+    Query = 1,
+    /// <summary><c>k_proj</c>.</summary>
+    Key = 2,
+    /// <summary><c>v_proj</c>.</summary>
+    Value = 4,
+    /// <summary><c>o_proj</c>.</summary>
+    Output = 8,
+    /// <summary><c>gate_proj</c>.</summary>
+    Gate = 16,
+    /// <summary><c>up_proj</c>.</summary>
+    Up = 32,
+    /// <summary><c>down_proj</c>.</summary>
+    Down = 64,
+    /// <summary>Every attention and feed-forward projection.</summary>
+    All = Query | Key | Value | Output | Gate | Up | Down,
+}
+
 /// <summary>The shape of a LLaMA decoder; the defaults are LLaMA 2 7B (Vicuna-7B v1.5).</summary>
 internal sealed record LlamaConfiguration
 {
@@ -34,8 +59,11 @@ internal sealed record LlamaConfiguration
     /// states another head reads (CosyVoice 2's Qwen2 reads text through the table and speaks through its own head).</summary>
     public bool IncludeHead { get; init; } = true;
 
-    /// <summary>LoRA rank on the query and value projections (Hu et al. 2022); 0 for none.</summary>
+    /// <summary>LoRA rank on the <see cref="LoraTargets"/> projections (Hu et al. 2022); 0 for none.</summary>
     public int LoraRank { get; init; }
+
+    /// <summary>The projections that carry LoRA branches; the query and value projections by default.</summary>
+    public LlamaLoraTargets LoraTargets { get; init; } = LlamaLoraTargets.Query | LlamaLoraTargets.Value;
 
     /// <summary>LoRA alpha; the update is scaled by alpha / rank.</summary>
     public double LoraAlpha { get; init; } = 16;
@@ -114,6 +142,17 @@ internal sealed class LlamaNetwork<T>
         /// <summary>Qwen3's per-head query and key RMSNorm weights, null without <see cref="LlamaConfiguration.QueryKeyNorm"/>.</summary>
         public BiasFreeLinearLayer<T>? QueryNorm { get; init; }
         public BiasFreeLinearLayer<T>? KeyNorm { get; init; }
+
+        /// <summary>The LoRA branches on the other projections, null unless <see cref="LlamaConfiguration.LoraTargets"/>
+        /// names them.</summary>
+        public Lora? KeyLora { get; init; }
+        public Lora? OutputLora { get; init; }
+        public Lora? GateLora { get; init; }
+        public Lora? UpLora { get; init; }
+        public Lora? DownLora { get; init; }
+
+        /// <summary>Every LoRA branch of the layer.</summary>
+        public IEnumerable<Lora> Loras => new[] { QueryLora, KeyLora, ValueLora, OutputLora, GateLora, UpLora, DownLora }.OfType<Lora>();
     }
 
     /// <summary>A LoRA branch: down projection A, up projection B, and dropout on its input.</summary>
@@ -137,9 +176,9 @@ internal sealed class LlamaNetwork<T>
         BiasFreeLinearLayer<T> Linear(int inputs, int outputs) => Add(new BiasFreeLinearLayer<T>(inputs, outputs));
         BiasFreeLinearLayer<T> Values(int count) => Add(new BiasFreeLinearLayer<T>(1, count));
         int hd = c.ResolvedHeadDim, kv = c.KeyValueHeads * hd, qd = c.Heads * hd;
-        Lora? Adapter(int outputs)
+        Lora? Adapter(LlamaLoraTargets target, int outputs, int inputs = -1)
         {
-            if (c.LoraRank <= 0) return null;
+            if (c.LoraRank <= 0 || (c.LoraTargets & target) == 0) return null;
             DropoutLayer<T>? dropout = null;
             if (c.LoraDropout > 0)
             {
@@ -147,7 +186,7 @@ internal sealed class LlamaNetwork<T>
                 dropout.SetTrainingMode(false);
                 _dropouts.Add(dropout);
             }
-            return new Lora(Linear(c.Hidden, c.LoraRank), Linear(c.LoraRank, outputs), dropout);
+            return new Lora(Linear(inputs < 0 ? c.Hidden : inputs, c.LoraRank), Linear(c.LoraRank, outputs), dropout);
         }
         if (c.VocabSize < 0) throw new ArgumentOutOfRangeException(nameof(configuration), "The vocabulary is 0 (none) or positive.");
         Embeddings = c.VocabSize > 0 ? Values(c.VocabSize * c.Hidden) : null;
@@ -155,20 +194,29 @@ internal sealed class LlamaNetwork<T>
         {
             var input = Values(c.Hidden);
             var query = Linear(c.Hidden, qd);
-            var queryLora = Adapter(qd);
+            var queryLora = Adapter(LlamaLoraTargets.Query, qd);
             var key = Linear(c.Hidden, kv);
+            var keyLora = Adapter(LlamaLoraTargets.Key, kv);
             var value = Linear(c.Hidden, kv);
-            var valueLora = Adapter(kv);
+            var valueLora = Adapter(LlamaLoraTargets.Value, kv);
             var queryBias = c.AttentionBias ? Values(qd) : null;
             var keyBias = c.AttentionBias ? Values(kv) : null;
             var valueBias = c.AttentionBias ? Values(kv) : null;
             var output = Linear(qd, c.Hidden);
+            var outputLora = Adapter(LlamaLoraTargets.Output, c.Hidden, qd);
             var queryNorm = c.QueryKeyNorm ? Values(hd) : null;
             var keyNorm = c.QueryKeyNorm ? Values(hd) : null;
-            Layers.Add(new Layer(input, query, key, value, output, Values(c.Hidden), Linear(c.Hidden, c.Intermediate),
-                Linear(c.Hidden, c.Intermediate), Linear(c.Intermediate, c.Hidden), queryLora, valueLora)
+            var postNorm = Values(c.Hidden);
+            var gate = Linear(c.Hidden, c.Intermediate);
+            var gateLora = Adapter(LlamaLoraTargets.Gate, c.Intermediate);
+            var up = Linear(c.Hidden, c.Intermediate);
+            var upLora = Adapter(LlamaLoraTargets.Up, c.Intermediate);
+            var down = Linear(c.Intermediate, c.Hidden);
+            var downLora = Adapter(LlamaLoraTargets.Down, c.Hidden, c.Intermediate);
+            Layers.Add(new Layer(input, query, key, value, output, postNorm, gate, up, down, queryLora, valueLora)
             {
                 QueryBias = queryBias, KeyBias = keyBias, ValueBias = valueBias, QueryNorm = queryNorm, KeyNorm = keyNorm,
+                KeyLora = keyLora, OutputLora = outputLora, GateLora = gateLora, UpLora = upLora, DownLora = downLora,
             });
         }
         FinalNorm = c.IncludeFinalNorm ? Values(c.Hidden) : null;
@@ -205,6 +253,9 @@ internal sealed class LlamaNetwork<T>
 
     /// <summary>Whether the decoder produces logits (its own head, or one tied to the token table).</summary>
     public bool HasHead => LmHead is not null || Configuration.TieWordEmbeddings;
+
+    /// <summary>The layers of every LoRA branch (A and B of each), the parameters LoRA fine-tuning updates.</summary>
+    public IEnumerable<LayerBase<T>> LoraLayers => Layers.SelectMany(l => l.Loras).SelectMany(a => new LayerBase<T>[] { a.A, a.B });
 
     // The logits of hidden states: the head, or the token table transposed.
     private Tensor<T>? Head(Tensor<T> hidden)
@@ -399,19 +450,24 @@ internal sealed class LlamaNetwork<T>
         var c = Configuration;
         int b = x.Shape[0], l = x.Shape[1], hd = c.ResolvedHeadDim, groups = c.Heads / c.KeyValueHeads;
         var normed = RmsNorm(layer.InputNorm, x);
+        // A projection of `input` plus peft's LoRA update: W x + (alpha / r) B A dropout(x).
+        Tensor<T> Adapted(BiasFreeLinearLayer<T> projection, Lora? lora, Tensor<T> input)
+        {
+            var y = Rows(projection, input);
+            if (lora is null) return y;
+            var dropped = lora.Dropout is null ? input : lora.Dropout.Forward(input);
+            return _engine.TensorAdd(y, _engine.TensorMultiplyScalar(Rows(lora.B, Rows(lora.A, dropped)), NumOps.FromDouble(c.LoraAlpha / c.LoraRank)));
+        }
         Tensor<T> Project(BiasFreeLinearLayer<T> projection, Lora? lora, BiasFreeLinearLayer<T>? projectionBias)
         {
-            var y = Rows(projection, normed);
+            var y = Adapted(projection, lora, normed);
             if (projectionBias is not null)
             {
                 var shape = y.Shape.ToArray();
                 var row = _engine.Reshape(Value(projectionBias), Enumerable.Repeat(1, shape.Length - 1).Concat(new[] { shape[^1] }).ToArray());
                 y = _engine.TensorAdd(y, _engine.TensorBroadcastTo(row, shape));
             }
-            if (lora is null) return y;
-            // peft's LoRA: W x + (alpha / r) B A dropout(x).
-            var x = lora.Dropout is null ? normed : lora.Dropout.Forward(normed);
-            return _engine.TensorAdd(y, _engine.TensorMultiplyScalar(Rows(lora.B, Rows(lora.A, x)), NumOps.FromDouble(c.LoraAlpha / c.LoraRank)));
+            return y;
         }
         // Heads [B, heads, L, hd]; Qwen3 normalizes each query and key head (q_norm, k_norm) before the rotary embedding.
         Tensor<T> Heads(Tensor<T> projected, int heads, BiasFreeLinearLayer<T>? norm)
@@ -421,7 +477,7 @@ internal sealed class LlamaNetwork<T>
             return _engine.TensorPermute(split, new[] { 0, 2, 1, 3 });
         }
         var q = Rotate(Heads(Project(layer.Query, layer.QueryLora, layer.QueryBias), c.Heads, layer.QueryNorm), cos, sin);
-        var k = Rotate(Heads(Project(layer.Key, null, layer.KeyBias), c.KeyValueHeads, layer.KeyNorm), cos, sin);
+        var k = Rotate(Heads(Project(layer.Key, layer.KeyLora, layer.KeyBias), c.KeyValueHeads, layer.KeyNorm), cos, sin);
         var v = Heads(Project(layer.Value, layer.ValueLora, layer.ValueBias), c.KeyValueHeads, null);
         if (cache is not null)
         {
@@ -449,10 +505,10 @@ internal sealed class LlamaNetwork<T>
         var context = _engine.Reshape(_engine.TensorPermute(
             _engine.Reshape(_engine.BatchMatMul(probabilities, _engine.Reshape(v, new[] { b * c.Heads, keys, hd })), new[] { b, c.Heads, l, hd }),
             new[] { 0, 2, 1, 3 }), new[] { b, l, c.Heads * hd });
-        x = _engine.TensorAdd(x, Rows(layer.Output, context));
+        x = _engine.TensorAdd(x, Adapted(layer.Output, layer.OutputLora, context));
         var post = RmsNorm(layer.PostNorm, x);
-        var gated = _engine.TensorMultiply(_engine.Swish(Rows(layer.Gate, post)), Rows(layer.Up, post));
-        return _engine.TensorAdd(x, Rows(layer.Down, gated));
+        var gated = _engine.TensorMultiply(_engine.Swish(Adapted(layer.Gate, layer.GateLora, post)), Adapted(layer.Up, layer.UpLora, post));
+        return _engine.TensorAdd(x, Adapted(layer.Down, layer.DownLora, gated));
     }
 
     /// <summary>
@@ -504,6 +560,17 @@ internal sealed class LlamaNetwork<T>
                 Linear(layer.ValueLora.A, $"{n}.self_attn.v_proj.lora_A.weight", h, c.LoraRank);
                 Linear(layer.ValueLora.B, $"{n}.self_attn.v_proj.lora_B.weight", c.LoraRank, kv);
             }
+            void Branch(Lora? lora, string module, int inputs, int outputs)
+            {
+                if (lora is null) return;
+                Linear(lora.A, $"{n}.{module}.lora_A.weight", inputs, c.LoraRank);
+                Linear(lora.B, $"{n}.{module}.lora_B.weight", c.LoraRank, outputs);
+            }
+            Branch(layer.KeyLora, "self_attn.k_proj", h, kv);
+            Branch(layer.OutputLora, "self_attn.o_proj", qd, h);
+            Branch(layer.GateLora, "mlp.gate_proj", h, c.Intermediate);
+            Branch(layer.UpLora, "mlp.up_proj", h, c.Intermediate);
+            Branch(layer.DownLora, "mlp.down_proj", c.Intermediate, h);
         }
         if (FinalNorm is not null) Vector(FinalNorm, $"{prefix}norm.weight", new[] { h });
         if (LmHead is not null) Linear(LmHead, headName, h, c.VocabSize);
